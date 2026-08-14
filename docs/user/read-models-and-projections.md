@@ -452,6 +452,21 @@ complete serving-generation map while the candidate is replayed. A binary missin
 revision refuses before application SQL. Restricted clone mode is available only for
 an exact-shape repair and refuses unsupported PostgreSQL DDL or dependencies.
 
+Replay incrementally stages async redelivery evidence in PostgreSQL. The persisted
+`promotionDedupLimit` admits the staged count plus a conservative tail before writers
+are fenced; status exposes the limit, current count, provisional head, and
+`promotionPrepared`. After final-head replay, a separate durable preparation installs
+dedup evidence, advances checkpoints, runs application verification, and releases
+retention without target relation locks. The following promotion attempt uses one
+absolute database-clock `cutoverLockTimeoutMs` across its group-row lock and one
+cumulative lock statement for every serving and candidate relation.
+
+A writer-fence deadline leaves V1 readable and writable. Once preparation is durable,
+a promotion lock deadline rolls back that attempt but deliberately leaves the group
+write-fenced with its prepared evidence intact. Inspect and resume after contention
+clears, or use the supported abandon operation; never repair this state with manual
+renames or checkpoint edits.
+
 Promotion retains V1 as explicit retired generations. Those tables stop receiving
 ordinary writes and are not automatic rollback or compatibility surfaces. Preview
 their destruction through `previewRetiredGenerationDrop`; active runs, compatible read

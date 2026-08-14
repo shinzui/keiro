@@ -126,6 +126,11 @@ column	keiro_projection_rebuild_adapters.projection_id	text not null
 column	keiro_projection_rebuild_adapters.run_id	text not null
 column	keiro_projection_rebuild_adapters.source_id	text not null
 column	keiro_projection_rebuild_adapters.updated_at	timestamp with time zone not null default now()
+column	keiro_projection_rebuild_dedup_stage.event_id	uuid not null
+column	keiro_projection_rebuild_dedup_stage.global_position	bigint not null
+column	keiro_projection_rebuild_dedup_stage.projection_name	text not null
+column	keiro_projection_rebuild_dedup_stage.run_id	text not null
+column	keiro_projection_rebuild_dedup_stage.subscription_name	text not null
 column	keiro_projection_rebuild_groups.active_run_id	text
 column	keiro_projection_rebuild_groups.completed_at	timestamp with time zone
 column	keiro_projection_rebuild_groups.created_at	timestamp with time zone not null default now()
@@ -160,6 +165,7 @@ column	keiro_projection_rebuild_runs.catalog_fingerprint	text not null
 column	keiro_projection_rebuild_runs.contract_fingerprint	text not null
 column	keiro_projection_rebuild_runs.cutover_lock_timeout_ms	bigint
 column	keiro_projection_rebuild_runs.cutover_threshold	bigint
+column	keiro_projection_rebuild_runs.dedup_provisional_head	bigint
 column	keiro_projection_rebuild_runs.failed_at	timestamp with time zone
 column	keiro_projection_rebuild_runs.failure_code	text
 column	keiro_projection_rebuild_runs.failure_detail	text
@@ -176,6 +182,8 @@ column	keiro_projection_rebuild_runs.history_retention_released_at	timestamp wit
 column	keiro_projection_rebuild_runs.history_retention_renewed_at	timestamp with time zone
 column	keiro_projection_rebuild_runs.page_size	integer not null
 column	keiro_projection_rebuild_runs.promoted_at	timestamp with time zone
+column	keiro_projection_rebuild_runs.promotion_dedup_limit	bigint
+column	keiro_projection_rebuild_runs.promotion_prepared_at	timestamp with time zone
 column	keiro_projection_rebuild_runs.rebuild_mode	text not null default 'offline'::text
 column	keiro_projection_rebuild_runs.run_id	text not null
 column	keiro_projection_rebuild_runs.runner_format	text not null
@@ -398,6 +406,15 @@ constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_r
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_run_id_source_id_fkey	FOREIGN KEY (run_id, source_id) REFERENCES keiro.keiro_projection_rebuild_sources(run_id, source_id) ON DELETE CASCADE
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_source_id_not_null	NOT NULL source_id
 constraint	keiro_projection_rebuild_adapters.keiro_projection_rebuild_adapters_updated_at_not_null	NOT NULL updated_at
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_event_id_not_null	NOT NULL event_id
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_global_position_not_null	NOT NULL global_position
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_names_chk	CHECK (((length(subscription_name) > 0) AND (length(projection_name) > 0)))
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_pkey	PRIMARY KEY (run_id, projection_name, event_id)
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_position_chk	CHECK ((global_position > 0))
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_projection_name_not_null	NOT NULL projection_name
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_run_id_fkey	FOREIGN KEY (run_id) REFERENCES keiro.keiro_projection_rebuild_runs(run_id) ON DELETE CASCADE
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_run_id_not_null	NOT NULL run_id
+constraint	keiro_projection_rebuild_dedup_stage.keiro_projection_rebuild_dedup_stage_subscription_name_not_null	NOT NULL subscription_name
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_active_run_chk	CHECK ((((status = ANY (ARRAY['live'::text, 'serving-versioned'::text])) AND (active_run_id IS NULL)) OR ((status = ANY (ARRAY['rebuilding'::text, 'failed'::text, 'rebuilding-versioned'::text, 'cutover-versioned'::text, 'failed-versioned'::text])) AND (active_run_id IS NOT NULL))))
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_availability_chk	CHECK ((((status = 'live'::text) AND reads_allowed AND writes_allowed) OR ((status = ANY (ARRAY['rebuilding'::text, 'failed'::text])) AND (NOT reads_allowed) AND (NOT writes_allowed)) OR ((status = ANY (ARRAY['serving-versioned'::text, 'rebuilding-versioned'::text])) AND reads_allowed AND writes_allowed) OR ((status = ANY (ARRAY['cutover-versioned'::text, 'failed-versioned'::text])) AND reads_allowed AND (NOT writes_allowed))))
 constraint	keiro_projection_rebuild_groups.keiro_projection_rebuild_groups_catalog_fingerprint_not_null	NOT NULL slice_fingerprint
@@ -444,7 +461,7 @@ constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_group_id_
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_group_id_not_null	NOT NULL group_id
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_group_slice_fingerprint_not_null	NOT NULL group_slice_fingerprint
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_head_chk	CHECK ((captured_head >= 0))
-constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_mode_chk	CHECK ((((rebuild_mode = 'offline'::text) AND (candidate_revision_id IS NULL) AND (cutover_threshold IS NULL) AND (cutover_lock_timeout_ms IS NULL) AND (history_retention_lease_id IS NULL) AND (history_retention_lease_owner IS NULL) AND (history_retention_protected_through IS NULL) AND (history_retention_expires_at IS NULL) AND (history_retention_renewed_at IS NULL) AND (history_retention_released_at IS NULL)) OR ((rebuild_mode = 'versioned'::text) AND (candidate_revision_id IS NOT NULL) AND (cutover_threshold IS NOT NULL) AND (cutover_threshold >= 0) AND (cutover_lock_timeout_ms IS NOT NULL) AND (cutover_lock_timeout_ms > 0) AND (history_retention_lease_id IS NOT NULL) AND (history_retention_lease_owner IS NOT NULL) AND (length(history_retention_lease_owner) > 0) AND (history_retention_protected_through IS NOT NULL) AND (history_retention_protected_through >= 0) AND (history_retention_expires_at IS NOT NULL) AND (history_retention_renewed_at IS NOT NULL))))
+constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_mode_chk	CHECK ((((rebuild_mode = 'offline'::text) AND (candidate_revision_id IS NULL) AND (cutover_threshold IS NULL) AND (cutover_lock_timeout_ms IS NULL) AND (promotion_dedup_limit IS NULL) AND (dedup_provisional_head IS NULL) AND (promotion_prepared_at IS NULL) AND (history_retention_lease_id IS NULL) AND (history_retention_lease_owner IS NULL) AND (history_retention_protected_through IS NULL) AND (history_retention_expires_at IS NULL) AND (history_retention_renewed_at IS NULL) AND (history_retention_released_at IS NULL)) OR ((rebuild_mode = 'versioned'::text) AND (candidate_revision_id IS NOT NULL) AND (cutover_threshold IS NOT NULL) AND (cutover_threshold >= 0) AND (cutover_lock_timeout_ms IS NOT NULL) AND (cutover_lock_timeout_ms > 0) AND (promotion_dedup_limit IS NOT NULL) AND (promotion_dedup_limit > 0) AND ((dedup_provisional_head IS NULL) OR (dedup_provisional_head >= 0)) AND (history_retention_lease_id IS NOT NULL) AND (history_retention_lease_owner IS NOT NULL) AND (length(history_retention_lease_owner) > 0) AND (history_retention_protected_through IS NOT NULL) AND (history_retention_protected_through >= 0) AND (history_retention_expires_at IS NOT NULL) AND (history_retention_renewed_at IS NOT NULL))))
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_page_size_chk	CHECK ((page_size > 0))
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_page_size_not_null	NOT NULL page_size
 constraint	keiro_projection_rebuild_runs.keiro_projection_rebuild_runs_pkey	PRIMARY KEY (run_id)
@@ -592,6 +609,8 @@ index	keiro_projection_dedup_pkey	CREATE UNIQUE INDEX keiro_projection_dedup_pke
 index	keiro_projection_group_cursors_pkey	CREATE UNIQUE INDEX keiro_projection_group_cursors_pkey ON keiro.keiro_projection_group_cursors USING btree (group_id)
 index	keiro_projection_rebuild_adapters_pkey	CREATE UNIQUE INDEX keiro_projection_rebuild_adapters_pkey ON keiro.keiro_projection_rebuild_adapters USING btree (run_id, source_id, projection_id)
 index	keiro_projection_rebuild_adapters_run_id_adapter_order_key	CREATE UNIQUE INDEX keiro_projection_rebuild_adapters_run_id_adapter_order_key ON keiro.keiro_projection_rebuild_adapters USING btree (run_id, adapter_order)
+index	keiro_projection_rebuild_dedup_stage_pkey	CREATE UNIQUE INDEX keiro_projection_rebuild_dedup_stage_pkey ON keiro.keiro_projection_rebuild_dedup_stage USING btree (run_id, projection_name, event_id)
+index	keiro_projection_rebuild_dedup_stage_run_position_idx	CREATE INDEX keiro_projection_rebuild_dedup_stage_run_position_idx ON keiro.keiro_projection_rebuild_dedup_stage USING btree (run_id, subscription_name, global_position)
 index	keiro_projection_rebuild_groups_pkey	CREATE UNIQUE INDEX keiro_projection_rebuild_groups_pkey ON keiro.keiro_projection_rebuild_groups USING btree (group_id)
 index	keiro_projection_rebuild_prom_run_id_target_id_canonical_na_key	CREATE UNIQUE INDEX keiro_projection_rebuild_prom_run_id_target_id_canonical_na_key ON keiro.keiro_projection_rebuild_promotion_objects USING btree (run_id, target_id, canonical_name)
 index	keiro_projection_rebuild_prom_run_id_target_id_generation_n_key	CREATE UNIQUE INDEX keiro_projection_rebuild_prom_run_id_target_id_generation_n_key ON keiro.keiro_projection_rebuild_promotion_objects USING btree (run_id, target_id, generation_name)
@@ -634,6 +653,7 @@ table	keiro_outbox	kind=r
 table	keiro_projection_dedup	kind=r
 table	keiro_projection_group_cursors	kind=r
 table	keiro_projection_rebuild_adapters	kind=r
+table	keiro_projection_rebuild_dedup_stage	kind=r
 table	keiro_projection_rebuild_groups	kind=r
 table	keiro_projection_rebuild_promotion_objects	kind=r
 table	keiro_projection_rebuild_run_targets	kind=r

@@ -1,7 +1,7 @@
 # Keiro database migrations
 
 `keiro-migrations` exports a native `pg-migrate` component named `keiro`. The
-component owns twenty-eight embedded SQL migrations and declares one dependency,
+component owns twenty-nine embedded SQL migrations and declares one dependency,
 `kiroku`. Applications compose Kiroku first and Keiro second; Keiro never embeds
 or copies Kiroku's SQL.
 

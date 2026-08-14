@@ -70,6 +70,7 @@ CatalogVersionedStartOptions
   , replayPageSize = 500
   , cutoverThreshold = 1000
   , cutoverLockTimeoutMs = 5000
+  , promotionDedupLimit = 1000000
   , retentionDuration = 600
   , requestedBy = "release-operator"
   , requestReason = "reporting schema V2"
@@ -83,10 +84,33 @@ begin leaves no run, lease, or partial candidate.
 
 Call `resumeVersionedGroupRebuild` until the phase is `VersionedPromoted`. Each call
 advances one durable boundary. Replay can require several rounds while live V1 traffic
-continues. Near convergence, Keiro fences writers, captures a final head, replays to it,
-reconciles async deduplication and checkpoints, and attempts promotion. The table-lock
-phase uses one overall `cutoverLockTimeoutMs`, so a long reader causes a complete
-rollback rather than a partial swap. The run remains resumable after that reader exits.
+continues. Every replay chunk stages its async redelivery keys in PostgreSQL rather than
+retaining the historical set in process memory. Before fencing, Keiro removes evidence
+already below durable checkpoint floors and checks the staged count plus the largest
+permitted tail against `promotionDedupLimit`. An oversized run returns
+`VersionedPromotionDedupLimitExceeded` while V1 remains writable. Reduce subscription
+lag, or abandon and begin a deliberately reviewed run with a larger persisted limit;
+changing the limit while resuming the same run is an identity conflict.
+
+Near convergence, Keiro fences writers, captures a final head, and replays the bounded
+tail. The next resume is a durable preparation step: it validates the candidate, runs
+application verification, installs staged dedup evidence, advances checkpoints, and
+releases retention without taking target relation locks. The status report then shows
+`promotionPrepared = true`. A following resume performs only the short atomic promotion.
+
+`cutoverLockTimeoutMs` is an absolute database-clock budget for one writer-fence or
+promotion attempt, not for the complete run. The promotion budget starts before the
+group-row lock and is reused for one deterministically ordered statement that locks all
+serving and candidate relations. Several blocked tables therefore cannot each consume
+the full timeout. A timeout returns `VersionedCutoverDeadlineExceeded` with phase
+`writer-fence`, `promotion-group`, or `target-relations`; no partial rename or metadata
+swap commits.
+
+Recovery depends on the durable boundary. A `writer-fence` timeout leaves the run in
+ordinary replay with V1 readable and writable. Once the fence succeeds, any preparation
+failure leaves the group fenced. A `promotion-group` or `target-relations` timeout after
+`promotionPrepared = true` preserves the already prepared dedup/checkpoint evidence and
+keeps the group fenced; inspect it, then resume after contention clears or abandon it.
 
 Kiroku's renewable history-retention lease protects the replay interval from hard
 deletion. Keiro renews the original lease before replay and cutover mutation. An expired
@@ -105,6 +129,7 @@ my-service ops rebuild versioned start reporting \
   --serving-revision reporting-v1 \
   --candidate-revision reporting-v2 \
   --target-mode application \
+  --promotion-dedup-limit 1000000 \
   --requested-by release-operator \
   --reason "reporting schema V2"
 
@@ -122,7 +147,9 @@ my-service ops rebuild versioned resume reporting-v2-20260814
 my-service ops rebuild versioned resume reporting-v2-20260814 --force
 ```
 
-Inspect before every retry. A replay or validation failure is repairable when its
+Inspect before every retry. Human and JSON status expose the persisted dedup limit,
+current staged count, provisional head, and preparation state. A replay or validation
+failure is repairable when its
 application-owned cause can be corrected without changing the stored contract. A DDL
 race, relation-OID mismatch, changed revision contract, or expired retention proof is a
 refusal to guess. `versioned abandon` drops staging generations, releases active

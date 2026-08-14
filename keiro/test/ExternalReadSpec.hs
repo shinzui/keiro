@@ -393,12 +393,13 @@ beginOnlineCandidateSql =
     (run_id, group_id, catalog_fingerprint, group_slice_fingerprint,
      contract_fingerprint, runner_format, captured_head, page_size,
      rebuild_mode, candidate_revision_id, cutover_threshold,
-     cutover_lock_timeout_ms, history_retention_lease_id,
+     cutover_lock_timeout_ms, promotion_dedup_limit,
+     history_retention_lease_id,
      history_retention_lease_owner, history_retention_protected_through,
      history_retention_expires_at, history_retention_renewed_at)
   SELECT 'external-online', group_id, 'catalog-external', slice_fingerprint,
-         'contract-external', 'keiro/versioned-rebuild/v2', 0, 100,
-         'versioned', 'counter-v2', 10, 2000,
+         'contract-external', 'keiro/versioned-rebuild/v3', 0, 100,
+         'versioned', 'counter-v2', 10, 2000, 1000000,
          '00000000-0000-0000-0000-000000000027'::uuid,
          'external-read-spec', 0, now() + interval '10 minutes', now()
   FROM keiro.keiro_projection_rebuild_groups

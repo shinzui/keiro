@@ -12,6 +12,7 @@ module Keiro.ReadModel.Rebuild.Runner
     RebuildVerificationProgress (..),
     RebuildRunReport (..),
     AsyncDedupBackfill (..),
+    collectAsyncDedupFloors,
     collectAsyncDedupBackfill,
     startCatalogRebuild,
     resumeCatalogRebuild,
@@ -230,6 +231,45 @@ data AsyncDedupBackfill = AsyncDedupBackfill
     backfillFloors :: ![(Text, GlobalPosition)]
   }
   deriving stock (Eq, Show, Generic)
+
+-- | Resolve the authoritative durable floor for every async subscription in a
+-- rebuild group without scanning event history. Missing rows are explicit so
+-- callers can refuse before fencing writers.
+collectAsyncDedupFloors ::
+  (Store :> es) =>
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  Eff es (Either [SubscriptionName] [(Text, GlobalPosition)])
+collectAsyncDedupFloors catalog groupId =
+  case Catalog.catalogAsyncIdempotencyKeys catalog groupId of
+    [] -> pure (Right [])
+    specs -> do
+      inventory <- subscriptionCheckpointInventory
+      let resolved =
+            [ ( SubscriptionName (Catalog.specSubscriptionName spec),
+                subscriptionPositionFromInventory
+                  (SubscriptionName (Catalog.specSubscriptionName spec))
+                  inventory
+              )
+            | spec <- specs
+            ]
+          missing =
+            List.sort
+              . List.nub
+              $ [subscriptionName | (subscriptionName, Nothing) <- resolved]
+      pure
+        $ if not (null missing)
+          then Left missing
+          else
+            Right
+              ( Map.toAscList
+                  ( Map.fromListWith
+                      Prelude.min
+                      [ (name, floor)
+                      | (SubscriptionName name, Just floor) <- resolved
+                      ]
+                  )
+              )
 
 -- | Collect the async dedup identities between each subscription's durable
 -- floor and the captured rebuild head. Missing checkpoint rows are returned

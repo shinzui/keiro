@@ -437,6 +437,7 @@ main = withJitsureiSuite $ \fixture -> hspec $ do
                 replayPageSize = 1,
                 cutoverThreshold = 10,
                 cutoverLockTimeoutMs = 2_000,
+                promotionDedupLimit = 1_000_000,
                 retentionDuration = secondsToDiffTime 600,
                 requestedBy = "jitsurei-test",
                 requestReason = "capture the schema-changing online rebuild transcript"

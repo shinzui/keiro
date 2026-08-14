@@ -31,7 +31,7 @@ import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
-import Data.Time (UTCTime (..), secondsToDiffTime)
+import Data.Time (UTCTime (..), diffUTCTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
@@ -106,6 +106,12 @@ spec fixture = do
         conflict
           `shouldSatisfy` \case
             Left (VersionedRunIdentityConflict _ detail) -> "threshold" `Text.isInfixOf` detail
+            _ -> False
+        dedupConflict <-
+          expectStore store (beginVersionedRebuild catalog (request & #promotionDedupLimit .~ 99))
+        dedupConflict
+          `shouldSatisfy` \case
+            Left (VersionedRunIdentityConflict _ detail) -> "dedup limit" `Text.isInfixOf` detail
             _ -> False
 
       it "rolls provisioner failures back with no run, lease, or untracked sibling" $ \store -> do
@@ -391,7 +397,7 @@ spec fixture = do
         ready ^. #phase `shouldBe` VersionedCutoverReplaying
         runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
 
-        promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        promoted <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
         promoted ^. #phase `shouldBe` VersionedPromoted
         promotedRows <- runStatement store () externalV1RowsStmt
         promotedRows `shouldSatisfy` (not . null)
@@ -413,7 +419,7 @@ spec fixture = do
         _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
         runStatement store () externalV1RowsStmt `shouldReturn` [(100, 42)]
 
-        promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        promoted <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
         promoted ^. #phase `shouldBe` VersionedPromoted
         oldRead <- Store.runStoreIO store (Store.runTransaction (Tx.statement () externalV1RowsStmt))
         oldRead `shouldSatisfy` hasSqlState "KR003"
@@ -432,8 +438,7 @@ spec fixture = do
         let request = versionedRequest "versioned-external-compatibility-implementation" physicalTargets
         _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
         expectStore store (reconcileExternalReadContracts catalog) >>= requireRight
-        _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
-        _ <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        _ <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
 
         compatibleRows <- runStatement store () externalV1RowsStmt
         compatibleRows `shouldSatisfy` (not . null)
@@ -467,7 +472,7 @@ spec fixture = do
                 (applyAsyncProjectionFromCatalog catalog asyncProjectionId catalogAsyncProjection (recorded 101))
             )
         live `shouldBe` CatalogAsyncApplied
-        runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+        runStatement store () servingCountsStmt `shouldReturn` (0, 1)
         for_ (handle ^. #candidateGenerations) $ \generation ->
           rowCount store (generation ^. #physicalTable) `shouldReturn` 2
 
@@ -508,7 +513,40 @@ spec fixture = do
           `shouldBe` CatalogAsyncServingRevisionUnavailable
             mainGroupId
             (identity mkProjectionRevisionId "counter-v2")
-        runStatement store () servingCountsStmt `shouldReturn` (6, 6)
+
+      it "refuses oversized staged dedup evidence before fencing and succeeds after checkpoint lag is reduced" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        appendVersionedEvents store "counter-large-dedup-lag" 20
+        let request =
+              versionedRequest "versioned-dedup-limit" physicalTargets
+                & #replayPageSize
+                .~ 4
+                & #cutoverThreshold
+                .~ 0
+                & #promotionDedupLimit
+                .~ 5
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        replayed <- driveVersionedReplayComplete store catalog (request ^. #rebuildRunId) 10
+        replayed ^. #stagedDedupCount `shouldBe` 20
+
+        refused <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+        refused
+          `shouldBe` Left
+            (VersionedPromotionDedupLimitExceeded (request ^. #rebuildRunId) 5 20)
+        unfenced <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+        unfenced ^. #phase `shouldBe` VersionedReplayRunning
+        unfenced ^. #dedupProvisionalHead `shouldBe` Nothing
+        runStatement store () activeLifecycleFactsStmt
+          `shouldReturn` ("rebuilding-versioned", True, True, "counter-v1", 0, 2, 2, 1, 1)
+
+        runStatement store ("catalog-async-subscription", 20) upsertSubscriptionCursorStmt
+        promoted <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
+        promoted ^. #phase `shouldBe` VersionedPromoted
+        promoted ^. #stagedDedupCount `shouldBe` 0
+        runStatement store () servingCountsStmt `shouldReturn` (20, 20)
 
       it "uses the Kiroku lease to refuse hard deletion for the full active run" $ \store -> do
         setupBridge store
@@ -595,7 +633,7 @@ spec fixture = do
                   <> " DROP COLUMN rogue"
               )
           )
-        repaired <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+        repaired <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
         repaired ^. #phase `shouldBe` VersionedPromoted
 
       it "previews retired blockers and drops only an unreferenced generation" $ \store -> do
@@ -663,7 +701,109 @@ spec fixture = do
 
   describe "schema-versioned cutover concurrency" $
     around (withFreshDatabase fixture) $ do
-      it "bounds the whole lock phase, keeps readers on v1, and resumes promotion" $ \connectionString ->
+      it "bounds writer-fence row contention and remains unfenced" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupBridge store
+            runScript store servingOnlyRowsSql
+            (catalog, physicalTargets) <- validatedBridge
+            registerBridge store catalog
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            let request =
+                  versionedRequest "versioned-writer-fence-timeout" physicalTargets
+                    & #cutoverLockTimeoutMs
+                    .~ 100
+            _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+            _ <- driveVersionedReplayComplete store catalog (request ^. #rebuildRunId) 5
+
+            holderDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          void (Tx.statement (rebuildGroupIdText mainGroupId) lockGroupRowStmt)
+                          Tx.sql "SELECT pg_sleep(1)"
+                      )
+                  )
+                  >>= putMVar holderDone
+            waitForGroupRowLock pool 50
+
+            startedAt <- getCurrentTime
+            timedOut <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            finishedAt <- getCurrentTime
+            timedOut
+              `shouldBe` Right
+                (Left (VersionedCutoverDeadlineExceeded (request ^. #rebuildRunId) "writer-fence"))
+            diffUTCTime finishedAt startedAt `shouldSatisfy` (< 0.35)
+            stillRunning <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+            stillRunning ^. #phase `shouldBe` VersionedReplayRunning
+            runStatement store () servingCountsStmt `shouldReturn` (1, 1)
+
+            _ <- expectPoolUsage =<< takeMVar holderDone
+            promoted <- driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10
+            promoted ^. #phase `shouldBe` VersionedPromoted
+
+      it "bounds promotion group-row contention without undoing prepared evidence" $ \connectionString ->
+        Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
+          withPool connectionString $ \pool -> do
+            setupBridge store
+            runScript store servingOnlyRowsSql
+            (catalog, physicalTargets) <- validatedBridge
+            registerBridge store catalog
+            runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+            let request =
+                  versionedRequest "versioned-promotion-row-timeout" physicalTargets
+                    & #cutoverLockTimeoutMs
+                    .~ 100
+            _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+            _ <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
+            prepared <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            prepared ^. #promotionPrepared `shouldBe` True
+            safetyBefore <-
+              (,)
+                <$> runStatement store () repairDedupCountStmt
+                <*> runStatement store () repairCheckpointStmt
+
+            holderDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          void (Tx.statement (rebuildGroupIdText mainGroupId) lockGroupRowStmt)
+                          Tx.sql "SELECT pg_sleep(1)"
+                      )
+                  )
+                  >>= putMVar holderDone
+            waitForGroupRowLock pool 50
+
+            startedAt <- getCurrentTime
+            timedOut <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
+            finishedAt <- getCurrentTime
+            timedOut
+              `shouldBe` Right
+                (Left (VersionedCutoverDeadlineExceeded (request ^. #rebuildRunId) "promotion-group"))
+            diffUTCTime finishedAt startedAt `shouldSatisfy` (< 0.35)
+            stillPrepared <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
+            stillPrepared ^. #promotionPrepared `shouldBe` True
+            safetyAfter <-
+              (,)
+                <$> runStatement store () repairDedupCountStmt
+                <*> runStatement store () repairCheckpointStmt
+            safetyAfter `shouldBe` safetyBefore
+
+            _ <- expectPoolUsage =<< takeMVar holderDone
+            promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            promoted ^. #phase `shouldBe` VersionedPromoted
+
+      it "bounds two independently contended target relations, keeps readers on v1, and resumes promotion" $ \connectionString ->
         Store.withStore (Store.defaultConnectionSettings connectionString) $ \store ->
           withPool connectionString $ \pool -> do
             setupBridge store
@@ -674,12 +814,18 @@ spec fixture = do
             let request =
                   versionedRequest "versioned-lock-timeout" physicalTargets
                     & #cutoverLockTimeoutMs
-                    .~ 100
+                    .~ 500
             handle <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
             ready <- driveVersionedToCutoverReady store catalog (request ^. #rebuildRunId) 10
             ready ^. #phase `shouldBe` VersionedCutoverReplaying
+            prepared <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
+            prepared ^. #promotionPrepared `shouldBe` True
+            safetyBefore <-
+              (,)
+                <$> runStatement store () repairDedupCountStmt
+                <*> runStatement store () repairCheckpointStmt
 
-            readerDone <- newEmptyMVar
+            counterReaderDone <- newEmptyMVar
             _ <-
               forkIO $
                 Pool.use
@@ -688,24 +834,54 @@ spec fixture = do
                       TxSessions.ReadCommitted
                       TxSessions.Write
                       ( do
-                          counts <- Tx.statement () servingCountsStmt
-                          Tx.sql "SELECT pg_sleep(1)"
-                          pure counts
+                          count <- Tx.statement () counterCountStmt
+                          Tx.sql "SELECT pg_sleep(0.3)"
+                          pure count
                       )
                   )
-                  >>= putMVar readerDone
+                  >>= putMVar counterReaderDone
             waitForCounterReader pool 50
 
+            auditReaderDone <- newEmptyMVar
+            _ <-
+              forkIO $
+                Pool.use
+                  pool
+                  ( TxSessions.transactionNoRetry
+                      TxSessions.ReadCommitted
+                      TxSessions.Write
+                      ( do
+                          count <- Tx.statement () auditCountStmt
+                          Tx.sql "SELECT pg_sleep(1)"
+                          pure count
+                      )
+                  )
+                  >>= putMVar auditReaderDone
+            waitForAuditReader pool 50
+
+            startedAt <- getCurrentTime
             timedOut <- Store.runStoreIO store (resumeVersionedRebuild catalog (request ^. #rebuildRunId))
-            timedOut `shouldSatisfy` isLeft
+            finishedAt <- getCurrentTime
+            timedOut
+              `shouldBe` Right
+                (Left (VersionedCutoverDeadlineExceeded (request ^. #rebuildRunId) "target-relations"))
+            diffUTCTime finishedAt startedAt `shouldSatisfy` (< 0.65)
             stillReady <- expectStore store (inspectVersionedRebuild (request ^. #rebuildRunId)) >>= requireRight
             stillReady ^. #phase `shouldBe` VersionedCutoverReplaying
+            stillReady ^. #promotionPrepared `shouldBe` True
+            safetyAfter <-
+              (,)
+                <$> runStatement store () repairDedupCountStmt
+                <*> runStatement store () repairCheckpointStmt
+            safetyAfter `shouldBe` safetyBefore
+            counterReaderCount <- expectPoolUsage =<< takeMVar counterReaderDone
+            counterReaderCount `shouldBe` 1
+            auditReaderCount <- expectPoolUsage =<< takeMVar auditReaderDone
+            auditReaderCount `shouldBe` 1
             runStatement store () servingCountsStmt `shouldReturn` (1, 1)
             for_ (handle ^. #candidateGenerations) $ \generation ->
               rowCount store (generation ^. #physicalTable) `shouldReturn` 0
 
-            readerCounts <- expectPoolUsage =<< takeMVar readerDone
-            readerCounts `shouldBe` (1, 1)
             promoted <- expectStore store (resumeVersionedRebuild catalog (request ^. #rebuildRunId)) >>= requireRight
             promoted ^. #phase `shouldBe` VersionedPromoted
             runStatement store () servingCountsStmt `shouldReturn` (0, 0)
@@ -1480,6 +1656,7 @@ rebuildRequestFor runId physicalTargets =
       replayPageSize = 2,
       cutoverThreshold = 10,
       cutoverLockTimeoutMs = 2_000,
+      promotionDedupLimit = 1_000_000,
       retentionLeaseRequest = retentionRequest runId,
       requestedBy = "versioned-rebuild-spec",
       requestReason = "exercise M3 lifecycle persistence"
@@ -1653,6 +1830,26 @@ waitForCounterReader pool remaining = do
     then pure ()
     else threadDelay 20_000 >> waitForCounterReader pool (remaining - 1)
 
+waitForAuditReader :: Pool.Pool -> Int -> IO ()
+waitForAuditReader _ 0 = expectationFailure "audit reader did not acquire ACCESS SHARE in time"
+waitForAuditReader pool remaining = do
+  locked <-
+    expectPoolUsage
+      =<< Pool.use pool (TxSessions.transactionNoRetry TxSessions.ReadCommitted TxSessions.Read (Tx.statement () auditAccessShareStmt))
+  if locked
+    then pure ()
+    else threadDelay 20_000 >> waitForAuditReader pool (remaining - 1)
+
+waitForGroupRowLock :: Pool.Pool -> Int -> IO ()
+waitForGroupRowLock _ 0 = expectationFailure "group row holder did not acquire its lock in time"
+waitForGroupRowLock pool remaining = do
+  locked <-
+    expectPoolUsage
+      =<< Pool.use pool (TxSessions.transactionNoRetry TxSessions.ReadCommitted TxSessions.Read (Tx.statement () groupRowShareLockStmt))
+  if locked
+    then pure ()
+    else threadDelay 20_000 >> waitForGroupRowLock pool (remaining - 1)
+
 expectStore ::
   Store.KirokuStore ->
   Eff '[Store, Error StoreError, IOE] value ->
@@ -1708,6 +1905,20 @@ driveVersionedToCutoverReady store catalog runId attempts
       if report ^. #phase == VersionedCutoverReplaying && allVersionedComplete (report ^. #sources)
         then pure report
         else driveVersionedToCutoverReady store catalog runId (attempts - 1)
+
+driveVersionedReplayComplete ::
+  Store.KirokuStore ->
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Int ->
+  IO VersionedRebuildReport
+driveVersionedReplayComplete store catalog runId attempts
+  | attempts <= 0 = expectationFailure "versioned rebuild did not complete ordinary replay" >> error "unreachable"
+  | otherwise = do
+      report <- expectStore store (resumeVersionedRebuild catalog runId) >>= requireRight
+      if report ^. #phase == VersionedReplayRunning && allVersionedComplete (report ^. #sources)
+        then pure report
+        else driveVersionedReplayComplete store catalog runId (attempts - 1)
 
 allVersionedComplete :: [VersionedSourceProgress] -> Bool
 allVersionedComplete =
@@ -1942,6 +2153,20 @@ servingCountsStmt =
         )
     )
 
+counterCountStmt :: Statement () Int64
+counterCountStmt =
+  preparable
+    "SELECT count(*) FROM app.counter"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.int8)))
+
+auditCountStmt :: Statement () Int64
+auditCountStmt =
+  preparable
+    "SELECT count(*) FROM app.counter_audit"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.int8)))
+
 externalV1RowsStmt :: Statement () [(Int64, Int64)]
 externalV1RowsStmt =
   preparable
@@ -1977,6 +2202,45 @@ counterAccessShareStmt =
       FROM pg_locks
       WHERE relation = 'app.counter'::regclass
         AND mode = 'AccessShareLock'
+        AND granted
+        AND pid <> pg_backend_pid()
+    )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+auditAccessShareStmt :: Statement () Bool
+auditAccessShareStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_locks
+      WHERE relation = 'app.counter_audit'::regclass
+        AND mode = 'AccessShareLock'
+        AND granted
+        AND pid <> pg_backend_pid()
+    )
+    """
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+lockGroupRowStmt :: Statement Text Text
+lockGroupRowStmt =
+  preparable
+    "UPDATE keiro.keiro_projection_rebuild_groups SET updated_at = updated_at WHERE group_id = $1 RETURNING group_id"
+    (E.param (E.nonNullable E.text))
+    (D.singleRow (D.column (D.nonNullable D.text)))
+
+groupRowShareLockStmt :: Statement () Bool
+groupRowShareLockStmt =
+  preparable
+    """
+    SELECT EXISTS (
+      SELECT 1
+      FROM pg_locks
+      WHERE relation = 'keiro.keiro_projection_rebuild_groups'::regclass
+        AND mode = 'RowExclusiveLock'
         AND granted
         AND pid <> pg_backend_pid()
     )

@@ -134,6 +134,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Fixed
 
+- Schema-versioned rebuilds now enforce an absolute database-clock deadline for
+  writer-fence and promotion lock attempts, acquire every target relation in one
+  cumulative lock statement, and return typed phase-specific deadline failures.
+  Async redelivery evidence is staged incrementally in PostgreSQL and admitted against
+  a persisted operator limit; candidate verification, set-based dedup installation,
+  checkpoint reconciliation, and lease release complete in a resumable preparation
+  phase before target relations are locked.
 - Cursorless read models built through `immediateReadModel` with `NoQueryCursor`
   now fail fast with `ReadModelMissingCursor` on every public wait path. The
   exported `waitFor` and deprecated `runQueryWith` waiting overrides no longer
@@ -180,6 +187,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
+- The schema-versioned rebuild resume contract advances to
+  `versioned-contract-v3` and its persisted runner to
+  `keiro/versioned-rebuild/v3`. The contract adds run-scoped dedup staging and a
+  persisted promotion admission limit. Complete active v2 versioned runs with the old
+  runtime or abandon them before upgrading; they cannot resume under v3.
 - `adoptCatalogGroups` now returns `CatalogAdoptionResult`, including adopted group
   metadata, per-registration update/insert outcomes, and removed old-name rows.
   `CatalogAdoptionPlan` likewise adds planned registration actions and orphan rows; code

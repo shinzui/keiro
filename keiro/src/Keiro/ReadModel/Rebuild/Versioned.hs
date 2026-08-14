@@ -38,6 +38,7 @@ import Contravariant.Extras
     contrazip5,
     contrazip6,
     contrazip7,
+    contrazip8,
   )
 import Control.Monad (foldM, join)
 import Data.ByteString qualified as ByteString
@@ -100,14 +101,12 @@ import Keiro.ReadModel.External qualified as External
 import Keiro.ReadModel.Rebuild.Group
   ( RebuildRunId,
     groupPreparationFor,
-    insertProjectionDedupBatchStmt,
     mkRebuildRunId,
     rebuildRunIdText,
     resetDeclaredSubscriptions,
   )
 import Keiro.ReadModel.Rebuild.Runner
-  ( AsyncDedupBackfill (..),
-    collectAsyncDedupBackfill,
+  ( collectAsyncDedupFloors,
   )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.HistoryRetention
@@ -129,7 +128,7 @@ import Kiroku.Store.HistoryRetention
 import Kiroku.Store.Read qualified as Store
 import Kiroku.Store.Subscription.Types (SubscriptionName)
 import Kiroku.Store.Transaction (runTransaction)
-import Kiroku.Store.Types (CategoryName (..), GlobalPosition (..), RecordedEvent)
+import Kiroku.Store.Types (CategoryName (..), EventId (..), GlobalPosition (..), RecordedEvent)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 data VersionedTargetMode
@@ -138,13 +137,13 @@ data VersionedTargetMode
   deriving stock (Eq, Ord, Show, Generic)
 
 versionedRunnerFormat :: Text
-versionedRunnerFormat = "keiro/versioned-rebuild/v2"
+versionedRunnerFormat = "keiro/versioned-rebuild/v3"
 
 versionedContract :: Text -> ProjectionRevisionId -> Text
 versionedContract slice revisionId =
   Text.intercalate
     ":"
-    [ "versioned-contract-v2",
+    [ "versioned-contract-v3",
       slice,
       projectionRevisionIdText revisionId
     ]
@@ -159,6 +158,7 @@ data VersionedRebuildRequest = VersionedRebuildRequest
     replayPageSize :: !Int32,
     cutoverThreshold :: !Int64,
     cutoverLockTimeoutMs :: !Int64,
+    promotionDedupLimit :: !Int64,
     retentionLeaseRequest :: !HistoryRetentionLeaseRequest,
     requestedBy :: !Text,
     requestReason :: !Text
@@ -177,6 +177,7 @@ data VersionedRebuildError
   | VersionedServingTargetBindingMismatch !TargetId !QualifiedTable !QualifiedTable
   | VersionedInvalidCutoverThreshold !Int64
   | VersionedInvalidCutoverLockTimeout !Int64
+  | VersionedInvalidPromotionDedupLimit !Int64
   | VersionedInvalidReplayPageSize !Int32
   | VersionedCloneContractMismatch !TargetId !Text
   | VersionedCloneRefused !TargetId !QualifiedTable ![Text]
@@ -197,6 +198,8 @@ data VersionedRebuildError
   | VersionedReplayContractMismatch !RebuildRunId !Text !Text
   | VersionedReplayInvariantFailed !RebuildRunId !Text
   | VersionedPromotionCheckpointsMissing !RebuildRunId ![SubscriptionName]
+  | VersionedPromotionDedupLimitExceeded !RebuildRunId !Int64 !Int64
+  | VersionedCutoverDeadlineExceeded !RebuildRunId !Text
   | VersionedObservedShapeMismatch !TargetId !Text !Text
   | VersionedRetiredNameCollision !TargetId !QualifiedTable !Int64
   | VersionedGenerationNotFound !TargetGenerationId
@@ -245,6 +248,7 @@ data VersionedRebuildHandle = VersionedRebuildHandle
     servingEpoch :: !Int64,
     cutoverThreshold :: !Int64,
     cutoverLockTimeoutMs :: !Int64,
+    promotionDedupLimit :: !Int64,
     lease :: !VersionedLeaseEvidence,
     candidateGenerations :: ![VersionedTargetGeneration]
   }
@@ -281,6 +285,10 @@ data VersionedRebuildReport = VersionedRebuildReport
     replayPageSize :: !Int32,
     cutoverThreshold :: !Int64,
     cutoverLockTimeoutMs :: !Int64,
+    promotionDedupLimit :: !Int64,
+    stagedDedupCount :: !Int64,
+    dedupProvisionalHead :: !(Maybe GlobalPosition),
+    promotionPrepared :: !Bool,
     lease :: !VersionedLeaseEvidence,
     sources :: ![VersionedSourceProgress],
     servingGenerations :: ![VersionedTargetGeneration],
@@ -333,6 +341,9 @@ data PersistedRun = PersistedRun
     persistedCandidateRevision :: !Text,
     persistedCutoverThreshold :: !Int64,
     persistedCutoverLockTimeoutMs :: !Int64,
+    persistedPromotionDedupLimit :: !Int64,
+    persistedDedupProvisionalHead :: !(Maybe Int64),
+    persistedPromotionPreparedAt :: !(Maybe UTCTime),
     persistedLeaseId :: !UUID,
     persistedLeaseOwner :: !Text,
     persistedProtectedThrough :: !Int64,
@@ -352,6 +363,7 @@ data InsertRun = InsertRun
     pageSizeValue :: !Int32,
     thresholdValue :: !Int64,
     timeoutValue :: !Int64,
+    dedupLimitValue :: !Int64,
     leaseUuid :: !UUID,
     leaseOwnerText :: !Text,
     protectedPosition :: !Int64,
@@ -525,6 +537,7 @@ inspectVersionedRebuild runId = runTransaction $ do
           sourceRows <- Tx.statement (rebuildRunIdText runId) loadVersionedSourcesStmt
           servingRows <- Tx.statement (run ^. #persistedGroupId) loadServingGenerationsStmt
           candidateRows <- loadCandidateGenerations runId
+          stagedCount <- Tx.statement (rebuildRunIdText runId) countStagedDedupStmt
           pure $ do
             servingText <-
               maybe
@@ -543,6 +556,10 @@ inspectVersionedRebuild runId = runTransaction $ do
                   replayPageSize = run ^. #persistedPageSize,
                   cutoverThreshold = run ^. #persistedCutoverThreshold,
                   cutoverLockTimeoutMs = run ^. #persistedCutoverLockTimeoutMs,
+                  promotionDedupLimit = run ^. #persistedPromotionDedupLimit,
+                  stagedDedupCount = stagedCount,
+                  dedupProvisionalHead = GlobalPosition <$> run ^. #persistedDedupProvisionalHead,
+                  promotionPrepared = isJust (run ^. #persistedPromotionPreparedAt),
                   lease = leaseEvidenceFor run,
                   sources = sourceRows,
                   servingGenerations = servingRows,
@@ -602,12 +619,31 @@ resumeVersionedRebuild catalog runId =
                     Left err -> pure (Left err)
                     Right () -> inspectVersionedRebuild runId
                 else do
-                  fenced <-
-                    runTransaction
-                      (enterVersionedCutoverTx runId (expectedContract report))
-                  case fenced of
-                    Left err -> pure (Left err)
-                    Right () -> inspectVersionedRebuild runId
+                  floors <- collectAsyncDedupFloors catalog (report ^. #rebuildGroupId)
+                  case floors of
+                    Left missing -> pure (Left (VersionedPromotionCheckpointsMissing runId missing))
+                    Right resolvedFloors -> do
+                      admitted <-
+                        runTransaction
+                          ( admitVersionedCutoverTx
+                              runId
+                              (expectedContract report)
+                              resolvedFloors
+                              (Prelude.fromIntegral (Prelude.length (Catalog.catalogAsyncIdempotencyKeys catalog (report ^. #rebuildGroupId))))
+                          )
+                      case admitted of
+                        Left err -> pure (Left err)
+                        Right () -> do
+                          fenced <-
+                            runTransaction
+                              ( enterVersionedCutoverTx
+                                  runId
+                                  (expectedContract report)
+                                  (report ^. #cutoverLockTimeoutMs)
+                              )
+                          case fenced of
+                            Left err -> pure (Left err)
+                            Right () -> inspectVersionedRebuild runId
           | otherwise -> do
               applied <- applyNextVersionedChunk catalog report
               case applied of
@@ -623,21 +659,34 @@ resumeVersionedRebuild catalog runId =
             Right () -> inspectVersionedRebuild runId
         VersionedCutoverReplaying
           | allVersionedSourcesComplete (report ^. #sources) -> do
-              backfill <-
-                collectAsyncDedupBackfill
-                  catalog
-                  (report ^. #rebuildGroupId)
-                  (report ^. #replayPageSize)
-                  (report ^. #capturedHead)
-              case backfill of
+              floors <- collectAsyncDedupFloors catalog (report ^. #rebuildGroupId)
+              case floors of
                 Left missing -> pure (Left (VersionedPromotionCheckpointsMissing runId missing))
-                Right redeliverySafety -> do
-                  promoted <-
-                    runTransaction
-                      (promoteVersionedRebuildTx catalog runId (expectedContract report) redeliverySafety)
-                  case promoted of
-                    Left err -> pure (Left err)
-                    Right () -> inspectVersionedRebuild runId
+                Right resolvedFloors
+                  | not (report ^. #promotionPrepared) -> do
+                      prepared <-
+                        runTransaction
+                          ( prepareVersionedPromotionTx
+                              catalog
+                              runId
+                              (expectedContract report)
+                              resolvedFloors
+                          )
+                      case prepared of
+                        Left err -> pure (Left err)
+                        Right () -> inspectVersionedRebuild runId
+                  | otherwise -> do
+                      promoted <-
+                        runTransaction
+                          ( promoteVersionedRebuildTx
+                              catalog
+                              runId
+                              (expectedContract report)
+                              (report ^. #cutoverLockTimeoutMs)
+                          )
+                      case promoted of
+                        Left err -> pure (Left err)
+                        Right () -> inspectVersionedRebuild runId
           | otherwise -> do
               applied <- applyNextVersionedChunk catalog report
               case applied of
@@ -725,6 +774,7 @@ applyNextVersionedChunk catalog report = do
       runTransaction
         ( applyVersionedChunkTx
             catalog
+            (report ^. #rebuildGroupId)
             (report ^. #rebuildRunId)
             (versionedContract (groupSliceText catalog (report ^. #rebuildGroupId)) (report ^. #candidateRevisionId))
             pages
@@ -795,12 +845,13 @@ renderGlobalPosition (GlobalPosition position) = Text.pack (show position)
 
 applyVersionedChunkTx ::
   ValidatedProjectionCatalog ->
+  RebuildGroupId ->
   RebuildRunId ->
   Text ->
   [VersionedSourcePage] ->
   [VersionedRoutedEvent] ->
   Tx.Transaction (Either VersionedRebuildError ())
-applyVersionedChunkTx catalog runId contract pages chunk = do
+applyVersionedChunkTx catalog groupId runId contract pages chunk = do
   renewed <- renewVersionedLeaseTx runId contract
   case renewed of
     Left err -> pure (Left err)
@@ -817,6 +868,7 @@ applyVersionedChunkTx catalog runId contract pages chunk = do
               case applied of
                 Left err -> condemned err
                 Right adapterCounts -> do
+                  stageVersionedDedupEvidence catalog groupId runId chunk
                   advanced <- traverse advanceSource (Map.toList sourceAdvances)
                   if not (all id advanced)
                     then condemned (VersionedReplayInvariantFailed runId "source cursor changed concurrently")
@@ -899,6 +951,37 @@ applyVersionedChunkTx catalog runId contract pages chunk = do
             (rebuildRunIdText runId, sourceIdText (source ^. #sourceId), target)
             completeVersionedSourceStmt
 
+stageVersionedDedupEvidence ::
+  ValidatedProjectionCatalog ->
+  RebuildGroupId ->
+  RebuildRunId ->
+  [VersionedRoutedEvent] ->
+  Tx.Transaction ()
+stageVersionedDedupEvidence catalog groupId runId routedEvents =
+  unless (null rows) $
+    Tx.statement
+      ( [rebuildRunIdText runId | _ <- rows],
+        [subscription | (subscription, _, _, _) <- rows],
+        [projection | (_, projection, _, _) <- rows],
+        [eventId | (_, _, eventId, _) <- rows],
+        [position | (_, _, _, position) <- rows]
+      )
+      insertStagedDedupBatchStmt
+  where
+    specs = Catalog.catalogAsyncIdempotencyKeys catalog groupId
+    rows =
+      [ ( Catalog.specSubscriptionName spec,
+          Catalog.specDedupName spec,
+          eventId,
+          position
+        )
+      | routed <- routedEvents,
+        spec <- specs,
+        Catalog.specSourceId spec == routed ^. #routedSourceId,
+        let EventId eventId = Catalog.specIdempotencyKey spec (routed ^. #routedEvent),
+        let GlobalPosition position = routed ^. #routedEvent . #globalPosition
+      ]
+
 renewVersionedLeaseTx ::
   RebuildRunId ->
   Text ->
@@ -963,16 +1046,61 @@ extendVersionedReplayHeadTx runId contract (GlobalPosition newHead) = do
 enterVersionedCutoverTx ::
   RebuildRunId ->
   Text ->
+  Int64 ->
   Tx.Transaction (Either VersionedRebuildError ())
-enterVersionedCutoverTx runId contract = do
+enterVersionedCutoverTx runId contract timeoutMs = do
   renewed <- renewVersionedLeaseTx runId contract
   case renewed of
     Left err -> pure (Left err)
     Right () -> do
-      fenced <- Tx.statement (rebuildRunIdText runId, contract) enterVersionedCutoverStmt
-      if fenced
-        then pure (Right ())
-        else condemned (VersionedPersistedLifecycleInvalid runId "cutover fence prerequisites are incomplete")
+      deadline <- Tx.statement timeoutMs capturePromotionDeadlineStmt
+      outcome <-
+        Tx.statement
+          (rebuildRunIdText runId, contract, deadline)
+          tryEnterVersionedCutoverStmt
+      case outcome of
+        "fenced" -> pure (Right ())
+        "deadline-exceeded" -> condemned (VersionedCutoverDeadlineExceeded runId "writer-fence")
+        _ -> condemned (VersionedPersistedLifecycleInvalid runId "cutover fence prerequisites are incomplete")
+
+admitVersionedCutoverTx ::
+  RebuildRunId ->
+  Text ->
+  [(Text, GlobalPosition)] ->
+  Int64 ->
+  Tx.Transaction (Either VersionedRebuildError ())
+admitVersionedCutoverTx runId contract floors asyncSpecCount = do
+  renewed <- renewVersionedLeaseTx runId contract
+  case renewed of
+    Left err -> pure (Left err)
+    Right () -> do
+      let (subscriptions, positions) =
+            Prelude.unzip
+              [ (subscription, position)
+              | (subscription, GlobalPosition position) <- floors
+              ]
+      unless (null floors) $
+        Tx.statement
+          (rebuildRunIdText runId, subscriptions, positions)
+          pruneStagedDedupStmt
+      admission <-
+        Tx.statement
+          ( rebuildRunIdText runId,
+            contract,
+            asyncSpecCount
+          )
+          admitVersionedCutoverStmt
+      case admission of
+        Nothing -> condemned (VersionedPersistedLifecycleInvalid runId "dedup admission prerequisites are incomplete")
+        Just (stagedCount, requiredCount, dedupLimit, admitted)
+          | admitted -> pure (Right ())
+          | otherwise ->
+              condemned
+                ( VersionedPromotionDedupLimitExceeded
+                    runId
+                    dedupLimit
+                    (Prelude.max stagedCount requiredCount)
+                )
 
 captureVersionedCutoverHeadTx ::
   RebuildRunId ->
@@ -989,122 +1117,198 @@ captureVersionedCutoverHeadTx runId contract (GlobalPosition finalHead) = do
         then pure (Right ())
         else condemned (VersionedPersistedLifecycleInvalid runId "final cutover head could not be captured")
 
-promoteVersionedRebuildTx ::
+prepareVersionedPromotionTx ::
   ValidatedProjectionCatalog ->
   RebuildRunId ->
   Text ->
-  AsyncDedupBackfill ->
+  [(Text, GlobalPosition)] ->
   Tx.Transaction (Either VersionedRebuildError ())
-promoteVersionedRebuildTx catalog runId contract redeliverySafety = do
+prepareVersionedPromotionTx catalog runId contract floors = do
   renewed <- renewVersionedLeaseTx runId contract
   case renewed of
     Left err -> pure (Left err)
     Right () -> do
-      locked <- Tx.statement (rebuildRunIdText runId, contract) lockActiveVersionedPromotionStmt
+      locked <- Tx.statement (rebuildRunIdText runId, contract) lockActiveVersionedPreparationStmt
       if not locked
-        then condemned (VersionedPersistedLifecycleInvalid runId "promotion prerequisites are incomplete")
+        then condemned (VersionedPersistedLifecycleInvalid runId "promotion preparation prerequisites are incomplete")
         else do
           maybeRun <- Tx.statement (rebuildRunIdText runId) lookupVersionedRunStmt
           case maybeRun of
-            Nothing -> condemned (VersionedRunIdentityConflict runId "versioned run vanished under promotion lock")
+            Nothing -> condemned (VersionedRunIdentityConflict runId "versioned run vanished under preparation lock")
             Just run -> do
-              maybeGroup <- Tx.statement (run ^. #persistedGroupId) readVersionedGroupStmt
-              case maybeGroup >>= (^. #persistedServingRevision) of
-                Nothing -> condemned (VersionedPersistedLifecycleInvalid runId "serving revision vanished under promotion lock")
-                Just servingRevisionText ->
-                  case ( catalogRevisionByText catalog servingRevisionText,
-                         catalogRevisionByText catalog (run ^. #persistedCandidateRevision)
-                       ) of
-                    (Nothing, _) -> condemned (VersionedRevisionNotInCatalog (parseRevisionId servingRevisionText))
-                    (_, Nothing) -> condemned (VersionedRevisionNotInCatalog (parseRevisionId (run ^. #persistedCandidateRevision)))
-                    (Just servingRevision, Just candidateRevision) -> do
-                      serving <- Tx.statement (run ^. #persistedGroupId) loadServingGenerationsStmt
-                      candidate <- loadCandidateGenerations runId
-                      case pairPromotionGenerations runId servingRevision candidateRevision serving candidate of
+              let (subscriptions, positions) =
+                    Prelude.unzip
+                      [ (subscription, position)
+                      | (subscription, GlobalPosition position) <- floors
+                      ]
+              unless (null floors) $
+                Tx.statement
+                  (rebuildRunIdText runId, subscriptions, positions)
+                  pruneStagedDedupStmt
+              stagedCount <- Tx.statement (rebuildRunIdText runId) countStagedDedupStmt
+              if stagedCount > run ^. #persistedPromotionDedupLimit
+                then
+                  condemned
+                    ( VersionedPromotionDedupLimitExceeded
+                        runId
+                        (run ^. #persistedPromotionDedupLimit)
+                        stagedCount
+                    )
+                else prepareRun run
+  where
+    prepareRun run = do
+      maybeGroup <- Tx.statement (run ^. #persistedGroupId) readVersionedGroupStmt
+      case maybeGroup >>= (^. #persistedServingRevision) of
+        Nothing -> condemned (VersionedPersistedLifecycleInvalid runId "serving revision vanished under preparation lock")
+        Just servingRevisionText ->
+          case ( catalogRevisionByText catalog servingRevisionText,
+                 catalogRevisionByText catalog (run ^. #persistedCandidateRevision)
+               ) of
+            (Nothing, _) -> condemned (VersionedRevisionNotInCatalog (parseRevisionId servingRevisionText))
+            (_, Nothing) -> condemned (VersionedRevisionNotInCatalog (parseRevisionId (run ^. #persistedCandidateRevision)))
+            (Just servingRevision, Just candidateRevision) -> do
+              serving <- Tx.statement (run ^. #persistedGroupId) loadServingGenerationsStmt
+              candidate <- loadCandidateGenerations runId
+              case pairPromotionGenerations runId servingRevision candidateRevision serving candidate of
+                Left err -> condemned err
+                Right pairs -> do
+                  identities <- verifyGenerationIdentities (serving <> candidate)
+                  case identities of
+                    Left err -> condemned err
+                    Right () -> do
+                      revalidated <- revalidatePromotionPairs servingRevision candidateRevision pairs
+                      case revalidated of
                         Left err -> condemned err
-                        Right pairs -> do
-                          Tx.statement (Text.pack (show (run ^. #persistedCutoverLockTimeoutMs))) setCutoverStatementTimeoutStmt
-                          collisions <- traverse retiredRelationCollision pairs
-                          case [err | Left err <- collisions] of
-                            err : _ -> condemned err
-                            [] -> do
-                              lockPromotionRelations pairs
+                        Right () -> do
+                          objectsValid <- promotionObjectsMatch runId candidateRevision
+                          if not objectsValid
+                            then condemned (VersionedPersistedLifecycleInvalid runId "persisted promotion object map differs from the candidate revision")
+                            else do
+                              verified <- runPromotionVerifications runId candidateRevision (candidateTargets pairs)
+                              case verified of
+                                Left err -> condemned err
+                                Right () -> do
+                                  void (Tx.statement (rebuildRunIdText runId) installStagedDedupStmt)
+                                  checkpoints <- reconcilePromotionCheckpoints catalog runId run floors
+                                  case checkpoints of
+                                    Left err -> condemned err
+                                    Right () -> releaseAndMarkPrepared run
+
+    releaseAndMarkPrepared run =
+      case mkHistoryRetentionLeaseOwner (run ^. #persistedLeaseOwner) of
+        Left _ -> condemned (VersionedRetentionOwnerInvalid runId)
+        Right validatedOwner -> do
+          releaseResult <-
+            releaseHistoryRetentionLeaseTx
+              ( HistoryRetentionLeaseHandle
+                  (HistoryRetentionLeaseId (run ^. #persistedLeaseId))
+                  validatedOwner
+              )
+          case releaseEvidence releaseResult of
+            Left detail -> condemned (VersionedRetentionReleaseFailed runId detail)
+            Right releasedAt -> do
+              prepared <-
+                Tx.statement
+                  (rebuildRunIdText runId, releasedAt)
+                  markVersionedPromotionPreparedStmt
+              if prepared
+                then pure (Right ())
+                else condemned (VersionedPersistedLifecycleInvalid runId "promotion preparation lost its locked run")
+
+promoteVersionedRebuildTx ::
+  ValidatedProjectionCatalog ->
+  RebuildRunId ->
+  Text ->
+  Int64 ->
+  Tx.Transaction (Either VersionedRebuildError ())
+promoteVersionedRebuildTx catalog runId contract timeoutMs = do
+  deadline <- Tx.statement timeoutMs capturePromotionDeadlineStmt
+  lockOutcome <-
+    Tx.statement
+      (rebuildRunIdText runId, contract, deadline)
+      tryLockActiveVersionedPromotionStmt
+  case lockOutcome of
+    "deadline-exceeded" -> condemned (VersionedCutoverDeadlineExceeded runId "promotion-group")
+    "locked" -> promoteLocked deadline
+    _ -> condemned (VersionedPersistedLifecycleInvalid runId "promotion prerequisites are incomplete")
+  where
+    promoteLocked deadline = do
+      maybeRun <- Tx.statement (rebuildRunIdText runId) lookupVersionedRunStmt
+      case maybeRun of
+        Nothing -> condemned (VersionedRunIdentityConflict runId "versioned run vanished under promotion lock")
+        Just run -> do
+          maybeGroup <- Tx.statement (run ^. #persistedGroupId) readVersionedGroupStmt
+          case maybeGroup >>= (^. #persistedServingRevision) of
+            Nothing -> condemned (VersionedPersistedLifecycleInvalid runId "serving revision vanished under promotion lock")
+            Just servingRevisionText ->
+              case ( catalogRevisionByText catalog servingRevisionText,
+                     catalogRevisionByText catalog (run ^. #persistedCandidateRevision)
+                   ) of
+                (Nothing, _) -> condemned (VersionedRevisionNotInCatalog (parseRevisionId servingRevisionText))
+                (_, Nothing) -> condemned (VersionedRevisionNotInCatalog (parseRevisionId (run ^. #persistedCandidateRevision)))
+                (Just servingRevision, Just candidateRevision) -> do
+                  serving <- Tx.statement (run ^. #persistedGroupId) loadServingGenerationsStmt
+                  candidate <- loadCandidateGenerations runId
+                  case pairPromotionGenerations runId servingRevision candidateRevision serving candidate of
+                    Left err -> condemned err
+                    Right pairs -> do
+                      collisions <- traverse retiredRelationCollision pairs
+                      case [err | Left err <- collisions] of
+                        err : _ -> condemned err
+                        [] -> do
+                          relationsLocked <- lockPromotionRelations deadline pairs
+                          if not relationsLocked
+                            then condemned (VersionedCutoverDeadlineExceeded runId "target-relations")
+                            else do
                               identities <- verifyGenerationIdentities (serving <> candidate)
                               case identities of
                                 Left err -> condemned err
                                 Right () -> do
-                                  revalidated <- revalidatePromotionPairs servingRevision candidateRevision pairs
-                                  case revalidated of
-                                    Left err -> condemned err
-                                    Right () -> do
-                                      persistedObjectRows <- Tx.statement (rebuildRunIdText runId) loadPromotionObjectsStmt
-                                      let persistedObjects = groupPromotionObjectRows persistedObjectRows
-                                      let declaredObjects =
-                                            [ ( targetIdText targetId,
-                                                provisioner ^. #promotionObjectNames
-                                              )
-                                            | (targetId, provisioner) <- Map.toAscList (candidateRevision ^. #targetProvisioners),
-                                              not (null (provisioner ^. #promotionObjectNames))
-                                            ]
-                                      if persistedObjects /= declaredObjects
-                                        then condemned (VersionedPersistedLifecycleInvalid runId "persisted promotion object map differs from the candidate revision")
-                                        else do
-                                          verified <- runPromotionVerifications runId candidateRevision (candidateTargets pairs)
-                                          case verified of
-                                            Left err -> condemned err
-                                            Right () -> do
-                                              traverse_ (renamePromotionPair servingRevision candidateRevision) pairs
-                                              traverse_ insertDedupBatch (dedupBatches (redeliverySafety ^. #backfillPairs))
-                                              checkpoints <- reconcilePromotionCheckpoints catalog runId run (redeliverySafety ^. #backfillFloors)
-                                              case checkpoints of
-                                                Left err -> condemned err
-                                                Right () -> do
-                                                  owner <-
-                                                    case mkHistoryRetentionLeaseOwner (run ^. #persistedLeaseOwner) of
-                                                      Left _ -> condemned (VersionedRetentionOwnerInvalid runId)
-                                                      Right value -> pure (Right value)
-                                                  case owner of
-                                                    Left err -> pure (Left err)
-                                                    Right validatedOwner -> do
-                                                      releaseResult <-
-                                                        releaseHistoryRetentionLeaseTx
-                                                          ( HistoryRetentionLeaseHandle
-                                                              (HistoryRetentionLeaseId (run ^. #persistedLeaseId))
-                                                              validatedOwner
-                                                          )
-                                                      case releaseEvidence releaseResult of
-                                                        Left detail -> condemned (VersionedRetentionReleaseFailed runId detail)
-                                                        Right releasedAt -> do
-                                                          promotedRun <-
-                                                            Tx.statement
-                                                              (rebuildRunIdText runId, releasedAt)
-                                                              markVersionedRunPromotedStmt
-                                                          promotedGroup <-
-                                                            Tx.statement
-                                                              ( run ^. #persistedGroupId,
-                                                                rebuildRunIdText runId,
-                                                                run ^. #persistedCandidateRevision
-                                                              )
-                                                              finishVersionedPromotionGroupStmt
-                                                          if promotedRun && promotedGroup
-                                                            then do
-                                                              externalReads <-
-                                                                External.reconcileExternalReadContractsForGroupsTx
-                                                                  catalog
-                                                                  (Just (Set.singleton (parseGroupId (run ^. #persistedGroupId))))
-                                                              case externalReads of
-                                                                Left err -> condemned (VersionedExternalReadReconciliationFailed runId err)
-                                                                Right () -> pure (Right ())
-                                                            else condemned (VersionedPersistedLifecycleInvalid runId "promotion metadata transition lost its locked row")
-  where
-    insertDedupBatch batch =
-      void (Tx.statement (Prelude.unzip batch) insertProjectionDedupBatchStmt)
+                                  objectsValid <- promotionObjectsMatch runId candidateRevision
+                                  if not objectsValid
+                                    then condemned (VersionedPersistedLifecycleInvalid runId "persisted promotion object map differs from the candidate revision")
+                                    else do
+                                      traverse_ (renamePromotionPair servingRevision candidateRevision) pairs
+                                      promotedRun <-
+                                        Tx.statement
+                                          (rebuildRunIdText runId, run ^. #persistedLeaseReleasedAt)
+                                          markVersionedRunPromotedStmt
+                                      promotedGroup <-
+                                        Tx.statement
+                                          ( run ^. #persistedGroupId,
+                                            rebuildRunIdText runId,
+                                            run ^. #persistedCandidateRevision
+                                          )
+                                          finishVersionedPromotionGroupStmt
+                                      if promotedRun && promotedGroup
+                                        then do
+                                          externalReads <-
+                                            External.reconcileExternalReadContractsForGroupsTx
+                                              catalog
+                                              (Just (Set.singleton (parseGroupId (run ^. #persistedGroupId))))
+                                          case externalReads of
+                                            Left err -> condemned (VersionedExternalReadReconciliationFailed runId err)
+                                            Right () -> pure (Right ())
+                                        else condemned (VersionedPersistedLifecycleInvalid runId "promotion metadata transition lost its locked row")
 
     retiredRelationCollision (_, serving, _) = do
       let retired = retiredTableFor serving
       resolveRelationOid retired <&> \case
         Nothing -> Right ()
         Just oid -> Left (VersionedRetiredNameCollision (serving ^. #targetId) retired oid)
+
+promotionObjectsMatch :: RebuildRunId -> ProjectionRevision -> Tx.Transaction Bool
+promotionObjectsMatch runId candidateRevision = do
+  persistedObjectRows <- Tx.statement (rebuildRunIdText runId) loadPromotionObjectsStmt
+  let persistedObjects = groupPromotionObjectRows persistedObjectRows
+      declaredObjects =
+        [ ( targetIdText targetId,
+            provisioner ^. #promotionObjectNames
+          )
+        | (targetId, provisioner) <- Map.toAscList (candidateRevision ^. #targetProvisioners),
+          not (null (provisioner ^. #promotionObjectNames))
+        ]
+  pure (persistedObjects == declaredObjects)
 
 pairPromotionGenerations ::
   RebuildRunId ->
@@ -1131,22 +1335,24 @@ pairPromotionGenerations runId servingRevision candidateRevision serving candida
     )
     (Map.keys servingById)
 
-lockPromotionRelations :: [(TargetId, VersionedTargetGeneration, VersionedTargetGeneration)] -> Tx.Transaction ()
-lockPromotionRelations pairs =
-  for_ ordered $ \table ->
-    Tx.sql
-      ( Text.Encoding.encodeUtf8
-          ( "LOCK TABLE "
-              <> qualifyTable (table ^. #schemaName) (table ^. #tableName)
-              <> " IN ACCESS EXCLUSIVE MODE"
-          )
-      )
+lockPromotionRelations ::
+  UTCTime ->
+  [(TargetId, VersionedTargetGeneration, VersionedTargetGeneration)] ->
+  Tx.Transaction Bool
+lockPromotionRelations deadline pairs =
+  Tx.statement
+    ([relationOid | (_, relationOid) <- ordered], deadline)
+    tryLockPromotionRelationsStmt
   where
     ordered =
-      List.sort
+      List.sortOn Prelude.fst
         . List.nub
         $ concatMap
-          (\(_, serving, candidate) -> [serving ^. #physicalTable, candidate ^. #physicalTable])
+          ( \(_, serving, candidate) ->
+              [ (serving ^. #physicalTable, serving ^. #relationOid),
+                (candidate ^. #physicalTable, candidate ^. #relationOid)
+              ]
+          )
           pairs
 
 revalidatePromotionPairs ::
@@ -1337,12 +1543,6 @@ retiredObjectName generation objectOrder =
 
 compactGenerationId :: TargetGenerationId -> Text
 compactGenerationId = Text.filter (/= '-') . UUID.toText . generationUuidValue
-
-dedupBatches :: [(Text, UUID)] -> [[(Text, UUID)]]
-dedupBatches [] = []
-dedupBatches pairs =
-  let (batch, rest) = Prelude.splitAt 10000 pairs
-   in batch : dedupBatches rest
 
 candidateExecutionContext ::
   ValidatedProjectionCatalog ->
@@ -1635,6 +1835,8 @@ validateRequest catalog request
       Left (VersionedInvalidCutoverThreshold (request ^. #cutoverThreshold))
   | request ^. #cutoverLockTimeoutMs <= 0 =
       Left (VersionedInvalidCutoverLockTimeout (request ^. #cutoverLockTimeoutMs))
+  | request ^. #promotionDedupLimit <= 0 =
+      Left (VersionedInvalidPromotionDedupLimit (request ^. #promotionDedupLimit))
   | otherwise = do
       serving <- findRevision (request ^. #servingRevisionId)
       candidate <- findRevision (request ^. #candidateRevisionId)
@@ -1798,6 +2000,7 @@ resumeExisting request slice group run
   | run ^. #persistedCandidateRevision /= projectionRevisionIdText (request ^. #candidateRevisionId) = conflict "candidate revision differs"
   | run ^. #persistedCutoverThreshold /= request ^. #cutoverThreshold = conflict "cutover threshold differs"
   | run ^. #persistedCutoverLockTimeoutMs /= request ^. #cutoverLockTimeoutMs = conflict "cutover lock timeout differs"
+  | run ^. #persistedPromotionDedupLimit /= request ^. #promotionDedupLimit = conflict "promotion dedup limit differs"
   | run ^. #persistedLeaseOwner /= requestedOwner = conflict "retention owner differs"
   | run ^. #persistedRunStatus /= "running" = conflict ("run status is " <> run ^. #persistedRunStatus)
   | group ^. #persistedStatus /= "rebuilding-versioned"
@@ -2072,6 +2275,7 @@ insertVersionedRun catalog request slice lease =
             pageSizeValue = request ^. #replayPageSize,
             thresholdValue = request ^. #cutoverThreshold,
             timeoutValue = request ^. #cutoverLockTimeoutMs,
+            dedupLimitValue = request ^. #promotionDedupLimit,
             leaseUuid = leaseId,
             leaseOwnerText = historyRetentionLeaseOwnerText (lease ^. #owner),
             protectedPosition = protected,
@@ -2176,6 +2380,7 @@ loadHandle request = do
           servingEpoch = group ^. #persistedServingEpoch,
           cutoverThreshold = run ^. #persistedCutoverThreshold,
           cutoverLockTimeoutMs = run ^. #persistedCutoverLockTimeoutMs,
+          promotionDedupLimit = run ^. #persistedPromotionDedupLimit,
           lease =
             VersionedLeaseEvidence
               { leaseId = run ^. #persistedLeaseId,
@@ -2417,12 +2622,13 @@ insertVersionedRunStmt =
       (run_id, group_id, catalog_fingerprint, group_slice_fingerprint,
        contract_fingerprint, runner_format, captured_head, page_size, status,
        rebuild_mode, candidate_revision_id, cutover_threshold,
-       cutover_lock_timeout_ms, history_retention_lease_id,
+       cutover_lock_timeout_ms, promotion_dedup_limit,
+       history_retention_lease_id,
        history_retention_lease_owner, history_retention_protected_through,
        history_retention_expires_at, history_retention_renewed_at)
     VALUES
-      ($1, $2, $3, $4, $5, 'keiro/versioned-rebuild/v2', $12, $7,
-       'running', 'versioned', $6, $8, $9, $10, $11, $12, $13, $14)
+      ($1, $2, $3, $4, $5, 'keiro/versioned-rebuild/v3', $13, $7,
+       'running', 'versioned', $6, $8, $9, $10, $11, $12, $13, $14, $15)
     """
     insertRunEncoder
     D.noResult
@@ -2441,6 +2647,7 @@ insertRunEncoder =
           ),
           ( value ^. #thresholdValue,
             value ^. #timeoutValue,
+            value ^. #dedupLimitValue,
             value ^. #leaseUuid,
             value ^. #leaseOwnerText,
             value ^. #protectedPosition,
@@ -2459,7 +2666,7 @@ insertRunEncoder =
             textParam
             int4Param
         )
-        (contrazip7 int8Param int8Param uuidParam textParam int8Param timestamptzParam timestamptzParam)
+        (contrazip8 int8Param int8Param int8Param uuidParam textParam int8Param timestamptzParam timestamptzParam)
     )
 
 insertVersionedSourceStmt :: Statement (Text, Text, Text, Maybe Text, Int64, Int64) ()
@@ -2502,7 +2709,8 @@ lookupVersionedRunStmt =
     SELECT run_id, group_id, catalog_fingerprint, group_slice_fingerprint,
            contract_fingerprint, runner_format, captured_head, page_size,
            status, candidate_revision_id,
-           cutover_threshold, cutover_lock_timeout_ms,
+           cutover_threshold, cutover_lock_timeout_ms, promotion_dedup_limit,
+           dedup_provisional_head, promotion_prepared_at,
            history_retention_lease_id, history_retention_lease_owner,
            history_retention_protected_through, history_retention_expires_at,
            history_retention_renewed_at, history_retention_released_at
@@ -2511,6 +2719,13 @@ lookupVersionedRunStmt =
     """
     textParam
     (D.rowMaybe persistedRunDecoder)
+
+countStagedDedupStmt :: Statement Text Int64
+countStagedDedupStmt =
+  preparable
+    "SELECT count(*) FROM keiro.keiro_projection_rebuild_dedup_stage WHERE run_id = $1"
+    textParam
+    (D.singleRow (D.column (D.nonNullable D.int8)))
 
 persistedRunDecoder :: D.Row PersistedRun
 persistedRunDecoder =
@@ -2527,6 +2742,9 @@ persistedRunDecoder =
     <*> D.column (D.nonNullable D.text)
     <*> D.column (D.nonNullable D.int8)
     <*> D.column (D.nonNullable D.int8)
+    <*> D.column (D.nonNullable D.int8)
+    <*> D.column (D.nullable D.int8)
+    <*> D.column (D.nullable D.timestamptz)
     <*> D.column (D.nonNullable D.uuid)
     <*> D.column (D.nonNullable D.text)
     <*> D.column (D.nonNullable D.int8)
@@ -2643,6 +2861,27 @@ completeVersionedSourceStmt =
     (contrazip3 textParam textParam int8Param)
     D.noResult
 
+insertStagedDedupBatchStmt :: Statement ([Text], [Text], [Text], [UUID], [Int64]) ()
+insertStagedDedupBatchStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_rebuild_dedup_stage
+      (run_id, subscription_name, projection_name, event_id, global_position)
+    SELECT staged.run_id, staged.subscription_name, staged.projection_name,
+           staged.event_id, staged.global_position
+    FROM unnest($1::text[], $2::text[], $3::text[], $4::uuid[], $5::bigint[])
+      AS staged(run_id, subscription_name, projection_name, event_id, global_position)
+    ON CONFLICT (run_id, projection_name, event_id) DO NOTHING
+    """
+    ( contrazip5
+        textArrayParam
+        textArrayParam
+        textArrayParam
+        uuidArrayParam
+        int8ArrayParam
+    )
+    D.noResult
+
 extendVersionedReplayHeadStmt :: Statement (Text, Text, Int64) Bool
 extendVersionedReplayHeadStmt =
   preparable
@@ -2677,27 +2916,89 @@ extendVersionedReplayHeadStmt =
     (contrazip3 textParam textParam int8Param)
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
-enterVersionedCutoverStmt :: Statement (Text, Text) Bool
-enterVersionedCutoverStmt =
+pruneStagedDedupStmt :: Statement (Text, [Text], [Int64]) ()
+pruneStagedDedupStmt =
   preparable
     """
-    UPDATE keiro.keiro_projection_rebuild_groups AS groups
-    SET status = 'cutover-versioned', writes_allowed = FALSE, updated_at = now()
-    FROM keiro.keiro_projection_rebuild_runs AS runs
-    WHERE runs.run_id = $1 AND runs.contract_fingerprint = $2
-      AND runs.status = 'running'
-      AND groups.group_id = runs.group_id
-      AND groups.status = 'rebuilding-versioned'
-      AND groups.active_run_id = runs.run_id
-      AND NOT EXISTS (
-        SELECT 1 FROM keiro.keiro_projection_rebuild_sources AS sources
-        WHERE sources.run_id = runs.run_id
-          AND sources.exhausted_through IS DISTINCT FROM sources.target_position
-      )
-    RETURNING TRUE
+    DELETE FROM keiro.keiro_projection_rebuild_dedup_stage AS staged
+    USING unnest($2::text[], $3::bigint[]) AS floors(subscription_name, global_position)
+    WHERE staged.run_id = $1
+      AND staged.subscription_name = floors.subscription_name
+      AND staged.global_position <= floors.global_position
     """
-    (contrazip2 textParam textParam)
-    (fromMaybe False <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
+    (contrazip3 textParam textArrayParam int8ArrayParam)
+    D.noResult
+
+admitVersionedCutoverStmt :: Statement (Text, Text, Int64) (Maybe (Int64, Int64, Int64, Bool))
+admitVersionedCutoverStmt =
+  preparable
+    """
+    WITH active AS (
+      SELECT runs.run_id, runs.captured_head, runs.cutover_threshold,
+             runs.promotion_dedup_limit
+      FROM keiro.keiro_projection_rebuild_runs AS runs
+      JOIN keiro.keiro_projection_rebuild_groups AS groups
+        ON groups.group_id = runs.group_id
+      WHERE runs.run_id = $1
+        AND runs.contract_fingerprint = $2
+        AND runs.status = 'running'
+        AND groups.status = 'rebuilding-versioned'
+        AND groups.active_run_id = runs.run_id
+        AND NOT EXISTS (
+          SELECT 1 FROM keiro.keiro_projection_rebuild_sources AS sources
+          WHERE sources.run_id = runs.run_id
+            AND sources.exhausted_through IS DISTINCT FROM sources.target_position
+        )
+      FOR UPDATE OF runs
+    ), facts AS (
+      SELECT active.*,
+             count(staged.event_id)::bigint AS staged_count,
+             count(staged.event_id)::numeric
+               + active.cutover_threshold::numeric * $3::numeric AS required_count
+      FROM active
+      LEFT JOIN keiro.keiro_projection_rebuild_dedup_stage AS staged
+        ON staged.run_id = active.run_id
+      GROUP BY active.run_id, active.captured_head, active.cutover_threshold,
+               active.promotion_dedup_limit
+    ), admitted AS (
+      UPDATE keiro.keiro_projection_rebuild_runs AS runs
+      SET dedup_provisional_head = facts.captured_head,
+          promotion_prepared_at = NULL,
+          updated_at = now()
+      FROM facts
+      WHERE runs.run_id = facts.run_id
+        AND facts.required_count <= facts.promotion_dedup_limit
+      RETURNING runs.run_id
+    )
+    SELECT facts.staged_count,
+           least(facts.required_count, 9223372036854775807)::bigint,
+           facts.promotion_dedup_limit,
+           EXISTS (SELECT 1 FROM admitted)
+    FROM facts
+    """
+    (contrazip3 textParam textParam int8Param)
+    ( D.rowMaybe
+        ( (,,,)
+            <$> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.int8)
+            <*> D.column (D.nonNullable D.bool)
+        )
+    )
+
+capturePromotionDeadlineStmt :: Statement Int64 UTCTime
+capturePromotionDeadlineStmt =
+  preparable
+    "SELECT clock_timestamp() + ($1 * interval '1 millisecond')"
+    int8Param
+    (D.singleRow (D.column (D.nonNullable D.timestamptz)))
+
+tryEnterVersionedCutoverStmt :: Statement (Text, Text, UTCTime) Text
+tryEnterVersionedCutoverStmt =
+  preparable
+    "SELECT keiro.keiro_try_projection_cutover_fence_v1($1, $2, $3)"
+    (contrazip3 textParam textParam timestamptzParam)
+    (D.singleRow (D.column (D.nonNullable D.text)))
 
 captureVersionedCutoverHeadStmt :: Statement (Text, Text, Int64) Bool
 captureVersionedCutoverHeadStmt =
@@ -2728,8 +3029,8 @@ captureVersionedCutoverHeadStmt =
     (contrazip3 textParam textParam int8Param)
     (D.singleRow (D.column (D.nonNullable D.bool)))
 
-lockActiveVersionedPromotionStmt :: Statement (Text, Text) Bool
-lockActiveVersionedPromotionStmt =
+lockActiveVersionedPreparationStmt :: Statement (Text, Text) Bool
+lockActiveVersionedPreparationStmt =
   preparable
     """
     SELECT runs.run_id
@@ -2738,6 +3039,8 @@ lockActiveVersionedPromotionStmt =
       ON groups.group_id = runs.group_id
     WHERE runs.run_id = $1 AND runs.contract_fingerprint = $2
       AND runs.status = 'cutover'
+      AND runs.dedup_provisional_head IS NOT NULL
+      AND runs.promotion_prepared_at IS NULL
       AND groups.status = 'cutover-versioned'
       AND groups.active_run_id = runs.run_id
       AND NOT EXISTS (
@@ -2750,12 +3053,32 @@ lockActiveVersionedPromotionStmt =
     (contrazip2 textParam textParam)
     (isJust <$> D.rowMaybe (D.column (D.nonNullable D.text)))
 
-setCutoverStatementTimeoutStmt :: Statement Text ()
-setCutoverStatementTimeoutStmt =
+tryLockActiveVersionedPromotionStmt :: Statement (Text, Text, UTCTime) Text
+tryLockActiveVersionedPromotionStmt =
   preparable
-    "SELECT set_config('statement_timeout', $1, true)"
+    "SELECT keiro.keiro_try_projection_promotion_lock_v1($1, $2, $3)"
+    (contrazip3 textParam textParam timestamptzParam)
+    (D.singleRow (D.column (D.nonNullable D.text)))
+
+tryLockPromotionRelationsStmt :: Statement ([Int64], UTCTime) Bool
+tryLockPromotionRelationsStmt =
+  preparable
+    "SELECT keiro.keiro_try_projection_relation_locks_v1($1, $2)"
+    (contrazip2 int8ArrayParam timestamptzParam)
+    (D.singleRow (D.column (D.nonNullable D.bool)))
+
+installStagedDedupStmt :: Statement Text Int64
+installStagedDedupStmt =
+  preparable
+    """
+    INSERT INTO keiro.keiro_projection_dedup (projection_name, event_id)
+    SELECT projection_name, event_id
+    FROM keiro.keiro_projection_rebuild_dedup_stage
+    WHERE run_id = $1
+    ON CONFLICT (projection_name, event_id) DO NOTHING
+    """
     textParam
-    (() <$ D.singleRow (D.column (D.nonNullable D.text)))
+    D.rowsAffected
 
 loadPromotionObjectsStmt :: Statement Text [(Text, PromotionObjectName)]
 loadPromotionObjectsStmt =
@@ -2812,6 +3135,24 @@ markVersionedVerificationPassedStmt =
     """
     (contrazip2 textParam textParam)
     D.noResult
+
+markVersionedPromotionPreparedStmt :: Statement (Text, Maybe UTCTime) Bool
+markVersionedPromotionPreparedStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_projection_rebuild_runs
+    SET promotion_prepared_at = now(),
+        history_retention_released_at = COALESCE($2, now()),
+        verified_at = now(), updated_at = now()
+    WHERE run_id = $1
+      AND rebuild_mode = 'versioned'
+      AND status = 'cutover'
+      AND dedup_provisional_head IS NOT NULL
+      AND promotion_prepared_at IS NULL
+    RETURNING TRUE
+    """
+    (contrazip2 textParam nullableTimestamptzParam)
+    (fromMaybe False <$> D.rowMaybe (D.column (D.nonNullable D.bool)))
 
 markVersionedRunPromotedStmt :: Statement (Text, Maybe UTCTime) Bool
 markVersionedRunPromotedStmt =
@@ -3306,6 +3647,8 @@ lockVersionedRunForAbandonStmt =
            runs.runner_format, runs.captured_head, runs.page_size,
            runs.status, runs.candidate_revision_id,
            runs.cutover_threshold, runs.cutover_lock_timeout_ms,
+           runs.promotion_dedup_limit, runs.dedup_provisional_head,
+           runs.promotion_prepared_at,
            runs.history_retention_lease_id, runs.history_retention_lease_owner,
            runs.history_retention_protected_through,
            runs.history_retention_expires_at,
@@ -3385,6 +3728,9 @@ restoreVersionedServingGroupStmt =
 textParam :: E.Params Text
 textParam = E.param (E.nonNullable E.text)
 
+textArrayParam :: E.Params [Text]
+textArrayParam = E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text)))
+
 nullableTextParam :: E.Params (Maybe Text)
 nullableTextParam = E.param (E.nullable E.text)
 
@@ -3394,8 +3740,14 @@ int4Param = E.param (E.nonNullable E.int4)
 int8Param :: E.Params Int64
 int8Param = E.param (E.nonNullable E.int8)
 
+int8ArrayParam :: E.Params [Int64]
+int8ArrayParam = E.param (E.nonNullable (E.foldableArray (E.nonNullable E.int8)))
+
 uuidParam :: E.Params UUID
 uuidParam = E.param (E.nonNullable E.uuid)
+
+uuidArrayParam :: E.Params [UUID]
+uuidArrayParam = E.param (E.nonNullable (E.foldableArray (E.nonNullable E.uuid)))
 
 timestamptzParam :: E.Params UTCTime
 timestamptzParam = E.param (E.nonNullable E.timestamptz)

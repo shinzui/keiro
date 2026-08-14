@@ -86,11 +86,35 @@ The serving table name remains a compatibility alias for existing application SQ
 Promotion may implement that alias with a transactional rename swap, but names alone
 are not lifecycle identity. Keiro persists relation identities and schema
 fingerprints, re-resolves them on resume, and refuses a run if a name now denotes a
-different object. Before promotion Keiro acquires all serving and staging table locks
-in deterministic order under one bounded deadline, revalidates the complete schema
-and dependency contract, and then swaps the whole rebuild group atomically. Replay,
-verification, and deduplication preparation occur before those table locks whenever
-correctness permits, keeping the final reader wait short.
+different object.
+
+The cutover has explicit durable boundaries and lock order. Ordinary candidate replay
+incrementally stages async redelivery keys in a run-scoped database relation. Before
+fencing, Keiro prunes evidence already below durable subscription floors, locks the run,
+and admits only a staged count plus conservative tail bound within the run's persisted
+promotion limit. It then captures an absolute database-clock deadline and attempts the
+group-row update that disables writers. A timeout rolls back that attempt, leaving the
+group unfenced and V1 writable.
+
+After fencing, Keiro captures the final head and replays only the bounded tail into the
+same staging relation. A separate preparation transaction locks the run and group rows,
+rechecks the exact evidence count, validates serving and candidate generations, runs
+application verification, installs deduplication evidence set-wise, advances declared
+checkpoints, releases history retention, and records that promotion is prepared. This
+work may be expensive, but it holds no serving or candidate target relation lock. The
+group remains write-fenced after preparation until promotion or abandonment.
+
+Each promotion attempt captures a new absolute database-clock deadline before trying
+to lock the run and group rows. It resolves and orders all serving and candidate
+relations, then acquires them with one cumulative `ACCESS EXCLUSIVE` `LOCK TABLE`
+statement whose timeout is the remaining deadline. Under those target locks Keiro
+performs only locked relation-identity and promotion-object revalidation, deterministic
+renames, the required managed external-read object reconciliation, and the metadata
+transition. A group-row or target-lock timeout rolls back only that attempt and returns
+a typed phase-specific outcome; the earlier prepared evidence remains durable and the
+group remains fenced for resume or abandonment. Thus `cutoverLockTimeoutMs` bounds one
+writer-fence or promotion attempt, not the total lifetime of a run, and contention on
+several relations cannot multiply one promotion attempt's wait budget.
 
 Schema eligibility is explicit. The built-in clone provisioner accepts only ordinary,
 permanent, non-partitioned heap tables whose DDL features it can reproduce and verify.
@@ -142,6 +166,10 @@ assumes without enforcement that old history is immutable.
 - Readers continue to observe the old serving generation during catch-up and may wait
   only during the bounded final cutover. They never observe a partially replayed
   staging generation through a sanctioned contract.
+- Async redelivery evidence grows incrementally in PostgreSQL rather than as one
+  process-resident historical list. The persisted promotion limit is resume identity;
+  oversized evidence refuses before the writer fence, while preparation and promotion
+  expose their separate durable states for operator recovery.
 - Retired generations remain explicit forensic and drain artifacts, not automatic
   rollback targets. Dropping them is a separate previewed destructive operation and is
   refused while an active run, supported read contract, or database dependency still

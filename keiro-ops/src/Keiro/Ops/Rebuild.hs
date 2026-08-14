@@ -145,6 +145,7 @@ data VersionedStartOptions = VersionedStartOptions
     pageSize :: !Int32,
     cutoverThreshold :: !Int64,
     cutoverLockTimeoutMs :: !Int64,
+    promotionDedupLimit :: !Int64,
     retentionSeconds :: !Int64
   }
   deriving stock (Eq, Show)
@@ -211,6 +212,7 @@ versionedStartOptionsParser =
     <*> option positiveInt32Reader (long "page-size" <> metavar "N" <> Optparse.value 500 <> showDefault)
     <*> option nonNegativeInt64Reader (long "cutover-threshold" <> metavar "POSITIONS" <> Optparse.value 1000 <> showDefault)
     <*> option positiveInt64Reader (long "lock-timeout-ms" <> metavar "MILLISECONDS" <> Optparse.value 5000 <> showDefault)
+    <*> option positiveInt64Reader (long "promotion-dedup-limit" <> metavar "ROWS" <> Optparse.value 1000000 <> showDefault)
     <*> option positiveInt64Reader (long "retention-seconds" <> metavar "SECONDS" <> Optparse.value 3600 <> showDefault)
 
 startOptionsParser :: Parser StartOptions
@@ -451,6 +453,7 @@ catalogVersionedStartOptions options =
       replayPageSize = options.pageSize,
       cutoverThreshold = options.cutoverThreshold,
       cutoverLockTimeoutMs = options.cutoverLockTimeoutMs,
+      promotionDedupLimit = options.promotionDedupLimit,
       retentionDuration = secondsToDiffTime (fromIntegral options.retentionSeconds),
       requestedBy = options.requestedBy,
       requestReason = options.reason
@@ -694,7 +697,7 @@ runResult report =
 versionedRunResult :: CatalogVersionedRunReport -> OpsResult
 versionedRunResult report =
   OpsResult
-    { headers = ["run", "group", "phase", "serving_revision", "candidate_revision", "epoch", "captured_head", "sources", "serving_generations", "candidate_generations"],
+    { headers = ["run", "group", "phase", "serving_revision", "candidate_revision", "epoch", "captured_head", "dedup_limit", "staged_dedup", "dedup_provisional_head", "promotion_prepared", "sources", "serving_generations", "candidate_generations"],
       rows =
         [ [ rebuildRunIdText run.rebuildRunId,
             rebuildGroupIdText run.rebuildGroupId,
@@ -703,6 +706,10 @@ versionedRunResult report =
             projectionRevisionIdText run.candidateRevisionId,
             showText run.servingEpoch,
             globalPositionText run.capturedHead,
+            showText run.promotionDedupLimit,
+            showText run.stagedDedupCount,
+            maybe "" globalPositionText run.dedupProvisionalHead,
+            boolText run.promotionPrepared,
             showText (length run.sources),
             showText (length run.servingGenerations),
             showText (length run.candidateGenerations)
@@ -885,6 +892,8 @@ versionedStartArguments options =
     showText options.cutoverThreshold,
     "--lock-timeout-ms",
     showText options.cutoverLockTimeoutMs,
+    "--promotion-dedup-limit",
+    showText options.promotionDedupLimit,
     "--retention-seconds",
     showText options.retentionSeconds
   ]

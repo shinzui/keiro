@@ -81,12 +81,20 @@ substitute for the declared delivery and retained redelivery authority.
 
 An online schema-versioned rebuild applies the same rule at its captured final head.
 Candidate replay does not rewind the live subscription while V1 continues serving.
-After the writer fence captures the final head, Keiro derives the retained redelivery
-window under the run's renewable Kiroku history lease, backfills the ordinary async
-dedup keys, and advances every declared member in the same transaction that promotes
-all candidate generations and the serving revision. A missing member, expired lease,
-or failed reconciliation rolls the transaction back and leaves promotion resumable or
-explicitly abandonable; it never exposes V2 with skipped delivery evidence.
+Instead, each replay chunk incrementally stages its async redelivery keys in a
+run-scoped database relation. Before the writer fence, Keiro prunes keys already below
+durable subscription floors and refuses if the staged count plus the bounded tail could
+exceed the run's persisted promotion limit. After the fence captures the final head,
+tail replay adds only the remaining bounded keys.
+
+A durable preparation transaction rechecks the exact staged count, installs ordinary
+async dedup keys set-wise, advances every declared member, and releases the history
+lease before target relations are locked. The group stays write-fenced and records
+that preparation completed. A later short promotion transaction swaps all candidate
+generations and the serving revision. A missing member, expired lease, or failed
+preparation rolls its transaction back; a failed lock attempt after preparation leaves
+the prepared evidence and checkpoint state intact and the group fenced for resume or
+explicit abandonment. V2 is never exposed with skipped delivery evidence.
 
 Targeted per-stream reprojection uses the same deduplication rule with a different
 checkpoint consequence. While holding the group exclusively, it replays one complete
@@ -114,9 +122,10 @@ does not itself reset a checkpoint or rebuild application data.
   projection ownership and reset policy.
 - Clearing a replayable target cannot combine with a missing-checkpoint choice that silently skips
   retained history.
-- Multi-member reset remains Kiroku-owned while target, fence, dedup, and checkpoint changes commit
-  or roll back at each boundary: preparation rewinds while fenced, and promotion backfills dedup,
-  advances every member, and returns the group to live atomically.
+- Multi-member reset remains Kiroku-owned while target, fence, dedup, and checkpoint
+  changes commit or roll back at each boundary: offline preparation rewinds while
+  fenced; online versioned preparation installs bounded staged dedup and advances every
+  member durably before the short atomic generation promotion returns the group live.
 - Async application remains exactly-once per retained dedup window across an offline catalog
   rebuild, including an in-flight delivery parked on the rebuild fence. Idempotent handler SQL is
   still useful defense in depth after operator pruning moves an event outside that window.

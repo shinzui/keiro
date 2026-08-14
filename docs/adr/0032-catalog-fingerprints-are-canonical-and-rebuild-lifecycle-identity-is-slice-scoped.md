@@ -173,10 +173,13 @@ owning group slice and the whole-catalog provenance.
 
 Allocated generation UUIDs and physical relation names remain outside catalog identity,
 but they are durable run identity once begin commits. The schema-versioned runner stores
-its own `keiro/versioned-rebuild/v2` contract beside the offline replay contract and
+its own `keiro/versioned-rebuild/v3` contract beside the offline replay contract and
 refuses resume if the catalog slice, ordered candidate adapters, revision identities, or
-persisted promotion-object map changes. Page size and a newly captured physical name
-can never be used to reinterpret an existing run.
+persisted promotion-object map changes. Its persisted promotion-dedup limit is also
+resume identity because changing admission policy mid-run would reinterpret whether the
+same staged history may fence writers. Page size and a newly captured physical name can
+never be used to reinterpret an existing run. An active v2 versioned run must complete
+under its old runtime or be abandoned before the v3 runner is deployed.
 
 
 ## Consequences

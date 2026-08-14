@@ -46,7 +46,7 @@ cross-plan release gate.
 - [x] (2026-08-14T08:05:14Z) M1: revision live handlers retain exact inline or
   subscription delivery authority; mixed-delivery versioned groups execute each effect
   once at the declared boundary before, during, and after promotion.
-- [ ] M2: writer-fence acquisition and promotion use a true overall deadline, expensive
+- [x] (2026-08-14T08:43:20Z) M2: writer-fence acquisition and promotion use a true overall deadline, expensive
   verification and deduplication preparation leave the exclusive-lock phase, and large
   dedup histories are staged and admitted before fencing.
 - [ ] M3: steady-state versioned inline/async writes, status reads, guarded reads, and
@@ -67,6 +67,14 @@ cross-plan release gate.
 - Revision live target requirements cannot remain group-total after delivery identity
   is restored. Replay adapters and revision verifiers still require the complete group,
   while each live handler must require exactly its supplying projection's owned targets.
+- PostgreSQL `statement_timeout` cannot express one budget across several client-issued
+  statements. Database-clock deadline helpers are needed both to catch the timeout into
+  a typed, still-usable transaction outcome and to apply the remaining budget before
+  the group-row and cumulative relation-lock statements.
+- Moving dedup installation and checkpoint reconciliation before target locks requires
+  a durable prepared boundary. A target-lock timeout must preserve that earlier committed
+  safety evidence and keep the writer fence, rather than pretending the whole cutover
+  attempt began from an unfenced state.
 
 
 ## Decision Log
@@ -100,11 +108,39 @@ cross-plan release gate.
   the name prevents them from collapsing into one ambiguous capability while keeping
   subscription identity anchored by its already-unique subscription and dedup IDs.
   Date: 2026-08-14
+- Decision: Persist incremental async dedup evidence per versioned run and make the
+  positive promotion limit part of start/resume identity.
+  Rationale: database staging bounds process residency and makes oversized redelivery
+  windows observable and rejectable before writers are fenced. The conservative
+  admission reserves `cutoverThreshold` rows for every async dedup specification, then
+  preparation rechecks the exact staged count.
+  Date: 2026-08-14
+- Decision: Split fenced preparation from relation-locked promotion.
+  Rationale: application verification, set-based dedup installation, checkpoint
+  reconciliation, and retention release can be proportional to data or topology and
+  must not extend reader-blocking target locks. The prepared marker gives crash recovery
+  an explicit authority: promotion retries preserve the fence and prepared evidence.
+  Date: 2026-08-14
+- Decision: Measure each writer-fence or promotion attempt from an absolute PostgreSQL
+  `clock_timestamp()` deadline and lock every target in one ordered statement.
+  Rationale: a per-statement timeout multiplies with the object count and omitted the
+  group-row wait. A shared deadline and one relation statement bound cumulative lock
+  acquisition while phase-specific typed errors preserve resumability.
+  Date: 2026-08-14
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+- M1 restored delivery-scoped revision dispatch and advanced catalog/slice identity;
+  the focused catalog, DSL, operator, and Jitsurei suites prove inline and subscription
+  effects stay on their declared boundaries across promotion.
+- M2 replaced process-resident historical dedup collection with incremental run-scoped
+  PostgreSQL staging and a persisted admission limit. The schema-versioned suite passes
+  22 examples, including independent writer-fence and promotion-group contention, two
+  target relations held by separate reader sessions under one 500 ms attempt budget,
+  durable prepared-state retry, and a 20-row lag refusal before fencing. The operator
+  suite passes 46 examples and the migration suite passes 32 examples with 29 embedded
+  native migrations and an exact PostgreSQL 18 schema snapshot.
 
 
 ## Context and Orientation
@@ -396,8 +432,10 @@ Two separate sessions blocking different promotion relations cannot make one att
 wait twice its configured deadline. Row-lock contention before target locking is also
 bounded. Every timeout preserves the complete v1 serving generation and returns a
 typed outcome. Successful promotion holds exclusive target locks only for locked
-identity/schema revalidation, bounded dedup/checkpoint installation if still required,
-renames, managed-object reconciliation, and metadata transition.
+relation identity and promotion-object revalidation, renames, managed-object
+reconciliation, and metadata transition. Application schema verification, dedup
+installation, checkpoint reconciliation, and retention release occur in the preceding
+durable preparation.
 
 A subscription lag larger than the admission limit refuses cutover while ordinary v1
 writes remain allowed. A lag within the limit uses database staging and bounded tail

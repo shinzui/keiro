@@ -224,6 +224,7 @@ data CatalogVersionedStartOptions = CatalogVersionedStartOptions
     replayPageSize :: !Int32,
     cutoverThreshold :: !Int64,
     cutoverLockTimeoutMs :: !Int64,
+    promotionDedupLimit :: !Int64,
     retentionDuration :: !DiffTime,
     requestedBy :: !Text,
     requestReason :: !Text
@@ -764,6 +765,7 @@ versionedRequestFor (ProjectionCatalogOperations catalog) options = do
         replayPageSize = options ^. #replayPageSize,
         cutoverThreshold = options ^. #cutoverThreshold,
         cutoverLockTimeoutMs = options ^. #cutoverLockTimeoutMs,
+        promotionDedupLimit = options ^. #promotionDedupLimit,
         retentionLeaseRequest = HistoryRetentionLeaseRequest owner reason duration,
         requestedBy = options ^. #requestedBy,
         requestReason = options ^. #requestReason
@@ -1314,6 +1316,10 @@ versionedRunValue report =
       "pageSize" Aeson..= (report ^. #replayPageSize),
       "cutoverThreshold" Aeson..= (report ^. #cutoverThreshold),
       "cutoverLockTimeoutMs" Aeson..= (report ^. #cutoverLockTimeoutMs),
+      "promotionDedupLimit" Aeson..= (report ^. #promotionDedupLimit),
+      "stagedDedupCount" Aeson..= (report ^. #stagedDedupCount),
+      "dedupProvisionalHead" Aeson..= fmap globalPositionValue (report ^. #dedupProvisionalHead),
+      "promotionPrepared" Aeson..= (report ^. #promotionPrepared),
       "sources" Aeson..= map versionedSourceValue (report ^. #sources),
       "servingGenerations" Aeson..= map versionedGenerationValue (report ^. #servingGenerations),
       "candidateGenerations" Aeson..= map versionedGenerationValue (report ^. #candidateGenerations)

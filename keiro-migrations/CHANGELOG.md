@@ -6,6 +6,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+- Migration `0029.sql` adds bounded, run-scoped async-dedup staging, persisted
+  admission/preparation evidence, and private database-clock deadline helpers for
+  schema-versioned writer-fence and cumulative promotion-lock attempts.
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.7 && <0.8` and
