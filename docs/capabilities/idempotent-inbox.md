@@ -1,10 +1,10 @@
 ---
 title: "Idempotent inbox with Kafka adapter"
 type: Capability
-description: "Consume inbound messages exactly once with respect to their effect by recording message identity in Postgres, so a redelivered message is recognized and skipped before it drives a command."
+description: "Run an inbound database handler at most once per retained (source, dedupe-key) identity, with selectable envelope/source/Kafka/custom policies and a canonical Kafka decoder."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-10
 provider: mori://shinzui/keiro
 status: shipped
@@ -33,12 +33,21 @@ evidence:
 # Idempotent inbox with Kafka adapter
 
 A consumer service records the identity of every inbound message it accepts in a
-Postgres inbox table, in the same transaction that drives the resulting command
-([CAP-3](transactional-command-cycle.md)). A redelivered message — which
-at-least-once transports and the outbox drain (CAP-9)
+Postgres inbox table, in the same transaction as the handler's database effects.
+Those effects may include the transactional command primitives from
+[CAP-3](transactional-command-cycle.md). A redelivered message — which
+at-least-once transports and the [outbox drain (CAP-9)](transactional-outbox.md)
 both produce — is recognized by its recorded identity and skipped before it can
-apply its effect a second time. The bundled Kafka adapter reads keiro's canonical
-envelope headers to derive that identity.
+apply its effect a second time. The bundled Kafka decoder reconstructs Keiro's
+canonical integration envelope and Kafka delivery reference; the caller chooses
+message-id, source-event, topic/partition/offset, or custom deduplication identity.
+
+The basic runner rolls back both the row and handler effects on an exception so
+a redelivery can try from scratch. The opt-in retrying runner instead records
+failed attempts in a second transaction, retries up to a caller-selected
+ceiling, and then leaves an operator-visible failed row as the poison-message
+record. Successful rows can retain the full envelope or only the deduplication
+facts; failed rows always retain the full envelope for diagnosis.
 
 This is recorded separately from the outbox because a consumer adopts and
 verifies the inbox on its own — a service that only consumes never runs an
@@ -49,15 +58,22 @@ outbox.
 ```haskell
 import Keiro.Inbox
 
-withInbox messageId $ \accept ->
-  when accept $ runCommand stream sid (commandFor message)  -- second delivery is skipped
+runInboxTransaction
+  Nothing
+  PreferIntegrationMessageId
+  integrationEvent
+  (Just kafkaDeliveryRef)
+  transactionalHandler
 ```
 
 ## Limits
 
-- Idempotency is keyed on the message identity carried in keiro's canonical
-  envelope headers; a producer that does not stamp a stable identity, or that
-  rewrites it on retry, defeats the dedup. The Kafka inbox reads a **fixed**
-  header set and cannot be remapped to arbitrary headers.
+- The chosen identity must be stable. The default integration-message policy
+  cannot deduplicate a producer that mints a new message id on every retry; use
+  source-event or a reviewed custom key when that is the intended contract.
 - Dedup covers the effect that runs in the inbox transaction. Effects a handler
   performs outside that transaction are not covered by the inbox record.
+- Garbage collection defines the deduplication window. A delivery that arrives
+  after its completed row is removed is new work to the inbox.
+- Failed rows are deliberately excluded from completed-row garbage collection;
+  resolving or removing a poison message is an operator decision.

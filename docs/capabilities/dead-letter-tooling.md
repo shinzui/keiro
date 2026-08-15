@@ -1,10 +1,10 @@
 ---
-title: "Dead-letter records and idempotent replay"
+title: "Dead-letter records and controlled replay"
 type: Capability
-description: "Durably record a dispatch that could not be delivered and replay a subscription's dead-letter queue idempotently, so a rejected message is never silently lost and never double-applied on replay."
+description: "Durably record a dispatch that could not be delivered, inspect a subscription's records, and replay them with an explicit idempotent handler so rejected messages are not silently lost."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-11
 provider: mori://shinzui/keiro
 status: shipped
@@ -20,7 +20,7 @@ requires:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
-    proves: "The 'Keiro.DeadLetter' describe block exercises recording a rejected dispatch as a durable row and replaying a subscription dead-letter queue without re-applying an already-settled entry."
+    proves: "The 'Keiro.DeadLetter' describe block exercises durable rejected-dispatch records, bounded listing, replay outcome classification, missing-source handling, and caller-controlled duplicate suppression."
   - kind: guide
     resource: docs/user/dead-letters.md
     proves: "When a dispatch is dead-lettered, what the record contains, and how to replay the dead-letter queue safely."
@@ -29,14 +29,16 @@ evidence:
     proves: "The dispatch dead-letter record types and the dispatcher-kind taxonomy that classifies which subscription produced a rejected dispatch."
 ---
 
-# Dead-letter records and idempotent replay
+# Dead-letter records and controlled replay
 
 When a process-manager or router dispatch ([CAP-7](process-managers-routers-timers.md))
 cannot be delivered, keiro writes a durable dead-letter row rather than dropping
 it, tagged with the dispatcher kind that produced it. `Keiro.DeadLetter.Replay`
-replays a subscription's dead-letter queue idempotently: an entry that has
-already been settled is recognized and not applied again, so a replay pass can be
-re-run safely after a partial failure.
+can list a bounded set of records for one subscription and replay them through a
+caller-supplied handler. Each attempted record is classified as freshly replayed,
+already applied, failed, or missing from the source stream. The original
+[Kiroku](mori://shinzui/kiroku) dead-letter row is retained as an audit record;
+replay neither deletes it nor marks it settled.
 
 This is its own capability because it is adopted and verified as an operational
 tool distinct from issuing dispatch: a consumer wires dead-letter replay into its
@@ -47,14 +49,20 @@ recovery runbook, and its evidence is separate from the dispatch mechanism.
 ```haskell
 import Keiro.DeadLetter.Replay
 
-replayDeadLetters subscription  -- re-drives unsettled entries; settled ones are skipped
+outcomes <- replaySubscriptionDeadLetters subscription 100 $ \recorded -> do
+  -- Use a deterministic event/message id in this handler.
+  replayRecordedEvent recorded
 ```
 
 ## Limits
 
-- Replay is idempotent with respect to the dead-letter record's settled state; it
-  is not a general poison-message policy. Deciding *why* an entry keeps failing
-  and whether to retry, drop, or fix-and-replay is left to the operator.
+- Replay safety comes from the supplied handler's idempotency or deterministic
+  identifiers, not from mutable state on the dead-letter row. A repeated pass
+  calls the handler again; the handler reports `ReplayedDuplicate` when the
+  intended effect already exists.
+- The scan is bounded by the requested limit. A hard-deleted source event is
+  reported as `ReplaySourceMissing`; it cannot be reconstructed from the
+  dead-letter record alone.
 - Dead-lettering covers dispatch rejection and subscription DLQ replay. The PGMQ
-  work queue keeps its own DLQ (CAP-12); the two are
+  work queue keeps its own DLQ ([CAP-12](postgres-work-queues.md)); the two are
   separate surfaces and this record does not cover the pgmq DLQ.

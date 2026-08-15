@@ -1,10 +1,10 @@
 ---
 title: "OpenTelemetry instrumentation"
 type: Capability
-description: "Emit OpenTelemetry spans and metrics across every delivery and handler — commands, projections, dispatch, timers, workflows, and jobs — so a consumer that wires an OTel exporter gets end-to-end traces without instrumenting the framework itself."
+description: "Emit bounded OpenTelemetry spans and metrics across commands, projections/rebuilds, dispatch, messaging, timers, workflows, and PGMQ jobs, with W3C propagation across durable boundaries."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-15
 provider: mori://shinzui/keiro
 status: shipped
@@ -12,8 +12,10 @@ stability: experimental
 since: "0.1.0.0"
 packages:
   - keiro
+  - keiro-pgmq
 interface:
   - Keiro.Telemetry
+  - Keiro.PGMQ.Metrics
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
@@ -21,6 +23,9 @@ evidence:
   - kind: guide
     resource: docs/user/operations.md
     proves: "How to wire an OTel exporter and what telemetry keiro emits for operating a deployment."
+  - kind: test
+    resource: keiro-pgmq/test/Main.hs
+    proves: "PGMQ jobs propagate W3C trace context across enqueue/settlement and record bounded queue, attempt, retry, completion, and dead-letter metrics."
   - kind: module
     resource: keiro/src/Keiro/Telemetry.hs
     proves: "The telemetry surface: span kinds and the common attribute set applied across delivery and handler paths."
@@ -30,10 +35,18 @@ evidence:
 
 keiro emits OpenTelemetry spans and metrics across its delivery and handler paths
 — the command cycle, projections, process-manager and router dispatch, timers,
-durable workflows, and pgmq jobs — with a common attribute surface and W3C trace
-context propagated through the outbox/inbox boundary. A consumer wires its own
+catalog rebuilds, durable workflows, and PGMQ jobs — with a common bounded
+attribute surface and W3C trace context propagated through durable messaging
+boundaries. A consumer wires its own
 OTel exporter and gets end-to-end traces and operational metrics without having
 to instrument the framework internals.
+
+Outcome-aware commands emit only `accepted`, `rejected`, or `no_op`; typed
+application reasons are deliberately excluded from attributes and metric
+dimensions. Read-model distance is measured in global-position units from the
+newest visible head, and versioned rebuild metrics distinguish starts, resumptions,
+pages/events, failures, promotions, and duration without inventing an event-count
+lag.
 
 This is recorded as a capability because configuring telemetry is a real,
 separate adoption decision with its own module and its own evidence, even though

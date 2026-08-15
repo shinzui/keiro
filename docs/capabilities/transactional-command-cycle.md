@@ -1,10 +1,10 @@
 ---
 title: "The transactional command cycle"
 type: Capability
-description: "Run the load → streaming replay → decide → append-batch command cycle with optimistic concurrency, optionally committing events, inline projections, and outbox/timer rows in one Postgres transaction."
+description: "Run the load → streaming replay → decide → append-batch command cycle with optimistic concurrency, duplicate-event probes, immediate replay verification, and optional transactional side effects."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-3
 provider: mori://shinzui/keiro
 status: shipped
@@ -21,7 +21,7 @@ requires:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
-    proves: "The 'Keiro.Command' and 'Keiro.Command enrichment parity' describe blocks exercise streaming replay, decide, append-batch with optimistic-concurrency conflict handling, and the transactional 'runCommandWithSql' step that appends events and writes inline projections/outbox/timer rows atomically."
+    proves: "The 'Keiro.Command', 'Keiro.Command enrichment parity', and 'typed domain command outcomes' blocks exercise streamed hydration, decide, duplicate probes, retry/fixpoint handling, append-time replay verification, and transactional SQL/projection variants."
   - kind: guide
     resource: docs/user/command-cycle.md
     proves: "The canonical command cycle end to end, including when to use the plain runner versus the transactional runner."
@@ -43,23 +43,34 @@ caller can retry.
 `runCommandWithSql` extends the append into a single Postgres transaction that
 also updates inline projections and writes outbox and timer rows, so a command
 and its immediate side effects commit or roll back together. This is the
-mechanism the transactional outbox (CAP-9) and durable timers (CAP-7) rely on.
+mechanism the [transactional outbox (CAP-9)](transactional-outbox.md) and
+[durable timers (CAP-7)](process-managers-routers-timers.md) rely on.
+Every successful append is replayed immediately from its pre-command state so a
+bad just-committed batch is reported through telemetry at the point it poisons
+the stream. Caller-supplied event ids also make an externally retried submission
+detectable without a second append.
+
+Consumers that need business-level accepted/rejected/no-op results use the same
+cycle through the outcome-aware runners described in
+[CAP-18](typed-domain-command-outcomes.md); those runners preserve the retry and
+transaction boundaries here.
 
 ## Shape
 
 ```haskell
 import Keiro.Command
 
-runCommand validatedStream streamId command       -- append-only
-runCommandWithSql validatedStream streamId command $ \events ->
+runCommand options validatedStream targetStream command       -- append-only
+runCommandWithSql options validatedStream targetStream command $ \appendResult ->
   -- extra writes committed in the same transaction as the append
 ```
 
 ## Limits
 
 - Optimistic concurrency means a hot stream under contention will see append
-  conflicts and must retry; there is no server-side serialization queue. Model
-  aggregates so a single stream is not a global write bottleneck.
+  conflicts and will retry only within the configured budget. A repeated
+  conflict against a stream hidden by a truncate marker terminates as a typed
+  conflict fixpoint rather than looping forever.
 - The transactional step commits only what runs inside the one Postgres
   transaction — cross-database or cross-service effects are not covered and
   belong to the outbox/inbox path, not to `runCommandWithSql`.

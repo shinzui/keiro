@@ -3,8 +3,8 @@ title: "PostgreSQL work queues (keiro-pgmq)"
 type: Capability
 description: "Run typed background jobs on a Postgres-native message queue with retries, a dead-letter policy, FIFO message groups, queue provisioning, metrics, and trace propagation — no separate broker."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-12
 provider: mori://shinzui/keiro
 status: shipped
@@ -14,6 +14,7 @@ packages:
   - keiro-pgmq
 interface:
   - Keiro.PGMQ
+  - Keiro.PGMQ.Codec
   - Keiro.PGMQ.Job
   - Keiro.PGMQ.Dlq
   - Keiro.PGMQ.Runtime
@@ -21,20 +22,22 @@ interface:
 evidence:
   - kind: test
     resource: keiro-pgmq/test/Main.hs
-    proves: "Typed job encode/decode, retry and DLQ policy, FIFO/message-group ordering, queue provisioning, one-shot draining without the shibuya runner, and W3C trace propagation across enqueue and settlement."
+    proves: "Typed job encode/decode, retry and DLQ policy, FIFO/message-group ordering, queue provisioning, direct one-shot draining, and W3C trace propagation across enqueue and settlement."
   - kind: guide
     resource: docs/user/work-queues.md
     proves: "How to define a typed job, run continuous workers or a one-shot drain, and configure retries and the DLQ."
   - kind: example
     resource: jitsurei/src/Jitsurei/ShipmentNotices.hs
-    proves: "A runnable background work queue over the order domain, including the fact that the job effect stack does not carry Kiroku's Store."
+    proves: "A runnable background work queue over the order domain, including the fact that the job effect stack does not carry the event store."
 ---
 
 # PostgreSQL work queues (keiro-pgmq)
 
 A separately depended-on package (`keiro-pgmq`) that gives a consumer a
-Postgres-native background job queue built on `pgmq-hs` and shibuya's pgmq
-adapter — no separate broker to run. Jobs are typed with their own codec; the
+Postgres-native background job queue built on
+[pgmq-hs](mori://shinzui/pgmq-hs) and the
+[Shibuya PGMQ adapter](mori://shinzui/shibuya-pgmq-adapter) — no separate broker
+to run. Jobs are typed with their own codec; the
 runtime supports continuous workers and a one-shot drain, configurable retries, a
 dead-letter policy, FIFO message groups, queue provisioning, metrics, and W3C
 trace propagation from enqueue through settlement.
@@ -47,15 +50,18 @@ workflows.
 ## Shape
 
 ```haskell
+import Data.Aeson (object)
 import Keiro.PGMQ
 
-enqueueTraced queue job
-runJobWorkers queue handler   -- or runJobOnce for a one-shot drain
+enqueueTraced tracerProvider job (MessageHeaders (object [])) payload
+runJobWorkers StopAllOnFailure 16
+  [jobProcessor job handler]  -- or runJobOnce 100 job handler
 ```
 
 ## Limits
 
-- The job effect stack deliberately does **not** carry Kiroku's `Store`; a job
+- The job effect stack deliberately does **not** carry
+  [Kiroku's](mori://shinzui/kiroku) `Store`; a job
   handler that needs to run keiro commands must interpret its own store — a
   structural fact worked examples call out because it trips people up.
 - The queue is Postgres-native and inherits pgmq's semantics: at-least-once

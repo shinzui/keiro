@@ -3,8 +3,8 @@ title: "Replay-safety validation boundary (ValidatedEventStream)"
 type: Capability
 description: "Reject unrecoverable, ambiguous, or state-losing transducers at a typed boundary before they are ever allowed to run commands."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-2
 provider: mori://shinzui/keiro
 status: shipped
@@ -33,7 +33,8 @@ evidence:
 
 # Replay-safety validation boundary (ValidatedEventStream)
 
-Before a keiki `SymTransducer` may drive commands, it must pass through
+Before a [Keiki](mori://shinzui/keiki) `SymTransducer` may drive commands, it
+must pass through
 `mkEventStream` / `validateEventStream` to become a `ValidatedEventStream`. The
 validator rejects transducers whose folds are not total, whose event inversion
 is ambiguous (two events could have produced the same state transition), or
@@ -51,20 +52,20 @@ validated boundary, and the migration path has its own guide.
 ```haskell
 import Keiro.EventStream
 
-case mkEventStream orderTransducer of
+case mkEventStream "order" orderEventStreamDef of
   Left warnings -> …  -- refuse to run: the transducer is not replay-safe
-  Right ves     -> runCommand ves …
+  Right ves     -> runCommand options ves targetStream command
 ```
 
 ## Limits
 
 - Validation is conservative: it can return an inversion-ambiguity warning for a
   transducer that is in fact safe, and the exact warning set depends on the
-  bundled keiki version (it changed at `keiro-core` 0.11.0.0 when keiki 0.9
-  proved more candidates disjoint — see the changelog). Treat warnings as a
-  prompt to review, not a proof of a bug.
+  bundled Keiki version (it changed at `keiro-core` 0.11.0.0 when
+  [Keiki 0.9](mori://shinzui/keiki) proved more candidates disjoint — see the
+  changelog). Treat warnings as a prompt to review, not a proof of a bug.
 - `Keiro.ReplayAudit` for hand-written services requires the author to supply a
   correct conservative `AffectedSet`; unlike the `.keiro` toolchain it cannot
   derive the affected set from a spec diff (see
-  CAP-14). An understated affected set understates
+  [CAP-14](typed-spec-toolchain.md)). An understated affected set understates
   replay risk.

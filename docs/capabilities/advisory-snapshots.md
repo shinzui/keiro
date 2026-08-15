@@ -1,10 +1,10 @@
 ---
-title: "Advisory aggregate snapshots"
+title: "Advisory aggregate and process-manager snapshots"
 type: Capability
-description: "Speed up stream hydration with periodic snapshots that stay strictly advisory — a corrupt or stale snapshot is discarded and replay from events remains the source of truth."
+description: "Speed up aggregate and process-manager stream hydration with periodic snapshots that stay strictly advisory — a corrupt or stale snapshot falls back to replay from events."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-4
 provider: mori://shinzui/keiro
 status: shipped
@@ -22,7 +22,7 @@ requires:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
-    proves: "The 'Keiro.Snapshot' describe block asserts that a snapshot accelerates hydration when valid and is discarded — falling back to full replay — when its codec, policy discriminator, or version does not match."
+    proves: "The 'Keiro.Snapshot' and 'Keiro.ProcessManager snapshots' blocks assert that compatible aggregate and manager snapshots accelerate hydration, while decode or compatibility failure falls back to full replay."
   - kind: guide
     resource: docs/user/snapshots.md
     proves: "When to enable snapshots, how the policy controls cadence, and why they never become load-bearing."
@@ -31,23 +31,32 @@ evidence:
     proves: "A runnable service configuring a snapshot policy over an aggregate."
 ---
 
-# Advisory aggregate snapshots
+# Advisory aggregate and process-manager snapshots
 
-Snapshots are an optimization for streams with long histories: the runtime
+Snapshots are an optimization for aggregate and process-manager state streams
+with long histories: the runtime
 periodically records the folded state so a later load can resume from the
 snapshot and replay only the tail. The guarantee is that snapshots are
-*advisory* — a snapshot that fails to decode, carries a mismatched policy
-discriminator, or predates the current version is silently discarded and the
-stream is rehydrated by replaying its events ([CAP-3](transactional-command-cycle.md)).
+*advisory* — a snapshot that fails to decode or does not match the current state
+codec version, register-file shape hash, and control-state/fold hash is discarded
+and the stream is rehydrated by replaying its events
+([CAP-3](transactional-command-cycle.md)).
 A snapshot can never be the reason a load produces wrong state.
+
+A process manager configures the same `snapshotPolicy` and `stateCodec` on its
+own event stream; no separate snapshot mechanism or table is involved.
 
 ## Shape
 
 ```haskell
 import Keiro.Snapshot
-import Keiro.Snapshot.Policy
+import Keiro.EventStream (SnapshotPolicy (..))
 
-snapshotEvery 100  -- take a snapshot every 100 events; correctness never depends on it
+eventStreamDef =
+  baseEventStream
+    { snapshotPolicy = Every 100
+    , stateCodec = Just stateCodec
+    }
 ```
 
 ## Limits
@@ -55,6 +64,6 @@ snapshotEvery 100  -- take a snapshot every 100 events; correctness never depend
 - Snapshots are a latency optimization only; they change no result and can be
   disabled with no correctness effect. Do not use them to store state that is
   not derivable from the event history.
-- A snapshot codec change invalidates existing snapshots (they are discarded and
-  rebuilt from events), so a deploy that changes snapshot shape pays a one-time
-  full-replay cost on first load of each stream.
+- Changing any compatibility discriminator invalidates existing snapshots, so
+  the next load of each stream pays a full replay before a new snapshot is
+  written. A policy change by itself changes cadence, not compatibility.

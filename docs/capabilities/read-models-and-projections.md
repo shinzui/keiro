@@ -1,10 +1,10 @@
 ---
 title: "Registered read models and fenced projections"
 type: Capability
-description: "Register read models, fold events into them with inline or async projections, choose explicit immediate or cursor-waiting query freshness, and rebuild behind an atomic writer fence."
+description: "Register read models, fold events into them with inline or subscription delivery, choose explicit immediate or reachable-head/position freshness, and rebuild behind an atomic writer fence."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-5
 provider: mori://shinzui/keiro
 status: shipped
@@ -14,6 +14,7 @@ packages:
   - keiro
 interface:
   - Keiro.ReadModel
+  - Keiro.ReadModel.Schema
   - Keiro.ReadModel.Rebuild
   - Keiro.Projection
   - Keiro.Connection
@@ -22,7 +23,10 @@ requires:
 evidence:
   - kind: test
     resource: keiro/test/Main.hs
-    proves: "The 'Keiro.ReadModel', 'Keiro.Connection projection schema', and 'catalog-fenced inline projections' describe blocks exercise registration, inline and async projection folds, immediate/category-head/position query policies, and atomically fenced rebuilds."
+    proves: "The 'Keiro.ReadModel', 'Keiro.Connection projection schema', and projection blocks exercise registration, inline and subscription folds, visible-head/position waits, timeouts, schema refusal, and atomically fenced rebuilds."
+  - kind: test
+    resource: keiro/test/ReadModelSpec.hs
+    proves: "Truthful constructors separate owner delivery from query freshness and fail immediately when a waiting policy has no compatible durable cursor or concrete position."
   - kind: guide
     resource: docs/user/read-models-and-projections.md
     proves: "How to register a read model, choose inline versus async projection, and rebuild safely."
@@ -34,10 +38,11 @@ evidence:
 # Registered read models and fenced projections
 
 A read model is an explicitly registered query surface backed by a Postgres
-table. A projection folds a category's events into it — *inline*, committed in
+table. A projection folds source events into it — *inline*, committed in
 the same transaction as the command ([CAP-3](transactional-command-cycle.md)) so
-the target is updated before the command returns, or *async*, applied by a
-subscription worker with its own checkpoint. Query freshness is independent:
+the target is updated before the command returns, or *subscription-delivered*,
+applied by a worker with its own durable checkpoint. Query freshness is
+independent:
 `Immediate` runs without polling, `WaitForHead` waits for a compatible durable
 cursor to reach one captured visible head, and caller-selected `WaitForPosition`
 can target the command's returned position. A rebuild replays history
@@ -63,7 +68,7 @@ registerReadModel
   (orderSummary ^. #shapeHash)
 ```
 
-An async model uses `DurableQueryCursor subscription`. It may still choose
+An asynchronously delivered model uses `DurableQueryCursor subscription`. It may still choose
 `immediateReadModel` and explicitly tolerate lag, or use `headWaitingReadModel`
 when the cursor's event source can reach the requested whole-store/category
 head. Per-call read-your-write uses `runQueryWithFreshness` and
@@ -71,11 +76,11 @@ head. Per-call read-your-write uses `runQueryWithFreshness` and
 
 ## Limits
 
-- Async projection checkpoints are at-least-once: a projection fold must be
+- Subscription projection checkpoints are at-least-once: a projection fold must be
   idempotent, because a crash between applying an event and advancing the
   checkpoint re-applies it. Exactly-once async checkpointing is explicitly *not*
   provided — see `docs/user/production-status.md`.
 - The single-read-model rebuild here fences one read model at a time. Rebuilding
   a set of read models that must be promoted together as one unit is the concern
-  of the projection catalog (CAP-6); do not use
+  of the [projection catalog (CAP-6)](typed-projection-catalogs.md); do not use
   the single-read-model rebuild to coordinate a multi-target cutover.

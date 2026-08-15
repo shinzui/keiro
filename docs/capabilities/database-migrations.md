@@ -1,10 +1,10 @@
 ---
 title: "Native database migrations and the keiro-migrate CLI"
 type: Capability
-description: "Install and upgrade the Kiroku and Keiro Postgres schemas with dependency-ordered, embedded pg-migrate components and a keiro-migrate executable, plus a verified import path from legacy Codd ledgers."
+description: "Install and upgrade the event-store and Keiro Postgres schemas with dependency-ordered embedded components and a keiro-migrate executable, plus a verified import path from legacy Codd ledgers."
 generated:
-  by: claude-code/sonnet-4.5
-  at: "2026-08-08T00:00:00Z"
+  by: openai/codex
+  at: "2026-08-15T00:00:00Z"
 capabilityId: CAP-13
 provider: mori://shinzui/keiro
 status: shipped
@@ -30,12 +30,13 @@ evidence:
 
 # Native database migrations and the keiro-migrate CLI
 
-A separately depended-on package (`keiro-migrations`) that owns the Kiroku and
-Keiro Postgres schemas as native, dependency-ordered `pg-migrate` components
-embedded in the binary, driven by the `keiro-migrate` executable. A schema check
-compares the live database against the expected schema, and a verified import
-path brings a database previously managed by a legacy Codd ledger onto the
-native migration history without a drop-and-recreate.
+A separately depended-on package (`keiro-migrations`) that owns the
+[Kiroku](mori://shinzui/kiroku) and Keiro Postgres schemas as native,
+dependency-ordered [pg-migrate](mori://shinzui/pg-migrate) components embedded
+in the binary, driven by the `keiro-migrate` executable. A schema check compares
+the live database against the expected schema, and a verified import path brings
+a database previously managed by a legacy Codd ledger onto the native migration
+history without a drop-and-recreate.
 
 This is its own capability because it is a distinct package and CLI a consumer
 runs at deploy time, adopted and verified independently of the runtime library
@@ -49,10 +50,10 @@ keiro-migrate up --database-url "$DATABASE_URL"   # install or upgrade the schem
 
 ## Limits
 
-- The legacy Codd import tooling lives behind the `legacy-codd-tools` cabal flag
-  (`Keiro.Migrations.LegacyCodd`, `Keiro.Migrations.New`,
-  `Keiro.Migrations.ExpectedSchema`) and pulls in `codd`; it is a one-time
-  migration aid, not part of the default build, and a consumer starting fresh
-  never needs it.
+- The supported Codd-history importer and preflight are in the default build.
+  Only the historical expected-schema, remediation, and ledger-fixup helpers
+  (`Keiro.Migrations.LegacyCodd`, `Keiro.Migrations.New`, and
+  `Keiro.Migrations.ExpectedSchema`) require the `legacy-codd-tools` Cabal flag
+  and its Codd dependencies. A fresh installation does not need either path.
 - Migrations are forward-only and Postgres-specific. There is no down-migration
   path; a rollback is a new forward migration.
