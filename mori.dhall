@@ -1,6 +1,6 @@
 let Schema =
-      https://raw.githubusercontent.com/shinzui/mori-schema/93104153ecf8817547229a867302a70a25c4b3d8/package.dhall
-        sha256:5e00bba267f27069df1d3caadfec2ec6a8c4e797ce652d78c09528f981b71b42
+      https://raw.githubusercontent.com/shinzui/mori-schema/e4899c15b6a7c36f5d6f2619c8a36ceabe58fc41/package.dhall
+        sha256:f33943bf2a160e4dc2087e482a3e784d39e79ff58d5ec67c1f53bcee3389e323
 
 in  Schema.Project::{
     , project = Schema.ProjectIdentity::{
