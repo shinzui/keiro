@@ -257,6 +257,21 @@ To add one:
    edge or the consumer's run fails outright, so add the upstream edge first,
    in the upstream repository. Today that means `kiroku-upgrade`, in the kiroku
    repository.
+
+   **Declaring it upstream is not enough — it must be *pushed*.** Consumers
+   install blueprints from git, so an upstream edge that exists only in a local
+   checkout is unreachable, and every consumer's run refuses. A local
+   `seihou agent --debug migrate` preview will happily pass against that local
+   checkout and tell you nothing, because it resolves the same working tree you
+   authored. Verify against the remote before tagging:
+
+   ```bash
+   git -C <upstream-repo> fetch -q origin
+   git -C <upstream-repo> branch -r --contains <blueprint-commit>
+   ```
+
+   Empty output means unpushed — stop and get it pushed. This was caught by
+   accident at 0.13.0.0, one step before an irreversible Hackage upload.
 4. Bump the blueprint's own `version` and the matching entry in
    `seihou-registry.dhall`, and update the edge table in
    `blueprints/keiro-upgrade/README.md` and the cohort map in
