@@ -6,6 +6,28 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### New Features
+
+- **Repository**: `blueprints/keiro-upgrade/` publishes Keiro's upgrade
+  knowledge as a Seihou blueprint migration — one agent-guided edge per released
+  version window that needs judgement work, run with
+  `seihou agent migrate keiro-upgrade`. The first edge is 0.12.0.0 → 0.13.0.0,
+  and it **entails** `kiroku-upgrade` 0.7.0.1 → 0.8.0.0, so a project that
+  depends only on Keiro and has never heard of Kiroku still crosses Kiroku's
+  edge — under Kiroku's own guidance, before Keiro's, and exactly once, because
+  the receipt is filed under the entailed blueprint's identity. A project that
+  also uses Kiroku directly therefore does not cross it twice, in either order.
+  The blueprint declares a read-only version probe that reads what this
+  project's Cabal build plan actually resolved, so `--to` need not be typed.
+  Published through the new root `seihou-registry.dhall`; the entailed blueprint
+  must be installed, and a run that cannot resolve it refuses rather than
+  leaving a project half-migrated with no signal.
+
+  Adding the edge is now a step in the release skill. The alternative has
+  already failed: `migrate-keiro-stack` in `agent-seihou` describes "the current
+  cohort" rather than a sequence of edges, nothing forced it forward at release
+  time, and it still pins `kiroku-store` 0.3.1.0 against today's 0.8.0.0.
+
 ### Breaking Changes
 
 - **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,

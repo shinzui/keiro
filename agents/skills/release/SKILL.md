@@ -223,8 +223,66 @@ in-cycle `fix:` commit repairing work introduced *in the same cycle* is not
 user-facing and correctly gets **no** entry — only fixes to already-released
 behavior belong under Bug Fixes.
 
-**Show the user every change — version bumps, bound updates, changelog edits —
-for review before committing.**
+#### Blueprint migration edge
+
+`blueprints/keiro-upgrade/` publishes Keiro's upgrade knowledge as one
+agent-guided edge per version window, consumed by
+`seihou agent migrate keiro-upgrade`. **Decide, every release, whether this one
+needs an edge — and record the decision either way.**
+
+An edge is needed when a consumer must change source, fixtures, or database
+state to cross this release: a changed or removed export, a new constructor on
+an exported sum type, a renamed configuration key, a migration whose recorded
+checksum moves, or a regeneration this release forces on DSL consumers. A
+release that is purely additive and source-compatible needs none — undeclared
+gaps between edges are legal and mean exactly "no agent intervention was
+required here."
+
+To add one:
+
+1. Write `blueprints/keiro-upgrade/migrations/<from>-to-<to>.md`. Name the exact
+   APIs that changed and what they became, state the edge's precondition, say
+   which of *this project's* validation commands prove it worked, and call out
+   what the agent must not do. Keep it to what a consumer must change — the
+   changelog already explains what happened.
+2. Append a `S.BlueprintMigration::{ from, to, prompt }` entry to
+   `blueprint.dhall`. `from` is the **last release before the break**, not the
+   earliest release the edge could apply from: Seihou selects an edge whose
+   `from` is at or after the consumer's cursor, so a lower `from` is skipped by
+   anyone already past it.
+3. **If this release absorbs an upstream breaking change, declare it in
+   `entails`** rather than copying that library's guidance here. Name the exact
+   upstream edge, matched on both `from` and `to`; Seihou will not window-plan
+   inside the entailed blueprint. The upstream blueprint must declare that
+   edge or the consumer's run fails outright, so add the upstream edge first,
+   in the upstream repository. Today that means `kiroku-upgrade`, in the kiroku
+   repository.
+4. Bump the blueprint's own `version` and the matching entry in
+   `seihou-registry.dhall`, and update the edge table in
+   `blueprints/keiro-upgrade/README.md` and the cohort map in
+   `blueprints/keiro-upgrade/files/keiro-cohort-versions.md`.
+5. Validate and preview a real chain — validation alone cannot check an
+   entailment, because whether the named blueprint declares the named edge is a
+   filesystem question:
+
+   ```bash
+   seihou validate-blueprint blueprints/keiro-upgrade
+   seihou agent --debug migrate keiro-upgrade --from <prev> --to <next>
+   ```
+
+   The preview must show every expected step, in order, each labelled with the
+   blueprint that owns it. Contacting no provider and writing nothing, it is
+   safe to run as often as you like.
+
+This step exists because the alternative has already failed once:
+`migrate-keiro-stack` in `agent-seihou` describes "the current cohort" rather
+than a sequence of edges, nothing forced it forward at release time, and it
+still pins `kiroku-store 0.3.1.0`. An append-only edge list cannot rot that way
+— but only if every release adds its edge.
+
+**Show the user every change — version bumps, bound updates, changelog edits,
+and the blueprint edge (or the reasoning for not adding one) — for review before
+committing.**
 
 ### 4. Verify (mandatory gate)
 
