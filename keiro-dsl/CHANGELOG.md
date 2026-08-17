@@ -6,11 +6,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.13.0.0 — 2026-08-17
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8`
   bound, so that generated service runtimes resolve against the same Kiroku
   release as the rest of the package set.
+- Requires the lockstep `keiro-core ^>=0.13.0.0`.
 
 ## 0.12.0.0 — 2026-08-14
 

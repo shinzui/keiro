@@ -6,10 +6,14 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.13.0.0 — 2026-08-17
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8`
   bound.
+- Requires the lockstep `keiro ^>=0.13.0.0`, `keiro-pgmq ^>=0.13.0.0`, and
+  `keiro-migrations ^>=0.13.0.0`.
 
 ## 0.12.0.0 — 2026-08-14
 

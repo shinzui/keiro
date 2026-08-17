@@ -6,6 +6,13 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.13.0.0 — 2026-08-17
+
+No changes this release. `keiro-pgmq` is republished at the shared version so
+that its PVP-compatible `keiro-core` bound tracks the lockstep package set; it
+does not depend on `kiroku-store` and is unaffected by the Kiroku 0.8.0.0
+adoption.
+
 ## 0.12.0.0 — 2026-08-14
 
 ### Breaking Changes

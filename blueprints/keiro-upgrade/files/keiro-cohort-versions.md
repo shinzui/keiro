@@ -1,7 +1,8 @@
 # Keiro release cohort map
 
-Which upstream releases each Keiro version pairs with. Keiro's seven packages
-share one version and are released together, so a row describes the whole set.
+Which upstream releases each Keiro version pairs with. Keiro's six published
+packages share one version and are released together, so a row describes the
+whole set.
 
 Use this to answer "what else moves when I move Keiro?" — not to decide what to
 edit. What to edit is in the edge prompt.

@@ -6,29 +6,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
-### New Features
-
-- **Repository**: `blueprints/keiro-upgrade/` publishes Keiro's upgrade
-  knowledge as a Seihou blueprint migration — one agent-guided edge per released
-  version window that needs judgement work, run with
-  `seihou agent migrate keiro-upgrade`. The first edge is 0.12.0.0 → 0.13.0.0,
-  and it **entails** `kiroku-upgrade` 0.7.0.1 → 0.8.0.0, so a project that
-  depends only on Keiro and has never heard of Kiroku still crosses Kiroku's
-  edge — under Kiroku's own guidance, before Keiro's, and exactly once, because
-  the receipt is filed under the entailed blueprint's identity. A project that
-  also uses Kiroku directly therefore does not cross it twice, in either order.
-  The blueprint declares a read-only version probe that reads what this
-  project's Cabal build plan actually resolved, so `--to` need not be typed.
-  Published through the new root `seihou-registry.dhall`; the entailed blueprint
-  must be installed, and a run that cannot resolve it refuses rather than
-  leaving a project half-migrated with no signal.
-
-  Adding the edge is now a step in the release skill. The alternative has
-  already failed: `migrate-keiro-stack` in `agent-seihou` describes "the current
-  cohort" rather than a sequence of edges, nothing forced it forward at release
-  time, and it still pins `kiroku-store` 0.3.1.0 against today's 0.8.0.0.
+## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes
+
+- **keiro**, **keiro-pgmq**, **keiro-dsl**, **keiro-ops**: require the lockstep
+  0.13.0.0 Keiro package family through PVP-compatible internal bounds.
 
 - **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,
   **keiro-test-support**, **keiro-dsl**, and **jitsurei** now require
@@ -54,6 +37,47 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   databases are affected and the fixup to run. This is the release that makes
   Keiro's migration plan apply on PostgreSQL 17: under 0.3.2.x, `0010` failed
   with SQLSTATE 42883 on every ordinary PostgreSQL 17 upgrade.
+
+### New Features
+
+- **Repository**: `blueprints/keiro-upgrade/` publishes Keiro's upgrade
+  knowledge as a Seihou blueprint migration — one agent-guided edge per released
+  version window that needs judgement work, run with
+  `seihou agent migrate keiro-upgrade`. The first edge is 0.12.0.0 → 0.13.0.0,
+  and it **entails** `kiroku-upgrade` 0.7.0.1 → 0.8.0.0, so a project that
+  depends only on Keiro and has never heard of Kiroku still crosses Kiroku's
+  edge — under Kiroku's own guidance, before Keiro's, and exactly once, because
+  the receipt is filed under the entailed blueprint's identity. A project that
+  also uses Kiroku directly therefore does not cross it twice, in either order.
+  The blueprint declares a read-only version probe that reads what this
+  project's Cabal build plan actually resolved, so `--to` need not be typed.
+  Published through the new root `seihou-registry.dhall`; the entailed blueprint
+  must be installed, and a run that cannot resolve it refuses rather than
+  leaving a project half-migrated with no signal.
+
+  Adding the edge is now a step in the release skill. The alternative has
+  already failed: `migrate-keiro-stack` in `agent-seihou` describes "the current
+  cohort" rather than a sequence of edges, nothing forced it forward at release
+  time, and it still pins `kiroku-store` 0.3.1.0 against today's 0.8.0.0.
+
+### Bug Fixes
+
+- **keiro-migrations**: picks up Kiroku BUG-1. Migration `0010` no longer
+  defaults `history_retention_leases.lease_id` to an unqualified `uuidv7()`,
+  which resolved only through the `search_path` Kiroku's `0001` installs and so
+  failed with SQLSTATE 42883 on every upgrade of a database already
+  bootstrapped through `0009`. Keiro's own suites run on PostgreSQL 18 and
+  never observed this; PostgreSQL 17 deployments did.
+
+### Other Changes
+
+- **Documentation**: the capability catalog in `docs/capabilities/` is
+  reconciled against the published 0.12.0.0 package set — CAP-16
+  (schema-aware operational console), CAP-17 (guarded external read-model
+  contracts), and CAP-18 (typed domain command outcomes) are recorded, and the
+  existing records' `since:` fields and package mappings are corrected.
+  `docs/user/migrations.md` documents the ledger re-baselining procedure this
+  release requires.
 
 ## 0.12.0.0 — 2026-08-14
 

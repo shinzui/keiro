@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
 
+## 0.13.0.0 — 2026-08-17
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8`
@@ -15,6 +17,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   `UnexpectedServerError`. Consumers that matched
   `UnexpectedServerError "40001"` or `UnexpectedServerError "40P01"`, and
   exhaustive matches over `StoreError`, must adopt the new constructor.
+- Requires the lockstep `keiro-core ^>=0.13.0.0`.
 
 ### Other Changes
 

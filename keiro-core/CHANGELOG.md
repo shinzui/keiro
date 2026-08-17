@@ -6,6 +6,8 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.13.0.0 — 2026-08-17
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8`

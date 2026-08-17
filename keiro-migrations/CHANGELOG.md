@@ -6,6 +6,8 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.13.0.0 — 2026-08-17
+
 ### Breaking Changes
 
 - Requires `kiroku-store >=0.8 && <0.9` and
@@ -37,7 +39,7 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
   production, as `docs/user/upgrading-to-the-keiro-schema.md` describes for the
   2026-07-05 realignment.
 
-### Fixes
+### Bug Fixes
 
 - Picks up Kiroku BUG-1: migration `0010` no longer defaults
   `history_retention_leases.lease_id` to an unqualified `uuidv7()`. `uuidv7()`
