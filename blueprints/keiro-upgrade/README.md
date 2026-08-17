@@ -6,7 +6,7 @@
 > heard of Kiroku — still crosses Kiroku's edges, exactly once, in the right
 > order.
 
-**Version:** `0.1.0`
+**Version:** `0.2.0`
 
 **Kind:** Blueprint migration (run with `seihou agent migrate`, not
 `seihou agent run` — this blueprint declares no baseline and applies no modules)

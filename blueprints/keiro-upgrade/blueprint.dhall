@@ -4,7 +4,7 @@ let S =
 
 in  S.Blueprint::{
     , name = "keiro-upgrade"
-    , version = Some "0.1.0"
+    , version = Some "0.2.0"
     , description = Some
         "Upgrade guidance for projects consuming Keiro, the event-sourcing framework and durable workflow engine. One edge per released version window that needs judgement work, with upstream cohort edges entailed so a project that has never heard of Kiroku still crosses them exactly once."
     , prompt = ./prompt.md as Text
