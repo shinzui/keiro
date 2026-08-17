@@ -362,6 +362,7 @@ isTransientStoreError = \case
   DuplicateEvent {} -> False
   EventAlreadyLinked {} -> False
   LinkSourceEventMissing {} -> False
+  TransientTransactionFailure {} -> True
   UnexpectedServerError {} -> False
 
 isTransientCommandError :: CommandError -> Bool

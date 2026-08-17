@@ -928,7 +928,7 @@ test-suite keiro-dsl-conformance-intake-full
     , effectful-core
     , hasql-transaction
     , keiro
-    , kiroku-store       >=0.7  && <0.8
+    , kiroku-store       >=0.8  && <0.9
     , text               >=2.1  && <2.2
 
 -- EP-4 publisher runtime conformance: the scaffolded Publisher config compiled
@@ -1288,7 +1288,7 @@ test-suite keiro-dsl-conformance-declarative-router
     , keiro
     , keiro-dsl
     , keiro-test-support
-    , kiroku-store        >=0.7      && <0.8
+    , kiroku-store        >=0.8      && <0.9
     , shibuya-core        ^>=0.9.0.0
     , text                >=2.1      && <2.2
     , time                >=1.12     && <1.15

@@ -6,6 +6,48 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+### Breaking Changes
+
+- Requires `kiroku-store >=0.8 && <0.9` and
+  `kiroku-store-migrations ^>=0.4.0.0`, replacing `>=0.7 && <0.8` and
+  `^>=0.3.2.0`. `kiroku-store-migrations` 0.3.2.0 and 0.3.2.1 are deprecated on
+  Hackage.
+
+- **Kiroku migration `0010` has a corrected payload, and therefore a new
+  checksum.** `keiro-migrate` composes Kiroku's plan ahead of Keiro's, and
+  `pg-migrate` verifies the exact SHA-256 of each applied migration's payload,
+  so a database that already applied `0010` from `kiroku-store-migrations`
+  0.3.2.0 or 0.3.2.1 will fail every `keiro-migrate up` and `keiro-migrate
+  verify` with a `MigrationChecksumMismatch` until its ledger row is
+  re-baselined. Run Kiroku's
+  `ledger-fixups/2026-08-16-rebaseline-0010-checksum.sql` against such a
+  database once, before migrating; it rewrites that one checksum, is
+  idempotent, and touches no schema. Kiroku's forward migration `0011` then
+  converges the schema through the ordinary runner.
+
+  Which databases are affected, and which are not:
+
+  | Database | Needs the fixup |
+  |---|---|
+  | Applied `0010` under 0.3.2.x — every PostgreSQL 18 database, and a fresh PostgreSQL 17 install performed by 0.3.2.x | Yes, once, before the next `up` |
+  | Never reached `0010` — every ordinary PostgreSQL 17 upgrade, which is the path this Kiroku release fixes | No; `0010` is still pending there and applies from the corrected payload |
+  | Ephemeral or template test databases | No; they apply the whole plan from scratch |
+
+  For a data-bearing database, rehearse on a restored clone before touching
+  production, as `docs/user/upgrading-to-the-keiro-schema.md` describes for the
+  2026-07-05 realignment.
+
+### Fixes
+
+- Picks up Kiroku BUG-1: migration `0010` no longer defaults
+  `history_retention_leases.lease_id` to an unqualified `uuidv7()`. `uuidv7()`
+  is a PostgreSQL 18 builtin; on PostgreSQL 17 the name came from the fallback
+  Kiroku's `0001` installs and was reachable only through the `search_path`
+  that `0001` itself sets, so `0010` parsed on a fresh install and failed with
+  SQLSTATE 42883 on every upgrade of a database already bootstrapped through
+  `0009`. Keiro's own suites run on PostgreSQL 18 and never observed this;
+  PostgreSQL 17 deployments did.
+
 ## 0.12.0.0 — 2026-08-14
 
 ### Breaking Changes

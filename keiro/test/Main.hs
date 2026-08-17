@@ -4658,6 +4658,22 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       isRejectionClass (EncodeFailed (NonObjectCallerMetadata Aeson.Null)) `shouldBe` False
       ackForCommandError (RetryDelay 5) (StoreFailed (Store.ConnectionLost "boom"))
         `shouldBe` AckRetry (RetryDelay 5)
+      -- kiroku-store 0.8.0.0 types class-40 rollbacks separately from
+      -- UnexpectedServerError. The transaction rolled back completely and
+      -- nothing was committed, so the source event retries rather than halting
+      -- the subscription; every other server code still halts.
+      ackForCommandError
+        (RetryDelay 5)
+        (StoreFailed (Store.TransientTransactionFailure "40001" "could not serialize access"))
+        `shouldBe` AckRetry (RetryDelay 5)
+      ackForCommandError
+        (RetryDelay 5)
+        (StoreFailed (Store.TransientTransactionFailure "40P01" "deadlock detected"))
+        `shouldBe` AckRetry (RetryDelay 5)
+      ackForCommandError (RetryDelay 5) (StoreFailed (Store.UnexpectedServerError "XX000" "boom"))
+        `shouldSatisfy` \case
+          AckHalt (HaltFatal _) -> True
+          _ -> False
       ackForCommandError (RetryDelay 5) CommandRejected `shouldSatisfy` \case
         AckHalt (HaltFatal _) -> True
         _ -> False

@@ -144,6 +144,47 @@ payloads before recording native history. See
 [Migration Ownership](migration-ownership.md#importing-existing-codd-history)
 for the API shape and safety constraints.
 
+## Databases that applied Kiroku `0010` under `kiroku-store-migrations` 0.3.2.x
+
+`kiroku-store-migrations` 0.4.0.0 corrects the payload of Kiroku migration
+`0010`, which changes its checksum. `pg-migrate` verifies the exact SHA-256 of
+each applied migration's payload, so a database that already applied `0010`
+from 0.3.2.0 or 0.3.2.1 fails every `keiro-migrate up` and `keiro-migrate
+verify` with `MigrationChecksumMismatch` until its ledger row is re-baselined.
+
+Who needs the re-baseline:
+
+| Database | Action |
+|---|---|
+| Applied `0010` under 0.3.2.x — every PostgreSQL 18 database, and a fresh PostgreSQL 17 install performed by 0.3.2.x | Run the fixup once, before the next `up` |
+| Never reached `0010` — every ordinary PostgreSQL 17 upgrade, the path this Kiroku release fixes | Nothing. `0010` is still pending and applies from the corrected payload |
+| Ephemeral or template-per-suite test databases | Nothing. They apply the whole plan from scratch |
+
+The fixup ships with `kiroku-store-migrations` as
+`ledger-fixups/2026-08-16-rebaseline-0010-checksum.sql`. It rewrites one
+checksum, touches no schema, and is idempotent — a second run, or a run against
+a database that applied the corrected payload, matches no rows. It assumes
+`pg-migrate`'s default ledger schema `pgmigrate`; edit the `to_regclass` call if
+your application configured a different one through `ledgerConfig`.
+
+```bash
+psql "$DATABASE_URL" \
+  --set ON_ERROR_STOP=on \
+  --file=<kiroku-store-migrations>/ledger-fixups/2026-08-16-rebaseline-0010-checksum.sql
+keiro-migrate verify
+keiro-migrate up
+```
+
+Kiroku's forward migration `0011` then converges the schema through the
+ordinary runner: it publishes `kiroku.uuidv7()` where missing and binds
+`history_retention_leases.lease_id`'s stored default to it. It is a no-op on a
+database that applied the corrected `0010`.
+
+For a data-bearing database, rehearse the fixup and the following `up` on a
+restored clone first, exactly as
+[Upgrading To The Keiro Schema](upgrading-to-the-keiro-schema.md) prescribes for
+the 2026-07-05 realignment.
+
 ## Runtime role privileges
 
 Use an owner/admin role for migrations. Grant the runtime role only the access

@@ -6,6 +6,28 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
 
+### Breaking Changes
+
+- Requires `kiroku-store >=0.8 && <0.9`, replacing the previous `>=0.7 && <0.8`
+  bound. `kiroku-store` 0.8.0.0 maps PostgreSQL's class-40 transaction-rollback
+  codes — `40001` serialization_failure and `40P01` deadlock_detected — to a new
+  `StoreError` constructor, `TransientTransactionFailure`, instead of to
+  `UnexpectedServerError`. Consumers that matched
+  `UnexpectedServerError "40001"` or `UnexpectedServerError "40P01"`, and
+  exhaustive matches over `StoreError`, must adopt the new constructor.
+
+### Other Changes
+
+- `Keiro.ProcessManager.isTransientStoreError` classifies
+  `TransientTransactionFailure` as transient, so a serialization failure or
+  deadlock surfaced by the store finalizes `AckRetry` on the process-manager and
+  router workers rather than halting the subscription. Before this release the
+  same conditions arrived as `UnexpectedServerError` and were classified
+  deterministic, so they halted. `Keiro.Command.isRetryableConflict` is
+  unchanged and still covers only optimistic-concurrency conflicts, so
+  `runCommand` continues to surface a transient failure as
+  `StoreFailed (TransientTransactionFailure …)` for its caller to classify.
+
 ## 0.12.0.0 — 2026-08-14
 
 ### Breaking Changes

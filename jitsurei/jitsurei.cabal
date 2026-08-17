@@ -77,7 +77,7 @@ library
     , keiki-codec-json      >=0.9      && <0.10
     , keiro
     , keiro-pgmq
-    , kiroku-store          >=0.7      && <0.8
+    , kiroku-store          >=0.8      && <0.9
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
     , pgmq-effectful        >=0.5      && <0.6
@@ -105,7 +105,7 @@ executable jitsurei-demo
     , jitsurei
     , keiro
     , keiro-ops
-    , kiroku-store                      >=0.7      && <0.8
+    , kiroku-store                      >=0.8      && <0.9
     , lens                              >=5.2
     , shibuya-core                      ^>=0.9.0.0
     , streamly
@@ -147,7 +147,7 @@ test-suite jitsurei-test
     , keiro
     , keiro-pgmq
     , keiro-test-support
-    , kiroku-store          >=0.7       && <0.8
+    , kiroku-store          >=0.8       && <0.9
     , lens                  >=5.2
     , mmzk-typeid           >=0.1
     , pgmq-core             >=0.5       && <0.6

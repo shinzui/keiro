@@ -6,6 +6,33 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### Breaking Changes
+
+- **keiro-core**, **keiro**, **keiro-migrations**, **keiro-ops**,
+  **keiro-test-support**, **keiro-dsl**, and **jitsurei** now require
+  `kiroku-store >=0.8 && <0.9`; migration consumers require
+  `kiroku-store-migrations ^>=0.4.0.0`. `kiroku-store-migrations` 0.3.2.0 and
+  0.3.2.1 are deprecated on Hackage.
+
+- **keiro**: `kiroku-store` 0.8.0.0 types PostgreSQL's class-40
+  transaction-rollback codes (`40001`, `40P01`) as a new `StoreError`
+  constructor, `TransientTransactionFailure`, rather than as
+  `UnexpectedServerError`. Exhaustive matches over `StoreError` need a new arm,
+  and any consumer that matched `UnexpectedServerError "40001"` or
+  `UnexpectedServerError "40P01"` must adopt the new constructor. Keiro
+  classifies it as transient, so a serialization failure or deadlock now
+  finalizes `AckRetry` on the process-manager and router workers where it
+  previously halted them.
+
+- **keiro-migrations**: Kiroku migration `0010`'s payload is corrected, which
+  changes its checksum. A database that already applied `0010` under
+  `kiroku-store-migrations` 0.3.2.x must have its ledger row re-baselined once,
+  before the next `keiro-migrate up`, or every `up` and `verify` fails with
+  `MigrationChecksumMismatch`. See `keiro-migrations/CHANGELOG.md` for which
+  databases are affected and the fixup to run. This is the release that makes
+  Keiro's migration plan apply on PostgreSQL 17: under 0.3.2.x, `0010` failed
+  with SQLSTATE 42883 on every ordinary PostgreSQL 17 upgrade.
+
 ## 0.12.0.0 — 2026-08-14
 
 ### Breaking Changes
