@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-19
+* **Addition**: IR-26..IR-32 filed by the keiro runtime UI initiative (origin mori://shinzui/keiro-ui): serve the keiro-ops surface over HTTP, WebSocket live feeds over Keiro.Wake, aggregate inspection reads, process-manager inspection reads, workflow inspection primitives for HTTP, composed runtime surface mounting, and recording the inspection-UI boundary in an ADR.
+
 ## 2026-08-12
 * **Implemented**: MasterPlan 38 completes IR-23 and IR-24. Candidate Language 5 now derives
 query supply from target ownership, puts `delivery` only on projection owners and `freshness`
