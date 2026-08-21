@@ -1,6 +1,12 @@
 # Bundle Update Log
 
 ## 2026-08-21
+* **Addition**: IR-34 requests a way for a guarded transition to write a mapped register, after
+  Rei's Intention root proved that `AggregateTransitionOwnershipConflict`,
+  `TransitionUnguardedSibling`, and `TransitionDuplicateUnguarded` compose into a gap with no
+  escape hatch: an edge writing a mapped register cannot be either side of a guarded pair. Rei
+  worked around it by dropping a write-only register; an aggregate whose register is read would
+  have been undeclarable.
 * **Addition**: IR-33 requests idempotent, semantically exact aggregate guard diffing after the
   published `keiro-dsl` 0.14.0.0 binary reported 39 `AggGuardTightened` advisories for Mori's
   byte-identical Language-5 workspace while simultaneously declaring the diff replay-neutral.
