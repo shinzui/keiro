@@ -6289,6 +6289,59 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       row2 ^. #rejection `shouldBe` Just rejection
       row3 ^. #status `shouldBe` OutboxSent
 
+    it "redelivers callbacks after a pre-commit finalization failure" $ \storeHandle -> do
+      let sentId = outboxIdFromOrdinal 1
+          rejectedId = outboxIdFromOrdinal 2
+          rows =
+            [ (sentId, sampleIntegrationEnvelope & #messageId .~ "precommit-sent" & #key .~ Just "precommit-key"),
+              (rejectedId, sampleIntegrationEnvelope & #messageId .~ "precommit-rejected" & #key .~ Just "precommit-key")
+            ]
+      rejection <- shouldBeRight (mkPublishRejection "invalid.destination" Nothing)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            traverse_ (uncurry enqueueIntegrationEventTx) rows
+      callbackInvocations <- newIORef []
+      let publish claimed = do
+            liftIO (modifyIORef' callbackInvocations (fmap (^. #outboxId) claimed :))
+            pure
+              [ (row ^. #outboxId, if row ^. #outboxId == rejectedId then PublishRejected rejection else PublishSucceeded)
+              | row <- claimed
+              ]
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.sql
+              "ALTER TABLE keiro.keiro_outbox ADD CONSTRAINT keiro_outbox_test_rejection_block CHECK (status <> 'rejected')"
+      first <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+      first `shouldSatisfy` \case
+        Left _ -> True
+        Right _ -> False
+      Right (Just stillPublishingSent) <- Store.runStoreIO storeHandle (lookupOutbox sentId)
+      Right (Just stillPublishingRejected) <- Store.runStoreIO storeHandle (lookupOutbox rejectedId)
+      stillPublishingSent ^. #status `shouldBe` OutboxPublishing
+      stillPublishingRejected ^. #status `shouldBe` OutboxPublishing
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.sql "ALTER TABLE keiro.keiro_outbox DROP CONSTRAINT keiro_outbox_test_rejection_block"
+      now <- getCurrentTime
+      let strandedAt = addUTCTime (-3600) now
+          maintenanceOptions = defaultMaintenanceOptions & #publishingTimeout .~ 1
+      Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt sentId strandedAt)
+      Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt rejectedId strandedAt)
+      Right maintenance <- Store.runStoreIO storeHandle (outboxMaintenancePass maintenanceOptions Nothing)
+      maintenance ^. #requeued `shouldBe` 2
+      Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+      summary ^. #published `shouldBe` 1
+      summary ^. #rejected `shouldBe` 1
+      Right (Just sentRow) <- Store.runStoreIO storeHandle (lookupOutbox sentId)
+      Right (Just rejectedRow) <- Store.runStoreIO storeHandle (lookupOutbox rejectedId)
+      sentRow ^. #status `shouldBe` OutboxSent
+      rejectedRow ^. #status `shouldBe` OutboxRejected
+      invocations <- readIORef callbackInvocations
+      invocations `shouldBe` replicate 2 [sentId, rejectedId]
+
     it "treats rejection as terminal for per-source ordering" $ \storeHandle -> do
       let row1Id = outboxIdFromOrdinal 1
           row2Id = outboxIdFromOrdinal 2

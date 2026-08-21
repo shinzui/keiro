@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-21
+* **Add**: Define terminal outbox rejection audit truth, ordered-successor release, committed-progress reporting, and the at-least-once pre-commit callback boundary (plan 165).
+
 ## 2026-08-14
 * **Update**: Publish Language 5 as the sole stable authoring contract and pin Language 4 conformance as published compatibility evidence (plan 263).
 * **Update**: Amend ADR 0024: isolate generation-0 awakeable probes behind the compatibility module and require generated workflows to allocate opaque declared awaits (plan 260).

@@ -6,6 +6,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## Unreleased
 
+### New Features
+
+- `outbox list` accepts `--status rejected` and renders `rejected_at`,
+  `rejection_code`, and bounded `rejection_detail` in human and JSON output.
+
 ## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes

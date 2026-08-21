@@ -6,6 +6,26 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### Breaking Changes
+
+- **keiro**: `PublishOutcome` gains `PublishRejected`, `OutboxStatus` gains
+  `OutboxRejected`, `OutboxRow` gains rejection audit fields, and
+  `OutboxPublishSummary` gains `rejected`. Exhaustive matches and direct record
+  construction must handle the new terminal outcome.
+- **keiro**: `KeiroMetrics` gains the `outboxRejected` counter field. Direct record
+  construction must initialize it; `newKeiroMetrics` users are unaffected.
+
+### New Features
+
+- **keiro**, **keiro-migrations**, **keiro-ops**: add bounded terminal outbox
+  rejection. Publishers return a validated stable code and optional detail; Keiro
+  persists one conditional `rejected` transition, releases ordered successors,
+  records an unlabelled counter, retains audit rows, and exposes them through operator
+  table and JSON output.
+- **keiro**: finalize all sent, rejected, failed, and skipped marks for one claimed
+  batch atomically. Summaries count committed conditional updates, preserving the
+  visible selected-versus-completed gap when stale-claim recovery wins a race.
+
 ## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes

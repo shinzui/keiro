@@ -6,6 +6,26 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
 
+### Breaking Changes
+
+- `PublishOutcome` gains `PublishRejected`, `OutboxStatus` gains
+  `OutboxRejected`, `OutboxRow` gains `rejectedAt` and `rejection`, and
+  `OutboxPublishSummary` gains `rejected`. Exhaustive matches and direct record
+  construction must handle the new terminal outcome.
+- `KeiroMetrics` gains the `outboxRejected` counter field. Direct record construction
+  must initialize it; `newKeiroMetrics` users are unaffected.
+
+### New Features
+
+- `mkPublishRejection` validates a stable 1–64 character code and optional non-empty,
+  1024-byte detail. `PublishRejected` commits bounded terminal audit truth, schedules
+  no retry, releases per-key and per-source successors, and does not stop
+  `StopTheLine`.
+- `publishClaimedOutbox` finalizes every outcome class for a claimed batch in one
+  transaction and derives its summary and `keiro.outbox.rejected` counter only from
+  conditional updates that committed. A pre-commit failure remains recoverable and
+  may redeliver the callback under the documented at-least-once contract.
+
 ## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes

@@ -1,10 +1,10 @@
 ---
 title: "Transactional outbox with Kafka adapter"
 type: Capability
-description: "Durably map committed events to an ordered, retrying outbox, or enqueue inline with a command, then publish through a transport-neutral drain with Kafka support."
+description: "Durably map committed events to an ordered outbox, or enqueue inline with a command, then publish, permanently reject, or retry through a transport-neutral drain with Kafka support."
 generated:
   by: openai/codex
-  at: "2026-08-15T00:00:00Z"
+  at: "2026-08-21T15:26:23Z"
 capabilityId: CAP-9
 provider: mori://shinzui/keiro
 status: shipped
@@ -41,8 +41,10 @@ with the command's append through `runCommandWithSql` from
 loses nothing because the durable row remains.
 
 The transport-neutral publisher claims rows with `SKIP LOCKED`, publishes a
-batch through an application callback, and marks the successful prefix sent and
-failures retryable or dead. Per-key head-of-line ordering is the default;
+batch through an application callback, and marks each handled row sent,
+permanently rejected with bounded audit data, retryable, or dead. Rejection is
+terminal and releases successors without claiming delivery or consuming retry
+budget. Per-key head-of-line ordering is the default;
 per-source, stop-the-line, and explicitly best-effort policies are available.
 Configurable backoff and attempt ceilings prevent a poison row from retrying
 forever, while a separate maintenance pass reclaims rows stranded by crashed
@@ -64,13 +66,15 @@ runCommandWithSql options eventStream targetStream command $ \_appendResult ->
 
 ## Limits
 
-- Delivery is at-least-once: the drain publishes then marks sent, so a crash
-  between publish and mark re-publishes on restart. Downstream consumers must
+- The callback is at-least-once: the drain invokes it before atomically finalizing
+  sent, rejected, and failed rows, so a crash or failed finalization can invoke it
+  again after recovery. Downstream consumers must
   dedup — which is exactly what the [inbox (CAP-10)](idempotent-inbox.md)
   provides for a keiro consumer.
 - An ordered policy constrains both claiming and result reporting: a publisher
   callback must not report a later same-key row as delivered after an earlier
-  row failed. Dead rows remain operator-visible and stop blocking their key.
+  row failed. Rejected and dead rows remain operator-visible and stop blocking their
+  key; a terminal rejection is a handled decision and does not stop `StopTheLine`.
 - The bundled adapter targets Kafka. Publishing to another broker means
   supplying your own drain sink against the outbox types; that path is not
   covered by the shipped adapter tests.

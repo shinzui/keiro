@@ -12,7 +12,7 @@ The outbox solves both. A producer-subscription writes one
 `keiro_outbox` row per mapped private event in the same Postgres
 transaction that advances its subscription checkpoint. A separate
 publisher worker drains the rows into Kafka and marks each row sent,
-retryable, or dead.
+rejected, retryable, or dead.
 
 Publish semantics are **at-least-once**: if the publisher crashes after
 Kafka acknowledges a record but before the row is marked sent, the
@@ -43,14 +43,14 @@ deduplication.
 3. The publisher worker (`publishClaimedOutbox`) claims rows with
    `FOR UPDATE SKIP LOCKED` plus a configurable ordering policy,
    publishes each claimed batch via a caller-supplied function, and
-   marks each row sent or failed. A separate maintenance pass
+   marks each row sent, rejected, or failed. A separate maintenance pass
    (`outboxMaintenancePass`) reclaims crashed-worker rows and samples
    the backlog gauge.
 
 The producer subscription never publishes to Kafka directly; the
-outbox row is the durable handoff. This places `attempts`,
-`last_error`, and per-row status into first-class SQL and gives
-operators a single place to inspect what is pending.
+outbox row is the durable handoff. This places `attempt_count`, transient
+`last_error`, terminal rejection audit fields, and per-row status into first-class SQL
+and gives operators a single place to inspect what is pending.
 
 ## The escape hatch
 
@@ -86,7 +86,7 @@ not promise cross-key order for null-keyed records).
 |--------------------|---------------------------------------------------------------|---------------------------------------------------------------------------|
 | `PerKeyHeadOfLine` | Default. One stuck row blocks only its key.                   | The common case where `key = aggregate_id`.                               |
 | `PerSourceStream`  | Any non-terminal row blocks every later row in the source.    | Ordering matters across keys (rare).                                      |
-| `StopTheLine`      | First failure halts the publisher; operator action required.  | Correctness requires manual review on every failure.                      |
+| `StopTheLine`      | First transient failure halts; rejection releases the suffix. | Correctness requires manual review on every retryable transport failure.  |
 | `BestEffort`       | Failed rows do not block later rows.                          | Events have no per-key or causal relationship; explicit opt-in only.      |
 
 Skipping a failed row and publishing a later row with the same Kafka
@@ -103,6 +103,46 @@ failed. If a row fails, keiro marks the successful prefix sent, marks
 the failed pivot retryable or dead, and returns the suffix to retryable
 state without consuming an attempt.
 
+A `PublishRejected` outcome is terminal rather than failed. It releases later rows in
+the same ordered group, including under `StopTheLine`, because retry cannot repair a
+publisher's intentional permanent refusal.
+
+## Terminal rejection
+
+Use `PublishRejected` when the transport has intentionally and permanently refused a
+message: for example, an invalid destination, authorization denial, or a sink that
+cannot represent the event. It is not a broker acknowledgement and it is not retry
+exhaustion.
+
+Construct rejection data through `mkPublishRejection`:
+
+```haskell
+case mkPublishRejection
+  "unsupported.sink"
+  (Just "the sink does not accept this event type") of
+  Left validationError -> handleConfigurationError validationError
+  Right rejection -> pure (row ^. #outboxId, PublishRejected rejection)
+```
+
+The stable code is 1–64 lowercase ASCII characters matching
+`[a-z][a-z0-9._-]*`. Optional detail must be non-empty and at most 1024 UTF-8
+bytes. Invalid values are rejected before a database statement; Keiro does not trim,
+lowercase, or truncate them.
+
+A committed rejection changes only a row still in `publishing` to `rejected`, stores
+`rejected_at`, `rejection_code`, and optional `rejection_detail`, and retains the row
+for audit. It schedules no retry, consumes no additional attempt, is excluded from
+backlog and stale-publisher recovery, and is not removed by sent-row garbage
+collection. `OutboxPublishSummary.rejected` and the unlabelled
+`keiro.outbox.rejected` counter count only conditional updates that committed.
+
+The callback still has at-least-once semantics. Sent, rejected, failed, and skipped
+marks for one claimed batch commit in one PostgreSQL transaction, but the external
+transport call happens first. If the process or finalization transaction fails after
+that call, stale-claim recovery makes the row eligible and the callback may receive the
+same `messageId` again. Transport adapters must make both delivery and rejection
+decisions idempotent by message identity.
+
 ## Auto dead-letter
 
 A row that fails `maxAttempts` consecutive times (default 10) is
@@ -114,12 +154,10 @@ inspection:
 SELECT * FROM keiro_outbox WHERE status = 'dead';
 ```
 
-Without a terminal state, a permanently broken row (oversized payload,
-schema-registry reject, missing topic, unrecoverable serialization bug)
-would freeze its key indefinitely. v1 does not distinguish transient
-from permanent Kafka errors — every error counts an attempt. A future
-worker can refine this by classifying the error before calling
-`markOutboxFailedTx`.
+Without a terminal state, an unclassified repeatedly failing row would freeze its key
+indefinitely. A transport adapter should return `PublishRejected` when it knows the
+refusal is permanent; `PublishFailed` remains retryable and eventually becomes `dead`
+at the attempt ceiling.
 
 ## Backoff
 
@@ -195,6 +233,9 @@ CREATE TABLE keiro_outbox (
   next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_error TEXT,
   published_at TIMESTAMPTZ,
+  rejected_at TIMESTAMPTZ,
+  rejection_code TEXT,
+  rejection_detail TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (source, message_id)
@@ -206,12 +247,12 @@ The supporting indexes:
 - `keiro_outbox_pending_idx` on `(status, next_attempt_at, created_at)`
   — backs the claim query's filter.
 - `keiro_outbox_head_of_line_idx` on `(source, message_key, created_at)`
-  partial `WHERE status NOT IN ('sent', 'dead') AND message_key IS NOT NULL`
+  partial `WHERE status NOT IN ('sent', 'dead', 'rejected') AND message_key IS NOT NULL`
   — backs the per-key head-of-line predicate.
 - `keiro_outbox_claim_order_idx` on `(created_at, outbox_id)` partial
   `WHERE status IN ('pending', 'failed')` — backs the claim ordering.
 - `keiro_outbox_source_order_idx` on `(source, created_at, outbox_id)` partial
-  `WHERE status NOT IN ('sent', 'dead')` — backs the `PerSourceStream`
+  `WHERE status NOT IN ('sent', 'dead', 'rejected')` — backs the `PerSourceStream`
   head-of-line predicate.
 - `keiro_outbox_sent_gc_idx` on `(published_at)` partial `WHERE status = 'sent'`
   — backs `garbageCollectSent`.

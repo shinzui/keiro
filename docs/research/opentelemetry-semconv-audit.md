@@ -171,6 +171,9 @@ line 27014):**
   `"dead_letter"` when `markOutboxFailedTx` returns `OutboxDead` (row has
   exhausted `maxAttempts`).
 - Set span status to `Error` with the failure text in the description.
+- On `PublishRejected`: leave span status unset/OK and omit `error.type`. A terminal
+  rejection is a handled publisher decision, and its bounded audit detail remains on
+  the retained outbox row rather than entering telemetry attributes.
 
 **Gap as of 2026-05-19:** No span emitted. The `IntegrationEvent.traceContext`
 field is serialized to `traceparent` / `tracestate` Kafka headers verbatim
@@ -539,6 +542,11 @@ generated module
   messages a producer sent. keiro uses its bespoke `keiro.outbox.published` name
   because it is event-sourcing-specific and tracks retried/deadlettered
   separately, which the spec metric does not (loose alignment).
+- **`keiro.outbox.rejected`** — unit `{event}`, **Counter** (`Int64`). Recorded
+  when a publisher's intentional permanent refusal commits as terminal
+  `rejected` (`recordOutboxRejected`). Description: "Outbox events permanently
+  rejected by the publisher." It carries no rejection-code or detail attributes.
+  Semconv alignment: none.
 - **`keiro.outbox.retried`** — unit `{event}`, **Counter** (`Int64`). Recorded on
   a transient publish failure that will retry (`recordOutboxRetried`).
   Description: "Outbox publish attempts that failed and will retry." Semconv
@@ -684,6 +692,7 @@ options.
 | -------------------------------- | ---------- | --------- | ----------------------------------------- | --------------------------------------------------- |
 | keiro.outbox.backlog             | {event}    | Gauge     | outbox publisher, per poll pass           | none (queue-depth; no messaging-metric equivalent)  |
 | keiro.outbox.published           | {event}    | Counter   | outbox publisher, on publish success      | $metric_messaging_client_sent_messages 3407 (loose) |
+| keiro.outbox.rejected            | {event}    | Counter   | outbox publisher, on terminal rejection   | none                                                |
 | keiro.outbox.retried             | {event}    | Counter   | outbox publisher, on transient failure    | none                                                |
 | keiro.outbox.deadlettered        | {event}    | Counter   | outbox publisher, on retry exhaustion     | none                                                |
 | keiro.inbox.processed            | {message}  | Counter   | inbox runner, on handler success          | $metric_messaging_client_consumed_messages 3410     |

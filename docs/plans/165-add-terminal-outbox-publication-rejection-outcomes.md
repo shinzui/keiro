@@ -49,8 +49,15 @@ This section must always reflect the actual current state of the work.
   publishing-state race, emitted an unlabelled rejection counter, and exposed bounded audit fields
   through operator table/JSON output. Focused validation passed with 43 core examples and 3
   operator examples, both with 0 failures.
-- [ ] Milestone 4: add crash/recovery and compatibility coverage, migrations, documentation,
-  changelog/release notes, and full validation.
+- [x] (2026-08-21T16:11:24Z) Milestone 4a: added atomic-finalization recovery coverage,
+  migration 31 upgrade/constraint coverage and count updates, regenerated and verified the native
+  PostgreSQL 18 snapshot, created strict-valid ADR 37, updated user/operations/telemetry and
+  capability documentation, and wrote unreleased changelog entries. Focused suites passed with 44
+  core examples, 3 operator examples, and 35 migration examples in both regeneration and plain
+  modes, all with 0 failures; `cabal build all` passed.
+- [ ] Milestone 4b: obtain the release workflow's required confirmation for the proposed 0.14.0.0
+  shared-major bump and changelogs, add its consumer migration edge, run the post-release-commit
+  gates, publish/tag/verify the cohort, and only then close IR-3 and this plan.
 
 
 ## Surprises & Discoveries
@@ -91,6 +98,13 @@ implementation. Provide concise evidence.
   0.13.0.0 package cohort whose native manifest ends at migration 30. The provisional next major
   cohort is therefore 0.14.0.0 and the next generated migration should be 31; both remain subject
   to the release and migration tools rather than being allocated by hand.
+- 2026-08-21: An immediate authoritative recheck found Hackage's preferred `keiro` versions and
+  upstream annotated tags both ending at 0.13.0.0. No 0.14 tag or registry release exists, so the
+  shared PVP-major candidate remains 0.14.0.0.
+- 2026-08-21: The first schema-regeneration pass wrote the correct snapshot but its already-running
+  test executable still embedded the previous text and four older upgrade tests expected tails that
+  ended at migration 30. Advancing those assertions by one and rebuilding made both the regeneration
+  and plain 35-example suites pass; frozen Codd artifacts remained untouched.
 
 
 ## Decision Log
@@ -185,7 +199,17 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The pre-release implementation now demonstrates the requested behavior end to end: a public
+publisher can construct a bounded rejection, the worker commits a distinct terminal audit row and
+continues ordered successors, summaries and metrics report only committed state, operators can
+inspect the retained evidence, and a failed finalization transaction redelivers the callback before
+converging through stale-claim recovery. Migration 0031 upgrades existing databases and the native
+snapshot/manifest/lock agree across fresh, upgrade, regeneration, and plain verification paths.
+
+The remaining outcome is deliberately external and irreversible: the repository release skill
+requires explicit confirmation of the 0.14.0.0 shared-major bump and reviewed changelogs before it
+may edit release metadata, commit the release, tag, push, or upload. IR-3 therefore remains proposed
+until every package and its documentation is verified live on Hackage.
 
 
 ## Context and Orientation
@@ -435,3 +459,9 @@ Revision note: Revalidated IR-3 against Keiro 0.11.0.0, current native migration
 surfaces, ADRs 9 and 25, Hackage/upstream tags, and the exact Shikigami 0.4.0.1 pin; accepted the API
 change, made validation/state/PVP/crash semantics explicit, attached the active intention, and reused
 the already-linked Plan 165 instead of creating a duplicate, 2026-08-10.
+
+Revision note: Implemented the public, durable, worker, telemetry, operator, migration, recovery,
+ADR, capability, and documentation work against the 0.13.0.0 cohort; regenerated the migration-31
+snapshot and recorded zero-failure pre-release validation. Split the irreversible release/IR closure
+into Milestone 4b because the repository release skill requires explicit user confirmation of the
+0.14.0.0 bump and reviewed changelogs before release metadata edits, 2026-08-21.

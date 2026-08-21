@@ -1,7 +1,9 @@
 # Bundle Update Log
 
-## 2026-08-15
+## 2026-08-21
+* **Update**: Extend the transactional outbox with bounded terminal rejection, ordered-successor release, committed summaries, and explicit at-least-once pre-finalization recovery (plan 165).
 
+## 2026-08-15
 * **Audit**: Reconcile the catalog with the published 0.12.0.0 package set,
 exported modules, release notes, user guides, focused runtime tests, DSL
 conformance corpus, and commits since the initial bundle.
@@ -23,11 +25,9 @@ versions, snapshot compatibility, command arguments, inbox/outbox transactions,
 dead-letter replay, work-queue runners, and legacy migration tooling.
 
 ## 2026-08-11
-
 * **Update**: Extend CAP-6 evidence through required candidate-Language-5 checkpoint policy, direct generation, replay-safe validation, and identity-preserving stop-the-world diff classification
 
 ## 2026-08-08
-
 * **Add**: Adopt the shared OKF capability profile (okf-profiles
 `coordination/capabilities` v0.9.0) and author the initial keiro capability
 catalog: 15 capabilities (CAP-1 … CAP-15) derived from packages, exported

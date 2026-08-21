@@ -98,6 +98,9 @@ column	keiro_outbox.occurred_at	timestamp with time zone not null
 column	keiro_outbox.outbox_id	uuid not null
 column	keiro_outbox.payload_bytes	bytea not null
 column	keiro_outbox.published_at	timestamp with time zone
+column	keiro_outbox.rejected_at	timestamp with time zone
+column	keiro_outbox.rejection_code	text
+column	keiro_outbox.rejection_detail	text
 column	keiro_outbox.schema_fingerprint	text
 column	keiro_outbox.schema_id	bigint
 column	keiro_outbox.schema_registry	text
@@ -376,6 +379,9 @@ constraint	keiro_outbox.keiro_outbox_occurred_at_not_null	NOT NULL occurred_at
 constraint	keiro_outbox.keiro_outbox_outbox_id_not_null	NOT NULL outbox_id
 constraint	keiro_outbox.keiro_outbox_payload_bytes_not_null	NOT NULL payload_bytes
 constraint	keiro_outbox.keiro_outbox_pkey	PRIMARY KEY (outbox_id)
+constraint	keiro_outbox.keiro_outbox_rejection_audit_check	CHECK ((((status = 'rejected'::text) AND (rejected_at IS NOT NULL) AND (rejection_code IS NOT NULL)) OR ((status <> 'rejected'::text) AND (rejected_at IS NULL) AND (rejection_code IS NULL) AND (rejection_detail IS NULL))))
+constraint	keiro_outbox.keiro_outbox_rejection_code_check	CHECK (((rejection_code IS NULL) OR (rejection_code ~ '^[a-z][a-z0-9._-]{0,63}$'::text)))
+constraint	keiro_outbox.keiro_outbox_rejection_detail_check	CHECK (((rejection_detail IS NULL) OR ((octet_length(rejection_detail) >= 1) AND (octet_length(rejection_detail) <= 1024))))
 constraint	keiro_outbox.keiro_outbox_schema_version_not_null	NOT NULL schema_version
 constraint	keiro_outbox.keiro_outbox_source_message_id_key	UNIQUE (source, message_id)
 constraint	keiro_outbox.keiro_outbox_source_not_null	NOT NULL source
@@ -598,12 +604,12 @@ index	keiro_inbox_pkey	CREATE UNIQUE INDEX keiro_inbox_pkey ON keiro.keiro_inbox
 index	keiro_managed_read_objects_contract_idx	CREATE INDEX keiro_managed_read_objects_contract_idx ON keiro.keiro_managed_read_objects USING btree (contract_id, contract_version)
 index	keiro_managed_read_objects_pkey	CREATE UNIQUE INDEX keiro_managed_read_objects_pkey ON keiro.keiro_managed_read_objects USING btree (object_schema, object_name, object_kind, object_signature)
 index	keiro_outbox_claim_order_idx	CREATE INDEX keiro_outbox_claim_order_idx ON keiro.keiro_outbox USING btree (created_at, outbox_id) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]))
-index	keiro_outbox_head_of_line_idx	CREATE INDEX keiro_outbox_head_of_line_idx ON keiro.keiro_outbox USING btree (source, message_key, created_at) WHERE ((status <> ALL (ARRAY['sent'::text, 'dead'::text])) AND (message_key IS NOT NULL))
+index	keiro_outbox_head_of_line_idx	CREATE INDEX keiro_outbox_head_of_line_idx ON keiro.keiro_outbox USING btree (source, message_key, created_at) WHERE ((status <> ALL (ARRAY['sent'::text, 'dead'::text, 'rejected'::text])) AND (message_key IS NOT NULL))
 index	keiro_outbox_pending_idx	CREATE INDEX keiro_outbox_pending_idx ON keiro.keiro_outbox USING btree (status, next_attempt_at, created_at)
 index	keiro_outbox_pkey	CREATE UNIQUE INDEX keiro_outbox_pkey ON keiro.keiro_outbox USING btree (outbox_id)
 index	keiro_outbox_sent_gc_idx	CREATE INDEX keiro_outbox_sent_gc_idx ON keiro.keiro_outbox USING btree (published_at) WHERE (status = 'sent'::text)
 index	keiro_outbox_source_message_id_key	CREATE UNIQUE INDEX keiro_outbox_source_message_id_key ON keiro.keiro_outbox USING btree (source, message_id)
-index	keiro_outbox_source_order_idx	CREATE INDEX keiro_outbox_source_order_idx ON keiro.keiro_outbox USING btree (source, created_at, outbox_id) WHERE (status <> ALL (ARRAY['sent'::text, 'dead'::text]))
+index	keiro_outbox_source_order_idx	CREATE INDEX keiro_outbox_source_order_idx ON keiro.keiro_outbox USING btree (source, created_at, outbox_id) WHERE (status <> ALL (ARRAY['sent'::text, 'dead'::text, 'rejected'::text]))
 index	keiro_projection_dedup_applied_at_idx	CREATE INDEX keiro_projection_dedup_applied_at_idx ON keiro.keiro_projection_dedup USING btree (applied_at)
 index	keiro_projection_dedup_pkey	CREATE UNIQUE INDEX keiro_projection_dedup_pkey ON keiro.keiro_projection_dedup USING btree (projection_name, event_id)
 index	keiro_projection_group_cursors_pkey	CREATE UNIQUE INDEX keiro_projection_group_cursors_pkey ON keiro.keiro_projection_group_cursors USING btree (group_id)

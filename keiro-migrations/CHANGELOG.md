@@ -6,6 +6,12 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+### New Features
+
+- Migration `0031.sql` adds the terminal `rejected` outbox status audit columns,
+  validates the bounded code/detail contract in PostgreSQL, and updates per-key and
+  per-source head-of-line indexes so rejected rows release ordered successors.
+
 ## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes
