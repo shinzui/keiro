@@ -1,5 +1,12 @@
 # Bundle Update Log
 
+## 2026-08-21
+* **Addition**: IR-33 requests idempotent, semantically exact aggregate guard diffing after the
+  published `keiro-dsl` 0.14.0.0 binary reported 39 `AggGuardTightened` advisories for Mori's
+  byte-identical Language-5 workspace while simultaneously declaring the diff replay-neutral.
+  The request preserves the replay-only remedy for genuine tightenings, but requires a real,
+  satisfiable removed region before Keiro prints that remedy.
+
 ## 2026-08-19
 * **Addition**: IR-26..IR-32 filed by the keiro runtime UI initiative (origin mori://shinzui/keiro-ui): serve the keiro-ops surface over HTTP, WebSocket live feeds over Keiro.Wake, aggregate inspection reads, process-manager inspection reads, workflow inspection primitives for HTTP, composed runtime surface mounting, and recording the inspection-UI boundary in an ADR.
 
