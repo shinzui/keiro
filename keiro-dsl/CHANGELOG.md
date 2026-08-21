@@ -6,6 +6,18 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
+### Breaking Changes
+
+- Requires the lockstep `keiro-core ^>=0.14.0.0`.
+
+### Other Changes
+
+- The `keiro-dsl-test` suite's `keiro-core` dependency, which shipped with no
+  version bound, now carries the lockstep `^>=0.14.0.0` bound like every other
+  bounded stanza. Library consumers are unaffected.
+
 ## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes

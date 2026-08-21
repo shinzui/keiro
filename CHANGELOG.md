@@ -6,6 +6,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
 ### Breaking Changes
 
 - **keiro**: `PublishOutcome` gains `PublishRejected`, `OutboxStatus` gains
@@ -14,6 +16,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   construction must handle the new terminal outcome.
 - **keiro**: `KeiroMetrics` gains the `outboxRejected` counter field. Direct record
   construction must initialize it; `newKeiroMetrics` users are unaffected.
+- **keiro**, **keiro-pgmq**, **keiro-dsl**, **keiro-ops**: require the lockstep
+  0.14.0.0 Keiro package family through PVP-compatible internal bounds.
 
 ### New Features
 
@@ -25,6 +29,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - **keiro**: finalize all sent, rejected, failed, and skipped marks for one claimed
   batch atomically. Summaries count committed conditional updates, preserving the
   visible selected-versus-completed gap when stale-claim recovery wins a race.
+
+### Other Changes
+
+- **Repository**: `blueprints/keiro-upgrade/` gains the 0.13.0.0 → 0.14.0.0 edge,
+  covering the new terminal outbox rejection constructors and record fields and
+  the `0031` migration consumers must apply. It entails no upstream edge — this
+  release absorbs no upstream breaking change.
+- **keiro-dsl**: the `keiro-dsl-test` suite's `keiro-core` dependency, which
+  shipped with no version bound, now carries the lockstep bound. Library
+  consumers are unaffected.
 
 ## 0.13.0.0 — 2026-08-17
 

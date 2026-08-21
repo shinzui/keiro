@@ -6,6 +6,8 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
 ### New Features
 
 - Migration `0031.sql` adds the terminal `rejected` outbox status audit columns,

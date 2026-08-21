@@ -6,6 +6,16 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
+### Breaking Changes
+
+- Requires the lockstep `keiro-core ^>=0.14.0.0`.
+
+No other changes this release. `keiro-pgmq` is unaffected by the terminal outbox
+rejection work, which lives entirely in `keiro`, `keiro-migrations`, and
+`keiro-ops`.
+
 ## 0.13.0.0 — 2026-08-17
 
 No changes this release. `keiro-pgmq` is republished at the shared version so

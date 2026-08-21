@@ -6,6 +6,12 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
+No API changes this release. `keiro-core` is republished at the shared version so
+that the lockstep package set carries one version number; its dependents'
+PVP-compatible `keiro-core` bounds move with it.
+
 ## 0.13.0.0 — 2026-08-17
 
 ### Breaking Changes

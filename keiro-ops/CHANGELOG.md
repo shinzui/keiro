@@ -6,6 +6,13 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
+### Breaking Changes
+
+- Requires the lockstep `keiro ^>=0.14.0.0`, `keiro-pgmq ^>=0.14.0.0`, and
+  `keiro-migrations ^>=0.14.0.0`.
+
 ### New Features
 
 - `outbox list` accepts `--status rejected` and renders `rejected_at`,

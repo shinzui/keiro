@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            keiro-ops
-version:         0.13.0.0
+version:         0.14.0.0
 synopsis:        Operational command-line interface for Keiro deployments
 description:
   A standalone database-only console and embeddable command tree for inspecting
@@ -68,9 +68,9 @@ library
     , effectful             >=2.6       && <2.7
     , effectful-core        >=2.6       && <2.7
     , hasql                 >=1.10      && <1.11
-    , keiro                 ^>=0.13.0.0
-    , keiro-migrations      ^>=0.13.0.0
-    , keiro-pgmq            ^>=0.13.0.0
+    , keiro                 ^>=0.14.0.0
+    , keiro-migrations      ^>=0.14.0.0
+    , keiro-pgmq            ^>=0.14.0.0
     , kiroku-store          >=0.8       && <0.9
     , optparse-applicative  >=0.18      && <0.20
     , text                  >=2.1       && <2.2
@@ -104,9 +104,9 @@ test-suite keiro-ops-test
     , hasql                 >=1.10      && <1.11
     , hasql-transaction     >=1.1       && <1.3
     , hspec                 >=2.11
-    , keiro                 ^>=0.13.0.0
+    , keiro                 ^>=0.14.0.0
     , keiro-ops
-    , keiro-pgmq            ^>=0.13.0.0
+    , keiro-pgmq            ^>=0.14.0.0
     , keiro-test-support
     , kiroku-store          >=0.8       && <0.9
     , optparse-applicative  >=0.18      && <0.20

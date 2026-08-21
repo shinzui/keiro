@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## Unreleased
 
+## 0.14.0.0 — 2026-08-21
+
 ### Breaking Changes
 
 - `PublishOutcome` gains `PublishRejected`, `OutboxStatus` gains
@@ -14,6 +16,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   construction must handle the new terminal outcome.
 - `KeiroMetrics` gains the `outboxRejected` counter field. Direct record construction
   must initialize it; `newKeiroMetrics` users are unaffected.
+- Requires the lockstep `keiro-core ^>=0.14.0.0`.
 
 ### New Features
 
