@@ -6,6 +6,21 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### New Features
+
+- **keiro-test-support** is now published to Hackage, starting at the shared
+  version 0.14.0.0. It was previously repository-internal, which meant the
+  `keiro`, `keiro-pgmq`, `keiro-ops`, and `keiro-dsl` test-suites could not be
+  built from their Hackage tarballs at all. Its own dependencies gained PVP upper
+  bounds and it ships a `LICENSE`.
+
+### Other Changes
+
+- **keiro**, **keiro-pgmq**, **keiro-ops**: the `keiro-test-support` dependency in
+  the test-suite and benchmark stanzas now carries the lockstep
+  `^>=0.14.0.0` bound. The `keiro-dsl` conformance suites are left unbounded, as
+  they are for every internal dependency.
+
 ## 0.14.0.0 — 2026-08-21
 
 ### Breaking Changes

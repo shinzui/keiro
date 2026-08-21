@@ -32,27 +32,34 @@ released together, but each gets its **own annotated git tag**.
 
 Publish in **this order** — dependencies first. `keiro`, `keiro-pgmq`, **and
 `keiro-dsl`** all depend on `keiro-core` at the library level.
-`keiro-migrations` has no internal library dependency. `keiro-ops` depends on
+`keiro-migrations` has no internal library dependency. `keiro-test-support`
+depends on `keiro-migrations`, so it follows it. `keiro-ops` depends on
 `keiro`, `keiro-pgmq`, and `keiro-migrations`, so it is always last.
 
 1. **keiro-core** (`keiro-core/`) — core stream/codec/event contracts. No internal deps.
 2. **keiro** (`keiro/`) — the event-sourcing & workflow framework. Depends on `keiro-core`.
 3. **keiro-pgmq** (`keiro-pgmq/`) — PGMQ job-queue integration. Depends on `keiro-core`.
 4. **keiro-migrations** (`keiro-migrations/`) — schema migrations + `keiro-migrate` exe. No internal library deps.
-5. **keiro-dsl** (`keiro-dsl/`) — typed `.keiro` spec toolchain (library + `keiro-dsl` exe). Depends on `keiro-core`.
-6. **keiro-ops** (`keiro-ops/`) — embeddable operational command tree + `keiro-ops` exe. Depends on `keiro`, `keiro-pgmq`, and `keiro-migrations`.
+5. **keiro-test-support** (`keiro-test-support/`) — shared suite-level PostgreSQL
+   fixtures. Library depends on `keiro-migrations`.
+6. **keiro-dsl** (`keiro-dsl/`) — typed `.keiro` spec toolchain (library + `keiro-dsl` exe). Depends on `keiro-core`.
+7. **keiro-ops** (`keiro-ops/`) — embeddable operational command tree + `keiro-ops` exe. Depends on `keiro`, `keiro-pgmq`, and `keiro-migrations`.
+
+Only **library** dependencies constrain upload order. `keiro`, `keiro-pgmq`,
+`keiro-ops`, and `keiro-dsl` depend on `keiro-test-support` from their
+test-suites and benchmark, not their libraries, so it is correct for it to be
+uploaded after `keiro` and `keiro-pgmq` — a consumer's default build plan never
+reaches it.
 
 Do not assume the internal dependency graph from this list — re-derive every
-internal-package occurrence from all six manifests each release with the scan
+internal-package occurrence from all seven manifests each release with the scan
 in step 3. The 0.7.0.0 release found the
 skill's previous claim that "`keiro-dsl`'s library is standalone" to be false,
 and that its `keiro-core` dependency had shipped in 0.6.0.0 with **no version
 bound at all**.
 
-The following packages are **NOT released** to Hackage:
+The following package is **NOT released** to Hackage:
 
-- **keiro-test-support** (`keiro-test-support/`) — internal: shared PostgreSQL
-  test fixtures, consumed only by the packages' test suites.
 - **jitsurei** (`jitsurei/`) — internal: guide-backed worked examples, not a
   reusable library.
 
@@ -87,11 +94,13 @@ The following packages are **NOT released** to Hackage:
 > If an upstream is genuinely unpublished and reachable from the default build
 > plan, stop and tell the user — do not upload a broken package.
 
-> **Known, accepted gap.** `keiro`'s and `keiro-pgmq`'s test-suites depend on
-> `keiro-test-support`, which is deliberately never published. Hackage's build
-> bot therefore cannot build those suites. This is pre-existing and outside the
-> default consumer build plan — note it, but do not treat it as a blocker or try
-> to "fix" it during a release.
+> **Closed as of 0.14.0.0 — `keiro-test-support` is published.** It used to be
+> repository-internal, which meant the `keiro`, `keiro-pgmq`, `keiro-ops`, and
+> `keiro-dsl` test-suites could not be built from their Hackage tarballs at all.
+> It is now a released package in the lockstep set and must be versioned,
+> bounded, changelogged, tagged, and uploaded like any other. If you are reading
+> an older release's notes describing this as an accepted gap, that text is
+> stale.
 
 ## Arguments
 
@@ -147,19 +156,30 @@ release"), commit count since then, and which package directories changed.
 #### Version bump
 Set the new `version:` in every published package's cabal file:
 `keiro-core/keiro-core.cabal`, `keiro/keiro.cabal`, `keiro-pgmq/keiro-pgmq.cabal`,
-`keiro-migrations/keiro-migrations.cabal`, `keiro-dsl/keiro-dsl.cabal`,
+`keiro-migrations/keiro-migrations.cabal`,
+`keiro-test-support/keiro-test-support.cabal`, `keiro-dsl/keiro-dsl.cabal`,
 `keiro-ops/keiro-ops.cabal`.
 
-Leave `keiro-test-support` and `jitsurei` as they are unless you deliberately
-choose to bump them for consistency (they are not published).
+Leave `jitsurei` as it is unless you deliberately choose to bump it for
+consistency (it is not published).
 
 #### Internal dependency bounds
 Find every internal dependency first — do not work from a remembered list:
 
 ```bash
-rg -n -g '*.cabal' 'keiro-core|keiro-migrations|keiro-pgmq|(^|[ ,])keiro([ ,]|$)' \
-  keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl keiro-ops
+rg -n -g '*.cabal' \
+  'keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|(^|[ ,])keiro([ ,]|$)' \
+  keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops
 ```
+
+**Read the matches, do not blind-replace them.** A bulk
+`s/\^>=<old>/\^>=<new>/` over the cabal files will also rewrite any *external*
+dependency that happens to sit at the same version as the outgoing shared one.
+At 0.14.0.0 that was `shibuya-pgmq-adapter`, which independently reached
+`^>=0.14.0.0`; a blind replace bumped it to a version that does not exist and the
+solver rejected the build. Diff each cabal file against `HEAD` before trusting
+the edit — every changed line must be a version, an internal bound, or
+`cabal-fmt` realignment.
 
 `keiro`, `keiro-pgmq`, and `keiro-dsl` all depend on `keiro-core`. Set each to a
 PVP-compatible bound matching the new version: `keiro-core ^>=A.B.C.D`. Update
@@ -190,7 +210,7 @@ conformance suites **cannot** catch a miss here — they depend on `keiro-core`
 directly. 0.7.0.0 shipped `Keiro.Codec.IdDomain` and needed exactly this fix.
 
 #### Changelogs
-All six published packages have a `CHANGELOG.md`, plus a root
+All seven published packages have a `CHANGELOG.md`, plus a root
 `CHANGELOG.md` summarizing the release across packages (it feeds the GitHub
 release notes in step 7). All follow
 [Keep a Changelog](https://keepachangelog.com/) + PVP with dates in
@@ -261,9 +281,8 @@ To add one:
    **Declaring it upstream is not enough — it must be *pushed*.** Consumers
    install blueprints from git, so an upstream edge that exists only in a local
    checkout is unreachable, and every consumer's run refuses. A local
-   `seihou agent --debug migrate` preview will happily pass against that local
-   checkout and tell you nothing, because it resolves the same working tree you
-   authored. Verify against the remote before tagging:
+   `seihou agent --debug migrate` preview tells you nothing about whether it is
+   pushed. Verify against the remote before tagging:
 
    ```bash
    git -C <upstream-repo> fetch -q origin
@@ -288,6 +307,32 @@ To add one:
    The preview must show every expected step, in order, each labelled with the
    blueprint that owns it. Contacting no provider and writing nothing, it is
    safe to run as often as you like.
+
+   **The preview does not read your working tree.** `seihou` resolves
+   `keiro-upgrade` from the *installed* copy at
+   `~/.config/seihou/installed/keiro-upgrade`, which was installed from git and
+   is usually stale — it lags this repository by at least the edge you are
+   adding. Previewing an edge you just authored therefore reports
+
+   ```
+   No blueprint migrations are declared inside the requested version window.
+   ```
+
+   which is a **false negative**, not a defect in your edge. Do not "fix" a
+   correct edge because of it. Sync the installed copy from the working tree
+   first, preview, then put it back:
+
+   ```bash
+   cp -R ~/.config/seihou/installed/keiro-upgrade "$S/keiro-upgrade.bak"
+   rsync -a --delete blueprints/keiro-upgrade/ ~/.config/seihou/installed/keiro-upgrade/
+   seihou agent --debug migrate keiro-upgrade --from <prev> --to <next>
+   rsync -a --delete "$S/keiro-upgrade.bak/" ~/.config/seihou/installed/keiro-upgrade/
+   ```
+
+   Confirm the restore (`grep version blueprint.dhall` and `ls migrations/`) —
+   leaving a synced copy behind would make the *next* release's preview lie in
+   the opposite direction. Use `seihou list --blueprints` to see which source a
+   blueprint currently resolves from.
 
 This step exists because the alternative has already failed once:
 `migrate-keiro-stack` in `agent-seihou` describes "the current cohort" rather
@@ -375,7 +420,7 @@ nix flake check   # treefmt + pre-commit hooks gate
   version:
 
   ```bash
-  for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl keiro-ops; do
+  for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops; do
     git tag -a "$pkg-<version>" -m "$pkg <version>"
   done
   ```
@@ -386,7 +431,8 @@ nix flake check   # treefmt + pre-commit hooks gate
 ### 6. Publish to Hackage (in dependency order)
 
 For **each** publishable package, in the order
-`keiro-core → keiro → keiro-pgmq → keiro-migrations → keiro-dsl → keiro-ops`:
+`keiro-core → keiro → keiro-pgmq → keiro-migrations → keiro-test-support →
+keiro-dsl → keiro-ops`:
 
 1. Re-confirm the package's dependencies are all on Hackage (see the
    prerequisite warning above). If a dependency reachable from the **default**
@@ -398,8 +444,10 @@ For **each** publishable package, in the order
    verify`, but a final per-package check is cheap): `keiro` → `cabal test
    keiro-test`, `keiro-pgmq` → `cabal test keiro-pgmq-test`, `keiro-migrations`
    → `cabal test keiro-migrations-test`, `keiro-dsl` → `cabal test
-   keiro-dsl-test`, `keiro-ops` → `cabal test keiro-ops-test`. `keiro-core`
-   has no dedicated suite — skip.
+   keiro-dsl-test`, `keiro-ops` → `cabal test keiro-ops-test`. `keiro-core` and
+   `keiro-test-support` have no dedicated suite — skip. `keiro-test-support` is
+   nonetheless exercised by every other package's suite, so a green `just
+   verify` already covers it.
 4. `cabal sdist` from `<pkg-dir>`, then upload **from the repo root**.
    Note the path: the tarball lands in the *workspace* `dist-newstyle/`, not in
    the package directory —
@@ -420,11 +468,11 @@ For **each** publishable package, in the order
 6. Report the Hackage URL:
    `https://hackage.haskell.org/package/<pkg>-<version>`.
 
-After all six, confirm each is actually live rather than trusting the upload
+After all seven, confirm each is actually live rather than trusting the upload
 output — both the package page and its docs:
 
 ```bash
-for p in keiro-core keiro keiro-pgmq keiro-migrations keiro-dsl keiro-ops; do
+for p in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops; do
   echo "$p $(curl -s -o /dev/null -w '%{http_code}' https://hackage.haskell.org/package/$p-<version>)" \
        "$(curl -s -o /dev/null -w '%{http_code}' https://hackage.haskell.org/package/$p-<version>/docs/)"
 done
@@ -441,6 +489,7 @@ After all uploads, present a summary table:
 | keiro | X.Y.Z.W | https://hackage.haskell.org/package/keiro-X.Y.Z.W |
 | keiro-pgmq | X.Y.Z.W | https://hackage.haskell.org/package/keiro-pgmq-X.Y.Z.W |
 | keiro-migrations | X.Y.Z.W | https://hackage.haskell.org/package/keiro-migrations-X.Y.Z.W |
+| keiro-test-support | X.Y.Z.W | https://hackage.haskell.org/package/keiro-test-support-X.Y.Z.W |
 | keiro-dsl | X.Y.Z.W | https://hackage.haskell.org/package/keiro-dsl-X.Y.Z.W |
 | keiro-ops | X.Y.Z.W | https://hackage.haskell.org/package/keiro-ops-X.Y.Z.W |
 
@@ -476,7 +525,7 @@ gh release create keiro-<version> --title "keiro <version>" --notes-file "$S/rel
 - Always ask the user to **confirm the version bump and changelogs before
   committing**.
 - Always publish in dependency order: **keiro-core → keiro → keiro-pgmq →
-  keiro-migrations → keiro-dsl → keiro-ops**.
+  keiro-migrations → keiro-test-support → keiro-dsl → keiro-ops**.
 - Never skip the gates: `nix fmt`, `just verify`, `cabal check`, `nix flake
   check`.
 - **Stop on any failure** — a failed gate, `cabal check`, or upload. Do not

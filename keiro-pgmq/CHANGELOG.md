@@ -6,6 +6,12 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## Unreleased
 
+### Other Changes
+
+- The `keiro-test-support` dependency in the test-suite stanza now carries the
+  lockstep `^>=0.14.0.0` bound, now that `keiro-test-support` is published to
+  Hackage. Library consumers are unaffected.
+
 ## 0.14.0.0 — 2026-08-21
 
 ### Breaking Changes
