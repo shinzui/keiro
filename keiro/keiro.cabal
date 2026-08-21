@@ -98,6 +98,7 @@ library
 
   other-modules:
     Keiro.Command.Domain
+    Keiro.Outbox.Rejection
     Keiro.Projection.Types
     Keiro.ReadModel.Rebuild.Group
     Keiro.ReadModel.Rebuild.Runner

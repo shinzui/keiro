@@ -268,6 +268,8 @@ data PublishOutcome
     PublishSucceeded
   | -- | Publish failed; will be retried after the configured backoff.
     PublishFailed !Text
+  | -- | The transport intentionally and permanently refused publication.
+    PublishRejected !PublishRejection
   deriving stock (Generic, Eq, Show)
 
 -- | Drain claimed outbox rows by handing the claimed batch to @publish@ and

@@ -36,8 +36,10 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: add public typed rejection data and validation without changing existing success
-  or transient-failure semantics.
+- [x] (2026-08-21T15:04:22Z) Milestone 1: added the opaque public `PublishRejection`, validation
+  errors/smart constructor/accessors, the `PublishRejected` outcome, and boundary coverage. The
+  focused test passed with 1 example and 0 failures; existing success and transient-failure code
+  remains unchanged for the storage/worker integration milestones.
 - [ ] Milestone 2: add the durable rejected state and an idempotent conditional finalization path.
 - [ ] Milestone 3: integrate rejection with batching, ordering policies, summaries, telemetry,
   maintenance, and operator inspection.
@@ -79,6 +81,10 @@ implementation. Provide concise evidence.
   requires summaries to count completed work rather than attempted work. The rejected count must
   therefore come from conditional database updates that actually committed, not merely from
   outcomes reported by the callback.
+- 2026-08-21: The working tree has advanced from the plan's 0.11.0.0/23-migration baseline to a
+  0.13.0.0 package cohort whose native manifest ends at migration 30. The provisional next major
+  cohort is therefore 0.14.0.0 and the next generated migration should be 31; both remain subject
+  to the release and migration tools rather than being allocated by hand.
 
 
 ## Decision Log
@@ -159,6 +165,12 @@ Record every decision made while working on the plan.
   the ExecPlan is a living document and is the correct place for current validation and scope.
   Date: 2026-08-10
 
+- Decision: Implement against the current 0.13.0.0 working tree and let the native migration and
+  release workflows allocate the next identifiers instead of preserving the stale numeric examples.
+  Rationale: Released identifiers are immutable and the plan explicitly requires rechecking them at
+  execution time. Current source and manifests are authoritative for implementation.
+  Date: 2026-08-21
+
 
 ## Outcomes & Retrospective
 
@@ -199,8 +211,8 @@ only `pending` and `failed`, sent garbage collection deletes only `sent`, and de
 renders outbox rows as tables and JSON. Both must learn the new terminal truth; free-form rejection
 detail must never become a metric attribute.
 
-The native schema component lives in `keiro-migrations/migrations/manifest`. As of plan validation it
-contains 23 migrations, so the normal `keiro-migrate new` command will allocate the next manifest
+The native schema component lives in `keiro-migrations/migrations/manifest`. At implementation start
+it contains 30 migrations, so the normal `keiro-migrate new` command will allocate the next manifest
 entry. [ADR 9](../adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md) requires the new
 SQL payload, manifest, `keiro-migrations/migrations.native.lock`, and
 `keiro-migrations/expected-schema/native/keiro-v18.txt` to agree. Do not edit

@@ -18,6 +18,11 @@ module Keiro.Outbox.Types
     OutboxPublishSummary (..),
     OutboxMaintenanceOptions (..),
     OutboxMaintenanceSummary (..),
+    PublishRejection,
+    PublishRejectionError (..),
+    mkPublishRejection,
+    publishRejectionCode,
+    publishRejectionDetail,
     defaultPublishOptions,
     defaultMaintenanceOptions,
     mkOutboxPublishOptions,
@@ -31,6 +36,13 @@ import Data.Time.Clock (NominalDiffTime)
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Keiro.Integration.Event (IntegrationEvent)
+import Keiro.Outbox.Rejection
+  ( PublishRejection,
+    PublishRejectionError (..),
+    mkPublishRejection,
+    publishRejectionCode,
+    publishRejectionDetail,
+  )
 import Keiro.Prelude
 import OpenTelemetry.Trace.Core (Tracer)
 

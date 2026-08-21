@@ -156,6 +156,7 @@ import Keiro.Outbox
     OutboxRow (..),
     OutboxStatus (..),
     PublishOutcome (..),
+    PublishRejectionError (..),
     claimOutboxBatch,
     defaultMaintenanceOptions,
     defaultPublishOptions,
@@ -168,8 +169,11 @@ import Keiro.Outbox
     mintIntegrationEvent,
     mkIntegrationProducer,
     mkOutboxPublishOptions,
+    mkPublishRejection,
     outboxMaintenancePass,
     publishClaimedOutbox,
+    publishRejectionCode,
+    publishRejectionDetail,
     sampleOutboxBacklog,
   )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
@@ -5822,6 +5826,30 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       record ^. #key `shouldBe` Nothing
 
   describe "Keiro.Outbox" $ around (withFreshStore fixture) $ do
+    it "validates terminal publication rejection data at its public boundary" $ \_storeHandle -> do
+      let validCode64 = "a" <> Text.replicate 63 "z"
+          validDetail1024 = Text.replicate 1024 "x"
+          validUtf8Detail = Text.replicate 512 "é"
+      valid <- shouldBeRight (mkPublishRejection validCode64 (Just validDetail1024))
+      publishRejectionCode valid `shouldBe` validCode64
+      publishRejectionDetail valid `shouldBe` Just validDetail1024
+      shouldBeRight_ (mkPublishRejection "authorization.denied_v2" Nothing)
+      shouldBeRight_ (mkPublishRejection "invalid-destination" (Just validUtf8Detail))
+      mkPublishRejection "" Nothing
+        `shouldBeLeft` InvalidPublishRejectionCode ""
+      mkPublishRejection "Uppercase" Nothing
+        `shouldBeLeft` InvalidPublishRejectionCode "Uppercase"
+      mkPublishRejection "1leading-digit" Nothing
+        `shouldBeLeft` InvalidPublishRejectionCode "1leading-digit"
+      mkPublishRejection "contains/slash" Nothing
+        `shouldBeLeft` InvalidPublishRejectionCode "contains/slash"
+      mkPublishRejection ("a" <> Text.replicate 64 "z") Nothing
+        `shouldBeLeft` InvalidPublishRejectionCode ("a" <> Text.replicate 64 "z")
+      mkPublishRejection "invalid-destination" (Just "")
+        `shouldBeLeft` PublishRejectionDetailEmpty
+      mkPublishRejection "invalid-destination" (Just (Text.replicate 513 "é"))
+        `shouldBeLeft` PublishRejectionDetailTooLong 1026
+
     it "validates publisher options before startup" $ \_storeHandle -> do
       shouldBeRight_ (mkOutboxPublishOptions defaultPublishOptions)
       mkOutboxPublishOptions (defaultPublishOptions & #batchSize .~ 0)
