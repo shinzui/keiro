@@ -40,7 +40,10 @@ This section must always reflect the actual current state of the work.
   errors/smart constructor/accessors, the `PublishRejected` outcome, and boundary coverage. The
   focused test passed with 1 example and 0 failures; existing success and transient-failure code
   remains unchanged for the storage/worker integration milestones.
-- [ ] Milestone 2: add the durable rejected state and an idempotent conditional finalization path.
+- [x] (2026-08-21T15:12:00Z) Milestone 2: generated native migration `0031.sql`, added the
+  constrained rejection audit columns and terminal index predicates, decoded `OutboxRejected` into
+  typed rows, and added the conditional `markOutboxRejectedTx`. The migration check covered all 31
+  checksums, and the focused fresh-database test passed with 1 example and 0 failures.
 - [ ] Milestone 3: integrate rejection with batching, ordering policies, summaries, telemetry,
   maintenance, and operator inspection.
 - [ ] Milestone 4: add crash/recovery and compatibility coverage, migrations, documentation,

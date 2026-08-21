@@ -68,6 +68,8 @@ instance FromJSON OutboxId where
 --   after a worker crash are reclaimed by 'Keiro.Outbox.outboxMaintenancePass'
 --   after 'publishingTimeout'.
 -- * 'OutboxSent' — Kafka acknowledged the publish; terminal.
+-- * 'OutboxRejected' — the transport intentionally and permanently refused
+--   publication; terminal and retained for operator audit.
 -- * 'OutboxFailed' — last attempt failed; will be retried after
 --   'next_attempt_at'.
 -- * 'OutboxDead' — terminal failure after 'maxAttempts' consecutive
@@ -76,6 +78,7 @@ data OutboxStatus
   = OutboxPending
   | OutboxPublishing
   | OutboxSent
+  | OutboxRejected
   | OutboxFailed
   | OutboxDead
   deriving stock (Generic, Eq, Show)
@@ -150,6 +153,8 @@ data OutboxRow = OutboxRow
     nextAttemptAt :: !UTCTime,
     lastError :: !(Maybe Text),
     publishedAt :: !(Maybe UTCTime),
+    rejectedAt :: !(Maybe UTCTime),
+    rejection :: !(Maybe PublishRejection),
     createdAt :: !UTCTime,
     updatedAt :: !UTCTime
   }
@@ -264,6 +269,7 @@ statusText = \case
   OutboxPending -> "pending"
   OutboxPublishing -> "publishing"
   OutboxSent -> "sent"
+  OutboxRejected -> "rejected"
   OutboxFailed -> "failed"
   OutboxDead -> "dead"
 
@@ -273,6 +279,7 @@ parseStatus = \case
   "pending" -> Right OutboxPending
   "publishing" -> Right OutboxPublishing
   "sent" -> Right OutboxSent
+  "rejected" -> Right OutboxRejected
   "failed" -> Right OutboxFailed
   "dead" -> Right OutboxDead
   bad -> Left ("unknown keiro_outbox.status: " <> bad)

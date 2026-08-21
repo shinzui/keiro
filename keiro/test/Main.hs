@@ -177,7 +177,7 @@ import Keiro.Outbox
     sampleOutboxBacklog,
   )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
-import Keiro.Outbox.Schema (markOutboxFailedTx)
+import Keiro.Outbox.Schema (markOutboxFailedTx, markOutboxRejectedTx)
 import Keiro.Prelude
 import Keiro.ProcessManager
 import Keiro.Projection
@@ -6035,6 +6035,36 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       row ^. #status `shouldBe` OutboxSent
       row ^. #publishedAt `shouldSatisfy` isJust
       row ^. #lastError `shouldBe` Nothing
+
+    it "finalizes rejection exactly once with durable typed audit data" $ \storeHandle -> do
+      let oid = OutboxId outboxUuid1
+      rejection <- shouldBeRight (mkPublishRejection "authorization.denied" (Just "sink policy refused this message"))
+      replacement <- shouldBeRight (mkPublishRejection "invalid.destination" Nothing)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+      firstClaimAt <- getCurrentTime
+      Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 firstClaimAt)
+      Right OutboxFailed <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (markOutboxFailedTx oid "transient predecessor" 5 0 firstClaimAt)
+      secondClaimAt <- getCurrentTime
+      Right [claimed] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 secondClaimAt)
+      rejectedAt <- getCurrentTime
+      Right True <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (markOutboxRejectedTx oid rejection rejectedAt)
+      Right False <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (markOutboxRejectedTx oid replacement (addUTCTime 60 rejectedAt))
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+      row ^. #status `shouldBe` OutboxRejected
+      row ^. #attemptCount `shouldBe` 2
+      row ^. #nextAttemptAt `shouldBe` claimed ^. #nextAttemptAt
+      row ^. #lastError `shouldBe` Nothing
+      row ^. #publishedAt `shouldBe` Nothing
+      row ^. #rejectedAt `shouldBe` Just rejectedAt
+      row ^. #rejection `shouldBe` Just rejection
 
     it "reclaims a row stranded in publishing by a crashed worker through maintenance" $ \storeHandle -> do
       let oid = OutboxId outboxUuid1
@@ -12935,6 +12965,8 @@ sampleOutboxRow event =
       nextAttemptAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0),
       lastError = Nothing,
       publishedAt = Nothing,
+      rejectedAt = Nothing,
+      rejection = Nothing,
       createdAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0),
       updatedAt = UTCTime (ModifiedJulianDay 60000) (secondsToDiffTime 0)
     }

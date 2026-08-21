@@ -11,6 +11,7 @@ module Keiro.Outbox.Schema
     requeueStuckOutbox,
     markOutboxSent,
     markOutboxSentBatch,
+    markOutboxRejectedTx,
     markOutboxFailedTx,
     markOutboxSkippedTx,
     lookupOutbox,
@@ -22,7 +23,7 @@ module Keiro.Outbox.Schema
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip3, contrazip5)
+import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
@@ -38,6 +39,7 @@ import Keiro.Integration.Event
     contentTypeText,
     parseContentType,
   )
+import Keiro.Outbox.Rejection (PublishRejection (..))
 import Keiro.Outbox.Types
 import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
@@ -200,6 +202,25 @@ markOutboxSentBatch outboxIds now =
           (fmap unOutboxId outboxIds, now)
           markSentBatchStmt
       )
+
+-- | Permanently reject a claimed row and retain bounded audit data.
+--
+-- The transition matches only @publishing@. Repeating it, losing a race to
+-- recovery, or attempting to overwrite another terminal state returns 'False'
+-- without changing the row.
+markOutboxRejectedTx ::
+  OutboxId ->
+  PublishRejection ->
+  UTCTime ->
+  Tx.Transaction Bool
+markOutboxRejectedTx outboxId rejection now =
+  Tx.statement
+    ( unOutboxId outboxId,
+      publishRejectionCode rejection,
+      publishRejectionDetail rejection,
+      now
+    )
+    markRejectedStmt
 
 -- | Mark a row as failed and decide whether it is retryable or dead.
 --
@@ -410,7 +431,7 @@ perKeyPredicates =
             WHERE earlier.source = r.source
               AND earlier.message_key = r.message_key
               AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
-              AND earlier.status NOT IN ('sent', 'dead')
+              AND earlier.status NOT IN ('sent', 'dead', 'rejected')
               AND NOT (earlier.status IN ('pending', 'failed') AND earlier.next_attempt_at <= $2) ) )
         """,
       postFilter =
@@ -420,7 +441,7 @@ perKeyPredicates =
             WHERE earlier.source = c.source
               AND earlier.message_key = c.message_key
               AND (earlier.created_at, earlier.outbox_id) < (c.created_at, c.outbox_id)
-              AND earlier.status NOT IN ('sent', 'dead')
+              AND earlier.status NOT IN ('sent', 'dead', 'rejected')
               AND NOT EXISTS (
                 SELECT 1 FROM candidate c2
                 WHERE c2.outbox_id = earlier.outbox_id ) ) )
@@ -436,7 +457,7 @@ perSourcePredicates =
           SELECT 1 FROM keiro.keiro_outbox earlier
           WHERE earlier.source = r.source
             AND (earlier.created_at, earlier.outbox_id) < (r.created_at, r.outbox_id)
-            AND earlier.status NOT IN ('sent', 'dead')
+            AND earlier.status NOT IN ('sent', 'dead', 'rejected')
             AND NOT (earlier.status IN ('pending', 'failed') AND earlier.next_attempt_at <= $2) )
         """,
       postFilter =
@@ -445,7 +466,7 @@ perSourcePredicates =
           SELECT 1 FROM keiro.keiro_outbox earlier
           WHERE earlier.source = c.source
             AND (earlier.created_at, earlier.outbox_id) < (c.created_at, c.outbox_id)
-            AND earlier.status NOT IN ('sent', 'dead')
+            AND earlier.status NOT IN ('sent', 'dead', 'rejected')
             AND NOT EXISTS (
               SELECT 1 FROM candidate c2
               WHERE c2.outbox_id = earlier.outbox_id ) )
@@ -511,8 +532,8 @@ rowColumns =
   kt.source_event_id, kt.source_global_position, kt.causation_id,
   kt.correlation_id, kt.traceparent, kt.tracestate, kt.payload_bytes,
   kt.attributes, kt.occurred_at, kt.status, kt.attempt_count,
-  kt.next_attempt_at, kt.last_error, kt.published_at, kt.created_at,
-  kt.updated_at
+  kt.next_attempt_at, kt.last_error, kt.published_at, kt.rejected_at,
+  kt.rejection_code, kt.rejection_detail, kt.created_at, kt.updated_at
   """
 
 unqualifiedRowColumns :: Text
@@ -524,8 +545,8 @@ unqualifiedRowColumns =
   source_event_id, source_global_position, causation_id,
   correlation_id, traceparent, tracestate, payload_bytes,
   attributes, occurred_at, status, attempt_count,
-  next_attempt_at, last_error, published_at, created_at,
-  updated_at
+  next_attempt_at, last_error, published_at, rejected_at,
+  rejection_code, rejection_detail, created_at, updated_at
   """
 
 claimResultDecoder :: D.Row OutboxRow
@@ -632,6 +653,29 @@ markSentBatchStmt =
     )
     D.rowsAffected
 
+markRejectedStmt :: Statement (UUID, Text, Maybe Text, UTCTime) Bool
+markRejectedStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_outbox
+    SET status = 'rejected',
+        rejected_at = $4,
+        rejection_code = $2,
+        rejection_detail = $3,
+        last_error = NULL,
+        published_at = NULL,
+        updated_at = $4
+    WHERE outbox_id = $1
+      AND status = 'publishing'
+    """
+    ( contrazip4
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nullable E.text))
+        (E.param (E.nonNullable E.timestamptz))
+    )
+    ((> 0) <$> D.rowsAffected)
+
 markFailedStmt :: Statement (UUID, Text, Text, UTCTime, UTCTime) ()
 markFailedStmt =
   preparable
@@ -709,8 +753,8 @@ selectAllSql =
          schema_version_ref, schema_id, schema_fingerprint, source_event_id,
          source_global_position, causation_id, correlation_id, traceparent,
          tracestate, payload_bytes, attributes, occurred_at, status,
-         attempt_count, next_attempt_at, last_error, published_at, created_at,
-         updated_at
+         attempt_count, next_attempt_at, last_error, published_at, rejected_at,
+         rejection_code, rejection_detail, created_at, updated_at
   FROM keiro.keiro_outbox
   """
 
@@ -745,6 +789,9 @@ data RawRow = RawRow
     nextAttemptAt :: !UTCTime,
     lastError :: !(Maybe Text),
     publishedAt :: !(Maybe UTCTime),
+    rejectedAt :: !(Maybe UTCTime),
+    rejectionCode :: !(Maybe Text),
+    rejectionDetail :: !(Maybe Text),
     createdAt :: !UTCTime,
     updatedAt :: !UTCTime
   }
@@ -780,6 +827,9 @@ rawRowDecoder =
     <*> D.column (D.nonNullable D.timestamptz)
     <*> D.column (D.nullable D.text)
     <*> D.column (D.nullable D.timestamptz)
+    <*> D.column (D.nullable D.timestamptz)
+    <*> D.column (D.nullable D.text)
+    <*> D.column (D.nullable D.text)
     <*> D.column (D.nonNullable D.timestamptz)
     <*> D.column (D.nonNullable D.timestamptz)
 
@@ -832,6 +882,11 @@ assembleRow raw =
           nextAttemptAt = raw ^. #nextAttemptAt,
           lastError = raw ^. #lastError,
           publishedAt = raw ^. #publishedAt,
+          rejectedAt = raw ^. #rejectedAt,
+          rejection =
+            (\code -> PublishRejection code (raw ^. #rejectionDetail))
+              <$> raw
+                ^. #rejectionCode,
           createdAt = raw ^. #createdAt,
           updatedAt = raw ^. #updatedAt
         }
