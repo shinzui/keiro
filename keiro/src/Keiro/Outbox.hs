@@ -89,6 +89,7 @@ import Keiro.Telemetry
     recordOutboxDeadlettered,
     recordOutboxPublished,
     recordOutboxReclaimed,
+    recordOutboxRejected,
     recordOutboxRetried,
     withProducerSpan,
   )
@@ -311,13 +312,14 @@ publishClaimedOutbox publish options mMetrics = do
   -- Counters from the aggregated pass summary (each a no-op under 'Nothing';
   -- a zero delta is harmless).
   recordOutboxPublished mMetrics (fromIntegral (summary ^. #published))
+  recordOutboxRejected mMetrics (fromIntegral (summary ^. #rejected))
   recordOutboxRetried mMetrics (fromIntegral (summary ^. #retried))
   recordOutboxDeadlettered mMetrics (fromIntegral (summary ^. #dead))
   pure summary
   where
     publishBatch :: [OutboxRow] -> Eff es OutboxPublishSummary
     publishBatch [] =
-      pure OutboxPublishSummary {claimed = 0, published = 0, retried = 0, dead = 0, haltedOn = Nothing}
+      pure OutboxPublishSummary {claimed = 0, published = 0, rejected = 0, retried = 0, dead = 0, haltedOn = Nothing}
     publishBatch batch =
       case options ^. #orderingPolicy of
         StopTheLine -> publishStopTheLine batch batch [] Nothing
@@ -339,6 +341,7 @@ publishClaimedOutbox publish options mMetrics = do
           outcomes' = outcomes <> [(row ^. #outboxId, outcome)]
       case outcome of
         PublishSucceeded -> publishStopTheLine original rest outcomes' Nothing
+        PublishRejected _ -> publishStopTheLine original rest outcomes' Nothing
         PublishFailed _ -> markProcessedOutcomes StopTheLine original (Map.fromList outcomes') (Just (row ^. #outboxId))
 
     publishRows :: [OutboxRow] -> Eff es (Map.Map OutboxId PublishOutcome)
@@ -396,6 +399,7 @@ publishClaimedOutbox publish options mMetrics = do
     firstFailure :: [(OutboxId, PublishOutcome)] -> Maybe Text
     firstFailure [] = Nothing
     firstFailure ((_, PublishSucceeded) : rest) = firstFailure rest
+    firstFailure ((_, PublishRejected _) : rest) = firstFailure rest
     firstFailure ((_, PublishFailed errMsg) : _) = Just errMsg
 
     markProcessedOutcomes ::
@@ -408,28 +412,38 @@ publishClaimedOutbox publish options mMetrics = do
       now <- liftIO getCurrentTime
       let marks = foldMap (groupMarks outcomes) (outcomeGroups policy batch)
           sentIds = marks ^. #sentIds
+          rejectedRows = marks ^. #rejectedRows
           failedRows = marks ^. #failedRows
           skippedRows = marks ^. #skippedRows
-      failedStatuses <-
-        if null failedRows && null skippedRows
-          then pure []
-          else runTransaction $ do
-            statuses <- traverse (markFailed now) failedRows
-            traverse_ (markSkipped now) skippedRows
-            pure statuses
-      _ <- markOutboxSentBatch sentIds now
-      let deadCount = length [() | OutboxDead <- failedStatuses]
-          retriedFailures = length failedStatuses - deadCount
+      committed <- runTransaction $ do
+        publishedCount <- markOutboxSentBatchTx sentIds now
+        rejectionMarks <- traverse (markRejected now) rejectedRows
+        failureMarks <- traverse (markFailed now) failedRows
+        skippedMarks <- traverse (markSkipped now) skippedRows
+        let failedStatuses = [status | Just status <- failureMarks]
+            deadCount = length [() | OutboxDead <- failedStatuses]
+        pure
+          CommittedMarks
+            { published = publishedCount,
+              rejected = length [() | True <- rejectionMarks],
+              retried = length [() | OutboxFailed <- failedStatuses] + length [() | True <- skippedMarks],
+              dead = deadCount
+            }
       pure
         OutboxPublishSummary
           { claimed = length batch,
-            published = length sentIds,
-            retried = retriedFailures + length skippedRows,
-            dead = deadCount,
+            published = committed ^. #published,
+            rejected = committed ^. #rejected,
+            retried = committed ^. #retried,
+            dead = committed ^. #dead,
             haltedOn = halted
           }
 
-    markFailed :: UTCTime -> (OutboxRow, Text) -> Tx.Transaction OutboxStatus
+    markRejected :: UTCTime -> (OutboxId, PublishRejection) -> Tx.Transaction Bool
+    markRejected now (outboxId, rejection) =
+      markOutboxRejectedTx outboxId rejection now
+
+    markFailed :: UTCTime -> (OutboxRow, Text) -> Tx.Transaction (Maybe OutboxStatus)
     markFailed now (row, errMsg) =
       markOutboxFailedTx
         (row ^. #outboxId)
@@ -438,7 +452,7 @@ publishClaimedOutbox publish options mMetrics = do
         (nextDelay (options ^. #backoff) (row ^. #attemptCount))
         now
 
-    markSkipped :: UTCTime -> OutboxRow -> Tx.Transaction ()
+    markSkipped :: UTCTime -> OutboxRow -> Tx.Transaction Bool
     markSkipped now row =
       markOutboxSkippedTx
         (row ^. #outboxId)
@@ -477,6 +491,7 @@ sampleOutboxBacklog (Just metrics) = do
 
 data OutcomeMarks = OutcomeMarks
   { sentIds :: ![OutboxId],
+    rejectedRows :: ![(OutboxId, PublishRejection)],
     failedRows :: ![(OutboxRow, Text)],
     skippedRows :: ![OutboxRow]
   }
@@ -486,26 +501,38 @@ instance Semigroup OutcomeMarks where
   left <> right =
     OutcomeMarks
       { sentIds = (left ^. #sentIds) <> (right ^. #sentIds),
+        rejectedRows = (left ^. #rejectedRows) <> (right ^. #rejectedRows),
         failedRows = (left ^. #failedRows) <> (right ^. #failedRows),
         skippedRows = (left ^. #skippedRows) <> (right ^. #skippedRows)
       }
 
 instance Monoid OutcomeMarks where
-  mempty = OutcomeMarks {sentIds = [], failedRows = [], skippedRows = []}
+  mempty = OutcomeMarks {sentIds = [], rejectedRows = [], failedRows = [], skippedRows = []}
 
 groupMarks :: Map.Map OutboxId PublishOutcome -> [OutboxRow] -> OutcomeMarks
-groupMarks outcomes = go []
+groupMarks outcomes = go [] []
   where
-    go sent [] = mempty {sentIds = sent}
-    go sent (row : rest) =
+    go sent rejected [] = mempty {sentIds = sent, rejectedRows = rejected}
+    go sent rejected (row : rest) =
       case fromMaybe (PublishFailed "publisher returned no outcome") (Map.lookup (row ^. #outboxId) outcomes) of
-        PublishSucceeded -> go (sent <> [row ^. #outboxId]) rest
+        PublishSucceeded -> go (sent <> [row ^. #outboxId]) rejected rest
+        PublishRejected rejection ->
+          go sent (rejected <> [(row ^. #outboxId, rejection)]) rest
         PublishFailed errMsg ->
           OutcomeMarks
             { sentIds = sent,
+              rejectedRows = rejected,
               failedRows = [(row, errMsg)],
               skippedRows = rest
             }
+
+data CommittedMarks = CommittedMarks
+  { published :: !Int,
+    rejected :: !Int,
+    retried :: !Int,
+    dead :: !Int
+  }
+  deriving stock (Generic)
 
 data OutcomeGroupKey
   = BatchGroup

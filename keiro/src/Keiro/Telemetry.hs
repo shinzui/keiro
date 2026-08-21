@@ -72,6 +72,7 @@ module Keiro.Telemetry
     keiroInstrumentationLibrary,
     keiroOutboxBacklogName,
     keiroOutboxPublishedName,
+    keiroOutboxRejectedName,
     keiroOutboxRetriedName,
     keiroOutboxDeadletteredName,
     keiroOutboxReclaimedName,
@@ -124,6 +125,7 @@ module Keiro.Telemetry
     newKeiroMetrics,
     recordOutboxBacklog,
     recordOutboxPublished,
+    recordOutboxRejected,
     recordOutboxRetried,
     recordOutboxDeadlettered,
     recordOutboxReclaimed,
@@ -579,6 +581,9 @@ keiroOutboxBacklogName = "keiro.outbox.backlog"
 keiroOutboxPublishedName :: Text
 keiroOutboxPublishedName = "keiro.outbox.published"
 
+keiroOutboxRejectedName :: Text
+keiroOutboxRejectedName = "keiro.outbox.rejected"
+
 keiroOutboxRetriedName :: Text
 keiroOutboxRetriedName = "keiro.outbox.retried"
 
@@ -736,6 +741,7 @@ keiroWorkflowActiveName = "keiro.workflow.active"
 data KeiroMetrics = KeiroMetrics
   { outboxBacklog :: Gauge Int64,
     outboxPublished :: Counter Int64,
+    outboxRejected :: Counter Int64,
     outboxRetried :: Counter Int64,
     outboxDeadlettered :: Counter Int64,
     outboxReclaimed :: Counter Int64,
@@ -796,6 +802,7 @@ newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics
 newKeiroMetrics meter = liftIO $ do
   outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
   outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
+  outboxRejected' <- counterI64 keiroOutboxRejectedName "{event}" "Outbox events intentionally and permanently rejected by the publisher."
   outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
   outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
   outboxReclaimed' <- counterI64 keiroOutboxReclaimedName "{event}" "Outbox rows reclaimed from a crashed or stalled publisher."
@@ -848,6 +855,7 @@ newKeiroMetrics meter = liftIO $ do
     KeiroMetrics
       { outboxBacklog = outboxBacklog',
         outboxPublished = outboxPublished',
+        outboxRejected = outboxRejected',
         outboxRetried = outboxRetried',
         outboxDeadlettered = outboxDeadlettered',
         outboxReclaimed = outboxReclaimed',
@@ -931,6 +939,9 @@ recordOutboxBacklog = recordGaugeI64 outboxBacklog
 
 recordOutboxPublished :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxPublished = recordCounter outboxPublished
+
+recordOutboxRejected :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxRejected = recordCounter outboxRejected
 
 recordOutboxRetried :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxRetried = recordCounter outboxRetried

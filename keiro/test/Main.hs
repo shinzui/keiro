@@ -6045,7 +6045,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
       firstClaimAt <- getCurrentTime
       Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 firstClaimAt)
-      Right OutboxFailed <-
+      Right (Just OutboxFailed) <-
         Store.runStoreIO storeHandle $
           Store.runTransaction (markOutboxFailedTx oid "transient predecessor" 5 0 firstClaimAt)
       secondClaimAt <- getCurrentTime
@@ -6253,6 +6253,118 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
         row ^. #status `shouldBe` OutboxSent
 
+    it "finalizes a mid-run rejection and continues the same-key suffix" $ \storeHandle -> do
+      let row1Id = outboxIdFromOrdinal 1
+          row2Id = outboxIdFromOrdinal 2
+          row3Id = outboxIdFromOrdinal 3
+          rows =
+            [ (row1Id, sampleIntegrationEnvelope & #messageId .~ "reject-run-1" & #key .~ Just "reject-run-key"),
+              (row2Id, sampleIntegrationEnvelope & #messageId .~ "reject-run-2" & #key .~ Just "reject-run-key"),
+              (row3Id, sampleIntegrationEnvelope & #messageId .~ "reject-run-3" & #key .~ Just "reject-run-key")
+            ]
+      rejection <- shouldBeRight (mkPublishRejection "unsupported.sink" (Just "the configured sink cannot accept this event type"))
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            traverse_ (uncurry enqueueIntegrationEventTx) rows
+      let publish claimed =
+            pure
+              [ ( row ^. #outboxId,
+                  if row ^. #outboxId == row2Id
+                    then PublishRejected rejection
+                    else PublishSucceeded
+                )
+              | row <- claimed
+              ]
+      Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish defaultPublishOptions Nothing)
+      summary ^. #claimed `shouldBe` 3
+      summary ^. #published `shouldBe` 2
+      summary ^. #rejected `shouldBe` 1
+      summary ^. #retried `shouldBe` 0
+      Right (Just row1) <- Store.runStoreIO storeHandle (lookupOutbox row1Id)
+      Right (Just row2) <- Store.runStoreIO storeHandle (lookupOutbox row2Id)
+      Right (Just row3) <- Store.runStoreIO storeHandle (lookupOutbox row3Id)
+      row1 ^. #status `shouldBe` OutboxSent
+      row2 ^. #status `shouldBe` OutboxRejected
+      row2 ^. #rejection `shouldBe` Just rejection
+      row3 ^. #status `shouldBe` OutboxSent
+
+    it "treats rejection as terminal for per-source ordering" $ \storeHandle -> do
+      let row1Id = outboxIdFromOrdinal 1
+          row2Id = outboxIdFromOrdinal 2
+          row3Id = outboxIdFromOrdinal 3
+          sourceEvent oid messageId =
+            (oid, sampleIntegrationEnvelope & #messageId .~ messageId & #source .~ "reject-source" & #key .~ Nothing)
+          rows =
+            [ sourceEvent row1Id "reject-source-1",
+              sourceEvent row2Id "reject-source-2",
+              sourceEvent row3Id "reject-source-3"
+            ]
+      rejection <- shouldBeRight (mkPublishRejection "authorization.denied" Nothing)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            traverse_ (uncurry enqueueIntegrationEventTx) rows
+      let publish claimed =
+            pure
+              [ (row ^. #outboxId, if row ^. #outboxId == row2Id then PublishRejected rejection else PublishSucceeded)
+              | row <- claimed
+              ]
+          opts = defaultPublishOptions & #orderingPolicy .~ PerSourceStream
+      Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+      summary ^. #published `shouldBe` 2
+      summary ^. #rejected `shouldBe` 1
+      Right (Just successor) <- Store.runStoreIO storeHandle (lookupOutbox row3Id)
+      successor ^. #status `shouldBe` OutboxSent
+
+    it "counts only a rejection finalization that wins the publishing-state race" $ \storeHandle -> do
+      let oid = OutboxId outboxUuid1
+      rejection <- shouldBeRight (mkPublishRejection "authorization.denied" Nothing)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+      now <- getCurrentTime
+      let strandedAt = addUTCTime (-3600) now
+          maintenanceOptions = defaultMaintenanceOptions & #publishingTimeout .~ 1
+          publish _ = do
+            backdateOutboxUpdatedAt oid strandedAt
+            _ <- outboxMaintenancePass maintenanceOptions Nothing
+            pure (PublishRejected rejection)
+      Right summary <-
+        Store.runStoreIO storeHandle $
+          publishClaimedOutbox (perRow publish) defaultPublishOptions Nothing
+      summary ^. #claimed `shouldBe` 1
+      summary ^. #published `shouldBe` 0
+      summary ^. #rejected `shouldBe` 0
+      summary ^. #retried `shouldBe` 0
+      summary ^. #dead `shouldBe` 0
+      Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+      row ^. #status `shouldBe` OutboxFailed
+      row ^. #rejection `shouldBe` Nothing
+
+    it "excludes rejected rows from claims, maintenance, backlog, and sent garbage collection" $ \storeHandle -> do
+      let oid = OutboxId outboxUuid1
+      rejection <- shouldBeRight (mkPublishRejection "invalid.destination" (Just "destination was removed"))
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+      Right summary <-
+        Store.runStoreIO storeHandle $
+          publishClaimedOutbox (perRow (const (pure (PublishRejected rejection)))) defaultPublishOptions Nothing
+      summary ^. #rejected `shouldBe` 1
+      now <- getCurrentTime
+      Right () <- Store.runStoreIO storeHandle (backdateOutboxUpdatedAt oid (addUTCTime (-3600) now))
+      Right claimed <- Store.runStoreIO storeHandle (claimOutboxBatch BestEffort 10 now)
+      claimed `shouldBe` []
+      Right maintenance <- Store.runStoreIO storeHandle (outboxMaintenancePass defaultMaintenanceOptions Nothing)
+      maintenance ^. #requeued `shouldBe` 0
+      maintenance ^. #deadLettered `shouldBe` 0
+      maintenance ^. #backlog `shouldBe` 0
+      Right deleted <- Store.runStoreIO storeHandle (garbageCollectSent 0 now)
+      deleted `shouldBe` 0
+      Right (Just retained) <- Store.runStoreIO storeHandle (lookupOutbox oid)
+      retained ^. #status `shouldBe` OutboxRejected
+
     it "publishClaimedOutbox skips the same-key suffix after a mid-run failure" $ \storeHandle -> do
       let row1Id = outboxIdFromOrdinal 1
           row2Id = outboxIdFromOrdinal 2
@@ -6349,9 +6461,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       now <- getCurrentTime
       Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 10 now)
       Right True <- Store.runStoreIO storeHandle (markOutboxSent oid now)
-      Right _ <-
+      Right lateResult <-
         Store.runStoreIO storeHandle $
           Store.runTransaction (markOutboxFailedTx oid "late failure from a timed-out worker" 5 60 now)
+      lateResult `shouldBe` Nothing
       Right (Just row) <- Store.runStoreIO storeHandle (lookupOutbox oid)
       row ^. #status `shouldBe` OutboxSent
       row ^. #lastError `shouldBe` Nothing
@@ -6428,6 +6541,46 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right (Just row4) <- Store.runStoreIO storeHandle (lookupOutbox row4Id)
       row3 ^. #status `shouldBe` OutboxFailed
       row3 ^. #attemptCount `shouldBe` 0
+      row4 ^. #status `shouldBe` OutboxFailed
+      row4 ^. #attemptCount `shouldBe` 0
+
+    it "StopTheLine continues after rejection and halts only on transient failure" $ \storeHandle -> do
+      let row1Id = outboxIdFromOrdinal 1
+          row2Id = outboxIdFromOrdinal 2
+          row3Id = outboxIdFromOrdinal 3
+          row4Id = outboxIdFromOrdinal 4
+          ids = [row1Id, row2Id, row3Id, row4Id]
+          rows =
+            [ (oid, sampleIntegrationEnvelope & #messageId .~ ("stop-reject-" <> Text.pack (show i)) & #key .~ Just "stop-reject-key")
+            | (i, oid) <- zip [1 .. 4 :: Int] ids
+            ]
+      rejection <- shouldBeRight (mkPublishRejection "unsupported.sink" Nothing)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            traverse_ (uncurry enqueueIntegrationEventTx) rows
+      seenRef <- newIORef []
+      let publish claimed = do
+            liftIO (modifyIORef' seenRef (<> fmap (^. #outboxId) claimed))
+            pure
+              [ ( row ^. #outboxId,
+                  if row ^. #outboxId == row1Id
+                    then PublishRejected rejection
+                    else
+                      if row ^. #outboxId == row3Id
+                        then PublishFailed "stop after rejection"
+                        else PublishSucceeded
+                )
+              | row <- claimed
+              ]
+          opts = defaultPublishOptions & #orderingPolicy .~ StopTheLine & #backoff .~ ConstantBackoff 0
+      Right summary <- Store.runStoreIO storeHandle (publishClaimedOutbox publish opts Nothing)
+      summary ^. #published `shouldBe` 1
+      summary ^. #rejected `shouldBe` 1
+      summary ^. #retried `shouldBe` 2
+      summary ^. #haltedOn `shouldBe` Just row3Id
+      readIORef seenRef `shouldReturn` take 3 ids
+      Right (Just row4) <- Store.runStoreIO storeHandle (lookupOutbox row4Id)
       row4 ^. #status `shouldBe` OutboxFailed
       row4 ^. #attemptCount `shouldBe` 0
 
@@ -6701,6 +6854,31 @@ main = withMigratedSuite $ \fixture -> hspec $ do
             other -> expectationFailure ("expected Error \"broker unreachable\", got " <> show other)
         other -> expectationFailure ("expected one batch span, got " <> show (length other))
 
+    it "does not mark a terminal rejection span as an error" $ \storeHandle -> do
+      (processor, spansRef) <- inMemoryListExporter
+      provider <- createTracerProvider [processor] emptyTracerProviderOptions
+      rejection <- shouldBeRight (mkPublishRejection "authorization.denied" (Just "operator policy"))
+      let tracer = makeTracer provider "keiro-test" tracerOptions
+          oid = OutboxId outboxUuid1
+          opts = defaultPublishOptions & #tracer ?~ tracer
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
+      Right summary <-
+        Store.runStoreIO storeHandle $
+          publishClaimedOutbox (perRow (const (pure (PublishRejected rejection)))) opts Nothing
+      summary ^. #rejected `shouldBe` 1
+      _ <- shutdownTracerProvider provider Nothing
+      spans <- traverse captureSpan =<< readIORef spansRef
+      case spans of
+        [batchSpan] -> do
+          textAttr (csAttributes batchSpan) "error.type" `shouldBe` Nothing
+          case csStatus batchSpan of
+            Unset -> pure ()
+            Ok -> pure ()
+            other -> expectationFailure ("expected rejection span to be Unset/Ok, got " <> show other)
+        other -> expectationFailure ("expected one rejection span, got " <> show (length other))
+
     it "publishClaimedOutbox records counters and sampleOutboxBacklog records the gauge" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
       (provider, _env) <-
@@ -6711,16 +6889,23 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       keiroMetrics <- Telemetry.newKeiroMetrics meter
       let okId = OutboxId outboxUuid1
           failId = OutboxId outboxUuid2
+          rejectId = OutboxId outboxUuid3
           okEvent = sampleIntegrationEnvelope & #messageId .~ "metrics-ok" & #key .~ Nothing
           failEvent = sampleIntegrationEnvelope & #messageId .~ "metrics-fail" & #key .~ Nothing
+          rejectEvent = sampleIntegrationEnvelope & #messageId .~ "metrics-reject" & #key .~ Nothing
+      rejection <- shouldBeRight (mkPublishRejection "unsupported.sink" (Just "not routed"))
       Right () <-
         Store.runStoreIO storeHandle $
           Store.runTransaction (enqueueIntegrationEventTx okId okEvent)
       Right () <-
         Store.runStoreIO storeHandle $
           Store.runTransaction (enqueueIntegrationEventTx failId failEvent)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (enqueueIntegrationEventTx rejectId rejectEvent)
       let publish row
             | row ^. #outboxId == okId = pure PublishSucceeded
+            | row ^. #outboxId == rejectId = pure (PublishRejected rejection)
             | otherwise = pure (PublishFailed "broker down")
           retryPassOpts =
             defaultPublishOptions
@@ -6737,6 +6922,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right summary1 <-
         Store.runStoreIO storeHandle (publishClaimedOutbox (perRow publish) retryPassOpts (Just keiroMetrics))
       summary1 ^. #published `shouldBe` 1
+      summary1 ^. #rejected `shouldBe` 1
       summary1 ^. #retried `shouldBe` 1
       -- Pass 2 (maxAttempts = 1): the failed row crosses the ceiling and dies.
       Right summary2 <-
@@ -6748,6 +6934,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       let scalars = flattenScalarPoints exported
       -- Counters are cumulative across both passes.
       lookup "keiro.outbox.published" scalars `shouldBe` Just (IntNumber 1)
+      lookup "keiro.outbox.rejected" scalars `shouldBe` Just (IntNumber 1)
       lookup "keiro.outbox.retried" scalars `shouldBe` Just (IntNumber 1)
       lookup "keiro.outbox.deadlettered" scalars `shouldBe` Just (IntNumber 1)
       -- Publish passes no longer run the backlog COUNT(*) on the hot path.

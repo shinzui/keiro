@@ -11,6 +11,7 @@ module Keiro.Outbox.Schema
     requeueStuckOutbox,
     markOutboxSent,
     markOutboxSentBatch,
+    markOutboxSentBatchTx,
     markOutboxRejectedTx,
     markOutboxFailedTx,
     markOutboxSkippedTx,
@@ -194,14 +195,17 @@ markOutboxSent outboxId now =
 -- Only rows still in @publishing@ transition. Returns how many rows changed;
 -- callers treat a shortfall as benign because delivery is already at-least-once.
 markOutboxSentBatch :: (Store :> es) => [OutboxId] -> UTCTime -> Eff es Int
-markOutboxSentBatch [] _ = pure 0
 markOutboxSentBatch outboxIds now =
+  runTransaction (markOutboxSentBatchTx outboxIds now)
+
+-- | Transactional form of 'markOutboxSentBatch' for atomic batch finalization.
+markOutboxSentBatchTx :: [OutboxId] -> UTCTime -> Tx.Transaction Int
+markOutboxSentBatchTx [] _ = pure 0
+markOutboxSentBatchTx outboxIds now =
   fromIntegral
-    <$> runTransaction
-      ( Tx.statement
-          (fmap unOutboxId outboxIds, now)
-          markSentBatchStmt
-      )
+    <$> Tx.statement
+      (fmap unOutboxId outboxIds, now)
+      markSentBatchStmt
 
 -- | Permanently reject a claimed row and retain bounded audit data.
 --
@@ -227,7 +231,8 @@ markOutboxRejectedTx outboxId rejection now =
 -- Reads the current @attempt_count@; if it is greater than or equal to
 -- @maxAttempts@, transitions to 'OutboxDead'. Otherwise transitions to
 -- 'OutboxFailed' and sets @next_attempt_at = now + delay@. Returns the
--- resulting status so the worker can update its summary counters.
+-- resulting status when a row changed so the worker can update its summary
+-- counters from committed work. A stale or terminal row returns 'Nothing'.
 --
 -- Runs inside the caller's transaction to keep "read attempt count → write
 -- status" atomic with respect to other workers.
@@ -243,23 +248,26 @@ markOutboxFailedTx ::
   Int ->
   NominalDiffTime ->
   UTCTime ->
-  Tx.Transaction OutboxStatus
+  Tx.Transaction (Maybe OutboxStatus)
 markOutboxFailedTx outboxId errMsg maxAttempts delay now = do
   currentAttempt <- Tx.statement (unOutboxId outboxId) readAttemptCountStmt
-  let attempt = fromMaybe 0 currentAttempt
-      shouldDie = attempt >= maxAttempts
-      nextStatus = if shouldDie then OutboxDead else OutboxFailed
-      nextAttempt = addUTCTime delay now
-  Tx.statement
-    (unOutboxId outboxId, statusText nextStatus, errMsg, nextAttempt, now)
-    markFailedStmt
-  pure nextStatus
+  case currentAttempt of
+    Nothing -> pure Nothing
+    Just attempt -> do
+      let shouldDie = attempt >= maxAttempts
+          nextStatus = if shouldDie then OutboxDead else OutboxFailed
+          nextAttempt = addUTCTime delay now
+      changed <-
+        Tx.statement
+          (unOutboxId outboxId, statusText nextStatus, errMsg, nextAttempt, now)
+          markFailedStmt
+      pure (nextStatus <$ guard changed)
 
 -- | Return a claimed row to @failed@ without consuming an attempt.
 --
 -- Used for rows skipped because an earlier row in the same ordered group failed
 -- inside the same publish batch.
-markOutboxSkippedTx :: OutboxId -> Text -> UTCTime -> Tx.Transaction ()
+markOutboxSkippedTx :: OutboxId -> Text -> UTCTime -> Tx.Transaction Bool
 markOutboxSkippedTx outboxId errMsg now =
   Tx.statement (unOutboxId outboxId, errMsg, now) markSkippedStmt
 
@@ -576,7 +584,7 @@ gcSentStmt =
 readAttemptCountStmt :: Statement UUID (Maybe Int)
 readAttemptCountStmt =
   preparable
-    "SELECT attempt_count FROM keiro.keiro_outbox WHERE outbox_id = $1"
+    "SELECT attempt_count FROM keiro.keiro_outbox WHERE outbox_id = $1 AND status = 'publishing'"
     (E.param (E.nonNullable E.uuid))
     (D.rowMaybe (fromIntegral <$> D.column (D.nonNullable D.int8)))
 
@@ -676,7 +684,7 @@ markRejectedStmt =
     )
     ((> 0) <$> D.rowsAffected)
 
-markFailedStmt :: Statement (UUID, Text, Text, UTCTime, UTCTime) ()
+markFailedStmt :: Statement (UUID, Text, Text, UTCTime, UTCTime) Bool
 markFailedStmt =
   preparable
     """
@@ -695,9 +703,9 @@ markFailedStmt =
         (E.param (E.nonNullable E.timestamptz))
         (E.param (E.nonNullable E.timestamptz))
     )
-    D.noResult
+    ((> 0) <$> D.rowsAffected)
 
-markSkippedStmt :: Statement (UUID, Text, UTCTime) ()
+markSkippedStmt :: Statement (UUID, Text, UTCTime) Bool
 markSkippedStmt =
   preparable
     """
@@ -715,7 +723,7 @@ markSkippedStmt =
         (E.param (E.nonNullable E.text))
         (E.param (E.nonNullable E.timestamptz))
     )
-    D.noResult
+    ((> 0) <$> D.rowsAffected)
 
 lookupOutboxStmt :: Statement UUID (Maybe OutboxRow)
 lookupOutboxStmt =

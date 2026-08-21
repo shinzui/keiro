@@ -190,7 +190,9 @@ data OutboxPublishConfigError
 
 -- | Aggregate result of one publisher pass.
 --
--- @published + retried + dead@ equals the number of rows claimed. 'retried'
+-- @published + rejected + retried + dead@ is the number of rows durably
+-- finalized by the pass and can be less than 'claimed' when recovery wins a
+-- stale-worker race. 'retried'
 -- includes rows that were skipped because an earlier row in the same ordered
 -- publish group failed; those rows are returned to @failed@ without consuming
 -- an attempt. 'haltedOn' is populated only by 'StopTheLine' policy and names
@@ -198,6 +200,7 @@ data OutboxPublishConfigError
 data OutboxPublishSummary = OutboxPublishSummary
   { claimed :: !Int,
     published :: !Int,
+    rejected :: !Int,
     retried :: !Int,
     dead :: !Int,
     haltedOn :: !(Maybe OutboxId)

@@ -135,6 +135,7 @@ spec fixture = do
       isParseSuccess (parseOps embeddedHooks ["rebuild", "external-read", "counter_reader", "1"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "retire-external-read", "counter_reader", "1"]) `shouldBe` True
       isParseSuccess (parseOps embeddedHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1"]) `shouldBe` True
+      isParseSuccess (parseOps embeddedHooks ["outbox", "list", "--source", "ops-source", "--status", "rejected"]) `shouldBe` True
       isParseFailure (parseOps embeddedHooks ["rebuild", "retire-external-read", "counter_reader", "0"]) `shouldBe` True
       isParseFailure (parseOps embeddedHooks ["rebuild", "reproject-stream", "ops-group", "ops-projection", "orders-1", "--page-size", "0"]) `shouldBe` True
 
@@ -1028,6 +1029,48 @@ spec fixture = do
       applied <- OpsOutbox.runCommand (opsEnv True store) (OpsOutbox.RequeueStuck 0 10)
       applied `shouldSatisfy` isSucceeded
       outboxStatus store outboxId `shouldReturn` Just Outbox.OutboxFailed
+
+    it "filters and renders rejected rows with bounded audit fields" $ \store -> do
+      now <- getCurrentTime
+      let outboxId = testOutboxId "018f5f43-8a70-7b9a-9a9b-59d391a76811"
+          event = sampleIntegrationEvent now "outbox-rejected-message"
+      rejection <-
+        either (fail . show) pure $
+          Outbox.mkPublishRejection "authorization.denied" (Just "the sink policy refused this message")
+      expectStore store (runTransaction (Outbox.enqueueOutboxTx (Outbox.OutboxMessage outboxId event)))
+      summary <-
+        expectStore store $
+          Outbox.publishClaimedOutbox
+            (\rows -> pure [(row.outboxId, Outbox.PublishRejected rejection) | row <- rows])
+            Outbox.defaultPublishOptions
+            Nothing
+      summary.rejected `shouldBe` 1
+
+      listed <-
+        OpsOutbox.runCommand
+          (opsEnv False store)
+          ( OpsOutbox.List
+              OpsOutbox.ListOptions
+                { source = "ops-source",
+                  status = Just Outbox.OutboxRejected,
+                  destination = Nothing,
+                  limit = 10
+                }
+          )
+      humanField "status" listed `shouldBe` Just "rejected"
+      humanField "rejection_code" listed `shouldBe` Just "authorization.denied"
+      humanField "rejection_detail" listed `shouldBe` Just "the sink policy refused this message"
+      humanField "rejected_at" listed `shouldSatisfy` maybe False (not . Text.null)
+      case listed of
+        Succeeded OpsResult {jsonValue = Aeson.Array values} ->
+          case values Vector.!? 0 of
+            Just (Aeson.Object row) -> do
+              KeyMap.lookup "status" row `shouldBe` Just (Aeson.String "rejected")
+              KeyMap.lookup "rejection_code" row `shouldBe` Just (Aeson.String "authorization.denied")
+              KeyMap.lookup "rejection_detail" row `shouldBe` Just (Aeson.String "the sink policy refused this message")
+              KeyMap.lookup "rejected_at" row `shouldSatisfy` maybe False (/= Aeson.Null)
+            other -> expectationFailure ("expected one rejected JSON object, got " <> show other)
+        other -> expectationFailure ("expected a successful rejected-row listing, got " <> show other)
 
     it "surfaces dispatch dead letters through the supported API" $ \store -> do
       let sourceEvent = EventId (testUuid "018f5f43-8a70-7b9a-9a9b-59d391a76802")

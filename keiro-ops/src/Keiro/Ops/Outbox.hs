@@ -70,7 +70,7 @@ commandParser =
       List
         <$> ( ListOptions
                 <$> textOption "source" "SOURCE" "Producing bounded-context source"
-                <*> optional (option statusReader (long "status" <> metavar "STATUS" <> help "pending, publishing, sent, failed, or dead"))
+                <*> optional (option statusReader (long "status" <> metavar "STATUS" <> help "pending, publishing, sent, rejected, failed, or dead"))
                 <*> optional (textOption "destination" "DESTINATION" "Destination filter")
                 <*> option positiveIntReader (long "limit" <> metavar "N" <> Opt.value 100 <> showDefault <> help "Maximum rows")
             )
@@ -184,7 +184,7 @@ countResult label count =
 outboxListResult :: [OutboxRow] -> OpsResult
 outboxListResult outboxRows =
   OpsResult
-    { headers = ["id", "source", "destination", "status", "attempts", "created_at", "last_error"],
+    { headers = ["id", "source", "destination", "status", "attempts", "created_at", "last_error", "rejected_at", "rejection_code", "rejection_detail"],
       rows = map outboxRow outboxRows,
       jsonValue = Aeson.toJSON (map outboxJson outboxRows)
     }
@@ -197,7 +197,10 @@ outboxRow row =
     statusText row.status,
     showText row.attemptCount,
     timeText row.createdAt,
-    maybe "" (truncateCell 120) row.lastError
+    maybe "" (truncateCell 120) row.lastError,
+    maybe "" timeText row.rejectedAt,
+    maybe "" publishRejectionCode row.rejection,
+    maybe "" (truncateCell 120) (row.rejection >>= publishRejectionDetail)
   ]
 
 outboxJson :: OutboxRow -> Value
@@ -218,6 +221,9 @@ outboxJson row =
       "next_attempt_at" .= row.nextAttemptAt,
       "last_error" .= row.lastError,
       "published_at" .= row.publishedAt,
+      "rejected_at" .= row.rejectedAt,
+      "rejection_code" .= fmap publishRejectionCode row.rejection,
+      "rejection_detail" .= (row.rejection >>= publishRejectionDetail),
       "created_at" .= row.createdAt,
       "updated_at" .= row.updatedAt
     ]

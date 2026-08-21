@@ -44,8 +44,11 @@ This section must always reflect the actual current state of the work.
   constrained rejection audit columns and terminal index predicates, decoded `OutboxRejected` into
   typed rows, and added the conditional `markOutboxRejectedTx`. The migration check covered all 31
   checksums, and the focused fresh-database test passed with 1 example and 0 failures.
-- [ ] Milestone 3: integrate rejection with batching, ordering policies, summaries, telemetry,
-  maintenance, and operator inspection.
+- [x] (2026-08-21T15:22:33Z) Milestone 3: integrated rejection with batching and every ordering
+  policy, committed all outcome marks atomically, counted only conditional updates that won the
+  publishing-state race, emitted an unlabelled rejection counter, and exposed bounded audit fields
+  through operator table/JSON output. Focused validation passed with 43 core examples and 3
+  operator examples, both with 0 failures.
 - [ ] Milestone 4: add crash/recovery and compatibility coverage, migrations, documentation,
   changelog/release notes, and full validation.
 
