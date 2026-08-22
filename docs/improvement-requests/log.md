@@ -13,17 +13,27 @@ AggGuardRemedyUnavailable (Plan 266). Deferred: the three-valued satisfiability 
 finite-domain witnesses would turn every Text/Int/Time/ID tightening into Unknown with no twin, and
 exact-equivalence twin coverage would make the safe old-guard-verbatim twin a perpetual finding.
 Revival conditions are recorded in the request.
-* **Addition**: IR-34 requests a way for a guarded transition to write a mapped register, after
-  Rei's Intention root proved that `AggregateTransitionOwnershipConflict`,
-  `TransitionUnguardedSibling`, and `TransitionDuplicateUnguarded` compose into a gap with no
-  escape hatch: an edge writing a mapped register cannot be either side of a guarded pair. Rei
-  worked around it by dropping a write-only register; an aggregate whose register is read would
-  have been undeclarable.
+* **Review**: Approve IR-34 after narrowing it from all mapped-register writes to constructed
+mapped values. Keiro already generates same-typed mapped copies, but current published
+`keiro-dsl` 0.14.0.0 still cannot write a target declaration's `initial` value or a typed mapped
+lift. Rei's Intention evidence is not an operator error: the removed register was absent from
+guards, outputs, snapshots, and consumers, while every observable timestamp is folded from the
+stored event. The implementation belongs in the successor-language expression surface of
+`mori://shinzui/keiro/packages/keiro-dsl`. Reject the originally suggested mixed
+guard-plus-`EdgeBuilder` Hole because it violates ADR-17's exclusive behavior ownership; retain
+generated guard/slot authority and use a declared versioned lift or a strictly term-valued,
+fold-versioned write hook.
+* **Addition**: IR-34 requests a way for a guarded transition to construct a mapped-register
+value, after Rei's Intention root proved that `AggregateTransitionOwnershipConflict`,
+`TransitionUnguardedSibling`, and `TransitionDuplicateUnguarded` compose into a gap with no
+escape hatch: an edge constructing a mapped-register value cannot be either side of a guarded
+pair. Rei worked around it by dropping a write-only register; an aggregate whose register is
+read would have been undeclarable.
 * **Addition**: IR-33 requests idempotent, semantically exact aggregate guard diffing after the
-  published `keiro-dsl` 0.14.0.0 binary reported 39 `AggGuardTightened` advisories for Mori's
-  byte-identical Language-5 workspace while simultaneously declaring the diff replay-neutral.
-  The request preserves the replay-only remedy for genuine tightenings, but requires a real,
-  satisfiable removed region before Keiro prints that remedy.
+published `keiro-dsl` 0.14.0.0 binary reported 39 `AggGuardTightened` advisories for Mori's
+byte-identical Language-5 workspace while simultaneously declaring the diff replay-neutral.
+The request preserves the replay-only remedy for genuine tightenings, but requires a real,
+satisfiable removed region before Keiro prints that remedy.
 
 ## 2026-08-19
 * **Addition**: IR-26..IR-32 filed by the keiro runtime UI initiative (origin mori://shinzui/keiro-ui): serve the keiro-ops surface over HTTP, WebSocket live feeds over Keiro.Wake, aggregate inspection reads, process-manager inspection reads, workflow inspection primitives for HTTP, composed runtime surface mounting, and recording the inspection-UI boundary in an ADR.
