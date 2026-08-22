@@ -31,11 +31,13 @@ Language-5 regression against itself and by diffing a disposable checkout of
 `mori://shinzui/mori/repos/mori` against `HEAD`: both produce no guard finding and a
 `replay-neutral` result.
 
-This plan deliberately stops at the structural safety boundary. It does not claim that two
-different guard expressions are semantically equivalent or that a computed twin is proved
-satisfiable. The dependent [ExecPlan 266](266-prove-aggregate-guard-relations-and-validate-replay-only-remedies.md)
-adds those proofs after this plan establishes one shared, deterministic transition-family
-comparison.
+This plan deliberately stops at the per-transition structural boundary. It does not group
+siblings by replay body, does not validate the printed twin against the candidate language, and
+does not claim anything about guard satisfiability. The dependent
+[ExecPlan 266](266-classify-guard-unions-by-replay-body-and-validate-replay-only-remedies.md)
+adds body-keyed guard-union classification and remedy validation after this plan establishes one
+shared, deterministic transition-family comparison. A semantic proof engine was reviewed and
+deferred; the IR-33 review records why and under what conditions it may return.
 
 
 ## Progress
@@ -46,10 +48,14 @@ comparison.
       transitions as a multiset.
 - [ ] Make both aggregate guard diffing and replay-impact analysis consume that shared
       family result, preserving conservative behavior for unresolved changes.
+- [ ] Exclude validator-proven no-op transitions (no `emit`) from guard-history
+      classification, and clear forward-only outcome fields from every printed twin.
 - [ ] Add the append-only `AggGuardRelationUnknown` diagnostic for structurally ambiguous
-      families, with the private-history safety vector and no replay-only remedy.
-- [ ] Prove identical, reordered, additive-only, genuinely changed, and ambiguous cases in
-      unit and CLI tests, including the minimized Mori-derived shape.
+      families, with the private-history safety vector, an explicit do-not-deploy remedy
+      mapping, and no replay-only remedy.
+- [ ] Prove identical, reordered, additive-only, genuinely changed, no-emit, Language-5
+      outcome, and ambiguous cases in unit and CLI tests, including the minimized
+      Mori-derived shape.
 - [ ] Run the disposable Mori regression, the complete `keiro-dsl` test inventory, formatting,
       documentation validation, and the ADR distillation pass.
 
@@ -80,15 +86,55 @@ comparison.
   `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs`, plus its permutation test in
   `keiro-dsl/test/Main.hs`.
 
+- Observation: sibling mispairing explains every one of the 39 reported findings. Counting
+  second-and-later live transitions per (aggregate, source, command) in Mori's committed
+  `domain/` sources gives exactly 39 (31 `ProjectArtifact`, 8 `Project`), and every such family
+  is a no-op branch declared before its complementary emitting branch. No second cause needs to
+  be searched for.
+  Evidence: validation pass on 2026-08-21 over `mori://shinzui/mori/repos/mori` `domain/*.keiro`;
+  the IR-33 total of 39.
+
+- Observation: a transition that emits nothing is a validator-proven no-op and can never strand
+  history. `validateSpec` rejects a no-emit transition that changes its vertex or writes any
+  register ("event-sourced state changes require persisted evidence"), so such a transition never
+  produces a stored event and hydration never needs it to invert anything. A guard change on it
+  is therefore not a replay hazard, while a replay-only twin built from it is itself an error
+  (`ReplayOnlyEmitsNothing`). Mori's no-op branches are exactly this shape, and today's advisory
+  prints precisely such an invalid twin for them.
+  Evidence: the no-emit rule and `replayOnlyRules` in `keiro-dsl/src/Keiro/Dsl/Validate.hs`;
+  `project.keiro` `Active -- ObserveProjectDescription` in Mori.
+
+- Observation: the printed twin copies the whole old `Transition` and changes only guard and
+  mode, so in Language 5 it carries the old `tOutcome`. The validator rejects a replay-only
+  transition with a forward outcome as `DomainOutcomeReplayOnlyClause`, so every Language-5
+  twin printed today is unpasteable as-is.
+  Evidence: `let twin = oldT {tGuard = ..., tMode = TmReplayOnly}` in `guardTighteningDiff`;
+  `transitionOutcomeRules` in `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
+
+- Observation: `test/fixtures/fold-identity-diff-replay.golden` renders findings in emission
+  order with no sort, and the `AggGuardTightened` advisory currently precedes
+  `AggFoldSurfaceChanged` because `aggregatePairDiff` emits `guardTighteningDiff` before
+  `transitionSurfaceDiff`. Relocating the guard pass after `diffCheckedSpecs` in `diffServices`
+  would reorder that golden.
+  Evidence: "pins representative diff and replay-impact rendering" in `keiro-dsl/test/Main.hs`;
+  `diffServices` and `aggregatePairDiff` in `keiro-dsl/src/Keiro/Dsl/Diff.hs`.
+
+- Observation: `remediationFor` in `keiro-dsl/src/Keiro/Dsl/DiffReport.hs` ends in an
+  `otherwise` branch that maps any unlisted code to `RemedyRunConformance`. A new diagnostic
+  code that is not explicitly mapped silently receives a run-conformance remedy rather than
+  failing to compile.
+  Evidence: the final guard of `remediationFor`.
+
 
 ## Decision Log
 
 - Decision: Split IR-33 into this structural correctness plan and dependent ExecPlan 266 for
-  semantic proofs and remedy validation.
+  replay-body classification and remedy validation.
   Rationale: exact multiset cancellation is sufficient to remove the reproduced self-diff bug
-  and can be verified without a solver. Semantic implication, satisfiability, existing-twin
-  coverage, and Language-5 remedy validation are a second coherent safety boundary and should
-  not make the contained idempotence fix harder to review or land.
+  and can be verified without a solver. Body-keyed guard unions, existing-twin coverage, and
+  Language-5 remedy validation are a second coherent safety boundary and should not make the
+  contained idempotence fix harder to review or land. (ExecPlan 266 originally also carried a
+  semantic proof engine; the IR-33 review of 2026-08-22 narrowed it out.)
   Date: 2026-08-21
 
 - Decision: Make transition-family comparison a shared internal Keiro module rather than copy
@@ -117,6 +163,37 @@ comparison.
   Rationale: the defect occurs before symbolic reasoning: byte-identical sibling transitions are
   paired incorrectly inside Keiro. A dependency change would add release coordination without
   improving this proof.
+  Date: 2026-08-21
+
+- Decision: A live transition with no `emit` never enters guard-history classification, on
+  either side of a family.
+  Rationale: the validator already proves such a transition is a pure no-op (no vertex change,
+  no register write), so no stored event depends on its guard and hydration never needs it as
+  an inverting edge. Classifying it can only produce a false hazard, and the twin it would print
+  is rejected as `ReplayOnlyEmitsNothing`. This is a structural fact of the DSL, not a semantic
+  guard proof, so it belongs in this plan rather than ExecPlan 266.
+  Date: 2026-08-21
+
+- Decision: Every printed twin clears `tOutcome` and `tOutcomeDuplicateLocs` in this plan.
+  Rationale: a forward-only domain outcome is illegal on a replay-only transition
+  (`DomainOutcomeReplayOnlyClause`). Leaving the copy in place would knowingly ship an
+  unpasteable remedy to every Language-5 adopter until ExecPlan 266 lands; the fix is two field
+  resets and changes no fold identity because `canonicalTransition` already excludes outcomes.
+  Date: 2026-08-21
+
+- Decision: Keep the guard pass inside the spec-level `aggregatePairDiff`, consuming
+  `transitionFamilyDeltas`; do not relocate it to a service-level pass in this plan.
+  Rationale: this plan needs only the two normalized `Spec`s, and relocating the pass after
+  `diffCheckedSpecs` would reorder the emission-ordered
+  `fold-identity-diff-replay.golden`, which this plan treats as a stop-and-investigate signal.
+  ExecPlan 266 needs the candidate's `CheckedService` for remedy validation and threads it
+  through `DiffEnv` instead, so the pass never moves.
+  Date: 2026-08-21
+
+- Decision: `AggGuardRelationUnknown` gets an explicit `remediationFor` case and a test that it
+  does not reach the `otherwise` fallthrough.
+  Rationale: the fallthrough maps unknown codes to `RemedyRunConformance`, which would advertise
+  a conformance run as sufficient for an undecided private-history hazard.
   Date: 2026-08-21
 
 
@@ -148,16 +225,23 @@ one occurrence from each side. A *family remainder* is what is left after that c
 transition and uses `Data.List.find` to select the first baseline live transition with the same
 source and command. It tests raw `Expr` inequality, constructs `oldGuard AND NOT newGuard` with
 `complementExpr`, and suppresses the warning if any candidate replay-only sibling shares the
-source and command. This plan changes only the pairing boundary and ambiguous-family response;
-ExecPlan 266 owns semantic relation and replay-only coverage correctness.
+source and command. It also copies the entire old transition into the printed twin, including a
+Language-5 forward outcome, and it classifies no-emit transitions that the validator already
+proves are pure no-ops. This plan changes the pairing boundary, the ambiguous-family response,
+the no-emit exclusion, and the twin's outcome fields; ExecPlan 266 owns replay-body grouping,
+replay-only coverage correctness, and twin validation.
+
+Raw `Expr` and `Transition` equality already ignore source locations: `Loc`'s `Eq` instance is
+constant-true in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`. The location-only relocation test in
+Milestone 1 therefore pins existing behavior rather than fixing a defect.
 
 `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` answers the narrower question of which historical event
 types and snapshots require an audit. Its `changedTransitionEvents` groups transitions by mode,
 source, and command; `cancelExact` removes exact canonical matches; `cancelLoosenings` removes a
 small syntactically provable loosening fragment; and remaining transitions contribute their event
 types. The exact cancellation and stable grouping belong in the shared module introduced here.
-The syntactic loosening rule remains in replay impact until ExecPlan 266 replaces it with a shared
-guard relation.
+The syntactic loosening rule remains private to replay impact until ExecPlan 266 shares it
+with the diff pass.
 
 `keiro-dsl/src/Keiro/Dsl/CanonicalEncoding.hs` defines `canonicalTransition`. These bytes are
 frozen persisted fold identity: they include replay behavior and exclude `tOutcome`, because a
@@ -223,6 +307,15 @@ must eventually produce exactly one unknown family finding and no text containin
 `replay-only` transition. Retain the existing genuine-tightening test as a regression; this plan
 must not silence its one-to-one warning.
 
+Add two further cases. First, a no-emit variant: tighten only the guard of the no-op branch in
+the sibling fixture and assert that no guard finding of any code is produced, because the
+validator proves that branch cannot strand history. Second, a Language-5 `domain-outcomes`
+variant whose old live transition declares an accepted outcome and whose guard genuinely
+tightens one-to-one: assert exactly one `AggGuardTightened`, that the printed twin contains no
+`outcome` clause, and that appending the twin to the candidate source parses, validates with no
+errors, and silences the finding on re-diff. Reuse the paste-and-revalidate shape of the existing
+Plan-143 test so the same proof covers both languages.
+
 Extend `keiro-dsl/test/diff-test.sh` with a Git-backed self-diff case. Commit the minimized fixture
 inside the script's disposable repository, run `diff --since HEAD` with both report outputs, and
 assert an empty `findings` array plus `{"verdict":"replay-neutral"}`. This proves the same CLI path
@@ -252,15 +345,20 @@ Replace the private `cancelExact` and grouping code in
 `cancelLoosenings` only to each exact remainder, preserving its conservative replay behavior for
 now. The existing replay-impact permutation test must remain green.
 
-Move aggregate guard findings out of the spec-only `aggregatePairDiff` path and into a
-service-aware guard evolution pass invoked by `diffServices`. The new pass still uses the old and
-new normalized specs, but starts with `transitionFamilyDeltas`. A family with an empty exact
-remainder produces no guard finding. Exactly one old and one new live remainder follows the
-existing raw guard-change path so the established Plan-143 behavior remains available. A family
-with plausible transitions on both sides but no unique remaining pair produces the conservative
-unknown finding defined in Milestone 3. An old-only removal or new-only addition remains owned by
-the independent fold/replay/declaration analyses rather than being mislabeled as a guard
-relation.
+Rewrite `guardTighteningDiff` in place, keeping it inside the spec-level `aggregatePairDiff`
+at its current position so finding emission order and the existing rendering golden are
+unchanged. The rewritten pass starts with `transitionFamilyDeltas` over the two aggregates'
+transitions and then drops every no-emit transition from both remainders of each live family
+before any classification, because such a transition is a validator-proven no-op that cannot
+strand history. A family with an empty exact remainder produces no guard finding. Exactly one
+old and one new emitting live remainder follows the existing raw guard-change path so the
+established Plan-143 behavior remains available; the twin it prints is the old transition with
+the removed-region guard, replay-only mode, `tOutcome = Nothing`, and
+`tOutcomeDuplicateLocs = []`. A family with emitting transitions on both sides but no unique
+remaining pair produces the conservative unknown finding defined in Milestone 3. An old-only
+removal or new-only addition remains owned by the independent fold/replay/declaration analyses
+rather than being mislabeled as a guard relation; ExecPlan 266 records that a removed emitting
+body is a hydration hazard that deserves its own remedy, and owns that extension.
 
 Milestone acceptance is that the minimized self-diff and all declaration permutations are empty
 and replay-neutral, while the genuine one-to-one tightening remains visible.
@@ -274,10 +372,13 @@ exhaustive diff-code registry used by `Diff.hs`. In `classifyCompatibility`, giv
 tool lacks a unique pair. Its detail must name the aggregate family, old/new remainder counts, and
 state that no replay-only transition was generated because the relationship is ambiguous.
 
-In `keiro-dsl/src/Keiro/Dsl/DiffReport.hs`, map this code to `RemedyDoNotDeploy` with guidance to
-resolve the family ambiguity or run the targeted replay audit. It must never map to
-`RemedyReplayOnlyEdge`. Add text and JSON assertions for the code, compatibility vector, and
-remediation. Update `keiro-dsl/CHANGELOG.md` and the guard-evolution section of
+In `keiro-dsl/src/Keiro/Dsl/DiffReport.hs`, add an explicit `remediationFor` case mapping this
+code to `RemedyDoNotDeploy` with guidance to resolve the family ambiguity or run the targeted
+replay audit. It must never map to `RemedyReplayOnlyEdge`, and it must not rely on the function's
+`otherwise` fallthrough, which would silently advertise `RemedyRunConformance`. Add text and
+JSON assertions for the code, compatibility vector, and remediation, including one that the
+JSON remedies for an ambiguous family contain `do-not-deploy` and not the run-conformance
+fallthrough alone. Update `keiro-dsl/CHANGELOG.md` and the guard-evolution section of
 `docs/guides/evolution-and-replayability.md` to explain that code-specific consumers of
 `AggGuardTightened` must also recognize `AggGuardRelationUnknown`, while compatibility-surface
 gates continue to catch both automatically.
@@ -395,10 +496,13 @@ twin. A disposable checkout of `mori://shinzui/mori/repos/mori` shows the same o
 own `HEAD`.
 
 A one-to-one real tightening continues to produce exactly one `AggGuardTightened` with the
-existing private-history compatibility vector. This plan does not weaken the runtime or audit
-proofs from ExecPlan 143. Conversely, a family whose exact remainders cannot be uniquely paired
-produces exactly one `AggGuardRelationUnknown`, uses the private-history advisory vector, supplies
-a do-not-deploy/audit remediation, and contains no rendered `replay-only` transition.
+existing private-history compatibility vector, and its printed twin carries no `outcome` clause,
+parses, and validates under Languages 1 through 5. A guard change confined to a no-emit
+transition produces no guard finding of any code. This plan does not weaken the runtime or audit
+proofs from ExecPlan 143. Conversely, a family whose exact emitting remainders cannot be uniquely
+paired produces exactly one `AggGuardRelationUnknown`, uses the private-history advisory vector,
+supplies an explicitly mapped do-not-deploy/audit remediation, and contains no rendered
+`replay-only` transition.
 
 `ReplayImpact` and ordinary diff both consume the same exact family partition. Its existing
 permutation test remains order-independent, and identical transitions cannot be classified as
@@ -440,10 +544,12 @@ how often it appears, but must keep parsing and reporting the code.
 observable contract is fixed: key-ordered families, duplicate-aware exact cancellation using
 `canonicalTransition`, and canonical-order remainders independent of source declaration order.
 
-`keiro-dsl/src/Keiro/Dsl/Diff.hs` gains a service-aware aggregate guard pass called by
-`diffServices`; the spec-only node-family differ no longer performs its own first-match guard
-comparison. The public `diffServices :: CheckedService -> CheckedService -> Either FoldSurfaceError
-[Change]` signature and the JSON schema remain unchanged.
+`keiro-dsl/src/Keiro/Dsl/Diff.hs` keeps its guard pass inside the spec-level
+`aggregatePairDiff` at the same emission position, but that pass consumes
+`transitionFamilyDeltas`, excludes no-emit transitions, and clears outcome fields from the twin
+instead of performing its own first-match guard comparison. The public
+`diffServices :: CheckedService -> CheckedService -> Either FoldSurfaceError [Change]` signature,
+finding emission order, the rendering golden, and the JSON schema remain unchanged.
 
 `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` consumes the same family deltas before its existing
 syntactic loosening pass. Its public

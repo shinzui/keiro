@@ -1,6 +1,18 @@
 # Bundle Update Log
 
 ## 2026-08-21
+* **Review**: Approve IR-33 with a narrowed scope after validating Plans 265 and 266 against Keiro
+master at ad0c04da and Mori's committed domain sources. The 39 findings have one cause:
+guardTighteningDiff pairs each candidate live transition with the first baseline sibling, and Mori
+declares a no-op branch before each emitting branch; the count of second-and-later live siblings is
+exactly 39. Accepted: exact multiset family cancellation shared with replay impact, no-emit
+exclusion, outcome-free twins, AggGuardRelationUnknown for unpairable families (Plan 265);
+replay-body guard unions, removed-body hazards with the old transition as twin, shared syntactic
+loosening, by-construction twin coverage, and render/parse/validate-gated remedies with
+AggGuardRemedyUnavailable (Plan 266). Deferred: the three-valued satisfiability engine, because
+finite-domain witnesses would turn every Text/Int/Time/ID tightening into Unknown with no twin, and
+exact-equivalence twin coverage would make the safe old-guard-verbatim twin a perpetual finding.
+Revival conditions are recorded in the request.
 * **Addition**: IR-34 requests a way for a guarded transition to write a mapped register, after
   Rei's Intention root proved that `AggregateTransitionOwnershipConflict`,
   `TransitionUnguardedSibling`, and `TransitionDuplicateUnguarded` compose into a gap with no
