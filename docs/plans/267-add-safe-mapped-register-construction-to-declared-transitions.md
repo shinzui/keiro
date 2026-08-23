@@ -53,6 +53,10 @@ construction remains outside the language. It also does not relax
       forward/replay, guard-verification, snapshot, and negative mutation evidence.
 - [ ] Reintroduce explicit candidate ownership in the conformance baseline, update authoring
       skeleton evidence without rewriting published Languages 1-5, and pass the corpus policy.
+- [ ] Close the pre-implementation validation gaps: reject a predicate-valued lift child at check
+      time, diagnose `initial` shadowing under Language 6, enforce walker exhaustiveness in the
+      scaffold and fingerprint modules, decode the ledger lift field optionally, and append the
+      lift fold field only when a lift is used.
 - [ ] Amend the relevant ADRs and user guidance, close IR-34 only after all acceptance gates pass,
       and run the complete package, documentation, and repository verification.
 
@@ -63,7 +67,12 @@ construction remains outside the language. It also does not relax
   register have the same mapped type. The missing operation is construction, not mapped-register
   assignment in general.
   Evidence: `write currentArtifact := artifact` in
-  `keiro-dsl/test/fixtures/consumer-types.keiro` scaffolds to a generated `B.slot` assignment.
+  `keiro-dsl/test/fixtures/structural-conformance.keiro` scaffolds to
+  `B.slot @"currentArtifact" =: d.artifact` in
+  `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Transducer.hs`.
+  (`consumer-types.keiro` carries the same write but is only used by temporary-directory scaffold
+  tests; no conformance directory compiles it.) The resolver admits the copy because
+  `checkExpected` compares equal `AggregateMapped` keys (`keiro-dsl/src/Keiro/Dsl/Expression.hs`).
 
 - Observation: Keiki 0.9.1.0 already contains every execution primitive this feature needs.
   `TOpaqueLit` carries a value without a `Show` constraint, `TApp1` applies a pure Haskell unary
@@ -73,10 +82,115 @@ construction remains outside the language. It also does not relax
   walkers in the released source at `mori://shinzui/keiki/packages/keiki`. Hackage and the
   upstream `v0.9.1.0` tag agreed at plan creation on 2026-08-21.
 
-- Observation: Keiki's hidden-input analysis recursively traverses `TApp1`. Wrapping a command
-  projection in a lift therefore does not hide the input read or make an unrecoverable command
-  replay-safe.
-  Evidence: `termReadsInput (TApp1 _ term) = termReadsInput term` in the released Keiki source.
+- Observation: Keiki's recoverability gate is schema-wide, not term-driven. `hiddenInputReasons`
+  requires every declared `InCtor` field to be recovered by a top-level `TInpCtorField` in the
+  head emitted event (`HirUnionMiss`, `HirHeadUnrecoverable`), regardless of which update terms
+  read it; `termReadsInput (TApp1 _ term) = termReadsInput term` only drives the epsilon-edge
+  check. Wrapping a command projection in a lift therefore cannot make an unrecoverable command
+  replay-safe, but a mutation that drops the field from the head event fails for reasons
+  independent of `TApp1`. Keiki also does not descend into derived terms when computing recovered
+  slots in outputs (`visitedSlotsOf`), so a lift must never be lowered into an event field.
+  Evidence: `hiddenInputReasons`, `visitedSlotsOf`, `termReadsInput`, and `edgeReadsInput` in
+  `src/Keiki/Core.hs` at `mori://shinzui/keiki/packages/keiki` 0.9.1.0.
+
+- Observation: `keiro-dsl check` has no command-recoverability diagnostic. Enforcement happens
+  when the generated harness runs Keiki's `validateTransducer defaultValidationOptions` and the
+  forward/replay register-equality row; both are conformance-time, not check-time.
+  Evidence: `keiro-dsl/src/Keiro/Dsl/Harness.hs` (`validateTransducer is empty` row and
+  `forwardReplayDecl`); no `HiddenInput`/`Unrecoverable` code exists in
+  `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
+
+- Observation: Keiki computes no behavioral identity of a transducer. `Keiki.Shape` hashes only
+  type-level state and register-file shape and documents that guards, updates, function bodies,
+  and values are intentionally excluded. An opaque function in `TApp1` or a value in `TOpaqueLit`
+  is invisible to every identity Keiki produces, so keiro-dsl's fold fingerprint is the sole
+  identity for a lift and its version is the only detection of a changed lift.
+  Evidence: `src/Keiki/Shape.hs` (`stateShapeHash`, `regFileShapeHash`, module Haddock) and the
+  absence of any `FoldVersion`/fingerprint symbol in Keiki `src/`.
+
+- Observation: `setSlotN` forces every written slot value to weak head normal form at each step,
+  and replay re-runs updates forward from the recovered command. A partial lift therefore throws
+  inside `runUpdate` during replay of stored history, not only during the live command.
+  Evidence: `setSlotN`, `runUpdate`, `applyEventKernel` in `src/Keiki/Core.hs`.
+
+- Observation: `initial` is not a reserved word, while `mapped` is. A register or command field
+  named `initial` is legal today, and under Language 5 `write x := initial` resolves it as an
+  ordinary unqualified root. `mapped(` cannot begin any current expression, so the new call form
+  is unambiguous; a bare `initial` write is not.
+  Evidence: `reservedWords` in `keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`; `resolveRoot` in
+  `keiro-dsl/src/Keiro/Dsl/Expression.hs`; `registerInitialCanonicalName` already renders a
+  mapped register initial as the word `initial` (`keiro-dsl/src/Keiro/Dsl/AggregateType.hs`).
+
+- Observation: `resolveWriteExpr` applies `predicateValued` to the top node only, and
+  `renderKeikiTerm` lowers a predicate node with `error`. Without a child check, a lift whose
+  declared source is `Bool` would accept `mapped(reg.a == reg.b)` at check time and crash the
+  scaffolder, violating ADR 4's earliest-boundary rule.
+  Evidence: `keiro-dsl/src/Keiro/Dsl/Expression.hs` (`resolveWriteExpr`, `predicateValued`) and
+  `impossiblePredicate` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`.
+
+- Observation: the library compiles with non-fatal `-Wall`; only `Expression.hs` opts into
+  `-Werror=incomplete-patterns`, and the generated-output `-Werror` flag does not cover `src/`.
+  Of the `TypedScalarNode` match sites outside `Expression.hs`, five are exhaustive and warn
+  (`typedExpressionChildren`, `renderKeikiTerm`, `renderOutcomeKeikiTerm`, `equalityIdentities`
+  children, `predicateValued`) and roughly twenty use a `_` fallback that silently mishandles a
+  new node. `typedExpressionImportTypes` is guard-only by design because `=:` infers write operand
+  types and an unused import is fatal under generated `-Werror`; a lift or initial symbol that
+  appears only in a write needs a new value-reference collection path, not a new case.
+  Evidence: `keiro-dsl/keiro-dsl.cabal` (`common warnings`), `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`
+  (`generatedTransitionGuards` comment, `typedExpressionImportTypes`,
+  `qualifiedValueReference`), `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` (`exprNames`,
+  `equalityIdentities`).
+
+- Observation: the mapping ledger decoder uses strict `.:` for every field, including the
+  existing `Maybe` initial symbol, and enforces `schema == 1`. A missing key fails the row, and
+  `parseRecord` traverses rows, so one failing row drops the whole scaffold record and its drift
+  history. Backward-readable decoding of a new optional field must use `.:?`.
+  Evidence: `keiro-dsl/src/Keiro/Dsl/MappedConsumer.hs` (`parseMapping`),
+  `keiro-dsl/src/Keiro/Dsl/ScaffoldRecord.hs` (`parseRecord`); `.:?` precedent in
+  `keiro-dsl/src/Keiro/Dsl/ExplainBindings.hs`.
+
+- Observation: the fold surface is newline-joined segments of `|`-joined fields hashed with
+  FNV-1a-128; nothing is length-delimited. Mapped-register segments enter an aggregate's surface
+  only when one of its registers has that type, and `ReplayImpact` recomputes
+  `aggregateFoldSurfaceForService` rather than classifying diff codes. A lift field appended to
+  every transition segment, even empty, would move every pinned digest; appended only when a lift
+  is used, it yields the "only aggregates that use the lift" replay property with no further
+  classification work.
+  Evidence: `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` (`aggregateFoldSurface`,
+  `mappedRegisterSegments`, `transitionSegment` with its conditional `outputOwnershipSegment`),
+  `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` (`matchedAggregateImpact`),
+  `keiro-dsl/test/fixtures/fold-identity-baseline.golden`, and the
+  `<aggregate>FoldFingerprint` literals in every generated transducer.
+
+- Observation: generated code never uses `K.opaqueLit` today; a mapped register initial renders
+  as the bare alias-qualified symbol (`Bindings.emptyGeometry`) in the initial register file, and
+  `TApp1` appears only in hand-written Hole code. Generated transducers already import
+  `Keiki.Core qualified as K` unconditionally, and `Keiki.Builder` does not re-export
+  `opaqueLit` or the `Term` constructors.
+  Evidence: `regInitialValue` in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, the import block of
+  `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Transducer.hs`,
+  and the `Keiki.Builder` import list.
+
+- Observation: consumer-owned nominal registers also select a declaration-owned initial symbol
+  with the bare `initial` token (`InitialNominal`), so the target-initial write form has a second
+  natural target that the original scope did not name.
+  Evidence: `resolveRegisterInitial` in `keiro-dsl/src/Keiro/Dsl/AggregateType.hs`.
+
+- Observation: the frontend-0.7 compatibility manifest pins declared Languages 1 through 3 plus
+  legacy forms; released Languages 1 through 5 are pinned by
+  `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs`. Language 5 uses syntax profile
+  `keiro-dsl/syntax-profile/4` and runtime profile `keiro-dsl/runtime-semantics/4`; profile numbers
+  are independent of language numbers. Registering a candidate makes
+  `currentAuthoringLanguageVersion` return 6, and `Keiro.Dsl.Skeleton` emits that version in every
+  new skeleton preamble.
+  Evidence: `keiro-dsl/test/frontend-0.7/manifest.json`,
+  `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`, `keiro-dsl/src/Keiro/Dsl/Skeleton.hs`.
+
+- Observation: `mapped opaque` declarations have no nested block today; only `mapped structural`
+  nests braces for its `wire` shape. The nested `write-lift` block reuses the `version` and
+  `fixtures` key spellings of the outer declaration and must be brace-scoped so the outer clause
+  loop cannot absorb them.
+  Evidence: `pOpaqueClause` and `pMappedStructural` in `keiro-dsl/src/Keiro/Dsl/Parser/Mapped.hs`.
 
 - Observation: normal Hole code receives the complete `EdgeBuilder`; it can conjoin another
   guard and update arbitrary registers. Emitting the source guard before invoking that Hole would
@@ -184,6 +298,70 @@ construction remains outside the language. It also does not relax
   another register outside canonical diff and fold identity.
   Date: 2026-08-21
 
+- Decision: Reject a predicate-valued lift child at check time with the existing
+  `ScalarOperatorUnsupported`/`AggregateExpressionOperatorUnsupported` diagnostic, exactly as a
+  predicate-valued top-level write is rejected today.
+  Rationale: `renderKeikiTerm` lowers predicates with `error`; the only sound boundary for this
+  input is the resolver (ADR 4). A `Bool`-sourced lift must not be able to reach the scaffolder
+  with `mapped(reg.a == reg.b)`.
+  Date: 2026-08-22
+
+- Decision: Under Language 6, a bare `initial` as the complete write right-hand side always means
+  the target's declared initial. If the aggregate declares a register named `initial`, or the
+  transition's command declares a field named `initial`, the checker raises a new located
+  diagnostic (equivalent to `AggregateExpressionWriteInitialShadowed`) that names
+  `reg.initial`/`cmd.initial` as the disambiguation. `pWriteExpr` matches `initial` only when it
+  is the entire right-hand side; `initial.field`, `initial + 1`, and any qualified spelling fall
+  through to `pExpr`. Languages 1 through 5 are untouched.
+  Rationale: `initial` is not reserved, so silently changing the meaning of an existing
+  Language-5 program on upgrade would be a semantic regression with identical canonical bytes.
+  A diagnostic is the only option that keeps Language 5 frozen, keeps Language 6 unambiguous, and
+  never reinterprets a program.
+  Date: 2026-08-22
+
+- Decision: Add `{-# OPTIONS_GHC -Werror=incomplete-patterns #-}` to `Keiro.Dsl.Scaffold` and
+  `Keiro.Dsl.FoldFingerprint` before adding the new constructors, replace every `_` fallback that
+  would mishandle `TypedMappedInitial`/`TypedMappedLift` (or the raw `EWriteInitial`/
+  `EWriteMapped`) with explicit cases, and add a dedicated write-side value-reference collector
+  for the initial and lift symbols alongside the guard-only `typedExpressionImportTypes`.
+  Rationale: `src/` builds with non-fatal `-Wall`, so "all walkers must become exhaustive" is
+  otherwise unenforced and a missed walker compiles green. Write operand types are deliberately
+  not imported, so the lift symbol needs its own collection path rather than a widened type
+  collector, which would produce an unused import that is fatal under the generated-output gate.
+  Date: 2026-08-22
+
+- Decision: Decode the optional mapping-ledger lift field with `.:?`, keep the per-row
+  `schema` at 1 and the record header at v1, and add a test that decodes a ledger written before
+  the field existed.
+  Rationale: the current decoder uses strict `.:` for every field, and a single failing row drops
+  the entire scaffold record. A naive copy of the existing style would silently erase drift
+  history for every consumer on the first post-upgrade scaffold.
+  Date: 2026-08-22
+
+- Decision: Record used-lift provenance as one additional `|`-joined field of the existing
+  transition segment, appended only when the transition uses a lift, in the existing plain-text
+  style; no length-delimited framing.
+  Rationale: the fold surface has no length-prefixed precedent, and a positional field present
+  but empty on lift-free transitions would move every pinned digest, which this plan classifies as
+  a design stop. Conditional presence also yields "only aggregates whose transition uses the lift"
+  in `ReplayImpact`, which recomputes fold surfaces rather than classifying diff codes.
+  Date: 2026-08-22
+
+- Decision: A lift is lowered only into a `B.slot` update and never into an event field or
+  output hook; the conformance service asserts that no generated event output term contains
+  `K.TApp1`.
+  Rationale: Keiki does not descend into derived terms when computing recovered slots in outputs,
+  so a lifted event field would be unrecoverable by construction. Updates are re-run forward from
+  the recovered command and are safe.
+  Date: 2026-08-22
+
+- Decision: Consumer-owned nominal register targets receive a dedicated diagnostic from the
+  `initial` write form in this plan rather than silent support.
+  Rationale: `InitialNominal` is lowered identically and could be admitted later, but admitting it
+  here widens the proof surface beyond the reproduced mapped case. Naming it explicitly avoids an
+  accidental extension through an unlisted branch.
+  Date: 2026-08-22
+
 
 ## Outcomes & Retrospective
 
@@ -230,18 +408,29 @@ and `mapped(...)` is refused at its exact marker with `LanguageFeatureRequiresVe
 `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs` currently registers Languages 1 through 5, with
 Language 5 as `Stable PublishedLanguage` and no candidate. Add version 6 as
 `Candidate CandidateLanguage`, with predecessor 5, a new syntax profile containing
-`MappedRegisterConstructionSyntax`, and the unchanged Language-5 runtime profile. Update
-`keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` to pin all registry rows and feature gates.
-`keiro-dsl/test/Keiro/Dsl/FrontendCompatibility.hs` and its manifest continue to pin released
-Languages 1-5.
+`MappedRegisterConstructionSyntax`, and the unchanged Language-5 runtime profile. Language 5 uses
+`keiro-dsl/syntax-profile/4` and `keiro-dsl/runtime-semantics/4`; Language 6 introduces
+`keiro-dsl/syntax-profile/5` and reuses runtime profile 4. Update
+`keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs`, which pins every registry row, feature gate, and
+the currently empty candidate list. `keiro-dsl/test/Keiro/Dsl/FrontendCompatibility.hs` and the
+`frontend-0.7` manifest pin declared Languages 1-3 and legacy forms and are not expected to
+change. Registering the candidate makes `currentAuthoringLanguageVersion` return 6, which
+`Keiro.Dsl.Skeleton` writes into every new skeleton preamble; this is the intended candidate
+authoring transition and is the only broad corpus movement the plan accepts.
 
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` resolves every generated transition once into
 `ResolvedGeneratedTransition`. `renderKeikiTerm` produces the term placed on the right-hand side
-of `B.slot`, while `generatedOnCmdBlock` keeps a Hole-owned edge separate. Extend the exhaustive
-typed-expression walkers, Haskell import occurrence planning, and term renderer. An initial node
-renders `K.opaqueLit` around the declaration's qualified initial. A lift node renders `K.TApp1`
-with the qualified declared function and the recursively rendered source term. It must not render
-an `EdgeBuilder` callback.
+of `B.slot`, while `generatedOnCmdBlock` keeps a Hole-owned edge separate. Extend the
+typed-expression walkers, Haskell import occurrence planning, and term renderer, and make the
+module fail to build on an incomplete match first (see the Decision Log). An initial node renders
+`K.opaqueLit` around the alias-qualified initial symbol obtained through
+`qualifiedValueReference`, the same path `regInitialValue` uses for the initial register file; the
+`K` alias for `Keiki.Core` is already imported by every generated transducer, and `opaqueLit` is
+not re-exported by `Keiki.Builder`. A lift node renders `K.TApp1` with the alias-qualified declared
+function and the recursively rendered source term. Neither symbol is collected by the guard-only
+`typedExpressionImportTypes`; add a write-side value-reference collector so the import plan
+qualifies them without introducing an unused type import. It must not render an `EdgeBuilder`
+callback, and it must never appear in an event output term.
 
 `keiro-dsl/src/Keiro/Dsl/StructuralConformance.hs` emits the one service-level module that checks
 all mapped declaration evidence. Add lift imports and labelled assertions there. The declared
@@ -253,27 +442,38 @@ function and cases stubs exactly once.
 
 `keiro-dsl/src/Keiro/Dsl/MappedConsumer.hs` records dependency modules and persisted mapping
 identity. Add an optional lift identity containing source type, function, version, and cases to
-both structural and opaque mappings. Keep its JSON schema backward-readable by decoding the new
-field as optional; do not make old ledgers fail. `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` then
-reports lift drift and imports the function/cases modules from the target declaration's consumer
-package.
+both structural and opaque mappings. The existing `parseMapping` decodes every field with strict
+`.:`; the new field must be decoded with `.:?` and encoded only when present, and the per-row
+`schema` stays at 1, so ledgers written before the field existed keep decoding.
+`mappingDrift` compares whole identities, so lift changes become drift-visible without further
+work; `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` renders that drift and imports the function/cases
+modules from the target declaration's consumer package through `mappedModules`.
 
 Persisted replay identity comes from `keiro-dsl/src/Keiro/Dsl/CanonicalEncoding.hs` and
-`keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs`, not presentation text. Add canonical spellings only
-for the new AST constructors, leaving every old constructor byte-identical. For a used lift,
-`transitionSegment` must add a resolved length-delimited provenance segment containing target
-mapped name, direct source type, qualified function, and lift version. The cases symbol is
-evidence-only and does not change execution identity. An unused declared lift must not change an
-aggregate fingerprint. The mapped initial symbol already participates in the mapped-register
-segment; the new `initial` expression makes its use explicit in the transition segment.
+`keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs`, not presentation text. The canonical encoder is a
+per-constructor pretty-printer with a precedence ladder; add the new constructors at the atom
+level so every old encoding stays byte-identical, and never renumber an existing level. The fold
+surface is newline-joined segments of `|`-joined fields. For a used lift, `transitionSegment`
+appends one more `|`-joined field (equivalent to
+`lifts=<register>:<mapped-name>:<source-type>:<qualified-function>:<version>`) only when the
+transition uses a lift, following the conditional `outputOwnershipSegment` precedent; a lift-free
+transition's bytes must not change. The cases symbol is evidence-only and does not enter
+execution identity. Because mapped-register segments are register-gated, an unused declared lift
+cannot change an aggregate fingerprint. The mapped initial symbol already participates in the
+mapped-register segment; the new `initial` expression makes its use explicit in the transition
+segment through its canonical spelling.
 
 `keiro-dsl/src/Keiro/Dsl/MappedDiff.hs` compares declaration metadata and
 `keiro-dsl/src/Keiro/Dsl/Diff.hs` assigns compatibility consequences. Add
 `MappedWriteLiftChanged` for add/remove/source/function/version changes and
-`MappedWriteLiftFixturesChanged` for evidence-only case-symbol changes. The former always requests
-a consumer rebuild; aggregate fold comparison and `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` must
-identify replay/snapshot impact only for aggregates whose transition actually uses the lift.
-Changing only the cases symbol remains replay-neutral.
+`MappedWriteLiftFixturesChanged` for evidence-only case-symbol changes, copying the
+`MappedFixturesChanged` classification (`mappedBuildVector`, `RemedyRunConformance`, build-only
+change shape) for the latter. The former always requests a consumer rebuild and attributes
+aggregate consequences through the existing use-path machinery.
+`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` does not classify diff codes; it recomputes
+`aggregateFoldSurfaceForService`, so the conditional transition field above is what confines
+replay/snapshot impact to aggregates whose transition actually uses the lift. Changing only the
+cases symbol remains replay-neutral.
 
 The compiled proof should be a new fixture at
 `keiro-dsl/test/fixtures/mapped-register-construction.keiro`, generated output under
@@ -313,19 +513,25 @@ controls this plan.
 
 ### Milestone 1: register Language 6 and make mapped `initial` executable
 
-Add `MappedRegisterConstructionSyntax` and candidate Language 6 in
+Before touching any constructor, add `-Werror=incomplete-patterns` to `Keiro.Dsl.Scaffold` and
+`Keiro.Dsl.FoldFingerprint` and confirm the package still builds; this turns every later missed
+walker into a build failure. Add `MappedRegisterConstructionSyntax` and candidate Language 6 in
 `Keiro.Dsl.LanguageVersion`, keeping stable version 5 and runtime profile 4 unchanged. Restore the
 candidate role in the conformance-baseline checker but do not regenerate the corpus yet. Add
-write-specific AST/parser/pretty/canonical support for `initial`, and make `resolveWriteExpr`
-resolve the target register through `resolveRegisterInitial`. It succeeds only for
-`InitialMapped`; direct, generated nominal, unknown, or mapped declarations without an initial
-receive a stable located diagnostic before scaffolding.
+write-specific AST/parser/pretty/canonical support for `initial`, with `pWriteExpr` accepting it
+only as the complete right-hand side, and make `resolveWriteExpr` resolve the target register
+through `resolveRegisterInitial`. It succeeds only for `InitialMapped`; direct, generated nominal,
+consumer nominal, unknown, or mapped declarations without an initial receive a stable located
+diagnostic before scaffolding. Add the `initial` shadowing diagnostic for aggregates that declare
+a register, or whose command declares a field, named `initial`.
 
-Extend `TypedScalarNode`, all exhaustive expression walkers, import planning, and
-`renderKeikiTerm` so a valid node becomes `K.opaqueLit Qualified.initialValue` inside the normal
-generated `B.slot` line. Add unit tests for Language-6 parse/render/check/scaffold and exact
-Language-5 preservation. At the end of this milestone, a guarded Language-6 transition can clear
-a mapped register without any Hole, and focused `keiro-dsl-test` groups pass.
+Extend `TypedScalarNode`, every expression walker (replacing `_` fallbacks that would mishandle
+the new node), the write-side value-reference collector, and `renderKeikiTerm` so a valid node
+becomes `K.opaqueLit Bindings.initialValue` inside the normal generated `B.slot` line. Add unit
+tests for Language-6 parse/render/check/scaffold, the shadowing diagnostic, and exact Language-5
+preservation, including an unchanged `fold-identity-baseline.golden`. At the end of this
+milestone, a guarded Language-6 transition can clear a mapped register without any Hole, and
+focused `keiro-dsl-test` groups pass.
 
 ### Milestone 2: add one checked declaration-owned mapped lift
 
@@ -337,13 +543,16 @@ non-mapped target, a target without a lift, and a source expression whose resolv
 from the declared source. Preserve direct same-type mapped copies through the existing
 `TypedRoot` path.
 
-Add `mapped(expression)` to `pWriteExpr`, a resolved typed node, import occurrences, and
-`K.TApp1` lowering. Extend mapping identities and create-once obligations without breaking old
-ledger decoding. Generate service-level conformance assertions for the declared function/cases.
-Add exact diff classifications and a resolved transition fold segment; verify that add/remove,
-function, source, and version changes are visible, a cases-only change is replay-neutral, and an
-unused lift does not move aggregate identity. At the end of this milestone the complete source
-surface checks and scaffolds deterministically, and unit/diff/replay tests pass.
+Add `mapped(expression)` to `pWriteExpr`, a resolved typed node whose child is rejected when
+`predicateValued`, import occurrences through the write-side collector, and `K.TApp1` lowering.
+Extend mapping identities with an `.:?`-decoded optional field and create-once obligations, and
+add a test that decodes a checked-in pre-lift ledger. Generate service-level conformance
+assertions for the declared function/cases. Add exact diff classifications and the conditional
+transition fold field; verify that add/remove, function, source, and version changes are visible,
+a cases-only change is replay-neutral, an unused lift does not move aggregate identity, and every
+lift-free fixture's fingerprint and generated `<aggregate>FoldFingerprint` literal is unchanged.
+At the end of this milestone the complete source surface checks and scaffolds deterministically,
+and unit/diff/replay tests pass.
 
 ### Milestone 3: prove the guarded machine and every safety boundary
 
@@ -351,19 +560,23 @@ Create the Language-6 conformance fixture around a `MaybeTime`-like consumer typ
 register that selects complementary siblings. Include at least these paths: create with the
 target initial, mark dormant using `mapped(cmd.markedAt)`, clear by an automatic awakening, remain
 dormant on the complement, explicitly awaken, and reopen. The first emitted event on every
-lift-reading edge must recover `markedAt`; this makes Keiki's hidden-input gate meaningful rather
-than accidentally bypassed.
+lift-reading edge must recover `markedAt`. Keiki's gate requires the whole command schema to be
+recovered from the head event regardless of which terms read it, and keiro-dsl `check` does not
+enforce recoverability, so this requirement is proven by the generated harness's
+`validateTransducer` row and the forward/replay equality row, not by `check`.
 
 Scaffold the generated modules, fill only the create-once domain, binding, lift, lift-case, and
 behavior-witness files, and register the suite in Cabal and the baseline as
 `candidate-primary` Language 6. Its `Main.hs` must assert exact register values, complementary
 branch selection, unchanged Keiki guard verification, generated ownership, forward/encoded/full
-replay agreement, fold-fingerprint composition, and snapshot invalidation. Add a mutation driver
-with a guarded temporary directory and trap-based restoration. It must turn red when the lift
-body contradicts cases, lift provenance is omitted from generated identity, a command field used
-only under `TApp1` disappears from the head event, a generated guard or slot is bypassed, or a
-guard/write is combined with `implementation hole`. Always rerun the green baseline after
-restoration.
+replay agreement, fold-fingerprint composition, snapshot invalidation, and that no generated
+event output term contains `K.TApp1`. Add a mutation driver with a guarded temporary directory
+and trap-based restoration, following `keiro-dsl/test/mapped-surface-mutation-test.sh`. It must
+turn red when the lift body contradicts cases, lift provenance is omitted from generated
+identity, the command field read by the lift disappears from the head event (this fails through
+Keiki's schema-wide recoverability gate and is a regression guard, not evidence about `TApp1`),
+a generated guard or slot is bypassed, a lift is moved into an event output, or a guard/write is
+combined with `implementation hole`. Always rerun the green baseline after restoration.
 
 Regenerate the conformance corpus. Accept only the new Language-6 suite, the deliberate
 candidate authoring-skeleton transition, and provenance attributable to those inputs. The
@@ -422,7 +635,11 @@ Language 5: bare initial keeps its released unknown-root result
 Language 5: mapped(...) fails with LanguageFeatureRequiresVersion
 Language 6: mapped target initial checks and scaffolds
 Language 6: declared Time -> MaybeTime lift checks and scaffolds
+Language 6: predicate-valued lift child is rejected at check time
+Language 6: bare initial beside a register named initial is diagnosed
 mixed implementation hole plus guard/write: AggregateTransitionOwnershipConflict
+pre-lift mapping ledger still decodes
+lift-free fold surfaces are byte-identical
 ```
 
 Generate the new candidate fixture in place, then fill only create-once files and check that a
@@ -519,13 +736,19 @@ Acceptance requires all of the following observable behavior, not merely a succe
 - `write dormantSince := initial` succeeds only when `dormantSince` is a mapped register whose
   checked declaration supplies an initial symbol. The generated assignment is equivalent to
   `B.slot @"dormantSince" =: K.opaqueLit Bindings.noTime`, remains inside the ordinary generated
-  transition, and contains no `EdgeBuilder` Hole.
+  transition, and contains no `EdgeBuilder` Hole. Consumer-nominal, direct, generated-nominal,
+  and initial-less mapped targets receive stable located diagnostics. When the aggregate declares
+  a register, or the command a field, named `initial`, a bare `initial` write is diagnosed rather
+  than reinterpreted; `reg.initial`/`cmd.initial` keep their Language-5 meaning.
 - A declared `write-lift from Time` accepts `mapped(cmd.markedAt)` only when the source expression
-  checks as exactly `Time` and the target is the mapped declaration that owns the lift. Missing,
-  duplicate, partial, invalid-symbol, unsupported-source, wrong-source, wrong-target, and
-  unversioned declarations fail at their declaration or use site with stable located
-  diagnostics. Existing same-typed whole mapped-value copies continue to check through their old
+  checks as exactly `Time`, is not predicate-valued, and the target is the mapped declaration
+  that owns the lift. Missing, duplicate, partial, invalid-symbol, unsupported-source,
+  wrong-source, wrong-target, predicate-child, and unversioned declarations fail at their
+  declaration or use site with stable located diagnostics; none reaches the scaffolder's
+  `error` path. Existing same-typed whole mapped-value copies continue to check through their old
   path.
+- `Keiro.Dsl.Scaffold` and `Keiro.Dsl.FoldFingerprint` carry `-Werror=incomplete-patterns`, and
+  no `_` fallback over `TypedScalarNode` or `Expr` silently absorbs the new constructors.
 - The generated term for the valid lift is equivalent to
   `K.TApp1 Bindings.atTime <rendered-command-term>` inside the generated `B.slot` update. The
   generated source still declares the guard, event vector, mode, target, and every update.
@@ -540,18 +763,22 @@ Acceptance requires all of the following observable behavior, not merely a succe
   values after initial, lifted, clearing, dormant-complement, explicit-awakening, and reopen
   paths. Keiki sibling verification succeeds. Forward execution, encoded-event replay, and full
   replay reach the same vertex and complete register file.
-- A command field read only underneath `K.TApp1` is still classified as an input read. Removing
-  its recovery from the first event makes checking or conformance fail, demonstrating that the
-  lift cannot smuggle a hidden replay dependency past Keiki.
+- Removing the lift-read command field's recovery from the first event makes the generated
+  conformance harness fail through Keiki's `validateTransducer` row, demonstrating that the lift
+  cannot smuggle a hidden replay dependency past Keiki. This is conformance-time evidence;
+  `keiro-dsl check` is not claimed to detect it. No generated event output term contains
+  `K.TApp1`.
 - A used lift's target mapped name, direct source type, qualified function, and version change
   transition fold identity, aggregate fingerprint, semantic diff, replay impact, and snapshot
   admission. Changing only its cases symbol reports `MappedWriteLiftFixturesChanged` and is
   replay-neutral. Adding or changing an unused declaration lift may request a consumer rebuild
-  but does not change an unrelated aggregate fingerprint.
-- The mapping ledger records the optional lift and remains able to decode ledgers written before
-  the field existed. Add/remove/source/function/version changes report `MappedWriteLiftChanged`;
-  cases-symbol drift reports the evidence-only code. Function and cases modules are attributed
-  to the mapped declaration's consumer package.
+  but does not change an unrelated aggregate fingerprint. Every lift-free fixture's fold surface,
+  `fold-identity-baseline.golden`, and generated `<aggregate>FoldFingerprint` literal remain
+  byte-identical.
+- The mapping ledger records the optional lift with `.:?` decoding and `schema` 1, and a test
+  decodes a checked-in ledger written before the field existed. Add/remove/source/function/
+  version changes report `MappedWriteLiftChanged`; cases-symbol drift reports the evidence-only
+  code. Function and cases modules are attributed to the mapped declaration's consumer package.
 - `keiro-dsl-conformance-mapped-register-construction`, its restoring mutation test, the focused
   tests in Concrete Steps, `cabal test keiro-dsl:tests`, `cabal build all`, the corpus policy,
   formatting, strict ADR and improvement-request validation, and `just verify` all pass. IR-34
@@ -662,8 +889,11 @@ data TypedScalarNode
 
 `resolveWriteExpr` supplies the target context. `TypedMappedInitial` has the target mapped type;
 `TypedMappedLift` has that same result type and contains a child whose checked type exactly equals
-`mappedWriteLiftSourceType`. General `resolveScalarExpr` remains target-independent and never
-produces these nodes.
+`mappedWriteLiftSourceType` and which is rejected when `predicateValued`. General
+`resolveScalarExpr` remains target-independent and never produces these nodes. `exprNames` and
+the `GuardAtomOutOfScope` scope rule, which already cover write right-hand sides, treat
+`EWriteInitial` as naming nothing and recurse into `EWriteMapped`. `typedExpressionChildren`
+returns the lift child so every recursive walker sees the command read beneath it.
 
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` renders those nodes as `K.opaqueLit initialValue` and
 `K.TApp1 liftFunction sourceTerm`, respectively, within the existing generated `B.slot`
@@ -680,8 +910,15 @@ atTimeCases :: NonEmpty (Text, Time, MaybeTime)
 
 `keiro-dsl/src/Keiro/Dsl/MappedConsumer.hs` adds an optional backward-compatible ledger value
 equivalent to `WriteLiftIdentity { sourceType, function, version, fixtures }` and
-`keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` reports its drift. The JSON decoder treats an absent
-field as `Nothing`; the encoder writes the field only when a lift exists.
+`keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs` reports its drift. The JSON decoder reads the field with
+`.:?` so an absent key is `Nothing` (the surrounding fields keep their strict `.:`); the encoder
+writes the field only when a lift exists; the per-row `schema` remains 1.
+
+User guidance must state the runtime consequence of the purity/totality contract: Keiki forces
+each written slot to weak head normal form and re-runs updates forward during replay, so a lift
+that throws fails replay of stored history, not only the live command, and a lift whose body
+changes without a version change silently changes replayed register values with no detection
+available from Keiki.
 
 `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` receives a used-lift provenance segment containing
 the target mapped key, resolved direct source type, qualified function, and lift version.
