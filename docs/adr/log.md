@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-08-23
+* **Update**: Accept idiomatic-v2 generated records with DuplicateRecordFields, NoFieldSelectors, and OverloadedRecordDot defaults, explicit newtype accessors, and compiler-checked access (plan 177).
+* **Update**: Extend generated-Haskell adoption with an explicit, preflighted, backup-backed idiomatic-v1-to-idiomatic-v2 migration that never rewrites Hole bodies (plan 177).
+
 ## 2026-08-21
 * **Add**: Define terminal outbox rejection audit truth, ordered-successor release, committed-progress reporting, and the at-least-once pre-commit callback boundary (plan 165).
 

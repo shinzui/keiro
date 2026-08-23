@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Generated Haskell has an explicit edition and local-extension contract
-description: The generated manifest owns the compilation baseline and naming edition; generated declarations use checked UpperCamelCase or lowerCamelCase while overwriteable modules declare specialized extensions locally only when needed.
-timestamp: 2026-08-05T14:23:30Z
+description: The generated manifest owns a versioned presentation and compilation contract; idiomatic-v2 defaults DuplicateRecordFields, NoFieldSelectors, and OverloadedRecordDot while adoption remains explicit.
+timestamp: 2026-08-23T13:29:23Z
 docId: ADR-19
 status: Accepted
 date: 2026-08-03
@@ -34,20 +34,33 @@ remain hidden.
 
 ## Decision
 
-The generated build manifest owns the complete Haskell compilation contract. It
-declares `default-language: GHC2024` and `OverloadedStrings` as the sole
-`default-extensions` entry before its module and dependency blocks. Repository
-conformance components compile through an independent Cabal common stanza with
-exactly the same defaults.
+The generated build manifest owns the complete, editioned Haskell compilation contract. Existing
+`idiomatic-v1` output retains `default-language: GHC2024` and `OverloadedStrings` as its sole
+`default-extensions` entry. The successor `idiomatic-v2` presentation edition declares GHC2024
+plus `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedRecordDot`, and `OverloadedStrings`.
+Repository conformance components compile through an independent Cabal common stanza with exactly
+the current edition's defaults; package-authored defaults are never inherited accidentally.
 
-Overwriteable generated modules declare non-baseline syntax locally and only
-when the concrete emitted module needs it. The allowed local set is closed:
-`BlockArguments`, `DeriveAnyClass`, `DuplicateRecordFields`,
-`OverloadedLabels`, `OverloadedRecordDot`, `QualifiedDo`, `TemplateHaskell`, and
-`TypeFamilies`. Emitters request those extensions through one typed renderer;
-semantic predicates beside each emitter decide conditional cases. Rendering is
-deduplicated and lexicographically ordered. A generated module with no local
-exception begins directly with its provenance banner.
+Overwriteable generated modules declare non-baseline syntax locally and only when the concrete
+emitted module needs it. Under `idiomatic-v1`, the allowed local set is
+`BlockArguments`, `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels`,
+`OverloadedRecordDot`, `QualifiedDo`, `TemplateHaskell`, and `TypeFamilies`. Under
+`idiomatic-v2`, both `DuplicateRecordFields` and `OverloadedRecordDot` move into the manifest
+defaults and are therefore removed from that local set; the other specialized extensions remain
+local and closed. Emitters request those extensions through one typed renderer; semantic
+predicates beside each emitter decide conditional cases. Rendering is deduplicated and
+lexicographically ordered. A generated module with no local exception begins directly with its
+provenance banner.
+
+`idiomatic-v2` generated product records use concise, repeatable labels and do not create selector
+functions. Emitted code selects product fields with constructor-directed patterns or record-dot;
+record-dot is an edition default because it is the ordinary direct-read syntax replacing selector
+functions. Higher-order access uses explicit typed lambdas when a former selector composition
+would obscure the record type. A deliberately public newtype unwrapper remains an explicitly
+signed function implemented with a positional constructor match, so its API survives
+`NoFieldSelectors` without reintroducing product selectors. `OverloadedRecordUpdate` is not part of
+the edition; emitted updates continue to use ordinary typed record syntax or explicit
+reconstruction.
 
 Tracked generated output is independently checked against the same closed set.
 Adding a new local extension or promoting one into the shared contract therefore
@@ -64,13 +77,25 @@ files advertise that same warning profile. Warning cleanliness is maintained by
 fixing emitted declarations and imports, not by weakening the consumer's
 compiler diagnostics.
 
-The generated-Haskell presentation contract also has an additive naming edition in single-file
-and workspace scaffold history. Current output uses `idiomatic-v1`; a missing row means the
-historical `legacy-v1`. One ASCII segmentation derives all logical names. Module segments, types,
-and constructors are UpperCamelCase; values and record selectors are lowerCamelCase. Leading,
-trailing, and repeated underscores, generated keywords, and normalized collisions are check-time
-errors. A final lexical declaration inventory checks emitted generated modules and newly created
-hole stubs before writes, independently of external snake-case strings in their bodies.
+The generated-Haskell presentation contract has an additive edition in single-file and workspace
+scaffold history. `idiomatic-v2` is the accepted EP-177 successor and becomes current at its
+implementation cutover; until then `idiomatic-v1` remains current, and a missing row means
+historical `legacy-v1`. One ASCII segmentation derives all logical names.
+Module segments, types, and constructors are UpperCamelCase; values and record labels are
+lowerCamelCase. Leading, trailing, and repeated underscores, generated keywords, and normalized
+collisions are check-time errors. A final lexical declaration inventory checks emitted generated
+modules and newly created hole stubs before writes, independently of external snake-case strings
+in their bodies.
+
+Moving from `idiomatic-v1` to `idiomatic-v2` is explicit adoption, not ordinary regeneration.
+Ordinary scaffolding refuses before writes and reports generated declarations plus hand-owned
+sources that still use the v1 product-field API. The separately authorized, backup-backed
+presentation-edition migration in ADR 0015 installs only after the relevant preflights pass. It
+never rewrites a create-once Hole body. A project first converts reported Hole uses to patterns,
+positional construction, record-dot for unchanged labels, or preserved explicit newtype accessors.
+The edition preserves constructor names, arity, and field order so label-renaming consumers have a
+source form that builds before and after adoption. Unresolved uses remain compiler errors rather
+than aliases or `FieldSelectors` escape hatches.
 
 Semantic occurrence planning inventories the exact transition-derived top-level helpers before
 rendering. If two live transitions would emit the same value declaration, the existing generated
@@ -91,39 +116,43 @@ under this compilation contract: `case`, `class`, `data`, `default`, `deriving`,
 `foreign`, `forall`, `if`, `import`, `in`, `infix`, `infixl`, `infixr`, `instance`, `let`, `module`,
 `newtype`, `of`, `then`, `type`, and `where`. Contextual words such as `as`, `family`, `mdo`,
 `proc`, `qualified`, `rec`, `safe`, `signature`, `stock`, `unsafe`, and `via` are not reserved by
-the closed extension set and remain valid selectors. The committed aggregate-scalars conformance
-component compiles all eleven as record selectors under the advertised GHC2024 contract. Direct
-fields whose DSL identity is one of the 23 rejected words must declare an explicit Haskell
-selector; their wire key and semantic identity need not change.
+the closed extension set and remain valid record labels. The committed aggregate-scalars
+conformance component compiles all eleven as v1 selector names; its v2 counterpart compiles them as
+`NoFieldSelectors` labels read through record-dot. Direct fields whose DSL identity is one of the
+23 rejected words must declare an explicit Haskell field label; their wire key and semantic
+identity need not change.
 
-This automated extension cleanup and ordinary regeneration applies only to overwriteable
+Automated extension cleanup and ordinary post-adoption regeneration apply only to overwriteable
 `Generated` modules.
 Create-once `HoleStub` modules, including behavior holes, application holes,
 read-model holes, and consumer binding skeletons, become hand-owned when first
 created. Later scaffold runs neither rewrite nor normalize their pragmas.
-The only source rewrite is the separately authorized legacy-name migration in ADR 0015, which
-backs up the entire original create-once file and rewrites exact module tokens without changing
-comments, literals, or its application-owned body.
+The only rewrite of a create-once source remains the separately authorized legacy-name migration
+in ADR 0015, which backs up the entire original file and rewrites exact module tokens without
+changing comments, literals, or its application-owned body. The v1-to-v2 record migration does not
+extend that exception.
 
 
 ## Consequences
 
 - A consumer can paste the complete manifest fragment into Cabal and know the
   language edition and default extension required by generated output.
-- Every specialized local pragma is evidence of syntax in that module rather
+- Every remaining specialized local pragma is evidence of syntax in that module rather
   than inherited historical noise.
 - Compiling the complete conformance corpus under the advertised profile catches
   a missing specialized pragma that the generator's broader build defaults would
   otherwise conceal.
 - Generated-output policy rejects GHC2024-covered, shared-default, or unapproved
   pragmas before they become fixture drift.
+- `idiomatic-v2` records can repeat concise labels without exporting ambiguous product-selector
+  functions; generated record-dot access remains type-directed and compiler-checked.
 - Hand-owned create-once code is not silently rewritten when the generated
-  contract changes; its own declarations remain the application's responsibility.
+  contract changes; explicit adoption reports its migration work before generated bytes move.
 - A consumer can distinguish a source rebuild from a wire/runtime migration:
   generated naming changes require re-scaffold, recompile, and conformance, but do
   not change persisted identities or replay behavior.
 - The reserved-word refusal surface cannot grow merely because a word is contextual in an
-  extension the generator does not enable; changing the compilation contract requires reviewing
+extension the generator does not enable; changing the compilation contract requires reviewing
   and recompiling the complete selector probe.
 
 
