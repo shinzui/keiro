@@ -69,7 +69,7 @@ planMappedCodec graph expression = do
           onOptional = id,
           onList = id,
           onMap = id,
-          onRef = \key -> case Map.lookup key (tgDeclarations graph) of
+          onRef = \key -> case Map.lookup key ((.declarations) graph) of
             Just ResolvedStructural {} -> Set.singleton (StructuralAuthority key)
             Just ResolvedOpaque {} -> Set.singleton (OpaqueAuthority key)
             Nothing -> Set.empty
@@ -91,13 +91,13 @@ renderMappedEncode graph boundary plan value =
         onMap = \encode candidate -> "toJSON (Map.map (\\item -> " <> encode "item" <> ") (" <> candidate <> "))",
         onRef = encodeReference
       }
-    (resolvedExpression plan)
+    ((.resolvedExpression) plan)
     value
   where
     primitive candidate = "toJSON (" <> candidate <> ")"
-    encodeReference key candidate = case Map.lookup key (tgDeclarations graph) of
+    encodeReference key candidate = case Map.lookup key ((.declarations) graph) of
       Just (ResolvedStructural declaration _) ->
-        "encode" <> sdName declaration <> suffix <> argument candidate
+        "encode" <> (.name) declaration <> suffix <> argument candidate
       Just ResolvedOpaque {} -> case boundary of
         ConsumerValueBoundary -> "toJSON " <> candidate
         StructuralShapeBoundary -> primitive candidate
@@ -125,10 +125,10 @@ renderMappedParse graph boundary plan =
         onMap = \decode -> "\\value -> (parseJSON value :: Parser (Map Text Value)) >>= traverse (" <> decode <> ")",
         onRef = parseReference
       }
-    (resolvedExpression plan)
+    ((.resolvedExpression) plan)
   where
-    parseReference key = case Map.lookup key (tgDeclarations graph) of
-      Just (ResolvedStructural declaration _) -> "parse" <> sdName declaration <> suffix
+    parseReference key = case Map.lookup key ((.declarations) graph) of
+      Just (ResolvedStructural declaration _) -> "parse" <> (.name) declaration <> suffix
       Just ResolvedOpaque {} -> "parseJSON"
       Nothing -> "parseJSON"
     suffix = case boundary of

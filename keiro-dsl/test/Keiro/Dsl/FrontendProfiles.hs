@@ -1,5 +1,3 @@
-{-# LANGUAGE NoFieldSelectors #-}
-
 module Keiro.Dsl.FrontendProfiles (frontendProfilesSpec) where
 
 import Control.Monad (forM_)
@@ -35,16 +33,16 @@ frontendProfilesSpec = do
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy]
                    ]
-      map (runtimeProfileFoldSegments . definitionRuntimeSemanticsProfile) (NE.toList languageRegistry)
+      map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],
                      [],
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"],
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"],
                      ["semantic-contract:keiro-dsl/projection-catalog/1", "semantic-contract:keiro-dsl/runtime-semantics/2"]
                    ]
-      map definitionSupport (NE.toList languageRegistry)
+      map (.support) (NE.toList languageRegistry)
         `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable]
-      map definitionMaturity (NE.toList languageRegistry)
+      map (.maturity) (NE.toList languageRegistry)
         `shouldBe` [PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage]
       currentStableLanguageVersion `shouldBe` version 5
       currentAuthoringLanguageVersion `shouldBe` version 5
@@ -54,18 +52,18 @@ frontendProfilesSpec = do
       languageSupportForVersion (version 4) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 5) `shouldBe` Just Stable
       languageSupportForVersion (version 999999) `shouldBe` Nothing
-      [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable]
+      [definition.version | definition <- NE.toList languageRegistry, (.support) definition == Stable]
         `shouldBe` [currentStableLanguageVersion]
-      [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Candidate]
+      [definition.version | definition <- NE.toList languageRegistry, (.support) definition == Candidate]
         `shouldBe` []
-      definitionVersion (NE.last languageRegistry) `shouldBe` currentAuthoringLanguageVersion
-      definitionPredecessor (NE.last languageRegistry) `shouldBe` Just (version 4)
+      (NE.last languageRegistry).version `shouldBe` currentAuthoringLanguageVersion
+      (.predecessor) (NE.last languageRegistry) `shouldBe` Just (version 4)
       forM_ (adjacent (NE.toList languageRegistry)) $ \(predecessor, successor) ->
         forM_ allRuntimeCapabilities $ \capability ->
-          runtimeProfileHasCapability (definitionRuntimeSemanticsProfile predecessor) capability
+          runtimeProfileHasCapability ((.runtimeSemanticsProfile) predecessor) capability
             `shouldSatisfy` \wasSupported ->
               not wasSupported
-                || runtimeProfileHasCapability (definitionRuntimeSemanticsProfile successor) capability
+                || runtimeProfileHasCapability ((.runtimeSemanticsProfile) successor) capability
       forM_ allFeatures $ \feature -> do
         let minimumVersion = case feature of
               ProjectionCatalogSyntax -> version 5
@@ -363,7 +361,7 @@ definitionCapabilities :: LanguageDefinition -> [RuntimeCapability]
 definitionCapabilities definition =
   [ capability
   | capability <- allRuntimeCapabilities,
-    runtimeProfileHasCapability (definitionRuntimeSemanticsProfile definition) capability
+    runtimeProfileHasCapability ((.runtimeSemanticsProfile) definition) capability
   ]
 
 adjacent :: [a] -> [(a, a)]
@@ -377,9 +375,9 @@ version number = maybe (error "invalid test language version") id (languageVersi
 
 definitionRow :: LanguageDefinition -> (Integer, Maybe Integer, Text, Text)
 definitionRow definition =
-  ( fromIntegral (languageVersionNumber (definitionVersion definition)),
-    fromIntegral . languageVersionNumber <$> definitionPredecessor definition,
-    syntaxProfileIdentifier (definitionSyntaxProfile definition),
+  ( fromIntegral (languageVersionNumber definition.version),
+    fromIntegral . languageVersionNumber <$> (.predecessor) definition,
+    syntaxProfileIdentifier ((.syntaxProfile) definition),
     definitionRuntimeSemantics definition
   )
 

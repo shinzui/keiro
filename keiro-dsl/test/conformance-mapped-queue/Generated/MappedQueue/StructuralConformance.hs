@@ -13,10 +13,10 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.MappedQueue.StructuralProjections qualified as StructuralProjections
+import Generated.MappedQueue.Structural.Shape.JobMetadata (JobMetadataShape(note))
+import Generated.MappedQueue.Structural.Shape.JobPayload (JobPayloadShape(jobId, label, metadata))
 import Conformance.MappedQueue.Bindings qualified as Bindings
 import Conformance.MappedQueue.Domain (JobMetadata, JobPayload)
-import Generated.MappedQueue.Structural.Shape.JobMetadata qualified as ShapeJobMetadata
-import Generated.MappedQueue.Structural.Shape.JobPayload qualified as ShapeJobPayload
 
 structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
@@ -71,17 +71,17 @@ vendorGeometryOpaqueAssertions =
     cases = fixtureCases Bindings.geometryCases
 
 coverageJobMetadata :: Bool
-coverageJobMetadata = any (isNothing . ShapeJobMetadata.note) shapes && any (isJust . ShapeJobMetadata.note) shapes
+coverageJobMetadata = any (isNothing . (.note)) shapes && any (isJust . (.note)) shapes
   where
     shapes = map (bindingToShape Bindings.jobMetadataBinding . snd) (NonEmpty.toList (fixtureCases Bindings.jobMetadataCases))
 
 coverageJobPayload :: Bool
-coverageJobPayload = any (isNothing . ShapeJobPayload.metadata) shapes && any (isJust . ShapeJobPayload.metadata) shapes
+coverageJobPayload = any (isNothing . (.metadata)) shapes && any (isJust . (.metadata)) shapes
   where
     shapes = map (bindingToShape Bindings.jobPayloadBinding . snd) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases))
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/job_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadJobIdWitness (\referenceOwner -> ShapeJobPayload.jobId (bindingToShape Bindings.jobPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
-  , ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadLabelWitness (\referenceOwner -> ShapeJobPayload.label (bindingToShape Bindings.jobPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
+  [ ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/job_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadJobIdWitness (\referenceOwner -> (bindingToShape Bindings.jobPayloadBinding referenceOwner).jobId) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
+  , ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadLabelWitness (\referenceOwner -> (bindingToShape Bindings.jobPayloadBinding referenceOwner).label) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
   ]

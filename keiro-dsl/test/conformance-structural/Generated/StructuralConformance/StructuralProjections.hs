@@ -10,9 +10,9 @@ module Generated.StructuralConformance.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Generated.StructuralConformance.Structural.Shape.ArtifactInfo (ArtifactInfoShape(artifactKey, displayName))
 import Conformance.Structural.Bindings qualified as Bindings
 import Conformance.Structural.Domain (ArtifactInfo)
-import Generated.StructuralConformance.Structural.Shape.ArtifactInfo qualified as ShapeArtifactInfo
 
 data ArtifactInfoArtifactKeyProjection
 
@@ -21,7 +21,7 @@ instance FieldProjection ArtifactInfoArtifactKeyProjection where
   type FieldOwner ArtifactInfoArtifactKeyProjection = ArtifactInfo
   type FieldResult ArtifactInfoArtifactKeyProjection = Text
   fieldShapeId _ = "conformance.structural.ArtifactInfo.v1"
-  projectFieldValue _ owner = ShapeArtifactInfo.artifactKey (bindingToShape Bindings.artifactInfoBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.artifactInfoBinding owner).artifactKey
 
 artifactInfoArtifactKeyWitness :: FieldWitness ArtifactInfoArtifactKeyProjection
 artifactInfoArtifactKeyWitness = fieldWitness @ArtifactInfoArtifactKeyProjection
@@ -33,7 +33,7 @@ instance FieldProjection ArtifactInfoDisplayNameProjection where
   type FieldOwner ArtifactInfoDisplayNameProjection = ArtifactInfo
   type FieldResult ArtifactInfoDisplayNameProjection = Text
   fieldShapeId _ = "conformance.structural.ArtifactInfo.v1"
-  projectFieldValue _ owner = ShapeArtifactInfo.displayName (bindingToShape Bindings.artifactInfoBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.artifactInfoBinding owner).displayName
 
 artifactInfoDisplayNameWitness :: FieldWitness ArtifactInfoDisplayNameProjection
 artifactInfoDisplayNameWitness = fieldWitness @ArtifactInfoDisplayNameProjection

@@ -31,7 +31,7 @@ renderSpec = renderDoc . docSpec
 
 -- | Render a source while preserving whether it explicitly declared a version.
 renderSource :: ParsedSource -> Text
-renderSource ParsedSource {parsedSourceLanguage = sourceLanguage, parsedSpec = spec} =
+renderSource ParsedSource {sourceLanguage = sourceLanguage, spec = spec} =
   case sourceLanguage of
     LegacyUnversioned -> renderSpec spec
     DeclaredLanguage {declaredLanguageVersion = version} ->
@@ -48,7 +48,7 @@ renderRouterDispatchSurface = renderDoc . docRouterDispatch
 
 renderTimerPayloadSurface :: TimerNode -> Text
 renderTimerPayloadSurface timer =
-  renderDoc ("payload" <+> braced (map docFieldBinding (tmPayload timer)))
+  renderDoc ("payload" <+> braced (map docFieldBinding ((.payload) timer)))
 
 renderTypeExpr :: TypeExpr -> Text
 renderTypeExpr = renderDoc . docTypeExpr
@@ -59,21 +59,21 @@ renderDoc = renderStrict . layoutPretty LayoutOptions {layoutPageWidth = Unbound
 docSpec :: Spec -> Doc ann
 docSpec s =
   vsep $
-    ["context" <+> pretty (specContext s)]
-      ++ maybe [] (\r -> ["module" <+> pretty r]) (specModuleRoot s)
-      ++ maybe [] (\l -> ["layout" <+> docLayout l]) (specLayout s)
+    ["context" <+> pretty ((.context) s)]
+      ++ maybe [] (\r -> ["module" <+> pretty r]) ((.moduleRoot) s)
+      ++ maybe [] (\l -> ["layout" <+> docLayout l]) ((.layout) s)
       ++ [mempty]
-      ++ map docId (specIds s)
-      ++ blankAfter (specIds s)
-      ++ map docEnum (specEnums s)
-      ++ blankAfter (specEnums s)
-      ++ map docRule (specRules s)
-      ++ blankAfter (specRules s)
-      ++ map docNominalScalar (specNominalScalars s)
-      ++ blankAfter (specNominalScalars s)
-      ++ map docMapped (specMapped s)
-      ++ blankAfter (specMapped s)
-      ++ map docNode (specNodes s)
+      ++ map docId ((.ids) s)
+      ++ blankAfter ((.ids) s)
+      ++ map docEnum ((.enums) s)
+      ++ blankAfter ((.enums) s)
+      ++ map docRule ((.rules) s)
+      ++ blankAfter ((.rules) s)
+      ++ map docNominalScalar ((.nominalScalars) s)
+      ++ blankAfter ((.nominalScalars) s)
+      ++ map docMapped ((.mapped) s)
+      ++ blankAfter ((.mapped) s)
+      ++ map docNode ((.nodes) s)
   where
     blankAfter xs = if null xs then [] else [mempty]
 
@@ -83,17 +83,17 @@ docLayout CollocatedLeaf = "collocated"
 
 docId :: IdDecl -> Doc ann
 docId d =
-  case idBinding d of
-    Nothing -> "id" <+> pretty (idName d) <+> ("prefix=" <> pretty (idPrefix d))
+  case (.binding) d of
+    Nothing -> "id" <+> pretty ((.name) d) <+> ("prefix=" <> pretty ((.prefix) d))
     Just binding ->
       vsep $
-        ["id" <+> pretty (idName d) <+> ("prefix=" <> pretty (idPrefix d)) <+> "using" <+> "{"]
+        ["id" <+> pretty ((.name) d) <+> ("prefix=" <> pretty ((.prefix) d)) <+> "using" <+> "{"]
           ++ map (indent 2) (docNominalBindingFacts binding)
           ++ ["}"]
 
 docEnum :: EnumDecl -> Doc ann
 docEnum d =
-  case enumBinding d of
+  case (.binding) d of
     Nothing -> enumHeader
     Just binding ->
       vsep $
@@ -101,14 +101,14 @@ docEnum d =
           ++ map (indent 2) (docNominalBindingFacts binding)
           ++ ["}"]
   where
-    enumHeader = "enum" <+> pretty (enumName d) <+> braced (map ctor (enumCtors d))
+    enumHeader = "enum" <+> pretty ((.name) d) <+> braced (map ctor ((.ctors) d))
     ctor (c, w) = pretty c <> "=" <> pretty w
 
 docRule :: RuleDecl -> Doc ann
 docRule d =
   vsep
-    [ "rule" <+> pretty (ruleName d) <+> ":" <+> pretty (ruleDomain d) <+> "->" <+> pretty (ruleCodomain d),
-      indent 2 ("ex" <+> hsep (punctuate " ;" (map cas (ruleCases d))))
+    [ "rule" <+> pretty ((.name) d) <+> ":" <+> pretty ((.domain) d) <+> "->" <+> pretty ((.codomain) d),
+      indent 2 ("ex" <+> hsep (punctuate " ;" (map cas ((.cases) d))))
     ]
   where
     cas (c, e) = pretty c <+> "=>" <+> docExpr 0 e
@@ -138,22 +138,22 @@ docNominalScalar :: NominalScalarDecl -> Doc ann
 docNominalScalar declaration =
   vsep $
     [ "mapped nominal"
-        <+> pretty (nominalScalarName declaration)
+        <+> pretty ((.name) declaration)
         <+> ":"
-        <+> pretty (nominalScalarRepresentation declaration)
+        <+> pretty ((.representation) declaration)
         <+> "{"
     ]
-      ++ map (indent 2) (docNominalBindingFacts (nominalScalarBinding declaration))
+      ++ map (indent 2) (docNominalBindingFacts ((.binding) declaration))
       ++ ["}"]
 
 docNominalBindingFacts :: NominalBindingDecl -> [Doc ann]
 docNominalBindingFacts binding =
-  maybe [] (pure . docHaskellSource) (nominalHaskell binding)
-    ++ maybe [] (pure . docQuotedFact "binding") (nominalBinding binding)
-    ++ maybe [] (pure . docQuotedFact "binding-version") (nominalBindingVersion binding)
-    ++ maybe [] (pure . docQuotedFact "canonical-type") (nominalCanonicalType binding)
-    ++ maybe [] (pure . docQuotedFact "fixtures") (nominalFixtures binding)
-    ++ maybe [] (pure . docQuotedFact "initial") (nominalInitial binding)
+  maybe [] (pure . docHaskellSource) ((.haskell) binding)
+    ++ maybe [] (pure . docQuotedFact "binding") ((.binding) binding)
+    ++ maybe [] (pure . docQuotedFact "binding-version") ((.bindingVersion) binding)
+    ++ maybe [] (pure . docQuotedFact "canonical-type") ((.canonicalType) binding)
+    ++ maybe [] (pure . docQuotedFact "fixtures") ((.fixtures) binding)
+    ++ maybe [] (pure . docQuotedFact "initial") ((.initial) binding)
 
 docShapeKind :: MappedShape -> Doc ann
 docShapeKind (ShapeRecord _ _ _) = "record"
@@ -163,9 +163,9 @@ docShapeKind (ShapeUnion _ _) = "union"
 docHaskellSource :: HaskellSource -> Doc ann
 docHaskellSource source =
   "haskell"
-    <+> ("package=" <> pretty (hsPackage source))
-    <+> ("module=" <> pretty (hsModule source))
-    <+> ("type=" <> pretty (hsType source))
+    <+> ("package=" <> pretty ((.package) source))
+    <+> ("module=" <> pretty ((.moduleName) source))
+    <+> ("type=" <> pretty ((.valueType) source))
 
 docQuotedFact :: Doc ann -> Text -> Doc ann
 docQuotedFact label value = label <+> "=" <+> dquoted value
@@ -185,9 +185,9 @@ docMappedShape (ShapeEnum entries) =
 docMappedShape (ShapeUnion encoding arms) =
   vsep $
     [ "wire tagged-object"
-        <+> ("tag=" <> dquoted (ueTagField encoding))
-        <+> ("contents=" <> dquoted (ueContentsField encoding))
-        <+> ("unknown-fields=" <> docUnknownFields (ueUnknownFields encoding))
+        <+> ("tag=" <> dquoted ((.tagField) encoding))
+        <+> ("contents=" <> dquoted ((.contentsField) encoding))
+        <+> ("unknown-fields=" <> docUnknownFields ((.unknownFields) encoding))
         <+> "{"
     ]
       ++ map (indent 2 . docWireArm) arms
@@ -199,13 +199,13 @@ docUnknownFields IgnoreUnknown = "ignore"
 
 docWireField :: WireField -> Doc ann
 docWireField field =
-  pretty (wfHaskell field)
+  pretty ((.haskell) field)
     <+> "as"
-    <+> dquoted (wfKey field)
+    <+> dquoted ((.key) field)
     <+> ":"
-    <+> docTypeExpr (wfType field)
-    <+> docPresence (wfPresence field)
-    <> maybe mempty (\value -> " on-missing=" <> docOnMissing value) (wfOnMissing field)
+    <+> docTypeExpr ((.valueType) field)
+    <+> docPresence ((.presence) field)
+    <> maybe mempty (\value -> " on-missing=" <> docOnMissing value) ((.onMissing) field)
 
 docPresence :: Presence -> Doc ann
 docPresence PRequired = "required"
@@ -222,14 +222,14 @@ docOnMissing OmEmptyMap = "{}"
 docOnMissing (OmCtor constructor) = pretty constructor
 
 docWireEnum :: WireEnum -> Doc ann
-docWireEnum entry = pretty (weCtor entry) <+> "as" <+> dquoted (weTag entry)
+docWireEnum entry = pretty ((.ctor) entry) <+> "as" <+> dquoted ((.tag) entry)
 
 docWireArm :: WireArm -> Doc ann
 docWireArm arm =
-  pretty (waCtor arm)
+  pretty ((.ctor) arm)
     <+> "as"
-    <+> dquoted (waTag arm)
-    <> maybe mempty (\payload -> " : " <> docTypeExpr payload) (waPayload arm)
+    <+> dquoted ((.tag) arm)
+    <> maybe mempty (\payload -> " : " <> docTypeExpr payload) ((.payload) arm)
 
 docTypeExpr :: TypeExpr -> Doc ann
 docTypeExpr TText = "Text"
@@ -272,16 +272,16 @@ docNode (NOperation o) = docOperation o
 docWorkflow :: WorkflowNode -> Doc ann
 docWorkflow w =
   vsep $
-    [ "workflow" <+> pretty (wfId w),
-      indent 2 ("name" <+> dquoted (wfStable w)),
-      indent 2 ("in" <+> pretty (wfInput w) <> inFieldsDoc),
-      indent 2 ("out" <+> pretty (wfOutput w)),
-      indent 2 ("id from input" <> maybe mempty (\f -> "." <> pretty f) (wfIdField w) <+> "via" <+> pretty (wfIdVia w)),
+    [ "workflow" <+> pretty ((.id) w),
+      indent 2 ("name" <+> dquoted ((.stable) w)),
+      indent 2 ("in" <+> pretty ((.input) w) <> inFieldsDoc),
+      indent 2 ("out" <+> pretty ((.output) w)),
+      indent 2 ("id from input" <> maybe mempty (\f -> "." <> pretty f) ((.idField) w) <+> "via" <+> pretty ((.idVia) w)),
       indent 2 "body"
     ]
-      ++ map (indent 4 . bodyItem) (wfBody w)
+      ++ map (indent 4 . bodyItem) ((.body) w)
   where
-    inFieldsDoc = case wfInputFields w of
+    inFieldsDoc = case (.inputFields) w of
       [] -> mempty
       fs -> " " <> braced (map docField fs)
     bodyItem (WfStep l r _) = "step" <+> pretty l <+> "->" <+> pretty r
@@ -294,7 +294,7 @@ docWorkflow w =
 
 docOperation :: OperationNode -> Doc ann
 docOperation o =
-  vsep $ ["operation" <+> pretty (opName o)] ++ map (indent 2) (shapeLines (opShape o))
+  vsep $ ["operation" <+> pretty ((.name) o)] ++ map (indent 2) (shapeLines ((.shape) o))
   where
     shapeLines (CommandOp agg sf sv proj) =
       [ "command on" <+> pretty agg,
@@ -321,52 +321,52 @@ docOperation o =
 docWorkqueue :: WorkqueueNode -> Doc ann
 docWorkqueue w =
   vsep $
-    [ "workqueue" <+> pretty (wqName w) <+> "{",
-      indent 2 ("queue logical =" <+> dquoted (wqLogical w)),
-      indent 2 ("derive physical =" <+> dquoted (wqPhysical w)),
-      indent 4 ("dlq =" <+> dquoted (wqDlq w)),
-      indent 4 ("table =" <+> dquoted (wqTable w))
+    [ "workqueue" <+> pretty ((.name) w) <+> "{",
+      indent 2 ("queue logical =" <+> dquoted ((.logical) w)),
+      indent 2 ("derive physical =" <+> dquoted ((.physical) w)),
+      indent 4 ("dlq =" <+> dquoted ((.dlq) w)),
+      indent 4 ("table =" <+> dquoted ((.table) w))
     ]
       ++ orderingLines
       ++ groupKeyLines
       ++ provisionLines
-      ++ [indent 2 ("payload" <+> pretty (wqPayloadName w) <+> "{")]
-      ++ map (indent 4 . field) (wqPayload w)
+      ++ [indent 2 ("payload" <+> pretty ((.payloadName) w) <+> "{")]
+      ++ map (indent 4 . field) ((.payload) w)
       ++ [ indent 2 "}",
-           indent 2 ("retry maxRetries =" <+> pretty (wqMaxRetries w) <+> "delay =" <+> pretty (wqDelay w) <+> "dlq =" <+> (if wqDlqOn w then "on" else "off")),
+           indent 2 ("retry maxRetries =" <+> pretty ((.maxRetries) w) <+> "delay =" <+> pretty ((.delay) w) <+> "dlq =" <+> (if (.dlqOn) w then "on" else "off")),
            indent 2 "disposition {"
          ]
-      ++ map (indent 4 . dispRow) (wqDisposition w)
+      ++ map (indent 4 . dispRow) ((.disposition) w)
       ++ [indent 2 "}", "}"]
   where
-    orderingLines = case wqOrdering w of
+    orderingLines = case (.ordering) w of
       WqUnordered -> []
       WqFifoThroughput -> [indent 2 "ordering fifo-throughput"]
       WqFifoRoundRobin -> [indent 2 "ordering fifo-roundrobin"]
-    groupKeyLines = case wqGroupKey w of
+    groupKeyLines = case (.groupKey) w of
       Nothing -> []
       Just groupKey ->
         [ indent 2 $
             "group key from"
-              <+> pretty (gkField groupKey)
+              <+> pretty ((.field) groupKey)
               <+> "via"
-              <+> pretty (gkVia groupKey)
-              <> maybe mempty (\fixture -> " fixture " <> dquoted fixture) (gkFixture groupKey)
+              <+> pretty ((.via) groupKey)
+              <> maybe mempty (\fixture -> " fixture " <> dquoted fixture) ((.fixture) groupKey)
         ]
-    provisionLines = case wqProvision w of
+    provisionLines = case (.provision) w of
       WqStandard -> []
       WqUnlogged -> [indent 2 "provision unlogged"]
       WqPartitioned interval retention ->
         [indent 2 ("provision partitioned(interval=" <> dquoted interval <> ", retention=" <> dquoted retention <> ")")]
     -- Always rendered: every payload field is required, and stating it keeps
     -- the canonical form self-describing.
-    field f = pretty (wqfName f) <+> "->" <+> dquoted (wqfWire f) <+> docQueuePayloadType (wqfType f) <> " required"
+    field f = pretty ((.name) f) <+> "->" <+> dquoted ((.wire) f) <+> docQueuePayloadType ((.valueType) f) <> " required"
     docQueuePayloadType (LegacyQueueScalar QueueText) = "text"
     docQueuePayloadType (LegacyQueueScalar QueueInt) = "int"
     docQueuePayloadType (LegacyQueueScalar QueueBool) = "bool"
     docQueuePayloadType (LegacyQueueScalar (QueueOther name)) = pretty name
     docQueuePayloadType (TypedQueueExpression expression) = ":" <+> docTypeExpr expression
-    dispRow r = pretty (wqdOutcome r) <+> "->" <+> act (wqdAction r)
+    dispRow r = pretty ((.outcome) r) <+> "->" <+> act ((.action) r)
     act IAckOk = "ackOk"
     act (IRetry win) = "retry" <+> pretty win
     act (IDeadLetter Nothing) = "deadLetter"
@@ -375,56 +375,56 @@ docWorkqueue w =
 docPgmqDispatch :: PgmqDispatchNode -> Doc ann
 docPgmqDispatch d =
   vsep
-    [ "dispatch" <+> pretty (pdName d) <+> "{",
-      indent 2 ("source readModel =" <+> pretty (pdSourceReadModel d) <+> "key =" <+> pretty (pdSourceKey d)),
-      indent 2 ("fanout body =" <+> pretty (pdFanoutBody d)),
-      indent 2 ("dedup key =" <+> pretty (pdDedupKey d)),
-      indent 4 ("seenIn readModel =" <+> pretty (pdDedupReadModel d) <+> "field =" <+> pretty (pdDedupReadModelField d)),
-      indent 4 ("seenIn queue =" <+> pretty (pdDedupQueue d) <+> "field =" <+> pretty (pdDedupQueueField d)),
-      indent 2 ("enqueue to =" <+> pretty (pdEnqueueTo d)),
+    [ "dispatch" <+> pretty ((.name) d) <+> "{",
+      indent 2 ("source readModel =" <+> pretty ((.sourceReadModel) d) <+> "key =" <+> pretty ((.sourceKey) d)),
+      indent 2 ("fanout body =" <+> pretty ((.fanoutBody) d)),
+      indent 2 ("dedup key =" <+> pretty ((.dedupKey) d)),
+      indent 4 ("seenIn readModel =" <+> pretty ((.dedupReadModel) d) <+> "field =" <+> pretty ((.dedupReadModelField) d)),
+      indent 4 ("seenIn queue =" <+> pretty ((.dedupQueue) d) <+> "field =" <+> pretty ((.dedupQueueField) d)),
+      indent 2 ("enqueue to =" <+> pretty ((.enqueueTo) d)),
       "}"
     ]
 
 docReadModel :: ReadModelNode -> Doc ann
 docReadModel readModel =
   vsep $
-    ["readmodel" <+> pretty (rmName readModel) <+> "{"]
-      ++ ( if not (T.null (rmTable readModel)) || not (T.null (rmSchema readModel))
+    ["readmodel" <+> pretty ((.name) readModel) <+> "{"]
+      ++ ( if not (T.null ((.table) readModel)) || not (T.null ((.schema) readModel))
              then
-               [ indent 2 ("table =" <+> dquoted (rmTable readModel)),
-                 indent 2 ("schema =" <+> dquoted (rmSchema readModel))
+               [ indent 2 ("table =" <+> dquoted ((.table) readModel)),
+                 indent 2 ("schema =" <+> dquoted ((.schema) readModel))
                ]
              else []
          )
       ++ [indent 2 "columns {"]
-      ++ map (indent 4 . docColumn) (rmColumns readModel)
+      ++ map (indent 4 . docColumn) ((.columns) readModel)
       ++ [indent 2 "}"]
-      ++ maybe [] docQueryTypes (queryTypes readModel)
-      ++ [ indent 2 ("version =" <+> pretty (rmVersion readModel)),
-           indent 2 ("shape =" <+> dquoted (rmShape readModel))
+      ++ maybe [] docQueryTypes ((.queryTypes) readModel)
+      ++ [ indent 2 ("version =" <+> pretty ((.version) readModel)),
+           indent 2 ("shape =" <+> dquoted ((.shape) readModel))
          ]
       ++ policyLines
-      ++ maybe [] (pure . indent 2 . ("group =" <+>) . pretty) (rmGroup readModel)
-      ++ [indent 2 ("targets =" <+> bracketed (map pretty (rmObservedTargets readModel))) | rmGroup readModel /= Nothing]
-      ++ maybe [] (pure . indent 2 . ("backing =" <+>) . pretty) (rmBackingTarget readModel)
+      ++ maybe [] (pure . indent 2 . ("group =" <+>) . pretty) ((.group) readModel)
+      ++ [indent 2 ("targets =" <+> bracketed (map pretty ((.observedTargets) readModel))) | (.group) readModel /= Nothing]
+      ++ maybe [] (pure . indent 2 . ("backing =" <+>) . pretty) ((.backingTarget) readModel)
       ++ ["}"]
   where
     docColumn columnDecl =
-      pretty (rmcName columnDecl)
-        <+> pretty (rmcType columnDecl)
-        <> if rmcRequired columnDecl then " required" else mempty
+      pretty ((.rmcName) columnDecl)
+        <+> pretty ((.rmcType) columnDecl)
+        <> if (.rmcRequired) columnDecl then " required" else mempty
     docScope RmEntireLog = "entire-log"
     docScope (RmCategory categoryName) = "category" <+> dquoted categoryName
     docFeed RmInline = "inline"
     docFeed RmSubscription = "subscription"
-    policyLines = case rmSupply readModel of
+    policyLines = case (.supply) readModel of
       LegacyReadModelSupply {legacyConsistency, legacyScope, legacyFeed, legacySubscription} ->
         [indent 2 ("consistency =" <+> docConsistency legacyConsistency)]
           ++ maybe [] (pure . indent 2 . ("scope =" <+>) . docScope) legacyScope
           ++ [indent 2 ("feed =" <+> docFeed legacyFeed)]
           ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) legacySubscription
       OwnerDerivedSupply ->
-        [indent 2 ("freshness =" <+> docFreshness (rmFreshness readModel))]
+        [indent 2 ("freshness =" <+> docFreshness ((.freshness) readModel))]
     docFreshness FreshnessImmediate = "immediate"
     docFreshness (FreshnessWaitForHead scope) = "wait-for-head" <+> docScope scope
     docQueryTypes ReadModelQueryTypes {input, result} =
@@ -435,82 +435,82 @@ docReadModel readModel =
 docProjectionTarget :: ProjectionTargetNode -> Doc ann
 docProjectionTarget target =
   vsep $
-    [ "target" <+> pretty (ptName target) <+> "{",
-      indent 2 ("schema =" <+> dquoted (ptSchema target)),
-      indent 2 ("table =" <+> dquoted (ptTable target)),
-      indent 2 ("reset =" <+> case ptReset target of TargetClear -> "clear"; TargetPreserve -> "preserve")
+    [ "target" <+> pretty ((.name) target) <+> "{",
+      indent 2 ("schema =" <+> dquoted ((.schema) target)),
+      indent 2 ("table =" <+> dquoted ((.table) target)),
+      indent 2 ("reset =" <+> case (.reset) target of TargetClear -> "clear"; TargetPreserve -> "preserve")
     ]
-      ++ [indent 2 ("depends-on =" <+> bracketed (map pretty (ptDependsOn target))) | not (null (ptDependsOn target))]
+      ++ [indent 2 ("depends-on =" <+> bracketed (map pretty ((.dependsOn) target))) | not (null ((.dependsOn) target))]
       ++ ["}"]
 
 docRebuildGroup :: RebuildGroupNode -> Doc ann
 docRebuildGroup groupNode =
   vsep
-    [ "rebuild-group" <+> pretty (rgName groupNode) <+> "{",
-      indent 2 ("targets =" <+> bracketed (map pretty (rgTargets groupNode))),
-      indent 2 ("order =" <+> bracketed (map pretty (rgOrder groupNode))),
+    [ "rebuild-group" <+> pretty ((.name) groupNode) <+> "{",
+      indent 2 ("targets =" <+> bracketed (map pretty ((.targets) groupNode))),
+      indent 2 ("order =" <+> bracketed (map pretty ((.order) groupNode))),
       "}"
     ]
 
 docProjectionRevision :: ProjectionRevisionNode -> Doc ann
 docProjectionRevision revision =
   vsep $
-    [ "projection-revision" <+> pretty (prvName revision) <+> "{",
-      indent 2 ("group =" <+> pretty (prvGroup revision))
+    [ "projection-revision" <+> pretty ((.name) revision) <+> "{",
+      indent 2 ("group =" <+> pretty ((.group) revision))
     ]
-      <> concatMap (pure . indent 2 . docRevisionTarget) (prvTargets revision)
+      <> concatMap (pure . indent 2 . docRevisionTarget) ((.targets) revision)
       <> ["}"]
   where
     docRevisionTarget target =
       vsep $
-        [ "target" <+> pretty (prtTarget target) <+> "{",
-          indent 2 ("schema-version =" <+> dquoted (prtSchemaVersion target)),
-          indent 2 ("provisioner =" <+> dquoted (prtProvisioner target)),
-          indent 2 ("provisioner-version =" <+> pretty (prtProvisionerVersion target)),
-          indent 2 ("expected-shape =" <+> dquoted (prtExpectedShape target)),
-          indent 2 ("validator =" <+> dquoted (prtValidator target)),
-          indent 2 ("validator-version =" <+> pretty (prtValidatorVersion target))
+        [ "target" <+> pretty ((.target) target) <+> "{",
+          indent 2 ("schema-version =" <+> dquoted ((.schemaVersion) target)),
+          indent 2 ("provisioner =" <+> dquoted ((.provisioner) target)),
+          indent 2 ("provisioner-version =" <+> pretty ((.provisionerVersion) target)),
+          indent 2 ("expected-shape =" <+> dquoted ((.expectedShape) target)),
+          indent 2 ("validator =" <+> dquoted ((.validator) target)),
+          indent 2 ("validator-version =" <+> pretty ((.validatorVersion) target))
         ]
-          <> map (indent 2 . docPromotionObject) (prtPromotionObjects target)
+          <> map (indent 2 . docPromotionObject) ((.promotionObjects) target)
           <> ["}"]
     docPromotionObject promotionObject =
       "promotion"
-        <+> ( case rpoKind promotionObject of
+        <+> ( case (.kind) promotionObject of
                 PromotionIndexNode -> "index"
                 PromotionConstraintNode -> "constraint"
                 PromotionOwnedSequenceNode -> "owned-sequence"
             )
-        <+> dquoted (rpoGenerationName promotionObject)
+        <+> dquoted ((.generationName) promotionObject)
         <+> "->"
-        <+> dquoted (rpoCanonicalName promotionObject)
+        <+> dquoted ((.canonicalName) promotionObject)
 
 docExternalRead :: ExternalReadNode -> Doc ann
 docExternalRead externalRead =
   vsep
-    [ "external-read" <+> pretty (erName externalRead) <+> "{",
-      indent 2 ("version =" <+> pretty (erVersion externalRead)),
-      indent 2 ("query =" <+> pretty (erQueryModel externalRead)),
-      indent 2 ("result-schema =" <+> dquoted (erResultSchema externalRead)),
-      indent 2 ("result-type =" <+> dquoted (erResultType externalRead)),
-      indent 2 ("compatible-revisions =" <+> bracketed (map pretty (erCompatibleRevisions externalRead))),
-      indent 2 ("surface-generation =" <+> pretty (erSurfaceGeneration externalRead)),
+    [ "external-read" <+> pretty ((.name) externalRead) <+> "{",
+      indent 2 ("version =" <+> pretty ((.version) externalRead)),
+      indent 2 ("query =" <+> pretty ((.queryModel) externalRead)),
+      indent 2 ("result-schema =" <+> dquoted ((.resultSchema) externalRead)),
+      indent 2 ("result-type =" <+> dquoted ((.resultType) externalRead)),
+      indent 2 ("compatible-revisions =" <+> bracketed (map pretty ((.compatibleRevisions) externalRead))),
+      indent 2 ("surface-generation =" <+> pretty ((.surfaceGeneration) externalRead)),
       "}"
     ]
 
 docProjectionOwner :: ProjectionOwnerNode -> Doc ann
 docProjectionOwner owner =
   vsep $
-    ["projection-owner" <+> pretty (poName owner) <+> "{"]
-      ++ map (indent 2 . ("source =" <+>) . docSource) (poSources owner)
-      ++ [ indent 2 ("delivery =" <+> case poDelivery owner of DeliveryInline -> "inline"; DeliverySubscription -> "subscription"),
-           indent 2 ("group =" <+> pretty (poGroup owner)),
-           indent 2 ("targets =" <+> bracketed (map pretty (poTargets owner))),
-           indent 2 ("order =" <+> pretty (poOrder owner))
+    ["projection-owner" <+> pretty ((.name) owner) <+> "{"]
+      ++ map (indent 2 . ("source =" <+>) . docSource) ((.sources) owner)
+      ++ [ indent 2 ("delivery =" <+> case (.delivery) owner of DeliveryInline -> "inline"; DeliverySubscription -> "subscription"),
+           indent 2 ("group =" <+> pretty ((.group) owner)),
+           indent 2 ("targets =" <+> bracketed (map pretty ((.targets) owner))),
+           indent 2 ("order =" <+> pretty ((.order) owner))
          ]
-      ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) (poSubscription owner)
-      ++ maybe [] (pure . indent 2 . ("dedup =" <+>) . dquoted) (poDedup owner)
-      ++ map (indent 2 . ("checkpoint-on-missing =" <+>) . docCheckpointOnMissing) (poCheckpointOnMissing owner)
-      ++ [indent 2 ("replay =" <+> docReplay (poReplay owner)), "}"]
+      ++ maybe [] (pure . indent 2 . ("subscription =" <+>) . dquoted) ((.subscription) owner)
+      ++ maybe [] (pure . indent 2 . ("dedup =" <+>) . dquoted) ((.dedup) owner)
+      ++ map (indent 2 . ("checkpoint-on-missing =" <+>) . docCheckpointOnMissing) ((.checkpointOnMissing) owner)
+      ++ [indent 2 ("replay =" <+> docReplay ((.replay) owner)), "}"]
   where
     docSource (CatalogAggregate aggregateName) = "aggregate" <+> pretty aggregateName
     docSource (CatalogCategory categoryName) = "category" <+> dquoted categoryName
@@ -524,61 +524,61 @@ docProjectionOwner owner =
 docEmit :: EmitNode -> Doc ann
 docEmit e =
   vsep $
-    [ "emit" <+> pretty (emName e) <+> "{",
-      indent 2 ("contract" <+> pretty (emContract e)),
-      indent 2 ("topic" <+> pretty (emTopic e)),
-      indent 2 ("source" <+> dquoted (emSource e)),
-      indent 2 ("key" <+> pretty (emKey e)),
-      indent 2 ("map" <+> pretty (emDiscriminant e) <+> "{")
+    [ "emit" <+> pretty ((.name) e) <+> "{",
+      indent 2 ("contract" <+> pretty ((.contract) e)),
+      indent 2 ("topic" <+> pretty ((.topic) e)),
+      indent 2 ("source" <+> dquoted ((.source) e)),
+      indent 2 ("key" <+> pretty ((.key) e)),
+      indent 2 ("map" <+> pretty ((.discriminant) e) <+> "{")
     ]
-      ++ map (indent 4 . row) (emMap e)
-      ++ [indent 4 "_ => skip" | emSkip e]
+      ++ map (indent 4 . row) ((.map) e)
+      ++ [indent 4 "_ => skip" | (.skip) e]
       ++ [ indent 2 "}",
-           indent 2 ("messageId" <+> docDerive (emMessageId e)),
-           indent 2 ("idempotencyKey" <+> docDerive (emIdempotencyKey e)),
+           indent 2 ("messageId" <+> docDerive ((.messageId) e)),
+           indent 2 ("idempotencyKey" <+> docDerive ((.idempotencyKey) e)),
            "}"
          ]
   where
-    row r = dquoted (emrValue r) <+> "=>" <+> pretty (emrEvent r)
-    docDerive d = "derive" <> maybe mempty (\p -> " " <> dquoted p) (dsPrefix d) <+> "hole"
+    row r = dquoted ((.value) r) <+> "=>" <+> pretty ((.event) r)
+    docDerive d = "derive" <> maybe mempty (\p -> " " <> dquoted p) ((.dsPrefix) d) <+> "hole"
 
 docPublisher :: PublisherNode -> Doc ann
 docPublisher p =
   vsep
-    [ "publisher" <+> pretty (pubName p) <+> "{",
-      indent 2 ("emit" <+> pretty (pubEmit p)),
-      indent 2 ("ordering" <+> pretty (pubOrdering p)),
-      indent 2 ("maxAttempts" <+> pretty (pubMaxAttempts p)),
-      indent 2 (docBackoff (pubBackoff p)),
-      indent 2 ("outboxId stable from" <+> pretty (pubOutboxField p)),
+    [ "publisher" <+> pretty ((.name) p) <+> "{",
+      indent 2 ("emit" <+> pretty ((.emit) p)),
+      indent 2 ("ordering" <+> pretty ((.ordering) p)),
+      indent 2 ("maxAttempts" <+> pretty ((.maxAttempts) p)),
+      indent 2 (docBackoff ((.backoff) p)),
+      indent 2 ("outboxId stable from" <+> pretty ((.outboxField) p)),
       "}"
     ]
 
 docIntake :: IntakeNode -> Doc ann
 docIntake i =
   vsep $
-    [ "intake" <+> pretty (inkName i) <+> "{",
-      indent 2 ("contract" <+> pretty (inkContract i)),
-      indent 2 ("topic" <+> pretty (inkTopic i)),
-      indent 2 ("accept" <+> hsep (map pretty (inkAccept i)))
+    [ "intake" <+> pretty ((.name) i) <+> "{",
+      indent 2 ("contract" <+> pretty ((.contract) i)),
+      indent 2 ("topic" <+> pretty ((.topic) i)),
+      indent 2 ("accept" <+> hsep (map pretty ((.accept) i)))
     ]
-      ++ map (indent 2 . docBind) (inkBinds i)
-      ++ [ indent 2 ("dedupe key" <+> pretty (inkDedupeKey i) <+> "policy" <+> pretty (inkDedupePolicy i))
+      ++ map (indent 2 . docBind) ((.binds) i)
+      ++ [ indent 2 ("dedupe key" <+> pretty ((.dedupeKey) i) <+> "policy" <+> pretty ((.dedupePolicy) i))
          ]
-      ++ [indent 2 "persist = dedupe-only" | inkPersist i == InkPersistDedupeOnly]
-      ++ [ indent 2 (docDecode (inkDecode i)),
+      ++ [indent 2 "persist = dedupe-only" | (.persist) i == InkPersistDedupeOnly]
+      ++ [ indent 2 (docDecode ((.decode) i)),
            indent 2 "disposition {"
          ]
-      ++ map (indent 4 . docDispRow) (inkDisposition i)
+      ++ map (indent 4 . docDispRow) ((.disposition) i)
       ++ [indent 2 "}", "}"]
   where
     docBind b =
       "bind"
-        <+> pretty (brField b)
+        <+> pretty ((.field) b)
         <+> "from"
-        <+> docSource (brSource b)
-        <> (if brRequired b then " required" else mempty)
-        <> (if brCrossCheck b then " cross-check body" else mempty)
+        <+> docSource ((.source) b)
+        <> (if (.required) b then " required" else mempty)
+        <> (if (.crossCheck) b then " cross-check body" else mempty)
     docSource (SrcHeader h) = "header" <+> dquoted h
     docSource SrcBody = "body"
     docSource SrcKafkaKey = "kafka-key"
@@ -586,11 +586,11 @@ docIntake i =
     docDecode d =
       vsep
         [ "decode {",
-          indent 2 ("envelope" <+> pretty (decEnvelope d)),
-          indent 2 ("body" <+> (if decBodyStrict d then "strict" else "lenient") <+> "schemaVersion ==" <+> pretty (decBodySchemaVersion d)),
+          indent 2 ("envelope" <+> pretty ((.envelope) d)),
+          indent 2 ("body" <+> (if (.bodyStrict) d then "strict" else "lenient") <+> "schemaVersion ==" <+> pretty ((.bodySchemaVersion) d)),
           "}"
         ]
-    docDispRow r = pretty (drOutcome r) <+> "=>" <+> docAction (drAction r)
+    docDispRow r = pretty ((.outcome) r) <+> "=>" <+> docAction ((.action) r)
     docAction IAckOk = "ackOk"
     docAction (IRetry w) = "retry" <+> pretty w
     docAction (IDeadLetter Nothing) = "deadLetter"
@@ -603,28 +603,28 @@ docIntake i =
 docContract :: ContractNode -> Doc ann
 docContract c =
   vsep $
-    [ "contract" <+> pretty (ctrName c) <+> "{",
-      indent 2 ("schemaVersion" <+> pretty (ctrSchemaVersion c)),
-      indent 2 ("discriminator" <+> pretty (ctrDiscriminator c))
+    [ "contract" <+> pretty ((.name) c) <+> "{",
+      indent 2 ("schemaVersion" <+> pretty ((.schemaVersion) c)),
+      indent 2 ("discriminator" <+> pretty ((.discriminator) c))
     ]
-      ++ map (indent 2 . docTopic) (ctrTopics c)
-      ++ map (indent 2 . docContractEvent) (ctrEvents c)
+      ++ map (indent 2 . docTopic) ((.topics) c)
+      ++ map (indent 2 . docContractEvent) ((.events) c)
       ++ ["}"]
   where
     docTopic (alias, t) = "topic" <+> pretty alias <+> dquoted t
     docContractEvent e =
       vsep $
-        ["event" <+> pretty (ceName e) <+> "on" <+> pretty (ceTopic e) <+> "{"]
-          ++ map (indent 2 . docContractField) (ceFields e)
+        ["event" <+> pretty ((.name) e) <+> "on" <+> pretty ((.topic) e) <+> "{"]
+          ++ map (indent 2 . docContractField) ((.fields) e)
           ++ ["}"]
     docContractField f =
       hsep
-        ( [pretty (cfName f)]
-            ++ maybe [] (\selector -> ["haskell", pretty selector]) (cfSelector f)
-            ++ maybe [] (\wireKey -> ["as", dquoted wireKey]) (cfWireKey f)
+        ( [pretty ((.name) f)]
+            ++ maybe [] (\selector -> ["haskell", pretty selector]) ((.selector) f)
+            ++ maybe [] (\wireKey -> ["as", dquoted wireKey]) ((.wireKey) f)
         )
         <> ":"
-        <+> docContractType (cfType f)
+        <+> docContractType ((.valueType) f)
     docContractType (CTypeId p) = "typeid" <+> dquoted p
     docContractType CText = "text"
     docContractType CInt = "int"
@@ -636,74 +636,74 @@ docContract c =
 docProcess :: ProcessNode -> Doc ann
 docProcess p =
   vsep
-    [ "process" <+> pretty (procId p),
-      indent 2 ("name" <+> dquoted (procName p)),
-      indent 2 (docInput (procInput p)),
-      indent 2 (docCorrelate (procCorrelate p)),
-      indent 2 (docSaga (procSaga p)),
-      indent 2 ("target" <+> pretty (procTarget p)),
-      indent 2 ("projections" <+> bracketed (map pretty (procProjections p))),
+    [ "process" <+> pretty ((.id) p),
+      indent 2 ("name" <+> dquoted ((.name) p)),
+      indent 2 (docInput ((.input) p)),
+      indent 2 (docCorrelate ((.correlate) p)),
+      indent 2 (docSaga ((.saga) p)),
+      indent 2 ("target" <+> pretty ((.target) p)),
+      indent 2 ("projections" <+> bracketed (map pretty ((.projections) p))),
       mempty,
-      indent 2 (docHandle (procHandle p)),
+      indent 2 (docHandle ((.handle) p)),
       mempty,
       indent 2 "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)",
-      indent 2 ("rejected =>" <+> docPolicyChoice (procRejected p)),
-      indent 2 ("poison =>" <+> docPolicyChoice (procPoison p)),
+      indent 2 ("rejected =>" <+> docPolicyChoice ((.rejected) p)),
+      indent 2 ("poison =>" <+> docPolicyChoice ((.poison) p)),
       mempty,
-      indent 2 (docTimer (procTimer p))
+      indent 2 (docTimer ((.timer) p))
     ]
 
 docRouter :: RouterNode -> Doc ann
 docRouter r =
   vsep
-    [ "router" <+> pretty (rtId r),
-      indent 2 ("name" <+> dquoted (rtName r)),
-      indent 2 (docInput (rtInput r)),
-      indent 2 (docRouterKey (isDeclarativeResolve (rtResolve r)) (rtKey r)),
-      indent 2 (docResolve (rtResolve r)),
-      indent 2 ("target" <+> pretty (rtTarget r)),
-      indent 2 ("projections" <+> bracketed (map pretty (rtProjections r))),
-      indent 2 (docRouterDispatch (rtDispatch r)),
+    [ "router" <+> pretty ((.id) r),
+      indent 2 ("name" <+> dquoted ((.name) r)),
+      indent 2 (docInput ((.input) r)),
+      indent 2 (docRouterKey (isDeclarativeResolve ((.resolve) r)) ((.key) r)),
+      indent 2 (docResolve ((.resolve) r)),
+      indent 2 ("target" <+> pretty ((.target) r)),
+      indent 2 ("projections" <+> bracketed (map pretty ((.projections) r))),
+      indent 2 (docRouterDispatch ((.dispatch) r)),
       indent 2 "dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)",
-      indent 2 ("rejected =>" <+> docPolicyChoice (rtRejected r)),
-      indent 2 ("poison =>" <+> docPolicyChoice (rtPoison r))
+      indent 2 ("rejected =>" <+> docPolicyChoice ((.rejected) r)),
+      indent 2 ("poison =>" <+> docPolicyChoice ((.poison) r))
     ]
 
 docRouterKey :: Bool -> CorrelateDecl -> Doc ann
 docRouterKey declarative key
-  | declarative = "key" <+> ("input." <> pretty (corrField key))
-  | otherwise = "key" <+> ("input." <> pretty (corrField key)) <+> "via" <+> pretty (corrVia key)
+  | declarative = "key" <+> ("input." <> pretty ((.field) key))
+  | otherwise = "key" <+> ("input." <> pretty ((.field) key)) <+> "via" <+> pretty ((.via) key)
 
 isDeclarativeResolve :: ResolveDecl -> Bool
-isDeclarativeResolve resolve = case rvSource resolve of
+isDeclarativeResolve resolve = case (.source) resolve of
   ResolveDeclarative {} -> True
   _ -> False
 
 docResolve :: ResolveDecl -> Doc ann
-docResolve resolve = case rvSource resolve of
+docResolve resolve = case (.source) resolve of
   ResolveReadModel name -> custom ("read-model" <+> pretty name)
   ResolveHole -> custom "hole"
   ResolveDeclarative selection ->
     vsep
       ( [ "resolve declarative {",
-          indent 2 ("identity =" <+> dquoted (rsIdentity selection)),
-          indent 2 ("version =" <+> pretty (rsVersion selection)),
-          indent 2 ("query = read-model" <+> pretty (rsQuery selection) <+> "with" <+> pretty (rsQueryInput selection)),
-          indent 2 ("where =" <+> docExpr 0 (rsPredicate selection)),
-          indent 2 ("recipient =" <+> docExpr 0 (rsRecipient selection)),
-          indent 2 ("order =" <+> pretty (rsOrder selection)),
-          indent 2 ("dedupe =" <+> pretty (rsDedupe selection))
+          indent 2 ("identity =" <+> dquoted ((.identity) selection)),
+          indent 2 ("version =" <+> pretty ((.version) selection)),
+          indent 2 ("query = read-model" <+> pretty ((.query) selection) <+> "with" <+> pretty ((.queryInput) selection)),
+          indent 2 ("where =" <+> docExpr 0 ((.predicate) selection)),
+          indent 2 ("recipient =" <+> docExpr 0 ((.recipient) selection)),
+          indent 2 ("order =" <+> pretty ((.order) selection)),
+          indent 2 ("dedupe =" <+> pretty ((.dedupe) selection))
         ]
-          ++ maybe [] (\(recipientLimit, _) -> [indent 2 ("max-recipients =" <+> pretty recipientLimit)]) (rsLimit selection)
-          ++ [ indent 2 ("empty =>" <+> docSelectionDisposition (rsEmptyPolicy selection)),
-               indent 2 ("failure =>" <+> docSelectionDisposition (rsFailurePolicy selection)),
-               indent 2 ("redelivery =" <+> pretty (rsRedelivery selection)),
-               indent 2 ("partial =" <+> pretty (rsPartial selection)),
+          ++ maybe [] (\(recipientLimit, _) -> [indent 2 ("max-recipients =" <+> pretty recipientLimit)]) ((.limit) selection)
+          ++ [ indent 2 ("empty =>" <+> docSelectionDisposition ((.emptyPolicy) selection)),
+               indent 2 ("failure =>" <+> docSelectionDisposition ((.failurePolicy) selection)),
+               indent 2 ("redelivery =" <+> pretty ((.redelivery) selection)),
+               indent 2 ("partial =" <+> pretty ((.partial) selection)),
                "}"
              ]
       )
   where
-    custom source = "resolve stable via" <+> source <+> "row" <+> braced (map pretty (rvRow resolve))
+    custom source = "resolve stable via" <+> source <+> "row" <+> braced (map pretty ((.row) resolve))
 
 docSelectionDisposition :: SelectionDispositionSyntax -> Doc ann
 docSelectionDisposition SelectionAck = "ack"
@@ -714,8 +714,8 @@ docSelectionDisposition SelectionHalt = "halt"
 docRouterDispatch :: RouterDispatchNode -> Doc ann
 docRouterDispatch dispatch =
   vsep
-    [ "dispatch-each" <+> pretty (rdCommand dispatch) <+> braced (map docFieldBinding (rdFields dispatch)),
-      indent 2 (docDispDisposition (rdDisposition dispatch))
+    [ "dispatch-each" <+> pretty ((.command) dispatch) <+> braced (map docFieldBinding ((.fields) dispatch)),
+      indent 2 (docDispDisposition ((.disposition) dispatch))
     ]
 
 docPolicyChoice :: PolicyChoice -> Doc ann
@@ -724,37 +724,37 @@ docPolicyChoice PolDeadLetter = "deadLetter"
 docPolicyChoice PolSkip = "skip"
 
 docInput :: InputDecl -> Doc ann
-docInput input = case inType input of
-  Just inputType -> "input" <+> pretty (inName input) <+> ":" <+> docTypeExpr inputType
-  Nothing -> "input" <+> pretty (inName input) <+> braced (map docField (inFields input))
+docInput input = case (.valueType) input of
+  Just inputType -> "input" <+> pretty ((.name) input) <+> ":" <+> docTypeExpr inputType
+  Nothing -> "input" <+> pretty ((.name) input) <+> braced (map docField ((.fields) input))
 
 docCorrelate :: CorrelateDecl -> Doc ann
-docCorrelate c = "correlate" <+> ("input." <> pretty (corrField c)) <+> "via" <+> pretty (corrVia c)
+docCorrelate c = "correlate" <+> ("input." <> pretty ((.field) c)) <+> "via" <+> pretty ((.via) c)
 
 docSaga :: SagaRef -> Doc ann
-docSaga s = "saga" <+> pretty (sagaAgg s) <+> "category" <+> dquoted (sagaCategory s)
+docSaga s = "saga" <+> pretty ((.agg) s) <+> "category" <+> dquoted ((.category) s)
 
 docHandle :: HandleNode -> Doc ann
 docHandle h =
   vsep $
-    ["on" <+> pretty (hOn h)]
-      ++ [indent 2 (docAdvance (hAdvance h))]
-      ++ map (indent 2 . docDispatch) (hDispatch h)
-      ++ [indent 2 ("schedule" <+> pretty (hSchedule h))]
+    ["on" <+> pretty ((.on) h)]
+      ++ [indent 2 (docAdvance ((.advance) h))]
+      ++ map (indent 2 . docDispatch) ((.dispatch) h)
+      ++ [indent 2 ("schedule" <+> pretty ((.schedule) h))]
 
 docAdvance :: AdvanceNode -> Doc ann
-docAdvance a = "advance" <+> pretty (advCommand a) <+> braced (map docFieldBinding (advFields a))
+docAdvance a = "advance" <+> pretty ((.advCommand) a) <+> braced (map docFieldBinding ((.advFields) a))
 
 docDispatch :: DispatchNode -> Doc ann
 docDispatch d =
   vsep
-    [ "dispatch" <+> (pretty (dispTarget d) <> "@" <> pretty (dispKey d)) <+> pretty (dispCommand d) <+> braced (map docFieldBinding (dispFields d)),
-      indent 2 (docDispDisposition (dispDisposition d))
+    [ "dispatch" <+> (pretty ((.target) d) <> "@" <> pretty ((.key) d)) <+> pretty ((.command) d) <+> braced (map docFieldBinding ((.fields) d)),
+      indent 2 (docDispDisposition ((.disposition) d))
     ]
 
 docDispDisposition :: DispatchDisposition -> Doc ann
 docDispDisposition x =
-  "on-appended" <+> docDisp (onAppended x) <+> ";" <+> "on-duplicate" <+> docDisp (onDuplicate x) <+> ";" <+> "on-failed" <+> docDisp (onFailed x)
+  "on-appended" <+> docDisp ((.onAppended) x) <+> ";" <+> "on-duplicate" <+> docDisp ((.onDuplicate) x) <+> ";" <+> "on-failed" <+> docDisp ((.onFailed) x)
 
 docDisp :: Disp -> Doc ann
 docDisp DAckOk = "AckOk"
@@ -764,54 +764,54 @@ docDisp (DDeadLetter r) = "DeadLetter" <+> dquoted r
 docTimer :: TimerNode -> Doc ann
 docTimer t =
   vsep
-    [ "timer" <+> pretty (tmName t),
-      indent 2 ("id" <+> docIdExpr (tmId t)),
-      indent 2 ("fireAt" <+> docFireAt (tmFireAt t)),
-      indent 2 ("payload" <+> braced (map docFieldBinding (tmPayload t))),
-      indent 2 (docFire (tmFire t)),
-      indent 2 ("decode unknown-status =>" <+> pretty (tmDecodeUnknown t)),
-      indent 2 ("max-attempts" <+> pretty (tmMaxAttempts t) <+> "dead-letter" <+> dquoted (tmDeadLetter t))
+    [ "timer" <+> pretty ((.name) t),
+      indent 2 ("id" <+> docIdExpr ((.id) t)),
+      indent 2 ("fireAt" <+> docFireAt ((.fireAt) t)),
+      indent 2 ("payload" <+> braced (map docFieldBinding ((.payload) t))),
+      indent 2 (docFire ((.fire) t)),
+      indent 2 ("decode unknown-status =>" <+> pretty ((.decodeUnknown) t)),
+      indent 2 ("max-attempts" <+> pretty ((.maxAttempts) t) <+> "dead-letter" <+> dquoted ((.deadLetter) t))
     ]
 
 docIdExpr :: IdExpr -> Doc ann
-docIdExpr e = "uuidv5" <+> dquoted (idePrefix e) <+> "<>" <+> pretty (ideField e)
+docIdExpr e = "uuidv5" <+> dquoted ((.prefix) e) <+> "<>" <+> pretty ((.field) e)
 
 docFireAt :: FireAtExpr -> Doc ann
-docFireAt f = ("input." <> pretty (faField f)) <+> "+" <+> pretty (faWindow f)
+docFireAt f = ("input." <> pretty ((.field) f)) <+> "+" <+> pretty ((.window) f)
 
 docFire :: FireNode -> Doc ann
 docFire f =
   vsep
-    [ "fire dispatch" <+> (pretty (fireTarget f) <> "@" <> pretty (fireKey f)) <+> pretty (fireCommand f) <+> braced (map docFieldBinding (fireFields f)),
-      indent 2 ("fired-event-id" <+> docIdExpr (fireFiredEventId f)),
-      indent 2 (docFireDisposition (fireDisposition f))
+    [ "fire dispatch" <+> (pretty ((.target) f) <> "@" <> pretty ((.key) f)) <+> pretty ((.command) f) <+> braced (map docFieldBinding ((.fields) f)),
+      indent 2 ("fired-event-id" <+> docIdExpr ((.firedEventId) f)),
+      indent 2 (docFireDisposition ((.disposition) f))
     ]
 
 docFireDisposition :: FireDisposition -> Doc ann
 docFireDisposition x =
   "on-ok"
-    <+> docFireOutcome (onOk x)
+    <+> docFireOutcome ((.onOk) x)
     <+> ";"
     <+> "on-reject"
-    <+> docFireOutcome (onReject x)
+    <+> docFireOutcome ((.onReject) x)
     <+> ";"
     <+> "on-ambiguous"
-    <+> docFireOutcome (onAmbiguous x)
+    <+> docFireOutcome ((.onAmbiguous) x)
     <+> ";"
     <+> "on-error"
-    <+> docFireOutcome (onError x)
+    <+> docFireOutcome ((.onError) x)
     <+> ";"
     <+> "not-mine"
-    <+> docFireOutcome (notMine x)
+    <+> docFireOutcome ((.notMine) x)
 
 docFireOutcome :: FireOutcome -> Doc ann
 docFireOutcome OFired = "Fired"
 docFireOutcome ORetry = "Retry"
 
 docFieldBinding :: FieldBinding -> Doc ann
-docFieldBinding b = case fbValue b of
-  Nothing -> pretty (fbName b)
-  Just v -> pretty (fbName b) <> "=" <> docValue v
+docFieldBinding b = case (.value) b of
+  Nothing -> pretty ((.name) b)
+  Just v -> pretty ((.name) b) <> "=" <> docValue v
   where
     docValue v = case T.stripPrefix "\"" v >>= T.stripSuffix "\"" of
       Just rawInner -> dquoted rawInner
@@ -834,43 +834,43 @@ bracketed ds = "[" <+> hsep ds <+> "]"
 docAggregate :: Aggregate -> Doc ann
 docAggregate a =
   vsep $
-    [ "aggregate" <+> pretty (aggName a),
-      maybe mempty (indent 2 . docDomainOutcomeTypes) (aggDomainOutcomeTypes a),
+    [ "aggregate" <+> pretty ((.name) a),
+      maybe mempty (indent 2 . docDomainOutcomeTypes) ((.domainOutcomeTypes) a),
       indent 2 "regs",
-      indent 4 (vsep (map docReg (aggRegs a))),
-      indent 2 ("states" <+> hsep (map docState (aggStates a))),
+      indent 4 (vsep (map docReg ((.regs) a))),
+      indent 2 ("states" <+> hsep (map docState ((.states) a))),
       mempty
     ]
-      ++ map (indent 2 . docCommand) (aggCommands a)
-      ++ blank (aggCommands a)
-      ++ map (indent 2 . docEvent) (aggEvents a)
-      ++ blank (aggEvents a)
-      ++ map (indent 2 . docTransition) (aggTransitions a)
-      ++ blank (aggTransitions a)
-      ++ maybe [] (\w -> [indent 2 (docWire w)]) (aggWire a)
-      ++ maybe [] (\p -> [indent 2 (docProjection p)]) (aggProjection a)
-      ++ maybe [] (\snapshot -> [indent 2 (docSnapshot snapshot)]) (aggSnapshot a)
+      ++ map (indent 2 . docCommand) ((.commands) a)
+      ++ blank ((.commands) a)
+      ++ map (indent 2 . docEvent) ((.events) a)
+      ++ blank ((.events) a)
+      ++ map (indent 2 . docTransition) ((.transitions) a)
+      ++ blank ((.transitions) a)
+      ++ maybe [] (\w -> [indent 2 (docWire w)]) ((.wire) a)
+      ++ maybe [] (\p -> [indent 2 (docProjection p)]) ((.projection) a)
+      ++ maybe [] (\snapshot -> [indent 2 (docSnapshot snapshot)]) ((.snapshot) a)
   where
     blank xs = if null xs then [] else [mempty]
 
 docDomainOutcomeTypes :: DomainOutcomeTypes -> Doc ann
 docDomainOutcomeTypes declaration =
   "domain-outcomes"
-    <+> ("rejection=" <> pretty (rejectionType declaration))
-    <+> ("no-op=" <> pretty (noOpType declaration))
+    <+> ("rejection=" <> pretty ((.rejectionType) declaration))
+    <+> ("no-op=" <> pretty ((.noOpType) declaration))
 
 docSnapshot :: SnapshotSpec -> Doc ann
 docSnapshot snapshot =
   vsep
-    [ "snapshot" <+> policyDoc (snapPolicy snapshot),
-      indent 2 ("state-codec version=" <> pretty (snapCodecVersion snapshot) <+> "shape-hash=" <> dquoted (snapShapeHash snapshot))
+    [ "snapshot" <+> policyDoc ((.policy) snapshot),
+      indent 2 ("state-codec version=" <> pretty ((.codecVersion) snapshot) <+> "shape-hash=" <> dquoted ((.shapeHash) snapshot))
     ]
   where
     policyDoc (SnapEvery interval) = "every" <+> pretty interval
     policyDoc SnapOnTerminal = "on-terminal"
 
 docReg :: RegDecl -> Doc ann
-docReg r = pretty (regName r) <+> docTypeExpr (regType r) <+> "=" <+> docRegInitial (regInitial r)
+docReg r = pretty ((.name) r) <+> docTypeExpr ((.valueType) r) <+> "=" <+> docRegInitial ((.initial) r)
 
 docRegInitial :: RegInitial -> Doc ann
 docRegInitial (RegInitBare value) = pretty value
@@ -879,46 +879,46 @@ docRegInitial (RegInitText value) = dquoted value
 docBackoff :: BackoffSpec -> Doc ann
 docBackoff backoff =
   "backoff"
-    <+> pretty (boKind backoff)
-    <+> pretty (boWindow backoff)
-    <+> maybe mempty (\window -> "max=" <> pretty window) (boMax backoff)
-    <+> maybe mempty (\multiplier -> "multiplier=" <> pretty multiplier) (boMultiplier backoff)
+    <+> pretty ((.kind) backoff)
+    <+> pretty ((.window) backoff)
+    <+> maybe mempty (\window -> "max=" <> pretty window) ((.max) backoff)
+    <+> maybe mempty (\multiplier -> "multiplier=" <> pretty multiplier) ((.multiplier) backoff)
 
 docState :: StateDecl -> Doc ann
-docState s = pretty (stName s) <> (if stTerminal s then "!" else mempty)
+docState s = pretty ((.name) s) <> (if (.terminal) s then "!" else mempty)
 
 docCommand :: Command -> Doc ann
-docCommand c = "command" <+> pretty (cmdName c) <+> braced (map docAggregateField (cmdFields c))
+docCommand c = "command" <+> pretty ((.name) c) <+> braced (map docAggregateField ((.fields) c))
 
 docAggregateField :: AggregateField -> Doc ann
 docAggregateField f =
   hsep
-    ( [pretty (aggregateFieldName f)]
-        ++ maybe [] (\selector -> ["haskell", pretty selector]) (aggregateFieldSelector f)
-        ++ maybe [] (\wireKey -> ["as", dquoted wireKey]) (aggregateFieldWireKey f)
+    ( [pretty ((.name) f)]
+        ++ maybe [] (\selector -> ["haskell", pretty selector]) ((.selector) f)
+        ++ maybe [] (\wireKey -> ["as", dquoted wireKey]) ((.wireKey) f)
     )
-    <> maybe mempty (\ty -> ":" <> docTypeExpr ty) (aggregateFieldType f)
+    <> maybe mempty (\ty -> ":" <> docTypeExpr ty) ((.valueType) f)
 
 docField :: Field -> Doc ann
-docField f = case fieldType f of
-  Nothing -> pretty (fieldName f)
-  Just ty -> pretty (fieldName f) <> ":" <> pretty ty
+docField f = case (.valueType) f of
+  Nothing -> pretty ((.name) f)
+  Just ty -> pretty ((.name) f) <> ":" <> pretty ty
 
 docEvent :: Event -> Doc ann
 docEvent e =
-  case evUpcastFrom e of
+  case (.upcastFrom) e of
     Nothing -> line1
     Just (m, _) -> vsep [line1, indent 2 ("upcast from v" <> pretty m <+> "=" <+> "HOLE")]
   where
-    kw = case (evRetiring e, evDeprecated e) of
+    kw = case ((.retiring) e, (.deprecated) e) of
       (False, False) -> "event"
       (True, False) -> "retiring event"
       (False, True) -> "deprecated event"
       (True, True) -> "retiring deprecated event"
     nameVer =
-      pretty (evName e)
-        <> (if evVersion e > 1 then " v" <> pretty (evVersion e) else mempty)
-    bodyDoc = case evBody e of
+      pretty ((.name) e)
+        <> (if (.version) e > 1 then " v" <> pretty ((.version) e) else mempty)
+    bodyDoc = case (.body) e of
       EventFromCommand cmd -> "=" <+> ("fields(" <> pretty cmd <> ")")
       EventFields fs -> braced (map docAggregateField fs)
     line1 = kw <+> nameVer <+> bodyDoc
@@ -942,19 +942,19 @@ renderExpr =
 docTransition :: Transition -> Doc ann
 docTransition t =
   vsep $
-    [modePrefix <> pretty (tSource t) <+> "--" <+> pretty (tCommand t) <+> "-->"]
+    [modePrefix <> pretty ((.source) t) <+> "--" <+> pretty ((.command) t) <+> "-->"]
       ++ map (indent 2) clauses
   where
-    modePrefix = case tMode t of
+    modePrefix = case (.mode) t of
       TmLive -> mempty
       TmReplayOnly -> "replay-only "
     clauses =
-      ["implementation hole" | tImplementation t == HoleImplementation]
-        ++ maybe [] (\g -> ["guard" <+> docExpr 0 g]) (tGuard t)
-        ++ map (\(r, e) -> "write" <+> pretty r <+> ":=" <+> docExpr 0 e) (tWrites t)
-        ++ maybe [] (pure . docTransitionOutcome) (tOutcome t)
-        ++ map (\ev -> "emit" <+> pretty ev) (tEmits t)
-        ++ ["goto" <+> pretty (tGoto t)]
+      ["implementation hole" | (.implementation) t == HoleImplementation]
+        ++ maybe [] (\g -> ["guard" <+> docExpr 0 g]) ((.guard) t)
+        ++ map (\(r, e) -> "write" <+> pretty r <+> ":=" <+> docExpr 0 e) ((.writes) t)
+        ++ maybe [] (pure . docTransitionOutcome) ((.outcome) t)
+        ++ map (\ev -> "emit" <+> pretty ev) ((.emits) t)
+        ++ ["goto" <+> pretty ((.goto) t)]
 
 docTransitionOutcome :: TransitionOutcome -> Doc ann
 docTransitionOutcome (OutcomeAccepted _) = "outcome accepted"
@@ -964,21 +964,21 @@ docTransitionOutcome (OutcomeNoOp expression _) = "outcome no-op" <+> docExpr 0 
 docWire :: WireSpec -> Doc ann
 docWire w =
   "wire"
-    <+> ("kind=" <> pretty (wireKind w))
-    <+> ("fields=" <> pretty (wireFields w))
-    <+> ("schemaVersion=" <> pretty (wireSchemaVersion w))
+    <+> ("kind=" <> pretty ((.kind) w))
+    <+> ("fields=" <> pretty ((.fields) w))
+    <+> ("schemaVersion=" <> pretty ((.schemaVersion) w))
 
 docProjection :: ProjectionSpec -> Doc ann
 docProjection p =
   vsep $
     [ hsep $
-        ["projection", pretty (projTable p)]
-          ++ maybe [] (pure . ("consistency=" <>) . docConsistency) (projConsistency p)
-          ++ ["key=" <> pretty (projKey p)]
+        ["projection", pretty ((.table) p)]
+          ++ maybe [] (pure . ("consistency=" <>) . docConsistency) ((.consistency) p)
+          ++ ["key=" <> pretty ((.key) p)]
     ]
-      ++ maybe [] (\m -> [indent 2 (statusMapHead m <+> braced (map pair (mapPairs m)))]) (projStatusMap p)
+      ++ maybe [] (\m -> [indent 2 (statusMapHead m <+> braced (map pair ((.pairs) m)))]) ((.statusMap) p)
   where
-    statusMapHead m = if mapPartial m then "status-map partial" else "status-map"
+    statusMapHead m = if (.partial) m then "status-map partial" else "status-map"
     pair (l, r) = pretty l <> "=>" <> pretty r
 
 docConsistency :: Consistency -> Doc ann

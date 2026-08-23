@@ -8,8 +8,8 @@ where
 
 import Data.Text (Text)
 import Keiro.Dsl.Frontend (FrontendFailure, LoweringFailure, lowerSurfaceDocument, lowerSurfaceSource, parseSurfaceSource)
-import Keiro.Dsl.Grammar (Name, Node, Placement, Spec, specContext, specLayout, specModuleRoot, specNodes)
-import Keiro.Dsl.LanguageVersion (ParseFailure, ParsedSource, SourceLanguage, SourceLanguageDiagnostic, SourceLanguageErrorCode, parsedSourceLanguage, parsedSpec, sourceLanguageErrorCode)
+import Keiro.Dsl.Grammar (Name, Node, Placement, Spec (..))
+import Keiro.Dsl.LanguageVersion (ParseFailure, ParsedSource (..), SourceLanguage, SourceLanguageDiagnostic (..), SourceLanguageErrorCode)
 import Keiro.Dsl.Parser (ParseError, parseSource, parseSourceDocument, parseSpec, parseSpecText)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.Source (SourceSpan)
@@ -47,25 +47,25 @@ renderSpecProbe :: Spec -> Text
 renderSpecProbe = renderSpec
 
 parsedSourceLanguageProbe :: ParsedSource -> SourceLanguage
-parsedSourceLanguageProbe = parsedSourceLanguage
+parsedSourceLanguageProbe parsed = parsed.sourceLanguage
 
 parsedSpecProbe :: ParsedSource -> Spec
-parsedSpecProbe = parsedSpec
+parsedSpecProbe parsed = parsed.spec
 
 sourceLanguageErrorCodeProbe :: SourceLanguageDiagnostic -> SourceLanguageErrorCode
-sourceLanguageErrorCodeProbe = sourceLanguageErrorCode
+sourceLanguageErrorCodeProbe diagnostic = diagnostic.errorCode
 
 specContextProbe :: Spec -> Name
-specContextProbe = specContext
+specContextProbe specification = specification.context
 
 specModuleRootProbe :: Spec -> Maybe Text
-specModuleRootProbe = specModuleRoot
+specModuleRootProbe specification = specification.moduleRoot
 
 specLayoutProbe :: Spec -> Maybe Placement
-specLayoutProbe = specLayout
+specLayoutProbe specification = specification.layout
 
 specNodesProbe :: Spec -> [Node]
-specNodesProbe = specNodes
+specNodesProbe specification = specification.nodes
 
 -- | Referencing every assignment keeps @-Wall@ useful and makes the module a
 -- real compile probe instead of passive documentation.

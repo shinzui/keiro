@@ -74,7 +74,7 @@ pinnedExamples =
 derivePair :: NameSourceKind -> NameSite -> Either HaskellNameError (Text, Text)
 derivePair source site = do
   derived <- deriveHaskellName source site
-  pure (renderUpperCamelName (upperCamel derived), renderLowerCamelName (lowerCamel derived))
+  pure (renderUpperCamelName derived.upperCamel, renderLowerCamelName derived.lowerCamel)
 
 shouldReject :: NameSite -> Expectation
 shouldReject site = deriveHaskellName LogicalIdentifier site `shouldSatisfy` isLeft
@@ -145,5 +145,5 @@ collisionKindExample kind =
     let first = occurrence kind ValueSpace "Generated.Foo" "sameName" "first"
         second = occurrence kind ValueSpace "Generated.Foo" "sameName" "second"
     case detectNameCollisions [second, first] of
-      [NormalizedNameCollision _ sites] -> map siteOwner (NE.toList sites) `shouldBe` ["first", "second"]
+      [NormalizedNameCollision _ sites] -> map (.owner) (NE.toList sites) `shouldBe` ["first", "second"]
       other -> expectationFailure ("expected one collision, got " <> show other)

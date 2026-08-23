@@ -52,19 +52,19 @@ pReadModel context = do
   _ <- symbol "}"
   pure
     ReadModelNode
-      { rmName = name,
-        rmTable = table,
-        rmSchema = schema,
-        rmColumns = columns,
-        rmVersion = version,
-        rmShape = shape,
-        rmFreshness = freshness,
-        rmSupply = supply,
-        rmGroup = group,
-        rmObservedTargets = observedTargets,
-        rmBackingTarget = backingTarget,
+      { name = name,
+        table = table,
+        schema = schema,
+        columns = columns,
+        version = version,
+        shape = shape,
+        freshness = freshness,
+        supply = supply,
+        group = group,
+        observedTargets = observedTargets,
+        backingTarget = backingTarget,
         queryTypes,
-        rmLoc = loc
+        loc = loc
       }
   where
     pColumn =

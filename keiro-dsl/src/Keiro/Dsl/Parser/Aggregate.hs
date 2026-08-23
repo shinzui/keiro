@@ -38,7 +38,7 @@ pAggregate context = do
   let items = map snd positionedItems
       transitions = [transition | BITransition transition _ <- items]
       stateElements =
-        [ mapLocated (SurfaceAggregateState name . stName) locatedState
+        [ mapLocated (SurfaceAggregateState name . (.name)) locatedState
         | locatedState <- locatedStates
         ]
       transitionElements =
@@ -62,20 +62,20 @@ pAggregate context = do
     _ -> pure ()
   pure
     ( Aggregate
-        { aggName = name,
-          aggRegs = regs,
-          aggStates = map locatedValue locatedStates,
-          aggCommands = [c | BICommand c _ <- items],
-          aggEvents = [e | BIEvent e _ <- items],
-          aggTransitions = map locatedValue transitions,
-          aggDomainOutcomeTypes = case outcomeDeclarations of
+        { name = name,
+          regs = regs,
+          states = map locatedValue locatedStates,
+          commands = [c | BICommand c _ <- items],
+          events = [e | BIEvent e _ <- items],
+          transitions = map locatedValue transitions,
+          domainOutcomeTypes = case outcomeDeclarations of
             declaration : _ -> Just declaration
             [] -> Nothing,
-          aggDomainOutcomeDuplicateLocs = map outcomeTypesLoc (drop 1 outcomeDeclarations),
-          aggWire = listToMaybe [w | BIWire w <- items],
-          aggProjection = listToMaybe [p | BIProjection p <- items],
-          aggSnapshot = listToMaybe [s | BISnapshot s <- items],
-          aggLoc = loc
+          domainOutcomeDuplicateLocs = map (.outcomeTypesLoc) (drop 1 outcomeDeclarations),
+          wire = listToMaybe [w | BIWire w <- items],
+          projection = listToMaybe [p | BIProjection p <- items],
+          snapshot = listToMaybe [s | BISnapshot s <- items],
+          loc = loc
         },
       stateElements <> transitionElements <> concatMap bodyElements items
     )
@@ -117,7 +117,7 @@ pRegDecl context = do
   ty <- pMappedTypeExpr context
   _ <- symbol "="
   initial <- (RegInitText <$> stringLit) <|> (RegInitBare <$> (ident <|> signedDecimalText))
-  pure RegDecl {regName = name, regType = ty, regInitial = initial, regLoc = loc}
+  pure RegDecl {name = name, valueType = ty, initial = initial, loc = loc}
 
 pStatesLine :: P [Located StateDecl]
 pStatesLine = do
@@ -139,7 +139,7 @@ pStatesLine = do
       n <- ident
       term <- option False (True <$ symbol "!")
       notFollowedBy (symbol "--")
-      pure StateDecl {stName = n, stTerminal = term, stLoc = loc}
+      pure StateDecl {name = n, terminal = term, loc = loc}
 
 pBodyItem :: FrontendContext -> P BodyItem
 pBodyItem context =
@@ -169,7 +169,7 @@ pSnapshot = do
   version <- boundedDecimal
   _ <- symbol "shape-hash" *> symbol "="
   hash <- stringLit
-  pure SnapshotSpec {snapPolicy = policy, snapCodecVersion = version, snapShapeHash = hash, snapLoc = loc}
+  pure SnapshotSpec {policy = policy, codecVersion = version, shapeHash = hash, loc = loc}
 
 pCommand :: FrontendContext -> P (Command, [Located SurfaceElement])
 pCommand context = do
@@ -178,8 +178,8 @@ pCommand context = do
   name <- ident
   fields <- braces (many (withOwnedSpan (pAggregateField context)))
   pure
-    ( Command {cmdName = name, cmdFields = map locatedValue fields, cmdLoc = loc},
-      map (mapLocated (SurfaceField . aggregateFieldName)) fields
+    ( Command {name = name, fields = map locatedValue fields, loc = loc},
+      map (mapLocated (SurfaceField . (.name))) fields
     )
 
 pAggregateField :: FrontendContext -> P AggregateField
@@ -191,11 +191,11 @@ pAggregateField context = do
   mty <- optional (symbol ":" *> pMappedTypeExpr context)
   pure
     AggregateField
-      { aggregateFieldName = n,
-        aggregateFieldSelector = selector,
-        aggregateFieldWireKey = wireKey,
-        aggregateFieldType = mty,
-        aggregateFieldLoc = loc
+      { name = n,
+        selector = selector,
+        wireKey = wireKey,
+        valueType = mty,
+        loc = loc
       }
 
 pEvent :: FrontendContext -> P (Event, [Located SurfaceElement])
@@ -219,19 +219,19 @@ pEvent context = do
           fields <- braces (many (withOwnedSpan (pAggregateField context)))
           pure
             ( EventFields (map locatedValue fields),
-              map (mapLocated (SurfaceField . aggregateFieldName)) fields
+              map (mapLocated (SurfaceField . (.name))) fields
             )
       ]
   up <- optional pUpcast
   pure
     ( Event
-        { evName = name,
-          evBody = body,
-          evVersion = ver,
-          evUpcastFrom = up,
-          evRetiring = retiring,
-          evDeprecated = deprecated,
-          evLoc = loc
+        { name = name,
+          body = body,
+          version = ver,
+          upcastFrom = up,
+          retiring = retiring,
+          deprecated = deprecated,
+          loc = loc
         },
       elements
     )
@@ -256,7 +256,7 @@ pWire = do
   _ <- symbol "schemaVersion"
   _ <- symbol "="
   v <- boundedDecimal
-  pure WireSpec {wireKind = k, wireFields = f, wireSchemaVersion = v}
+  pure WireSpec {kind = k, fields = f, schemaVersion = v}
 
 pProjection :: FrontendContext -> P ProjectionSpec
 pProjection context = do
@@ -278,11 +278,11 @@ pProjection context = do
   sm <- optional pStatusMap
   pure
     ProjectionSpec
-      { projTable = table,
-        projConsistency = cons,
-        projKey = k,
-        projStatusMap = sm,
-        projLoc = loc
+      { table = table,
+        consistency = cons,
+        key = k,
+        statusMap = sm,
+        loc = loc
       }
   where
     pConsistency =
@@ -293,7 +293,7 @@ pStatusMap = do
   keyword "status-map"
   partial <- option False (True <$ keyword "partial")
   pairs <- braces (many pPair)
-  pure Mapping {mapPairs = pairs, mapPartial = partial}
+  pure Mapping {pairs = pairs, partial = partial}
   where
     pPair = do
       l <- ident
@@ -344,22 +344,22 @@ pTransition context = do
   let guards = [e | CGuard e <- clauses]
   pure
     ( Transition
-        { tSource = src,
-          tCommand = cmd,
-          tImplementation = case holeOffsets of
+        { source = src,
+          command = cmd,
+          implementation = case holeOffsets of
             _ : _ -> HoleImplementation
             [] | frontendSupportsFeature context TypedAggregateExpressionSyntax -> GeneratedImplementation
             [] -> LegacyHoleImplementation,
-          tGuard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
-          tWrites = [(r, e) | CWrite r e <- clauses],
-          tEmits = [n | CEmit n <- clauses],
-          tOutcome = case outcomes of
+          guard = case guards of [] -> Nothing; es -> Just (foldr1 EAnd es),
+          writes = [(r, e) | CWrite r e <- clauses],
+          emits = [n | CEmit n <- clauses],
+          outcome = case outcomes of
             (_, outcome) : _ -> Just outcome
             [] -> Nothing,
-          tOutcomeDuplicateLocs = map (transitionOutcomeLoc . snd) (drop 1 outcomes),
-          tGoto = gt,
-          tMode = mode,
-          tLoc = loc
+          outcomeDuplicateLocs = map (transitionOutcomeLoc . snd) (drop 1 outcomes),
+          goto = gt,
+          mode = mode,
+          loc = loc
         },
       elements
     )

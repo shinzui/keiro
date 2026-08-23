@@ -14,7 +14,9 @@ executable keiro-dsl-codec-compare-artifact-info
     DuplicateRecordFields
     ImportQualifiedPost
     LambdaCase
+    NoFieldSelectors
     OverloadedLabels
+    OverloadedRecordDot
     OverloadedStrings
 
   ghc-options:        -Wall -Werror=missing-fields

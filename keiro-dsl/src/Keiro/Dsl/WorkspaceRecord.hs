@@ -79,23 +79,23 @@ import System.FilePath (isAbsolute, splitDirectories)
 -- directory, and which member file produced it ('Nothing' for context-level
 -- modules emitted once from the merged graph).
 data WorkspaceModuleRow = WorkspaceModuleRow
-  { wrmKind :: !ModuleKind,
-    wrmPath :: !FilePath,
-    wrmOwner :: !(Maybe FilePath),
-    wrmRole :: !(Maybe ModuleRole)
+  { kind :: !ModuleKind,
+    path :: !FilePath,
+    owner :: !(Maybe FilePath),
+    role :: !(Maybe ModuleRole)
   }
   deriving stock (Eq, Show)
 
 instance ToJSON WorkspaceModuleRow where
   toJSON row =
     object $
-      [ "kind" .= (case wrmKind row of Generated -> "generated" :: Text; HoleStub -> "hole"),
-        "path" .= T.pack (wrmPath row)
+      [ "kind" .= (case (.kind) row of Generated -> "generated" :: Text; HoleStub -> "hole"),
+        "path" .= T.pack ((.path) row)
       ]
-        <> ["owner" .= T.pack owner | Just owner <- [wrmOwner row]]
-        <> ["roleOwnerKind" .= roleOwnerKind role | Just role <- [wrmRole row]]
-        <> ["roleOwnerName" .= roleOwnerName role | Just role <- [wrmRole row]]
-        <> ["roleFamily" .= roleFamily role | Just role <- [wrmRole row]]
+        <> ["owner" .= T.pack owner | Just owner <- [(.owner) row]]
+        <> ["roleOwnerKind" .= (.ownerKind) role | Just role <- [(.role) row]]
+        <> ["roleOwnerName" .= (.ownerName) role | Just role <- [(.role) row]]
+        <> ["roleFamily" .= (.family) role | Just role <- [(.role) row]]
 
 instance FromJSON WorkspaceModuleRow where
   parseJSON = withObject "WorkspaceModuleRow" $ \fields -> do
@@ -115,29 +115,29 @@ instance FromJSON WorkspaceModuleRow where
       _ -> fail "module role fields must be all present or all absent"
     pure
       WorkspaceModuleRow
-        { wrmKind = moduleKind,
-          wrmPath = T.unpack (path :: Text),
-          wrmOwner = T.unpack <$> (owner :: Maybe Text),
-          wrmRole = moduleRoleValue
+        { kind = moduleKind,
+          path = T.unpack (path :: Text),
+          owner = T.unpack <$> (owner :: Maybe Text),
+          role = moduleRoleValue
         }
 
 -- | One member's source-language provenance in a workspace record.
 data WorkspaceSourceLanguageRow = WorkspaceSourceLanguageRow
-  { wrslPath :: !FilePath,
-    wrslSourceLanguage :: !SourceLanguage
+  { path :: !FilePath,
+    sourceLanguage :: !SourceLanguage
   }
   deriving stock (Eq, Show)
 
 instance ToJSON WorkspaceSourceLanguageRow where
   toJSON row =
     object
-      [ "path" .= T.pack (wrslPath row),
+      [ "path" .= T.pack ((.path) row),
         "sourceForm" .= sourceFormText sourceLanguage,
         "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage,
         "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
       ]
     where
-      sourceLanguage = wrslSourceLanguage row
+      sourceLanguage = (.sourceLanguage) row
 
 instance FromJSON WorkspaceSourceLanguageRow where
   parseJSON value@(Aeson.Object fields) = do
@@ -145,8 +145,8 @@ instance FromJSON WorkspaceSourceLanguageRow where
     sourceLanguage <- parseJSON value
     pure
       WorkspaceSourceLanguageRow
-        { wrslPath = T.unpack (path :: Text),
-          wrslSourceLanguage = sourceLanguage
+        { path = T.unpack (path :: Text),
+          sourceLanguage = sourceLanguage
         }
   parseJSON _ = fail "WorkspaceSourceLanguageRow must be an object"
 
@@ -156,21 +156,21 @@ instance FromJSON WorkspaceSourceLanguageRow where
 -- carries the @-- \@generated@ banner but no surviving record lists it (the orphan
 -- case created when one legacy record overwrote another).
 data AdoptedRow = AdoptedRow
-  { adPath :: !FilePath,
-    adEvidence :: !Text,
+  { path :: !FilePath,
+    evidence :: !Text,
     -- | The legacy record's file name, when the evidence is @record@.
-    adSource :: !(Maybe Text),
+    source :: !(Maybe Text),
     -- | The legacy record's @spec:@ field, when available.
-    adSpec :: !(Maybe Text)
+    spec :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
 instance ToJSON AdoptedRow where
   toJSON row =
     object $
-      ["path" .= T.pack (adPath row), "evidence" .= adEvidence row]
-        <> ["source" .= source | Just source <- [adSource row]]
-        <> ["spec" .= specPath | Just specPath <- [adSpec row]]
+      ["path" .= T.pack ((.path) row), "evidence" .= (.evidence) row]
+        <> ["source" .= source | Just source <- [(.source) row]]
+        <> ["spec" .= specPath | Just specPath <- [(.spec) row]]
 
 instance FromJSON AdoptedRow where
   parseJSON = withObject "AdoptedRow" $ \fields -> do
@@ -180,41 +180,41 @@ instance FromJSON AdoptedRow where
     specPath <- fields .:? "spec"
     pure
       AdoptedRow
-        { adPath = T.unpack (path :: Text),
-          adEvidence = evidence,
-          adSource = source,
-          adSpec = specPath
+        { path = T.unpack (path :: Text),
+          evidence = evidence,
+          source = source,
+          spec = specPath
         }
 
 -- | Everything one successful whole-workspace scaffold produced.
 data WorkspaceRecord = WorkspaceRecord
   { -- | The manifest's @service@ name: the workspace's durable identity.
-    wrService :: !Text,
+    service :: !Text,
     -- | The manifest's __file name__, not a path. Members are relative to its
     --     directory, so the directory is wherever the manifest currently sits;
     --     recording only the name keeps the record independent of the invoking
     --     working directory, which is what makes byte-identical output provable.
-    wrManifest :: !Text,
-    wrContext :: !Text,
-    wrModuleRoot :: !Text,
-    wrLayout :: !Text,
+    manifest :: !Text,
+    context :: !Text,
+    moduleRoot :: !Text,
+    layout :: !Text,
     -- | Canonically ordered manifest-relative member paths.
-    wrMembers :: ![FilePath],
-    wrSourceLanguages :: ![WorkspaceSourceLanguageRow],
-    wrLanguageContract :: !EffectiveLanguageContract,
-    wrNamingEdition :: !GeneratedHaskellNamingEdition,
-    wrModules :: ![WorkspaceModuleRow],
-    wrMappings :: ![MappingIdentity],
-    wrIdDomains :: ![Text],
-    wrNominalEqualities :: ![Text],
-    wrBindingObligations :: ![BindingHole],
-    wrBehaviorRequirements :: ![BehaviorRecordRow],
-    wrProjectionCatalogFacts :: ![Text],
-    wrQueryContractBaseline :: !Bool,
-    wrQueryContracts :: ![QueryContractIdentity],
-    wrRouterSelections :: ![RouterSelectionSnapshot],
-    wrAdopted :: ![AdoptedRow],
-    wrSemanticImpact :: !(Maybe SemanticImpactSnapshot)
+    members :: ![FilePath],
+    sourceLanguages :: ![WorkspaceSourceLanguageRow],
+    languageContract :: !EffectiveLanguageContract,
+    namingEdition :: !GeneratedHaskellNamingEdition,
+    modules :: ![WorkspaceModuleRow],
+    mappings :: ![MappingIdentity],
+    idDomains :: ![Text],
+    nominalEqualities :: ![Text],
+    bindingObligations :: ![BindingHole],
+    requirements :: ![BehaviorRecordRow],
+    projectionCatalogFacts :: ![Text],
+    queryContractBaseline :: !Bool,
+    queryContracts :: ![QueryContractIdentity],
+    routerSelections :: ![RouterSelectionSnapshot],
+    adopted :: ![AdoptedRow],
+    semanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
   deriving stock (Eq, Show)
 
@@ -225,30 +225,30 @@ renderWorkspaceRecord :: WorkspaceRecord -> Text
 renderWorkspaceRecord record =
   T.unlines $
     [ workspaceRecordHeader,
-      "service: " <> wrService record,
-      "manifest: " <> wrManifest record,
-      "context: " <> wrContext record,
+      "service: " <> (.service) record,
+      "manifest: " <> (.manifest) record,
+      "context: " <> (.context) record,
       "module-root: " <> rootLabel,
-      "layout: " <> wrLayout record,
-      "naming-edition " <> renderGeneratedHaskellNamingEdition (wrNamingEdition record)
+      "layout: " <> (.layout) record,
+      "naming-edition " <> renderGeneratedHaskellNamingEdition ((.namingEdition) record)
     ]
-      <> ["member " <> T.pack path | path <- wrMembers record]
-      <> ["source-language " <> encodeRow row | row <- wrSourceLanguages record]
-      <> ["semantic-contract " <> encodeRow (wrLanguageContract record)]
-      <> ["module " <> encodeRow row | row <- wrModules record]
-      <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- wrMappings record]
-      <> ["id-domain " <> identity | identity <- wrIdDomains record]
-      <> ["nominal-equality " <> identity | identity <- wrNominalEqualities record]
-      <> ["binding " <> encodeRow obligation | obligation <- wrBindingObligations record]
-      <> ["behavior " <> encodeRow requirement | requirement <- wrBehaviorRequirements record]
-      <> ["projection-catalog-fact " <> fact | fact <- wrProjectionCatalogFacts record]
-      <> ["query-contract-baseline v1" | wrQueryContractBaseline record]
-      <> ["query-contract " <> encodeRow identity | identity <- wrQueryContracts record]
-      <> ["router-selection " <> encodeRow selection | selection <- wrRouterSelections record]
-      <> ["semantic-impact " <> encodeRow snapshot | Just snapshot <- [wrSemanticImpact record]]
-      <> ["adopted " <> encodeRow adopted | adopted <- wrAdopted record]
+      <> ["member " <> T.pack path | path <- (.members) record]
+      <> ["source-language " <> encodeRow row | row <- (.sourceLanguages) record]
+      <> ["semantic-contract " <> encodeRow ((.languageContract) record)]
+      <> ["module " <> encodeRow row | row <- (.modules) record]
+      <> [mappingRowPrefix mapping <> encodeRow mapping | mapping <- (.mappings) record]
+      <> ["id-domain " <> identity | identity <- (.idDomains) record]
+      <> ["nominal-equality " <> identity | identity <- (.nominalEqualities) record]
+      <> ["binding " <> encodeRow obligation | obligation <- (.bindingObligations) record]
+      <> ["behavior " <> encodeRow requirement | requirement <- (.requirements) record]
+      <> ["projection-catalog-fact " <> fact | fact <- (.projectionCatalogFacts) record]
+      <> ["query-contract-baseline v1" | (.queryContractBaseline) record]
+      <> ["query-contract " <> encodeRow identity | identity <- (.queryContracts) record]
+      <> ["router-selection " <> encodeRow selection | selection <- (.routerSelections) record]
+      <> ["semantic-impact " <> encodeRow snapshot | Just snapshot <- [(.semanticImpact) record]]
+      <> ["adopted " <> encodeRow adopted | adopted <- (.adopted) record]
   where
-    rootLabel = if T.null (wrModuleRoot record) then "(none)" else wrModuleRoot record
+    rootLabel = if T.null ((.moduleRoot) record) then "(none)" else (.moduleRoot) record
 
 encodeRow :: (ToJSON a) => a -> Text
 encodeRow = Text.decodeUtf8 . BL.toStrict . Aeson.encode
@@ -277,49 +277,49 @@ parseWorkspaceRecord contents = case T.lines contents of
         let idDomains = [identity | row <- rows, Just identity <- [T.stripPrefix "id-domain " row]]
         let nominalEqualities = [identity | row <- rows, Just identity <- [T.stripPrefix "nominal-equality " row]]
         obligations <- traverse (decodeRow "binding ") (rowsWith "binding " rows)
-        behaviorRequirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
+        requirements <- traverse (decodeRow "behavior ") (rowsWith "behavior " rows)
         let catalogFacts = [fact | row <- rows, Just fact <- [T.stripPrefix "projection-catalog-fact " row]]
         queryContractBaseline <- parseQueryContractBaseline rows
         queryContracts <- traverse (decodeRow "query-contract ") (rowsWith "query-contract " rows)
         routerSelections <- traverse (decodeRow "router-selection ") (rowsWith "router-selection " rows)
         semanticImpact <- parseSemanticImpact rows
-        adopted <- traverse (decodeRow "adopted ") (rowsWith "adopted " rows)
+        adopted <- (traverse (decodeRow "adopted ") (rowsWith "adopted " rows) :: Maybe [AdoptedRow])
         checkedAdopted <- traverse checkedAdoption adopted
         if hasDuplicates members
-          || hasDuplicates (map wrmPath checkedModules)
-          || hasDuplicates (map mappingSpecName mappings)
+          || hasDuplicates (map (.path) checkedModules)
+          || hasDuplicates (map (.specName) mappings)
           || hasDuplicates idDomains
           || hasDuplicates nominalEqualities
           || hasDuplicates (map bindingKey obligations)
-          || hasDuplicates (map behaviorRecordKey behaviorRequirements)
+          || hasDuplicates (map (.key) requirements)
           || hasDuplicates catalogFacts
           || hasDuplicates (map queryContractIdentityKey queryContracts)
-          || hasDuplicates (map selectionRouter routerSelections)
+          || hasDuplicates (map (.router) routerSelections)
           then Nothing
           else
             pure
               WorkspaceRecord
-                { wrService = service,
-                  wrManifest = manifest,
-                  wrContext = context,
-                  wrModuleRoot = if rootLabel == "(none)" then "" else rootLabel,
-                  wrLayout = layout,
-                  wrMembers = members,
-                  wrSourceLanguages = sourceLanguages,
-                  wrLanguageContract = languageContract,
-                  wrNamingEdition = namingEdition,
-                  wrModules = checkedModules,
-                  wrMappings = mappings,
-                  wrIdDomains = idDomains,
-                  wrNominalEqualities = nominalEqualities,
-                  wrBindingObligations = obligations,
-                  wrBehaviorRequirements = behaviorRequirements,
-                  wrProjectionCatalogFacts = catalogFacts,
-                  wrQueryContractBaseline = queryContractBaseline,
-                  wrQueryContracts = queryContracts,
-                  wrRouterSelections = routerSelections,
-                  wrAdopted = checkedAdopted,
-                  wrSemanticImpact = semanticImpact
+                { service = service,
+                  manifest = manifest,
+                  context = context,
+                  moduleRoot = if rootLabel == "(none)" then "" else rootLabel,
+                  layout = layout,
+                  members = members,
+                  sourceLanguages = sourceLanguages,
+                  languageContract = languageContract,
+                  namingEdition = namingEdition,
+                  modules = checkedModules,
+                  mappings = mappings,
+                  idDomains = idDomains,
+                  nominalEqualities = nominalEqualities,
+                  bindingObligations = obligations,
+                  requirements = requirements,
+                  projectionCatalogFacts = catalogFacts,
+                  queryContractBaseline = queryContractBaseline,
+                  queryContracts = queryContracts,
+                  routerSelections = routerSelections,
+                  adopted = checkedAdopted,
+                  semanticImpact = semanticImpact
                 }
   _ -> Nothing
   where
@@ -330,23 +330,37 @@ parseWorkspaceRecord contents = case T.lines contents of
     decodeRow prefix row = do
       payload <- T.stripPrefix prefix row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    checkedModule :: WorkspaceModuleRow -> Maybe WorkspaceModuleRow
     checkedModule row = do
-      path <- safePath (T.pack (wrmPath row))
-      owner <- traverse (safePath . T.pack) (wrmOwner row)
-      pure row {wrmPath = path, wrmOwner = owner}
+      path <- safePath (T.pack ((.path) row))
+      owner <- traverse (safePath . T.pack) ((.owner) row)
+      pure
+        WorkspaceModuleRow
+          { kind = (.kind) row,
+            path = path,
+            owner = owner,
+            role = (.role) row
+          }
+    checkedAdoption :: AdoptedRow -> Maybe AdoptedRow
     checkedAdoption row = do
-      path <- safePath (T.pack (adPath row))
-      pure row {adPath = path}
+      path <- safePath (T.pack ((.path) row))
+      pure
+        AdoptedRow
+          { path = path,
+            evidence = (.evidence) row,
+            source = (.source) row,
+            spec = (.spec) row
+          }
     parseSourceLanguages members rows = case rowsWith "source-language " rows of
       [] -> Just [WorkspaceSourceLanguageRow path LegacyUnversioned | path <- members]
       sourceRows -> do
         decoded <- traverse (decodeRow "source-language ") sourceRows
         checked <- traverse checkedSourceLanguage decoded
-        if hasDuplicates (map wrslPath checked) || sort (map wrslPath checked) /= sort members
+        if hasDuplicates (map (.path) checked) || sort (map (.path) checked) /= sort members
           then Nothing
           else Just checked
     parseLanguageContract sourceLanguages rows = do
-      let inferred = nub [effectiveLanguageContract (wrslSourceLanguage row) | row <- sourceLanguages]
+      let inferred = nub [effectiveLanguageContract ((.sourceLanguage) row) | row <- sourceLanguages]
       common <- case inferred of
         [contract] -> Just contract
         [] -> Just (effectiveLanguageContract LegacyUnversioned)
@@ -369,9 +383,14 @@ parseWorkspaceRecord contents = case T.lines contents of
       [] -> Just False
       ["query-contract-baseline v1"] -> Just True
       _ -> Nothing
+    checkedSourceLanguage :: WorkspaceSourceLanguageRow -> Maybe WorkspaceSourceLanguageRow
     checkedSourceLanguage row = do
-      path <- safePath (T.pack (wrslPath row))
-      pure row {wrslPath = path}
+      path <- safePath (T.pack ((.path) row))
+      pure
+        WorkspaceSourceLanguageRow
+          { path = path,
+            sourceLanguage = (.sourceLanguage) row
+          }
     safePath raw =
       let path = T.unpack raw
        in if null path || isAbsolute path || ".." `elem` splitDirectories path
@@ -380,11 +399,11 @@ parseWorkspaceRecord contents = case T.lines contents of
     hasDuplicates :: (Eq a) => [a] -> Bool
     hasDuplicates values = length values /= length (nub values)
     bindingKey hole =
-      ( holeMappedName hole,
-        holeModule hole,
-        holeSymbol hole,
-        holeKind hole,
-        holePath hole
+      ( (.mappedName) hole,
+        (.moduleName) hole,
+        (.symbol) hole,
+        (.kind) hole,
+        (.path) hole
       )
 
 -- | @keiro-dsl-ledger.workspace.\<service\>.txt@ — the machine-owned workspace

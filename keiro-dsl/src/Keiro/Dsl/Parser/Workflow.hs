@@ -19,7 +19,7 @@ pWorkflow = do
   nm <- stringLit
   keyword "in"
   inTy <- ident
-  inFields <- option [] (braces (many pField))
+  fields <- option [] (braces (many pField))
   keyword "out"
   outTy <- ident
   keyword "id"
@@ -32,15 +32,15 @@ pWorkflow = do
   body <- many pWfBodyItem
   pure
     WorkflowNode
-      { wfId = wid,
-        wfStable = nm,
-        wfInput = inTy,
-        wfInputFields = inFields,
-        wfOutput = outTy,
-        wfIdField = idField,
-        wfIdVia = idVia,
-        wfBody = body,
-        wfLoc = loc
+      { id = wid,
+        stable = nm,
+        input = inTy,
+        inputFields = fields,
+        output = outTy,
+        idField = idField,
+        idVia = idVia,
+        body = body,
+        loc = loc
       }
   where
     pWfBodyItem =
@@ -84,7 +84,7 @@ pOperation = do
         pSignalOp,
         pRunOp
       ]
-  pure OperationNode {opName = nm, opShape = shape, opLoc = loc}
+  pure OperationNode {name = nm, shape = shape, loc = loc}
   where
     pCommandOp = do
       keyword "command"

@@ -42,11 +42,11 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.TypeGraph
 
 data ExpressionEnvironment = ExpressionEnvironment
-  { environmentSpec :: !Spec,
-    environmentAggregate :: !Aggregate,
-    environmentTransition :: !Transition,
-    environmentSymbols :: !AggregateSymbols,
-    environmentTypeGraph :: !(Maybe TypeGraph)
+  { spec :: !Spec,
+    aggregate :: !Aggregate,
+    transition :: !Transition,
+    symbols :: !AggregateSymbols,
+    typeGraph :: !(Maybe TypeGraph)
   }
 
 expressionEnvironment :: Spec -> Aggregate -> Transition -> ExpressionEnvironment
@@ -67,11 +67,11 @@ expressionEnvironmentFromGraphResult typeGraphResult spec aggregate transition =
 expressionEnvironmentWith :: AggregateSymbols -> Maybe TypeGraph -> Spec -> Aggregate -> Transition -> ExpressionEnvironment
 expressionEnvironmentWith symbols graph spec aggregate transition =
   ExpressionEnvironment
-    { environmentSpec = spec,
-      environmentAggregate = aggregate,
-      environmentTransition = transition,
-      environmentSymbols = symbols,
-      environmentTypeGraph = graph
+    { spec = spec,
+      aggregate = aggregate,
+      transition = transition,
+      symbols = symbols,
+      typeGraph = graph
     }
 
 data ExpectedScalarType
@@ -85,9 +85,9 @@ data ScalarRootProvenance
   deriving stock (Eq, Show)
 
 data ResolvedScalarProjection = ResolvedScalarProjection
-  { scalarProjectionOwner :: !MappedKey,
-    scalarProjectionPointer :: !Text,
-    scalarProjectionFields :: ![Name]
+  { owner :: !MappedKey,
+    pointer :: !Text,
+    fields :: ![Name]
   }
   deriving stock (Eq, Show)
 
@@ -122,9 +122,9 @@ data TypedScalarNode
   deriving stock (Eq, Show)
 
 data TypedScalarExpr = TypedScalarExpr
-  { typedScalarType :: !ResolvedAggregateType,
-    typedScalarLoc :: !Loc,
-    typedScalarNode :: !TypedScalarNode
+  { valueType :: !ResolvedAggregateType,
+    loc :: !Loc,
+    node :: !TypedScalarNode
   }
   deriving stock (Eq, Show)
 
@@ -144,9 +144,9 @@ data ExpressionDiagnosticCode
   deriving stock (Eq, Ord, Show)
 
 data ExpressionDiagnostic = ExpressionDiagnostic
-  { expressionDiagnosticLoc :: !Loc,
-    expressionDiagnosticCode :: !ExpressionDiagnosticCode,
-    expressionDiagnosticMessage :: !Text
+  { loc :: !Loc,
+    code :: !ExpressionDiagnosticCode,
+    message :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -170,9 +170,9 @@ resolveScalarExpr environment expected expression =
       (resolvedLeft, resolvedRight) <- resolveBoth (resolve left (ExpectScalarType AggregateBool)) (resolve right (ExpectScalarType AggregateBool))
       pure
         TypedScalarExpr
-          { typedScalarType = AggregateBool,
-            typedScalarLoc = expressionLoc left right,
-            typedScalarNode = constructor resolvedLeft resolvedRight
+          { valueType = AggregateBool,
+            loc = expressionLoc left right,
+            node = constructor resolvedLeft resolvedRight
           }
 
     resolveComparison operator left right = do
@@ -181,9 +181,9 @@ resolveScalarExpr environment expected expression =
       requireComparisonCapability operator resolvedLeft
       pure
         TypedScalarExpr
-          { typedScalarType = AggregateBool,
-            typedScalarLoc = expressionLoc left right,
-            typedScalarNode = case operator of
+          { valueType = AggregateBool,
+            loc = expressionLoc left right,
+            node = case operator of
               OpEq -> TypedEqual resolvedLeft resolvedRight
               OpNeq -> TypedNotEqual resolvedLeft resolvedRight
               OpLt -> TypedCompare OpLt resolvedLeft resolvedRight
@@ -200,30 +200,30 @@ resolveScalarExpr environment expected expression =
         _ -> resolvePair left right
       let (resolvedLeft, resolvedRight) = pair
       requireSameType resolvedLeft resolvedRight
-      evidence <- arithmeticEvidence loc (typedScalarType resolvedLeft)
+      evidence <- arithmeticEvidence loc ((.valueType) resolvedLeft)
       pure
         TypedScalarExpr
-          { typedScalarType = typedScalarType resolvedLeft,
-            typedScalarLoc = loc,
-            typedScalarNode = constructor evidence resolvedLeft resolvedRight
+          { valueType = (.valueType) resolvedLeft,
+            loc = loc,
+            node = constructor evidence resolvedLeft resolvedRight
           }
 
     resolvePair left right
       | contextualLiteral left && not (contextualLiteral right) = do
           resolvedRight <- resolve right InferScalarType
-          resolvedLeft <- resolve left (ExpectScalarType (typedScalarType resolvedRight))
+          resolvedLeft <- resolve left (ExpectScalarType ((.valueType) resolvedRight))
           pure (resolvedLeft, resolvedRight)
       | contextualLiteral right && not (contextualLiteral left) = do
           resolvedLeft <- resolve left InferScalarType
-          resolvedRight <- resolve right (ExpectScalarType (typedScalarType resolvedLeft))
+          resolvedRight <- resolve right (ExpectScalarType ((.valueType) resolvedLeft))
           pure (resolvedLeft, resolvedRight)
       | otherwise = case (resolve left InferScalarType, resolve right InferScalarType) of
           (Right resolvedLeft, Right resolvedRight) -> Right (resolvedLeft, resolvedRight)
           (Left _, Right resolvedRight) -> do
-            resolvedLeft <- resolve left (ExpectScalarType (typedScalarType resolvedRight))
+            resolvedLeft <- resolve left (ExpectScalarType ((.valueType) resolvedRight))
             pure (resolvedLeft, resolvedRight)
           (Right resolvedLeft, Left _) -> do
-            resolvedRight <- resolve right (ExpectScalarType (typedScalarType resolvedLeft))
+            resolvedRight <- resolve right (ExpectScalarType ((.valueType) resolvedLeft))
             pure (resolvedLeft, resolvedRight)
           (Left leftErrors, Left rightErrors) -> Left (leftErrors <> rightErrors)
 
@@ -234,15 +234,15 @@ resolveScalarExpr environment expected expression =
       (_, Left errors) -> Left errors
 
     requireSameType left right
-      | typedScalarType left == typedScalarType right = Right ()
+      | (.valueType) left == (.valueType) right = Right ()
       | otherwise =
           failure
-            (typedScalarLoc right)
+            ((.loc) right)
             ScalarOperandTypeMismatch
             ( "expression operands have different scalar types '"
-                <> aggregateCanonicalName (typedScalarType left)
+                <> aggregateCanonicalName ((.valueType) left)
                 <> "' and '"
-                <> aggregateCanonicalName (typedScalarType right)
+                <> aggregateCanonicalName ((.valueType) right)
                 <> "'; numeric coercion is not supported"
             )
 
@@ -254,37 +254,37 @@ resolveScalarExpr environment expected expression =
             OpLe -> OrderingGuardUse
             OpGt -> OrderingGuardUse
             OpGe -> OrderingGuardUse
-       in case aggregateCapability useSite (typedScalarType operand) of
+       in case aggregateCapability useSite ((.valueType) operand) of
             SolverVisible -> Right ()
             OpaqueOnly -> unsupported useSite
             Unsupported -> unsupported useSite
       where
         unsupported useSite =
           failure
-            (typedScalarLoc operand)
+            ((.loc) operand)
             ScalarOperatorUnsupported
             ( renderUseSite useSite
                 <> " is unsupported for scalar type '"
-                <> aggregateCanonicalName (typedScalarType operand)
+                <> aggregateCanonicalName ((.valueType) operand)
                 <> "'"
             )
 
     checkExpected InferScalarType resolved = Right resolved
     checkExpected (ExpectScalarType wanted) resolved
-      | wanted == typedScalarType resolved = Right resolved
+      | wanted == (.valueType) resolved = Right resolved
       | wanted == AggregateBool =
           failure
-            (typedScalarLoc resolved)
+            ((.loc) resolved)
             ScalarBooleanOperandRequired
-            ("Boolean expression requires Bool, found '" <> aggregateCanonicalName (typedScalarType resolved) <> "'")
+            ("Boolean expression requires Bool, found '" <> aggregateCanonicalName ((.valueType) resolved) <> "'")
       | otherwise =
           failure
-            (typedScalarLoc resolved)
+            ((.loc) resolved)
             ScalarOperandTypeMismatch
             ( "expected scalar type '"
                 <> aggregateCanonicalName wanted
                 <> "', found '"
-                <> aggregateCanonicalName (typedScalarType resolved)
+                <> aggregateCanonicalName ((.valueType) resolved)
                 <> "'"
             )
 
@@ -292,14 +292,14 @@ resolveGuardExpr :: ExpressionEnvironment -> Expr -> Either (NonEmpty Expression
 resolveGuardExpr environment expression =
   case resolveScalarExpr environment (ExpectScalarType AggregateBool) expression of
     Left diagnostics
-      | all ((== ScalarBooleanOperandRequired) . expressionDiagnosticCode) (NE.toList diagnostics) ->
+      | all ((== ScalarBooleanOperandRequired) . (.code)) (NE.toList diagnostics) ->
           Left
             ( fmap
                 ( \diagnostic ->
-                    diagnostic
-                      { expressionDiagnosticCode = ScalarGuardBoolRequired,
-                        expressionDiagnosticMessage = "aggregate guard must resolve to Bool; " <> expressionDiagnosticMessage diagnostic
-                      }
+                    replaceExpressionDiagnostic
+                      ScalarGuardBoolRequired
+                      ("aggregate guard must resolve to Bool; " <> diagnostic.message)
+                      diagnostic
                 )
                 diagnostics
             )
@@ -307,39 +307,47 @@ resolveGuardExpr environment expression =
 
 resolveWriteExpr :: ExpressionEnvironment -> Name -> Expr -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
 resolveWriteExpr environment registerName expression =
-  case find ((== registerName) . regName) (aggRegs (environmentAggregate environment)) of
+  case find ((== registerName) . (.name)) ((.regs) ((.aggregate) environment)) of
     Nothing ->
       failure
         (exprLoc expression)
         ScalarWriteTargetUnknown
         ("write target '" <> registerName <> "' is not an aggregate register")
-    Just register -> case resolveAggregateType (environmentSymbols environment) (regLoc register) RegisterUse (regType register) of
+    Just register -> case resolveAggregateType ((.symbols) environment) ((.loc) register) RegisterUse ((.valueType) register) of
       Left _ -> Right unresolvedSentinel
       Right expected -> case resolveScalarExpr environment (ExpectScalarType expected) expression of
         Left diagnostics -> Left (fmap writeDiagnostic diagnostics)
         Right resolved
           | predicateValued resolved ->
               failure
-                (typedScalarLoc resolved)
+                ((.loc) resolved)
                 ScalarOperatorUnsupported
                 "comparison and Boolean operators are guard predicates and cannot be written as scalar terms"
           | otherwise -> Right resolved
         where
           writeDiagnostic diagnostic
-            | expressionDiagnosticCode diagnostic == ScalarOperandTypeMismatch =
-                diagnostic
-                  { expressionDiagnosticCode = ScalarWriteTypeMismatch,
-                    expressionDiagnosticMessage =
-                      "write to register '"
-                        <> registerName
-                        <> "' has the wrong scalar type; "
-                        <> expressionDiagnosticMessage diagnostic
-                  }
+            | (.code) diagnostic == ScalarOperandTypeMismatch =
+                replaceExpressionDiagnostic
+                  ScalarWriteTypeMismatch
+                  ( "write to register '"
+                      <> registerName
+                      <> "' has the wrong scalar type; "
+                      <> diagnostic.message
+                  )
+                  diagnostic
             | otherwise = diagnostic
   where
     -- The aggregate type validator reports the primary type error first. This
     -- value is never scaffolded because any error prevents generation.
     unresolvedSentinel = TypedScalarExpr AggregateBool noLoc (TypedLiteral (ScalarBoolValue False))
+
+replaceExpressionDiagnostic :: ExpressionDiagnosticCode -> Text -> ExpressionDiagnostic -> ExpressionDiagnostic
+replaceExpressionDiagnostic code message diagnostic =
+  ExpressionDiagnostic
+    { loc = diagnostic.loc,
+      code,
+      message
+    }
 
 resolvePath :: ExpressionEnvironment -> Loc -> ExprRoot -> [Name] -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
 resolvePath environment loc root path = case path of
@@ -364,15 +372,15 @@ resolveRoot environment loc root name = case root of
     (Nothing, Just value) -> Right (commandRoot value)
     (Nothing, Nothing) -> unknown
   where
-    aggregate = environmentAggregate environment
-    transition = environmentTransition environment
-    symbols = environmentSymbols environment
-    register = find ((== name) . regName) (aggRegs aggregate)
+    aggregate = (.aggregate) environment
+    transition = (.transition) environment
+    symbols = (.symbols) environment
+    register = find ((== name) . (.name)) ((.regs) aggregate)
     commandField = do
-      command <- find ((== tCommand transition) . cmdName) (aggCommands aggregate)
-      find ((== name) . aggregateFieldName) (cmdFields command)
+      matchedCommand <- find ((== (.command) transition) . (.name)) ((.commands) aggregate)
+      find ((== name) . (.name)) ((.fields) matchedCommand)
     registerRoot value =
-      ScalarRegisterRoot name (resolvedOrUnknown (resolveAggregateType symbols (regLoc value) RegisterUse (regType value)))
+      ScalarRegisterRoot name (resolvedOrUnknown (resolveAggregateType symbols ((.loc) value) RegisterUse ((.valueType) value)))
     commandRoot value =
       ScalarCommandRoot name (resolvedOrUnknown (inferAggregateFieldType symbols aggregate CommandFieldUse value))
     resolvedOrUnknown = either (const (AggregateMapped (MappedKey "<invalid>"))) id
@@ -383,7 +391,7 @@ resolveRoot environment loc root name = case root of
         ( "scalar root '"
             <> name
             <> "' resolves to no register or field of command '"
-            <> tCommand transition
+            <> (.command) transition
             <> "'; qualify enum values as Type.Constructor"
         )
 
@@ -396,21 +404,21 @@ resolveProjectionPath environment loc provenance fields = do
         loc
         ScalarPathInvalid
         ("cannot project fields through scalar type '" <> aggregateCanonicalName other <> "'")
-  graph <- maybe (failure loc ScalarPathUnsupported "mapped structural graph is unavailable") Right (environmentTypeGraph environment)
+  graph <- maybe (failure loc ScalarPathUnsupported "mapped structural graph is unavailable") Right ((.typeGraph) environment)
   (resolvedType, wireKeys) <- walk graph owner fields
   if scalarLeaf resolvedType
     then
       pure
         TypedScalarExpr
-          { typedScalarType = resolvedType,
-            typedScalarLoc = loc,
-            typedScalarNode =
+          { valueType = resolvedType,
+            loc = loc,
+            node =
               TypedProject
                 provenance
                 ResolvedScalarProjection
-                  { scalarProjectionOwner = owner,
-                    scalarProjectionPointer = T.concat ["/" <> escapePointer key | key <- wireKeys],
-                    scalarProjectionFields = fields
+                  { owner = owner,
+                    pointer = T.concat ["/" <> escapePointer key | key <- wireKeys],
+                    fields = fields
                   }
           }
     else
@@ -419,22 +427,22 @@ resolveProjectionPath environment loc provenance fields = do
         ScalarPathUnsupported
         ("path ends at unsupported non-scalar type '" <> aggregateCanonicalName resolvedType <> "'")
   where
-    walk graph ownerKey remaining = case Map.lookup ownerKey (tgDeclarations graph) of
+    walk graph ownerKey remaining = case Map.lookup ownerKey ((.declarations) graph) of
       Just (ResolvedStructural _ (RRecord _ _ recordFields)) -> selectField graph recordFields remaining
       Just ResolvedStructural {} -> failure loc ScalarPathUnsupported "scalar paths may cross required structural records only"
       Just ResolvedOpaque {} -> failure loc ScalarPathUnsupported "scalar paths cannot cross an opaque mapped declaration"
       Nothing -> failure loc ScalarPathInvalid ("unknown mapped path owner '" <> unMappedKey ownerKey <> "'")
 
     selectField _ _ [] = failure loc ScalarPathInvalid "scalar path is empty"
-    selectField graph recordFields (fieldName : rest) = case find ((== fieldName) . rwfHaskell) recordFields of
-      Nothing -> failure loc ScalarPathInvalid ("required structural field '" <> fieldName <> "' does not exist")
+    selectField graph recordFields (name : rest) = case find ((== name) . (.haskell)) recordFields of
+      Nothing -> failure loc ScalarPathInvalid ("required structural field '" <> name <> "' does not exist")
       Just field
-        | rwfPresence field /= PRequired -> failure loc ScalarPathUnsupported ("field '" <> fieldName <> "' is optional; scalar paths must be total")
-        | null rest -> (,[rwfKey field]) <$> resolvedLeaf (rwfType field)
-        | RRef nextOwner <- rwfType field -> do
+        | (.presence) field /= PRequired -> failure loc ScalarPathUnsupported ("field '" <> name <> "' is optional; scalar paths must be total")
+        | null rest -> (,[(.key) field]) <$> resolvedLeaf ((.valueType) field)
+        | RRef nextOwner <- (.valueType) field -> do
             (leafType, keys) <- walk graph nextOwner rest
-            pure (leafType, rwfKey field : keys)
-        | otherwise -> failure loc ScalarPathUnsupported ("field '" <> fieldName <> "' is not a required structural record")
+            pure (leafType, (.key) field : keys)
+        | otherwise -> failure loc ScalarPathUnsupported ("field '" <> name <> "' is not a required structural record")
 
     resolvedLeaf = \case
       RText -> Right AggregateText
@@ -482,17 +490,17 @@ resolveLiteral environment loc expected literal = case literal of
         (syntax <> " literal cannot inhabit scalar type '" <> aggregateCanonicalName other <> "'")
 
 resolveEnumLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> Name -> Name -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
-resolveEnumLiteral environment loc expected typeName constructor = case find ((== typeName) . enumName) (specEnums (environmentSpec environment)) of
+resolveEnumLiteral environment loc expected typeName constructor = case find ((== typeName) . (.name)) ((.enums) ((.spec) environment)) of
   Nothing -> failure loc ScalarLiteralInvalid ("unknown enum literal type '" <> typeName <> "'")
   Just declaration
-    | constructor `notElem` map fst (enumCtors declaration) ->
+    | constructor `notElem` map fst ((.ctors) declaration) ->
         failure loc ScalarLiteralInvalid ("enum '" <> typeName <> "' has no constructor '" <> constructor <> "'")
     | otherwise -> do
         resolved <- resolveDeclared typeName
         requireExpected resolved
         pure (literalExpr loc resolved (ScalarEnumValue typeName constructor))
   where
-    resolveDeclared name = case resolveAggregateType (environmentSymbols environment) loc WholeValueWriteUse (TRef name) of
+    resolveDeclared name = case resolveAggregateType ((.symbols) environment) loc WholeValueWriteUse (TRef name) of
       Left _ -> failure loc ScalarLiteralInvalid ("enum type '" <> name <> "' is not available at this aggregate use")
       Right resolved -> Right resolved
     requireExpected resolved = case expected of
@@ -502,15 +510,15 @@ resolveEnumLiteral environment loc expected typeName constructor = case find ((=
         | otherwise -> failure loc ScalarOperandTypeMismatch ("enum literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
 
 resolveIdLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> Name -> Text -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
-resolveIdLiteral environment loc expected typeName value = case find ((== typeName) . idName) (specIds (environmentSpec environment)) of
+resolveIdLiteral environment loc expected typeName value = case find ((== typeName) . (.name)) ((.ids) ((.spec) environment)) of
   Nothing -> failure loc ScalarLiteralInvalid ("unknown ID literal type '" <> typeName <> "'")
   Just declaration -> case TypeID.parseText value of
     Left parseError -> failure loc ScalarLiteralInvalid ("invalid " <> typeName <> " literal: " <> T.pack (show parseError))
     Right parsed
-      | TypeID.getPrefix parsed /= idPrefix declaration ->
-          failure loc ScalarLiteralInvalid ("ID literal prefix must be '" <> idPrefix declaration <> "'")
+      | TypeID.getPrefix parsed /= (.prefix) declaration ->
+          failure loc ScalarLiteralInvalid ("ID literal prefix must be '" <> (.prefix) declaration <> "'")
       | otherwise -> do
-          resolved <- case resolveAggregateType (environmentSymbols environment) loc WholeValueWriteUse (TRef typeName) of
+          resolved <- case resolveAggregateType ((.symbols) environment) loc WholeValueWriteUse (TRef typeName) of
             Left _ -> failure loc ScalarLiteralInvalid ("ID type '" <> typeName <> "' is not available at this aggregate use")
             Right valueType -> Right valueType
           case expected of
@@ -555,7 +563,7 @@ scalarLeaf = \case
   AggregateMapped {} -> False
 
 predicateValued :: TypedScalarExpr -> Bool
-predicateValued expression = case typedScalarNode expression of
+predicateValued expression = case (.node) expression of
   TypedEqual {} -> True
   TypedNotEqual {} -> True
   TypedCompare {} -> True
@@ -599,9 +607,9 @@ failure :: Loc -> ExpressionDiagnosticCode -> Text -> Either (NonEmpty Expressio
 failure loc diagnosticCode diagnosticMessage =
   Left
     ( ExpressionDiagnostic
-        { expressionDiagnosticLoc = loc,
-          expressionDiagnosticCode = diagnosticCode,
-          expressionDiagnosticMessage = diagnosticMessage
+        { loc = loc,
+          code = diagnosticCode,
+          message = diagnosticMessage
         }
         :| []
     )

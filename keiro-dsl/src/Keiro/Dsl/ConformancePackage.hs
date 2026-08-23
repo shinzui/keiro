@@ -55,19 +55,19 @@ data ConformanceServiceKey
   deriving stock (Eq, Ord, Show)
 
 data ConformanceFile = ConformanceFile
-  { conformanceFilePath :: !FilePath,
-    conformanceFileText :: !Text,
-    conformanceFileKind :: !ModuleKind
+  { path :: !FilePath,
+    text :: !Text,
+    kind :: !ModuleKind
   }
   deriving stock (Eq, Show)
 
 data ConformancePackagePlan = ConformancePackagePlan
-  { cppServiceKey :: !ConformanceServiceKey,
-    cppDirectory :: !FilePath,
-    cppPackageName :: !Text,
-    cppRuntimePackage :: !RuntimePackageName,
-    cppFacadeModule :: !Text,
-    cppFiles :: ![ConformanceFile]
+  { serviceKey :: !ConformanceServiceKey,
+    directory :: !FilePath,
+    packageName :: !Text,
+    runtimePackage :: !RuntimePackageName,
+    facadeModule :: !Text,
+    files :: ![ConformanceFile]
   }
   deriving stock (Eq, Show)
 
@@ -75,8 +75,8 @@ data ConformanceFactSide = ExpectedFact | ActualFact
   deriving stock (Eq, Ord, Show)
 
 data DuplicateFactKey = DuplicateFactKey
-  { duplicateFactSide :: !ConformanceFactSide,
-    duplicateFactKey :: !String
+  { side :: !ConformanceFactSide,
+    key :: !String
   }
   deriving stock (Eq, Ord, Show)
 
@@ -98,11 +98,11 @@ data ConformancePackageFailure
   deriving stock (Eq, Show)
 
 data ConformancePackageRecord = ConformancePackageRecord
-  { cprSchema :: !Int,
-    cprServiceKey :: !ConformanceServiceKey,
-    cprRuntimePackage :: !RuntimePackageName,
-    cprFacadeModule :: !Text,
-    cprFiles :: ![(ModuleKind, FilePath)]
+  { schema :: !Int,
+    serviceKey :: !ConformanceServiceKey,
+    runtimePackage :: !RuntimePackageName,
+    facadeModule :: !Text,
+    files :: ![(ModuleKind, FilePath)]
   }
   deriving stock (Eq, Show)
 
@@ -110,24 +110,24 @@ data ConformanceWriteDisposition = ConformanceCreated | ConformanceOverwritten |
   deriving stock (Eq, Show)
 
 data ConformanceStaleFile = ConformanceStaleFile
-  { conformanceStaleKind :: !ModuleKind,
-    conformanceStalePath :: !FilePath,
-    conformanceStaleBannerPresent :: !(Maybe Bool)
+  { kind :: !ModuleKind,
+    path :: !FilePath,
+    bannerPresent :: !(Maybe Bool)
   }
   deriving stock (Eq, Show)
 
 data PreparedConformancePackage = PreparedConformancePackage
-  { preparedRoot :: !FilePath,
-    preparedPlan :: !ConformancePackagePlan,
-    preparedStale :: ![ConformanceStaleFile]
+  { root :: !FilePath,
+    plan :: !ConformancePackagePlan,
+    stale :: ![ConformanceStaleFile]
   }
   deriving stock (Eq, Show)
 
 data ConformancePackageReport = ConformancePackageReport
-  { conformanceReportRoot :: !FilePath,
-    conformanceReportPlan :: !ConformancePackagePlan,
-    conformanceReportDispositions :: ![(ConformanceFile, ConformanceWriteDisposition)],
-    conformanceReportStale :: ![ConformanceStaleFile]
+  { root :: !FilePath,
+    plan :: !ConformancePackagePlan,
+    dispositions :: ![(ConformanceFile, ConformanceWriteDisposition)],
+    stale :: ![ConformanceStaleFile]
   }
   deriving stock (Eq, Show)
 
@@ -171,32 +171,32 @@ planConformancePackage serviceKey runtimePackage facadeModule service
         ConformanceFile "src/Main.hs" (renderMain banner facadeModule) Generated,
         ConformanceFile "src/KeiroConformance/Expectations.hs" (renderExpectations factValues) HoleStub
       ]
-    recordRows = [(conformanceFileKind file, conformanceFilePath file) | file <- baseFiles] <> [(Generated, conformanceRecordFileName)]
+    recordRows = [((.kind) file, (.path) file) | file <- baseFiles] <> [(Generated, conformanceRecordFileName)]
     record =
       ConformancePackageRecord
-        { cprSchema = 1,
-          cprServiceKey = serviceKey,
-          cprRuntimePackage = runtimePackage,
-          cprFacadeModule = facadeModule,
-          cprFiles = recordRows
+        { schema = 1,
+          serviceKey = serviceKey,
+          runtimePackage = runtimePackage,
+          facadeModule = facadeModule,
+          files = recordRows
         }
     recordFile = ConformanceFile conformanceRecordFileName (banner <> "\n" <> renderConformancePackageRecord record) Generated
     files = baseFiles <> [recordFile]
-    paths = packageDirectory : map conformanceFilePath files
+    paths = packageDirectory : map (.path) files
     unsafePaths = filter (not . safeRelativePath) paths
     collisions =
       [ entries
-      | entries <- Map.elems (Map.fromListWith (<>) [(T.toCaseFold (T.pack path), [path]) | path <- map conformanceFilePath files]),
+      | entries <- Map.elems (Map.fromListWith (<>) [(T.toCaseFold (T.pack path), [path]) | path <- map (.path) files]),
         length entries > 1
       ]
     plan =
       ConformancePackagePlan
-        { cppServiceKey = serviceKey,
-          cppDirectory = packageDirectory,
-          cppPackageName = packageName,
-          cppRuntimePackage = runtimePackage,
-          cppFacadeModule = facadeModule,
-          cppFiles = files
+        { serviceKey = serviceKey,
+          directory = packageDirectory,
+          packageName = packageName,
+          runtimePackage = runtimePackage,
+          facadeModule = facadeModule,
+          files = files
         }
 
 renderCabal :: Text -> Text -> RuntimePackageName -> Text -> Text
@@ -218,7 +218,7 @@ renderCabal banner packageName runtimePackage serviceName =
       "  ghc-options: -Wall",
       "  build-depends:",
       "      base >=4.18 && <5",
-      "    , " <> unRuntimePackageName runtimePackage,
+      "    , " <> (.unRuntimePackageName) runtimePackage,
       "  default-language: GHC2024",
       "  default-extensions: OverloadedStrings"
     ]
@@ -320,11 +320,11 @@ renderConformancePackageRecord :: ConformancePackageRecord -> Text
 renderConformancePackageRecord record =
   T.unlines $
     [ conformanceLedgerHeader,
-      "service-key " <> renderServiceKey (cprServiceKey record),
-      "runtime-package " <> unRuntimePackageName (cprRuntimePackage record),
-      "facade-module " <> cprFacadeModule record
+      "service-key " <> renderServiceKey ((.serviceKey) record),
+      "runtime-package " <> (.unRuntimePackageName) ((.runtimePackage) record),
+      "facade-module " <> (.facadeModule) record
     ]
-      <> ["file " <> encodeConformanceFileRow (ConformanceFileRow fileKind path) | (fileKind, path) <- cprFiles record]
+      <> ["file " <> encodeConformanceFileRow (ConformanceFileRow fileKind path) | (fileKind, path) <- (.files) record]
 
 parseConformancePackageRecord :: Text -> Maybe ConformancePackageRecord
 parseConformancePackageRecord input = case meaningfulLines input of
@@ -337,16 +337,16 @@ parseConformancePackageRecord input = case meaningfulLines input of
       runtimePackage <- exactlyOne [value | row <- rows, Just raw <- [T.stripPrefix "runtime-package " row], Right value <- [mkRuntimePackageName raw]]
       facadeModule <- exactlyOne [value | row <- rows, Just value <- [T.stripPrefix "facade-module " row], not (T.null value), T.all (not . (`elem` [' ', '\t'])) value]
       fileRows <- traverse decodeConformanceFileRow [row | row <- rows, "file " `T.isPrefixOf` row]
-      let files = [(conformanceRowKind row, conformanceRowPath row) | row <- fileRows]
+      let files = [((.kind) row, (.path) row) | row <- fileRows]
       if safeServiceKey serviceKey && safeConformanceFiles files
         then
           Just
             ConformancePackageRecord
-              { cprSchema = 1,
-                cprServiceKey = serviceKey,
-                cprRuntimePackage = runtimePackage,
-                cprFacadeModule = facadeModule,
-                cprFiles = files
+              { schema = 1,
+                serviceKey = serviceKey,
+                runtimePackage = runtimePackage,
+                facadeModule = facadeModule,
+                files = files
               }
         else Nothing
 
@@ -365,11 +365,11 @@ parseLegacyConformancePackageRecord input = do
     then
       Just
         ConformancePackageRecord
-          { cprSchema = schema,
-            cprServiceKey = serviceKey,
-            cprRuntimePackage = runtimePackage,
-            cprFacadeModule = facadeModule,
-            cprFiles = files
+          { schema = schema,
+            serviceKey = serviceKey,
+            runtimePackage = runtimePackage,
+            facadeModule = facadeModule,
+            files = files
           }
     else Nothing
   where
@@ -385,15 +385,15 @@ conformanceLedgerHeader :: Text
 conformanceLedgerHeader = "keiro-dsl conformance ledger v1"
 
 data ConformanceFileRow = ConformanceFileRow
-  { conformanceRowKind :: !ModuleKind,
-    conformanceRowPath :: !FilePath
+  { kind :: !ModuleKind,
+    path :: !FilePath
   }
 
 instance ToJSON ConformanceFileRow where
   toJSON row =
     object
-      [ "kind" .= case conformanceRowKind row of Generated -> "generated" :: Text; HoleStub -> "create-once",
-        "path" .= T.pack (conformanceRowPath row)
+      [ "kind" .= case (.kind) row of Generated -> "generated" :: Text; HoleStub -> "create-once",
+        "path" .= T.pack ((.path) row)
       ]
 
 instance FromJSON ConformanceFileRow where
@@ -438,16 +438,16 @@ safeConformanceFiles files =
 
 preflightConformancePackage :: FilePath -> Bool -> ConformancePackagePlan -> IO (Either [ConformancePackageFailure] PreparedConformancePackage)
 preflightConformancePackage out forceGeneratedOverwrite plan = do
-  bannerless <- if forceGeneratedOverwrite then pure [] else missingPackageBanners root (cppFiles plan)
+  bannerless <- if forceGeneratedOverwrite then pure [] else missingPackageBanners root ((.files) plan)
   previousResult <- readPreviousRecord root forceGeneratedOverwrite bannerless plan
-  case [ConformanceGeneratedBannerMissing (map (cppDirectory plan </>) bannerless) | not (null bannerless)] <> either id (const []) previousResult of
+  case [ConformanceGeneratedBannerMissing (map ((.directory) plan </>) bannerless) | not (null bannerless)] <> either id (const []) previousResult of
     failures@(_ : _) -> pure (Left failures)
     [] -> do
       let previous = either (const Nothing) id previousResult
-      stale <- maybe (pure []) (stalePackageFiles root (map conformanceFilePath (cppFiles plan))) previous
-      pure (Right PreparedConformancePackage {preparedRoot = root, preparedPlan = plan, preparedStale = stale})
+      stale <- maybe (pure []) (stalePackageFiles root (map (.path) ((.files) plan))) previous
+      pure (Right PreparedConformancePackage {root = root, plan = plan, stale = stale})
   where
-    root = out </> cppDirectory plan
+    root = out </> (.directory) plan
 
 readPreviousRecord :: FilePath -> Bool -> [FilePath] -> ConformancePackagePlan -> IO (Either [ConformancePackageFailure] (Maybe ConformancePackageRecord))
 readPreviousRecord root forceGeneratedOverwrite bannerless plan = do
@@ -458,22 +458,22 @@ readPreviousRecord root forceGeneratedOverwrite bannerless plan = do
     else do
       parsed <- parseConformancePackageRecord <$> TIO.readFile path
       pure $ case parsed of
-        Nothing -> Left [InvalidConformancePackageRecord (cppDirectory plan </> conformanceRecordFileName)]
+        Nothing -> Left [InvalidConformancePackageRecord ((.directory) plan </> conformanceRecordFileName)]
         Just record
-          | cprServiceKey record == cppServiceKey plan -> Right (Just record)
-          | otherwise -> Left [ConformancePackageRecordMismatch (cppDirectory plan </> conformanceRecordFileName)]
+          | (.serviceKey) record == (.serviceKey) plan -> Right (Just record)
+          | otherwise -> Left [ConformancePackageRecordMismatch ((.directory) plan </> conformanceRecordFileName)]
 
 missingPackageBanners :: FilePath -> [ConformanceFile] -> IO [FilePath]
 missingPackageBanners root files = fmap concat . forM generated $ \file -> do
-  let path = root </> conformanceFilePath file
+  let path = root </> (.path) file
   exists <- doesFileExist path
   if not exists
     then pure []
     else do
       contents <- TIO.readFile path
-      pure [conformanceFilePath file | not (any isGeneratedBannerLine (T.lines contents))]
+      pure [(.path) file | not (any isGeneratedBannerLine (T.lines contents))]
   where
-    generated = [file | file <- files, conformanceFileKind file == Generated]
+    generated = [file | file <- files, (.kind) file == Generated]
 
 stalePackageFiles :: FilePath -> [FilePath] -> ConformancePackageRecord -> IO [ConformanceStaleFile]
 stalePackageFiles root current record = fmap concat . forM removed $ \(fileKind, path) -> do
@@ -489,40 +489,40 @@ stalePackageFiles root current record = fmap concat . forM removed $ \(fileKind,
       pure [ConformanceStaleFile fileKind path evidence]
   where
     currentSet = Set.fromList current
-    removed = [(fileKind, path) | (fileKind, path) <- cprFiles record, path `Set.notMember` currentSet]
+    removed = [(fileKind, path) | (fileKind, path) <- (.files) record, path `Set.notMember` currentSet]
 
 executePreparedConformancePackage :: PreparedConformancePackage -> IO ConformancePackageReport
 executePreparedConformancePackage prepared = do
-  dispositions <- traverse (writeConformanceFile (preparedRoot prepared)) (cppFiles plan)
+  dispositions <- traverse (writeConformanceFile ((.root) prepared)) ((.files) plan)
   pure
     ConformancePackageReport
-      { conformanceReportRoot = preparedRoot prepared,
-        conformanceReportPlan = plan,
-        conformanceReportDispositions = dispositions,
-        conformanceReportStale = preparedStale prepared
+      { root = (.root) prepared,
+        plan = plan,
+        dispositions = dispositions,
+        stale = (.stale) prepared
       }
   where
-    plan = preparedPlan prepared
+    plan = (.plan) prepared
 
 writeConformanceFile :: FilePath -> ConformanceFile -> IO (ConformanceFile, ConformanceWriteDisposition)
 writeConformanceFile root file = do
-  let path = root </> conformanceFilePath file
+  let path = root </> (.path) file
   exists <- doesFileExist path
-  case conformanceFileKind file of
+  case (.kind) file of
     HoleStub
       | exists -> pure (file, ConformanceSkipped)
       | otherwise -> write path ConformanceCreated
     Generated
       | exists -> do
           existing <- TIO.readFile path
-          if existing == conformanceFileText file
+          if existing == (.text) file
             then pure (file, ConformanceUnchanged)
             else write path ConformanceOverwritten
       | otherwise -> write path ConformanceCreated
   where
     write path disposition = do
       createDirectoryIfMissing True (takeDirectory path)
-      TIO.writeFile path (conformanceFileText file)
+      TIO.writeFile path ((.text) file)
       pure (file, disposition)
 
 compareConformanceFacts :: [(String, String)] -> [(String, String)] -> Either [DuplicateFactKey] [ConformanceFactResult]
@@ -556,7 +556,7 @@ renderConformancePackageFailure = \case
   ConformancePathCollision paths -> ["error: conformance package path collision -- refusing to scaffold; nothing was written"] <> map ("  " <>) (map T.pack paths)
   PackageDuplicateFactKeys duplicates ->
     ["error: duplicate conformance fact keys -- refusing to scaffold; nothing was written"]
-      <> ["  " <> sideLabel (duplicateFactSide duplicate) <> "/" <> T.pack (duplicateFactKey duplicate) | duplicate <- duplicates]
+      <> ["  " <> sideLabel ((.side) duplicate) <> "/" <> T.pack ((.key) duplicate) | duplicate <- duplicates]
   ConformanceGeneratedBannerMissing paths ->
     ["error: refusing to overwrite generated conformance package files without a recognized '-- @generated' banner"]
       <> map ("  " <>) (map T.pack paths)
@@ -570,33 +570,33 @@ renderConformancePackageFailure = \case
 renderConformancePackageReport :: ConformancePackageReport -> [Text]
 renderConformancePackageReport report =
   [ "conformance-package: " <> T.pack cabalPath,
-    "conformance-target: cabal test " <> cppPackageName plan
+    "conformance-target: cabal test " <> (.packageName) plan
   ]
-    <> [ "conformance-file: " <> T.pack (root </> conformanceFilePath file) <> " " <> dispositionTag disposition
+    <> [ "conformance-file: " <> T.pack (root </> (.path) file) <> " " <> dispositionTag disposition
        | (file, disposition) <- dispositions,
-         conformanceFileKind file == Generated,
-         conformanceFilePath file /= conformanceRecordFileName
+         (.kind) file == Generated,
+         (.path) file /= conformanceRecordFileName
        ]
-    <> ["expectations: " <> T.pack (root </> conformanceFilePath file) <> " " <> dispositionTag disposition | (file, disposition) <- dispositions, conformanceFileKind file == HoleStub]
-    <> ["conformance-record: " <> T.pack (root </> conformanceRecordFileName) <> " " <> dispositionTag disposition | (file, disposition) <- dispositions, conformanceFilePath file == conformanceRecordFileName]
+    <> ["expectations: " <> T.pack (root </> (.path) file) <> " " <> dispositionTag disposition | (file, disposition) <- dispositions, (.kind) file == HoleStub]
+    <> ["conformance-record: " <> T.pack (root </> conformanceRecordFileName) <> " " <> dispositionTag disposition | (file, disposition) <- dispositions, (.path) file == conformanceRecordFileName]
     <> staleLines
   where
-    plan = conformanceReportPlan report
-    root = conformanceReportRoot report
-    dispositions = conformanceReportDispositions report
-    cabalPath = root </> T.unpack (cppPackageName plan) <> ".cabal"
+    plan = (.plan) report
+    root = (.root) report
+    dispositions = (.dispositions) report
+    cabalPath = root </> T.unpack ((.packageName) plan) <> ".cabal"
     dispositionTag ConformanceCreated = "(created)"
     dispositionTag ConformanceOverwritten = "(overwritten)"
     dispositionTag ConformanceSkipped = "(skipped: already present)"
     dispositionTag ConformanceUnchanged = "(unchanged)"
-    staleLines = case conformanceReportStale report of
+    staleLines = case (.stale) report of
       [] -> []
       stale ->
         ["conformance-stale: " <> tshow (length stale) <> " file(s) are no longer produced; keiro-dsl never deletes files."]
-          <> ["  " <> staleKindLabel (conformanceStaleKind file) <> " " <> T.pack (root </> conformanceStalePath file) <> staleEvidence file | file <- stale]
+          <> ["  " <> staleKindLabel ((.kind) file) <> " " <> T.pack (root </> (.path) file) <> staleEvidence file | file <- stale]
     staleKindLabel Generated = "generated"
     staleKindLabel HoleStub = "create-once"
-    staleEvidence file = case conformanceStaleBannerPresent file of
+    staleEvidence file = case (.bannerPresent) file of
       Nothing -> " (hand-owned; preserve and review)"
       Just True -> " (recognized generated banner present; review before deleting)"
       Just False -> " (generated banner missing; preserve and review)"

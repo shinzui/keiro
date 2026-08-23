@@ -26,7 +26,7 @@ pProjectionTarget context = do
   reset <- symbol "reset" *> symbol "=" *> pReset
   dependsOn <- option [] (try (symbol "depends-on" *> symbol "=" *> brackets (many ident)))
   _ <- symbol "}"
-  pure ProjectionTargetNode {ptName = name, ptSchema = schema, ptTable = table, ptReset = reset, ptDependsOn = dependsOn, ptLoc = loc}
+  pure ProjectionTargetNode {name = name, schema = schema, table = table, reset = reset, dependsOn = dependsOn, loc = loc}
   where
     pReset = choice [TargetClear <$ keyword "clear", TargetPreserve <$ keyword "preserve"]
 
@@ -40,7 +40,7 @@ pRebuildGroup context = do
   targets <- symbol "targets" *> symbol "=" *> brackets (many ident)
   order <- symbol "order" *> symbol "=" *> brackets (many ident)
   _ <- symbol "}"
-  pure RebuildGroupNode {rgName = name, rgTargets = targets, rgOrder = order, rgLoc = loc}
+  pure RebuildGroupNode {name = name, targets = targets, order = order, loc = loc}
 
 pProjectionRevision :: FrontendContext -> P ProjectionRevisionNode
 pProjectionRevision context = do
@@ -52,7 +52,7 @@ pProjectionRevision context = do
   group <- symbol "group" *> symbol "=" *> ident
   revisionTargets <- many pRevisionTarget
   _ <- symbol "}"
-  pure ProjectionRevisionNode {prvName = name, prvGroup = group, prvTargets = revisionTargets, prvLoc = loc}
+  pure ProjectionRevisionNode {name = name, group = group, targets = revisionTargets, loc = loc}
   where
     pRevisionTarget = do
       _ <- keyword "target"
@@ -68,14 +68,14 @@ pProjectionRevision context = do
       _ <- symbol "}"
       pure
         RevisionTargetNode
-          { prtTarget = targetName,
-            prtSchemaVersion = schemaVersion,
-            prtProvisioner = provisioner,
-            prtProvisionerVersion = provisionerVersion,
-            prtExpectedShape = expectedShape,
-            prtValidator = validator,
-            prtValidatorVersion = validatorVersion,
-            prtPromotionObjects = promotionObjects
+          { target = targetName,
+            schemaVersion = schemaVersion,
+            provisioner = provisioner,
+            provisionerVersion = provisionerVersion,
+            expectedShape = expectedShape,
+            validator = validator,
+            validatorVersion = validatorVersion,
+            promotionObjects = promotionObjects
           }
     pPromotionObject = do
       _ <- keyword "promotion"
@@ -106,14 +106,14 @@ pExternalRead context = do
   _ <- symbol "}"
   pure
     ExternalReadNode
-      { erName = name,
-        erVersion = version,
-        erQueryModel = queryModel,
-        erResultSchema = resultSchema,
-        erResultType = resultType,
-        erCompatibleRevisions = compatibleRevisions,
-        erSurfaceGeneration = surfaceGeneration,
-        erLoc = loc
+      { name = name,
+        version = version,
+        queryModel = queryModel,
+        resultSchema = resultSchema,
+        resultType = resultType,
+        compatibleRevisions = compatibleRevisions,
+        surfaceGeneration = surfaceGeneration,
+        loc = loc
       }
 
 pProjectionOwner :: FrontendContext -> P ProjectionOwnerNode
@@ -135,17 +135,17 @@ pProjectionOwner context = do
   _ <- symbol "}"
   pure
     ProjectionOwnerNode
-      { poName = name,
-        poSources = sources,
-        poDelivery = delivery,
-        poGroup = group,
-        poTargets = targets,
-        poOrder = ownerOrder,
-        poSubscription = subscription,
-        poDedup = dedup,
-        poCheckpointOnMissing = checkpointOnMissing,
-        poReplay = replay,
-        poLoc = loc
+      { name = name,
+        sources = sources,
+        delivery = delivery,
+        group = group,
+        targets = targets,
+        order = ownerOrder,
+        subscription = subscription,
+        dedup = dedup,
+        checkpointOnMissing = checkpointOnMissing,
+        replay = replay,
+        loc = loc
       }
   where
     pSource = symbol "source" *> symbol "=" *> choice [CatalogAggregate <$> (keyword "aggregate" *> ident), CatalogCategory <$> (keyword "category" *> stringLit), CatalogAll <$ keyword "all"]

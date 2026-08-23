@@ -20,10 +20,9 @@ module Keiro.Dsl.AggregateType
     aggregateCapability,
     aggregateCanonicalName,
     typeExprCanonicalName,
-    AggregateHaskellSource,
+    AggregateHaskellSource (..),
     aggregateConsumerHaskellSource,
     aggregateSourceReferences,
-    aggregateSourceStaticImports,
     renderAggregateHaskellSource,
     aggregatePackages,
     aggregateSampleHaskell,
@@ -82,9 +81,9 @@ data ResolvedAggregateType
   deriving stock (Eq, Ord, Show)
 
 data AggregateSymbols = AggregateSymbols
-  { symbolNominals :: !(Map Name ResolvedNominalType),
-    symbolVertices :: !(Map Name [Name]),
-    symbolMapped :: !(Map MappedKey ResolvedMappedDecl)
+  { nominals :: !(Map Name ResolvedNominalType),
+    vertices :: !(Map Name [Name]),
+    mapped :: !(Map MappedKey ResolvedMappedDecl)
   }
 
 aggregateSymbols :: Spec -> AggregateSymbols
@@ -92,22 +91,22 @@ aggregateSymbols spec =
   aggregateSymbolsFromGraphResult (resolveTypeGraph spec) spec
 
 aggregateSymbolsFromGraph :: TypeGraph -> Spec -> AggregateSymbols
-aggregateSymbolsFromGraph graph = aggregateSymbolsFromDeclarations (tgDeclarations graph)
+aggregateSymbolsFromGraph graph = aggregateSymbolsFromDeclarations ((.declarations) graph)
 
 aggregateSymbolsFromGraphResult :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> AggregateSymbols
 aggregateSymbolsFromGraphResult graphResult =
-  aggregateSymbolsFromDeclarations (either (const Map.empty) tgDeclarations graphResult)
+  aggregateSymbolsFromDeclarations (either (const Map.empty) (.declarations) graphResult)
 
 aggregateSymbolsFromDeclarations :: Map MappedKey ResolvedMappedDecl -> Spec -> AggregateSymbols
 aggregateSymbolsFromDeclarations mappedDeclarations spec =
   AggregateSymbols
-    { symbolNominals = either (const Map.empty) nominalTypes (resolveNominalTypes spec),
-      symbolVertices =
+    { nominals = either (const Map.empty) (.nominalTypes) (resolveNominalTypes spec),
+      vertices =
         Map.fromList
-          [ (aggName aggregate <> "Vertex", map stName (aggStates aggregate))
-          | NAggregate aggregate <- specNodes spec
+          [ ((.name) aggregate <> "Vertex", map (.name) ((.states) aggregate))
+          | NAggregate aggregate <- (.nodes) spec
           ],
-      symbolMapped = mappedDeclarations
+      mapped = mappedDeclarations
     }
 
 data AggregateTypeErrorReason
@@ -118,9 +117,9 @@ data AggregateTypeErrorReason
   deriving stock (Eq, Show)
 
 data AggregateTypeError = AggregateTypeError
-  { aggregateTypeErrorLoc :: !Loc,
-    aggregateTypeErrorUseSite :: !AggregateUseSite,
-    aggregateTypeErrorReason :: !AggregateTypeErrorReason
+  { loc :: !Loc,
+    useSite :: !AggregateUseSite,
+    reason :: !AggregateTypeErrorReason
   }
   deriving stock (Eq, Show)
 
@@ -138,9 +137,9 @@ resolveAggregateType symbols loc useSite expression = do
     TList {} -> unsupportedShape
     TMap {} -> unsupportedShape
     TRef name
-      | Just nominal <- Map.lookup name (symbolNominals symbols) -> pure (AggregateNominal nominal)
-      | Map.member name (symbolVertices symbols) -> pure (AggregateVertex name)
-      | Map.member (MappedKey name) (symbolMapped symbols) -> pure (AggregateMapped (MappedKey name))
+      | Just nominal <- Map.lookup name ((.nominals) symbols) -> pure (AggregateNominal nominal)
+      | Map.member name ((.vertices) symbols) -> pure (AggregateVertex name)
+      | Map.member (MappedKey name) ((.mapped) symbols) -> pure (AggregateMapped (MappedKey name))
       | otherwise -> Left (AggregateTypeError loc useSite (UnknownAggregateType name))
   case aggregateCapability useSite resolved of
     Unsupported -> Left (AggregateTypeError loc useSite (UnsupportedAggregateCapability resolved))
@@ -151,17 +150,17 @@ resolveAggregateType symbols loc useSite expression = do
 
 inferAggregateFieldType :: AggregateSymbols -> Aggregate -> AggregateUseSite -> AggregateField -> Either AggregateTypeError ResolvedAggregateType
 inferAggregateFieldType symbols aggregate useSite field =
-  resolveAggregateType symbols (aggregateFieldLoc field) useSite inferred
+  resolveAggregateType symbols ((.loc) field) useSite inferred
   where
-    inferred = case aggregateFieldType field of
+    inferred = case (.valueType) field of
       Just expression -> expression
-      Nothing -> case [regType register | register <- aggRegs aggregate, regName register == aggregateFieldName field] of
+      Nothing -> case [(.valueType) register | register <- (.regs) aggregate, (.name) register == (.name) field] of
         expression : _ -> expression
         [] ->
-          let candidate = pascal (aggregateFieldName field)
-           in if Map.member candidate (symbolNominals symbols)
-                || Map.member candidate (symbolVertices symbols)
-                || Map.member (MappedKey candidate) (symbolMapped symbols)
+          let candidate = pascal ((.name) field)
+           in if Map.member candidate ((.nominals) symbols)
+                || Map.member candidate ((.vertices) symbols)
+                || Map.member (MappedKey candidate) ((.mapped) symbols)
                 then TRef candidate
                 else TText
 
@@ -169,7 +168,7 @@ aggregateCapability :: AggregateUseSite -> ResolvedAggregateType -> AggregateCap
 aggregateCapability useSite resolved = case useSite of
   EqualityGuardUse -> case resolved of
     AggregateMapped {} -> Unsupported
-    AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+    AggregateNominal nominal -> case (.representation) nominal of
       ScalarRepresentation {} -> SolverVisible
       IdRepresentation {} -> SolverVisible
       EnumRepresentation {} -> SolverVisible
@@ -206,13 +205,13 @@ solverVisibility resolved = case resolved of
   AggregateMapped {} -> OpaqueOnly
 
 nominalSolverVisibility :: ResolvedNominalType -> AggregateCapability
-nominalSolverVisibility nominal = case resolvedNominalRepresentation nominal of
+nominalSolverVisibility nominal = case (.representation) nominal of
   ScalarRepresentation {} -> SolverVisible
   IdRepresentation {} -> OpaqueOnly
   EnumRepresentation {} -> OpaqueOnly
 
 nominalOrderingCapability :: ResolvedNominalType -> AggregateCapability
-nominalOrderingCapability nominal = case resolvedNominalRepresentation nominal of
+nominalOrderingCapability nominal = case (.representation) nominal of
   ScalarRepresentation NominalInt -> SolverVisible
   ScalarRepresentation NominalNatural -> SolverVisible
   ScalarRepresentation NominalTime -> SolverVisible
@@ -229,7 +228,7 @@ aggregateCanonicalName resolved = case resolved of
   AggregateBool -> "Bool"
   AggregateTime -> "Time"
   AggregateNatural -> "Natural"
-  AggregateNominal nominal -> resolvedNominalName nominal
+  AggregateNominal nominal -> (.name) nominal
   AggregateVertex name -> name
   AggregateMapped key -> unMappedKey key
 
@@ -248,19 +247,19 @@ typeExprCanonicalName expression = case expression of
   TRef name -> name
 
 data AggregateHaskellSource = AggregateHaskellSource
-  { aggregateSourceBuiltin :: !(Maybe Text),
-    aggregateSourceReference :: !(Maybe HaskellReference),
-    aggregateSourceStaticImports :: !(Set Text)
+  { builtin :: !(Maybe Text),
+    reference :: !(Maybe HaskellReference),
+    staticImports :: !(Set Text)
   }
 
 aggregateConsumerHaskellSource :: AggregateSymbols -> ResolvedAggregateType -> AggregateHaskellSource
 aggregateConsumerHaskellSource symbols resolved = case resolved of
   AggregateTime -> builtin "UTCTime" timeImports
   AggregateNatural -> builtin "Natural" (Set.singleton "Numeric.Natural (Natural)")
-  AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-    GeneratedNominal -> builtin (resolvedNominalName nominal) Set.empty
-    ConsumerNominal binding -> external (consumerNominalHaskell binding)
-  AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
+  AggregateNominal nominal -> case (.ownership) nominal of
+    GeneratedNominal -> builtin ((.name) nominal) Set.empty
+    ConsumerNominal binding -> external ((.haskell) binding)
+  AggregateMapped key -> case Map.lookup key ((.mapped) symbols) of
     Just declaration -> external (mappedHaskell declaration)
     Nothing -> builtin (unMappedKey key) Set.empty
   _ -> builtin (aggregateCanonicalName resolved) Set.empty
@@ -269,18 +268,18 @@ aggregateConsumerHaskellSource symbols resolved = case resolved of
     external source =
       AggregateHaskellSource
         Nothing
-        (Just (HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified))
+        (Just (HaskellReference ((.moduleName) source) ((.valueType) source) TypeNamespace PreferUnqualified))
         Set.empty
-    mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
-    mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
+    mappedHaskell (ResolvedStructural declaration _) = (.haskell) declaration
+    mappedHaskell (ResolvedOpaque declaration) = (.haskell) declaration
     timeImports =
       Set.singleton "Data.Time.Clock (UTCTime)"
 
 aggregateSourceReferences :: AggregateHaskellSource -> Set HaskellReference
-aggregateSourceReferences source = maybe Set.empty Set.singleton (aggregateSourceReference source)
+aggregateSourceReferences source = maybe Set.empty Set.singleton ((.reference) source)
 
 renderAggregateHaskellSource :: HaskellImportPlan -> AggregateHaskellSource -> Either HaskellImportError Text
-renderAggregateHaskellSource plan source = case (aggregateSourceBuiltin source, aggregateSourceReference source) of
+renderAggregateHaskellSource plan source = case ((.builtin) source, (.reference) source) of
   (Just builtin, Nothing) -> pure builtin
   (Nothing, Just reference) -> renderPlannedReference plan reference
   _ -> error "invalid aggregate Haskell source description"
@@ -288,20 +287,20 @@ renderAggregateHaskellSource plan source = case (aggregateSourceBuiltin source, 
 aggregatePackages :: AggregateSymbols -> ResolvedAggregateType -> Set Text
 aggregatePackages symbols resolved = case resolved of
   AggregateTime -> Set.singleton "time"
-  AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+  AggregateNominal nominal -> case (.ownership) nominal of
     GeneratedNominal -> Set.empty
-    ConsumerNominal binding -> Set.singleton (hsPackage (consumerNominalHaskell binding))
-  AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
-    Just declaration -> Set.singleton (hsPackage (mappedHaskell declaration))
+    ConsumerNominal binding -> Set.singleton ((.package) ((.haskell) binding))
+  AggregateMapped key -> case Map.lookup key ((.mapped) symbols) of
+    Just declaration -> Set.singleton ((.package) (mappedHaskell declaration))
     Nothing -> Set.empty
   _ -> Set.empty
   where
-    mappedHaskell (ResolvedStructural declaration _) = sdHaskell declaration
-    mappedHaskell (ResolvedOpaque declaration) = odHaskell declaration
+    mappedHaskell (ResolvedStructural declaration _) = (.haskell) declaration
+    mappedHaskell (ResolvedOpaque declaration) = (.haskell) declaration
 
 aggregateSampleHaskell :: AggregateSymbols -> Text -> ResolvedAggregateType -> Text
-aggregateSampleHaskell symbols fieldName resolved = case resolved of
-  AggregateText -> tshow ("sample-" <> fieldName)
+aggregateSampleHaskell symbols name resolved = case resolved of
+  AggregateText -> tshow ("sample-" <> name)
   AggregateInt -> "0"
   AggregateInteger -> "0"
   AggregateBool -> "False"
@@ -309,24 +308,24 @@ aggregateSampleHaskell symbols fieldName resolved = case resolved of
   AggregateNatural -> "0"
   AggregateNominal nominal -> nominalSample nominal
   AggregateVertex name -> firstConstructor name
-  AggregateMapped key -> case Map.lookup key (symbolMapped symbols) of
+  AggregateMapped key -> case Map.lookup key ((.mapped) symbols) of
     Just declaration -> "(snd (NonEmpty.head (fixtureCases " <> unQualifiedValueName (mappedFixtures declaration) <> ")))"
     Nothing -> unMappedKey key <> ".sample"
   where
-    firstConstructor name = case Map.lookup name (symbolVertices symbols) of
+    firstConstructor name = case Map.lookup name ((.vertices) symbols) of
       Just (constructor : _) -> constructor
       _ -> name
-    nominalSample nominal = case resolvedNominalOwnership nominal of
+    nominalSample nominal = case (.ownership) nominal of
       ConsumerNominal binding ->
         "(nominalFixtureDomain (NonEmpty.head (nominalFixtureCases "
-          <> unQualifiedValueName (consumerNominalFixtures binding)
+          <> unQualifiedValueName ((.fixtures) binding)
           <> ")))"
-      GeneratedNominal -> case resolvedNominalRepresentation nominal of
-        IdRepresentation {} -> "(" <> resolvedNominalName nominal <> " \"sample\")"
+      GeneratedNominal -> case (.representation) nominal of
+        IdRepresentation {} -> "(" <> (.name) nominal <> " \"sample\")"
         EnumRepresentation constructors -> fst (NE.head constructors)
-        ScalarRepresentation {} -> resolvedNominalName nominal <> ".sample"
-    mappedFixtures (ResolvedStructural declaration _) = sdFixtures declaration
-    mappedFixtures (ResolvedOpaque declaration) = odFixtures declaration
+        ScalarRepresentation {} -> (.name) nominal <> ".sample"
+    mappedFixtures (ResolvedStructural declaration _) = (.fixtures) declaration
+    mappedFixtures (ResolvedOpaque declaration) = (.fixtures) declaration
 
 data ResolvedRegisterInitial
   = InitialText !Text
@@ -364,21 +363,21 @@ resolveRegisterInitial symbols loc resolved syntax = case resolved of
       Just number | number >= 0 -> pure (InitialNatural (fromInteger number))
       _ -> invalid "Natural initials must be non-negative integral literals"
     RegInitText _ -> invalid "Natural initials must be unquoted non-negative integral literals"
-  AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+  AggregateNominal nominal -> case (.ownership) nominal of
     ConsumerNominal binding -> case syntax of
-      RegInitBare "initial" -> case consumerNominalInitial binding of
-        Just value -> pure (InitialNominal (resolvedNominalName nominal) value)
+      RegInitBare "initial" -> case (.initial) binding of
+        Just value -> pure (InitialNominal ((.name) nominal) value)
         Nothing -> invalid "consumer-owned nominal register type must declare an initial symbol"
       _ -> invalid "consumer-owned nominal register initials must use the bare initial token"
-    GeneratedNominal -> case resolvedNominalRepresentation nominal of
+    GeneratedNominal -> case (.representation) nominal of
       IdRepresentation {} -> case syntax of
-        RegInitBare "placeholder" -> pure (InitialId (resolvedNominalName nominal))
+        RegInitBare "placeholder" -> pure (InitialId ((.name) nominal))
         _ -> invalid "ID initials must use placeholder"
-      EnumRepresentation constructors -> namedInitial (resolvedNominalName nominal) (Just (map fst (NE.toList constructors)))
+      EnumRepresentation constructors -> namedInitial ((.name) nominal) (Just (map fst (NE.toList constructors)))
       ScalarRepresentation {} -> invalid "generated nominal scalars are unsupported"
-  AggregateVertex name -> namedInitial name (Map.lookup name (symbolVertices symbols))
+  AggregateVertex name -> namedInitial name (Map.lookup name ((.vertices) symbols))
   AggregateMapped key -> case syntax of
-    RegInitBare "initial" -> case Map.lookup key (symbolMapped symbols) >>= mappedInitial of
+    RegInitBare "initial" -> case Map.lookup key ((.mapped) symbols) >>= mappedInitial of
       Just value -> pure (InitialMapped key value)
       Nothing -> invalid "mapped register type must declare an initial symbol"
     _ -> invalid "mapped register initials must use the bare initial token"
@@ -387,8 +386,8 @@ resolveRegisterInitial symbols loc resolved syntax = case resolved of
     namedInitial name constructors = case syntax of
       RegInitBare constructor | maybe False (constructor `elem`) constructors -> pure (InitialNamed resolved constructor)
       _ -> invalid ("initial must name a constructor of " <> name)
-    mappedInitial (ResolvedStructural declaration _) = sdInitial declaration
-    mappedInitial (ResolvedOpaque declaration) = odInitial declaration
+    mappedInitial (ResolvedStructural declaration _) = (.initial) declaration
+    mappedInitial (ResolvedOpaque declaration) = (.initial) declaration
 
 renderRegisterInitial :: ResolvedRegisterInitial -> Text
 renderRegisterInitial initial = case initial of
@@ -432,15 +431,15 @@ registerInitialCanonicalName initial = case initial of
 pascal :: Text -> Text
 pascal value =
   case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-    Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+    Right derived -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
     Left _ -> value
   where
     site =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.GeneratedTypeSite,
-          HaskellName.siteLogicalName = value,
-          HaskellName.siteOwner = "aggregate-type",
-          HaskellName.siteLine = 0
+        { HaskellName.kind = HaskellName.GeneratedTypeSite,
+          HaskellName.logicalName = value,
+          HaskellName.owner = "aggregate-type",
+          HaskellName.line = 0
         }
 
 tshow :: Text -> Text

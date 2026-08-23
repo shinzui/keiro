@@ -1,5 +1,3 @@
-{-# LANGUAGE NoFieldSelectors #-}
-
 -- | Exact source provenance for semantic aggregate subjects.
 --
 -- The index deliberately lives beside 'Keiro.Dsl.Grammar.Spec'. Source
@@ -71,8 +69,8 @@ newtype SemanticSourceIndex = SemanticSourceIndex
 
 -- | The semantic parse result and its independently comparable source index.
 data ParsedSourceDocument = ParsedSourceDocument
-  { documentParsedSource :: !ParsedSource,
-    documentSourceIndex :: !SemanticSourceIndex
+  { parsedSource :: !ParsedSource,
+    sourceIndex :: !SemanticSourceIndex
   }
   deriving stock (Eq, Show, Generic)
 
@@ -84,10 +82,10 @@ data SourceIndexFailureCode
   deriving stock (Eq, Ord, Show, Generic)
 
 data SourceIndexFailure = SourceIndexFailure
-  { failureCode :: !SourceIndexFailureCode,
-    failureSubject :: !(Maybe SourceSubject),
-    failureSpan :: !(Maybe SourceSpan),
-    failureMessage :: !Text
+  { code :: !SourceIndexFailureCode,
+    subject :: !(Maybe SourceSubject),
+    span :: !(Maybe SourceSpan),
+    message :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
@@ -96,13 +94,13 @@ data SourceIndexFailure = SourceIndexFailure
 semanticSourceSubjects :: Spec -> [SourceSubject]
 semanticSourceSubjects spec = concatMap aggregateSubjects aggregates
   where
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
     aggregateSubjects aggregate =
-      [ AggregateStateSubject (aggName aggregate) (stName state)
-      | state <- aggStates aggregate
+      [ AggregateStateSubject ((.name) aggregate) ((.name) state)
+      | state <- (.states) aggregate
       ]
-        <> [ AggregateTransitionSubject (aggName aggregate) (TransitionOrdinal ordinal)
-           | (ordinal, _) <- zip [0 ..] (aggTransitions aggregate)
+        <> [ AggregateTransitionSubject ((.name) aggregate) (TransitionOrdinal ordinal)
+           | (ordinal, _) <- zip [0 ..] ((.transitions) aggregate)
            ]
 
 -- | Construct a complete exact index for one parsed file. The expected
@@ -118,10 +116,10 @@ exactSemanticSourceIndex source expected entries = do
     Just (subject, sourceSpan) ->
       Left
         SourceIndexFailure
-          { failureCode = SourceIndexFileMismatch,
-            failureSubject = Just subject,
-            failureSpan = Just sourceSpan,
-            failureMessage = "source-index span belongs to a different source file"
+          { code = SourceIndexFileMismatch,
+            subject = Just subject,
+            span = Just sourceSpan,
+            message = "source-index span belongs to a different source file"
           }
     Nothing -> pure ()
   checkedIndex ExactSourcePosition expected entries
@@ -135,13 +133,13 @@ compatibilitySemanticSourceIndex source spec =
   checkedIndex CompatibilityLineOnly expected entries
   where
     expected = semanticSourceSubjects spec
-    entries = concatMap aggregateEntries [aggregate | NAggregate aggregate <- specNodes spec]
+    entries = concatMap aggregateEntries [aggregate | NAggregate aggregate <- (.nodes) spec]
     aggregateEntries aggregate =
-      [ (AggregateStateSubject (aggName aggregate) (stName state), lineSpan (stLoc state))
-      | state <- aggStates aggregate
+      [ (AggregateStateSubject ((.name) aggregate) ((.name) state), lineSpan ((.loc) state))
+      | state <- (.states) aggregate
       ]
-        <> [ (AggregateTransitionSubject (aggName aggregate) (TransitionOrdinal ordinal), lineSpan (tLoc transition))
-           | (ordinal, transition) <- zip [0 ..] (aggTransitions aggregate)
+        <> [ (AggregateTransitionSubject ((.name) aggregate) (TransitionOrdinal ordinal), lineSpan ((.loc) transition))
+           | (ordinal, transition) <- zip [0 ..] ((.transitions) aggregate)
            ]
     lineSpan (Loc lineNumber) =
       SourceSpan
@@ -165,10 +163,10 @@ repathSemanticSourceIndex expected replacement (SemanticSourceIndex index) =
     Just (subject, position) ->
       Left
         SourceIndexFailure
-          { failureCode = SourceIndexFileMismatch,
-            failureSubject = Just subject,
-            failureSpan = Just (spanOf position),
-            failureMessage = "source-index span does not match the workspace member source path"
+          { code = SourceIndexFileMismatch,
+            subject = Just subject,
+            span = Just (spanOf position),
+            message = "source-index span does not match the workspace member source path"
           }
     Nothing ->
       Right
@@ -178,8 +176,11 @@ repathSemanticSourceIndex expected replacement (SemanticSourceIndex index) =
   where
     spanOf IndexedSourcePosition {span = sourceSpan} = sourceSpan
     sourceOf SourceSpan {source} = source
-    replaceSource position@IndexedSourcePosition {span = sourceSpan} =
-      position {span = sourceSpan {source = replacement}}
+    replaceSource IndexedSourcePosition {quality, span = SourceSpan {start, end}} =
+      IndexedSourcePosition
+        { quality,
+          span = SourceSpan {source = replacement, start, end}
+        }
 
 -- | Union complete member indices, refusing any duplicate semantic subject.
 unionSemanticSourceIndexes :: [SemanticSourceIndex] -> Either SourceIndexFailure SemanticSourceIndex
@@ -217,20 +218,20 @@ checkedIndex quality expected entries = do
     Just subject ->
       Left
         SourceIndexFailure
-          { failureCode = UnexpectedSourceSubject,
-            failureSubject = Just subject,
-            failureSpan = snd <$> find ((== subject) . fst) entries,
-            failureMessage = "source index contains a subject absent from the semantic graph"
+          { code = UnexpectedSourceSubject,
+            subject = Just subject,
+            span = snd <$> find ((== subject) . fst) entries,
+            message = "source index contains a subject absent from the semantic graph"
           }
     Nothing -> pure ()
   case Set.lookupMin (expectedSubjects Set.\\ actualSubjects) of
     Just subject ->
       Left
         SourceIndexFailure
-          { failureCode = MissingSourceSubject,
-            failureSubject = Just subject,
-            failureSpan = Nothing,
-            failureMessage = "semantic graph subject has no source-index entry"
+          { code = MissingSourceSubject,
+            subject = Just subject,
+            span = Nothing,
+            message = "semantic graph subject has no source-index entry"
           }
     Nothing -> Right index
 
@@ -242,10 +243,10 @@ checkedIndexWithPositions entries =
     Just duplicate ->
       Left
         SourceIndexFailure
-          { failureCode = DuplicateSourceSubject,
-            failureSubject = Just duplicate,
-            failureSpan = spanOf <$> find ((== duplicate) . fst) entries,
-            failureMessage = "source index contains more than one entry for a semantic subject"
+          { code = DuplicateSourceSubject,
+            subject = Just duplicate,
+            span = spanOf <$> find ((== duplicate) . fst) entries,
+            message = "source index contains more than one entry for a semantic subject"
           }
     Nothing -> Right (SemanticSourceIndex (Map.fromList entries))
   where

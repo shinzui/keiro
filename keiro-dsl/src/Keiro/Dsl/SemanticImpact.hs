@@ -97,10 +97,10 @@ data MappedRootKind
 
 -- | One checked aggregate root before transitive declaration expansion.
 data MappedRoot = MappedRoot
-  { mappedRootConsumer :: !MappedConsumer,
-    mappedRootKind :: !MappedRootKind,
-    mappedRootUseSite :: !UseSite,
-    mappedRootDeclaration :: !MappedKey
+  { consumer :: !MappedConsumer,
+    kind :: !MappedRootKind,
+    useSite :: !UseSite,
+    declaration :: !MappedKey
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -108,10 +108,10 @@ data MappedRoot = MappedRoot
 -- one declaration. Unlike 'MappedRoot', this also represents transitive paths
 -- and therefore is suitable for durable ledgers and exact conformance facts.
 data MappedRootEvidence = MappedRootEvidence
-  { evidenceConsumer :: !MappedConsumer,
-    evidenceRootKind :: !MappedRootKind,
-    evidencePath :: !Text,
-    evidenceOperation :: !(Maybe Text)
+  { consumer :: !MappedConsumer,
+    rootKind :: !MappedRootKind,
+    path :: !Text,
+    operation :: !(Maybe Text)
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -138,15 +138,15 @@ data MappedConsequence
 -- intentionally unused declaration to the empty set. The service inventory is
 -- declaration ownership for conformance; it is not another aggregate consumer.
 data SemanticImpact = SemanticImpact
-  { impactRoots :: ![MappedRoot],
-    impactUsePaths :: !(Map MappedKey [UsePath]),
-    impactAggregateDeclarations :: !(Map MappedConsumer (Set MappedKey)),
-    impactDeclarationConsumers :: !(Map MappedKey (Set MappedConsumer)),
-    impactDeclarationEvidence :: !(Map MappedKey (Set MappedRootEvidence)),
-    impactDeclarationConsequences :: !(Map MappedKey (Set MappedConsequence)),
-    impactServiceDeclarations :: !(Set MappedKey),
-    impactDeclarationIdentities :: !(Map MappedKey Text),
-    impactUnsupportedProjectionSources :: ![UnsupportedProjectionSource]
+  { roots :: ![MappedRoot],
+    usePaths :: !(Map MappedKey [UsePath]),
+    aggregateDeclarations :: !(Map MappedConsumer (Set MappedKey)),
+    declarationConsumers :: !(Map MappedKey (Set MappedConsumer)),
+    declarationEvidence :: !(Map MappedKey (Set MappedRootEvidence)),
+    declarationConsequences :: !(Map MappedKey (Set MappedConsequence)),
+    serviceDeclarations :: !(Set MappedKey),
+    declarationIdentities :: !(Map MappedKey Text),
+    unsupportedProjectionSources :: ![UnsupportedProjectionSource]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -156,25 +156,25 @@ data SemanticImpact = SemanticImpact
 -- inventory makes the declaration ownership boundary visible and leaves room
 -- for future non-aggregate roots.
 data SemanticImpactSnapshot = SemanticImpactSnapshot
-  { snapshotMappedConsumers :: !(Map MappedKey (Set MappedConsumer)),
-    snapshotMappedEvidence :: !(Maybe (Map MappedKey (Set MappedRootEvidence))),
-    snapshotMappedConsequences :: !(Maybe (Map MappedKey (Set MappedConsequence))),
-    snapshotServiceInventory :: !(Set MappedKey),
-    snapshotDeclarationIdentities :: !(Map MappedKey Text)
+  { mappedConsumers :: !(Map MappedKey (Set MappedConsumer)),
+    mappedEvidence :: !(Maybe (Map MappedKey (Set MappedRootEvidence))),
+    mappedConsequences :: !(Maybe (Map MappedKey (Set MappedConsequence))),
+    serviceInventory :: !(Set MappedKey),
+    declarationIdentities :: !(Map MappedKey Text)
   }
   deriving stock (Eq, Show, Generic)
 
 -- | One declaration's before/after consumer explanation. Compatibility and
 -- generated-file writes deliberately remain outside this type.
 data MappedImpactDelta = MappedImpactDelta
-  { impactDeclaration :: !MappedKey,
-    impactPreviousConsumers :: !(Set MappedConsumer),
-    impactCurrentConsumers :: !(Set MappedConsumer),
-    impactPreviousEvidence :: !(Maybe (Set MappedRootEvidence)),
-    impactCurrentEvidence :: !(Maybe (Set MappedRootEvidence)),
-    impactPreviousConsequences :: !(Maybe (Set MappedConsequence)),
-    impactCurrentConsequences :: !(Maybe (Set MappedConsequence)),
-    impactServiceConformance :: !Bool
+  { declaration :: !MappedKey,
+    previousConsumers :: !(Set MappedConsumer),
+    currentConsumers :: !(Set MappedConsumer),
+    previousEvidence :: !(Maybe (Set MappedRootEvidence)),
+    currentEvidence :: !(Maybe (Set MappedRootEvidence)),
+    previousConsequences :: !(Maybe (Set MappedConsequence)),
+    currentConsequences :: !(Maybe (Set MappedConsequence)),
+    serviceConformance :: !Bool
   }
   deriving stock (Eq, Show, Generic)
 
@@ -182,10 +182,10 @@ data MappedImpactDelta = MappedImpactDelta
 -- changed. A missing previous snapshot means legacy history, not an empty old
 -- graph; callers can still report the checked current consumers honestly.
 data SemanticImpactReport = SemanticImpactReport
-  { semanticReportPrevious :: !(Maybe SemanticImpactSnapshot),
-    semanticReportCurrent :: !SemanticImpactSnapshot,
-    semanticReportDeclarations :: ![MappedKey],
-    semanticReportDeltas :: ![MappedImpactDelta]
+  { previous :: !(Maybe SemanticImpactSnapshot),
+    current :: !SemanticImpactSnapshot,
+    declarations :: ![MappedKey],
+    deltas :: ![MappedImpactDelta]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -199,18 +199,18 @@ instance ToJSON SemanticImpactSnapshot where
           .= [ object
                  ( [ "declaration" .= unMappedKey declaration,
                      "consumers" .= map mappedConsumerIdentity (Set.toAscList declarationConsumers),
-                     "identity" .= Map.findWithDefault "" declaration (snapshotDeclarationIdentities snapshot)
+                     "identity" .= Map.findWithDefault "" declaration ((.declarationIdentities) snapshot)
                    ]
-                     <> maybe [] (\evidence -> ["consumerEvidence" .= Set.toAscList (Map.findWithDefault Set.empty declaration evidence)]) (snapshotMappedEvidence snapshot)
-                     <> maybe [] (\consequences -> ["consequences" .= Set.toAscList (Map.findWithDefault Set.empty declaration consequences)]) (snapshotMappedConsequences snapshot)
+                     <> maybe [] (\evidence -> ["consumerEvidence" .= Set.toAscList (Map.findWithDefault Set.empty declaration evidence)]) ((.mappedEvidence) snapshot)
+                     <> maybe [] (\consequences -> ["consequences" .= Set.toAscList (Map.findWithDefault Set.empty declaration consequences)]) ((.mappedConsequences) snapshot)
                  )
-             | (declaration, declarationConsumers) <- Map.toAscList (snapshotMappedConsumers snapshot)
+             | (declaration, declarationConsumers) <- Map.toAscList ((.mappedConsumers) snapshot)
              ],
-        "serviceInventory" .= map unMappedKey (Set.toAscList (snapshotServiceInventory snapshot))
+        "serviceInventory" .= map unMappedKey (Set.toAscList ((.serviceInventory) snapshot))
       ]
         <> [ "mappedSurfaceEvidenceVersion" .= (1 :: Int)
-           | isJust (snapshotMappedEvidence snapshot)
-               || isJust (snapshotMappedConsequences snapshot)
+           | isJust ((.mappedEvidence) snapshot)
+               || isJust ((.mappedConsequences) snapshot)
            ]
 
 instance FromJSON SemanticImpactSnapshot where
@@ -244,11 +244,11 @@ instance FromJSON SemanticImpactSnapshot where
     unless (maybe True (consequencesAgree declarationMap) consequences) (fail "semantic-impact consequences and consumer inventory differ")
     pure
       SemanticImpactSnapshot
-        { snapshotMappedConsumers = declarationMap,
-          snapshotMappedEvidence = evidence,
-          snapshotMappedConsequences = consequences,
-          snapshotServiceInventory = inventory,
-          snapshotDeclarationIdentities = declarationIdentities
+        { mappedConsumers = declarationMap,
+          mappedEvidence = evidence,
+          mappedConsequences = consequences,
+          serviceInventory = inventory,
+          declarationIdentities = declarationIdentities
         }
     where
       parseDeclaration = withObject "SemanticImpactDeclaration" $ \row -> do
@@ -266,13 +266,13 @@ instance FromJSON SemanticImpactSnapshot where
       distinct values = length values == Set.size (Set.fromList values)
       evidenceAgrees consumers evidence =
         and
-          [ Set.map evidenceConsumer (Map.findWithDefault Set.empty declaration evidence) == declarationConsumers
+          [ Set.map (.consumer) (Map.findWithDefault Set.empty declaration evidence) == declarationConsumers
               && all operationAgrees (Set.toList (Map.findWithDefault Set.empty declaration evidence))
           | (declaration, declarationConsumers) <- Map.toList consumers
           ]
-      operationAgrees evidence = case evidenceRootKind evidence of
-        MappedProjectionEventRoot -> maybe False (not . T.null) (evidenceOperation evidence)
-        _ -> evidenceOperation evidence == Nothing
+      operationAgrees evidence = case (.rootKind) evidence of
+        MappedProjectionEventRoot -> maybe False (not . T.null) ((.operation) evidence)
+        _ -> (.operation) evidence == Nothing
       consequencesAgree consumers consequences =
         and
           [ Set.fromList
@@ -293,10 +293,10 @@ instance FromJSON SemanticImpactSnapshot where
 instance ToJSON MappedRootEvidence where
   toJSON evidence =
     object
-      [ "consumer" .= mappedConsumerIdentity (evidenceConsumer evidence),
-        "surface" .= mappedRootKindIdentity (evidenceRootKind evidence),
-        "path" .= evidencePath evidence,
-        "operation" .= evidenceOperation evidence
+      [ "consumer" .= mappedConsumerIdentity ((.consumer) evidence),
+        "surface" .= mappedRootKindIdentity ((.rootKind) evidence),
+        "path" .= (.path) evidence,
+        "operation" .= (.operation) evidence
       ]
 
 instance FromJSON MappedRootEvidence where
@@ -337,14 +337,14 @@ instance FromJSON MappedConsequence where
 instance ToJSON MappedImpactDelta where
   toJSON delta =
     object
-      [ "declaration" .= unMappedKey (impactDeclaration delta),
-        "previousConsumers" .= map mappedConsumerIdentity (Set.toAscList (impactPreviousConsumers delta)),
-        "currentConsumers" .= map mappedConsumerIdentity (Set.toAscList (impactCurrentConsumers delta)),
-        "previousConsumerEvidence" .= fmap Set.toAscList (impactPreviousEvidence delta),
-        "currentConsumerEvidence" .= fmap Set.toAscList (impactCurrentEvidence delta),
-        "previousConsequences" .= fmap Set.toAscList (impactPreviousConsequences delta),
-        "currentConsequences" .= fmap Set.toAscList (impactCurrentConsequences delta),
-        "serviceConformance" .= impactServiceConformance delta
+      [ "declaration" .= unMappedKey ((.declaration) delta),
+        "previousConsumers" .= map mappedConsumerIdentity (Set.toAscList ((.previousConsumers) delta)),
+        "currentConsumers" .= map mappedConsumerIdentity (Set.toAscList ((.currentConsumers) delta)),
+        "previousConsumerEvidence" .= fmap Set.toAscList ((.previousEvidence) delta),
+        "currentConsumerEvidence" .= fmap Set.toAscList ((.currentEvidence) delta),
+        "previousConsequences" .= fmap Set.toAscList ((.previousConsequences) delta),
+        "currentConsequences" .= fmap Set.toAscList ((.currentConsequences) delta),
+        "serviceConformance" .= (.serviceConformance) delta
       ]
 
 instance FromJSON MappedImpactDelta where
@@ -352,9 +352,9 @@ instance FromJSON MappedImpactDelta where
     declaration <- MappedKey <$> fields .: "declaration"
     previousNames <- fields .: "previousConsumers"
     currentNames <- fields .: "currentConsumers"
-    previousEvidence <- fields .:? "previousConsumerEvidence"
+    decodedPreviousEvidence <- fields .:? "previousConsumerEvidence"
     currentEvidence <- fields .:? "currentConsumerEvidence"
-    previousConsequences <- fields .:? "previousConsequences"
+    decodedPreviousConsequences <- fields .:? "previousConsequences"
     currentConsequences <- fields .:? "currentConsequences"
     serviceConformance <- fields .: "serviceConformance"
     previous <- traverse parseConsumerName previousNames
@@ -363,14 +363,14 @@ instance FromJSON MappedImpactDelta where
     unless (distinct current) (fail "duplicate current semantic-impact consumer")
     pure
       MappedImpactDelta
-        { impactDeclaration = declaration,
-          impactPreviousConsumers = Set.fromList previous,
-          impactCurrentConsumers = Set.fromList current,
-          impactPreviousEvidence = Set.fromList <$> previousEvidence,
-          impactCurrentEvidence = Set.fromList <$> currentEvidence,
-          impactPreviousConsequences = Set.fromList <$> previousConsequences,
-          impactCurrentConsequences = Set.fromList <$> currentConsequences,
-          impactServiceConformance = serviceConformance
+        { declaration = declaration,
+          previousConsumers = Set.fromList previous,
+          currentConsumers = Set.fromList current,
+          previousEvidence = Set.fromList <$> decodedPreviousEvidence,
+          currentEvidence = Set.fromList <$> currentEvidence,
+          previousConsequences = Set.fromList <$> decodedPreviousConsequences,
+          currentConsequences = Set.fromList <$> currentConsequences,
+          serviceConformance = serviceConformance
         }
     where
       distinct values = length values == Set.size (Set.fromList values)
@@ -381,41 +381,41 @@ instance FromJSON MappedImpactDelta where
 semanticImpact :: TypeGraph -> SemanticImpact
 semanticImpact graph =
   SemanticImpact
-    { impactRoots = roots,
-      impactUsePaths = pathsByDeclaration,
-      impactAggregateDeclarations = aggregateDeclarations,
-      impactDeclarationConsumers = declarationConsumers,
-      impactDeclarationEvidence = declarationEvidence,
-      impactDeclarationConsequences = Map.map (Set.unions . map consequencesForEvidence . Set.toAscList) declarationEvidence,
-      impactServiceDeclarations = serviceDeclarations,
-      impactDeclarationIdentities = Map.mapWithKey (declarationIdentity graph) (tgDeclarations graph),
-      impactUnsupportedProjectionSources = tgUnsupportedProjectionSources graph
+    { roots = roots,
+      usePaths = pathsByDeclaration,
+      aggregateDeclarations = aggregateDeclarations,
+      declarationConsumers = declarationConsumers,
+      declarationEvidence = declarationEvidence,
+      declarationConsequences = Map.map (Set.unions . map consequencesForEvidence . Set.toAscList) declarationEvidence,
+      serviceDeclarations = allServiceDeclarations,
+      declarationIdentities = Map.mapWithKey (declarationIdentity graph) ((.declarations) graph),
+      unsupportedProjectionSources = (.unsupportedProjectionSources) graph
     }
   where
-    directRoots = map mappedRootFromUseSite (tgUseSites graph)
-    roots = sort (directRoots <> concatMap derivedRoots (tgDerivedMappedConsumers graph))
+    directRoots = map mappedRootFromUseSite ((.useSites) graph)
+    roots = sort (directRoots <> concatMap derivedRoots ((.derivedMappedConsumers) graph))
     derivedRoots consumer =
       [ MappedRoot
-          { mappedRootConsumer = DerivedProjectionConsumer consumer,
-            mappedRootKind = MappedProjectionEventRoot,
-            mappedRootUseSite = site,
-            mappedRootDeclaration = declaration
+          { consumer = DerivedProjectionConsumer consumer,
+            kind = MappedProjectionEventRoot,
+            useSite = site,
+            declaration = declaration
           }
-      | site@(RootEventField aggregate _ _ declaration) <- tgUseSites graph,
+      | site@(RootEventField aggregate _ _ declaration) <- (.useSites) graph,
         aggregate == derivedAuthority consumer
       ]
     aggregateDeclarations =
       Map.fromListWith
         Set.union
-        [ (mappedRootConsumer root, declarationClosure graph (mappedRootDeclaration root))
+        [ ((.consumer) root, declarationClosure graph ((.declaration) root))
         | root <- roots
         ]
-    serviceDeclarations = Map.keysSet (tgDeclarations graph)
-    pathsByDeclaration = Map.fromSet (sort . usePaths graph . unMappedKey) serviceDeclarations
+    allServiceDeclarations = Map.keysSet ((.declarations) graph)
+    pathsByDeclaration = Map.fromSet (sort . usePaths graph . unMappedKey) allServiceDeclarations
     declarationConsumers =
       Map.unionWith
         Set.union
-        (Map.fromSet (const Set.empty) serviceDeclarations)
+        (Map.fromSet (const Set.empty) allServiceDeclarations)
         ( Map.fromListWith
             Set.union
             [ (declaration, Set.singleton consumer)
@@ -428,23 +428,23 @@ semanticImpact graph =
         (\_ paths -> Set.fromList (concatMap evidenceForPath paths))
         pathsByDeclaration
     evidenceForPath usePath =
-      let directRoot = mappedRootFromUseSite (upRoot usePath)
+      let directRoot = mappedRootFromUseSite ((.root) usePath)
           direct =
             MappedRootEvidence
-              { evidenceConsumer = mappedRootConsumer directRoot,
-                evidenceRootKind = mappedRootKind directRoot,
-                evidencePath = renderUsePath usePath,
-                evidenceOperation = Nothing
+              { consumer = (.consumer) directRoot,
+                rootKind = (.kind) directRoot,
+                path = renderUsePath usePath,
+                operation = Nothing
               }
           projections =
             [ MappedRootEvidence
-                { evidenceConsumer = DerivedProjectionConsumer derived,
-                  evidenceRootKind = MappedProjectionEventRoot,
-                  evidencePath = renderUsePath usePath,
-                  evidenceOperation = Map.lookup derived (tgProjectionOperationalIdentities graph)
+                { consumer = DerivedProjectionConsumer derived,
+                  rootKind = MappedProjectionEventRoot,
+                  path = renderUsePath usePath,
+                  operation = Map.lookup derived ((.projectionOperationalIdentities) graph)
                 }
             | aggregate <- maybeToList (eventAuthority usePath),
-              derived <- tgDerivedMappedConsumers graph,
+              derived <- (.derivedMappedConsumers) graph,
               derivedAuthority derived == aggregate
             ]
        in direct : projections
@@ -455,20 +455,24 @@ semanticImpact graph =
 -- query root comes from 'CheckedRouterSelection'.
 semanticImpactForService :: CheckedService -> TypeGraph -> SemanticImpact
 semanticImpactForService service graph =
-  base
-    { impactRoots = sort (impactRoots base <> map selectionEvidenceRoot extraEvidence),
-      impactAggregateDeclarations = Map.unionWith Set.union (impactAggregateDeclarations base) declarationsByConsumer,
-      impactDeclarationConsumers = Map.unionWith Set.union (impactDeclarationConsumers base) consumersByDeclaration,
-      impactDeclarationEvidence = Map.unionWith Set.union (impactDeclarationEvidence base) evidenceByDeclaration,
-      impactDeclarationConsequences = Map.unionWith Set.union (impactDeclarationConsequences base) consequencesByDeclaration
+  SemanticImpact
+    { roots = sort (base.roots <> map (.root) extraEvidence),
+      usePaths = base.usePaths,
+      aggregateDeclarations = Map.unionWith Set.union base.aggregateDeclarations declarationsByConsumer,
+      declarationConsumers = Map.unionWith Set.union base.declarationConsumers consumersByDeclaration,
+      declarationEvidence = Map.unionWith Set.union base.declarationEvidence evidenceByDeclaration,
+      declarationConsequences = Map.unionWith Set.union base.declarationConsequences consequencesByDeclaration,
+      serviceDeclarations = base.serviceDeclarations,
+      declarationIdentities = base.declarationIdentities,
+      unsupportedProjectionSources = base.unsupportedProjectionSources
     }
   where
     base = semanticImpact graph
     extraEvidence = concatMap checkedRouterEvidence checkedSelections
     checkedSelections =
-      [ (rtId router, checked)
-      | NRouter router <- specNodes (checkedSpec service),
-        ResolveDeclarative {} <- [rvSource (rtResolve router)],
+      [ ((.id) router, checked)
+      | NRouter router <- (.nodes) (checkedSpec service),
+        ResolveDeclarative {} <- [(.source) ((.resolve) router)],
         let checked = case checkRouterSelection (checkedLanguageContract service) graph (checkedSpec service) router of
               Right value -> value
               Left failures -> error ("validated declarative router selection did not check: " <> show failures)
@@ -476,15 +480,15 @@ semanticImpactForService service graph =
     declarationsByConsumer =
       Map.fromListWith
         Set.union
-        [ (mappedRootConsumer root, declarationClosure graph (mappedRootDeclaration root))
+        [ ((.consumer) root, declarationClosure graph ((.declaration) root))
         | SelectionEvidence root _ <- extraEvidence
         ]
     consumersByDeclaration =
       Map.fromListWith
         Set.union
-        [ (declaration, Set.singleton (mappedRootConsumer root))
+        [ (declaration, Set.singleton ((.consumer) root))
         | SelectionEvidence root _ <- extraEvidence,
-          declaration <- Set.toList (declarationClosure graph (mappedRootDeclaration root))
+          declaration <- Set.toList (declarationClosure graph ((.declaration) root))
         ]
     evidenceByDeclaration =
       Map.fromListWith
@@ -492,14 +496,14 @@ semanticImpactForService service graph =
         [ ( declaration,
             Set.singleton
               MappedRootEvidence
-                { evidenceConsumer = mappedRootConsumer root,
-                  evidenceRootKind = mappedRootKind root,
-                  evidencePath = path,
-                  evidenceOperation = Nothing
+                { consumer = (.consumer) root,
+                  rootKind = (.kind) root,
+                  path = path,
+                  operation = Nothing
                 }
           )
         | SelectionEvidence root path <- extraEvidence,
-          declaration <- Set.toList (declarationClosure graph (mappedRootDeclaration root))
+          declaration <- Set.toList (declarationClosure graph ((.declaration) root))
         ]
     consequencesByDeclaration =
       Map.map
@@ -507,8 +511,8 @@ semanticImpactForService service graph =
         evidenceByDeclaration
 
 data SelectionEvidence = SelectionEvidence
-  { selectionEvidenceRoot :: !MappedRoot,
-    selectionEvidencePath :: !Text
+  { root :: !MappedRoot,
+    path :: !Text
   }
 
 checkedRouterEvidence :: (Name, CheckedRouterSelection) -> [SelectionEvidence]
@@ -516,14 +520,14 @@ checkedRouterEvidence (router, selection) = queryInputEvidence <> expressionEvid
   where
     queryInputEvidence =
       [ selectionEvidence router SelectionQueryInput MappedRouterSelectionQueryInputRoot site ("router " <> router <> " selection query input")
-      | site@RootReadModelQueryInput {} <- checkedUseSites selection
+      | site@RootReadModelQueryInput {} <- (.useSites) selection
       ]
     expressionEvidence =
-      checkedExpressionEvidence router selection SelectionPredicate MappedRouterSelectionPredicateRoot "predicate" (checkedPredicate selection)
-        <> checkedExpressionEvidence router selection SelectionRecipient MappedRouterSelectionRecipientRoot "recipient" (checkedRecipient selection)
+      checkedExpressionEvidence router selection SelectionPredicate MappedRouterSelectionPredicateRoot "predicate" ((.predicate) selection)
+        <> checkedExpressionEvidence router selection SelectionRecipient MappedRouterSelectionRecipientRoot "recipient" ((.recipient) selection)
         <> concat
           [ checkedExpressionEvidence router selection (SelectionCommandField field) MappedRouterSelectionCommandFieldRoot ("command field " <> field) expression
-          | (field, expression) <- Map.toAscList (checkedCommandFields selection)
+          | (field, expression) <- Map.toAscList ((.commandFields) selection)
           ]
 
 checkedExpressionEvidence :: Name -> CheckedRouterSelection -> RouterSelectionPosition -> MappedRootKind -> Text -> CheckedScalarExpr -> [SelectionEvidence]
@@ -536,20 +540,20 @@ checkedExpressionEvidence router selection position rootKind label expression =
 selectionEvidence :: Name -> RouterSelectionPosition -> MappedRootKind -> UseSite -> Text -> SelectionEvidence
 selectionEvidence router position rootKind site path =
   SelectionEvidence
-    { selectionEvidenceRoot =
+    { root =
         MappedRoot
-          { mappedRootConsumer = RouterSelectionConsumer router position,
-            mappedRootKind = rootKind,
-            mappedRootUseSite = site,
-            mappedRootDeclaration = useSiteDeclaration site
+          { consumer = RouterSelectionConsumer router position,
+            kind = rootKind,
+            useSite = site,
+            declaration = useSiteDeclaration site
           },
-      selectionEvidencePath = path
+      path = path
     }
 
 selectionRootSites :: SelectionRoot -> CheckedRouterSelection -> [UseSite]
 selectionRootSites root selection =
   [ site
-  | site <- checkedUseSites selection,
+  | site <- (.useSites) selection,
     case (root, site) of
       (SelectionInput, RootReadModelQueryInput {}) -> True
       (SelectionRow, RootReadModelQueryResult {}) -> True
@@ -557,7 +561,7 @@ selectionRootSites root selection =
   ]
 
 checkedScalarPaths :: CheckedScalarExpr -> [(SelectionRoot, [CheckedSelectionPathSegment])]
-checkedScalarPaths expression = case checkedScalarNode expression of
+checkedScalarPaths expression = case (.node) expression of
   CheckedPath root segments -> [(root, segments)]
   CheckedTextLiteral _ -> []
   CheckedIntegralLiteral _ -> []
@@ -568,12 +572,12 @@ checkedScalarPaths expression = case checkedScalarNode expression of
 
 renderCheckedPath :: SelectionRoot -> [CheckedSelectionPathSegment] -> Text
 renderCheckedPath root segments =
-  rootLabel <> T.concat ["." <> checkedPathField segment <> wireLabel segment | segment <- segments]
+  rootLabel <> T.concat ["." <> (.field) segment <> wireLabel segment | segment <- segments]
   where
     rootLabel = case root of SelectionInput -> "input"; SelectionRow -> "row"
     wireLabel segment
-      | checkedPathField segment == checkedPathWireKey segment = ""
-      | otherwise = " as '" <> checkedPathWireKey segment <> "'"
+      | (.field) segment == (.wireKey) segment = ""
+      | otherwise = " as '" <> (.wireKey) segment <> "'"
 
 useSiteDeclaration :: UseSite -> MappedKey
 useSiteDeclaration = \case
@@ -586,35 +590,35 @@ useSiteDeclaration = \case
 
 consequencesForMappedEvidence :: TypeGraph -> MappedRootEvidence -> Set MappedConsequence
 consequencesForMappedEvidence graph evidence =
-  Set.fromList (MappedConsumerBuild (evidenceConsumer evidence) : surfaceConsequences)
+  Set.fromList (MappedConsumerBuild ((.consumer) evidence) : surfaceConsequences)
   where
-    surfaceConsequences = case evidenceRootKind evidence of
+    surfaceConsequences = case (.rootKind) evidence of
       MappedCommandFieldRoot -> []
-      MappedEventFieldRoot -> case evidenceConsumer evidence of
+      MappedEventFieldRoot -> case (.consumer) evidence of
         AggregateConsumer aggregate -> [MappedPrivateEventHistory aggregate]
         _ -> []
-      MappedRegisterRoot -> case evidenceConsumer evidence of
+      MappedRegisterRoot -> case (.consumer) evidence of
         AggregateConsumer aggregate -> [MappedSnapshotHydration aggregate]
         _ -> []
-      MappedWorkqueueFieldRoot -> case evidenceConsumer evidence of
+      MappedWorkqueueFieldRoot -> case (.consumer) evidence of
         WorkqueueConsumer workqueue -> [MappedWorkqueueHistory workqueue]
         _ -> []
-      MappedReadModelQueryInputRoot -> case evidenceConsumer evidence of
+      MappedReadModelQueryInputRoot -> case (.consumer) evidence of
         ReadModelQueryConsumer readModel MappedQueryInput -> [MappedQueryApi readModel MappedQueryInput]
         _ -> []
-      MappedReadModelQueryResultRoot -> case evidenceConsumer evidence of
+      MappedReadModelQueryResultRoot -> case (.consumer) evidence of
         ReadModelQueryConsumer readModel MappedQueryResult -> [MappedQueryApi readModel MappedQueryResult]
         _ -> []
       MappedRouterSelectionQueryInputRoot -> selectionConsequences
       MappedRouterSelectionPredicateRoot -> selectionConsequences
       MappedRouterSelectionRecipientRoot -> selectionConsequences
       MappedRouterSelectionCommandFieldRoot -> selectionConsequences
-      MappedProjectionEventRoot -> case evidenceConsumer evidence of
+      MappedProjectionEventRoot -> case (.consumer) evidence of
         DerivedProjectionConsumer derived ->
           MappedProjectionHandlerReview derived
-            : [MappedProjectionRebuild derived groupName | groupName <- maybeToList (Map.lookup derived (tgReplayableProjectionGroups graph))]
+            : [MappedProjectionRebuild derived groupName | groupName <- maybeToList (Map.lookup derived ((.replayableProjectionGroups) graph))]
         _ -> []
-    selectionConsequences = case evidenceConsumer evidence of
+    selectionConsequences = case (.consumer) evidence of
       RouterSelectionConsumer router _ -> [MappedRouterSelectionBuild router, MappedRouterSelectionCoordinationReview router]
       _ -> []
 
@@ -622,11 +626,11 @@ consequencesForMappedEvidence graph evidence =
 semanticImpactSnapshot :: SemanticImpact -> SemanticImpactSnapshot
 semanticImpactSnapshot impact =
   SemanticImpactSnapshot
-    { snapshotMappedConsumers = impactDeclarationConsumers impact,
-      snapshotMappedEvidence = Just (impactDeclarationEvidence impact),
-      snapshotMappedConsequences = Just (impactDeclarationConsequences impact),
-      snapshotServiceInventory = impactServiceDeclarations impact,
-      snapshotDeclarationIdentities = impactDeclarationIdentities impact
+    { mappedConsumers = (.declarationConsumers) impact,
+      mappedEvidence = Just ((.declarationEvidence) impact),
+      mappedConsequences = Just ((.declarationConsequences) impact),
+      serviceInventory = (.serviceDeclarations) impact,
+      declarationIdentities = (.declarationIdentities) impact
     }
 
 -- | Compare consumer membership, service-inventory membership, and canonical
@@ -635,28 +639,28 @@ diffSemanticImpact :: SemanticImpactSnapshot -> SemanticImpactSnapshot -> [Mappe
 diffSemanticImpact previous current =
   [ delta
   | delta <- mappedImpactForDeclarations allDeclarations previous current,
-    impactPreviousConsumers delta /= impactCurrentConsumers delta
-      || impactPreviousEvidence delta /= impactCurrentEvidence delta
-      || impactPreviousConsequences delta /= impactCurrentConsequences delta
-      || serviceMember previous (impactDeclaration delta) /= serviceMember current (impactDeclaration delta)
-      || declarationIdentityAt previous (impactDeclaration delta) /= declarationIdentityAt current (impactDeclaration delta)
+    (.previousConsumers) delta /= (.currentConsumers) delta
+      || (.previousEvidence) delta /= (.currentEvidence) delta
+      || (.previousConsequences) delta /= (.currentConsequences) delta
+      || serviceMember previous ((.declaration) delta) /= serviceMember current ((.declaration) delta)
+      || declarationIdentityAt previous ((.declaration) delta) /= declarationIdentityAt current ((.declaration) delta)
   ]
   where
-    allDeclarations = Set.toAscList (snapshotServiceInventory previous <> snapshotServiceInventory current)
+    allDeclarations = Set.toAscList ((.serviceInventory) previous <> (.serviceInventory) current)
 
 -- | Explain an authoritative set of changed mapped declarations. Keys are
 -- sorted and deduplicated; a key absent from both inventories is ignored.
 mappedImpactForDeclarations :: [MappedKey] -> SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappedImpactDelta]
 mappedImpactForDeclarations declarations previous current =
   [ MappedImpactDelta
-      { impactDeclaration = declaration,
-        impactPreviousConsumers = snapshotConsumers previous declaration,
-        impactCurrentConsumers = snapshotConsumers current declaration,
-        impactPreviousEvidence = snapshotEvidence previous declaration,
-        impactCurrentEvidence = snapshotEvidence current declaration,
-        impactPreviousConsequences = snapshotConsequences previous declaration,
-        impactCurrentConsequences = snapshotConsequences current declaration,
-        impactServiceConformance = serviceMember previous declaration || serviceMember current declaration
+      { declaration = declaration,
+        previousConsumers = snapshotConsumers previous declaration,
+        currentConsumers = snapshotConsumers current declaration,
+        previousEvidence = snapshotEvidence previous declaration,
+        currentEvidence = snapshotEvidence current declaration,
+        previousConsequences = snapshotConsequences previous declaration,
+        currentConsequences = snapshotConsequences current declaration,
+        serviceConformance = serviceMember previous declaration || serviceMember current declaration
       }
   | declaration <- Set.toAscList (Set.fromList declarations),
     serviceMember previous declaration || serviceMember current declaration
@@ -667,28 +671,28 @@ mappedImpactForDeclarations declarations previous current =
 semanticImpactReport :: Maybe SemanticImpactSnapshot -> SemanticImpactSnapshot -> [MappedKey] -> SemanticImpactReport
 semanticImpactReport previous current declarations =
   SemanticImpactReport
-    { semanticReportPrevious = previous,
-      semanticReportCurrent = current,
-      semanticReportDeclarations = canonicalDeclarations,
-      semanticReportDeltas = maybe [] (\old -> mappedImpactForDeclarations canonicalDeclarations old current) previous
+    { previous = previous,
+      current = current,
+      declarations = canonicalDeclarations,
+      deltas = maybe [] (\old -> mappedImpactForDeclarations canonicalDeclarations old current) previous
     }
   where
     canonicalDeclarations = Set.toAscList (Set.fromList declarations)
 
 snapshotConsumers :: SemanticImpactSnapshot -> MappedKey -> Set MappedConsumer
-snapshotConsumers snapshot declaration = Map.findWithDefault Set.empty declaration (snapshotMappedConsumers snapshot)
+snapshotConsumers snapshot declaration = Map.findWithDefault Set.empty declaration ((.mappedConsumers) snapshot)
 
 snapshotEvidence :: SemanticImpactSnapshot -> MappedKey -> Maybe (Set MappedRootEvidence)
-snapshotEvidence snapshot declaration = (Map.findWithDefault Set.empty declaration) <$> snapshotMappedEvidence snapshot
+snapshotEvidence snapshot declaration = (Map.findWithDefault Set.empty declaration) <$> (.mappedEvidence) snapshot
 
 snapshotConsequences :: SemanticImpactSnapshot -> MappedKey -> Maybe (Set MappedConsequence)
-snapshotConsequences snapshot declaration = (Map.findWithDefault Set.empty declaration) <$> snapshotMappedConsequences snapshot
+snapshotConsequences snapshot declaration = (Map.findWithDefault Set.empty declaration) <$> (.mappedConsequences) snapshot
 
 serviceMember :: SemanticImpactSnapshot -> MappedKey -> Bool
-serviceMember snapshot declaration = declaration `Set.member` snapshotServiceInventory snapshot
+serviceMember snapshot declaration = declaration `Set.member` (.serviceInventory) snapshot
 
 declarationIdentityAt :: SemanticImpactSnapshot -> MappedKey -> Maybe Text
-declarationIdentityAt snapshot declaration = Map.lookup declaration (snapshotDeclarationIdentities snapshot)
+declarationIdentityAt snapshot declaration = Map.lookup declaration ((.declarationIdentities) snapshot)
 
 -- | Canonical identity for mapped declaration facts that 'MappedDiff' treats
 -- as changes. Source locations and declaration order are deliberately absent.
@@ -700,31 +704,31 @@ declarationIdentity graph key declaration =
   where
     structuralParts structural shape =
       [ "structural",
-        sourceIdentity (sdHaskell structural),
-        unQualifiedValueName (sdBinding structural),
-        unBindingVersion (sdBindingVersion structural),
-        unCanonicalTypeId (sdCanonical structural),
-        unQualifiedValueName (sdFixtures structural),
-        maybe "" unQualifiedValueName (sdInitial structural),
+        sourceIdentity ((.haskell) structural),
+        unQualifiedValueName ((.binding) structural),
+        unBindingVersion ((.bindingVersion) structural),
+        unCanonicalTypeId ((.canonical) structural),
+        unQualifiedValueName ((.fixtures) structural),
+        maybe "" unQualifiedValueName ((.initial) structural),
         wireFingerprint graph (unMappedKey key),
         structuralPresentation shape
       ]
     opaqueParts opaque =
       [ "opaque",
-        sourceIdentity (odHaskell opaque),
-        unCodecIdentity (odCodecIdentity opaque),
-        unCodecVersion (odCodecVersion opaque),
-        unQualifiedValueName (odFixtures opaque),
-        maybe "" unQualifiedValueName (odInitial opaque),
+        sourceIdentity ((.haskell) opaque),
+        unCodecIdentity ((.codecIdentity) opaque),
+        unCodecVersion ((.codecVersion) opaque),
+        unQualifiedValueName ((.fixtures) opaque),
+        maybe "" unQualifiedValueName ((.initial) opaque),
         wireFingerprint graph (unMappedKey key)
       ]
-    sourceIdentity source = T.intercalate ":" [hsPackage source, hsModule source, hsType source]
+    sourceIdentity source = T.intercalate ":" [(.package) source, (.moduleName) source, (.valueType) source]
     structuralPresentation (RRecord constructor _ fields) =
-      "record:" <> constructor <> ":" <> T.intercalate "," [rwfHaskell field <> "=" <> rwfKey field | field <- sortOn rwfKey fields]
+      "record:" <> constructor <> ":" <> T.intercalate "," [(.haskell) field <> "=" <> (.key) field | field <- sortOn (\field -> field.key) fields]
     structuralPresentation (REnum entries) =
-      "enum:" <> T.intercalate "," [weCtor entry <> "=" <> weTag entry | entry <- sortOn weTag entries]
+      "enum:" <> T.intercalate "," [(.ctor) entry <> "=" <> (.tag) entry | entry <- sortOn (.tag) entries]
     structuralPresentation (RUnion _ arms) =
-      "union:" <> T.intercalate "," [rwaTag arm | arm <- sortOn rwaTag arms]
+      "union:" <> T.intercalate "," [(.tag) arm | arm <- sortOn (.tag) arms]
 
 mappedConsumerIdentity :: MappedConsumer -> Name
 mappedConsumerIdentity (AggregateConsumer aggregate) = aggregate
@@ -824,17 +828,17 @@ mappedSurfaceFactValues impact =
   [ ( T.intercalate
         "/"
         [ "mapped-surface",
-          mappedRootKindIdentity (evidenceRootKind evidence),
-          mappedConsumerIdentity (evidenceConsumer evidence),
+          mappedRootKindIdentity ((.rootKind) evidence),
+          mappedConsumerIdentity ((.consumer) evidence),
           unMappedKey declaration,
-          evidencePath evidence
+          (.path) evidence
         ],
       T.intercalate "," (map mappedConsequenceIdentity (Set.toAscList consequences))
-        <> maybe "" (";projection-operation:" <>) (evidenceOperation evidence)
+        <> maybe "" (";projection-operation:" <>) ((.operation) evidence)
     )
-  | (declaration, evidenceValues) <- Map.toAscList (impactDeclarationEvidence impact),
+  | (declaration, evidenceValues) <- Map.toAscList ((.declarationEvidence) impact),
     evidence <- Set.toAscList evidenceValues,
-    let consequences = Map.findWithDefault Set.empty declaration (impactDeclarationConsequences impact)
+    let consequences = Map.findWithDefault Set.empty declaration ((.declarationConsequences) impact)
   ]
 
 derivedAuthority :: DerivedMappedConsumer -> Name
@@ -845,78 +849,78 @@ derivedAuthority (CatalogProjectionConsumer _ aggregate) = aggregate
 aggregateMappedRoots :: SemanticImpact -> Name -> [MappedRoot]
 aggregateMappedRoots impact aggregate =
   [ root
-  | root <- impactRoots impact,
-    mappedRootConsumer root == AggregateConsumer aggregate
+  | root <- (.roots) impact,
+    (.consumer) root == AggregateConsumer aggregate
   ]
 
 -- | Return one aggregate's transitive mapped declaration closure in stable
 -- declaration-key order.
 aggregateMappedClosure :: SemanticImpact -> Name -> [MappedKey]
 aggregateMappedClosure impact aggregate =
-  maybe [] Set.toAscList (Map.lookup (AggregateConsumer aggregate) (impactAggregateDeclarations impact))
+  maybe [] Set.toAscList (Map.lookup (AggregateConsumer aggregate) ((.aggregateDeclarations) impact))
 
 -- | Return every aggregate that can consume a declaration in stable order.
 -- Unknown and intentionally unused declarations both have no consumers; use
 -- 'serviceMappedInventory' to distinguish whether a declaration exists.
 mappedDeclarationConsumers :: SemanticImpact -> MappedKey -> [MappedConsumer]
 mappedDeclarationConsumers impact declaration =
-  maybe [] Set.toAscList (Map.lookup declaration (impactDeclarationConsumers impact))
+  maybe [] Set.toAscList (Map.lookup declaration ((.declarationConsumers) impact))
 
 -- | Return every checked declaration, including declarations with no current
 -- aggregate consumer, in stable order.
 serviceMappedInventory :: SemanticImpact -> [MappedKey]
-serviceMappedInventory = Set.toAscList . impactServiceDeclarations
+serviceMappedInventory = Set.toAscList . (.serviceDeclarations)
 
 declarationClosure :: TypeGraph -> MappedKey -> Set MappedKey
 declarationClosure graph root =
-  Set.insert root (Map.findWithDefault Set.empty root (tgReachability graph))
+  Set.insert root (Map.findWithDefault Set.empty root ((.reachability) graph))
 
 mappedRootFromUseSite :: UseSite -> MappedRoot
 mappedRootFromUseSite site@(RootCommandField aggregate _ _ declaration) =
   MappedRoot
-    { mappedRootConsumer = AggregateConsumer aggregate,
-      mappedRootKind = MappedCommandFieldRoot,
-      mappedRootUseSite = site,
-      mappedRootDeclaration = declaration
+    { consumer = AggregateConsumer aggregate,
+      kind = MappedCommandFieldRoot,
+      useSite = site,
+      declaration = declaration
     }
 mappedRootFromUseSite site@(RootEventField aggregate _ _ declaration) =
   MappedRoot
-    { mappedRootConsumer = AggregateConsumer aggregate,
-      mappedRootKind = MappedEventFieldRoot,
-      mappedRootUseSite = site,
-      mappedRootDeclaration = declaration
+    { consumer = AggregateConsumer aggregate,
+      kind = MappedEventFieldRoot,
+      useSite = site,
+      declaration = declaration
     }
 mappedRootFromUseSite site@(RootRegister aggregate _ declaration) =
   MappedRoot
-    { mappedRootConsumer = AggregateConsumer aggregate,
-      mappedRootKind = MappedRegisterRoot,
-      mappedRootUseSite = site,
-      mappedRootDeclaration = declaration
+    { consumer = AggregateConsumer aggregate,
+      kind = MappedRegisterRoot,
+      useSite = site,
+      declaration = declaration
     }
 mappedRootFromUseSite site@(RootWorkqueueField workqueue _ declaration) =
   MappedRoot
-    { mappedRootConsumer = WorkqueueConsumer workqueue,
-      mappedRootKind = MappedWorkqueueFieldRoot,
-      mappedRootUseSite = site,
-      mappedRootDeclaration = declaration
+    { consumer = WorkqueueConsumer workqueue,
+      kind = MappedWorkqueueFieldRoot,
+      useSite = site,
+      declaration = declaration
     }
 mappedRootFromUseSite site@(RootReadModelQueryInput readModel declaration) =
   MappedRoot
-    { mappedRootConsumer = ReadModelQueryConsumer readModel MappedQueryInput,
-      mappedRootKind = MappedReadModelQueryInputRoot,
-      mappedRootUseSite = site,
-      mappedRootDeclaration = declaration
+    { consumer = ReadModelQueryConsumer readModel MappedQueryInput,
+      kind = MappedReadModelQueryInputRoot,
+      useSite = site,
+      declaration = declaration
     }
 mappedRootFromUseSite site@(RootReadModelQueryResult readModel declaration) =
   MappedRoot
-    { mappedRootConsumer = ReadModelQueryConsumer readModel MappedQueryResult,
-      mappedRootKind = MappedReadModelQueryResultRoot,
-      mappedRootUseSite = site,
-      mappedRootDeclaration = declaration
+    { consumer = ReadModelQueryConsumer readModel MappedQueryResult,
+      kind = MappedReadModelQueryResultRoot,
+      useSite = site,
+      declaration = declaration
     }
 
 eventAuthority :: UsePath -> Maybe Name
-eventAuthority UsePath {upRoot = RootEventField aggregate _ _ _} = Just aggregate
+eventAuthority UsePath {root = RootEventField aggregate _ _ _} = Just aggregate
 eventAuthority _ = Nothing
 
 maybeToList :: Maybe value -> [value]

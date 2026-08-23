@@ -70,8 +70,8 @@ data CatalogReplayImpact
 instance ToJSON AggregateImpact where
   toJSON impact =
     object
-      [ "eventTypes" .= Set.toAscList (eventTypes impact),
-        "includeSnapshotStreams" .= includeSnapshotStreams impact
+      [ "eventTypes" .= Set.toAscList ((.eventTypes) impact),
+        "includeSnapshotStreams" .= (.includeSnapshotStreams) impact
       ]
 
 instance ToJSON ReplayImpact where
@@ -87,11 +87,11 @@ instance ToJSON CatalogReplayImpact where
   toJSON impact@CatalogReplayAffected {} =
     object
       [ "verdict" .= ("catalog-replay-affected" :: Text),
-        "groups" .= Set.toAscList (affectedGroups impact),
-        "targets" .= Set.toAscList (affectedTargets impact),
-        "sources" .= Set.toAscList (affectedSources impact),
-        "adapters" .= Set.toAscList (affectedAdapters impact),
-        "invalidatesRunningFingerprint" .= invalidatesRunningFingerprint impact
+        "groups" .= Set.toAscList ((.affectedGroups) impact),
+        "targets" .= Set.toAscList ((.affectedTargets) impact),
+        "sources" .= Set.toAscList ((.affectedSources) impact),
+        "adapters" .= Set.toAscList ((.affectedAdapters) impact),
+        "invalidatesRunningFingerprint" .= (.invalidatesRunningFingerprint) impact
       ]
 
 catalogReplayImpactServices :: CheckedService -> CheckedService -> CatalogReplayImpact
@@ -108,26 +108,26 @@ catalogReplayImpactServices oldService newService
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
-    oldTargets = Map.fromList [(ptName target, target) | NProjectionTarget target <- specNodes oldSpec]
-    newTargets = Map.fromList [(ptName target, target) | NProjectionTarget target <- specNodes newSpec]
-    oldGroups = Map.fromList [(rgName groupNode, groupNode) | NRebuildGroup groupNode <- specNodes oldSpec]
-    newGroups = Map.fromList [(rgName groupNode, groupNode) | NRebuildGroup groupNode <- specNodes newSpec]
-    oldOwners = Map.fromList [(poName owner, owner) | NProjectionOwner owner <- specNodes oldSpec]
-    newOwners = Map.fromList [(poName owner, owner) | NProjectionOwner owner <- specNodes newSpec]
+    oldTargets = Map.fromList [((.name) target, target) | NProjectionTarget target <- (.nodes) oldSpec]
+    newTargets = Map.fromList [((.name) target, target) | NProjectionTarget target <- (.nodes) newSpec]
+    oldGroups = Map.fromList [((.name) groupNode, groupNode) | NRebuildGroup groupNode <- (.nodes) oldSpec]
+    newGroups = Map.fromList [((.name) groupNode, groupNode) | NRebuildGroup groupNode <- (.nodes) newSpec]
+    oldOwners = Map.fromList [((.name) owner, owner) | NProjectionOwner owner <- (.nodes) oldSpec]
+    newOwners = Map.fromList [((.name) owner, owner) | NProjectionOwner owner <- (.nodes) newSpec]
     changedTargetNames = changedKeys oldTargets newTargets
     changedGroupNames = changedKeys oldGroups newGroups
     changedOwnerNames = changedKeys oldOwners newOwners
     changedOwners = mapMaybe (`Map.lookup` oldOwners) (Set.toList changedOwnerNames) <> mapMaybe (`Map.lookup` newOwners) (Set.toList changedOwnerNames)
     changedGroups = mapMaybe (`Map.lookup` oldGroups) (Set.toList changedGroupNames) <> mapMaybe (`Map.lookup` newGroups) (Set.toList changedGroupNames)
-    groups = changedGroupNames <> Set.fromList (map poGroup changedOwners) <> groupsContainingChangedTargets <> inheritedGroups
-    targets = changedTargetNames <> Set.fromList (concatMap poTargets changedOwners <> concatMap rgTargets changedGroups) <> inheritedTargets
-    sources = Set.fromList (map renderSource (concatMap poSources changedOwners)) <> inheritedSources
+    groups = changedGroupNames <> Set.fromList (map (.group) changedOwners) <> groupsContainingChangedTargets <> inheritedGroups
+    targets = changedTargetNames <> Set.fromList (concatMap (.targets) changedOwners <> concatMap (.targets) changedGroups) <> inheritedTargets
+    sources = Set.fromList (map renderSource (concatMap (.sources) changedOwners)) <> inheritedSources
     adapters = changedOwnerNames <> inheritedAdapters
     groupsContainingChangedTargets =
       Set.fromList
-        [ rgName groupNode
+        [ (.name) groupNode
         | groupNode <- Map.elems oldGroups <> Map.elems newGroups,
-          any (`Set.member` changedTargetNames) (rgTargets groupNode)
+          any (`Set.member` changedTargetNames) ((.targets) groupNode)
         ]
     changedKeys oldMap newMap =
       Set.fromList
@@ -154,8 +154,8 @@ catalogReplayImpactServices oldService newService
         operationFingerprint oldOperation /= operationFingerprint newOperation,
         maybe False operationReplayable oldOperation || maybe False operationReplayable newOperation
       ]
-    oldMappedOperations = maybe Map.empty ProjectionImpact.operations (projectionImpactFor oldService)
-    newMappedOperations = maybe Map.empty ProjectionImpact.operations (projectionImpactFor newService)
+    oldMappedOperations = maybe Map.empty (.operations) (projectionImpactFor oldService)
+    newMappedOperations = maybe Map.empty (.operations) (projectionImpactFor newService)
     projectionImpactFor service = case checkedTypeGraph service of
       Left _ -> Nothing
       Right graph -> Just (ProjectionImpact.projectionMappedImpact service (semanticImpact graph))
@@ -200,24 +200,24 @@ replayImpactServices oldService newService = do
     newSymbols = aggregateSymbolsFromGraphResult newGraphResult newSpec
     oldContext = ReplaySurfaceContext oldSpec oldGraphResult oldSymbols
     newContext = ReplaySurfaceContext newSpec newGraphResult newSymbols
-    oldAggregates = [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes (surfaceSpec oldContext)]
-    newAggregates = Map.fromList [(aggName aggregate, aggregate) | NAggregate aggregate <- specNodes (surfaceSpec newContext)]
+    oldAggregates = [((.name) aggregate, aggregate) | NAggregate aggregate <- (.nodes) ((.spec) oldContext)]
+    newAggregates = Map.fromList [((.name) aggregate, aggregate) | NAggregate aggregate <- (.nodes) ((.spec) newContext)]
 
 data ReplaySurfaceContext = ReplaySurfaceContext
-  { surfaceSpec :: !Spec,
-    surfaceGraphResult :: Either (NE.NonEmpty TypeGraphError) TypeGraph,
-    surfaceSymbols :: AggregateSymbols
+  { spec :: !Spec,
+    graphResult :: Either (NE.NonEmpty TypeGraphError) TypeGraph,
+    symbols :: AggregateSymbols
   }
 
 hasImpact :: AggregateImpact -> Bool
 hasImpact impact =
-  not (Set.null (eventTypes impact))
-    || includeSnapshotStreams impact
+  not (Set.null ((.eventTypes) impact))
+    || (.includeSnapshotStreams) impact
 
 removedAggregateImpact :: Aggregate -> AggregateImpact
 removedAggregateImpact aggregate =
   AggregateImpact
-    { eventTypes = Set.fromList (evName <$> aggEvents aggregate),
+    { eventTypes = Set.fromList ((.name) <$> (.events) aggregate),
       includeSnapshotStreams = True
     }
 
@@ -227,7 +227,7 @@ matchedAggregateImpact oldService newService oldContext newContext oldAggregate 
   newNonTransitionSurface <-
     aggregateFoldSurfaceForService
       newService
-      newAggregate {aggTransitions = aggTransitions oldAggregate}
+      (replaceAggregateTransitions oldAggregate.transitions newAggregate)
   let nonTransitionFoldChanged = oldSurface /= newNonTransitionSurface
   pure
     AggregateImpact
@@ -238,34 +238,34 @@ matchedAggregateImpact oldService newService oldContext newContext oldAggregate 
         includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
       }
   where
-    oldEventTypes = Set.fromList (evName <$> aggEvents oldAggregate)
+    oldEventTypes = Set.fromList ((.name) <$> (.events) oldAggregate)
     decodeAffected = decodeSurfaceAffected oldContext newContext oldAggregate newAggregate
     mappedRegisterChanged =
       mappedRegisterSurface oldContext oldAggregate
         /= mappedRegisterSurface newContext newAggregate
     (transitionAffected, transitionFoldChanged) =
-      changedTransitionEvents (aggTransitions oldAggregate) (aggTransitions newAggregate)
+      changedTransitionEvents ((.transitions) oldAggregate) ((.transitions) newAggregate)
 
 decodeSurfaceAffected :: ReplaySurfaceContext -> ReplaySurfaceContext -> Aggregate -> Aggregate -> Set Name
 decodeSurfaceAffected oldContext newContext oldAggregate newAggregate =
   removedOrChanged <> wireAffected
   where
-    newEvents = Map.fromList [(evName event, event) | event <- aggEvents newAggregate]
+    newEvents = Map.fromList [((.name) event, event) | event <- (.events) newAggregate]
     removedOrChanged =
       Set.fromList
-        [ evName oldEvent
-        | oldEvent <- aggEvents oldAggregate,
-          maybe True ((/= eventSurface oldContext oldAggregate oldEvent) . eventSurface newContext newAggregate) (Map.lookup (evName oldEvent) newEvents)
+        [ (.name) oldEvent
+        | oldEvent <- (.events) oldAggregate,
+          maybe True ((/= eventSurface oldContext oldAggregate oldEvent) . eventSurface newContext newAggregate) (Map.lookup ((.name) oldEvent) newEvents)
         ]
     wireAffected
-      | aggWire oldAggregate == aggWire newAggregate = Set.empty
-      | otherwise = Set.fromList (evName <$> aggEvents oldAggregate)
+      | (.wire) oldAggregate == (.wire) newAggregate = Set.empty
+      | otherwise = Set.fromList ((.name) <$> (.events) oldAggregate)
 
 eventDecodeSurface :: Aggregate -> Event -> (Int, Maybe (Int, Hole), [(Name, Text, Maybe TypeExpr)])
 eventDecodeSurface aggregate event =
-  ( evVersion event,
-    evUpcastFrom event,
-    [ (fieldDslName identity, fieldWireKey identity, aggregateFieldType field)
+  ( (.version) event,
+    (.upcastFrom) event,
+    [ ((.dslName) identity, (.wireKey) identity, (.valueType) field)
     | field <- eventFields aggregate event,
       let identity = resolveAggregateFieldIdentity field
     ]
@@ -278,17 +278,17 @@ eventSurface context aggregate event =
 mappedFieldSurface :: ReplaySurfaceContext -> Aggregate -> Event -> [(Name, Text)]
 mappedFieldSurface context aggregate event = mapped <> nominal
   where
-    mapped = case surfaceGraphResult context of
+    mapped = case (.graphResult) context of
       Left _ -> []
       Right graph ->
-        [ (aggregateFieldName field, wireFingerprint graph typeName)
+        [ ((.name) field, wireFingerprint graph typeName)
         | field <- eventFields aggregate event,
-          TRef typeName <- maybeToList (aggregateFieldType field),
-          Map.member (MappedKey typeName) (tgDeclarations graph)
+          TRef typeName <- maybeToList ((.valueType) field),
+          Map.member (MappedKey typeName) ((.declarations) graph)
         ]
-    symbols = surfaceSymbols context
+    symbols = (.symbols) context
     nominal =
-      [ (aggregateFieldName field, nominalSurface resolved)
+      [ ((.name) field, nominalSurface resolved)
       | field <- eventFields aggregate event,
         Right (AggregateNominal resolved) <- [inferAggregateFieldType symbols aggregate EventFieldUse field]
       ]
@@ -296,33 +296,33 @@ mappedFieldSurface context aggregate event = mapped <> nominal
 mappedRegisterSurface :: ReplaySurfaceContext -> Aggregate -> [(Name, Name, Text)]
 mappedRegisterSurface context aggregate = mapped <> nominal
   where
-    mapped = case surfaceGraphResult context of
+    mapped = case (.graphResult) context of
       Left _ -> []
       Right graph ->
-        [ (regName register, typeName, wireFingerprint graph typeName)
-        | register <- aggRegs aggregate,
-          TRef typeName <- [regType register],
-          Map.member (MappedKey typeName) (tgDeclarations graph)
+        [ ((.name) register, typeName, wireFingerprint graph typeName)
+        | register <- (.regs) aggregate,
+          TRef typeName <- [(.valueType) register],
+          Map.member (MappedKey typeName) ((.declarations) graph)
         ]
-    symbols = surfaceSymbols context
+    symbols = (.symbols) context
     nominal =
-      [ (regName register, resolvedNominalName resolved, nominalSurface resolved)
-      | register <- aggRegs aggregate,
-        Right (AggregateNominal resolved) <- [resolveAggregateType symbols (regLoc register) RegisterUse (regType register)]
+      [ ((.name) register, (.name) resolved, nominalSurface resolved)
+      | register <- (.regs) aggregate,
+        Right (AggregateNominal resolved) <- [resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register)]
       ]
 
 nominalSurface :: ResolvedNominalType -> Text
 nominalSurface nominal =
-  nominalRepresentationSurface (resolvedNominalRepresentation nominal)
-    <> case resolvedNominalOwnership nominal of
+  nominalRepresentationSurface ((.representation) nominal)
+    <> case (.ownership) nominal of
       GeneratedNominal -> "|ownership=generated"
       ConsumerNominal binding ->
         Text.concat
           [ "|ownership=consumer",
-            "|canonical=" <> unCanonicalTypeId (consumerNominalCanonical binding),
-            "|binding=" <> unQualifiedValueName (consumerNominalBinding binding),
-            "|binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding),
-            "|initial=" <> maybe "(none)" unQualifiedValueName (consumerNominalInitial binding)
+            "|canonical=" <> (.unCanonicalTypeId) ((.canonical) binding),
+            "|binding=" <> (.unQualifiedValueName) ((.binding) binding),
+            "|binding-version=" <> (.unBindingVersion) ((.bindingVersion) binding),
+            "|initial=" <> maybe "(none)" (.unQualifiedValueName) ((.initial) binding)
           ]
 
 nominalRepresentationSurface :: NominalRepresentation -> Text
@@ -337,10 +337,10 @@ nominalRepresentationSurface representation = case representation of
     NominalTime -> "scalar:Time"
 
 eventFields :: Aggregate -> Event -> [AggregateField]
-eventFields aggregate event = case evBody event of
+eventFields aggregate event = case (.body) event of
   EventFields fields -> fields
   EventFromCommand commandName ->
-    concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+    concat [(.fields) command | command <- (.commands) aggregate, (.name) command == commandName]
 
 maybeToList :: Maybe a -> [a]
 maybeToList = maybe [] pure
@@ -371,15 +371,15 @@ changedTransitionEvents oldTransitions newTransitions =
       Map.fromListWith (<>)
         . map (\transition -> (transitionIdentity transition, [transition]))
     transitionIdentity transition =
-      ( modeKey (tMode transition),
-        tSource transition,
-        tCommand transition
+      ( modeKey ((.mode) transition),
+        (.source) transition,
+        (.command) transition
       )
     modeKey TmLive = "live" :: Text
     modeKey TmReplayOnly = "replay-only"
     transitionSortKey transition =
-      (maybe "" canonicalExpr (tGuard transition), canonicalTransition transition)
-    emittedBy = Set.fromList . tEmits
+      (maybe "" canonicalExpr ((.guard) transition), canonicalTransition transition)
+    emittedBy = Set.fromList . (.emits)
 
 -- | Remove byte-identical transitions as a multiset. Sorting makes duplicate
 -- cancellation independent of declaration order.
@@ -413,9 +413,9 @@ cancelLoosenings oldTransitions newTransitions =
         guardOnlyLoosening oldTransition newTransition
       ]
     looseningPairKey (oldTransition, newTransition) =
-      ( maybe "" canonicalExpr (tGuard oldTransition),
+      ( maybe "" canonicalExpr ((.guard) oldTransition),
         canonicalTransition oldTransition,
-        maybe "" canonicalExpr (tGuard newTransition),
+        maybe "" canonicalExpr ((.guard) newTransition),
         canonicalTransition newTransition
       )
 
@@ -426,8 +426,41 @@ cancelLoosenings oldTransitions newTransitions =
 -- conjunction elimination, and disjunction introduction.
 guardOnlyLoosening :: Transition -> Transition -> Bool
 guardOnlyLoosening oldTransition newTransition =
-  oldTransition {tGuard = tGuard newTransition} == newTransition
-    && guardImplies (tGuard oldTransition) (tGuard newTransition)
+  replaceTransitionGuard newTransition.guard oldTransition == newTransition
+    && guardImplies oldTransition.guard newTransition.guard
+
+replaceAggregateTransitions :: [Transition] -> Aggregate -> Aggregate
+replaceAggregateTransitions transitions aggregate =
+  Aggregate
+    { name = aggregate.name,
+      regs = aggregate.regs,
+      states = aggregate.states,
+      commands = aggregate.commands,
+      events = aggregate.events,
+      transitions,
+      domainOutcomeTypes = aggregate.domainOutcomeTypes,
+      domainOutcomeDuplicateLocs = aggregate.domainOutcomeDuplicateLocs,
+      wire = aggregate.wire,
+      projection = aggregate.projection,
+      snapshot = aggregate.snapshot,
+      loc = aggregate.loc
+    }
+
+replaceTransitionGuard :: Maybe Expr -> Transition -> Transition
+replaceTransitionGuard guard transition =
+  Transition
+    { source = transition.source,
+      command = transition.command,
+      implementation = transition.implementation,
+      guard,
+      writes = transition.writes,
+      emits = transition.emits,
+      outcome = transition.outcome,
+      outcomeDuplicateLocs = transition.outcomeDuplicateLocs,
+      goto = transition.goto,
+      mode = transition.mode,
+      loc = transition.loc
+    }
 
 guardImplies :: Maybe Expr -> Maybe Expr -> Bool
 guardImplies _ Nothing = True
@@ -451,8 +484,8 @@ renderReplayImpact (ReplayAffected aggregates) =
       "; "
       [ aggregateName
           <> " events=["
-          <> Text.intercalate "," (Set.toAscList (eventTypes impact))
+          <> Text.intercalate "," (Set.toAscList ((.eventTypes) impact))
           <> "] snapshots="
-          <> if includeSnapshotStreams impact then "yes" else "no"
+          <> if (.includeSnapshotStreams) impact then "yes" else "no"
       | (aggregateName, impact) <- Map.toAscList aggregates
       ]

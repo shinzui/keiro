@@ -1,5 +1,3 @@
-{-# LANGUAGE NoFieldSelectors #-}
-
 -- | Shared implementation behind the public frontend and parser compatibility
 -- facade. This module is intentionally not exposed by the package.
 module Keiro.Dsl.Frontend.Internal
@@ -32,7 +30,7 @@ import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
-  ( LanguageDefinition,
+  ( LanguageDefinition (..),
     LanguageFeature,
     LanguageVersion,
     ParseFailure (..),
@@ -40,7 +38,6 @@ import Keiro.Dsl.LanguageVersion
     SourceLanguage,
     SourceLanguageDiagnostic (..),
     SourceLanguageErrorCode,
-    definitionVersion,
     languageSupportsFeature,
     renderParseFailure,
     sourceLanguageDiagnosticMessage,
@@ -62,7 +59,7 @@ data FrontendContext = FrontendContext
   deriving stock (Eq, Show, Generic)
 
 frontendLanguageVersion :: FrontendContext -> LanguageVersion
-frontendLanguageVersion FrontendContext {definition} = definitionVersion definition
+frontendLanguageVersion FrontendContext {definition} = (.version) definition
 
 frontendSupportsFeature :: FrontendContext -> LanguageFeature -> Bool
 frontendSupportsFeature context feature = languageSupportsFeature (frontendLanguageVersion context) feature
@@ -111,11 +108,11 @@ frontendFailureFromSourceDiagnostic :: FrontendPhase -> SourceSpan -> Maybe [Lan
 frontendFailureFromSourceDiagnostic phase span supportedOverride diagnostic =
   FrontendFailure
     { phase,
-      code = SourceLanguageError (sourceLanguageErrorCode diagnostic),
+      code = SourceLanguageError ((.errorCode) diagnostic),
       span,
       message = sourceLanguageDiagnosticMessage diagnostic,
       expected = [],
-      supportedVersions = fromMaybe (NE.toList (sourceLanguageSupportedVersions diagnostic)) supportedOverride,
+      supportedVersions = fromMaybe (NE.toList ((.supportedVersions) diagnostic)) supportedOverride,
       compatibility = SourceLanguageFailure diagnostic
     }
 
@@ -189,13 +186,13 @@ lowerSurfaceDocument surfaceSource@SurfaceSource {spec = locatedSpec} = do
       Right
       ( exactSemanticSourceIndex
           (case surfaceSource of SurfaceSource {source} -> source)
-          (semanticSourceSubjects (parsedSpec parsedSource))
+          (semanticSourceSubjects ((.spec) parsedSource))
           (surfaceSourceEntries surfaceSource)
       )
   pure
     ParsedSourceDocument
-      { documentParsedSource = parsedSource,
-        documentSourceIndex = sourceIndex
+      { parsedSource = parsedSource,
+        sourceIndex = sourceIndex
       }
 
 -- | Compatibility lowering for syntax-valid semantic graphs, including graphs
@@ -206,8 +203,8 @@ lowerSurfaceSource surfaceSource@SurfaceSource {language, spec = locatedSpec} = 
   validateSurfaceSource surfaceSource
   pure
     ParsedSource
-      { parsedSourceLanguage = language,
-        parsedSpec = lowerSpec locatedSpec
+      { sourceLanguage = language,
+        spec = lowerSpec locatedSpec
       }
 
 surfaceSourceEntries :: SurfaceSource -> [(SourceSubject, SourceSpan)]
@@ -223,11 +220,11 @@ surfaceSourceEntries SurfaceSource {spec = Located {value = SurfaceSpec {element
       SurfaceExpression {} -> []
 
 sourceIndexLoweringFailure :: SourceSpan -> SourceIndexFailure -> LoweringFailure
-sourceIndexLoweringFailure fallback SourceIndexFailure {failureCode = indexCode, failureSpan, failureMessage} =
+sourceIndexLoweringFailure fallback SourceIndexFailure {code = indexCode, span, message} =
   LoweringFailure
     { code = SemanticSourceIndexInvalid indexCode,
-      span = maybe fallback id failureSpan,
-      message = failureMessage
+      span = maybe fallback id span,
+      message = message
     }
 
 lowerSpec :: Located SurfaceSpec -> Spec
@@ -235,22 +232,22 @@ lowerSpec
   Located
     { value =
         SurfaceSpec
-          { context = Located {value = contextName},
+          { context = Located {value = name},
             moduleRoot,
             layout,
             items
           }
     } =
     Spec
-      { specContext = contextName,
-        specModuleRoot = locatedValue <$> moduleRoot,
-        specLayout = locatedValue <$> layout,
-        specIds = [declaration | Located {span, value = SurfaceId value} <- items, let declaration = value {idLoc = spanLoc span}],
-        specEnums = [declaration | Located {span, value = SurfaceEnum value} <- items, let declaration = value {enumLoc = spanLoc span}],
-        specRules = [declaration | Located {span, value = SurfaceRule value} <- items, let declaration = value {ruleLoc = spanLoc span}],
-        specNominalScalars = [declaration | Located {span, value = SurfaceNominalScalar value} <- items, let declaration = value {nominalScalarLoc = spanLoc span}],
-        specMapped = [declaration | Located {span, value = SurfaceMapped value} <- items, let declaration = setMappedLoc (spanLoc span) value],
-        specNodes = [node | Located {span, value = SurfaceNode value} <- items, let node = setNodeLoc (spanLoc span) value]
+      { context = name,
+        moduleRoot = locatedValue <$> moduleRoot,
+        layout = locatedValue <$> layout,
+        ids = [setIdLoc (spanLoc span) value | Located {span, value = SurfaceId value} <- items],
+        enums = [setEnumLoc (spanLoc span) value | Located {span, value = SurfaceEnum value} <- items],
+        rules = [setRuleLoc (spanLoc span) value | Located {span, value = SurfaceRule value} <- items],
+        nominalScalars = [setNominalScalarLoc (spanLoc span) value | Located {span, value = SurfaceNominalScalar value} <- items],
+        mapped = [declaration | Located {span, value = SurfaceMapped value} <- items, let declaration = setMappedLoc (spanLoc span) value],
+        nodes = [node | Located {span, value = SurfaceNode value} <- items, let node = setNodeLoc (spanLoc span) value]
       }
 
 locatedValue :: Located a -> a
@@ -259,64 +256,73 @@ locatedValue Located {value} = value
 spanLoc :: SourceSpan -> Loc
 spanLoc sourceSpan = Loc (startLine sourceSpan)
 
+setIdLoc :: Loc -> IdDecl -> IdDecl
+setIdLoc loc IdDecl {name, prefix, binding} = IdDecl {name, prefix, binding, loc}
+
+setEnumLoc :: Loc -> EnumDecl -> EnumDecl
+setEnumLoc loc EnumDecl {name, ctors, binding} = EnumDecl {name, ctors, binding, loc}
+
+setRuleLoc :: Loc -> RuleDecl -> RuleDecl
+setRuleLoc loc RuleDecl {name, domain, codomain, cases} = RuleDecl {name, domain, codomain, cases, loc}
+
+setNominalScalarLoc :: Loc -> NominalScalarDecl -> NominalScalarDecl
+setNominalScalarLoc loc NominalScalarDecl {name, representation, binding} =
+  NominalScalarDecl {name, representation, binding, loc}
+
 setMappedLoc :: Loc -> MappedDecl -> MappedDecl
-setMappedLoc loc value@MappedStructural {} = value {msLoc = loc}
-setMappedLoc loc value@MappedOpaque {} = value {moLoc = loc}
+setMappedLoc loc (MappedStructural name haskell binding bindingVersion canonical fixtures initial shape _) =
+  MappedStructural name haskell binding bindingVersion canonical fixtures initial shape loc
+setMappedLoc loc (MappedOpaque name haskell codecId codecVersion fixtures initial _) =
+  MappedOpaque name haskell codecId codecVersion fixtures initial loc
 
 setNodeLoc :: Loc -> Node -> Node
 setNodeLoc loc = \case
-  NAggregate value -> NAggregate value {aggLoc = loc}
-  NProcess value -> NProcess value {procLoc = loc}
-  NRouter value -> NRouter value {rtLoc = loc}
-  NContract value -> NContract value {ctrLoc = loc}
-  NIntake value -> NIntake value {inkLoc = loc}
-  NEmit value -> NEmit value {emLoc = loc}
-  NPublisher value -> NPublisher value {pubLoc = loc}
-  NWorkqueue value -> NWorkqueue value {wqLoc = loc}
-  NPgmqDispatch value -> NPgmqDispatch value {pdLoc = loc}
-  NReadModel value -> NReadModel value {rmLoc = loc}
-  NProjectionTarget value -> NProjectionTarget value {ptLoc = loc}
-  NRebuildGroup value -> NRebuildGroup value {rgLoc = loc}
-  NProjectionRevision value -> NProjectionRevision value {prvLoc = loc}
-  NExternalRead value -> NExternalRead value {erLoc = loc}
-  NProjectionOwner value -> NProjectionOwner value {poLoc = loc}
-  NWorkflow
-    WorkflowNode
-      { wfId,
-        wfStable,
-        wfInput,
-        wfInputFields,
-        wfOutput,
-        wfIdField,
-        wfIdVia,
-        wfBody
-      } ->
-      NWorkflow
-        WorkflowNode
-          { wfId,
-            wfStable,
-            wfInput,
-            wfInputFields,
-            wfOutput,
-            wfIdField,
-            wfIdVia,
-            wfBody,
-            wfLoc = loc
-          }
-  NOperation value -> NOperation value {opLoc = loc}
+  NAggregate (Aggregate name regs states commands events transitions domainOutcomeTypes domainOutcomeDuplicateLocs wire projection snapshot _) ->
+    NAggregate (Aggregate name regs states commands events transitions domainOutcomeTypes domainOutcomeDuplicateLocs wire projection snapshot loc)
+  NProcess (ProcessNode nodeId name input correlate saga target projections handle rejected poison timer _) ->
+    NProcess (ProcessNode nodeId name input correlate saga target projections handle rejected poison timer loc)
+  NRouter (RouterNode nodeId name input key resolve target projections dispatch rejected poison _) ->
+    NRouter (RouterNode nodeId name input key resolve target projections dispatch rejected poison loc)
+  NContract (ContractNode name schemaVersion discriminator topics events _) ->
+    NContract (ContractNode name schemaVersion discriminator topics events loc)
+  NIntake (IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition _) ->
+    NIntake (IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc)
+  NEmit (EmitNode name contract topic source key discriminant mapping skip messageId idempotencyKey _) ->
+    NEmit (EmitNode name contract topic source key discriminant mapping skip messageId idempotencyKey loc)
+  NPublisher (PublisherNode name emit ordering maxAttempts backoff outboxField _) ->
+    NPublisher (PublisherNode name emit ordering maxAttempts backoff outboxField loc)
+  NWorkqueue (WorkqueueNode name logical physical dlq table ordering groupKey provision payloadName payload maxRetries delay dlqOn disposition _) ->
+    NWorkqueue (WorkqueueNode name logical physical dlq table ordering groupKey provision payloadName payload maxRetries delay dlqOn disposition loc)
+  NPgmqDispatch PgmqDispatchNode {name, sourceReadModel, sourceKey, fanoutBody, dedupKey, dedupReadModel, dedupReadModelField, dedupQueue, dedupQueueField, enqueueTo} ->
+    NPgmqDispatch PgmqDispatchNode {name, sourceReadModel, sourceKey, fanoutBody, dedupKey, dedupReadModel, dedupReadModelField, dedupQueue, dedupQueueField, enqueueTo, loc}
+  NReadModel (ReadModelNode name table schema columns version shape freshness supply group observedTargets backingTarget queryTypes _) ->
+    NReadModel (ReadModelNode name table schema columns version shape freshness supply group observedTargets backingTarget queryTypes loc)
+  NProjectionTarget ProjectionTargetNode {name, schema, table, reset, dependsOn} ->
+    NProjectionTarget ProjectionTargetNode {name, schema, table, reset, dependsOn, loc}
+  NRebuildGroup RebuildGroupNode {name, targets, order} ->
+    NRebuildGroup RebuildGroupNode {name, targets, order, loc}
+  NProjectionRevision (ProjectionRevisionNode name group targets _) ->
+    NProjectionRevision (ProjectionRevisionNode name group targets loc)
+  NExternalRead ExternalReadNode {name, version, queryModel, resultSchema, resultType, compatibleRevisions, surfaceGeneration} ->
+    NExternalRead ExternalReadNode {name, version, queryModel, resultSchema, resultType, compatibleRevisions, surfaceGeneration, loc}
+  NProjectionOwner ProjectionOwnerNode {name, sources, delivery, group, targets, order, subscription, dedup, checkpointOnMissing, replay} ->
+    NProjectionOwner ProjectionOwnerNode {name, sources, delivery, group, targets, order, subscription, dedup, checkpointOnMissing, replay, loc}
+  NWorkflow (WorkflowNode nodeId stable input inputFields output idField idVia body _) ->
+    NWorkflow (WorkflowNode nodeId stable input inputFields output idField idVia body loc)
+  NOperation (OperationNode name shape _) -> NOperation (OperationNode name shape loc)
 
 validateSurfaceSource :: SurfaceSource -> Either LoweringFailure ()
 validateSurfaceSource
   SurfaceSource
     { source = sourceName,
       preamble,
-      spec = Located {span = specSpan, value = surfaceSpec}
+      spec = Located {span = specSpan, value = spec}
     } = do
     traverse_ (validateOwnedSpan sourceName) allSpans
     traverse_ (validateContained specSpan) bodySpans
-    validateOrder (surfaceItemSpans surfaceSpec)
+    validateOrder (surfaceItemSpans spec)
     where
-      bodySpans = surfaceSpecSpans surfaceSpec
+      bodySpans = surfaceSpecSpans spec
       allSpans = specSpan : maybe [] (\Located {span} -> [span]) preamble <> bodySpans
       validateOwnedSpan expected sourceSpan@SourceSpan {source}
         | not (validSourceSpan sourceSpan) =

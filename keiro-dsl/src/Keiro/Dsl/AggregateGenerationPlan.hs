@@ -11,9 +11,9 @@ import Data.Map.Strict qualified as Map
 import Keiro.Dsl.Grammar (Name, Transition (..))
 
 data TransitionLayoutEntry = TransitionLayoutEntry
-  { layoutDeclarationIndex :: !Int,
-    layoutOutgoingIndex :: !Int,
-    layoutTransition :: !Transition
+  { declarationIndex :: !Int,
+    outgoingIndex :: !Int,
+    transition :: !Transition
   }
   deriving stock (Eq, Show)
 
@@ -21,7 +21,7 @@ transitionLayout :: [Transition] -> [TransitionLayoutEntry]
 transitionLayout transitions = snd (mapAccumL buildEntry Map.empty (zip [1 ..] transitions))
   where
     buildEntry counts (declarationIndex, transition) =
-      let source = tSource transition
+      let source = (.source) transition
           outgoingIndex = Map.findWithDefault 0 source counts
           counts' = Map.insert source (outgoingIndex + 1) counts
           entry = TransitionLayoutEntry declarationIndex outgoingIndex transition
@@ -30,7 +30,7 @@ transitionLayout transitions = snd (mapAccumL buildEntry Map.empty (zip [1 ..] t
 groupTransitionLayoutBySource :: [TransitionLayoutEntry] -> [(Name, [TransitionLayoutEntry])]
 groupTransitionLayoutBySource entries =
   [ (source, transitionLayoutForSource source entries)
-  | source <- firstOccurrences (map (tSource . layoutTransition) entries)
+  | source <- firstOccurrences (map ((.source) . (.transition)) entries)
   ]
   where
     firstOccurrences = foldl appendNew []
@@ -39,4 +39,4 @@ groupTransitionLayoutBySource entries =
       | otherwise = seen ++ [value]
 
 transitionLayoutForSource :: Name -> [TransitionLayoutEntry] -> [TransitionLayoutEntry]
-transitionLayoutForSource source = filter ((== source) . tSource . layoutTransition)
+transitionLayoutForSource source = filter ((== source) . (.source) . (.transition))

@@ -34,7 +34,7 @@ import Distribution.Types.UnqualComponentName (unUnqualComponentName)
 import Distribution.Utils.Path (getSymbolicPath)
 import Keiro.Dsl.ConformancePackage (ConformancePackageRecord (..), conformanceRecordFileName, parseConformancePackageRecord)
 import Keiro.Dsl.Scaffold (ModuleKind (..), codecComparisonBanner, isGeneratedBannerLine)
-import Keiro.Dsl.ScaffoldRecord (ScaffoldRecord (..), parseRecord)
+import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (IdiomaticNamingV1), ScaffoldRecord (..), parseRecord)
 import Keiro.Dsl.WorkspaceRecord (WorkspaceModuleRow (..), WorkspaceRecord (..), parseWorkspaceRecord)
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import System.Exit (ExitCode (..))
@@ -51,7 +51,8 @@ data CorpusEntry
       }
   | WorkspaceSpec
       { ceManifestPath :: FilePath,
-        ceOutDir :: FilePath
+        ceOutDir :: FilePath,
+        ceApplyGeneratedHaskellEdition :: Bool
       }
   | SkeletonRun
       { ceKind :: Text,
@@ -64,7 +65,11 @@ data CorpusEntry
   deriving stock (Eq, Show)
 
 entryOutDir :: CorpusEntry -> FilePath
-entryOutDir = ceOutDir
+entryOutDir = \case
+  SingleSpec {ceOutDir} -> ceOutDir
+  WorkspaceSpec {ceOutDir} -> ceOutDir
+  SkeletonRun {ceOutDir} -> ceOutDir
+  FrozenCorpus {ceOutDir} -> ceOutDir
 
 renderInvocation :: CorpusEntry -> [String]
 renderInvocation SingleSpec {ceSpecPath, ceOutDir, ceModuleRoot, ceCollocate, ceExtraArgs} =
@@ -72,8 +77,9 @@ renderInvocation SingleSpec {ceSpecPath, ceOutDir, ceModuleRoot, ceCollocate, ce
     <> maybe [] (\root -> ["--module-root", T.unpack root]) ceModuleRoot
     <> ["--collocate" | ceCollocate]
     <> map T.unpack ceExtraArgs
-renderInvocation WorkspaceSpec {ceManifestPath, ceOutDir} =
+renderInvocation WorkspaceSpec {ceManifestPath, ceOutDir, ceApplyGeneratedHaskellEdition} =
   ["scaffold", ceManifestPath, "--out", ceOutDir]
+    <> ["--apply-generated-haskell-edition" | ceApplyGeneratedHaskellEdition]
 renderInvocation SkeletonRun {ceRoot, ceOutDir} =
   ["scaffold", "/dev/stdin", "--out", ceOutDir, "--module-root", T.unpack ceRoot]
 renderInvocation FrozenCorpus {} = []
@@ -166,24 +172,24 @@ emptySupplement :: Supplement
 emptySupplement = Supplement [] [] [] [] [] []
 
 addRow :: SupplementRow -> Supplement -> Supplement
-addRow row supplement = case row of
-  WorkspaceRow manifest outDir -> supplement {supWorkspaces = (manifest, outDir) : supWorkspaces supplement}
-  SkeletonRow kind root outDir -> supplement {supSkeletons = (kind, root, outDir) : supSkeletons supplement}
-  FrozenRow outDir -> supplement {supFrozen = outDir : supFrozen supplement}
-  ExtraArgsRow outDir args -> supplement {supExtraArgs = (outDir, args) : supExtraArgs supplement}
-  ExemptionRow path -> supplement {supExemptions = path : supExemptions supplement}
-  LegacyGeneratedRow path -> supplement {supLegacyGenerated = path : supLegacyGenerated supplement}
+addRow row (Supplement workspaces skeletons frozen extraArgs exemptions legacyGenerated) = case row of
+  WorkspaceRow manifest outDir -> Supplement ((manifest, outDir) : workspaces) skeletons frozen extraArgs exemptions legacyGenerated
+  SkeletonRow kind root outDir -> Supplement workspaces ((kind, root, outDir) : skeletons) frozen extraArgs exemptions legacyGenerated
+  FrozenRow outDir -> Supplement workspaces skeletons (outDir : frozen) extraArgs exemptions legacyGenerated
+  ExtraArgsRow outDir args -> Supplement workspaces skeletons frozen ((outDir, args) : extraArgs) exemptions legacyGenerated
+  ExemptionRow path -> Supplement workspaces skeletons frozen extraArgs (path : exemptions) legacyGenerated
+  LegacyGeneratedRow path -> Supplement workspaces skeletons frozen extraArgs exemptions (path : legacyGenerated)
 
 validateSupplement :: Supplement -> [Text]
 validateSupplement supplement =
-  duplicateMessages "workspace out-dir" (map snd (supWorkspaces supplement))
-    <> duplicateMessages "extra-args out-dir" (map fst (supExtraArgs supplement))
-    <> duplicateMessages "frozen out-dir" (supFrozen supplement)
+  duplicateMessages "workspace out-dir" (map snd supplement.supWorkspaces)
+    <> duplicateMessages "extra-args out-dir" (map fst supplement.supExtraArgs)
+    <> duplicateMessages "frozen out-dir" supplement.supFrozen
     <> [ "corpus out-dir cannot be both skeleton and frozen: " <> T.pack outDir
-       | outDir <- Set.toList (Set.fromList (map (\(_, _, outDir) -> outDir) (supSkeletons supplement)) `Set.intersection` Set.fromList (supFrozen supplement))
+       | outDir <- Set.toList (Set.fromList (map (\(_, _, outDir) -> outDir) supplement.supSkeletons) `Set.intersection` Set.fromList supplement.supFrozen)
        ]
-    <> duplicateMessages "uncompiled-generated path" (supExemptions supplement)
-    <> duplicateMessages "legacy-generated path" (supLegacyGenerated supplement)
+    <> duplicateMessages "uncompiled-generated path" supplement.supExemptions
+    <> duplicateMessages "legacy-generated path" supplement.supLegacyGenerated
   where
     duplicateMessages label values =
       [ "duplicate " <> label <> " in corpus manifest: " <> T.pack value
@@ -227,28 +233,28 @@ loadHistory repoRoot recordPath = do
 buildPlan :: FilePath -> Supplement -> [RecordHistory] -> Either [Text] ([CorpusEntry], [FilePath])
 buildPlan repoRoot supplement histories =
   if null errors
-    then Right (orderedEntries, supExemptions supplement)
+    then Right (orderedEntries, supplement.supExemptions)
     else Left errors
   where
-    extraArgs = Map.fromList (supExtraArgs supplement)
-    workspaceRows = Map.fromList [(outDir, manifest) | (manifest, outDir) <- supWorkspaces supplement]
+    extraArgs = Map.fromList supplement.supExtraArgs
+    workspaceRows = Map.fromList [(outDir, manifest) | (manifest, outDir) <- supplement.supWorkspaces]
     singleRecords = [(recordOutDir repoRoot path, record) | SingleHistory path record <- histories]
-    workspaceRecords = [recordOutDir repoRoot path | WorkspaceHistory path _ <- histories]
-    stdinDirs = Set.fromList [outDir | (outDir, record) <- singleRecords, recSpecPath record == "/dev/stdin"]
-    ordinaryRecords = [(outDir, record) | (outDir, record) <- singleRecords, recSpecPath record /= "/dev/stdin"]
+    workspaceRecords = [(recordOutDir repoRoot path, record) | WorkspaceHistory path record <- histories]
+    stdinDirs = Set.fromList [outDir | (outDir, record) <- singleRecords, record.specPath == "/dev/stdin"]
+    ordinaryRecords = [(outDir, record) | (outDir, record) <- singleRecords, record.specPath /= "/dev/stdin"]
     ordinaryDirs = Set.fromList (map fst ordinaryRecords)
-    workspaceDirs = Set.fromList workspaceRecords
-    skeletonDirs = Set.fromList [outDir | (_, _, outDir) <- supSkeletons supplement]
-    frozenDirs = Set.fromList (supFrozen supplement)
+    workspaceDirs = Set.fromList (map fst workspaceRecords)
+    skeletonDirs = Set.fromList [outDir | (_, _, outDir) <- supplement.supSkeletons]
+    frozenDirs = Set.fromList supplement.supFrozen
     stdinClaimDirs = skeletonDirs `Set.union` frozenDirs
     singleEntries = map makeSingle ordinaryRecords
     workspaceEntries =
-      [ WorkspaceSpec manifest outDir
-      | outDir <- workspaceRecords,
+      [ WorkspaceSpec manifest outDir (record.namingEdition == IdiomaticNamingV1)
+      | (outDir, record) <- workspaceRecords,
         Just manifest <- [Map.lookup outDir workspaceRows]
       ]
-    skeletonEntries = [SkeletonRun kind root outDir | (kind, root, outDir) <- supSkeletons supplement]
-    frozenEntries = map FrozenCorpus (supFrozen supplement)
+    skeletonEntries = [SkeletonRun kind root outDir | (kind, root, outDir) <- supplement.supSkeletons]
+    frozenEntries = map FrozenCorpus supplement.supFrozen
     orderedEntries = sortOn entryOutDir (singleEntries <> workspaceEntries) <> skeletonEntries <> frozenEntries
     errors =
       ["no tracked scaffold records were found under keiro-dsl/test" | null histories]
@@ -288,16 +294,18 @@ buildPlan repoRoot supplement histories =
       ]
     unsafeInputErrors =
       [ "corpus input is not a safe repository-relative path: " <> T.pack input
-      | input <- map ceSpecPath singleEntries <> map ceManifestPath workspaceEntries,
+      | input <- map (.ceSpecPath) singleEntries <> map (.ceManifestPath) workspaceEntries,
         not (safeRelativePath input)
       ]
     makeSingle (outDir, record) =
       SingleSpec
-        { ceSpecPath = T.unpack (recSpecPath record),
+        { ceSpecPath = T.unpack record.specPath,
           ceOutDir = outDir,
-          ceModuleRoot = nonEmpty (recModuleRoot record),
-          ceCollocate = recLayout record == "collocated",
-          ceExtraArgs = Map.findWithDefault [] outDir extraArgs
+          ceModuleRoot = nonEmpty record.moduleRoot,
+          ceCollocate = record.layout == "collocated",
+          ceExtraArgs =
+            ["--apply-generated-haskell-edition" | record.namingEdition == IdiomaticNamingV1]
+              <> Map.findWithDefault [] outDir extraArgs
         }
 
 recordOutDir :: FilePath -> FilePath -> FilePath
@@ -325,9 +333,9 @@ checkRecordDiskConsistency repoRoot entries = do
     (Right histories, Right conformanceViews, Right supplement) -> do
       let views = map historyRecordView histories <> conformanceViews
           recordedFiles =
-            [ (kind, normalise (takeDirectory (rvRecordPath view) </> path), rvRecordPath view)
+            [ (kind, normalise (takeDirectory view.rvRecordPath </> path), view.rvRecordPath)
             | view <- views,
-              (kind, path) <- rvFiles view
+              (kind, path) <- view.rvFiles
             ]
       missing <-
         filterM
@@ -350,7 +358,7 @@ checkRecordDiskConsistency repoRoot entries = do
               | path <- generatedOnDisk,
                 any (`pathWithin` path) (skeletonClaims <> frozenClaims)
               ]
-          legacyGenerated = Set.fromList (supLegacyGenerated supplement)
+          legacyGenerated = Set.fromList supplement.supLegacyGenerated
           generatedSet = Set.fromList generatedOnDisk
           unrecorded =
             Set.toList
@@ -373,9 +381,9 @@ checkRecordDiskConsistency repoRoot entries = do
 historyRecordView :: RecordHistory -> RecordView
 historyRecordView history = case history of
   SingleHistory path record ->
-    RecordView path (recFiles record)
+    RecordView path record.files
   WorkspaceHistory path record ->
-    RecordView path [(wrmKind row, wrmPath row) | row <- wrModules record]
+    RecordView path [(row.kind, row.path) | row <- record.modules]
 
 loadConformanceRecordViews :: FilePath -> IO (Either [Text] [RecordView])
 loadConformanceRecordViews repoRoot = do
@@ -392,7 +400,7 @@ loadConformanceRecordViews repoRoot = do
       contents <- TIO.readFile (repoRoot </> path)
       pure $ case parseConformancePackageRecord contents of
         Nothing -> Left (T.pack path <> ": conformance package record does not parse")
-        Just record -> Right (RecordView path (cprFiles record))
+        Just record -> Right (RecordView path record.files)
 
 comparisonOutputPaths :: [CorpusEntry] -> [FilePath]
 comparisonOutputPaths entries =
@@ -430,7 +438,12 @@ listFilesRecursively root = do
     visit name = do
       let path = root </> name
       directory <- doesDirectoryExist path
-      if directory then listFilesRecursively path else pure [path]
+      if directory
+        then
+          if name == ".keiro-dsl-generated-haskell-migrations"
+            then pure []
+            else listFilesRecursively path
+        else pure [path]
 
 data CabalComponent = CabalComponent
   { ccName :: Text,
@@ -458,10 +471,10 @@ checkSuiteCoverage repoRoot entries = do
       let plannedDirs = nub (map entryOutDir entries)
           suiteDirs =
             nub
-              [ (ccName component, dir)
+              [ (component.ccName, dir)
               | component <- cabalComponents description,
-                "test:" `T.isPrefixOf` ccName component,
-                dir <- ccSourceDirs component,
+                "test:" `T.isPrefixOf` component.ccName,
+                dir <- component.ccSourceDirs,
                 corpusDirPrefix `isPrefixOf` dir
               ]
           covers planned dir = planned == dir || planned `pathWithin` dir || dir `pathWithin` planned
@@ -516,7 +529,7 @@ checkCabalInventory repoRoot entries exemptions = do
       let allComponents = cabalComponents description
           corpusRoots = sort (nub (map entryOutDir entries))
           relevantComponents = filter (componentIntersects corpusRoots) allComponents
-          relevantSourceDirs = sort (nub (concatMap ccSourceDirs relevantComponents))
+          relevantSourceDirs = sort (nub (concatMap (.ccSourceDirs) relevantComponents))
       resolved <- traverse (resolveComponentModules repoRoot) relevantComponents
       generatedOnDisk <- discoverGeneratedHaskell repoRoot entries
       let danglingErrors = concatMap fst resolved
@@ -577,23 +590,23 @@ componentIntersects corpusRoots component =
   or
     [ corpusRoot `pathWithin` sourceDir || sourceDir `pathWithin` corpusRoot
     | corpusRoot <- corpusRoots,
-      sourceDir <- ccSourceDirs component
+      sourceDir <- component.ccSourceDirs
     ]
 
 resolveComponentModules :: FilePath -> CabalComponent -> IO ([Text], [FilePath])
 resolveComponentModules repoRoot component = do
-  resolved <- forM (ccOtherModules component) $ \moduleName ->
-    if moduleName `Set.member` ccAutogenModules component
+  resolved <- forM component.ccOtherModules $ \moduleName ->
+    if moduleName `Set.member` component.ccAutogenModules
       then pure (Right [])
       else do
         existing <- resolveModulePath repoRoot component (CabalModule.toFilePath moduleName)
         pure $ case existing of
-          [] -> Left (ccName component <> ": other-modules entry has no file: " <> T.pack (CabalModule.toFilePath moduleName))
+          [] -> Left (component.ccName <> ": other-modules entry has no file: " <> T.pack (CabalModule.toFilePath moduleName))
           paths -> Right paths
-  resolvedMains <- forM (ccMainFiles component) $ \mainFile -> do
+  resolvedMains <- forM component.ccMainFiles $ \mainFile -> do
     existing <- resolveSourcePath repoRoot component mainFile
     pure $ case existing of
-      [] -> Left (ccName component <> ": main-is entry has no file: " <> T.pack mainFile)
+      [] -> Left (component.ccName <> ": main-is entry has no file: " <> T.pack mainFile)
       paths -> Right paths
   let (errors, declaredPaths) = partitionEithers resolved
       (mainErrors, mainPaths) = partitionEithers resolvedMains
@@ -616,7 +629,7 @@ resolveModulePath repoRoot component relative =
   filterM
     (doesFileExist . (repoRoot </>))
     [ normalise (sourceDir </> relative <.> extension)
-    | sourceDir <- ccSourceDirs component,
+    | sourceDir <- component.ccSourceDirs,
       extension <- ["hs", "lhs"]
     ]
 
@@ -624,7 +637,7 @@ resolveSourcePath :: FilePath -> CabalComponent -> FilePath -> IO [FilePath]
 resolveSourcePath repoRoot component relative =
   filterM
     (doesFileExist . (repoRoot </>))
-    [normalise (sourceDir </> relative) | sourceDir <- ccSourceDirs component]
+    [normalise (sourceDir </> relative) | sourceDir <- component.ccSourceDirs]
 
 importsFrom :: Text -> [Text]
 importsFrom = mapMaybe importedModule . T.lines

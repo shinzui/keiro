@@ -5,33 +5,33 @@ module Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts (Wor
 -- A driver asserts them against a hand-written expectation, so a spec
 -- change (e.g. renaming an await) reddens a specific assertion.
 data WorkflowFacts = WorkflowFacts
-  { workflowFactName :: !String
-  , workflowFactIdVia :: !String
-  , workflowFactIdField :: !String
-  , workflowFactBody :: ![String]
-  , workflowFactAwaitLabels :: ![String]
-  , workflowFactPatchIds :: ![String]
+  { name :: !String
+  , idVia :: !String
+  , idField :: !String
+  , body :: ![String]
+  , awaitLabels :: ![String]
+  , patchIds :: ![String]
   }
   deriving stock (Eq, Show)
 
 workflowFacts :: WorkflowFacts
 workflowFacts =
   WorkflowFacts
-    { workflowFactName = "hospital-transfer-reservation"
-    , workflowFactIdVia = "idText"
-    , workflowFactIdField = "reservationId"
-    , workflowFactBody = ["step:create-transfer-hold", "patch:fraud-check-v2(step:fraud-check)", "await:reservation-confirmation", "step:release-or-retain-capacity", "step:summarize-reservation", "continueAsNew:RolloverSeed"]
-    , workflowFactAwaitLabels = ["reservation-confirmation"]
-    , workflowFactPatchIds = ["fraud-check-v2"]
+    { name = "hospital-transfer-reservation"
+    , idVia = "idText"
+    , idField = "reservationId"
+    , body = ["step:create-transfer-hold", "patch:fraud-check-v2(step:fraud-check)", "await:reservation-confirmation", "step:release-or-retain-capacity", "step:summarize-reservation", "continueAsNew:RolloverSeed"]
+    , awaitLabels = ["reservation-confirmation"]
+    , patchIds = ["fraud-check-v2"]
     }
 
 -- | Base-library projection used by the service-level conformance facade.
 workflowFactValues :: [(String, String)]
 workflowFactValues =
-  [ ("name", workflowFactName workflowFacts)
-  , ("idVia", workflowFactIdVia workflowFacts)
-  , ("idField", workflowFactIdField workflowFacts)
-  , ("body", show (workflowFactBody workflowFacts))
-  , ("awaits", show (workflowFactAwaitLabels workflowFacts))
-  , ("patches", show (workflowFactPatchIds workflowFacts))
+  [ ("name", name workflowFacts)
+  , ("idVia", idVia workflowFacts)
+  , ("idField", idField workflowFacts)
+  , ("body", show (body workflowFacts))
+  , ("awaits", show (awaitLabels workflowFacts))
+  , ("patches", show (patchIds workflowFacts))
   ]

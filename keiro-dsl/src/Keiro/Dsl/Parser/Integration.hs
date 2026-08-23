@@ -31,12 +31,12 @@ pContract context = do
   _ <- symbol "}"
   pure
     ContractNode
-      { ctrName = nm,
-        ctrSchemaVersion = sv,
-        ctrDiscriminator = disc,
-        ctrTopics = topics,
-        ctrEvents = events,
-        ctrLoc = loc
+      { name = nm,
+        schemaVersion = sv,
+        discriminator = disc,
+        topics = topics,
+        events = events,
+        loc = loc
       }
   where
     pTopic = do
@@ -50,7 +50,7 @@ pContract context = do
       keyword "on"
       topicAlias <- ident
       fs <- braces (many pContractField)
-      pure ContractEvent {ceName = nm, ceTopic = topicAlias, ceFields = fs}
+      pure ContractEvent {name = nm, topic = topicAlias, fields = fs}
     pContractField = do
       loc <- getLoc
       n <- ident
@@ -59,7 +59,7 @@ pContract context = do
       _ <- symbol ":"
       ty <- pContractType
       _ <- optional (symbol ";")
-      pure ContractField {cfName = n, cfSelector = selector, cfWireKey = wireKey, cfType = ty, cfLoc = loc}
+      pure ContractField {name = n, selector = selector, wireKey = wireKey, valueType = ty, loc = loc}
     pContractType =
       choice
         [ CTypeId <$> (keyword "typeid" *> stringLit),
@@ -98,17 +98,17 @@ pIntake = do
   _ <- symbol "}"
   pure
     IntakeNode
-      { inkName = nm,
-        inkContract = ctr,
-        inkTopic = tp,
-        inkAccept = acc,
-        inkBinds = binds,
-        inkDedupeKey = dk,
-        inkDedupePolicy = dp,
-        inkPersist = persistence,
-        inkDecode = dec,
-        inkDisposition = disp,
-        inkLoc = loc
+      { name = nm,
+        contract = ctr,
+        topic = tp,
+        accept = acc,
+        binds = binds,
+        dedupeKey = dk,
+        dedupePolicy = dp,
+        persist = persistence,
+        decode = dec,
+        disposition = disp,
+        loc = loc
       }
   where
     pBindRow = do
@@ -118,7 +118,7 @@ pIntake = do
       src <- pWireSource
       req <- option False (True <$ keyword "required")
       xc <- option False (True <$ (keyword "cross-check" *> keyword "body"))
-      pure BindRow {brField = f, brSource = src, brRequired = req, brCrossCheck = xc}
+      pure BindRow {field = f, source = src, required = req, crossCheck = xc}
     pWireSource =
       choice
         [ SrcHeader <$> (keyword "header" *> stringLit),
@@ -137,7 +137,7 @@ pIntake = do
       _ <- symbol "=="
       v <- boundedDecimal
       _ <- symbol "}"
-      pure DecodeSpec {decEnvelope = env, decBodyStrict = strict, decBodySchemaVersion = v}
+      pure DecodeSpec {envelope = env, bodyStrict = strict, bodySchemaVersion = v}
     pEnvelopePolicy = do
       a <- wireWord
       b <- wireWord
@@ -151,7 +151,7 @@ pIntake = do
       o <- ident
       _ <- symbol "=>"
       act <- pInboxAction
-      pure DispositionRow {drOutcome = o, drAction = act, drLoc = loc}
+      pure DispositionRow {outcome = o, action = act, loc = loc}
     pInboxAction =
       choice
         [ IAckOk <$ keyword "ackOk",
@@ -183,17 +183,17 @@ pEmit = do
   _ <- symbol "}"
   pure
     EmitNode
-      { emName = nm,
-        emContract = ctr,
-        emTopic = tp,
-        emSource = src,
-        emKey = k,
-        emDiscriminant = disc,
-        emMap = rows,
-        emSkip = skip,
-        emMessageId = mid,
-        emIdempotencyKey = idk,
-        emLoc = loc
+      { name = nm,
+        contract = ctr,
+        topic = tp,
+        source = src,
+        key = k,
+        discriminant = disc,
+        map = rows,
+        skip = skip,
+        messageId = mid,
+        idempotencyKey = idk,
+        loc = loc
       }
   where
     pMapRows = do
@@ -205,7 +205,7 @@ pEmit = do
       v <- stringLit
       _ <- symbol "=>"
       ev <- ident
-      pure EmitMapRow {emrValue = v, emrEvent = ev, emrLoc = loc}
+      pure EmitMapRow {value = v, event = ev, loc = loc}
     pDerive = do
       keyword "derive"
       pfx <- optional stringLit
@@ -236,11 +236,11 @@ pPublisher = do
   _ <- symbol "}"
   pure
     PublisherNode
-      { pubName = nm,
-        pubEmit = em,
-        pubOrdering = ord,
-        pubMaxAttempts = ma,
-        pubBackoff = BackoffSpec {boKind = bk, boWindow = bw, boMax = bm, boMultiplier = multiplier},
-        pubOutboxField = obf,
-        pubLoc = loc
+      { name = nm,
+        emit = em,
+        ordering = ord,
+        maxAttempts = ma,
+        backoff = BackoffSpec {kind = bk, window = bw, max = bm, multiplier = multiplier},
+        outboxField = obf,
+        loc = loc
       }

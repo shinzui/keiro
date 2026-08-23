@@ -11,10 +11,10 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.TransferRouting.StructuralProjections qualified as StructuralProjections
+import Generated.TransferRouting.Structural.Shape.HospitalLoadRow (HospitalLoadRowShape(availableBeds, hospitalId, region))
+import Generated.TransferRouting.Structural.Shape.TransferRouteInput (TransferRouteInputShape(region, transferNeedId))
 import Conformance.DeclarativeRouter.Bindings qualified as Bindings
 import Conformance.DeclarativeRouter.Domain (HospitalLoadRow, TransferRouteInput)
-import Generated.TransferRouting.Structural.Shape.HospitalLoadRow qualified as ShapeHospitalLoadRow
-import Generated.TransferRouting.Structural.Shape.TransferRouteInput qualified as ShapeTransferRouteInput
 
 structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
@@ -66,9 +66,9 @@ coverageTransferRouteInput = True
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.declarative-router.HospitalLoadRow.v1/available_beds", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.hospitalLoadRowAvailableBedsWitness (\referenceOwner -> ShapeHospitalLoadRow.availableBeds (bindingToShape Bindings.hospitalLoadRowBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.hospitalLoadRowCases)))
-  , ("projection witness agreement: conformance.declarative-router.HospitalLoadRow.v1/hospital_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.hospitalLoadRowHospitalIdWitness (\referenceOwner -> ShapeHospitalLoadRow.hospitalId (bindingToShape Bindings.hospitalLoadRowBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.hospitalLoadRowCases)))
-  , ("projection witness agreement: conformance.declarative-router.HospitalLoadRow.v1/region", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.hospitalLoadRowRegionWitness (\referenceOwner -> ShapeHospitalLoadRow.region (bindingToShape Bindings.hospitalLoadRowBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.hospitalLoadRowCases)))
-  , ("projection witness agreement: conformance.declarative-router.TransferRouteInput.v1/region", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.transferRouteInputRegionWitness (\referenceOwner -> ShapeTransferRouteInput.region (bindingToShape Bindings.transferRouteInputBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.transferRouteInputCases)))
-  , ("projection witness agreement: conformance.declarative-router.TransferRouteInput.v1/transfer_need_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.transferRouteInputTransferNeedIdWitness (\referenceOwner -> ShapeTransferRouteInput.transferNeedId (bindingToShape Bindings.transferRouteInputBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.transferRouteInputCases)))
+  [ ("projection witness agreement: conformance.declarative-router.HospitalLoadRow.v1/available_beds", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.hospitalLoadRowAvailableBedsWitness (\referenceOwner -> (bindingToShape Bindings.hospitalLoadRowBinding referenceOwner).availableBeds) owner) (NonEmpty.toList (fixtureCases Bindings.hospitalLoadRowCases)))
+  , ("projection witness agreement: conformance.declarative-router.HospitalLoadRow.v1/hospital_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.hospitalLoadRowHospitalIdWitness (\referenceOwner -> (bindingToShape Bindings.hospitalLoadRowBinding referenceOwner).hospitalId) owner) (NonEmpty.toList (fixtureCases Bindings.hospitalLoadRowCases)))
+  , ("projection witness agreement: conformance.declarative-router.HospitalLoadRow.v1/region", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.hospitalLoadRowRegionWitness (\referenceOwner -> (bindingToShape Bindings.hospitalLoadRowBinding referenceOwner).region) owner) (NonEmpty.toList (fixtureCases Bindings.hospitalLoadRowCases)))
+  , ("projection witness agreement: conformance.declarative-router.TransferRouteInput.v1/region", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.transferRouteInputRegionWitness (\referenceOwner -> (bindingToShape Bindings.transferRouteInputBinding referenceOwner).region) owner) (NonEmpty.toList (fixtureCases Bindings.transferRouteInputCases)))
+  , ("projection witness agreement: conformance.declarative-router.TransferRouteInput.v1/transfer_need_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.transferRouteInputTransferNeedIdWitness (\referenceOwner -> (bindingToShape Bindings.transferRouteInputBinding referenceOwner).transferNeedId) owner) (NonEmpty.toList (fixtureCases Bindings.transferRouteInputCases)))
   ]

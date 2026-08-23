@@ -45,13 +45,13 @@ diffWorkspaces old new = do
   where
     annotate change =
       WorkspaceChange
-        { wcChange = change,
-          wcDeclarationSite =
+        { change = change,
+          declarationSite =
             ownedSiteForName new (declarationName kind)
               <|> ownedSiteForName old (declarationName kind),
-          wcUseSites =
+          useSites =
             [ (path, ownedSiteForName new (pathRoot path) <|> ownedSiteForName old (pathRoot path))
-            | path <- ckPaths kind
+            | path <- (.paths) kind
             ]
         }
       where
@@ -60,50 +60,50 @@ diffWorkspaces old new = do
 memberLanguageChanges :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 memberLanguageChanges old new =
   [ WorkspaceChange
-      { wcChange = change,
-        wcDeclarationSite = Just (OwnedSite path (sourceLine (wmSourceLanguage newMember))),
-        wcUseSites = []
+      { change = change,
+        declarationSite = Just (OwnedSite path (sourceLine ((.sourceLanguage) newMember))),
+        useSites = []
       }
   | (path, newMember) <- Map.toAscList newByPath,
     Just oldMember <- [Map.lookup path oldByPath],
-    change <- sourceLanguageChange (wsService new) (T.pack path) (wmSourceLanguage oldMember) (wmSourceLanguage newMember)
+    change <- sourceLanguageChange ((.service) new) (T.pack path) ((.sourceLanguage) oldMember) ((.sourceLanguage) newMember)
   ]
   where
-    oldByPath = Map.fromList [(wmPath member, member) | member <- wsMembers old]
-    newByPath = Map.fromList [(wmPath member, member) | member <- wsMembers new]
+    oldByPath = Map.fromList [((.path) member, member) | member <- (.members) old]
+    newByPath = Map.fromList [((.path) member, member) | member <- (.members) new]
     sourceLine LegacyUnversioned = 1
     sourceLine DeclaredLanguage {languageVersionLoc = Loc lineNumber} = lineNumber
 
 -- | Preserve the existing headline/vector bytes and append indented citations.
 renderWorkspaceFinding :: WorkspaceChange -> Text
 renderWorkspaceFinding workspaceChange =
-  T.intercalate "\n" (renderFinding (wcChange workspaceChange) : declarationLine <> useLines)
+  T.intercalate "\n" (renderFinding ((.change) workspaceChange) : declarationLine <> useLines)
   where
-    declarationLine = case wcDeclarationSite workspaceChange of
+    declarationLine = case (.declarationSite) workspaceChange of
       Nothing -> []
       Just site -> ["    declared: " <> renderOwnedSite site]
     useLines =
       [ "    use-site: " <> path <> " (" <> renderOwnedSite site <> ")"
-      | (path, Just site) <- wcUseSites workspaceChange
+      | (path, Just site) <- (.useSites) workspaceChange
       ]
 
 renderOwnedSite :: OwnedSite -> Text
-renderOwnedSite site = T.pack (osFile site) <> ":" <> T.pack (show (osLine site))
+renderOwnedSite site = T.pack ((.file) site) <> ":" <> T.pack (show ((.line) site))
 
 ownedSiteForName :: WorkspaceSpec -> Name -> Maybe OwnedSite
 ownedSiteForName workspace name = do
   (_, (file, Loc line)) <- find ((== name) . snd . fst) entries
   pure (OwnedSite file line)
   where
-    ownership = wsOwnership workspace
-    entries = Map.toAscList (oiDeclarations ownership) <> Map.toAscList (oiNodes ownership)
+    ownership = (.ownership) workspace
+    entries = Map.toAscList ((.declarations) ownership) <> Map.toAscList ((.nodes) ownership)
 
 declarationName :: ChangeKind -> Name
 declarationName kind
-  | "mapped-" `T.isPrefixOf` ckFacet kind,
-    Just mapped <- mappedNameFromSubject (ckSubject kind) =
+  | "mapped-" `T.isPrefixOf` (.facet) kind,
+    Just mapped <- mappedNameFromSubject ((.subject) kind) =
       mapped
-  | otherwise = ckNode kind
+  | otherwise = (.node) kind
 
 mappedNameFromSubject :: Text -> Maybe Name
 mappedNameFromSubject subject =
@@ -126,7 +126,7 @@ changeKind (Breaking kind) = kind
 ownershipMoveChanges :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 ownershipMoveChanges old new =
   [ WorkspaceChange
-      { wcChange =
+      { change =
           advisoryAt
             (consumerBuildContext name [])
             name
@@ -139,40 +139,40 @@ ownershipMoveChanges old new =
                 <> T.pack newFile
                 <> "; source ownership changed while wire evolution remains independently classified"
             ),
-        wcDeclarationSite = Just (OwnedSite newFile (unLoc newLoc)),
-        wcUseSites = []
+        declarationSite = Just (OwnedSite newFile ((.unLoc) newLoc)),
+        useSites = []
       }
-  | (key@(_, name), (oldFile, _)) <- Map.toAscList (ownershipEntries (wsOwnership old)),
-    Just (newFile, newLoc) <- [Map.lookup key (ownershipEntries (wsOwnership new))],
+  | (key@(_, name), (oldFile, _)) <- Map.toAscList (ownershipEntries ((.ownership) old)),
+    Just (newFile, newLoc) <- [Map.lookup key (ownershipEntries ((.ownership) new))],
     oldFile /= newFile
   ]
 
 ownershipEntries :: OwnershipIndex -> Map.Map (Text, Name) (FilePath, Loc)
-ownershipEntries ownership = oiDeclarations ownership <> oiNodes ownership
+ownershipEntries ownership = (.declarations) ownership <> (.nodes) ownership
 
 authorityChanges :: WorkspaceSpec -> WorkspaceSpec -> [WorkspaceChange]
 authorityChanges old new =
   concat
-    [ changed "service-identity" (wsService old) (wsService new) serviceDetail,
-      changed "context" (wsContext old) (wsContext new) contextDetail,
-      changed "module-root" (renderModuleRoot (wsModuleRoot old)) (renderModuleRoot (wsModuleRoot new)) moduleDetail,
-      changed "layout" (renderLayout (wsLayout old)) (renderLayout (wsLayout new)) layoutDetail
+    [ changed "service-identity" ((.service) old) ((.service) new) serviceDetail,
+      changed "context" ((.context) old) ((.context) new) contextDetail,
+      changed "module-root" (renderModuleRoot ((.moduleRoot) old)) (renderModuleRoot ((.moduleRoot) new)) moduleDetail,
+      changed "layout" (renderLayout ((.layout) old)) (renderLayout ((.layout) new)) layoutDetail
     ]
   where
     changed field before after detail
       | before == after = []
       | otherwise =
           [ WorkspaceChange
-              { wcChange =
+              { change =
                   advisoryAt
-                    (consumerBuildContext (wsService new) [])
-                    (wsService new)
+                    (consumerBuildContext ((.service) new) [])
+                    ((.service) new)
                     "workspace-authority"
                     field
                     WorkspaceAuthorityChanged
                     (field <> " changed '" <> before <> "' -> '" <> after <> "'; " <> detail),
-                wcDeclarationSite = Nothing,
-                wcUseSites = []
+                declarationSite = Nothing,
+                useSites = []
               }
           ]
     serviceDetail = "scaffold and compatibility history are re-keyed; follow the workspace adoption path"

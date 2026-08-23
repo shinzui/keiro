@@ -65,13 +65,13 @@ instance FromJSON SourceExpectation where
 instance ToJSON SourceExpectation where
   toJSON row =
     object
-      [ "path" .= sourcePath row,
-        "sourceForm" .= sourceForm row,
-        "declaredVersion" .= sourceDeclaredVersion row,
-        "effectiveVersion" .= sourceEffectiveVersion row,
-        "result" .= sourceResult row,
-        "failureClass" .= sourceFailureClass row,
-        "diagnosticCode" .= sourceDiagnosticCode row
+      [ "path" .= (.sourcePath) row,
+        "sourceForm" .= (.sourceForm) row,
+        "declaredVersion" .= (.sourceDeclaredVersion) row,
+        "effectiveVersion" .= (.sourceEffectiveVersion) row,
+        "result" .= (.sourceResult) row,
+        "failureClass" .= (.sourceFailureClass) row,
+        "diagnosticCode" .= (.sourceDiagnosticCode) row
       ]
 
 data WorkspaceExpectation = WorkspaceExpectation
@@ -93,10 +93,10 @@ instance FromJSON WorkspaceExpectation where
 instance ToJSON WorkspaceExpectation where
   toJSON row =
     object
-      [ "path" .= workspacePath row,
-        "result" .= workspaceResult row,
-        "failureClass" .= workspaceFailureClass row,
-        "diagnosticCode" .= workspaceDiagnosticCode row
+      [ "path" .= (.workspacePath) row,
+        "result" .= (.workspaceResult) row,
+        "failureClass" .= (.workspaceFailureClass) row,
+        "diagnosticCode" .= (.workspaceDiagnosticCode) row
       ]
 
 data CompatibilityManifest = CompatibilityManifest
@@ -120,47 +120,47 @@ instance FromJSON CompatibilityManifest where
 instance ToJSON CompatibilityManifest where
   toJSON manifest =
     object
-      [ "schema" .= manifestSchema manifest,
-        "release" .= manifestRelease manifest,
-        "entryPoints" .= manifestEntryPoints manifest,
-        "sources" .= manifestSources manifest,
-        "workspaces" .= manifestWorkspaces manifest
+      [ "schema" .= (.manifestSchema) manifest,
+        "release" .= (.manifestRelease) manifest,
+        "entryPoints" .= (.manifestEntryPoints) manifest,
+        "sources" .= (.manifestSources) manifest,
+        "workspaces" .= (.manifestWorkspaces) manifest
       ]
 
 frontendCompatibilitySpec :: SpecWith ()
 frontendCompatibilitySpec = describe "frontend 0.7 compatibility" $ do
   it "decodes the released manifest and classifies every checked-in frontend fixture" $ do
     manifest <- readManifest
-    manifestSchema manifest `shouldBe` "keiro-dsl/frontend-compatibility/1"
-    manifestRelease manifest `shouldBe` "0.7.0.0"
-    manifestEntryPoints manifest `shouldBe` releasedFrontendEntryPoints
+    (.manifestSchema) manifest `shouldBe` "keiro-dsl/frontend-compatibility/1"
+    (.manifestRelease) manifest `shouldBe` "0.7.0.0"
+    (.manifestEntryPoints) manifest `shouldBe` releasedFrontendEntryPoints
     sources <- sourceFixturePaths
     workspaces <- workspaceFixturePaths
-    map sourcePath (manifestSources manifest) `shouldBe` sources
-    map workspacePath (manifestWorkspaces manifest) `shouldBe` workspaces
+    map (.sourcePath) ((.manifestSources) manifest) `shouldBe` sources
+    map (.workspacePath) ((.manifestWorkspaces) manifest) `shouldBe` workspaces
 
   it "preserves every source outcome, released contract, and accepted canonical round trip" $ do
     manifest <- readManifest
-    forM_ (manifestSources manifest) $ \expected -> do
-      actual <- observeSource (sourcePath expected)
+    forM_ ((.manifestSources) manifest) $ \expected -> do
+      actual <- observeSource ((.sourcePath) expected)
       actual `shouldBe` expected
       whenAccepted expected $ do
-        source <- readRepoText (sourcePath expected)
-        case parseSource (sourcePath expected) source of
+        source <- readRepoText ((.sourcePath) expected)
+        case parseSource ((.sourcePath) expected) source of
           Left failure -> expectationFailure (show failure)
-          Right parsed -> case parseSource (sourcePath expected) (renderSource parsed) of
+          Right parsed -> case parseSource ((.sourcePath) expected) (renderSource parsed) of
             Left failure -> expectationFailure (show failure)
             Right reparsed -> do
-              parsedSpec reparsed `shouldBe` parsedSpec parsed
-              effectiveLanguageVersion (parsedSourceLanguage reparsed)
-                `shouldBe` effectiveLanguageVersion (parsedSourceLanguage parsed)
-              sourceFormText (parsedSourceLanguage reparsed)
-                `shouldBe` sourceFormText (parsedSourceLanguage parsed)
+              (.spec) reparsed `shouldBe` (.spec) parsed
+              effectiveLanguageVersion ((.sourceLanguage) reparsed)
+                `shouldBe` effectiveLanguageVersion ((.sourceLanguage) parsed)
+              sourceFormText ((.sourceLanguage) reparsed)
+                `shouldBe` sourceFormText ((.sourceLanguage) parsed)
 
   it "preserves every workspace composition outcome and member-attribution code" $ do
     manifest <- readManifest
-    forM_ (manifestWorkspaces manifest) $ \expected ->
-      observeWorkspace (workspacePath expected) `shouldReturn` expected
+    forM_ ((.manifestWorkspaces) manifest) $ \expected ->
+      observeWorkspace ((.workspacePath) expected) `shouldReturn` expected
 
   it "keeps direct parsing and representative one-member workspaces semantically identical" $ do
     let examples =
@@ -173,7 +173,7 @@ frontendCompatibilitySpec = describe "frontend 0.7 compatibility" $ do
       Left failure -> expectationFailure (show failure)
       Right parsed -> do
         let workspace = oneMemberParsedWorkspace path parsed
-        wsMergedSpec workspace `shouldBe` parsedSpec parsed
+        (.mergedSpec) workspace `shouldBe` (.spec) parsed
         checkWorkspace workspace `shouldBe` []
 
   it "renders curated source, grammar, semantic, and workspace failures byte-for-byte" $
@@ -187,7 +187,7 @@ frontendCompatibilitySpec = describe "frontend 0.7 compatibility" $ do
 
 whenAccepted :: SourceExpectation -> IO () -> IO ()
 whenAccepted row action
-  | sourceResult row == "accept" = action
+  | (.sourceResult) row == "accept" = action
   | otherwise = pure ()
 
 observeSource :: FilePath -> IO SourceExpectation
@@ -209,16 +209,16 @@ observeSource path = do
       base
         "reject"
         (Just "source-language")
-        (Just (sourceLanguageErrorCodeText (sourceLanguageErrorCode diagnostic)))
-        (languageVersionNumber <$> sourceLanguageDeclaredVersion diagnostic)
+        (Just (sourceLanguageErrorCodeText ((.errorCode) diagnostic)))
+        (languageVersionNumber <$> (.declaredVersion) diagnostic)
     Left (BodyGrammarFailure _) ->
       base "reject" (Just "body-grammar") Nothing (supportedHeaderVersion headerVersion)
     Right parsed ->
-      let sourceLanguage = parsedSourceLanguage parsed
-          effective = Just (languageVersionNumber (effectiveLanguageVersion sourceLanguage))
-          errors = filter ((== Error) . severity) (validateService (checkedSource parsed))
+      let parsedLanguage = parsed.sourceLanguage
+          effective = Just (languageVersionNumber (effectiveLanguageVersion parsedLanguage))
+          errors = filter ((== Error) . (.severity)) (validateService (checkedSource parsed))
        in case errors of
-            diagnostic : _ -> base "reject" (Just "semantic") (Just (T.pack (show (code diagnostic)))) effective
+            diagnostic : _ -> base "reject" (Just "semantic") (Just (T.pack (show ((.code) diagnostic)))) effective
             [] -> base "accept" Nothing Nothing effective
 
 observeWorkspace :: FilePath -> IO WorkspaceExpectation
@@ -229,9 +229,9 @@ observeWorkspace path = do
     Left (WorkspaceManifestUnreadable _) -> rejected "manifest-unreadable" Nothing
     Left (WorkspaceManifestUnparseable _) -> rejected "manifest-grammar" Nothing
     Left (WorkspaceRefused diagnostics) ->
-      rejected "composition" (Just (T.pack (show (wdCode (NE.head diagnostics)))))
-    Right workspace -> case filter ((== Error) . wdSeverity) (checkWorkspace workspace) of
-      diagnostic : _ -> rejected "semantic" (Just (T.pack (show (wdCode diagnostic))))
+      rejected "composition" (Just (T.pack (show ((.code) (NE.head diagnostics)))))
+    Right workspace -> case filter ((== Error) . (.severity)) (checkWorkspace workspace) of
+      diagnostic : _ -> rejected "semantic" (Just (T.pack (show ((.code) diagnostic))))
       [] -> WorkspaceExpectation path "accept" Nothing Nothing
   where
     rejected failureClass diagnostic = WorkspaceExpectation path "reject" (Just failureClass) diagnostic
@@ -362,7 +362,7 @@ renderParse path source = pure $ case parseSource path source of
 renderSemantic :: FilePath -> Text -> IO Text
 renderSemantic path source = pure $ case parseSource path source of
   Left failure -> error ("semantic diagnostic source failed to parse: " <> show failure)
-  Right parsed -> case filter ((== Error) . severity) (validateService (checkedSource parsed)) of
+  Right parsed -> case filter ((== Error) . (.severity)) (validateService (checkedSource parsed)) of
     diagnostic : _ -> renderDiagnostic path diagnostic <> "\n"
     [] -> error ("semantic diagnostic source unexpectedly validated: " <> path)
 

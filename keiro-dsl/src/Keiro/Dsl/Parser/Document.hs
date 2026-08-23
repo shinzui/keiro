@@ -48,8 +48,8 @@ parseSurfaceSource src input = do
             Left bundle -> case firstContextualFailure bundle of
               Just contextual ->
                 let diagnostic = contextualDiagnostic src sourceLanguage contextual
-                    supported = languageVersionsSupportingFeature <$> contextualFailureFeature contextual
-                 in Left (frontendFailureFromSourceDiagnostic BodyParsingPhase (contextualFailureSpan contextual) supported diagnostic)
+                    supported = languageVersionsSupportingFeature <$> (.feature) contextual
+                 in Left (frontendFailureFromSourceDiagnostic BodyParsingPhase ((.span) contextual) supported diagnostic)
               Nothing ->
                 Left
                   ( frontendFailureFromBody

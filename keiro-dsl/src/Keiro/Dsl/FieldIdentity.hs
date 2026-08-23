@@ -15,27 +15,27 @@ import Data.Text (Text)
 import Keiro.Dsl.Grammar
 
 data ResolvedFieldIdentity = ResolvedFieldIdentity
-  { fieldDslName :: !Name,
-    fieldSelector :: !Text,
-    fieldWireKey :: !Text,
-    fieldLoc :: !Loc
+  { dslName :: !Name,
+    selector :: !Text,
+    wireKey :: !Text,
+    loc :: !Loc
   }
   deriving stock (Eq, Show)
 
 resolveAggregateFieldIdentity :: AggregateField -> ResolvedFieldIdentity
 resolveAggregateFieldIdentity field =
   ResolvedFieldIdentity
-    { fieldDslName = aggregateFieldName field,
-      fieldSelector = maybe (aggregateFieldName field) id (aggregateFieldSelector field),
-      fieldWireKey = maybe (aggregateFieldName field) id (aggregateFieldWireKey field),
-      fieldLoc = aggregateFieldLoc field
+    { dslName = (.name) field,
+      selector = maybe ((.name) field) id ((.selector) field),
+      wireKey = maybe ((.name) field) id ((.wireKey) field),
+      loc = (.loc) field
     }
 
 resolveContractFieldIdentity :: ContractField -> ResolvedFieldIdentity
 resolveContractFieldIdentity field =
   ResolvedFieldIdentity
-    { fieldDslName = cfName field,
-      fieldSelector = maybe (cfName field) id (cfSelector field),
-      fieldWireKey = maybe (cfName field) id (cfWireKey field),
-      fieldLoc = cfLoc field
+    { dslName = (.name) field,
+      selector = maybe ((.name) field) id ((.selector) field),
+      wireKey = maybe ((.name) field) id ((.wireKey) field),
+      loc = (.loc) field
     }

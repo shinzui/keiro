@@ -1,5 +1,3 @@
-{-# LANGUAGE NoFieldSelectors #-}
-
 -- | Located, non-lossless surface syntax for a Keiro source document.
 --
 -- The surface layer preserves document order and source ownership while

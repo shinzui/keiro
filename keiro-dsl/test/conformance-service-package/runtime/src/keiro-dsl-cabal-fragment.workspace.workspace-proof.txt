@@ -5,6 +5,9 @@
 
 default-language: GHC2024
 default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
     OverloadedStrings
 
 exposed-modules:

@@ -17,10 +17,10 @@ import Keiro.Dsl.CodecCompare (HistoricalCodec (..))
 historicalArtifactInfoCodec :: HistoricalCodec Domain.ArtifactInfo
 historicalArtifactInfoCodec =
     HistoricalCodec
-        { hcIdentity = "conformance.structural.ArtifactInfo.aeson"
-        , hcVersion = "legacy-v3"
-        , hcEncode = encodeArtifactInfo
-        , hcDecode = either (Left . T.pack) Right . parseEither parseArtifactInfo
+        { identity = "conformance.structural.ArtifactInfo.aeson"
+        , version = "legacy-v3"
+        , encode = encodeArtifactInfo
+        , decode = either (Left . T.pack) Right . parseEither parseArtifactInfo
         }
 
 {- | Acceptance control: this stands in for the historical codec after its two
@@ -31,10 +31,10 @@ exit condition as well as its refusal path.
 generatedEquivalentArtifactInfoCodec :: HistoricalCodec Domain.ArtifactInfo
 generatedEquivalentArtifactInfoCodec =
     HistoricalCodec
-        { hcIdentity = "conformance.structural.ArtifactInfo.generated-equivalent"
-        , hcVersion = "cutover-v4"
-        , hcEncode = GeneratedCodec.encodeArtifactInfoMapped
-        , hcDecode = GeneratedCodec.decodeArtifactInfoMapped
+        { identity = "conformance.structural.ArtifactInfo.generated-equivalent"
+        , version = "cutover-v4"
+        , encode = GeneratedCodec.encodeArtifactInfoMapped
+        , decode = GeneratedCodec.decodeArtifactInfoMapped
         }
 
 encodeArtifactInfo :: Domain.ArtifactInfo -> Value

@@ -107,10 +107,10 @@ pNominalScalarAfterMapped loc = do
   binding <- pNominalBindingBlock loc
   pure
     NominalScalarDecl
-      { nominalScalarName = name,
-        nominalScalarRepresentation = representation,
-        nominalScalarBinding = binding,
-        nominalScalarLoc = loc
+      { name = name,
+        representation = representation,
+        binding = binding,
+        loc = loc
       }
 
 pUsingNominalBinding :: P NominalBindingDecl
@@ -130,13 +130,13 @@ pNominalBindingBlock loc = do
   initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
   pure
     NominalBindingDecl
-      { nominalHaskell = hs,
-        nominalBinding = binding,
-        nominalBindingVersion = bindingVersion,
-        nominalCanonicalType = canonical,
-        nominalFixtures = fixtures,
-        nominalInitial = initial,
-        nominalLoc = loc
+      { haskell = hs,
+        binding = binding,
+        bindingVersion = bindingVersion,
+        canonicalType = canonical,
+        fixtures = fixtures,
+        initial = initial,
+        loc = loc
       }
 
 pNominalClause :: P MappedClause
@@ -184,7 +184,7 @@ pHaskellSource = do
   keyword "type"
   _ <- symbol "="
   typeName <- ident
-  pure HaskellSource {hsPackage = packageName, hsModule = moduleName, hsType = typeName}
+  pure HaskellSource {package = packageName, moduleName = moduleName, valueType = typeName}
 
 pQuotedFact :: Text -> P Text
 pQuotedFact factName = keyword factName *> symbol "=" *> stringLit
@@ -229,17 +229,17 @@ pWireField context = do
   keyword "as"
   wireKey <- stringLit
   _ <- symbol ":"
-  fieldType <- pMappedTypeExpr context
+  valueType <- pMappedTypeExpr context
   presence <- choice [PRequired <$ keyword "required", POptional <$ keyword "optional"]
   onMissing <- optional (keyword "on-missing" *> symbol "=" *> pOnMissing)
   pure
     WireField
-      { wfHaskell = haskellName,
-        wfKey = wireKey,
-        wfType = fieldType,
-        wfPresence = presence,
-        wfOnMissing = onMissing,
-        wfLoc = loc
+      { haskell = haskellName,
+        key = wireKey,
+        valueType = valueType,
+        presence = presence,
+        onMissing = onMissing,
+        loc = loc
       }
 
 pWireEnum :: P WireEnum
@@ -248,7 +248,7 @@ pWireEnum = do
   constructor <- ident
   keyword "as"
   wireTag <- stringLit
-  pure WireEnum {weCtor = constructor, weTag = wireTag, weLoc = loc}
+  pure WireEnum {ctor = constructor, tag = wireTag, loc = loc}
 
 pWireArm :: FrontendContext -> P WireArm
 pWireArm context = do
@@ -257,7 +257,7 @@ pWireArm context = do
   keyword "as"
   wireTag <- stringLit
   payload <- optional (symbol ":" *> pMappedTypeExpr context)
-  pure WireArm {waCtor = constructor, waTag = wireTag, waPayload = payload, waLoc = loc}
+  pure WireArm {ctor = constructor, tag = wireTag, payload = payload, loc = loc}
 
 pMappedTypeExpr :: FrontendContext -> P TypeExpr
 pMappedTypeExpr context =

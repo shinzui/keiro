@@ -10,7 +10,7 @@ module Generated.AggregateScalarExpressions.StructuralProjections
 import Numeric.Natural (Natural)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
-import Generated.AggregateScalarExpressions.Structural.Shape.Limits qualified as ShapeLimits
+import Generated.AggregateScalarExpressions.Structural.Shape.Limits (LimitsShape(ceiling, minimum))
 import ScalarExpressions.Bindings qualified as Bindings
 import ScalarExpressions.Domain (Limits)
 
@@ -21,7 +21,7 @@ instance FieldProjection LimitsCeilingProjection where
   type FieldOwner LimitsCeilingProjection = Limits
   type FieldResult LimitsCeilingProjection = Natural
   fieldShapeId _ = "scalar-expressions.Limits.v1"
-  projectFieldValue _ owner = ShapeLimits.ceiling (bindingToShape Bindings.limitsBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.limitsBinding owner).ceiling
 
 limitsCeilingWitness :: FieldWitness LimitsCeilingProjection
 limitsCeilingWitness = fieldWitness @LimitsCeilingProjection
@@ -33,7 +33,7 @@ instance FieldProjection LimitsMinimumProjection where
   type FieldOwner LimitsMinimumProjection = Limits
   type FieldResult LimitsMinimumProjection = Integer
   fieldShapeId _ = "scalar-expressions.Limits.v1"
-  projectFieldValue _ owner = ShapeLimits.minimum (bindingToShape Bindings.limitsBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.limitsBinding owner).minimum
 
 limitsMinimumWitness :: FieldWitness LimitsMinimumProjection
 limitsMinimumWitness = fieldWitness @LimitsMinimumProjection

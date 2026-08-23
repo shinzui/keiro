@@ -9,9 +9,9 @@ module Generated.CatalogDemo.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Generated.CatalogDemo.Structural.Shape.QualificationPayload (QualificationPayloadShape(qualificationId))
 import CatalogDemo.MappedBindings qualified as MappedBindings
 import CatalogDemo.MappedDomain (QualificationPayload)
-import Generated.CatalogDemo.Structural.Shape.QualificationPayload qualified as ShapeQualificationPayload
 
 data QualificationPayloadQualificationIdProjection
 
@@ -20,7 +20,7 @@ instance FieldProjection QualificationPayloadQualificationIdProjection where
   type FieldOwner QualificationPayloadQualificationIdProjection = QualificationPayload
   type FieldResult QualificationPayloadQualificationIdProjection = Text
   fieldShapeId _ = "catalog-demo.QualificationPayload.v1"
-  projectFieldValue _ owner = ShapeQualificationPayload.qualificationId (bindingToShape MappedBindings.qualificationPayloadBinding owner)
+  projectFieldValue _ owner = (bindingToShape MappedBindings.qualificationPayloadBinding owner).qualificationId
 
 qualificationPayloadQualificationIdWitness :: FieldWitness QualificationPayloadQualificationIdProjection
 qualificationPayloadQualificationIdWitness = fieldWitness @QualificationPayloadQualificationIdProjection

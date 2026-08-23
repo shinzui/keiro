@@ -54,7 +54,7 @@ import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.RuntimePackage (isCabalPackageName)
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, effectiveRuntimeProfile, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
 import Keiro.Integration.Event qualified as Event
 import Numeric (showHex)
@@ -725,18 +725,18 @@ renderDiagnostic file d =
     primary =
       T.pack file
         <> ":"
-        <> T.pack (show (line d))
+        <> T.pack (show ((.line) d))
         <> ": "
         <> sev
         <> "["
-        <> T.pack (show (code d))
+        <> T.pack (show ((.code) d))
         <> "]: "
-        <> message d
+        <> (.message) d
     notes =
       [ "  " <> T.pack file <> ":" <> T.pack (show noteLine) <> ": note: " <> note
-      | (noteLine, note) <- relatedLocations d
+      | (noteLine, note) <- (.relatedLocations) d
       ]
-    sev = case severity d of Error -> "error"; Warning -> "warning"
+    sev = case (.severity) d of Error -> "error"; Warning -> "warning"
 
 -- | Error diagnostics produced when the effective source language is below a
 -- CI-required released floor. A legacy source has no preamble, so line 1 is the
@@ -791,32 +791,32 @@ validateSpec = validateService . legacyCheckedService
 
 validateCheckedSpec :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract typeGraphResult supplyAnalysis spec =
-  sortOn line (validateNames languageContract typeGraphResult spec ++ validateMapped typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) (specNodes spec))
+  sortOn (.line) (validateNames languageContract typeGraphResult spec ++ validateMapped typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) ((.nodes) spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
 -- released acceptance; runtime semantics 3 is the unreleased tightening gate.
 enforcesSpecSurfaceClosures :: EffectiveLanguageContract -> Bool
 enforcesSpecSurfaceClosures languageContract =
-  runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) StrictSpecSurfaceValidation
+  runtimeProfileHasCapability ((.runtimeProfile) languageContract) StrictSpecSurfaceValidation
 
 hasProjectionCatalog :: EffectiveLanguageContract -> Bool
 hasProjectionCatalog languageContract =
-  runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) ProjectionCatalogRuntime
+  runtimeProfileHasCapability ((.runtimeProfile) languageContract) ProjectionCatalogRuntime
 
 hasSeparatedProjectionQueryPolicy :: EffectiveLanguageContract -> Bool
 hasSeparatedProjectionQueryPolicy languageContract =
-  runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) SeparatedProjectionQueryPolicy
+  runtimeProfileHasCapability ((.runtimeProfile) languageContract) SeparatedProjectionQueryPolicy
 
 validateNominal :: EffectiveLanguageContract -> Spec -> [Diagnostic]
 validateNominal languageContract spec = domainErrors <> resolutionErrors
   where
     domainErrors =
-      [ mkErr (locLine (idLoc declaration)) NominalInvalidIdPrefix $
-          "id '" <> idName declaration <> "' has invalid TypeID prefix '" <> idPrefix declaration <> "': " <> T.pack (show reason)
-      | declaration <- specIds spec,
-        Just _ <- [idDomainContractFor languageContract (idPrefix declaration)],
-        Just reason <- [TypeID.checkPrefix (idPrefix declaration)]
+      [ mkErr (locLine ((.loc) declaration)) NominalInvalidIdPrefix $
+          "id '" <> (.name) declaration <> "' has invalid TypeID prefix '" <> (.prefix) declaration <> "': " <> T.pack (show reason)
+      | declaration <- (.ids) spec,
+        Just _ <- [idDomainContractFor languageContract ((.prefix) declaration)],
+        Just reason <- [TypeID.checkPrefix ((.prefix) declaration)]
       ]
     resolutionErrors = case Nominal.resolveNominalTypes spec of
       Right _ -> []
@@ -855,92 +855,92 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
   Right _ -> concatMap aggregateRules aggregates
   where
     symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
 
     aggregateRules aggregate =
       outcomeTypeRules aggregate
-        ++ concatMap commandRules (aggCommands aggregate)
-        ++ concatMap eventRules (aggEvents aggregate)
-        ++ concatMap registerRules (aggRegs aggregate)
-        ++ concatMap (transitionRules aggregate) (aggTransitions aggregate)
+        ++ concatMap commandRules ((.commands) aggregate)
+        ++ concatMap eventRules ((.events) aggregate)
+        ++ concatMap registerRules ((.regs) aggregate)
+        ++ concatMap (transitionRules aggregate) ((.transitions) aggregate)
       where
-        commandRules command = concatMap (fieldRule aggregate CommandFieldUse) (cmdFields command)
-        eventRules event = case evBody event of
+        commandRules command = concatMap (fieldRule aggregate CommandFieldUse) ((.fields) command)
+        eventRules event = case (.body) event of
           EventFields fields -> concatMap (fieldRule aggregate EventFieldUse) fields
           EventFromCommand _ -> []
-        registerRules register = case resolveAggregateType symbols (regLoc register) RegisterUse (regType register) of
+        registerRules register = case resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register) of
           Left typeError -> [aggregateTypeDiagnostic typeError]
           Right AggregateMapped {} -> []
-          Right resolved -> case resolveRegisterInitial symbols (regLoc register) resolved (regInitial register) of
+          Right resolved -> case resolveRegisterInitial symbols ((.loc) register) resolved ((.initial) register) of
             Left initialError -> [aggregateTypeDiagnostic initialError]
             Right _ -> []
 
     fieldRule aggregate useSite field =
       either (pure . aggregateTypeDiagnostic) (const []) (inferAggregateFieldType symbols aggregate useSite field)
 
-    outcomeTypeRules aggregate = case aggDomainOutcomeTypes aggregate of
+    outcomeTypeRules aggregate = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just declaration ->
-        unresolved "rejection" (rejectionType declaration)
-          ++ unresolved "no-op" (noOpType declaration)
+        unresolved "rejection" ((.rejectionType) declaration)
+          ++ unresolved "no-op" ((.noOpType) declaration)
         where
-          unresolved label name = case resolveAggregateType symbols (outcomeTypesLoc declaration) HaskellLoweringUse (TRef name) of
+          unresolved label name = case resolveAggregateType symbols ((.outcomeTypesLoc) declaration) HaskellLoweringUse (TRef name) of
             Right _ -> []
             Left _ ->
-              [ mkErr (locLine (outcomeTypesLoc declaration)) DomainOutcomeTypeUnresolved $
-                  "aggregate '" <> aggName aggregate <> "' declares unknown or unsupported " <> label <> " outcome type '" <> name <> "'"
+              [ mkErr (locLine ((.outcomeTypesLoc) declaration)) DomainOutcomeTypeUnresolved $
+                  "aggregate '" <> (.name) aggregate <> "' declares unknown or unsupported " <> label <> " outcome type '" <> name <> "'"
               ]
 
     transitionRules aggregate transition = ownershipRules ++ outcomeExpressionRules
       where
         environment = expressionEnvironmentFromGraphResult typeGraphResult spec aggregate transition
-        ownershipRules = case tImplementation transition of
+        ownershipRules = case (.implementation) transition of
           LegacyHoleImplementation ->
-            concatMap (comparisonRule aggregate transition) (maybe [] comparisons (tGuard transition))
+            concatMap (comparisonRule aggregate transition) (maybe [] comparisons ((.guard) transition))
           GeneratedImplementation ->
-            maybe [] (expressionDiagnostics . resolveGuardExpr environment) (tGuard transition)
-              ++ concatMap (expressionDiagnostics . uncurry (resolveWriteExpr environment)) (tWrites transition)
+            maybe [] (expressionDiagnostics . resolveGuardExpr environment) ((.guard) transition)
+              ++ concatMap (expressionDiagnostics . uncurry (resolveWriteExpr environment)) ((.writes) transition)
           HoleImplementation ->
-            [ mkErr (locLine (tLoc transition)) AggregateTransitionOwnershipConflict $
+            [ mkErr (locLine ((.loc) transition)) AggregateTransitionOwnershipConflict $
                 "transition '"
-                  <> tSource transition
+                  <> (.source) transition
                   <> " -- "
-                  <> tCommand transition
+                  <> (.command) transition
                   <> "' selects implementation hole and therefore cannot also declare guard or write clauses"
-            | tGuard transition /= Nothing || not (null (tWrites transition))
+            | (.guard) transition /= Nothing || not (null ((.writes) transition))
             ]
-        outcomeExpressionRules = case (aggDomainOutcomeTypes aggregate, tOutcome transition) of
-          (Just declaration, Just (OutcomeRejected expression _)) -> resolveReason "rejected" (rejectionType declaration) expression
-          (Just declaration, Just (OutcomeNoOp expression _)) -> resolveReason "no-op" (noOpType declaration) expression
+        outcomeExpressionRules = case ((.domainOutcomeTypes) aggregate, (.outcome) transition) of
+          (Just declaration, Just (OutcomeRejected expression _)) -> resolveReason "rejected" ((.rejectionType) declaration) expression
+          (Just declaration, Just (OutcomeNoOp expression _)) -> resolveReason "no-op" ((.noOpType) declaration) expression
           _ -> []
         resolveReason label typeName expression =
-          case resolveAggregateType symbols (outcomeTypesLoc declaration) HaskellLoweringUse (TRef typeName) of
+          case resolveAggregateType symbols ((.outcomeTypesLoc) declaration) HaskellLoweringUse (TRef typeName) of
             Left _ -> []
             Right expected ->
               case resolveScalarExpr environment (ExpectScalarType expected) expression of
                 Right _ -> []
                 Left diagnostics -> map (outcomeExpressionDiagnostic label . id) (NE.toList diagnostics)
           where
-            declaration = case aggDomainOutcomeTypes aggregate of
+            declaration = case (.domainOutcomeTypes) aggregate of
               Just value -> value
               Nothing -> error "unreachable: outcome reason without declaration"
 
     outcomeExpressionDiagnostic label diagnostic =
       mkErr
-        (locLine (expressionDiagnosticLoc diagnostic))
-        ( if expressionDiagnosticCode diagnostic `elem` [ScalarOperandTypeMismatch, ScalarBooleanOperandRequired]
+        (locLine ((.loc) diagnostic))
+        ( if (.code) diagnostic `elem` [ScalarOperandTypeMismatch, ScalarBooleanOperandRequired]
             then DomainOutcomeReasonTypeMismatch
-            else expressionCode (expressionDiagnosticCode diagnostic)
+            else expressionCode ((.code) diagnostic)
         )
-        ("typed " <> label <> " outcome reason is invalid: " <> expressionDiagnosticMessage diagnostic)
+        ("typed " <> label <> " outcome reason is invalid: " <> (.message) diagnostic)
 
     expressionDiagnostics = either (map expressionDiagnostic . NE.toList) (const [])
 
     expressionDiagnostic diagnostic =
       mkErr
-        (locLine (expressionDiagnosticLoc diagnostic))
-        (expressionCode (expressionDiagnosticCode diagnostic))
-        (expressionDiagnosticMessage diagnostic)
+        (locLine ((.loc) diagnostic))
+        (expressionCode ((.code) diagnostic))
+        ((.message) diagnostic)
 
     expressionCode = \case
       ScalarRootUnknown -> AggregateExpressionRootUnknown
@@ -960,7 +960,7 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       case (expressionType aggregate transition left, expressionType aggregate transition right) of
         (Right leftType, Right rightType)
           | leftType /= rightType ->
-              [ mkErr (locLine (tLoc transition)) AggregateGuardTypeMismatch $
+              [ mkErr (locLine ((.loc) transition)) AggregateGuardTypeMismatch $
                   "comparison operands have different aggregate types '"
                     <> aggregateCanonicalName leftType
                     <> "' and '"
@@ -968,7 +968,7 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
                     <> "'"
               ]
           | aggregateCapability useSite leftType == Unsupported ->
-              [ mkErr (locLine (tLoc transition)) AggregateGuardCapabilityUnsupported $
+              [ mkErr (locLine ((.loc) transition)) AggregateGuardCapabilityUnsupported $
                   renderAggregateUseSite useSite
                     <> " is unsupported for aggregate type '"
                     <> aggregateCanonicalName leftType
@@ -1004,17 +1004,17 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
         LiteralQualified typeName _ -> resolveAggregateType symbols (exprLoc expression) EqualityGuardUse (TRef typeName)
         LiteralId typeName _ -> resolveAggregateType symbols (exprLoc expression) EqualityGuardUse (TRef typeName)
 
-    atomType aggregate transition name = case [register | register <- aggRegs aggregate, regName register == name] of
-      register : _ -> resolveAggregateType symbols (regLoc register) RegisterUse (regType register)
-      [] -> case [field | command <- aggCommands aggregate, cmdName command == tCommand transition, field <- cmdFields command, aggregateFieldName field == name] of
+    atomType aggregate transition name = case [register | register <- (.regs) aggregate, (.name) register == name] of
+      register : _ -> resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register)
+      [] -> case [field | command <- (.commands) aggregate, (.name) command == (.command) transition, field <- (.fields) command, (.name) field == name] of
         field : _ -> inferAggregateFieldType symbols aggregate CommandFieldUse field
-        [] -> case [enumName declaration | declaration <- specEnums spec, name `elem` map fst (enumCtors declaration)] of
-          enumType : _ -> resolveAggregateType symbols (tLoc transition) CommandFieldUse (TRef enumType)
+        [] -> case [(.name) declaration | declaration <- (.enums) spec, name `elem` map fst ((.ctors) declaration)] of
+          enumType : _ -> resolveAggregateType symbols ((.loc) transition) CommandFieldUse (TRef enumType)
           []
-            | name `elem` map stName (aggStates aggregate) -> pure (AggregateVertex (aggName aggregate <> "Vertex"))
-            | Just rule <- firstMatching ((== name) . ruleName) (specRules spec) ->
-                resolveAggregateType symbols (ruleLoc rule) EqualityGuardUse (nameTypeExpr (ruleCodomain rule))
-            | otherwise -> Left (AggregateTypeError (tLoc transition) EqualityGuardUse (UnknownAggregateType name))
+            | name `elem` map (.name) ((.states) aggregate) -> pure (AggregateVertex ((.name) aggregate <> "Vertex"))
+            | Just rule <- firstMatching ((== name) . (.name)) ((.rules) spec) ->
+                resolveAggregateType symbols ((.loc) rule) EqualityGuardUse (nameTypeExpr ((.codomain) rule))
+            | otherwise -> Left (AggregateTypeError ((.loc) transition) EqualityGuardUse (UnknownAggregateType name))
 
     nameTypeExpr name = case name of
       "Text" -> TText
@@ -1039,27 +1039,27 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
 
 aggregateTypeDiagnostic :: AggregateTypeError -> Diagnostic
 aggregateTypeDiagnostic aggregateError =
-  mkErr (locLine (aggregateTypeErrorLoc aggregateError)) diagnosticCode diagnosticMessage
+  mkErr (locLine ((.loc) aggregateError)) diagnosticCode diagnosticMessage
   where
-    diagnosticCode = case aggregateTypeErrorReason aggregateError of
+    diagnosticCode = case (.reason) aggregateError of
       UnknownAggregateType {} -> AggregateTypeUnknown
       UnsupportedAggregateShape {} -> AggregateTypeUnsupportedAtUse
-      UnsupportedAggregateCapability {} -> case aggregateTypeErrorUseSite aggregateError of
+      UnsupportedAggregateCapability {} -> case (.useSite) aggregateError of
         EqualityGuardUse -> AggregateGuardCapabilityUnsupported
         OrderingGuardUse -> AggregateGuardCapabilityUnsupported
         _ -> AggregateTypeUnsupportedAtUse
       InvalidRegisterInitial {} -> AggregateRegisterInitialInvalid
-    diagnosticMessage = case aggregateTypeErrorReason aggregateError of
+    diagnosticMessage = case (.reason) aggregateError of
       UnknownAggregateType name ->
-        "unknown aggregate type '" <> name <> "' at " <> renderAggregateUseSite (aggregateTypeErrorUseSite aggregateError)
+        "unknown aggregate type '" <> name <> "' at " <> renderAggregateUseSite ((.useSite) aggregateError)
       UnsupportedAggregateShape expression ->
         "direct aggregate type '"
           <> typeExprCanonicalName expression
           <> "' is unsupported at "
-          <> renderAggregateUseSite (aggregateTypeErrorUseSite aggregateError)
+          <> renderAggregateUseSite ((.useSite) aggregateError)
           <> "; use a mapped structural declaration for Json or container shapes"
       UnsupportedAggregateCapability resolved ->
-        renderAggregateUseSite (aggregateTypeErrorUseSite aggregateError)
+        renderAggregateUseSite ((.useSite) aggregateError)
           <> " is unsupported for aggregate type '"
           <> aggregateCanonicalName resolved
           <> "'"
@@ -1146,7 +1146,7 @@ declarationErrorMessage = \case
 
 mappedLine :: Spec -> Name -> Int
 mappedLine spec name =
-  maybe 1 (locLine . mappedLoc) (firstMatching ((== name) . mappedName) (specMapped spec))
+  maybe 1 (locLine . mappedLoc) (firstMatching ((== name) . mappedName) ((.mapped) spec))
 
 mappedName :: MappedDecl -> Name
 mappedName MappedStructural {msName = name} = name
@@ -1165,7 +1165,7 @@ mappedCanonical MappedStructural {msCanonical = canonical} = canonical
 mappedCanonical MappedOpaque {} = Nothing
 
 mappedLexicalRules :: Spec -> [Diagnostic]
-mappedLexicalRules spec = concatMap declarationRules (specMapped spec)
+mappedLexicalRules spec = concatMap declarationRules ((.mapped) spec)
   where
     declarationRules declaration =
       constructorRule "mapped declaration name" (mappedName declaration) declaration
@@ -1174,14 +1174,14 @@ mappedLexicalRules spec = concatMap declarationRules (specMapped spec)
         ++ shapeConstructorRules declaration
 
     haskellRules declaration source =
-      [ invalid declaration $ "Haskell package '" <> hsPackage source <> "' does not follow Cabal package-name grammar"
-      | not (isCabalPackageName (hsPackage source))
+      [ invalid declaration $ "Haskell package '" <> (.package) source <> "' does not follow Cabal package-name grammar"
+      | not (isCabalPackageName ((.package) source))
       ]
-        ++ [ invalid declaration $ "Haskell module '" <> hsModule source <> "' must be dot-separated Upper identifiers"
-           | not (moduleNameSafe (hsModule source))
+        ++ [ invalid declaration $ "Haskell module '" <> (.moduleName) source <> "' must be dot-separated Upper identifiers"
+           | not (moduleNameSafe ((.moduleName) source))
            ]
-        ++ [ invalid declaration $ "Haskell type '" <> hsType source <> "' must be an Upper identifier"
-           | not (constructorSafe (hsType source))
+        ++ [ invalid declaration $ "Haskell type '" <> (.valueType) source <> "' must be an Upper identifier"
+           | not (constructorSafe ((.valueType) source))
            ]
 
     qualifiedFacts MappedStructural {msBinding = binding, msFixtures = fixtures, msInitial = initial, msLoc = loc} =
@@ -1200,19 +1200,19 @@ mappedLexicalRules spec = concatMap declarationRules (specMapped spec)
     shapeConstructorRules declaration = case declaration of
       MappedStructural {msShape = ShapeRecord constructor _ fields} ->
         constructorRule "record constructor" constructor declaration
-          ++ [ invalidAt (wireFieldLoc field) $ "record selector '" <> wfHaskell field <> "' must be a lower-initial Haskell identifier"
+          ++ [ invalidAt (wireFieldLoc field) $ "record selector '" <> (.haskell) field <> "' must be a lower-initial Haskell identifier"
              | field <- fields,
-               not (lowerIdentifierSafe (wfHaskell field))
+               not (lowerIdentifierSafe ((.haskell) field))
              ]
       MappedStructural {msShape = ShapeEnum entries} ->
-        [ invalidAt (weLoc entry) $ "enum constructor '" <> weCtor entry <> "' must be an Upper identifier"
+        [ invalidAt ((.loc) entry) $ "enum constructor '" <> (.ctor) entry <> "' must be an Upper identifier"
         | entry <- entries,
-          not (constructorSafe (weCtor entry))
+          not (constructorSafe ((.ctor) entry))
         ]
       MappedStructural {msShape = ShapeUnion _ arms} ->
-        [ invalidAt (waLoc arm) $ "union constructor '" <> waCtor arm <> "' must be an Upper identifier"
+        [ invalidAt ((.loc) arm) $ "union constructor '" <> (.ctor) arm <> "' must be an Upper identifier"
         | arm <- arms,
-          not (constructorSafe (waCtor arm))
+          not (constructorSafe ((.ctor) arm))
         ]
       MappedOpaque {} -> []
 
@@ -1228,7 +1228,7 @@ mappedIdentityRules :: Spec -> [Diagnostic]
 mappedIdentityRules spec =
   [ mkErr (locLine (mappedLoc declaration)) MappedInvalidIdentity $
       "mapped declaration '" <> mappedName declaration <> "' has an identity/version containing an ASCII control character"
-  | declaration <- specMapped spec,
+  | declaration <- (.mapped) spec,
     value <- identityValues declaration,
     T.any asciiControl value
   ]
@@ -1240,19 +1240,19 @@ mappedIdentityRules spec =
 mappedConflictRules :: Spec -> [Diagnostic]
 mappedConflictRules spec = sourceCollisions ++ canonicalCollisions ++ packageCollisions
   where
-    declarations = specMapped spec
+    declarations = (.mapped) spec
     sourceFacts = [(declaration, source) | declaration <- declarations, source <- maybeToList (mappedHaskell declaration)]
     sourceCollisions =
       [ conflict declaration $
-          "Haskell target '" <> hsModule source <> "." <> hsType source <> "' is claimed by more than one mapped declaration"
-      | (declaration, source) <- duplicatesBy (\(_, value) -> (hsModule value, hsType value)) sourceFacts
+          "Haskell target '" <> (.moduleName) source <> "." <> (.valueType) source <> "' is claimed by more than one mapped declaration"
+      | (declaration, source) <- duplicatesBy (\(_, value) -> ((.moduleName) value, (.valueType) value)) sourceFacts
       ]
     canonicalFacts = [(declaration, canonical) | declaration <- declarations, canonical <- maybeToList (mappedCanonical declaration), not (T.null canonical)]
     canonicalCollisions =
       [ conflict declaration $ "canonical-type '" <> canonical <> "' is claimed by more than one mapped declaration"
       | (declaration, canonical) <- duplicatesBy snd canonicalFacts
       ]
-    moduleFacts = [(declaration, hsModule source, hsPackage source) | (declaration, source) <- sourceFacts]
+    moduleFacts = [(declaration, (.moduleName) source, (.package) source) | (declaration, source) <- sourceFacts]
     packageCollisions =
       [ conflict declaration $
           "Haskell module '" <> moduleName <> "' is declared from conflicting packages '" <> oldPackage <> "' and '" <> packageName <> "'"
@@ -1266,7 +1266,7 @@ mappedConflictRules spec = sourceCollisions ++ canonicalCollisions ++ packageCol
 
 mappedGraphRules :: Spec -> TypeGraph -> [Diagnostic]
 mappedGraphRules spec graph =
-  concatMap declarationRules (Map.elems (tgDeclarations graph))
+  concatMap declarationRules (Map.elems ((.declarations) graph))
     ++ mappedRegisterInitialRules spec graph
   where
     declarationRules =
@@ -1280,85 +1280,85 @@ mappedGraphRules spec graph =
     shapeRules declaration =
       MappedShapeAlgebra
         { onRecord = \_ _ fields ->
-            [ mappedError (rwfLoc field) MappedDuplicateFieldName declaration $
-                "record selector '" <> rwfHaskell field <> "' is declared more than once"
-            | field <- duplicatesBy rwfHaskell fields
+            [ mappedError ((.loc) field) MappedDuplicateFieldName declaration $
+                "record selector '" <> (.haskell) field <> "' is declared more than once"
+            | field <- duplicatesBy (.haskell) fields
             ]
-              ++ [ mappedError (rwfLoc field) MappedDuplicateWireKey declaration $
-                     "record wire key '" <> rwfKey field <> "' is declared more than once"
-                 | field <- duplicatesBy rwfKey fields
+              ++ [ mappedError ((.loc) field) MappedDuplicateWireKey declaration $
+                     "record wire key '" <> (.key) field <> "' is declared more than once"
+                 | field <- duplicatesBy (.key) fields
                  ]
-              ++ [ mappedError (rwfLoc field) MappedUnsupportedEncoding declaration "record wire keys must be non-empty"
+              ++ [ mappedError ((.loc) field) MappedUnsupportedEncoding declaration "record wire keys must be non-empty"
                  | field <- fields,
-                   T.null (rwfKey field)
+                   T.null ((.key) field)
                  ]
               ++ concatMap (fieldRules declaration) fields,
           onEnum = \entries ->
-            [ mappedError (weLoc entry) MappedDuplicateArmName declaration $
-                "enum constructor '" <> weCtor entry <> "' is declared more than once"
-            | entry <- duplicatesBy weCtor entries
+            [ mappedError ((.loc) entry) MappedDuplicateArmName declaration $
+                "enum constructor '" <> (.ctor) entry <> "' is declared more than once"
+            | entry <- duplicatesBy (.ctor) entries
             ]
-              ++ [ mappedError (weLoc entry) MappedDuplicateWireTag declaration $
-                     "enum wire spelling '" <> weTag entry <> "' is declared more than once"
-                 | entry <- duplicatesBy weTag entries
+              ++ [ mappedError ((.loc) entry) MappedDuplicateWireTag declaration $
+                     "enum wire spelling '" <> (.tag) entry <> "' is declared more than once"
+                 | entry <- duplicatesBy (.tag) entries
                  ]
-              ++ [ mappedError (weLoc entry) MappedUnsupportedEncoding declaration "enum wire spellings must be non-empty"
+              ++ [ mappedError ((.loc) entry) MappedUnsupportedEncoding declaration "enum wire spellings must be non-empty"
                  | entry <- entries,
-                   T.null (weTag entry)
+                   T.null ((.tag) entry)
                  ],
           onUnion = \encoding arms ->
-            [ mappedError (sdLoc declaration) MappedUnsupportedEncoding declaration "tagged-object tag and contents keys must be distinct"
-            | ueTagField encoding == ueContentsField encoding
+            [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "tagged-object tag and contents keys must be distinct"
+            | (.tagField) encoding == (.contentsField) encoding
             ]
-              ++ [ mappedError (sdLoc declaration) MappedUnsupportedEncoding declaration "tagged-object tag and contents keys must be non-empty"
-                 | T.null (ueTagField encoding) || T.null (ueContentsField encoding)
+              ++ [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "tagged-object tag and contents keys must be non-empty"
+                 | T.null ((.tagField) encoding) || T.null ((.contentsField) encoding)
                  ]
-              ++ [ mappedError (rwaLoc arm) MappedDuplicateArmName declaration $
-                     "union constructor '" <> rwaCtor arm <> "' is declared more than once"
-                 | arm <- duplicatesBy rwaCtor arms
+              ++ [ mappedError ((.loc) arm) MappedDuplicateArmName declaration $
+                     "union constructor '" <> (.ctor) arm <> "' is declared more than once"
+                 | arm <- duplicatesBy (.ctor) arms
                  ]
-              ++ [ mappedError (rwaLoc arm) MappedDuplicateWireTag declaration $
-                     "union wire tag '" <> rwaTag arm <> "' is declared more than once"
-                 | arm <- duplicatesBy rwaTag arms
+              ++ [ mappedError ((.loc) arm) MappedDuplicateWireTag declaration $
+                     "union wire tag '" <> (.tag) arm <> "' is declared more than once"
+                 | arm <- duplicatesBy (.tag) arms
                  ]
-              ++ [ mappedError (rwaLoc arm) MappedUnsupportedEncoding declaration "union wire tags must be non-empty"
+              ++ [ mappedError ((.loc) arm) MappedUnsupportedEncoding declaration "union wire tags must be non-empty"
                  | arm <- arms,
-                   T.null (rwaTag arm)
+                   T.null ((.tag) arm)
                  ]
               ++ concatMap (armRules declaration) arms
         }
 
     fieldRules declaration field =
       defaultRules declaration field
-        ++ [ mappedError (rwfLoc field) MappedNonInjectiveNullability declaration $
-               "field '" <> rwfHaskell field <> "' contains Optional around a null-capable Json, Optional, or opaque mapped value"
-           | hasNonInjectiveOptional graph (rwfType field)
+        ++ [ mappedError ((.loc) field) MappedNonInjectiveNullability declaration $
+               "field '" <> (.haskell) field <> "' contains Optional around a null-capable Json, Optional, or opaque mapped value"
+           | hasNonInjectiveOptional graph ((.valueType) field)
            ]
 
     armRules declaration arm =
-      [ mappedError (rwaLoc arm) MappedNonInjectiveNullability declaration $
-          "union arm '" <> rwaCtor arm <> "' contains Optional around a null-capable Json, Optional, or opaque mapped value"
-      | payload <- maybeToList (rwaPayload arm),
+      [ mappedError ((.loc) arm) MappedNonInjectiveNullability declaration $
+          "union arm '" <> (.ctor) arm <> "' contains Optional around a null-capable Json, Optional, or opaque mapped value"
+      | payload <- maybeToList ((.payload) arm),
         hasNonInjectiveOptional graph payload
       ]
 
-    defaultRules declaration field = case (rwfPresence field, rwfOnMissing field) of
+    defaultRules declaration field = case ((.presence) field, (.onMissing) field) of
       (PRequired, Just _) -> [illTyped "required fields cannot declare on-missing"]
       (POptional, Nothing) ->
-        [ mappedError (rwfLoc field) MappedMissingIngredient declaration $
-            "optional field '" <> rwfHaskell field <> "' is missing its on-missing policy"
+        [ mappedError ((.loc) field) MappedMissingIngredient declaration $
+            "optional field '" <> (.haskell) field <> "' is missing its on-missing policy"
         ]
       (POptional, Just value)
-        | not (defaultMatches graph (rwfType field) value) -> [illTyped "on-missing value does not match the field type or numeric bounds"]
+        | not (defaultMatches graph ((.valueType) field) value) -> [illTyped "on-missing value does not match the field type or numeric bounds"]
       _ -> []
       where
         illTyped detail =
-          mappedError (rwfLoc field) MappedDefaultIllTyped declaration $
-            "field '" <> rwfHaskell field <> "': " <> detail
+          mappedError ((.loc) field) MappedDefaultIllTyped declaration $
+            "field '" <> (.haskell) field <> "': " <> detail
 
     mappedError loc diagnosticCode declaration detail =
       mkErr (locLine loc) diagnosticCode $
-        "mapped declaration '" <> sdName declaration <> "' " <> detail
+        "mapped declaration '" <> (.name) declaration <> "' " <> detail
     maybeToList = maybe [] pure
 
 data DefaultType
@@ -1402,7 +1402,7 @@ defaultType graph =
       }
 
 referencedDefaultType :: TypeGraph -> MappedKey -> DefaultType
-referencedDefaultType graph key = case Map.lookup key (tgDeclarations graph) of
+referencedDefaultType graph key = case Map.lookup key ((.declarations) graph) of
   Nothing -> DefaultOther
   Just declaration ->
     foldMappedDecl
@@ -1411,7 +1411,7 @@ referencedDefaultType graph key = case Map.lookup key (tgDeclarations graph) of
             foldMappedShape
               MappedShapeAlgebra
                 { onRecord = \_ _ _ -> DefaultOther,
-                  onEnum = DefaultEnum . Set.fromList . map weCtor,
+                  onEnum = DefaultEnum . Set.fromList . map (.ctor),
                   onUnion = \_ _ -> DefaultOther
                 }
               shape,
@@ -1420,13 +1420,13 @@ referencedDefaultType graph key = case Map.lookup key (tgDeclarations graph) of
       declaration
 
 data NullabilityFacts = NullabilityFacts
-  { nfTopNull :: !Bool,
-    nfBadOptional :: !Bool
+  { topNull :: !Bool,
+    badOptional :: !Bool
   }
 
 hasNonInjectiveOptional :: TypeGraph -> ResolvedTypeExpr -> Bool
 hasNonInjectiveOptional graph =
-  nfBadOptional
+  (.badOptional)
     . foldTypeExpr
       TypeExprAlgebra
         { onText = nonNull,
@@ -1436,7 +1436,7 @@ hasNonInjectiveOptional graph =
           onNatural = nonNull,
           onTime = nonNull,
           onJson = nullable,
-          onOptional = \child -> NullabilityFacts True (nfTopNull child || nfBadOptional child),
+          onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
           onList = nestedNonNull,
           onMap = nestedNonNull,
           onRef = \key -> if mappedRefIsOpaque graph key then nullable else nonNull
@@ -1444,10 +1444,10 @@ hasNonInjectiveOptional graph =
   where
     nonNull = NullabilityFacts False False
     nullable = NullabilityFacts True False
-    nestedNonNull child = NullabilityFacts False (nfBadOptional child)
+    nestedNonNull child = NullabilityFacts False ((.badOptional) child)
 
 mappedRefIsOpaque :: TypeGraph -> MappedKey -> Bool
-mappedRefIsOpaque graph key = case Map.lookup key (tgDeclarations graph) of
+mappedRefIsOpaque graph key = case Map.lookup key ((.declarations) graph) of
   Nothing -> False
   Just declaration ->
     foldMappedDecl
@@ -1459,29 +1459,29 @@ mappedRefIsOpaque graph key = case Map.lookup key (tgDeclarations graph) of
 
 mappedRegisterInitialRules :: Spec -> TypeGraph -> [Diagnostic]
 mappedRegisterInitialRules spec graph =
-  concatMap aggregateRules [aggregate | NAggregate aggregate <- specNodes spec]
+  concatMap aggregateRules [aggregate | NAggregate aggregate <- (.nodes) spec]
   where
-    aggregateRules aggregate = concatMap registerRule (aggRegs aggregate)
-    registerRule register = case regType register of
-      TRef typeName -> case Map.lookup (MappedKey typeName) (tgDeclarations graph) of
+    aggregateRules aggregate = concatMap registerRule ((.regs) aggregate)
+    registerRule register = case (.valueType) register of
+      TRef typeName -> case Map.lookup (MappedKey typeName) ((.declarations) graph) of
         Nothing -> []
-        Just declaration -> case regInitial register of
+        Just declaration -> case (.initial) register of
           RegInitBare "initial"
             | mappedInitial declaration == Nothing ->
-                [ mkErr (locLine (regLoc register)) MappedMissingInitialValue $
-                    "mapped register '" <> regName register <> "' requires declaration '" <> typeName <> "' to name an explicit initial value"
+                [ mkErr (locLine ((.loc) register)) MappedMissingInitialValue $
+                    "mapped register '" <> (.name) register <> "' requires declaration '" <> typeName <> "' to name an explicit initial value"
                 ]
             | otherwise -> []
           _ ->
-            [ mkErr (locLine (regLoc register)) RegisterInitialOutOfScope $
-                "mapped register '" <> regName register <> "' must use the bare initial token; the declaration-owned symbol is verified by GHC"
+            [ mkErr (locLine ((.loc) register)) RegisterInitialOutOfScope $
+                "mapped register '" <> (.name) register <> "' must use the bare initial token; the declaration-owned symbol is verified by GHC"
             ]
       _ -> []
     mappedInitial =
       foldMappedDecl
         MappedDeclAlgebra
-          { onStructuralDecl = \declaration _ -> sdInitial declaration,
-            onOpaqueDecl = odInitial
+          { onStructuralDecl = \declaration _ -> (.initial) declaration,
+            onOpaqueDecl = (.initial)
           }
 
 moduleNameSafe :: Text -> Bool
@@ -1524,107 +1524,107 @@ headOr fallback = \case
 validateNames :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
 validateNames languageContract typeGraphResult spec =
   concat
-    [ concatMap idNames (specIds spec),
-      concatMap enumNames (specEnums spec),
-      concatMap nominalNames (specNominalScalars spec),
-      concatMap nodeNames (specNodes spec),
+    [ concatMap idNames ((.ids) spec),
+      concatMap enumNames ((.enums) spec),
+      concatMap nominalNames ((.nominalScalars) spec),
+      concatMap nodeNames ((.nodes) spec),
       normalizedCollisions
     ]
   where
     idNames declaration =
-      constructorName "id name" (idName declaration) (idLoc declaration)
+      constructorName "id name" ((.name) declaration) ((.loc) declaration)
 
     enumNames declaration =
-      constructorName "enum name" (enumName declaration) (enumLoc declaration)
+      constructorName "enum name" ((.name) declaration) ((.loc) declaration)
         ++ concatMap
-          (\(ctor, _) -> constructorName ("constructor of enum '" <> enumName declaration <> "'") ctor (enumLoc declaration))
-          (enumCtors declaration)
+          (\(ctor, _) -> constructorName ("constructor of enum '" <> (.name) declaration <> "'") ctor ((.loc) declaration))
+          ((.ctors) declaration)
 
     nominalNames declaration =
-      constructorName "nominal scalar name" (nominalScalarName declaration) (nominalScalarLoc declaration)
+      constructorName "nominal scalar name" ((.name) declaration) ((.loc) declaration)
 
     nodeNames = \case
       NAggregate aggregate -> aggregateNames aggregate
       NProcess process -> processNames process
       NRouter router -> routerNames router
       NContract contract ->
-        pascalizedNodeName "contract" (ctrName contract) (ctrLoc contract)
+        pascalizedNodeName "contract" ((.name) contract) ((.loc) contract)
           ++ concatMap
-            (\event -> constructorName "contract event name" (ceName event) (ctrLoc contract) ++ concatMap contractFieldName (ceFields event))
-            (ctrEvents contract)
-      NIntake intake -> pascalizedNodeName "intake" (inkName intake) (inkLoc intake)
-      NEmit emitNode -> pascalizedNodeName "emit" (emName emitNode) (emLoc emitNode)
-      NPublisher publisher -> pascalizedNodeName "publisher" (pubName publisher) (pubLoc publisher)
+            (\event -> constructorName "contract event name" ((.name) event) ((.loc) contract) ++ concatMap contractFieldName ((.fields) event))
+            ((.events) contract)
+      NIntake intake -> pascalizedNodeName "intake" ((.name) intake) ((.loc) intake)
+      NEmit emitNode -> pascalizedNodeName "emit" ((.name) emitNode) ((.loc) emitNode)
+      NPublisher publisher -> pascalizedNodeName "publisher" ((.name) publisher) ((.loc) publisher)
       NWorkqueue workqueue ->
-        pascalizedNodeName "workqueue" (wqName workqueue) (wqLoc workqueue)
-          ++ constructorName "workqueue payload name" (wqPayloadName workqueue) (wqLoc workqueue)
-          ++ concatMap (\field -> fieldNameRule "workqueue payload field" (wqfName field) (wqLoc workqueue)) (wqPayload workqueue)
-      NPgmqDispatch dispatch -> pascalizedNodeName "dispatch" (pdName dispatch) (pdLoc dispatch)
-      NReadModel readModel -> pascalizedNodeName "readmodel" (rmName readModel) (rmLoc readModel)
-      NProjectionTarget target -> pascalizedNodeName "target" (ptName target) (ptLoc target)
-      NRebuildGroup groupNode -> pascalizedNodeName "rebuild group" (rgName groupNode) (rgLoc groupNode)
-      NProjectionRevision revision -> pascalizedNodeName "projection revision" (prvName revision) (prvLoc revision)
-      NExternalRead externalRead -> pascalizedNodeName "external read" (externalReadNodeIdentity externalRead) (erLoc externalRead)
-      NProjectionOwner owner -> pascalizedNodeName "projection owner" (poName owner) (poLoc owner)
+        pascalizedNodeName "workqueue" ((.name) workqueue) ((.loc) workqueue)
+          ++ constructorName "workqueue payload name" ((.payloadName) workqueue) ((.loc) workqueue)
+          ++ concatMap (\field -> fieldNameRule "workqueue payload field" ((.name) field) ((.loc) workqueue)) ((.payload) workqueue)
+      NPgmqDispatch dispatch -> pascalizedNodeName "dispatch" ((.name) dispatch) ((.loc) dispatch)
+      NReadModel readModel -> pascalizedNodeName "readmodel" ((.name) readModel) ((.loc) readModel)
+      NProjectionTarget target -> pascalizedNodeName "target" ((.name) target) ((.loc) target)
+      NRebuildGroup groupNode -> pascalizedNodeName "rebuild group" ((.name) groupNode) ((.loc) groupNode)
+      NProjectionRevision revision -> pascalizedNodeName "projection revision" ((.name) revision) ((.loc) revision)
+      NExternalRead externalRead -> pascalizedNodeName "external read" (externalReadNodeIdentity externalRead) ((.loc) externalRead)
+      NProjectionOwner owner -> pascalizedNodeName "projection owner" ((.name) owner) ((.loc) owner)
       NWorkflow workflow -> workflowNames workflow
       NOperation _ -> []
 
     aggregateNames aggregate =
-      constructorName "aggregate name" (aggName aggregate) (aggLoc aggregate)
+      constructorName "aggregate name" ((.name) aggregate) ((.loc) aggregate)
         ++ concatMap
-          (\register -> fieldNameRule "register name" (regName register) (regLoc register))
-          (aggRegs aggregate)
-        ++ concatMap commandNames (aggCommands aggregate)
-        ++ concatMap eventNames (aggEvents aggregate)
-        ++ maybe [] (\projection -> fieldNameRule "projection key" (projKey projection) (projLoc projection)) (aggProjection aggregate)
+          (\register -> fieldNameRule "register name" ((.name) register) ((.loc) register))
+          ((.regs) aggregate)
+        ++ concatMap commandNames ((.commands) aggregate)
+        ++ concatMap eventNames ((.events) aggregate)
+        ++ maybe [] (\projection -> fieldNameRule "projection key" ((.key) projection) ((.loc) projection)) ((.projection) aggregate)
         ++ vertexCollisions aggregate
       where
         commandNames command =
-          constructorName "command name" (cmdName command) (cmdLoc command)
-            ++ concatMap (aggregateFieldNameRule "command field") (cmdFields command)
+          constructorName "command name" ((.name) command) ((.loc) command)
+            ++ concatMap (aggregateFieldNameRule "command field") ((.fields) command)
         eventNames event =
-          constructorName "event name" (evName event) (evLoc event)
-            ++ case evBody event of
+          constructorName "event name" ((.name) event) ((.loc) event)
+            ++ case (.body) event of
               EventFields fields -> concatMap (aggregateFieldNameRule "event field") fields
               EventFromCommand _ -> []
 
     processNames process =
-      constructorName "process name" (procId process) (procLoc process)
-        ++ constructorName "process input name" (inName input) (procLoc process)
-        ++ concatMap (\field -> fieldNameRule "process input field" (fieldName field) (procLoc process)) (inFields input)
-        ++ concatMap (bindingName "advance field binding" (procLoc process)) (advFields (hAdvance handle))
-        ++ concatMap dispatchBindings (hDispatch handle)
-        ++ concatMap (bindingName "timer payload field binding" (tmLoc timer)) (tmPayload timer)
-        ++ concatMap (bindingName "timer fire field binding" (tmLoc timer)) (fireFields (tmFire timer))
+      constructorName "process name" ((.id) process) ((.loc) process)
+        ++ constructorName "process input name" ((.name) input) ((.loc) process)
+        ++ concatMap (\field -> fieldNameRule "process input field" ((.name) field) ((.loc) process)) ((.fields) input)
+        ++ concatMap (bindingName "advance field binding" ((.loc) process)) ((.advFields) ((.advance) handle))
+        ++ concatMap dispatchBindings ((.dispatch) handle)
+        ++ concatMap (bindingName "timer payload field binding" ((.loc) timer)) ((.payload) timer)
+        ++ concatMap (bindingName "timer fire field binding" ((.loc) timer)) ((.fields) ((.fire) timer))
       where
-        input = procInput process
-        handle = procHandle process
-        timer = procTimer process
-        dispatchBindings dispatch = concatMap (bindingName "dispatch field binding" (dispLoc dispatch)) (dispFields dispatch)
+        input = (.input) process
+        handle = (.handle) process
+        timer = (.timer) process
+        dispatchBindings dispatch = concatMap (bindingName "dispatch field binding" ((.loc) dispatch)) ((.fields) dispatch)
 
     routerNames router =
-      constructorName "router name" (rtId router) (rtLoc router)
-        ++ constructorName "router input name" (inName input) (rtLoc router)
-        ++ concatMap (\field -> fieldNameRule "router input field" (fieldName field) (rtLoc router)) (inFields input)
-        ++ concatMap (\field -> fieldNameRule "router resolve-row field" field (rvLoc resolve)) (rvRow resolve)
-        ++ concatMap (bindingName "router dispatch field binding" (rdLoc dispatch)) (rdFields dispatch)
+      constructorName "router name" ((.id) router) ((.loc) router)
+        ++ constructorName "router input name" ((.name) input) ((.loc) router)
+        ++ concatMap (\field -> fieldNameRule "router input field" ((.name) field) ((.loc) router)) ((.fields) input)
+        ++ concatMap (\field -> fieldNameRule "router resolve-row field" field ((.loc) resolve)) ((.row) resolve)
+        ++ concatMap (bindingName "router dispatch field binding" ((.loc) dispatch)) ((.fields) dispatch)
       where
-        input = rtInput router
-        resolve = rtResolve router
-        dispatch = rtDispatch router
+        input = (.input) router
+        resolve = (.resolve) router
+        dispatch = (.dispatch) router
 
-    bindingName category anchor binding = fieldNameRule category (fbName binding) anchor
+    bindingName category anchor binding = fieldNameRule category ((.name) binding) anchor
     contractFieldName = contractFieldNameRule "contract field"
 
     aggregateFieldNameRule category field =
-      case aggregateFieldSelector field of
-        Nothing -> fieldNameRule category (aggregateFieldName field) (aggregateFieldLoc field)
-        Just selector -> explicitFieldSelectorRule category (aggregateFieldName field) selector (aggregateFieldLoc field)
+      case (.selector) field of
+        Nothing -> fieldNameRule category ((.name) field) ((.loc) field)
+        Just selector -> explicitFieldSelectorRule category ((.name) field) selector ((.loc) field)
 
     contractFieldNameRule category field =
-      case cfSelector field of
-        Nothing -> fieldNameRule category (cfName field) (cfLoc field)
-        Just selector -> explicitFieldSelectorRule category (cfName field) selector (cfLoc field)
+      case (.selector) field of
+        Nothing -> fieldNameRule category ((.name) field) ((.loc) field)
+        Just selector -> explicitFieldSelectorRule category ((.name) field) selector ((.loc) field)
 
     explicitFieldSelectorRule category dslName selector anchor =
       case HaskellName.checkedLowerOccurrence site selector of
@@ -1633,21 +1633,21 @@ validateNames languageContract typeGraphResult spec =
       where
         site =
           HaskellName.NameSite
-            { HaskellName.siteKind = HaskellName.GeneratedFieldSite,
-              HaskellName.siteLogicalName = selector,
-              HaskellName.siteOwner = category <> ":" <> dslName,
-              HaskellName.siteLine = locLine anchor
+            { HaskellName.kind = HaskellName.GeneratedFieldSite,
+              HaskellName.logicalName = selector,
+              HaskellName.owner = category <> ":" <> dslName,
+              HaskellName.line = locLine anchor
             }
 
     constructorName category name anchor = checkedLogicalName HaskellName.GeneratedTypeSite category name anchor
 
     workflowNames workflow =
-      constructorName "workflow name" (wfId workflow) (workflowNodeLoc workflow)
+      constructorName "workflow name" ((.id) workflow) (workflowNodeLoc workflow)
         <> concat
           [ case HaskellName.deriveLowerHelperName HaskellName.LogicalWireWord "Await" site of
               Right _ -> []
               Left nameError -> [nameErrorDiagnostic "workflow await binding" nameError]
-          | (label, loc) <- workflowAwaits (wfBody workflow),
+          | (label, loc) <- workflowAwaits ((.body) workflow),
             let site = workflowAwaitBindingSite workflow label loc
           ]
 
@@ -1665,25 +1665,25 @@ validateNames languageContract typeGraphResult spec =
 
     nameSite kind category name anchor =
       HaskellName.NameSite
-        { HaskellName.siteKind = kind,
-          HaskellName.siteLogicalName = name,
-          HaskellName.siteOwner = category <> ":" <> name,
-          HaskellName.siteLine = locLine anchor
+        { HaskellName.kind = kind,
+          HaskellName.logicalName = name,
+          HaskellName.owner = category <> ":" <> name,
+          HaskellName.line = locLine anchor
         }
 
     nameErrorDiagnostic category = \case
       HaskellName.EmptyNameSegment site ->
-        mkErr (HaskellName.siteLine site) IdentUnsafeNormalization $
-          category <> " '" <> HaskellName.siteLogicalName site <> "' has an empty generated-Haskell word"
+        mkErr ((.line) site) IdentUnsafeNormalization $
+          category <> " '" <> (.logicalName) site <> "' has an empty generated-Haskell word"
       HaskellName.UnsafeNameSeparator site reason ->
-        mkErr (HaskellName.siteLine site) IdentUnsafeNormalization $
-          category <> " '" <> HaskellName.siteLogicalName site <> "' cannot be normalized safely: " <> reason
+        mkErr ((.line) site) IdentUnsafeNormalization $
+          category <> " '" <> (.logicalName) site <> "' cannot be normalized safely: " <> reason
       HaskellName.ReservedGeneratedOccurrence site occurrence ->
-        mkErr (HaskellName.siteLine site) GeneratedOccurrenceReserved $
-          category <> " '" <> HaskellName.siteLogicalName site <> "' normalizes to reserved Haskell occurrence '" <> occurrence <> "'"
+        mkErr ((.line) site) GeneratedOccurrenceReserved $
+          category <> " '" <> (.logicalName) site <> "' normalizes to reserved Haskell occurrence '" <> occurrence <> "'"
       HaskellName.InvalidExplicitHaskellName site occurrence ->
-        mkErr (HaskellName.siteLine site) IdentUnsafeNormalization $
-          category <> " '" <> HaskellName.siteLogicalName site <> "' cannot become generated Haskell occurrence '" <> occurrence <> "'"
+        mkErr ((.line) site) IdentUnsafeNormalization $
+          category <> " '" <> (.logicalName) site <> "' cannot become generated Haskell occurrence '" <> occurrence <> "'"
       collision@HaskellName.NormalizedNameCollision {} -> collisionDiagnostic collision
 
     normalizedCollisions = map collisionDiagnostic (HaskellName.detectNameCollisions collisionOccurrences)
@@ -1696,57 +1696,57 @@ validateNames languageContract typeGraphResult spec =
         <> concatMap contractFieldOccurrences contracts
         <> concatMap workflowRuntimeOccurrences workflows
 
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
-    contracts = [contract | NContract contract <- specNodes spec]
-    workflows = [workflow | NWorkflow workflow <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    contracts = [contract | NContract contract <- (.nodes) spec]
+    workflows = [workflow | NWorkflow workflow <- (.nodes) spec]
 
     contextSegment =
-      case deriveAt HaskellName.LogicalWireWord HaskellName.ContextModuleSite "context" (specContext spec) (Loc 1) of
-        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
-        Left _ -> specContext spec
+      case deriveAt HaskellName.LogicalWireWord HaskellName.ContextModuleSite "context" ((.context) spec) (Loc 1) of
+        Right derived -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
+        Left _ -> (.context) spec
 
     nodeModuleOccurrences =
       [ HaskellName.plannedOccurrence contextSegment HaskellName.ModuleSpace "" rendered site
-      | node <- specNodes spec,
+      | node <- (.nodes) spec,
         let (category, raw, anchor) = nodeNameAndLoc node,
         let site = nameSite HaskellName.NodeModuleSite category raw anchor,
         Right derived <- [HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site],
-        let rendered = HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        let rendered = HaskellName.renderUpperCamelName ((.upperCamel) derived)
       ]
 
     sharedTypeOccurrences =
       [ HaskellName.plannedOccurrence ("Generated." <> contextSegment <> ".Nominals") HaskellName.TypeSpace "" rendered site
       | (category, raw, anchor) <-
-          [("id", idName declaration, idLoc declaration) | declaration <- specIds spec]
-            <> [("enum", enumName declaration, enumLoc declaration) | declaration <- specEnums spec]
-            <> [("nominal", nominalScalarName declaration, nominalScalarLoc declaration) | declaration <- specNominalScalars spec],
+          [("id", (.name) declaration, (.loc) declaration) | declaration <- (.ids) spec]
+            <> [("enum", (.name) declaration, (.loc) declaration) | declaration <- (.enums) spec]
+            <> [("nominal", (.name) declaration, (.loc) declaration) | declaration <- (.nominalScalars) spec],
         let site = nameSite HaskellName.GeneratedTypeSite category raw anchor,
         Right derived <- [HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site],
-        let rendered = HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        let rendered = HaskellName.renderUpperCamelName ((.upperCamel) derived)
       ]
 
     aggregateFieldOccurrences aggregate = commandFields <> eventFields
       where
-        targetModule = "Generated." <> contextSegment <> "." <> normalizedUpper "aggregate" (aggName aggregate) (aggLoc aggregate) <> ".Domain"
+        targetModule = "Generated." <> contextSegment <> "." <> normalizedUpper "aggregate" ((.name) aggregate) ((.loc) aggregate) <> ".Domain"
         commandFields =
-          [ fieldOccurrence targetModule (cmdName command) "command field" field
-          | command <- aggCommands aggregate,
-            field <- cmdFields command
+          [ fieldOccurrence targetModule ((.name) command) "command field" field
+          | command <- (.commands) aggregate,
+            field <- (.fields) command
           ]
         eventFields =
-          [ fieldOccurrence targetModule (evName event) "event field" field
-          | event <- aggEvents aggregate,
+          [ fieldOccurrence targetModule ((.name) event) "event field" field
+          | event <- (.events) aggregate,
             field <- eventFieldsFor aggregate event
           ]
 
     eventFieldsFor aggregate event =
-      case evBody event of
+      case (.body) event of
         EventFields fields -> fields
         EventFromCommand commandName ->
           [ field
-          | command <- aggCommands aggregate,
-            cmdName command == commandName,
-            field <- cmdFields command
+          | command <- (.commands) aggregate,
+            (.name) command == commandName,
+            field <- (.fields) command
           ]
 
     -- The occurrence registered here must be the selector generation actually
@@ -1758,8 +1758,8 @@ validateNames languageContract typeGraphResult spec =
     -- still refused, by the generated-name audit that owns that rule and says so.
     fieldOccurrence targetModule scope category field =
       let identity = resolveAggregateFieldIdentity field
-          site = nameSite HaskellName.GeneratedFieldSite category (fieldDslName identity) (aggregateFieldLoc field)
-       in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope (fieldSelector identity) site
+          site = nameSite HaskellName.GeneratedFieldSite category ((.dslName) identity) ((.loc) field)
+       in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope ((.selector) identity) site
 
     aggregateHarnessOccurrences aggregate =
       transitionHelpers <> sampleConstants
@@ -1767,11 +1767,11 @@ validateNames languageContract typeGraphResult spec =
         transitionHelpers =
           concat
             [ [helperOccurrence "accept" ("accept" <> commandName) transition]
-                <> [helperOccurrence "forward/replay" ("forwardReplay" <> commandName) transition | not (null (tEmits transition))]
-            | transition <- aggTransitions aggregate,
-              tSource transition == initialState,
-              tMode transition == TmLive,
-              let commandName = tCommand transition
+                <> [helperOccurrence "forward/replay" ("forwardReplay" <> commandName) transition | not (null ((.emits) transition))]
+            | transition <- (.transitions) aggregate,
+              (.source) transition == initialState,
+              (.mode) transition == TmLive,
+              let commandName = (.command) transition
             ]
         sampleConstants = map idSampleOccurrence generatedIds <> maybe [] (pure . timeSampleOccurrence) timeSample
         resolvedHarnessFields =
@@ -1781,64 +1781,64 @@ validateNames languageContract typeGraphResult spec =
           ]
         generatedIds =
           Map.elems . Map.fromList $
-            [ (Nominal.resolvedNominalName nominal, nominal)
+            [ ((.name) nominal, nominal)
             | (_, AggregateNominal nominal) <- resolvedHarnessFields,
-              Nominal.GeneratedNominal <- [Nominal.resolvedNominalOwnership nominal],
-              Nominal.IdRepresentation prefix <- [Nominal.resolvedNominalRepresentation nominal],
+              Nominal.GeneratedNominal <- [(.ownership) nominal],
+              Nominal.IdRepresentation prefix <- [(.representation) nominal],
               idDomainContractFor languageContract prefix /= Nothing
             ]
         timeFields = [field | (field, AggregateTime) <- resolvedHarnessFields]
-        timeSample = case filter ((== "observedAt") . aggregateFieldName) timeFields of
+        timeSample = case filter ((== "observedAt") . (.name)) timeFields of
           field : _ -> Just ("sampleObservedAt", field)
           [] -> case timeFields of
             field : _ -> Just ("sampleTime", field)
             [] -> Nothing
-        initialState = case aggStates aggregate of
-          state : _ -> stName state
+        initialState = case (.states) aggregate of
+          state : _ -> (.name) state
           [] -> ""
         symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
         targetModule =
           "Generated."
             <> contextSegment
             <> "."
-            <> normalizedUpper "aggregate" (aggName aggregate) (aggLoc aggregate)
+            <> normalizedUpper "aggregate" ((.name) aggregate) ((.loc) aggregate)
             <> ".Harness"
         helperOccurrence helperKind rendered transition =
           HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" rendered site
           where
             site =
               HaskellName.NameSite
-                { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
-                  HaskellName.siteLogicalName = tCommand transition,
-                  HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":" <> helperKind <> ":line:" <> T.pack (show (locLine (tLoc transition))),
-                  HaskellName.siteLine = locLine (tLoc transition)
+                { HaskellName.kind = HaskellName.GeneratedHelperSite,
+                  HaskellName.logicalName = (.command) transition,
+                  HaskellName.owner = "aggregate:" <> (.name) aggregate <> ":" <> helperKind <> ":line:" <> T.pack (show (locLine ((.loc) transition))),
+                  HaskellName.line = locLine ((.loc) transition)
                 }
         idSampleOccurrence nominal =
           HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" ("sample" <> nominalName) site
           where
-            nominalName = Nominal.resolvedNominalName nominal
-            nominalLoc = Nominal.resolvedNominalLoc nominal
+            nominalName = (.name) nominal
+            loc = (.loc) nominal
             site =
               HaskellName.NameSite
-                { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
-                  HaskellName.siteLogicalName = nominalName,
-                  HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":sample-id:" <> nominalName,
-                  HaskellName.siteLine = locLine nominalLoc
+                { HaskellName.kind = HaskellName.GeneratedHelperSite,
+                  HaskellName.logicalName = nominalName,
+                  HaskellName.owner = "aggregate:" <> (.name) aggregate <> ":sample-id:" <> nominalName,
+                  HaskellName.line = locLine loc
                 }
         timeSampleOccurrence (rendered, field) =
           HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" rendered site
           where
             site =
               HaskellName.NameSite
-                { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
-                  HaskellName.siteLogicalName = aggregateFieldName field,
-                  HaskellName.siteOwner = "aggregate:" <> aggName aggregate <> ":sample-time",
-                  HaskellName.siteLine = locLine (aggregateFieldLoc field)
+                { HaskellName.kind = HaskellName.GeneratedHelperSite,
+                  HaskellName.logicalName = (.name) field,
+                  HaskellName.owner = "aggregate:" <> (.name) aggregate <> ":sample-time",
+                  HaskellName.line = locLine ((.loc) field)
                 }
 
     workflowRuntimeOccurrences workflow =
       [ HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" rendered site
-      | (label, loc) <- workflowAwaits (wfBody workflow),
+      | (label, loc) <- workflowAwaits ((.body) workflow),
         let site = workflowAwaitBindingSite workflow label loc,
         Right awaitName <- [HaskellName.deriveLowerHelperName HaskellName.LogicalWireWord "Await" site],
         let rendered = HaskellName.renderLowerCamelName awaitName
@@ -1848,15 +1848,15 @@ validateNames languageContract typeGraphResult spec =
           "Generated."
             <> contextSegment
             <> "."
-            <> normalizedUpper "workflow" (wfId workflow) (workflowNodeLoc workflow)
+            <> normalizedUpper "workflow" ((.id) workflow) (workflowNodeLoc workflow)
             <> ".WorkflowRuntime"
 
     workflowAwaitBindingSite workflow label loc =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.GeneratedValueSite,
-          HaskellName.siteLogicalName = label,
-          HaskellName.siteOwner = "workflow:" <> wfId workflow <> ":await:" <> label,
-          HaskellName.siteLine = locLine loc
+        { HaskellName.kind = HaskellName.GeneratedValueSite,
+          HaskellName.logicalName = label,
+          HaskellName.owner = "workflow:" <> (.id) workflow <> ":await:" <> label,
+          HaskellName.line = locLine loc
         }
 
     workflowAwaits = concatMap go
@@ -1866,90 +1866,90 @@ validateNames languageContract typeGraphResult spec =
         go _ = []
 
     harnessFields aggregate =
-      [(CommandFieldUse, field) | command <- aggCommands aggregate, field <- cmdFields command]
+      [(CommandFieldUse, field) | command <- (.commands) aggregate, field <- (.fields) command]
         <> [ (EventFieldUse, field)
-           | event <- aggEvents aggregate,
+           | event <- (.events) aggregate,
              field <- eventFieldsFor aggregate event
            ]
 
     contractFieldOccurrences contract =
-      [ contractFieldOccurrence targetModule (ceName event <> "Data") field
-      | event <- ctrEvents contract,
-        field <- ceFields event
+      [ contractFieldOccurrence targetModule ((.name) event <> "Data") field
+      | event <- (.events) contract,
+        field <- (.fields) event
       ]
       where
         targetModule =
           "Generated."
             <> contextSegment
             <> "."
-            <> normalizedUpper "contract" (ctrName contract) (ctrLoc contract)
+            <> normalizedUpper "contract" ((.name) contract) ((.loc) contract)
             <> ".Contract"
 
     contractFieldOccurrence targetModule scope field =
       let identity = resolveContractFieldIdentity field
-          site = nameSite HaskellName.GeneratedFieldSite "contract field" (fieldDslName identity) (fieldLoc identity)
-          rendered = case cfSelector field of
+          site = nameSite HaskellName.GeneratedFieldSite "contract field" ((.dslName) identity) ((.loc) identity)
+          rendered = case (.selector) field of
             Just selector -> selector
             Nothing -> case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-              Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
-              Left _ -> fieldSelector identity
+              Right derived -> HaskellName.renderLowerCamelName ((.lowerCamel) derived)
+              Left _ -> (.selector) identity
        in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope rendered site
 
     normalizedUpper category raw anchor =
       case deriveAt HaskellName.LogicalIdentifier HaskellName.GeneratedTypeSite category raw anchor of
-        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        Right derived -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
         Left _ -> raw
 
     nodeNameAndLoc = \case
-      NAggregate value -> ("aggregate", aggName value, aggLoc value)
-      NProcess value -> ("process", procId value, procLoc value)
-      NRouter value -> ("router", rtId value, rtLoc value)
-      NContract value -> ("contract", ctrName value, ctrLoc value)
-      NIntake value -> ("intake", inkName value, inkLoc value)
-      NEmit value -> ("emit", emName value, emLoc value)
-      NPublisher value -> ("publisher", pubName value, pubLoc value)
-      NWorkqueue value -> ("workqueue", wqName value, wqLoc value)
-      NPgmqDispatch value -> ("dispatch", pdName value, pdLoc value)
-      NReadModel value -> ("readmodel", rmName value, rmLoc value)
-      NProjectionTarget value -> ("target", ptName value, ptLoc value)
-      NRebuildGroup value -> ("rebuild-group", rgName value, rgLoc value)
-      NProjectionRevision value -> ("projection-revision", prvName value, prvLoc value)
-      NExternalRead value -> ("external-read", externalReadNodeIdentity value, erLoc value)
-      NProjectionOwner value -> ("projection-owner", poName value, poLoc value)
-      NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
-      NOperation value -> ("operation", opName value, opLoc value)
+      NAggregate value -> ("aggregate", (.name) value, (.loc) value)
+      NProcess value -> ("process", (.id) value, (.loc) value)
+      NRouter value -> ("router", (.id) value, (.loc) value)
+      NContract value -> ("contract", (.name) value, (.loc) value)
+      NIntake value -> ("intake", (.name) value, (.loc) value)
+      NEmit value -> ("emit", (.name) value, (.loc) value)
+      NPublisher value -> ("publisher", (.name) value, (.loc) value)
+      NWorkqueue value -> ("workqueue", (.name) value, (.loc) value)
+      NPgmqDispatch value -> ("dispatch", (.name) value, (.loc) value)
+      NReadModel value -> ("readmodel", (.name) value, (.loc) value)
+      NProjectionTarget value -> ("target", (.name) value, (.loc) value)
+      NRebuildGroup value -> ("rebuild-group", (.name) value, (.loc) value)
+      NProjectionRevision value -> ("projection-revision", (.name) value, (.loc) value)
+      NExternalRead value -> ("external-read", externalReadNodeIdentity value, (.loc) value)
+      NProjectionOwner value -> ("projection-owner", (.name) value, (.loc) value)
+      NWorkflow value -> ("workflow", (.id) value, workflowNodeLoc value)
+      NOperation value -> ("operation", (.name) value, (.loc) value)
 
     collisionDiagnostic (HaskellName.NormalizedNameCollision key sites) =
       case reverse (NE.toList sites) of
         primary : reversedEarlier ->
           Diagnostic
-            { line = HaskellName.siteLine primary,
+            { line = (.line) primary,
               severity = Error,
               code = GeneratedOccurrenceCollision,
               relatedLocations =
-                [ (HaskellName.siteLine site, "'" <> HaskellName.siteLogicalName site <> "' also normalizes here")
+                [ ((.line) site, "'" <> (.logicalName) site <> "' also normalizes here")
                 | site <- reverse reversedEarlier
                 ],
               message =
                 "logical declarations "
-                  <> T.intercalate ", " ["'" <> HaskellName.siteLogicalName site <> "'" | site <- NE.toList sites]
+                  <> T.intercalate ", " ["'" <> (.logicalName) site <> "'" | site <- NE.toList sites]
                   <> " normalize to the same Haskell occurrence '"
-                  <> HaskellName.occurrenceName key
+                  <> (.name) key
                   <> "' in "
-                  <> HaskellName.occurrenceModule key
+                  <> (.moduleName) key
                   <> " ("
-                  <> T.pack (show (HaskellName.occurrenceSpace key))
+                  <> T.pack (show ((.space) key))
                   <> ")"
             }
         [] -> mkErr 1 GeneratedOccurrenceCollision "internal error: normalized collision without source sites"
     collisionDiagnostic nameError = nameErrorDiagnostic "generated declaration" nameError
 
     vertexCollisions aggregate =
-      [ mkErr (locLine (aggLoc aggregate)) VertexCtorCollision $
+      [ mkErr (locLine ((.loc) aggregate)) VertexCtorCollision $
           "aggregate '"
-            <> aggName aggregate
+            <> (.name) aggregate
             <> "' state '"
-            <> stName state
+            <> (.name) state
             <> "' generates vertex constructor '"
             <> vertex
             <> "', which collides with "
@@ -1957,15 +1957,15 @@ validateNames languageContract typeGraphResult spec =
             <> " '"
             <> vertex
             <> "' in the generated Domain constructor namespace"
-      | state <- aggStates aggregate,
-        let vertex = normalizedUpper "aggregate" (aggName aggregate) (aggLoc aggregate) <> normalizedUpper "state" (stName state) (stLoc state),
+      | state <- (.states) aggregate,
+        let vertex = normalizedUpper "aggregate" ((.name) aggregate) ((.loc) aggregate) <> normalizedUpper "state" ((.name) state) ((.loc) state),
         declarationKind <- collisionKinds aggregate vertex
       ]
 
     collisionKinds aggregate vertex =
-      ["event" | vertex `elem` [normalizedUpper "event" (evName event) (evLoc event) | event <- aggEvents aggregate]]
-        ++ ["command" | vertex `elem` [normalizedUpper "command" (cmdName command) (cmdLoc command) | command <- aggCommands aggregate]]
-        ++ ["enum constructor" | vertex `elem` [normalizedUpper "enum constructor" ctor (enumLoc enum) | enum <- specEnums spec, (ctor, _) <- enumCtors enum]]
+      ["event" | vertex `elem` [normalizedUpper "event" ((.name) event) ((.loc) event) | event <- (.events) aggregate]]
+        ++ ["command" | vertex `elem` [normalizedUpper "command" ((.name) command) ((.loc) command) | command <- (.commands) aggregate]]
+        ++ ["enum constructor" | vertex `elem` [normalizedUpper "enum constructor" ctor ((.loc) enum) | enum <- (.enums) spec, (ctor, _) <- (.ctors) enum]]
 
 -- Explicit consumer-owned Haskell references keep their spelling and use the
 -- historical lexical check. Generated names never call this helper.
@@ -2010,24 +2010,24 @@ specLevelRules languageContract supplyAnalysis spec = duplicateNodes ++ duplicat
     duplicateNodes =
       [ mkErr (locLine loc) DuplicateNodeName $
           "duplicate " <> kind <> " node name '" <> name <> "'"
-      | node <- duplicatesBy nodeKey (specNodes spec),
+      | node <- duplicatesBy nodeKey ((.nodes) spec),
         let (kind, name, loc) = nodeIdentity node
       ]
     nodeKey node = let (kind, name, _) = nodeIdentity node in (kind, name)
-    duplicateEnumMembers = concatMap enumDuplicates (specEnums spec)
+    duplicateEnumMembers = concatMap enumDuplicates ((.enums) spec)
     enumDuplicates e =
-      [ mkErr (locLine (enumLoc e)) DuplicateEnumCtor $
-          "enum '" <> enumName e <> "' declares constructor '" <> ctor <> "' more than once"
-      | (ctor, _) <- duplicatesBy fst (enumCtors e)
+      [ mkErr (locLine ((.loc) e)) DuplicateEnumCtor $
+          "enum '" <> (.name) e <> "' declares constructor '" <> ctor <> "' more than once"
+      | (ctor, _) <- duplicatesBy fst ((.ctors) e)
       ]
-        ++ [ mkErr (locLine (enumLoc e)) DuplicateEnumWire $
-               "enum '" <> enumName e <> "' declares wire spelling '" <> wire <> "' more than once"
-           | (_, wire) <- duplicatesBy snd (enumCtors e)
+        ++ [ mkErr (locLine ((.loc) e)) DuplicateEnumWire $
+               "enum '" <> (.name) e <> "' declares wire spelling '" <> wire <> "' more than once"
+           | (_, wire) <- duplicatesBy snd ((.ctors) e)
            ]
     duplicateIdPrefixes =
-      [ mkErr (locLine (idLoc d)) DuplicateIdPrefix $
-          "id '" <> idName d <> "' reuses prefix '" <> idPrefix d <> "'"
-      | d <- duplicatesBy idPrefix (specIds spec)
+      [ mkErr (locLine ((.loc) d)) DuplicateIdPrefix $
+          "id '" <> (.name) d <> "' reuses prefix '" <> (.prefix) d <> "'"
+      | d <- duplicatesBy (.prefix) ((.ids) spec)
       ]
     duplicateDeclarations =
       [ mkErr (locLine loc) NominalDuplicateDeclaration $
@@ -2036,11 +2036,11 @@ specLevelRules languageContract supplyAnalysis spec = duplicateNodes ++ duplicat
         (category, name, loc) <- duplicatesBy (\(category, name, _) -> (category, name)) declarationOrigins
       ]
     declarationOrigins =
-      [("id", idName value, idLoc value) | value <- specIds spec]
-        <> [("enum", enumName value, enumLoc value) | value <- specEnums spec]
-        <> [("nominal scalar", nominalScalarName value, nominalScalarLoc value) | value <- specNominalScalars spec]
-        <> [("mapped", mappedName value, mappedLoc value) | value <- specMapped spec]
-        <> [("rule", ruleName value, ruleLoc value) | value <- specRules spec]
+      [("id", (.name) value, (.loc) value) | value <- (.ids) spec]
+        <> [("enum", (.name) value, (.loc) value) | value <- (.enums) spec]
+        <> [("nominal scalar", (.name) value, (.loc) value) | value <- (.nominalScalars) spec]
+        <> [("mapped", mappedName value, mappedLoc value) | value <- (.mapped) spec]
+        <> [("rule", (.name) value, (.loc) value) | value <- (.rules) spec]
     runtimeIdentities =
       [ mkErr (locLine loc) RuntimeIdentityInvalid $
           kind <> " stable identity " <> T.pack (show identity) <> " " <> reason
@@ -2055,32 +2055,32 @@ specLevelRules languageContract supplyAnalysis spec = duplicateNodes ++ duplicat
         (kind, identity, loc) <- duplicatesBy (\(_, identity, _) -> identity) stableIdentityOrigins
       ]
     stableIdentityOrigins =
-      [("workflow", wfStable workflow, workflowNodeLoc workflow) | NWorkflow workflow <- specNodes spec]
-        <> [("process", procName process, procLoc process) | NProcess process <- specNodes spec]
-        <> [("router", rtName router, rtLoc router) | NRouter router <- specNodes spec]
+      [("workflow", (.stable) workflow, workflowNodeLoc workflow) | NWorkflow workflow <- (.nodes) spec]
+        <> [("process", (.name) process, (.loc) process) | NProcess process <- (.nodes) spec]
+        <> [("router", (.name) router, (.loc) router) | NRouter router <- (.nodes) spec]
     catalogRules
       | hasProjectionCatalog languageContract = validateProjectionCatalogFleet supplyAnalysis spec
       | otherwise = []
-    ruleDiagnostics = concatMap (validateRule spec) (specRules spec)
+    ruleDiagnostics = concatMap (validateRule spec) ((.rules) spec)
 
 nodeIdentity :: Node -> (Text, Name, Loc)
-nodeIdentity (NAggregate a) = ("aggregate", aggName a, aggLoc a)
-nodeIdentity (NProcess p) = ("process", procId p, procLoc p)
-nodeIdentity (NRouter r) = ("router", rtId r, rtLoc r)
-nodeIdentity (NContract c) = ("contract", ctrName c, ctrLoc c)
-nodeIdentity (NIntake i) = ("intake", inkName i, inkLoc i)
-nodeIdentity (NEmit e) = ("emit", emName e, emLoc e)
-nodeIdentity (NPublisher p) = ("publisher", pubName p, pubLoc p)
-nodeIdentity (NWorkqueue w) = ("workqueue", wqName w, wqLoc w)
-nodeIdentity (NPgmqDispatch d) = ("dispatch", pdName d, pdLoc d)
-nodeIdentity (NReadModel r) = ("readmodel", rmName r, rmLoc r)
-nodeIdentity (NProjectionTarget target) = ("target", ptName target, ptLoc target)
-nodeIdentity (NRebuildGroup groupNode) = ("rebuild-group", rgName groupNode, rgLoc groupNode)
-nodeIdentity (NProjectionRevision revision) = ("projection-revision", prvName revision, prvLoc revision)
-nodeIdentity (NExternalRead externalRead) = ("external-read", externalReadNodeIdentity externalRead, erLoc externalRead)
-nodeIdentity (NProjectionOwner owner) = ("projection-owner", poName owner, poLoc owner)
-nodeIdentity (NWorkflow w) = ("workflow", wfId w, workflowNodeLoc w)
-nodeIdentity (NOperation o) = ("operation", opName o, opLoc o)
+nodeIdentity (NAggregate a) = ("aggregate", (.name) a, (.loc) a)
+nodeIdentity (NProcess p) = ("process", (.id) p, (.loc) p)
+nodeIdentity (NRouter r) = ("router", (.id) r, (.loc) r)
+nodeIdentity (NContract c) = ("contract", (.name) c, (.loc) c)
+nodeIdentity (NIntake i) = ("intake", (.name) i, (.loc) i)
+nodeIdentity (NEmit e) = ("emit", (.name) e, (.loc) e)
+nodeIdentity (NPublisher p) = ("publisher", (.name) p, (.loc) p)
+nodeIdentity (NWorkqueue w) = ("workqueue", (.name) w, (.loc) w)
+nodeIdentity (NPgmqDispatch d) = ("dispatch", (.name) d, (.loc) d)
+nodeIdentity (NReadModel r) = ("readmodel", (.name) r, (.loc) r)
+nodeIdentity (NProjectionTarget target) = ("target", (.name) target, (.loc) target)
+nodeIdentity (NRebuildGroup groupNode) = ("rebuild-group", (.name) groupNode, (.loc) groupNode)
+nodeIdentity (NProjectionRevision revision) = ("projection-revision", (.name) revision, (.loc) revision)
+nodeIdentity (NExternalRead externalRead) = ("external-read", externalReadNodeIdentity externalRead, (.loc) externalRead)
+nodeIdentity (NProjectionOwner owner) = ("projection-owner", (.name) owner, (.loc) owner)
+nodeIdentity (NWorkflow w) = ("workflow", (.id) w, workflowNodeLoc w)
+nodeIdentity (NOperation o) = ("operation", (.name) o, (.loc) o)
 
 validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> Node -> [Diagnostic]
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
@@ -2115,129 +2115,129 @@ validateContract languageContract contract =
     <> unresolvedTopicAliases
   where
     emptyContract =
-      [ mkErr (locLine (ctrLoc contract)) ContractEmpty $
+      [ mkErr (locLine ((.loc) contract)) ContractEmpty $
           "contract '"
-            <> ctrName contract
+            <> (.name) contract
             <> "' declares no events; scaffold cannot lower an empty contract -- declare at least one event"
-      | null (ctrEvents contract)
+      | null ((.events) contract)
       ]
     typeIdPrefixErrors =
-      [ mkErr (locLine (cfLoc field)) ContractInvalidTypeIdPrefix $
+      [ mkErr (locLine ((.loc) field)) ContractInvalidTypeIdPrefix $
           "contract '"
-            <> ctrName contract
+            <> (.name) contract
             <> "' event '"
-            <> ceName event
+            <> (.name) event
             <> "' field '"
-            <> cfName field
+            <> (.name) field
             <> "' has invalid TypeID prefix '"
             <> prefix
             <> "': "
             <> T.pack (show reason)
-      | event <- ctrEvents contract,
-        field <- ceFields event,
-        CTypeId prefix <- [cfType field],
+      | event <- (.events) contract,
+        field <- (.fields) event,
+        CTypeId prefix <- [(.valueType) field],
         Just _ <- [contractIdDomainContractFor languageContract prefix],
         Just reason <- [TypeID.checkPrefix prefix]
       ]
     schemaVersionFloor =
-      [ mkErr (locLine (ctrLoc contract)) ContractSchemaVersionBelowMinimum $
-          "contract '" <> ctrName contract <> "' schemaVersion must be at least 1"
+      [ mkErr (locLine ((.loc) contract)) ContractSchemaVersionBelowMinimum $
+          "contract '" <> (.name) contract <> "' schemaVersion must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
-        ctrSchemaVersion contract < 1
+        (.schemaVersion) contract < 1
       ]
     topicNames =
-      [ mkErr (locLine (ctrLoc contract)) ContractTopicNameInvalid $
-          "contract '" <> ctrName contract <> "' topic alias '" <> alias <> "' has invalid Kafka topic " <> T.pack (show topic) <> ": " <> reason
-      | (alias, topic) <- ctrTopics contract,
+      [ mkErr (locLine ((.loc) contract)) ContractTopicNameInvalid $
+          "contract '" <> (.name) contract <> "' topic alias '" <> alias <> "' has invalid Kafka topic " <> T.pack (show topic) <> ": " <> reason
+      | (alias, topic) <- (.topics) contract,
         T.null topic || enforcesSpecSurfaceClosures languageContract,
         Just reason <- [kafkaTopicError topic]
       ]
     duplicateEvents =
-      [ mkErr (locLine (ctrLoc contract)) ContractDuplicateEvent $
-          "contract '" <> ctrName contract <> "' declares event '" <> ceName event <> "' more than once"
-      | event <- duplicatesBy ceName (ctrEvents contract)
+      [ mkErr (locLine ((.loc) contract)) ContractDuplicateEvent $
+          "contract '" <> (.name) contract <> "' declares event '" <> (.name) event <> "' more than once"
+      | event <- duplicatesBy (.name) ((.events) contract)
       ]
     duplicateTopicAliases =
-      [ mkErr (locLine (ctrLoc contract)) ContractDuplicateTopicAlias $
-          "contract '" <> ctrName contract <> "' declares topic alias '" <> alias <> "' more than once"
-      | (alias, _) <- duplicatesBy fst (ctrTopics contract)
+      [ mkErr (locLine ((.loc) contract)) ContractDuplicateTopicAlias $
+          "contract '" <> (.name) contract <> "' declares topic alias '" <> alias <> "' more than once"
+      | (alias, _) <- duplicatesBy fst ((.topics) contract)
       ]
     duplicateFields =
-      [ mkErr (locLine (cfLoc field)) ContractDuplicateFieldName $
-          "contract '" <> ctrName contract <> "' event '" <> ceName event <> "' declares field '" <> cfName field <> "' more than once"
-      | event <- ctrEvents contract,
-        field <- duplicatesBy cfName (ceFields event)
+      [ mkErr (locLine ((.loc) field)) ContractDuplicateFieldName $
+          "contract '" <> (.name) contract <> "' event '" <> (.name) event <> "' declares field '" <> (.name) field <> "' more than once"
+      | event <- (.events) contract,
+        field <- duplicatesBy (.name) ((.fields) event)
       ]
     discriminatorShadows =
-      [ mkErr (locLine (cfLoc field)) ContractFieldShadowsDiscriminator $
+      [ mkErr (locLine ((.loc) field)) ContractFieldShadowsDiscriminator $
           "contract '"
-            <> ctrName contract
+            <> (.name) contract
             <> "' event '"
-            <> ceName event
+            <> (.name) event
             <> "' field '"
-            <> cfName field
+            <> (.name) field
             <> "' shadows the payload discriminator"
       | enforcesSpecSurfaceClosures languageContract,
-        event <- ctrEvents contract,
-        field <- ceFields event,
-        fieldWireKey (resolveContractFieldIdentity field) == ctrDiscriminator contract
+        event <- (.events) contract,
+        field <- (.fields) event,
+        (.wireKey) (resolveContractFieldIdentity field) == (.discriminator) contract
       ]
     fieldWireKeyRules =
       concat
         [ wireKeyRulesForRecord
-            ("contract '" <> ctrName contract <> "' event '" <> ceName event <> "'")
-            (Just (ctrDiscriminator contract, "payload discriminator"))
-            (map resolveContractFieldIdentity (ceFields event))
-        | event <- ctrEvents contract
+            ("contract '" <> (.name) contract <> "' event '" <> (.name) event <> "'")
+            (Just ((.discriminator) contract, "payload discriminator"))
+            (map resolveContractFieldIdentity ((.fields) event))
+        | event <- (.events) contract
         ]
     unresolvedTopicAliases =
-      [ mkErr (locLine (ctrLoc contract)) ContractTopicAliasUnresolved $
-          "contract '" <> ctrName contract <> "' event '" <> ceName event <> "' names undeclared topic alias '" <> ceTopic event <> "'"
+      [ mkErr (locLine ((.loc) contract)) ContractTopicAliasUnresolved $
+          "contract '" <> (.name) contract <> "' event '" <> (.name) event <> "' names undeclared topic alias '" <> (.topic) event <> "'"
       | enforcesSpecSurfaceClosures languageContract,
-        event <- ctrEvents contract,
-        ceTopic event `notElem` map fst (ctrTopics contract)
+        event <- (.events) contract,
+        (.topic) event `notElem` map fst ((.topics) contract)
       ]
 
 -- | Workflow replay keys, patch guards, rotation, and injected inputs must be unambiguous.
 validateWorkflow :: WorkflowNode -> [Diagnostic]
 validateWorkflow w = duplicateLabels ++ sleepFields ++ patchDuplicates ++ patchIds ++ continuePositions ++ idField
   where
-    inputFields = map fieldName (wfInputFields w)
-    labelledItems = workflowLabelledItems (wfBody w)
-    patchItems = workflowPatchItems (wfBody w)
+    inputFields = map (.name) ((.inputFields) w)
+    labelledItems = workflowLabelledItems ((.body) w)
+    patchItems = workflowPatchItems ((.body) w)
     duplicateLabels =
       [ mkErr (locLine (wfBodyLoc item)) WorkflowDuplicateLabel $
-          "workflow '" <> wfId w <> "' declares label '" <> label <> "' more than once; labels key deterministic replay, so a duplicate label replays the first occurrence's journaled result"
+          "workflow '" <> (.id) w <> "' declares label '" <> label <> "' more than once; labels key deterministic replay, so a duplicate label replays the first occurrence's journaled result"
       | (label, item) <- duplicatesBy fst labelledItems
       ]
     sleepFields =
       [ mkErr (locLine loc) WorkflowSleepDelayUnresolved $
-          "workflow '" <> wfId w <> "' sleep '" <> label <> "' references undeclared input field '" <> delay <> "'"
+          "workflow '" <> (.id) w <> "' sleep '" <> label <> "' references undeclared input field '" <> delay <> "'"
       | WfSleep label delay loc <- map snd labelledItems,
         delay `notElem` inputFields
       ]
     patchDuplicates =
       [ mkErr (locLine loc) WorkflowPatchDuplicate $
-          "workflow '" <> wfId w <> "' declares patch id '" <> patchId <> "' more than once; patch decisions journal under one stable key"
+          "workflow '" <> (.id) w <> "' declares patch id '" <> patchId <> "' more than once; patch decisions journal under one stable key"
       | (patchId, _, loc) <- duplicatesBy (\(patchId, _, _) -> patchId) patchItems
       ]
     patchIds =
       [ mkErr (locLine loc) WorkflowPatchIdInvalid $
-          "workflow '" <> wfId w <> "' patch id '" <> patchId <> "' contains ':'; the runtime reserves that separator for the patch journal-key prefix"
+          "workflow '" <> (.id) w <> "' patch id '" <> patchId <> "' contains ':'; the runtime reserves that separator for the patch journal-key prefix"
       | (patchId, _, loc) <- patchItems,
         ":" `T.isInfixOf` patchId
       ]
     continuePositions =
       [ mkErr (locLine loc) WorkflowContinueAsNewNotTerminal $
-          "workflow '" <> wfId w <> "' continueAsNew must be the last top-level body item and may not appear inside a patch"
-      | (isTopLevelTerminal, loc) <- workflowContinueItems (wfBody w),
+          "workflow '" <> (.id) w <> "' continueAsNew must be the last top-level body item and may not appear inside a patch"
+      | (isTopLevelTerminal, loc) <- workflowContinueItems ((.body) w),
         not isTopLevelTerminal
       ]
-    idField = case wfIdField w of
+    idField = case (.idField) w of
       Just field
         | field `notElem` inputFields ->
             [ mkErr (locLine (workflowNodeLoc w)) WorkflowIdFieldUnresolved $
-                "workflow '" <> wfId w <> "' derives its id from undeclared input field '" <> field <> "'"
+                "workflow '" <> (.id) w <> "' derives its id from undeclared input field '" <> field <> "'"
             ]
       _ -> []
 
@@ -2281,37 +2281,37 @@ workflowContinueItems items = topLevel ++ nested
 
 -- | A top-level rule is a total, clock-free function over one declared enum.
 validateRule :: Spec -> RuleDecl -> [Diagnostic]
-validateRule spec rule = case [e | e <- specEnums spec, enumName e == ruleDomain rule] of
+validateRule spec rule = case [e | e <- (.enums) spec, (.name) e == (.domain) rule] of
   [] ->
     [ mkErr rl RuleDomainUnresolved $
-        "rule '" <> ruleName rule <> "' has undeclared enum domain '" <> ruleDomain rule <> "'"
+        "rule '" <> (.name) rule <> "' has undeclared enum domain '" <> (.domain) rule <> "'"
     ]
   (domain : _) -> totality domain ++ unknownCases domain ++ bodyDiagnostics
   where
-    rl = locLine (ruleLoc rule)
-    caseNames = map fst (ruleCases rule)
-    allEnumCtors = Set.fromList [ctor | e <- specEnums spec, (ctor, _) <- enumCtors e]
+    rl = locLine ((.loc) rule)
+    caseNames = map fst ((.cases) rule)
+    allEnumCtors = Set.fromList [ctor | e <- (.enums) spec, (ctor, _) <- (.ctors) e]
     totality domain =
-      let missing = [ctor | (ctor, _) <- enumCtors domain, ctor `notElem` caseNames]
+      let missing = [ctor | (ctor, _) <- (.ctors) domain, ctor `notElem` caseNames]
        in [ mkErr rl RuleNotTotal $
-              "rule '" <> ruleName rule <> "' is not total over enum '" <> enumName domain <> "'; missing cases {" <> T.intercalate ", " missing <> "}"
+              "rule '" <> (.name) rule <> "' is not total over enum '" <> (.name) domain <> "'; missing cases {" <> T.intercalate ", " missing <> "}"
           | not (null missing)
           ]
     unknownCases domain =
       [ mkErr rl RuleCaseUnknownCtor $
-          "rule '" <> ruleName rule <> "' has case '" <> ctor <> "' which is not a constructor of enum '" <> enumName domain <> "'"
-      | (ctor, _) <- ruleCases rule,
-        ctor `notElem` map fst (enumCtors domain)
+          "rule '" <> (.name) rule <> "' has case '" <> ctor <> "' which is not a constructor of enum '" <> (.name) domain <> "'"
+      | (ctor, _) <- (.cases) rule,
+        ctor `notElem` map fst ((.ctors) domain)
       ]
-    bodyDiagnostics = concatMap validateBody (ruleCases rule)
+    bodyDiagnostics = concatMap validateBody ((.cases) rule)
     validateBody (ctor, expr) =
       [ mkErr rl ClockSampled $
-          "rule '" <> ruleName rule <> "' case '" <> ctor <> "' samples the wall clock via '" <> atom <> "'; rules must be deterministic"
+          "rule '" <> (.name) rule <> "' case '" <> ctor <> "' samples the wall clock via '" <> atom <> "'; rules must be deterministic"
       | atom <- dedup (exprNames expr),
         atom `Set.member` clockAtoms
       ]
         ++ [ mkErr rl GuardAtomOutOfScope $
-               "atom '" <> atom <> "' in rule '" <> ruleName rule <> "' resolves to no enum constructor or boolean literal"
+               "atom '" <> atom <> "' in rule '" <> (.name) rule <> "' resolves to no enum constructor or boolean literal"
            | atom <- dedup (exprNames expr),
              atom `Set.notMember` clockAtoms,
              atom `Set.notMember` allEnumCtors
@@ -2320,20 +2320,20 @@ validateRule spec rule = case [e | e <- specEnums spec, enumName e == ruleDomain
 -- | Operation rules resolve command aggregates, stream fields, projections,
 -- read models, workflow signal labels and value types, and run targets.
 validateOperation :: Spec -> OperationNode -> [Diagnostic]
-validateOperation spec o = case opShape o of
+validateOperation spec o = case (.shape) o of
   CommandOp aggregate streamField _ projections ->
     aggregateRef aggregate streamField ++ projectionRefs projections
   QueryOp readModel _ _ consistency ->
-    resolveReadModelRef QueryUnresolvedReadModel spec (opLoc o) ("query operation '" <> opName o <> "'") readModel
+    resolveReadModelRef QueryUnresolvedReadModel spec ((.loc) o) ("query operation '" <> (.name) o <> "'") readModel
       ++ [ mkErr ol QueryConsistencyInvalid $
-             "query operation '" <> opName o <> "' has unknown consistency '" <> consistency <> "'; expected Strong, Eventual, or PositionWait"
+             "query operation '" <> (.name) o <> "' has unknown consistency '" <> consistency <> "'; expected Strong, Eventual, or PositionWait"
          | consistency `notElem` (["Strong", "Eventual", "PositionWait"] :: [Name])
          ]
   SignalOp lbl wf _ _ valueType ->
     case lookupWorkflow wf of
       Nothing ->
-        [mkErr ol AwaitSignalMismatch ("signal operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")]
-      Just w -> case [(resultType, loc) | (_, WfAwait label resultType loc) <- workflowLabelledItems (wfBody w), label == lbl] of
+        [mkErr ol AwaitSignalMismatch ("signal operation '" <> (.name) o <> "' targets undeclared workflow '" <> wf <> "'")]
+      Just w -> case [(resultType, loc) | (_, WfAwait label resultType loc) <- workflowLabelledItems ((.body) w), label == lbl] of
         [] ->
           [ mkErr ol AwaitSignalMismatch $
               "signal '" <> lbl <> "' of " <> wf <> " has no matching 'await' (workflow declares awaits {" <> T.intercalate ", " (awaitLabels w) <> "}); the deterministic awakeable id will not match and the workflow will wait forever"
@@ -2345,29 +2345,29 @@ validateOperation spec o = case opShape o of
                   "signal '" <> lbl <> "' of " <> wf <> " carries value type '" <> valueType <> "' but the await expects '" <> resultType <> "'"
               ]
   RunOp wf _ _ ->
-    [ mkErr ol RunWorkflowUnresolved ("run operation '" <> opName o <> "' targets undeclared workflow '" <> wf <> "'")
-    | wf `notElem` map wfId workflows
+    [ mkErr ol RunWorkflowUnresolved ("run operation '" <> (.name) o <> "' targets undeclared workflow '" <> wf <> "'")
+    | wf `notElem` map (.id) workflows
     ]
   where
-    ol = locLine (opLoc o)
-    workflows = [w | NWorkflow w <- specNodes spec]
-    aggregates = [a | NAggregate a <- specNodes spec]
-    projectionTables = [projTable p | a <- aggregates, Just p <- [aggProjection a]]
-    lookupWorkflow n = case [w | w <- workflows, wfId w == n] of (w : _) -> Just w; [] -> Nothing
-    awaitLabels w = [l | (_, WfAwait l _ _) <- workflowLabelledItems (wfBody w)]
-    aggregateRef name streamField = case [a | a <- aggregates, aggName a == name] of
+    ol = locLine ((.loc) o)
+    workflows = [w | NWorkflow w <- (.nodes) spec]
+    aggregates = [a | NAggregate a <- (.nodes) spec]
+    projectionTables = [(.table) p | a <- aggregates, Just p <- [(.projection) a]]
+    lookupWorkflow n = case [w | w <- workflows, (.id) w == n] of (w : _) -> Just w; [] -> Nothing
+    awaitLabels w = [l | (_, WfAwait l _ _) <- workflowLabelledItems ((.body) w)]
+    aggregateRef name streamField = case [a | a <- aggregates, (.name) a == name] of
       [] ->
         [ mkErr ol OperationUnresolvedRef $
-            "command operation '" <> opName o <> "' targets undeclared aggregate '" <> name <> "'"
+            "command operation '" <> (.name) o <> "' targets undeclared aggregate '" <> name <> "'"
         ]
       (aggregate : _) ->
         [ mkErr ol OperationUnresolvedRef $
-            "command operation '" <> opName o <> "' stream field '" <> streamField <> "' is not declared by any command of aggregate '" <> name <> "'"
-        | streamField `notElem` [aggregateFieldName field | command <- aggCommands aggregate, field <- cmdFields command]
+            "command operation '" <> (.name) o <> "' stream field '" <> streamField <> "' is not declared by any command of aggregate '" <> name <> "'"
+        | streamField `notElem` [(.name) field | command <- (.commands) aggregate, field <- (.fields) command]
         ]
     projectionRefs projections =
       [ mkErr ol OperationUnresolvedRef $
-          "command operation '" <> opName o <> "' references undeclared projection table '" <> projection <> "'"
+          "command operation '" <> (.name) o <> "' references undeclared projection table '" <> projection <> "'"
       | projection <- projections,
         projection `notElem` projectionTables
       ]
@@ -2377,37 +2377,37 @@ resolveReadModelRef :: DiagnosticCode -> Spec -> Loc -> Text -> Name -> [Diagnos
 resolveReadModelRef diagnosticCode spec diagnosticLoc context name =
   [ mkErr (locLine diagnosticLoc) diagnosticCode $
       context <> " references undeclared readmodel '" <> name <> "'"
-  | name `notElem` [rmName readModel | NReadModel readModel <- specNodes spec]
+  | name `notElem` [(.name) readModel | NReadModel readModel <- (.nodes) spec]
   ]
 
 validateProjectionCatalogFleet :: ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
 validateProjectionCatalogFleet supplyAnalysis spec = physicalDuplicates <> groupOwnership <> projectionOwnership <> targetDependencies <> handlerOrders <> sourceOrdering <> supplyDiagnostics
   where
-    targets = [target | NProjectionTarget target <- specNodes spec]
-    groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
-    owners = [owner | NProjectionOwner owner <- specNodes spec]
+    targets = [target | NProjectionTarget target <- (.nodes) spec]
+    groups = [groupNode | NRebuildGroup groupNode <- (.nodes) spec]
+    owners = [owner | NProjectionOwner owner <- (.nodes) spec]
     physicalDuplicates =
-      [ mkErr (locLine (ptLoc target)) CatalogPhysicalTargetDuplicate $
-          "target '" <> ptName target <> "' reuses physical table " <> ptSchema target <> "." <> ptTable target
-      | target <- duplicatesBy (\target -> (ptSchema target, ptTable target)) targets
+      [ mkErr (locLine ((.loc) target)) CatalogPhysicalTargetDuplicate $
+          "target '" <> (.name) target <> "' reuses physical table " <> (.schema) target <> "." <> (.table) target
+      | target <- duplicatesBy (\target -> ((.schema) target, (.table) target)) targets
       ]
-    targetClaims = [(targetName, rgName groupNode, rgLoc groupNode) | groupNode <- groups, targetName <- rgTargets groupNode]
+    targetClaims = [(targetName, (.name) groupNode, (.loc) groupNode) | groupNode <- groups, targetName <- (.targets) groupNode]
     groupOwnership =
-      [ mkErr (locLine (ptLoc target)) CatalogTargetUnowned $
-          "target '" <> ptName target <> "' is not owned by any rebuild group"
+      [ mkErr (locLine ((.loc) target)) CatalogTargetUnowned $
+          "target '" <> (.name) target <> "' is not owned by any rebuild group"
       | target <- targets,
-        null [() | (targetName, _, _) <- targetClaims, targetName == ptName target]
+        null [() | (targetName, _, _) <- targetClaims, targetName == (.name) target]
       ]
         <> [ mkErr (locLine claimLoc) CatalogTargetMultiplyOwned $
                "target '" <> targetName <> "' is owned by more than one rebuild group"
            | (targetName, _, claimLoc) <- duplicatesBy (\(targetName, _, _) -> targetName) targetClaims
            ]
-    projectionClaims = [(targetName, poName owner, poLoc owner) | owner <- owners, targetName <- poTargets owner]
+    projectionClaims = [(targetName, (.name) owner, (.loc) owner) | owner <- owners, targetName <- (.targets) owner]
     projectionOwnership =
-      [ mkErr (locLine (ptLoc target)) CatalogTargetUnowned $
-          "target '" <> ptName target <> "' has no projection owner"
+      [ mkErr (locLine ((.loc) target)) CatalogTargetUnowned $
+          "target '" <> (.name) target <> "' has no projection owner"
       | target <- targets,
-        null [() | (targetName, _, _) <- projectionClaims, targetName == ptName target]
+        null [() | (targetName, _, _) <- projectionClaims, targetName == (.name) target]
       ]
         <> [ mkErr (locLine claimLoc) CatalogTargetMultiplyOwned $
                "target '" <> targetName <> "' is claimed by more than one projection owner"
@@ -2415,120 +2415,120 @@ validateProjectionCatalogFleet supplyAnalysis spec = physicalDuplicates <> group
            ]
     groupForTarget = Map.fromList [(targetName, groupName) | (targetName, groupName, _) <- targetClaims]
     targetDependencies =
-      [ mkErr (locLine (ptLoc target)) CatalogTargetDependencyUnknown $
-          "target '" <> ptName target <> "' depends on undeclared target '" <> dependency <> "'"
+      [ mkErr (locLine ((.loc) target)) CatalogTargetDependencyUnknown $
+          "target '" <> (.name) target <> "' depends on undeclared target '" <> dependency <> "'"
       | target <- targets,
-        dependency <- ptDependsOn target,
-        dependency `notElem` map ptName targets
+        dependency <- (.dependsOn) target,
+        dependency `notElem` map (.name) targets
       ]
-        <> [ mkErr (locLine (ptLoc target)) CatalogTargetDependencyOutsideGroup $
-               "target '" <> ptName target <> "' depends on target '" <> dependency <> "' in another rebuild group"
+        <> [ mkErr (locLine ((.loc) target)) CatalogTargetDependencyOutsideGroup $
+               "target '" <> (.name) target <> "' depends on target '" <> dependency <> "' in another rebuild group"
            | target <- targets,
-             dependency <- ptDependsOn target,
-             Just ownerGroup <- [Map.lookup (ptName target) groupForTarget],
+             dependency <- (.dependsOn) target,
+             Just ownerGroup <- [Map.lookup ((.name) target) groupForTarget],
              Just dependencyGroup <- [Map.lookup dependency groupForTarget],
              ownerGroup /= dependencyGroup
            ]
-        <> [ mkErr (locLine (ptLoc target)) CatalogTargetDependencyCycle $
-               "target dependency cycle includes '" <> ptName target <> "'"
-           | CyclicSCC cycleTargets <- stronglyConnComp [(target, ptName target, ptDependsOn target) | target <- targets],
+        <> [ mkErr (locLine ((.loc) target)) CatalogTargetDependencyCycle $
+               "target dependency cycle includes '" <> (.name) target <> "'"
+           | CyclicSCC cycleTargets <- stronglyConnComp [(target, (.name) target, (.dependsOn) target) | target <- targets],
              target <- cycleTargets
            ]
     handlerOrders =
-      [ mkErr (locLine (poLoc owner)) CatalogDuplicateHandlerOrder $
-          "projection owner '" <> poName owner <> "' reuses handler order " <> T.pack (show (poOrder owner)) <> " in group '" <> poGroup owner <> "'"
-      | owner <- duplicatesBy (\owner -> (poGroup owner, poOrder owner)) owners
+      [ mkErr (locLine ((.loc) owner)) CatalogDuplicateHandlerOrder $
+          "projection owner '" <> (.name) owner <> "' reuses handler order " <> T.pack (show ((.order) owner)) <> " in group '" <> (.group) owner <> "'"
+      | owner <- duplicatesBy (\owner -> ((.group) owner, (.order) owner)) owners
       ]
     sourceOrdering =
       [ Diagnostic
-          { line = locLine (rgLoc groupNode),
+          { line = locLine ((.loc) groupNode),
             severity = Error,
             code = CatalogAmbiguousSourceOrdering,
             relatedLocations =
-              [ (locLine (poLoc owner), "projection owner '" <> poName owner <> "' contributes " <> sourceScopeText owner <> " events")
+              [ (locLine ((.loc) owner), "projection owner '" <> (.name) owner <> "' contributes " <> sourceScopeText owner <> " events")
               | owner <- groupOwners
               ],
             message =
               "rebuild group '"
-                <> rgName groupNode
+                <> (.name) groupNode
                 <> "' cannot combine an all-stream source with category-scoped sources; split them into separate rebuild groups"
           }
       | groupNode <- groups,
-        let groupOwners = sortOn poName [owner | owner <- owners, poGroup owner == rgName groupNode],
+        let groupOwners = sortOn (.name) [owner | owner <- owners, (.group) owner == (.name) groupNode],
         any ownerUsesAllStreams groupOwners,
         any ownerUsesCategoryScope groupOwners
       ]
-    ownerUsesAllStreams owner = CatalogAll `elem` poSources owner
-    ownerUsesCategoryScope owner = any isCategoryScope (poSources owner)
+    ownerUsesAllStreams owner = CatalogAll `elem` (.sources) owner
+    ownerUsesCategoryScope owner = any isCategoryScope ((.sources) owner)
     isCategoryScope CatalogAll = False
     isCategoryScope CatalogCategory {} = True
     isCategoryScope CatalogAggregate {} = True
     sourceScopeText owner
       | ownerUsesAllStreams owner = "all-stream"
       | otherwise = "category-scoped"
-    supplyDiagnostics = concatMap projectionSupplyIssueDiagnostics (projectionSupplyIssues supplyAnalysis)
+    supplyDiagnostics = concatMap projectionSupplyIssueDiagnostics ((.projectionSupplyIssues) supplyAnalysis)
 
 projectionSupplyIssueDiagnostics :: ProjectionSupplyIssue -> [Diagnostic]
 projectionSupplyIssueDiagnostics = \case
   SupplyObservedTargetsEmpty readModel ->
-    [ mkErr (locLine (rmLoc readModel)) CatalogReadModelBindingMissing $
-        "readmodel '" <> rmName readModel <> "' must observe at least one target in its projection catalog group"
+    [ mkErr (locLine ((.loc) readModel)) CatalogReadModelBindingMissing $
+        "readmodel '" <> (.name) readModel <> "' must observe at least one target in its projection catalog group"
     ]
   SupplyObservedTargetUnknown readModel targetName ->
-    [ mkErr (locLine (rmLoc readModel)) CatalogTargetUnknown $
-        "readmodel '" <> rmName readModel <> "' observes undeclared target '" <> targetName <> "'"
+    [ mkErr (locLine ((.loc) readModel)) CatalogTargetUnknown $
+        "readmodel '" <> (.name) readModel <> "' observes undeclared target '" <> targetName <> "'"
     ]
   SupplyObservedTargetOutsideGroup readModel targetName ->
-    [ mkErr (locLine (rmLoc readModel)) CatalogReadModelTargetOutsideGroup $
-        "readmodel '" <> rmName readModel <> "' observes target '" <> targetName <> "' outside its bound group"
+    [ mkErr (locLine ((.loc) readModel)) CatalogReadModelTargetOutsideGroup $
+        "readmodel '" <> (.name) readModel <> "' observes target '" <> targetName <> "' outside its bound group"
     ]
   SupplyObservedTargetWithoutOwner _ _ -> []
   SupplyObservedTargetWithMultipleOwners _ _ _ -> []
   SupplyOwnerGroupMismatch _ _ _ -> []
   SupplyQueryWithoutOwner readModel ->
-    [ mkErr (locLine (rmLoc readModel)) CatalogReadModelSupplierMissing $
-        "readmodel '" <> rmName readModel <> "' does not resolve to one projection owner through its observed targets"
+    [ mkErr (locLine ((.loc) readModel)) CatalogReadModelSupplierMissing $
+        "readmodel '" <> (.name) readModel <> "' does not resolve to one projection owner through its observed targets"
     ]
   SupplyQueryWithMultipleOwners readModel owners ->
     [ Diagnostic
-        { line = locLine (rmLoc readModel),
+        { line = locLine ((.loc) readModel),
           severity = Error,
           code = CatalogReadModelMultipleSuppliers,
           relatedLocations =
-            [ (locLine (poLoc owner), "projection owner '" <> poName owner <> "' supplies part of the observed target set")
-            | owner <- sortOn poName owners
+            [ (locLine ((.loc) owner), "projection owner '" <> (.name) owner <> "' supplies part of the observed target set")
+            | owner <- sortOn (.name) owners
             ],
           message =
             "readmodel '"
-              <> rmName readModel
+              <> (.name) readModel
               <> "' spans several projection owners ("
-              <> T.intercalate ", " (map poName (sortOn poName owners))
+              <> T.intercalate ", " (map (.name) (sortOn (.name) owners))
               <> "); split the query or declare one owner for the complete observed target set"
         }
     ]
   SupplyLegacyProjectionConflict readModel aggregate projection ->
     [ Diagnostic
-        { line = locLine (rmLoc readModel),
+        { line = locLine ((.loc) readModel),
           severity = Error,
           code = CatalogReadModelLegacyProjectionConflict,
           relatedLocations =
-            [ ( locLine (projLoc projection),
-                "aggregate '" <> aggName aggregate <> "' also names this readmodel in its legacy projection clause"
+            [ ( locLine ((.loc) projection),
+                "aggregate '" <> (.name) aggregate <> "' also names this readmodel in its legacy projection clause"
               )
             ],
           message =
             "catalog-bound readmodel '"
-              <> rmName readModel
+              <> (.name) readModel
               <> "' derives its supplier from projection-owner target ownership; remove the legacy aggregate projection clause"
         }
     ]
 
 validateProjectionTarget :: EffectiveLanguageContract -> ProjectionTargetNode -> [Diagnostic]
 validateProjectionTarget languageContract target =
-  [ mkErr (locLine (ptLoc target)) ReadModelIdentifierInvalid $
-      "target '" <> ptName target <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
+  [ mkErr (locLine ((.loc) target)) ReadModelIdentifierInvalid $
+      "target '" <> (.name) target <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
   | hasProjectionCatalog languageContract,
-    (kind, identifier) <- [("schema", ptSchema target), ("table", ptTable target)],
+    (kind, identifier) <- [("schema", (.schema) target), ("table", (.table) target)],
     not (validPostgresIdentifier identifier)
   ]
 
@@ -2537,24 +2537,24 @@ validateRebuildGroup languageContract spec groupNode
   | not (hasProjectionCatalog languageContract) = []
   | otherwise = emptyTargets <> unknownTargets <> invalidOrder
   where
-    targetNames = [ptName target | NProjectionTarget target <- specNodes spec]
+    targetNames = [(.name) target | NProjectionTarget target <- (.nodes) spec]
     emptyTargets =
-      [ mkErr (locLine (rgLoc groupNode)) CatalogGroupEmpty $
-          "rebuild group '" <> rgName groupNode <> "' must own at least one target"
-      | null (rgTargets groupNode)
+      [ mkErr (locLine ((.loc) groupNode)) CatalogGroupEmpty $
+          "rebuild group '" <> (.name) groupNode <> "' must own at least one target"
+      | null ((.targets) groupNode)
       ]
     unknownTargets =
-      [ mkErr (locLine (rgLoc groupNode)) CatalogTargetUnknown $
-          "rebuild group '" <> rgName groupNode <> "' references undeclared target '" <> targetName <> "'"
-      | targetName <- rgTargets groupNode,
+      [ mkErr (locLine ((.loc) groupNode)) CatalogTargetUnknown $
+          "rebuild group '" <> (.name) groupNode <> "' references undeclared target '" <> targetName <> "'"
+      | targetName <- (.targets) groupNode,
         targetName `notElem` targetNames
       ]
     invalidOrder =
-      [ mkErr (locLine (rgLoc groupNode)) CatalogGroupOrderMismatch $
-          "rebuild group '" <> rgName groupNode <> "' order must contain each owned target exactly once"
-      | Set.fromList (rgOrder groupNode) /= Set.fromList (rgTargets groupNode)
-          || length (rgOrder groupNode) /= Set.size (Set.fromList (rgOrder groupNode))
-          || length (rgTargets groupNode) /= Set.size (Set.fromList (rgTargets groupNode))
+      [ mkErr (locLine ((.loc) groupNode)) CatalogGroupOrderMismatch $
+          "rebuild group '" <> (.name) groupNode <> "' order must contain each owned target exactly once"
+      | Set.fromList ((.order) groupNode) /= Set.fromList ((.targets) groupNode)
+          || length ((.order) groupNode) /= Set.size (Set.fromList ((.order) groupNode))
+          || length ((.targets) groupNode) /= Set.size (Set.fromList ((.targets) groupNode))
       ]
 
 validateProjectionRevision :: EffectiveLanguageContract -> Spec -> ProjectionRevisionNode -> [Diagnostic]
@@ -2562,56 +2562,56 @@ validateProjectionRevision languageContract spec revisionNode
   | not (hasProjectionCatalog languageContract) = []
   | otherwise = noTargets <> unknownGroup <> unknownTargets <> duplicateTargets <> targetSetMismatch <> invalidIdentities <> invalidPromotionNames
   where
-    declaredTargets = [ptName target | NProjectionTarget target <- specNodes spec]
-    matchingGroups = [groupNode | NRebuildGroup groupNode <- specNodes spec, rgName groupNode == prvGroup revisionNode]
-    revisionTargets = prvTargets revisionNode
-    revisionTargetNames = map prtTarget revisionTargets
+    declaredTargets = [(.name) target | NProjectionTarget target <- (.nodes) spec]
+    matchingGroups = [groupNode | NRebuildGroup groupNode <- (.nodes) spec, (.name) groupNode == (.group) revisionNode]
+    revisionTargets = (.targets) revisionNode
+    revisionTargetNames = map (.target) revisionTargets
     noTargets =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionNoTarget $
-          "projection revision '" <> prvName revisionNode <> "' must declare every target in its rebuild group"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionNoTarget $
+          "projection revision '" <> (.name) revisionNode <> "' must declare every target in its rebuild group"
       | null revisionTargets
       ]
     unknownGroup =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionGroupUnknown $
-          "projection revision '" <> prvName revisionNode <> "' references undeclared rebuild group '" <> prvGroup revisionNode <> "'"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionGroupUnknown $
+          "projection revision '" <> (.name) revisionNode <> "' references undeclared rebuild group '" <> (.group) revisionNode <> "'"
       | null matchingGroups
       ]
     unknownTargets =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionTargetUnknown $
-          "projection revision '" <> prvName revisionNode <> "' references undeclared target '" <> prtTarget revisionTarget <> "'"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionTargetUnknown $
+          "projection revision '" <> (.name) revisionNode <> "' references undeclared target '" <> (.target) revisionTarget <> "'"
       | revisionTarget <- revisionTargets,
-        prtTarget revisionTarget `notElem` declaredTargets
+        (.target) revisionTarget `notElem` declaredTargets
       ]
     duplicateTargets =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionDuplicateTarget $
-          "projection revision '" <> prvName revisionNode <> "' declares target '" <> targetName <> "' more than once"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionDuplicateTarget $
+          "projection revision '" <> (.name) revisionNode <> "' declares target '" <> targetName <> "' more than once"
       | targetName <- duplicatesBy id revisionTargetNames
       ]
     targetSetMismatch =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionTargetSetMismatch $
-          "projection revision '" <> prvName revisionNode <> "' target set must equal rebuild group '" <> prvGroup revisionNode <> "'"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionTargetSetMismatch $
+          "projection revision '" <> (.name) revisionNode <> "' target set must equal rebuild group '" <> (.group) revisionNode <> "'"
       | groupNode : _ <- [matchingGroups],
-        Set.fromList revisionTargetNames /= Set.fromList (rgTargets groupNode)
+        Set.fromList revisionTargetNames /= Set.fromList ((.targets) groupNode)
           || length revisionTargetNames /= Set.size (Set.fromList revisionTargetNames)
       ]
     invalidIdentities =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionIdentityInvalid $
-          "projection revision '" <> prvName revisionNode <> "' target '" <> prtTarget revisionTarget <> "' has invalid " <> identityKind <> " identity/version"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionIdentityInvalid $
+          "projection revision '" <> (.name) revisionNode <> "' target '" <> (.target) revisionTarget <> "' has invalid " <> identityKind <> " identity/version"
       | revisionTarget <- revisionTargets,
         (identityKind, identity, version) <-
-          [ ("schema", prtSchemaVersion revisionTarget, 1),
-            ("provisioner", prtProvisioner revisionTarget, prtProvisionerVersion revisionTarget),
-            ("expected-shape", prtExpectedShape revisionTarget, 1),
-            ("validator", prtValidator revisionTarget, prtValidatorVersion revisionTarget)
+          [ ("schema", (.schemaVersion) revisionTarget, 1),
+            ("provisioner", (.provisioner) revisionTarget, (.provisionerVersion) revisionTarget),
+            ("expected-shape", (.expectedShape) revisionTarget, 1),
+            ("validator", (.validator) revisionTarget, (.validatorVersion) revisionTarget)
           ],
         T.null identity || T.strip identity /= identity || version <= 0
       ]
     invalidPromotionNames =
-      [ mkErr (locLine (prvLoc revisionNode)) CatalogRevisionPromotionNameInvalid $
-          "projection revision '" <> prvName revisionNode <> "' target '" <> prtTarget revisionTarget <> "' promotion names must be valid, unique PostgreSQL identifiers"
+      [ mkErr (locLine ((.loc) revisionNode)) CatalogRevisionPromotionNameInvalid $
+          "projection revision '" <> (.name) revisionNode <> "' target '" <> (.target) revisionTarget <> "' promotion names must be valid, unique PostgreSQL identifiers"
       | revisionTarget <- revisionTargets,
-        let objects = prtPromotionObjects revisionTarget
-            names = concat [[rpoGenerationName object, rpoCanonicalName object] | object <- objects],
+        let objects = (.promotionObjects) revisionTarget
+            names = concat [[(.generationName) object, (.canonicalName) object] | object <- objects],
         any (not . validPostgresIdentifier) names
           || length names /= Set.size (Set.fromList names)
       ]
@@ -2629,74 +2629,74 @@ validateExternalRead languageContract spec externalRead
         <> revisionGroupMismatch
         <> invalidSurfaceGeneration
   where
-    diagnosticLine = locLine (erLoc externalRead)
-    readModels = [readModel | NReadModel readModel <- specNodes spec]
-    revisions = [revision | NProjectionRevision revision <- specNodes spec]
-    matchingReadModels = [readModel | readModel <- readModels, rmName readModel == erQueryModel externalRead]
+    diagnosticLine = locLine ((.loc) externalRead)
+    readModels = [readModel | NReadModel readModel <- (.nodes) spec]
+    revisions = [revision | NProjectionRevision revision <- (.nodes) spec]
+    matchingReadModels = [readModel | readModel <- readModels, (.name) readModel == (.queryModel) externalRead]
     matchingGroup = case matchingReadModels of
-      readModel : _ -> rmGroup readModel
+      readModel : _ -> (.group) readModel
       [] -> Nothing
     invalidIdentity =
       [ mkErr diagnosticLine CatalogExternalReadIdentityInvalid $
           "external-read '"
-            <> erName externalRead
+            <> (.name) externalRead
             <> "' requires lower-case PostgreSQL identifiers for its contract, result schema, and result type"
       | any
           (not . validPostgresIdentifier)
-          [erName externalRead, erResultSchema externalRead, erResultType externalRead]
+          [(.name) externalRead, (.resultSchema) externalRead, (.resultType) externalRead]
       ]
     invalidVersion =
       [ mkErr diagnosticLine CatalogExternalReadVersionInvalid $
-          "external-read '" <> erName externalRead <> "' version must be at least 1"
-      | erVersion externalRead <= 0
+          "external-read '" <> (.name) externalRead <> "' version must be at least 1"
+      | (.version) externalRead <= 0
       ]
     unknownQuery =
       [ mkErr diagnosticLine CatalogExternalReadQueryUnknown $
-          "external-read '" <> erName externalRead <> "' references undeclared readmodel '" <> erQueryModel externalRead <> "'"
+          "external-read '" <> (.name) externalRead <> "' references undeclared readmodel '" <> (.queryModel) externalRead <> "'"
       | null matchingReadModels
       ]
     invalidTargetCardinality =
       [ mkErr diagnosticLine CatalogExternalReadTargetCardinalityInvalid $
           "external-read '"
-            <> erName externalRead
+            <> (.name) externalRead
             <> "' is the bounded all-row form and its readmodel must observe exactly one target"
       | readModel <- take 1 matchingReadModels,
-        length (rmObservedTargets readModel) /= 1
+        length ((.observedTargets) readModel) /= 1
       ]
-    compatibleRevisions = erCompatibleRevisions externalRead
+    compatibleRevisions = (.compatibleRevisions) externalRead
     invalidCompatibility =
       [ mkErr diagnosticLine CatalogExternalReadCompatibilityInvalid $
-          "external-read '" <> erName externalRead <> "' must name at least one compatible projection revision without duplicates"
+          "external-read '" <> (.name) externalRead <> "' must name at least one compatible projection revision without duplicates"
       | null compatibleRevisions
           || length compatibleRevisions /= Set.size (Set.fromList compatibleRevisions)
       ]
     unknownRevisions =
       [ mkErr diagnosticLine CatalogExternalReadRevisionUnknown $
-          "external-read '" <> erName externalRead <> "' references undeclared projection revision '" <> revisionName <> "'"
+          "external-read '" <> (.name) externalRead <> "' references undeclared projection revision '" <> revisionName <> "'"
       | revisionName <- compatibleRevisions,
-        revisionName `notElem` map prvName revisions
+        revisionName `notElem` map (.name) revisions
       ]
     revisionGroupMismatch =
       [ mkErr diagnosticLine CatalogExternalReadRevisionGroupMismatch $
           "external-read '"
-            <> erName externalRead
+            <> (.name) externalRead
             <> "' binds readmodel group '"
             <> queryGroup
             <> "' but compatible revision '"
             <> revisionName
             <> "' belongs to group '"
-            <> prvGroup revision
+            <> (.group) revision
             <> "'"
       | Just queryGroup <- [matchingGroup],
         revisionName <- compatibleRevisions,
         revision <- revisions,
-        prvName revision == revisionName,
-        prvGroup revision /= queryGroup
+        (.name) revision == revisionName,
+        (.group) revision /= queryGroup
       ]
     invalidSurfaceGeneration =
       [ mkErr diagnosticLine CatalogExternalReadSurfaceGenerationInvalid $
-          "external-read '" <> erName externalRead <> "' surface-generation must be at least 1"
-      | erSurfaceGeneration externalRead <= 0
+          "external-read '" <> (.name) externalRead <> "' surface-generation must be at least 1"
+      | (.surfaceGeneration) externalRead <= 0
       ]
 
 validateProjectionOwner :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Spec -> ProjectionOwnerNode -> [Diagnostic]
@@ -2704,94 +2704,94 @@ validateProjectionOwner languageContract supplyAnalysis spec owner
   | not (hasProjectionCatalog languageContract) = []
   | otherwise = noSources <> noTargets <> unknownGroup <> outsideGroup <> sourceRules <> identityRules <> checkpointRules <> asyncQueryBinding <> replayRules
   where
-    groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
-    targets = [target | NProjectionTarget target <- specNodes spec]
-    aggregates = [aggName aggregate | NAggregate aggregate <- specNodes spec]
-    selectedGroupTargets = case [rgTargets groupNode | groupNode <- groups, rgName groupNode == poGroup owner] of
+    groups = [groupNode | NRebuildGroup groupNode <- (.nodes) spec]
+    targets = [target | NProjectionTarget target <- (.nodes) spec]
+    aggregates = [(.name) aggregate | NAggregate aggregate <- (.nodes) spec]
+    selectedGroupTargets = case [(.targets) groupNode | groupNode <- groups, (.name) groupNode == (.group) owner] of
       groupTargets : _ -> groupTargets
       [] -> []
     noSources =
-      [mkErr (locLine (poLoc owner)) CatalogProjectionNoSource ("projection owner '" <> poName owner <> "' must declare at least one source") | null (poSources owner)]
+      [mkErr (locLine ((.loc) owner)) CatalogProjectionNoSource ("projection owner '" <> (.name) owner <> "' must declare at least one source") | null ((.sources) owner)]
     noTargets =
-      [mkErr (locLine (poLoc owner)) CatalogProjectionNoTarget ("projection owner '" <> poName owner <> "' must declare at least one target") | null (poTargets owner)]
+      [mkErr (locLine ((.loc) owner)) CatalogProjectionNoTarget ("projection owner '" <> (.name) owner <> "' must declare at least one target") | null ((.targets) owner)]
     unknownGroup =
-      [ mkErr (locLine (poLoc owner)) CatalogGroupUnknown $
-          "projection owner '" <> poName owner <> "' references undeclared rebuild group '" <> poGroup owner <> "'"
-      | poGroup owner `notElem` map rgName groups
+      [ mkErr (locLine ((.loc) owner)) CatalogGroupUnknown $
+          "projection owner '" <> (.name) owner <> "' references undeclared rebuild group '" <> (.group) owner <> "'"
+      | (.group) owner `notElem` map (.name) groups
       ]
     outsideGroup =
-      [ mkErr (locLine (poLoc owner)) CatalogProjectionTargetOutsideGroup $
-          "projection owner '" <> poName owner <> "' writes target '" <> targetName <> "' outside group '" <> poGroup owner <> "'"
-      | targetName <- poTargets owner,
+      [ mkErr (locLine ((.loc) owner)) CatalogProjectionTargetOutsideGroup $
+          "projection owner '" <> (.name) owner <> "' writes target '" <> targetName <> "' outside group '" <> (.group) owner <> "'"
+      | targetName <- (.targets) owner,
         targetName `notElem` selectedGroupTargets
       ]
     sourceRules =
-      [ mkErr (locLine (poLoc owner)) CatalogSourceUnresolved $
-          "projection owner '" <> poName owner <> "' references undeclared aggregate source '" <> aggregateName <> "'"
-      | CatalogAggregate aggregateName <- poSources owner,
+      [ mkErr (locLine ((.loc) owner)) CatalogSourceUnresolved $
+          "projection owner '" <> (.name) owner <> "' references undeclared aggregate source '" <> aggregateName <> "'"
+      | CatalogAggregate aggregateName <- (.sources) owner,
         aggregateName `notElem` aggregates
       ]
-        <> [ mkErr (locLine (poLoc owner)) CatalogSourceOverlap $
-               "projection owner '" <> poName owner <> "' must select exactly one typed replay source; split independent sources into separate owners"
-           | length (poSources owner) > 1
+        <> [ mkErr (locLine ((.loc) owner)) CatalogSourceOverlap $
+               "projection owner '" <> (.name) owner <> "' must select exactly one typed replay source; split independent sources into separate owners"
+           | length ((.sources) owner) > 1
            ]
-        <> [ mkErr (locLine (poLoc owner)) RuntimeIdentityInvalid $
-               "projection owner '" <> poName owner <> "' category source " <> T.pack (show categoryName) <> " " <> reason
-           | CatalogCategory categoryName <- poSources owner,
+        <> [ mkErr (locLine ((.loc) owner)) RuntimeIdentityInvalid $
+               "projection owner '" <> (.name) owner <> "' category source " <> T.pack (show categoryName) <> " " <> reason
+           | CatalogCategory categoryName <- (.sources) owner,
              Just reason <- [runtimeIdentityError False categoryName]
            ]
-    identityRules = case poDelivery owner of
+    identityRules = case (.delivery) owner of
       DeliverySubscription ->
-        [ mkErr (locLine (poLoc owner)) CatalogAsyncIdentityMissing $
-            "projection owner '" <> poName owner <> "' with subscription delivery requires both subscription and dedup identities"
-        | poSubscription owner == Nothing || poDedup owner == Nothing
+        [ mkErr (locLine ((.loc) owner)) CatalogAsyncIdentityMissing $
+            "projection owner '" <> (.name) owner <> "' with subscription delivery requires both subscription and dedup identities"
+        | (.subscription) owner == Nothing || (.dedup) owner == Nothing
         ]
       DeliveryInline ->
-        [ mkErr (locLine (poLoc owner)) CatalogInlineIdentityUnexpected $
-            "projection owner '" <> poName owner <> "' with inline delivery cannot declare subscription or dedup identities"
-        | poSubscription owner /= Nothing || poDedup owner /= Nothing
+        [ mkErr (locLine ((.loc) owner)) CatalogInlineIdentityUnexpected $
+            "projection owner '" <> (.name) owner <> "' with inline delivery cannot declare subscription or dedup identities"
+        | (.subscription) owner /= Nothing || (.dedup) owner /= Nothing
         ]
-    checkpointRules = case poDelivery owner of
+    checkpointRules = case (.delivery) owner of
       DeliverySubscription ->
-        [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyMissing $
-            "projection owner '" <> poName owner <> "' with subscription delivery requires exactly one checkpoint-on-missing policy"
-        | null (poCheckpointOnMissing owner)
+        [ mkErr (locLine ((.loc) owner)) CatalogCheckpointPolicyMissing $
+            "projection owner '" <> (.name) owner <> "' with subscription delivery requires exactly one checkpoint-on-missing policy"
+        | null ((.checkpointOnMissing) owner)
         ]
-          <> [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyDuplicate $
-                 "projection owner '" <> poName owner <> "' declares checkpoint-on-missing more than once; choose exactly one of from-beginning, from-current-head, or fail"
-             | length (poCheckpointOnMissing owner) > 1
+          <> [ mkErr (locLine ((.loc) owner)) CatalogCheckpointPolicyDuplicate $
+                 "projection owner '" <> (.name) owner <> "' declares checkpoint-on-missing more than once; choose exactly one of from-beginning, from-current-head, or fail"
+             | length ((.checkpointOnMissing) owner) > 1
              ]
       DeliveryInline ->
-        [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyUnexpected $
-            "projection owner '" <> poName owner <> "' with inline delivery cannot declare checkpoint-on-missing because inline delivery has no durable subscription checkpoint"
-        | not (null (poCheckpointOnMissing owner))
+        [ mkErr (locLine ((.loc) owner)) CatalogCheckpointPolicyUnexpected $
+            "projection owner '" <> (.name) owner <> "' with inline delivery cannot declare checkpoint-on-missing because inline delivery has no durable subscription checkpoint"
+        | not (null ((.checkpointOnMissing) owner))
         ]
     asyncQueryBinding =
-      [ mkErr (locLine (poLoc owner)) CatalogAsyncQueryBindingMissing $
-          "projection owner '" <> poName owner <> "' has no query model in group '" <> poGroup owner <> "' observing one of its targets"
-      | poDelivery owner == DeliverySubscription,
+      [ mkErr (locLine ((.loc) owner)) CatalogAsyncQueryBindingMissing $
+          "projection owner '" <> (.name) owner <> "' has no query model in group '" <> (.group) owner <> "' observing one of its targets"
+      | (.delivery) owner == DeliverySubscription,
         null
           [ ()
-          | supply <- resolvedProjectionSupplies supplyAnalysis,
-            supplyProjectionOwner supply == poName owner
+          | supply <- (.resolvedProjectionSupplies) supplyAnalysis,
+            (.projectionOwner) supply == (.name) owner
           ]
       ]
     replayRules =
-      [ mkErr (locLine (poLoc owner)) CatalogClearTargetLiveOnly $
-          "projection owner '" <> poName owner <> "' is live-only but writes a clear-before-replay target"
-      | ProjectionLiveOnly _ <- [poReplay owner],
+      [ mkErr (locLine ((.loc) owner)) CatalogClearTargetLiveOnly $
+          "projection owner '" <> (.name) owner <> "' is live-only but writes a clear-before-replay target"
+      | ProjectionLiveOnly _ <- [(.replay) owner],
         target <- targets,
-        ptName target `elem` poTargets owner,
-        ptReset target == TargetClear
+        (.name) target `elem` (.targets) owner,
+        (.reset) target == TargetClear
       ]
-        <> [ mkErr (locLine (poLoc owner)) CatalogCheckpointPolicyReplayUnsafe $
-               "projection owner '" <> poName owner <> "' uses from-current-head for subscription '" <> fromMaybe "" (poSubscription owner) <> "' while replayable target '" <> ptName target <> "' is cleared before replay; use from-beginning or fail"
-           | poDelivery owner == DeliverySubscription,
-             poCheckpointOnMissing owner == [CheckpointFromCurrentHead],
-             poReplay owner == ProjectionReplayExplicit,
+        <> [ mkErr (locLine ((.loc) owner)) CatalogCheckpointPolicyReplayUnsafe $
+               "projection owner '" <> (.name) owner <> "' uses from-current-head for subscription '" <> fromMaybe "" ((.subscription) owner) <> "' while replayable target '" <> (.name) target <> "' is cleared before replay; use from-beginning or fail"
+           | (.delivery) owner == DeliverySubscription,
+             (.checkpointOnMissing) owner == [CheckpointFromCurrentHead],
+             (.replay) owner == ProjectionReplayExplicit,
              target <- targets,
-             ptName target `elem` poTargets owner,
-             ptReset target == TargetClear
+             (.name) target `elem` (.targets) owner,
+             (.reset) target == TargetClear
            ]
 
 -- | Validate captured identity, feed semantics, and the declared column surface.
@@ -2799,37 +2799,37 @@ validateReadModel :: EffectiveLanguageContract -> ProjectionSupplyAnalysis -> Sp
 validateReadModel languageContract supplyAnalysis spec readModel =
   shapeFixture ++ columnTypes ++ strongFeed ++ scopeMode ++ inlineSubscription ++ inlineReference ++ freshnessCapability ++ versionFloor ++ identifiers ++ runtimeIdentities ++ duplicateColumns ++ catalogBinding
   where
-    readModelLine = locLine (rmLoc readModel)
+    readModelLine = locLine ((.loc) readModel)
     expectedShape = deriveShapeHash readModel
     shapeFixture =
       [ mkErr readModelLine RmShapeHashDrift $
           "readmodel '"
-            <> rmName readModel
+            <> (.name) readModel
             <> "': captured shape \""
-            <> rmShape readModel
+            <> (.shape) readModel
             <> "\" does not match the declared columns (expected \""
             <> expectedShape
             <> "\"); update the fixture AND bump version if the table shape really changed"
-      | rmShape readModel /= expectedShape
+      | (.shape) readModel /= expectedShape
       ]
     allowedColumnTypes = Set.fromList ["text", "int", "bigint", "bool", "timestamptz", "jsonb", "numeric"]
     columnTypes =
       [ mkErr readModelLine RmUnknownColumnType $
-          "readmodel '" <> rmName readModel <> "' column '" <> rmcName columnDecl <> "' has unknown type '" <> rmcType columnDecl <> "'"
-      | columnDecl <- rmColumns readModel,
-        rmcType columnDecl `Set.notMember` allowedColumnTypes
+          "readmodel '" <> (.name) readModel <> "' column '" <> (.rmcName) columnDecl <> "' has unknown type '" <> (.rmcType) columnDecl <> "'"
+      | columnDecl <- (.columns) readModel,
+        (.rmcType) columnDecl `Set.notMember` allowedColumnTypes
       ]
     strongFeed =
       [ mkErr readModelLine RmStrongInlineOnly $
           "readmodel '"
-            <> rmName readModel
+            <> (.name) readModel
             <> "': consistency = Strong with feed = inline; an inline-only model has no subscription worker to advance the cursor a Strong read waits on. Use consistency = Eventual, or feed = subscription"
       | legacyReadModelFeed readModel == Just RmInline,
         legacyReadModelConsistency readModel == Just Strong
       ]
     scopeMode =
       [ mkErr readModelLine RmScopeWithoutStrong $
-          "readmodel '" <> rmName readModel <> "': scope is meaningful only with consistency = Strong"
+          "readmodel '" <> (.name) readModel <> "': scope is meaningful only with consistency = Strong"
       | legacyReadModelScope readModel /= Nothing,
         legacyReadModelConsistency readModel /= Just Strong
       ]
@@ -2839,24 +2839,24 @@ validateReadModel languageContract supplyAnalysis spec readModel =
             severity = Warning,
             code = RmInlineSubscriptionIgnored,
             relatedLocations = [],
-            message = "readmodel '" <> rmName readModel <> "': subscription override is ignored when feed = inline; remove it or select feed = subscription"
+            message = "readmodel '" <> (.name) readModel <> "': subscription override is ignored when feed = inline; remove it or select feed = subscription"
           }
       | legacyReadModelFeed readModel == Just RmInline,
         legacyReadModelSubscription readModel /= Nothing
       ]
     inlineReference
       | hasProjectionCatalog languageContract,
-        rmGroup readModel /= Nothing =
+        (.group) readModel /= Nothing =
           []
       | otherwise =
           [ mkErr readModelLine RmInlineFeedUnreferenced $
-              "readmodel '" <> rmName readModel <> "' declares feed = inline but no aggregate projection references it"
+              "readmodel '" <> (.name) readModel <> "' declares feed = inline but no aggregate projection references it"
           | legacyReadModelFeed readModel == Just RmInline,
-            rmName readModel `notElem` [projTable projection | NAggregate aggregate <- specNodes spec, Just projection <- [aggProjection aggregate]]
+            (.name) readModel `notElem` [(.table) projection | NAggregate aggregate <- (.nodes) spec, Just projection <- [(.projection) aggregate]]
           ]
     freshnessCapability
       | not (hasSeparatedProjectionQueryPolicy languageContract) = []
-      | otherwise = case rmFreshness readModel of
+      | otherwise = case (.freshness) readModel of
           FreshnessImmediate -> []
           requested@(FreshnessWaitForHead requestedScope) ->
             case resolvedOwner of
@@ -2877,8 +2877,8 @@ validateReadModel languageContract supplyAnalysis spec readModel =
                     [ waitError
                         CatalogQueryWaitWithoutCompatibleCursor
                         requested
-                        ("projection-owner '" <> poName owner <> "'")
-                        (deliveryText (poDelivery owner))
+                        ("projection-owner '" <> (.name) owner <> "'")
+                        (deliveryText ((.delivery) owner))
                         (allCursorCandidates owner)
                         "use freshness = immediate or give the supplying owner one compatible subscription cursor"
                     ]
@@ -2887,33 +2887,33 @@ validateReadModel languageContract supplyAnalysis spec readModel =
                     [ waitError
                         CatalogQueryWaitWithAmbiguousCursor
                         requested
-                        ("projection-owner '" <> poName owner <> "'")
-                        (deliveryText (poDelivery owner))
+                        ("projection-owner '" <> (.name) owner <> "'")
+                        (deliveryText ((.delivery) owner))
                         candidates
                         "leave exactly one compatible subscription cursor or use freshness = immediate"
                     ]
       where
         resolvedOwner = do
-          ownerName <- case [ supplyProjectionOwner supply
-                            | supply <- resolvedProjectionSupplies supplyAnalysis,
-                              supplyQueryModel supply == rmName readModel
+          ownerName <- case [ (.projectionOwner) supply
+                            | supply <- (.resolvedProjectionSupplies) supplyAnalysis,
+                              (.queryModel) supply == (.name) readModel
                             ] of
             [name] -> Just name
             _ -> Nothing
-          case [owner | NProjectionOwner owner <- specNodes spec, poName owner == ownerName] of
+          case [owner | NProjectionOwner owner <- (.nodes) spec, (.name) owner == ownerName] of
             [owner] -> Just owner
             _ -> Nothing
         implicitProjectionOwners =
           [ aggregate
-          | NAggregate aggregate <- specNodes spec,
-            Just projection <- [aggProjection aggregate],
-            projTable projection == rmName readModel
+          | NAggregate aggregate <- (.nodes) spec,
+            Just projection <- [(.projection) aggregate],
+            (.table) projection == (.name) readModel
           ]
         compatibleCursorCandidates scope owner
-          | poDelivery owner /= DeliverySubscription = []
-          | not (any (sourceReaches scope) (poSources owner)) = []
+          | (.delivery) owner /= DeliverySubscription = []
+          | not (any (sourceReaches scope) ((.sources) owner)) = []
           | otherwise = allCursorCandidates owner
-        allCursorCandidates owner = case poSubscription owner of
+        allCursorCandidates owner = case (.subscription) owner of
           Just subscription -> [subscription]
           Nothing -> []
         sourceReaches RmEntireLog CatalogAll = True
@@ -2932,7 +2932,7 @@ validateReadModel languageContract supplyAnalysis spec readModel =
         waitError diagnosticCode requested ownerText delivery candidates remedy =
           mkErr readModelLine diagnosticCode $
             "readmodel '"
-              <> rmName readModel
+              <> (.name) readModel
               <> "' requests "
               <> freshnessText requested
               <> " but its supplying "
@@ -2945,98 +2945,98 @@ validateReadModel languageContract supplyAnalysis spec readModel =
               <> remedy
     versionFloor =
       [ mkErr readModelLine ReadModelVersionBelowMinimum $
-          "readmodel '" <> rmName readModel <> "' version must be at least 1"
+          "readmodel '" <> (.name) readModel <> "' version must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
-        rmVersion readModel < 1
+        (.version) readModel < 1
       ]
     identifiers =
       [ mkErr readModelLine ReadModelIdentifierInvalid $
-          "readmodel '" <> rmName readModel <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
+          "readmodel '" <> (.name) readModel <> "' " <> kind <> " " <> T.pack (show identifier) <> " is not a PostgreSQL unquoted identifier"
       | enforcesSpecSurfaceClosures languageContract,
         (kind, identifier) <-
           [ (kind, identifier)
-          | rmGroup readModel == Nothing,
-            (kind, identifier) <- [("schema", rmSchema readModel), ("table", rmTable readModel)]
+          | (.group) readModel == Nothing,
+            (kind, identifier) <- [("schema", (.schema) readModel), ("table", (.table) readModel)]
           ]
-            <> [("column", rmcName columnDecl) | columnDecl <- rmColumns readModel],
+            <> [("column", (.rmcName) columnDecl) | columnDecl <- (.columns) readModel],
         not (validPostgresIdentifier identifier)
       ]
     runtimeIdentities =
       [ mkErr readModelLine RuntimeIdentityInvalid $
-          "readmodel '" <> rmName readModel <> "' subscription " <> T.pack (show subscription) <> " " <> reason
+          "readmodel '" <> (.name) readModel <> "' subscription " <> T.pack (show subscription) <> " " <> reason
       | enforcesSpecSurfaceClosures languageContract,
         Just subscription <- [legacyReadModelSubscription readModel],
         Just reason <- [stableIdentityError subscription]
       ]
         ++ [ mkErr readModelLine RuntimeIdentityInvalid $
-               "readmodel '" <> rmName readModel <> "' scope category " <> T.pack (show category) <> " " <> reason
+               "readmodel '" <> (.name) readModel <> "' scope category " <> T.pack (show category) <> " " <> reason
            | enforcesSpecSurfaceClosures languageContract,
              Just (RmCategory category) <- [readModelScopeForIdentity readModel],
              Just reason <- [runtimeIdentityError False category]
            ]
-    readModelScopeForIdentity model = case rmSupply model of
+    readModelScopeForIdentity model = case (.supply) model of
       LegacyReadModelSupply {legacyScope} -> legacyScope
-      OwnerDerivedSupply -> case rmFreshness model of
+      OwnerDerivedSupply -> case (.freshness) model of
         FreshnessImmediate -> Nothing
         FreshnessWaitForHead scope -> Just scope
     duplicateColumns =
       [ mkErr readModelLine ReadModelDuplicateColumn $
-          "readmodel '" <> rmName readModel <> "' declares column '" <> rmcName columnDecl <> "' more than once"
+          "readmodel '" <> (.name) readModel <> "' declares column '" <> (.rmcName) columnDecl <> "' more than once"
       | enforcesSpecSurfaceClosures languageContract,
-        columnDecl <- duplicatesBy rmcName (rmColumns readModel)
+        columnDecl <- duplicatesBy (.rmcName) ((.columns) readModel)
       ]
     catalogBinding
       | not (hasProjectionCatalog languageContract) = []
       | otherwise = missingGroup <> unknownGroup <> physicalOverride <> backingRequired <> backingUnobserved
       where
-        groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
+        groups = [groupNode | NRebuildGroup groupNode <- (.nodes) spec]
         missingGroup =
           [ mkErr readModelLine CatalogReadModelBindingMissing $
-              "readmodel '" <> rmName readModel <> "' must bind to a projection catalog group or be referenced by one legacy aggregate projection"
-          | rmGroup readModel == Nothing,
+              "readmodel '" <> (.name) readModel <> "' must bind to a projection catalog group or be referenced by one legacy aggregate projection"
+          | (.group) readModel == Nothing,
             null
               [ ()
-              | NAggregate aggregate <- specNodes spec,
-                Just projection <- [aggProjection aggregate],
-                projTable projection == rmName readModel
+              | NAggregate aggregate <- (.nodes) spec,
+                Just projection <- [(.projection) aggregate],
+                (.table) projection == (.name) readModel
               ]
           ]
         unknownGroup =
           [ mkErr readModelLine CatalogGroupUnknown $
-              "readmodel '" <> rmName readModel <> "' references undeclared rebuild group '" <> groupName <> "'"
-          | Just groupName <- [rmGroup readModel],
-            groupName `notElem` map rgName groups
+              "readmodel '" <> (.name) readModel <> "' references undeclared rebuild group '" <> groupName <> "'"
+          | Just groupName <- [(.group) readModel],
+            groupName `notElem` map (.name) groups
           ]
         physicalOverride =
           [ mkErr readModelLine CatalogReadModelPhysicalOverride $
               "readmodel '"
-                <> rmName readModel
+                <> (.name) readModel
                 <> "' binds to group '"
                 <> groupName
                 <> "' but declares explicit table/schema; physical coordinates belong to the target declaration — remove table/schema and name the intended target in 'targets' (and 'backing' when observing several)"
-          | Just groupName <- [rmGroup readModel],
-            rmTable readModel /= "" || rmSchema readModel /= ""
+          | Just groupName <- [(.group) readModel],
+            (.table) readModel /= "" || (.schema) readModel /= ""
           ]
         backingRequired =
           [ mkErr readModelLine CatalogReadModelBackingRequired $
               "readmodel '"
-                <> rmName readModel
+                <> (.name) readModel
                 <> "' observes "
-                <> T.pack (show (length (rmObservedTargets readModel)))
+                <> T.pack (show (length ((.observedTargets) readModel)))
                 <> " targets; name the physical backing target with 'backing = <target>'"
-          | rmGroup readModel /= Nothing,
-            length (rmObservedTargets readModel) > 1,
-            rmBackingTarget readModel == Nothing
+          | (.group) readModel /= Nothing,
+            length ((.observedTargets) readModel) > 1,
+            (.backingTarget) readModel == Nothing
           ]
         backingUnobserved =
           [ mkErr readModelLine CatalogReadModelBackingUnobserved $
               "readmodel '"
-                <> rmName readModel
+                <> (.name) readModel
                 <> "' names backing target '"
                 <> backingTarget
                 <> "' but does not observe it"
-          | Just backingTarget <- [rmBackingTarget readModel],
-            backingTarget `notElem` rmObservedTargets readModel
+          | Just backingTarget <- [(.backingTarget) readModel],
+            backingTarget `notElem` (.observedTargets) readModel
           ]
 
 -- | EP-5 workqueue rules: the captured physical name must match the queueRef
@@ -3045,85 +3045,85 @@ validateReadModel languageContract supplyAnalysis spec readModel =
 validateWorkqueue :: EffectiveLanguageContract -> WorkqueueNode -> [Diagnostic]
 validateWorkqueue languageContract w = concat [divergence, completeness, duplicateRows, inversions, retryCeiling, orderingRules, groupKeyRules, payloadTypes, windows, provisionRules]
   where
-    wl = locLine (wqLoc w)
-    rows = wqDisposition w
-    (derivedPhysical, derivedDlq, derivedTable) = derivedQueueTrio (wqLogical w)
+    wl = locLine ((.loc) w)
+    rows = (.disposition) w
+    (derivedPhysical, derivedDlq, derivedTable) = derivedQueueTrio ((.logical) w)
     divergence =
       [ mkErr wl WqPhysicalDivergence $
-          "workqueue '" <> wqName w <> "': captured physical \"" <> wqPhysical w <> "\" diverges from queueRef(\"" <> wqLogical w <> "\") = \"" <> derivedPhysical <> "\""
-      | wqPhysical w /= derivedPhysical
+          "workqueue '" <> (.name) w <> "': captured physical \"" <> (.physical) w <> "\" diverges from queueRef(\"" <> (.logical) w <> "\") = \"" <> derivedPhysical <> "\""
+      | (.physical) w /= derivedPhysical
       ]
         ++ [ mkErr wl WqDlqDivergence $
-               "workqueue '" <> wqName w <> "': captured dlq \"" <> wqDlq w <> "\" diverges from queueRef = \"" <> derivedDlq <> "\""
-           | wqDlq w /= derivedDlq
+               "workqueue '" <> (.name) w <> "': captured dlq \"" <> (.dlq) w <> "\" diverges from queueRef = \"" <> derivedDlq <> "\""
+           | (.dlq) w /= derivedDlq
            ]
         ++ [ mkErr wl WqTableDivergence $
-               "workqueue '" <> wqName w <> "': captured table \"" <> wqTable w <> "\" diverges from queueRef table = \"" <> derivedTable <> "\""
-           | wqTable w /= derivedTable
+               "workqueue '" <> (.name) w <> "': captured table \"" <> (.table) w <> "\" diverges from queueRef table = \"" <> derivedTable <> "\""
+           | (.table) w /= derivedTable
            ]
     requiredOutcomes = ["storeFailure", "commandRejected", "decodeFailure", "onCodecReject"]
     completeness =
       [ mkErr wl WqDispositionIncomplete $
-          "workqueue '" <> wqName w <> "' disposition table is missing outcome '" <> outcome <> "'"
+          "workqueue '" <> (.name) w <> "' disposition table is missing outcome '" <> outcome <> "'"
       | outcome <- requiredOutcomes,
-        outcome `notElem` map wqdOutcome rows
+        outcome `notElem` map (.outcome) rows
       ]
     duplicateRows =
-      [ mkErr (locLine (wqdLoc row)) DispositionDuplicateOutcome $
-          "workqueue '" <> wqName w <> "' repeats disposition outcome '" <> wqdOutcome row <> "'; the first row would shadow this row"
-      | row <- duplicatesBy wqdOutcome rows
+      [ mkErr (locLine ((.loc) row)) DispositionDuplicateOutcome $
+          "workqueue '" <> (.name) w <> "' repeats disposition outcome '" <> (.outcome) row <> "'; the first row would shadow this row"
+      | row <- duplicatesBy (.outcome) rows
       ]
-    firstRow outcome = case [row | row <- rows, wqdOutcome row == outcome] of
+    firstRow outcome = case [row | row <- rows, (.outcome) row == outcome] of
       (row : _) -> Just row
       [] -> Nothing
-    isRetry row = case wqdAction row of IRetry _ -> True; _ -> False
-    isDeadLetter row = case wqdAction row of IDeadLetter _ -> True; _ -> False
+    isRetry row = case (.action) row of IRetry _ -> True; _ -> False
+    isDeadLetter row = case (.action) row of IDeadLetter _ -> True; _ -> False
     inversions =
-      [ mkErr (locLine (wqdLoc row)) WqStoreFailureNotRetry ("workqueue '" <> wqName w <> "': 'storeFailure' is transient and MUST retry, not dead-letter")
+      [ mkErr (locLine ((.loc) row)) WqStoreFailureNotRetry ("workqueue '" <> (.name) w <> "': 'storeFailure' is transient and MUST retry, not dead-letter")
       | Just row <- [firstRow "storeFailure"],
         isDeadLetter row
       ]
-        ++ [ mkErr (locLine (wqdLoc row)) WqDecodeFailureNotDeadLetter ("workqueue '" <> wqName w <> "': 'decodeFailure' is poison and MUST dead-letter, not retry")
+        ++ [ mkErr (locLine ((.loc) row)) WqDecodeFailureNotDeadLetter ("workqueue '" <> (.name) w <> "': 'decodeFailure' is poison and MUST dead-letter, not retry")
            | Just row <- [firstRow "decodeFailure"],
              isRetry row
            ]
     retryCeiling =
-      [ mkErr wl WqDlqWithoutCeiling ("workqueue '" <> wqName w <> "': dlq=on requires maxRetries >= 1 (an absent ceiling never dead-letters)")
-      | wqDlqOn w && wqMaxRetries w < 1
+      [ mkErr wl WqDlqWithoutCeiling ("workqueue '" <> (.name) w <> "': dlq=on requires maxRetries >= 1 (an absent ceiling never dead-letters)")
+      | (.dlqOn) w && (.maxRetries) w < 1
       ]
-    fifo = wqOrdering w /= WqUnordered
+    fifo = (.ordering) w /= WqUnordered
     orderingRules =
       [ mkErr wl WqGroupKeyMissing $
-          "workqueue '" <> wqName w <> "': FIFO delivery is per group, so ordering requires a 'group key' clause that makes enqueueToGroup deterministic"
-      | fifo && wqGroupKey w == Nothing
+          "workqueue '" <> (.name) w <> "': FIFO delivery is per group, so ordering requires a 'group key' clause that makes enqueueToGroup deterministic"
+      | fifo && (.groupKey) w == Nothing
       ]
         ++ [ mkErr wl WqGroupKeyWithoutFifo $
-               "workqueue '" <> wqName w <> "': a group key with unordered reads would be ignored; declare a FIFO ordering or remove the key"
-           | not fifo && wqGroupKey w /= Nothing
+               "workqueue '" <> (.name) w <> "': a group key with unordered reads would be ignored; declare a FIFO ordering or remove the key"
+           | not fifo && (.groupKey) w /= Nothing
            ]
-    groupKeyRules = case wqGroupKey w of
+    groupKeyRules = case (.groupKey) w of
       Nothing -> []
       Just groupKey ->
-        case [field | field <- wqPayload w, wqfName field == gkField groupKey] of
+        case [field | field <- (.payload) w, (.name) field == (.field) groupKey] of
           [] ->
             [ mkErr wl WqGroupKeyUnresolved $
-                "workqueue '" <> wqName w <> "': group key field '" <> gkField groupKey <> "' is not declared in its payload"
+                "workqueue '" <> (.name) w <> "': group key field '" <> (.field) groupKey <> "' is not declared in its payload"
             ]
           field : _ ->
             [ mkErr wl WqGroupKeyUnresolved $
-                "workqueue '" <> wqName w <> "': group key via raw requires a text payload field, but '" <> gkField groupKey <> "' has type '" <> queuePayloadTypeText (wqfType field) <> "'"
-            | gkVia groupKey == "raw" && not (isDirectText (wqfType field))
+                "workqueue '" <> (.name) w <> "': group key via raw requires a text payload field, but '" <> (.field) groupKey <> "' has type '" <> queuePayloadTypeText ((.valueType) field) <> "'"
+            | (.via) groupKey == "raw" && not (isDirectText ((.valueType) field))
             ]
               ++ [ mkErr wl WqGroupKeyUnresolved $
-                     "workqueue '" <> wqName w <> "': opaque group-key derivation '" <> gkVia groupKey <> "' requires a captured fixture"
-                 | gkVia groupKey /= "raw" && gkFixture groupKey == Nothing
+                     "workqueue '" <> (.name) w <> "': opaque group-key derivation '" <> (.via) groupKey <> "' requires a captured fixture"
+                 | (.via) groupKey /= "raw" && (.fixture) groupKey == Nothing
                  ]
     payloadTypes =
       [ mkErr wl WqPayloadTypeUnknown $
-          "workqueue '" <> wqName w <> "' payload field '" <> wqfName field <> "' has unknown type '" <> queueScalarName scalar <> "'; expected text, int, or bool"
+          "workqueue '" <> (.name) w <> "' payload field '" <> (.name) field <> "' has unknown type '" <> queueScalarName scalar <> "'; expected text, int, or bool"
       | enforcesSpecSurfaceClosures languageContract,
-        field <- wqPayload w,
-        LegacyQueueScalar scalar@(QueueOther _) <- [wqfType field]
+        field <- (.payload) w,
+        LegacyQueueScalar scalar@(QueueOther _) <- [(.valueType) field]
       ]
     isDirectText (LegacyQueueScalar QueueText) = True
     isDirectText (TypedQueueExpression TText) = True
@@ -3131,13 +3131,13 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
     queuePayloadTypeText (LegacyQueueScalar scalar) = queueScalarName scalar
     queuePayloadTypeText (TypedQueueExpression _) = "mapped expression"
     windows =
-      windowRangeRule languageContract wl ("workqueue '" <> wqName w <> "' delay") (wqDelay w)
+      windowRangeRule languageContract wl ("workqueue '" <> (.name) w <> "' delay") ((.delay) w)
         ++ concat
-          [ windowRangeRule languageContract (locLine (wqdLoc row)) ("workqueue '" <> wqName w <> "' retry") window
+          [ windowRangeRule languageContract (locLine ((.loc) row)) ("workqueue '" <> (.name) w <> "' retry") window
           | row <- rows,
-            IRetry window <- [wqdAction row]
+            IRetry window <- [(.action) row]
           ]
-    provisionRules = case wqProvision w of
+    provisionRules = case (.provision) w of
       WqStandard -> []
       WqUnlogged ->
         [ Diagnostic
@@ -3145,12 +3145,12 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
               severity = Warning,
               code = WqUnloggedDurability,
               relatedLocations = [],
-              message = "workqueue '" <> wqName w <> "': provision unlogged is truncated to empty on a database crash; use it only for transient, regenerable work"
+              message = "workqueue '" <> (.name) w <> "': provision unlogged is truncated to empty on a database crash; use it only for transient, regenerable work"
             }
         ]
       WqPartitioned interval retention ->
         [ mkErr wl WqPartitionSpecEmpty $
-            "workqueue '" <> wqName w <> "': partition interval and retention must be non-empty; they are create-time settings and the additive reconciler will not migrate an existing queue"
+            "workqueue '" <> (.name) w <> "': partition interval and retention must be non-empty; they are create-time settings and the additive reconciler will not migrate an existing queue"
         | T.null interval || T.null retention
         ]
 
@@ -3158,24 +3158,24 @@ validateWorkqueue languageContract w = concat [divergence, completeness, duplica
 validatePgmqDispatch :: EffectiveLanguageContract -> Spec -> PgmqDispatchNode -> [Diagnostic]
 validatePgmqDispatch languageContract spec d = enqueueRef ++ dedupQueueRef ++ sourceReadModelRef ++ sourceReadModelField ++ dedupReadModelRef ++ dedupReadModelField ++ dedupKeyField ++ fanoutFunctionName
   where
-    dl = locLine (pdLoc d)
+    dl = locLine ((.loc) d)
     -- The top-level `dedup key` is the logical value being deduped. Its two
     -- physical locations are already checked against the seenIn read model and
     -- queue; the key itself comes from the source read model's row, so it must
     -- be one of that model's generated selectors — exactly the rule `source key`
     -- already obeys. ExecPlan 197 parked this as descriptive-only.
-    dedupKeyField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdSourceReadModel d] of
+    dedupKeyField = case [readModel | NReadModel readModel <- (.nodes) spec, (.name) readModel == (.sourceReadModel) d] of
       [] -> []
       readModel : _ ->
         [ mkSurfaceRefusal languageContract dl DispatchReadModelFieldUnknown $
             "dispatch '"
-              <> pdName d
+              <> (.name) d
               <> "' dedup key '"
-              <> pdDedupKey d
+              <> (.dedupKey) d
               <> "' is not a generated logical selector for a column of source readmodel '"
-              <> pdSourceReadModel d
+              <> (.sourceReadModel) d
               <> "'"
-        | pdDedupKey d `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
+        | (.dedupKey) d `notElem` map (logicalFieldSelector . (.rmcName)) ((.columns) readModel)
         ]
 
     -- `fanout body` names a hand-written function that expands one source row
@@ -3186,50 +3186,50 @@ validatePgmqDispatch languageContract spec d = enqueueRef ++ dedupQueueRef ++ so
     fanoutFunctionName =
       [ mkSurfaceRefusal languageContract dl PgmqFanoutFunctionInvalid $
           "dispatch '"
-            <> pdName d
+            <> (.name) d
             <> "' fanout body '"
-            <> pdFanoutBody d
+            <> (.fanoutBody) d
             <> "' cannot name a Haskell function; it must be a lowercase-initial identifier that is not a reserved word"
-      | not (lowerIdentifierSafe (pdFanoutBody d))
+      | not (lowerIdentifierSafe ((.fanoutBody) d))
       ]
-    workqueues = [w | NWorkqueue w <- specNodes spec]
+    workqueues = [w | NWorkqueue w <- (.nodes) spec]
     enqueueRef =
-      [ mkErr dl DispatchEnqueueUnresolved ("dispatch '" <> pdName d <> "' enqueues to undeclared workqueue '" <> pdEnqueueTo d <> "'")
-      | pdEnqueueTo d `notElem` map wqName workqueues
+      [ mkErr dl DispatchEnqueueUnresolved ("dispatch '" <> (.name) d <> "' enqueues to undeclared workqueue '" <> (.enqueueTo) d <> "'")
+      | (.enqueueTo) d `notElem` map (.name) workqueues
       ]
-    dedupQueueRef = case [w | w <- workqueues, wqName w == pdDedupQueue d] of
+    dedupQueueRef = case [w | w <- workqueues, (.name) w == (.dedupQueue) d] of
       [] ->
         [ mkErr dl DispatchDedupQueueUnresolved $
-            "dispatch '" <> pdName d <> "' checks an undeclared dedup queue '" <> pdDedupQueue d <> "'"
+            "dispatch '" <> (.name) d <> "' checks an undeclared dedup queue '" <> (.dedupQueue) d <> "'"
         ]
       (queue : _) ->
         [ mkErr dl DispatchDedupFieldUnresolved $
-            "dispatch '" <> pdName d <> "' dedup field '" <> pdDedupQueueField d <> "' is not a payload wire field of queue '" <> pdDedupQueue d <> "'"
-        | pdDedupQueueField d `notElem` map wqfWire (wqPayload queue)
+            "dispatch '" <> (.name) d <> "' dedup field '" <> (.dedupQueueField) d <> "' is not a payload wire field of queue '" <> (.dedupQueue) d <> "'"
+        | (.dedupQueueField) d `notElem` map (.wire) ((.payload) queue)
         ]
     sourceReadModelRef =
-      resolveReadModelRef DispatchReadModelUnresolved spec (pdLoc d) ("dispatch '" <> pdName d <> "' source") (pdSourceReadModel d)
-    sourceReadModelField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdSourceReadModel d] of
+      resolveReadModelRef DispatchReadModelUnresolved spec ((.loc) d) ("dispatch '" <> (.name) d <> "' source") ((.sourceReadModel) d)
+    sourceReadModelField = case [readModel | NReadModel readModel <- (.nodes) spec, (.name) readModel == (.sourceReadModel) d] of
       [] -> []
       readModel : _ ->
         [ mkErr dl DispatchReadModelFieldUnknown $
-            "dispatch '" <> pdName d <> "' source key '" <> pdSourceKey d <> "' is not a generated logical selector for a column of readmodel '" <> pdSourceReadModel d <> "'"
+            "dispatch '" <> (.name) d <> "' source key '" <> (.sourceKey) d <> "' is not a generated logical selector for a column of readmodel '" <> (.sourceReadModel) d <> "'"
         | enforcesSpecSurfaceClosures languageContract,
-          pdSourceKey d `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
+          (.sourceKey) d `notElem` map (logicalFieldSelector . (.rmcName)) ((.columns) readModel)
         ]
     dedupReadModelRef =
-      resolveReadModelRef DispatchReadModelUnresolved spec (pdLoc d) ("dispatch '" <> pdName d <> "' dedup") (pdDedupReadModel d)
-    dedupReadModelField = case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == pdDedupReadModel d] of
+      resolveReadModelRef DispatchReadModelUnresolved spec ((.loc) d) ("dispatch '" <> (.name) d <> "' dedup") ((.dedupReadModel) d)
+    dedupReadModelField = case [readModel | NReadModel readModel <- (.nodes) spec, (.name) readModel == (.dedupReadModel) d] of
       [] -> []
       (readModel : _) ->
         [ mkErr dl DispatchReadModelFieldUnknown $
-            "dispatch '" <> pdName d <> "' dedup field '" <> pdDedupReadModelField d <> "' is not a declared column of readmodel '" <> pdDedupReadModel d <> "'"
-        | pdDedupReadModelField d `notElem` map rmcName (rmColumns readModel)
+            "dispatch '" <> (.name) d <> "' dedup field '" <> (.dedupReadModelField) d <> "' is not a declared column of readmodel '" <> (.dedupReadModel) d <> "'"
+        | (.dedupReadModelField) d `notElem` map (.rmcName) ((.columns) readModel)
         ]
 
 -- | The declared contracts in a spec, by name.
 specContracts :: Spec -> [ContractNode]
-specContracts spec = [c | NContract c <- specNodes spec]
+specContracts spec = [c | NContract c <- (.nodes) spec]
 
 -- | EP-4 cross-node coupling: an intake's contract/topic/accepted-events resolve.
 intakeCoupling :: EffectiveLanguageContract -> Spec -> IntakeNode -> [Diagnostic]
@@ -3240,89 +3240,89 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ 
     -- naming a canonical header is descriptive and true, so it stays silent. A
     -- row naming any other header reads like remapping and silently is not.
     bindHeaderNames =
-      [ mkSurfaceRefusal languageContract (locLine (inkLoc i)) IntakeBindHeaderUnknown $
+      [ mkSurfaceRefusal languageContract (locLine ((.loc) i)) IntakeBindHeaderUnknown $
           "intake '"
-            <> inkName i
+            <> (.name) i
             <> "' binds '"
-            <> brField binding
+            <> (.field) binding
             <> "' from header "
             <> T.pack (show headerName)
             <> ", which is not one of keiro's canonical envelope headers; the Kafka inbox reads a fixed header set and cannot be remapped, so this row would not take effect. Use one of: "
             <> T.intercalate ", " (map (T.pack . show) canonicalEnvelopeHeaders)
-      | binding <- inkBinds i,
-        SrcHeader headerName <- [brSource binding],
+      | binding <- (.binds) i,
+        SrcHeader headerName <- [(.source) binding],
         headerName `notElem` canonicalEnvelopeHeaders
       ]
-    contractCoupling = case lookupContract (inkContract i) of
+    contractCoupling = case lookupContract ((.contract) i) of
       Nothing ->
-        [mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' references undeclared contract '" <> inkContract i <> "'")]
+        [mkErr (locLine ((.loc) i)) IntakeUnresolvedContract ("intake '" <> (.name) i <> "' references undeclared contract '" <> (.contract) i <> "'")]
       Just c ->
         concat
-          [ [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' topic '" <> inkTopic i <> "' is not a topic of contract '" <> inkContract i <> "'")
-            | inkTopic i `notElem` map fst (ctrTopics c)
+          [ [ mkErr (locLine ((.loc) i)) IntakeUnresolvedContract ("intake '" <> (.name) i <> "' topic '" <> (.topic) i <> "' is not a topic of contract '" <> (.contract) i <> "'")
+            | (.topic) i `notElem` map fst ((.topics) c)
             ],
-            [ mkErr (locLine (inkLoc i)) IntakeUnresolvedContract ("intake '" <> inkName i <> "' accepts event '" <> ev <> "' not declared in contract '" <> inkContract i <> "'")
-            | ev <- inkAccept i,
-              ev `notElem` map ceName (ctrEvents c)
+            [ mkErr (locLine ((.loc) i)) IntakeUnresolvedContract ("intake '" <> (.name) i <> "' accepts event '" <> ev <> "' not declared in contract '" <> (.contract) i <> "'")
+            | ev <- (.accept) i,
+              ev `notElem` map (.name) ((.events) c)
             ],
-            [ mkErr (locLine (inkLoc i)) TopicAffinityMismatch $
-                "intake '" <> inkName i <> "' subscribes to topic '" <> inkTopic i <> "' but accepted event '" <> ceName event <> "' is declared on topic '" <> ceTopic event <> "'"
-            | event <- ctrEvents c,
-              ceName event `elem` inkAccept i,
-              ceTopic event /= inkTopic i
+            [ mkErr (locLine ((.loc) i)) TopicAffinityMismatch $
+                "intake '" <> (.name) i <> "' subscribes to topic '" <> (.topic) i <> "' but accepted event '" <> (.name) event <> "' is declared on topic '" <> (.topic) event <> "'"
+            | event <- (.events) c,
+              (.name) event `elem` (.accept) i,
+              (.topic) event /= (.topic) i
             ],
-            [ mkErr (locLine (inkLoc i)) IntakeBindUnresolved $
-                "intake '" <> inkName i <> "' binds undeclared envelope or accepted-event field '" <> brField binding <> "'"
+            [ mkErr (locLine ((.loc) i)) IntakeBindUnresolved $
+                "intake '" <> (.name) i <> "' binds undeclared envelope or accepted-event field '" <> (.field) binding <> "'"
             | enforcesSpecSurfaceClosures languageContract,
-              binding <- inkBinds i,
-              brField binding `Set.notMember` resolvableFields c
+              binding <- (.binds) i,
+              (.field) binding `Set.notMember` resolvableFields c
             ],
-            [ mkErr (locLine (inkLoc i)) IntakeDedupeKeyUnresolved $
-                "intake '" <> inkName i <> "' dedupe key '" <> inkDedupeKey i <> "' is not an envelope or accepted-event field"
+            [ mkErr (locLine ((.loc) i)) IntakeDedupeKeyUnresolved $
+                "intake '" <> (.name) i <> "' dedupe key '" <> (.dedupeKey) i <> "' is not an envelope or accepted-event field"
             | enforcesSpecSurfaceClosures languageContract,
-              inkDedupeKey i `Set.notMember` resolvableFields c
+              (.dedupeKey) i `Set.notMember` resolvableFields c
             ],
-            [ mkErr (locLine (inkLoc i)) IntakeDecodeSchemaVersionMismatch $
+            [ mkErr (locLine ((.loc) i)) IntakeDecodeSchemaVersionMismatch $
                 "intake '"
-                  <> inkName i
+                  <> (.name) i
                   <> "' decode schemaVersion "
-                  <> tInt (decBodySchemaVersion (inkDecode i))
+                  <> tInt ((.bodySchemaVersion) ((.decode) i))
                   <> " does not match contract '"
-                  <> ctrName c
+                  <> (.name) c
                   <> "' schemaVersion "
-                  <> tInt (ctrSchemaVersion c)
+                  <> tInt ((.schemaVersion) c)
             | enforcesSpecSurfaceClosures languageContract,
-              decBodySchemaVersion (inkDecode i) /= ctrSchemaVersion c
+              (.bodySchemaVersion) ((.decode) i) /= (.schemaVersion) c
             ]
           ]
     bindFlagWarnings =
       [ Diagnostic
-          { line = locLine (inkLoc i),
+          { line = locLine ((.loc) i),
             severity = Warning,
             code = IntakeBindFlagUnenforced,
             relatedLocations = [],
             message =
               "intake '"
-                <> inkName i
+                <> (.name) i
                 <> "' bind for '"
-                <> brField binding
+                <> (.field) binding
                 <> "' declares "
                 <> bindFlagText binding
                 <> ", but generated code does not consume envelope bindings"
           }
-      | binding <- inkBinds i,
-        brRequired binding || brCrossCheck binding
+      | binding <- (.binds) i,
+        (.required) binding || (.crossCheck) binding
       ]
-    lookupContract n = case [c | c <- specContracts spec, ctrName c == n] of (c : _) -> Just c; [] -> Nothing
+    lookupContract n = case [c | c <- specContracts spec, (.name) c == n] of (c : _) -> Just c; [] -> Nothing
     resolvableFields contract =
       canonicalIntakeEnvelopeFields
         <> Set.fromList
-          [ cfName field
-          | event <- ctrEvents contract,
-            ceName event `elem` inkAccept i,
-            field <- ceFields event
+          [ (.name) field
+          | event <- (.events) contract,
+            (.name) event `elem` (.accept) i,
+            field <- (.fields) event
           ]
-    bindFlagText binding = case (brRequired binding, brCrossCheck binding) of
+    bindFlagText binding = case ((.required) binding, (.crossCheck) binding) of
       (True, True) -> "'required' and 'cross-check body' flags"
       (True, False) -> "a 'required' flag"
       (False, True) -> "a 'cross-check body' flag"
@@ -3335,95 +3335,95 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ 
 validateEmit :: EffectiveLanguageContract -> Spec -> EmitNode -> [Diagnostic]
 validateEmit languageContract spec e = skipRule ++ duplicateCases ++ coupling
   where
-    el = locLine (emLoc e)
+    el = locLine ((.loc) e)
     skipRule =
-      [ mkErr el EmitSkipMissing ("emit '" <> emName e <> "' map must end with an explicit '_ => skip' catch-all (hole-kind 7 optionality)")
-      | not (emSkip e)
+      [ mkErr el EmitSkipMissing ("emit '" <> (.name) e <> "' map must end with an explicit '_ => skip' catch-all (hole-kind 7 optionality)")
+      | not ((.skip) e)
       ]
     duplicateCases =
-      [ mkErr (locLine (emrLoc row)) EmitMapDuplicateCase $
-          "emit '" <> emName e <> "' repeats map discriminant '" <> emrValue row <> "'; the first row would shadow this row"
+      [ mkErr (locLine ((.loc) row)) EmitMapDuplicateCase $
+          "emit '" <> (.name) e <> "' repeats map discriminant '" <> (.value) row <> "'; the first row would shadow this row"
       | enforcesSpecSurfaceClosures languageContract,
-        row <- duplicatesBy emrValue (emMap e)
+        row <- duplicatesBy (.value) ((.map) e)
       ]
-    coupling = case [c | c <- specContracts spec, ctrName c == emContract e] of
-      [] -> [mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' references undeclared contract '" <> emContract e <> "'")]
+    coupling = case [c | c <- specContracts spec, (.name) c == (.contract) e] of
+      [] -> [mkErr el EmitUnresolvedContract ("emit '" <> (.name) e <> "' references undeclared contract '" <> (.contract) e <> "'")]
       (c : _) ->
-        [ mkErr el EmitUnresolvedContract ("emit '" <> emName e <> "' topic '" <> emTopic e <> "' is not a topic of contract '" <> emContract e <> "'")
-        | emTopic e `notElem` map fst (ctrTopics c)
+        [ mkErr el EmitUnresolvedContract ("emit '" <> (.name) e <> "' topic '" <> (.topic) e <> "' is not a topic of contract '" <> (.contract) e <> "'")
+        | (.topic) e `notElem` map fst ((.topics) c)
         ]
-          ++ [ mkErr (locLine (emrLoc r)) EmitUnresolvedContract ("emit '" <> emName e <> "' maps to event '" <> emrEvent r <> "' not declared in contract '" <> emContract e <> "'")
-             | r <- emMap e,
-               emrEvent r `notElem` map ceName (ctrEvents c)
+          ++ [ mkErr (locLine ((.loc) r)) EmitUnresolvedContract ("emit '" <> (.name) e <> "' maps to event '" <> (.event) r <> "' not declared in contract '" <> (.contract) e <> "'")
+             | r <- (.map) e,
+               (.event) r `notElem` map (.name) ((.events) c)
              ]
-          ++ [ mkErr (locLine (emrLoc row)) TopicAffinityMismatch $
-                 "emit '" <> emName e <> "' publishes on topic '" <> emTopic e <> "' but mapped event '" <> emrEvent row <> "' is declared on topic '" <> ceTopic event <> "'"
-             | row <- emMap e,
-               event <- ctrEvents c,
-               ceName event == emrEvent row,
-               ceTopic event /= emTopic e
+          ++ [ mkErr (locLine ((.loc) row)) TopicAffinityMismatch $
+                 "emit '" <> (.name) e <> "' publishes on topic '" <> (.topic) e <> "' but mapped event '" <> (.event) row <> "' is declared on topic '" <> (.topic) event <> "'"
+             | row <- (.map) e,
+               event <- (.events) c,
+               (.name) event == (.event) row,
+               (.topic) event /= (.topic) e
              ]
 
 validatePublisher :: EffectiveLanguageContract -> Spec -> PublisherNode -> [Diagnostic]
 validatePublisher languageContract spec p =
   unresolvedEmit ++ orderingVocabulary ++ backoffPolicy ++ attemptsFloor ++ outboxField ++ windows
   where
-    publisherLine = locLine (pubLoc p)
+    publisherLine = locLine ((.loc) p)
     unresolvedEmit =
-      [ mkErr publisherLine PublisherUnresolvedEmit ("publisher '" <> pubName p <> "' references undeclared emit '" <> pubEmit p <> "'")
-      | pubEmit p `notElem` [emName e | NEmit e <- specNodes spec]
+      [ mkErr publisherLine PublisherUnresolvedEmit ("publisher '" <> (.name) p <> "' references undeclared emit '" <> (.emit) p <> "'")
+      | (.emit) p `notElem` [(.name) e | NEmit e <- (.nodes) spec]
       ]
     orderingVocabulary =
       [ mkErr publisherLine PublisherOrderingUnknown $
           "publisher '"
-            <> pubName p
+            <> (.name) p
             <> "' has unknown ordering '"
-            <> pubOrdering p
+            <> (.ordering) p
             <> "'; expected PerKeyHeadOfLine, PerSourceStream, StopTheLine, or BestEffort"
-      | pubOrdering p `Set.notMember` publisherOrderings
+      | (.ordering) p `Set.notMember` publisherOrderings
       ]
     backoffPolicy =
       [ mkErr publisherLine PublisherBackoffInvalid $
-          "publisher '" <> pubName p <> "' has an invalid " <> problem
-      | Just problem <- [backoffProblemMaybe (pubBackoff p)]
+          "publisher '" <> (.name) p <> "' has an invalid " <> problem
+      | Just problem <- [backoffProblemMaybe ((.backoff) p)]
       ]
     attemptsFloor =
       [ mkErr publisherLine PublisherMaxAttemptsBelowMinimum $
-          "publisher '" <> pubName p <> "' maxAttempts must be at least 1"
+          "publisher '" <> (.name) p <> "' maxAttempts must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
-        pubMaxAttempts p < 1
+        (.maxAttempts) p < 1
       ]
-    outboxField = case [emitNode | NEmit emitNode <- specNodes spec, emName emitNode == pubEmit p] of
+    outboxField = case [emitNode | NEmit emitNode <- (.nodes) spec, (.name) emitNode == (.emit) p] of
       [] -> []
       emitNode : _ ->
         [ mkErr publisherLine PublisherOutboxFieldUnresolved $
-            "publisher '" <> pubName p <> "' outboxId field '" <> pubOutboxField p <> "' is not messageId, idempotencyKey, or a field of an event mapped by emit '" <> pubEmit p <> "'"
+            "publisher '" <> (.name) p <> "' outboxId field '" <> (.outboxField) p <> "' is not messageId, idempotencyKey, or a field of an event mapped by emit '" <> (.emit) p <> "'"
         | enforcesSpecSurfaceClosures languageContract,
-          pubOutboxField p `Set.notMember` allowedOutboxFields emitNode
+          (.outboxField) p `Set.notMember` allowedOutboxFields emitNode
         ]
     allowedOutboxFields emitNode =
       Set.fromList ("messageId" : "idempotencyKey" : mappedContractFields emitNode)
     mappedContractFields emitNode =
-      [ fieldDslName (resolveContractFieldIdentity field)
+      [ (.dslName) (resolveContractFieldIdentity field)
       | contract <- specContracts spec,
-        ctrName contract == emContract emitNode,
-        event <- ctrEvents contract,
-        ceName event `elem` map emrEvent (emMap emitNode),
-        field <- ceFields event
+        (.name) contract == (.contract) emitNode,
+        event <- (.events) contract,
+        (.name) event `elem` map (.event) ((.map) emitNode),
+        field <- (.fields) event
       ]
     windows =
-      windowRangeRule languageContract publisherLine ("publisher '" <> pubName p <> "' backoff") (boWindow (pubBackoff p))
-        ++ maybe [] (windowRangeRule languageContract publisherLine ("publisher '" <> pubName p <> "' maximum backoff")) (boMax (pubBackoff p))
+      windowRangeRule languageContract publisherLine ("publisher '" <> (.name) p <> "' backoff") ((.window) ((.backoff) p))
+        ++ maybe [] (windowRangeRule languageContract publisherLine ("publisher '" <> (.name) p <> "' maximum backoff")) ((.max) ((.backoff) p))
 
 publisherOrderings :: Set Name
 publisherOrderings = Set.fromList ["PerKeyHeadOfLine", "PerSourceStream", "StopTheLine", "BestEffort"]
 
 backoffProblemMaybe :: BackoffSpec -> Maybe Text
-backoffProblemMaybe backoff = case boKind backoff of
+backoffProblemMaybe backoff = case (.kind) backoff of
   "constant" -> Nothing
-  "exponential" -> case (boMax backoff, boMultiplier backoff) of
+  "exponential" -> case ((.max) backoff, (.multiplier) backoff) of
     (Just maximumWindow, Just multiplierText) ->
-      case (validationWindowSeconds (boWindow backoff), validationWindowSeconds maximumWindow, readMaybe (T.unpack multiplierText) :: Maybe Double) of
+      case (validationWindowSeconds ((.window) backoff), validationWindowSeconds maximumWindow, readMaybe (T.unpack multiplierText) :: Maybe Double) of
         (Just initialSeconds, Just maximumSeconds, Just multiplier)
           | initialSeconds > 0 && maximumSeconds >= initialSeconds && multiplier >= 1 -> Nothing
         _ -> Just "exponential backoff; initial must be positive, max must be at least initial, and multiplier must be at least 1"
@@ -3472,75 +3472,75 @@ windowRangeRule languageContract diagnosticLine context window =
 validateIntake :: EffectiveLanguageContract -> IntakeNode -> [Diagnostic]
 validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary, decodePosture, windows]
   where
-    il = locLine (inkLoc i)
+    il = locLine ((.loc) i)
     -- `decBodyStrict` reaches nothing but the pretty-printer: generated contract
     -- codecs decode every declared body field as required and admit no lenient
     -- mode, so `body strict` describes what happens and `body lenient` does not.
     decodePosture =
       [ mkSurfaceRefusal languageContract il DecodeBodyPostureUnsupported $
           "intake '"
-            <> inkName i
+            <> (.name) i
             <> "' declares 'body lenient', but generated contract codecs decode a body strictly: every declared field is required and no lenient fallback is emitted. Write 'body strict' to describe what runs"
-      | not (decBodyStrict (inkDecode i))
+      | not ((.bodyStrict) ((.decode) i))
       ]
-    rows = inkDisposition i
+    rows = (.disposition) i
     requiredOutcomes =
       ["processed", "duplicate", "inProgress", "previouslyFailed", "decodeFailed", "dedupeFailed", "storeFailed"]
     completeness =
       [ mkErr il DispositionIncomplete $
-          "intake '" <> inkName i <> "' disposition table is missing outcome '" <> o <> "'"
+          "intake '" <> (.name) i <> "' disposition table is missing outcome '" <> o <> "'"
       | o <- requiredOutcomes,
-        o `notElem` map drOutcome rows
+        o `notElem` map (.outcome) rows
       ]
     duplicateRows =
-      [ mkErr (locLine (drLoc row)) DispositionDuplicateOutcome $
-          "intake '" <> inkName i <> "' repeats disposition outcome '" <> drOutcome row <> "'; the first row would shadow this row"
-      | row <- duplicatesBy drOutcome rows
+      [ mkErr (locLine ((.loc) row)) DispositionDuplicateOutcome $
+          "intake '" <> (.name) i <> "' repeats disposition outcome '" <> (.outcome) row <> "'; the first row would shadow this row"
+      | row <- duplicatesBy (.outcome) rows
       ]
     windows =
       concat
-        [ windowRangeRule languageContract (locLine (drLoc row)) ("intake '" <> inkName i <> "' retry") window
+        [ windowRangeRule languageContract (locLine ((.loc) row)) ("intake '" <> (.name) i <> "' retry") window
         | row <- rows,
-          IRetry window <- [drAction row]
+          IRetry window <- [(.action) row]
         ]
     dedupeVocabulary =
       [ mkErr il IntakeDedupePolicyUnknown $
           "intake '"
-            <> inkName i
+            <> (.name) i
             <> "' has unknown dedupe policy '"
-            <> inkDedupePolicy i
+            <> (.dedupePolicy) i
             <> "'; expected PreferIntegrationMessageId, PreferSourceEventIdentity, or KafkaDeliveryIdentity"
-      | inkDedupePolicy i `Set.notMember` intakeDedupePolicies
+      | (.dedupePolicy) i `Set.notMember` intakeDedupePolicies
       ]
     decodeVersionFloor =
       [ mkErr il IntakeDecodeSchemaVersionBelowMinimum $
-          "intake '" <> inkName i <> "' decode schemaVersion must be at least 1"
+          "intake '" <> (.name) i <> "' decode schemaVersion must be at least 1"
       | enforcesSpecSurfaceClosures languageContract,
-        decBodySchemaVersion (inkDecode i) < 1
+        (.bodySchemaVersion) ((.decode) i) < 1
       ]
     envelopeVocabulary =
       [ mkErr il IntakeEnvelopePolicyUnknown $
-          "intake '" <> inkName i <> "' has unsupported envelope policy " <> T.pack (show (decEnvelope (inkDecode i))) <> "; expected \"strict-required lenient-optional\""
+          "intake '" <> (.name) i <> "' has unsupported envelope policy " <> T.pack (show ((.envelope) ((.decode) i))) <> "; expected \"strict-required lenient-optional\""
       | enforcesSpecSurfaceClosures languageContract,
-        decEnvelope (inkDecode i) /= "strict-required lenient-optional"
+        (.envelope) ((.decode) i) /= "strict-required lenient-optional"
       ]
-    firstRow outcome = case [row | row <- rows, drOutcome row == outcome] of
+    firstRow outcome = case [row | row <- rows, (.outcome) row == outcome] of
       (row : _) -> Just row
       [] -> Nothing
-    isRetry row = case drAction row of IRetry _ -> True; _ -> False
+    isRetry row = case (.action) row of IRetry _ -> True; _ -> False
     inversions =
-      [ mkErr (locLine (drLoc row)) DispositionDuplicateRetry $
-          "intake '" <> inkName i <> "': a 'duplicate' redelivery must be ackOk (success), not retry"
+      [ mkErr (locLine ((.loc) row)) DispositionDuplicateRetry $
+          "intake '" <> (.name) i <> "': a 'duplicate' redelivery must be ackOk (success), not retry"
       | Just row <- [firstRow "duplicate"],
         isRetry row
       ]
-        ++ [ mkErr (locLine (drLoc row)) DispositionPreviouslyFailedRetry $
-               "intake '" <> inkName i <> "': 'previouslyFailed' must dead-letter, not retry (a prior failure won't succeed on replay)"
+        ++ [ mkErr (locLine ((.loc) row)) DispositionPreviouslyFailedRetry $
+               "intake '" <> (.name) i <> "': 'previouslyFailed' must dead-letter, not retry (a prior failure won't succeed on replay)"
            | Just row <- [firstRow "previouslyFailed"],
              isRetry row
            ]
-        ++ [ mkErr (locLine (drLoc row)) DispositionDecodeUnboundedRetry $
-               "intake '" <> inkName i <> "': 'decodeFailed' must dead-letter (terminal), not retry unboundedly"
+        ++ [ mkErr (locLine ((.loc) row)) DispositionDecodeUnboundedRetry $
+               "intake '" <> (.name) i <> "': 'decodeFailed' must dead-letter (terminal), not retry unboundedly"
            | Just row <- [firstRow "decodeFailed"],
              isRetry row
            ]
@@ -3612,27 +3612,27 @@ validateProcess languageContract spec p =
     -- no branch that retries or dead-letters a *successful* append. Only AckOk
     -- describes what runs.
     onAppendedArms =
-      [ mkSurfaceRefusal languageContract (locLine (dispLoc d)) DispatchOnAppendedUnsupported $
+      [ mkSurfaceRefusal languageContract (locLine ((.loc) d)) DispatchOnAppendedUnsupported $
           "dispatch to '"
-            <> dispTarget d
+            <> (.target) d
             <> "' maps on-appended => "
-            <> dispText (onAppended (dispDisposition d))
+            <> dispText ((.onAppended) ((.disposition) d))
             <> ", but a successful append is always acked: no runtime path retries or dead-letters an event it just appended. Write 'on-appended AckOk'"
-      | d <- hDispatch (procHandle p),
-        onAppended (dispDisposition d) /= DAckOk
+      | d <- (.dispatch) ((.handle) p),
+        (.onAppended) ((.disposition) d) /= DAckOk
       ]
 
     -- `decode unknown-status => X` names the status a row that fails to decode
     -- is read as. X must be a status the timer table actually has.
     decodeUnknownStatus =
-      [ mkSurfaceRefusal languageContract (locLine (tmLoc timer)) TimerDecodeStatusUnknown $
+      [ mkSurfaceRefusal languageContract (locLine ((.loc) timer)) TimerDecodeStatusUnknown $
           "timer '"
-            <> tmName timer
+            <> (.name) timer
             <> "' maps decode unknown-status => '"
-            <> tmDecodeUnknown timer
+            <> (.decodeUnknown) timer
             <> "', which is not a timer status; a stored timer row is one of: "
             <> T.intercalate ", " runtimeTimerStatuses
-      | tmDecodeUnknown timer `notElem` runtimeTimerStatuses
+      | (.decodeUnknown) timer `notElem` runtimeTimerStatuses
       ]
 
     -- The dead-letter reason is a hand-owned obligation: `runTimerWorkerWith`
@@ -3641,11 +3641,11 @@ validateProcess languageContract spec p =
     -- `Keiro.Timer.deadLetterTimer`. Nothing can check what the prose says, but
     -- an empty or blank reason names no obligation at all.
     deadLetterText =
-      [ mkSurfaceRefusal languageContract (locLine (tmLoc timer)) TimerDeadLetterTextInvalid $
+      [ mkSurfaceRefusal languageContract (locLine ((.loc) timer)) TimerDeadLetterTextInvalid $
           "timer '"
-            <> tmName timer
+            <> (.name) timer
             <> "' declares a blank dead-letter reason; the reason is the hand-owned text an operator-written timer worker passes to Keiro.Timer.deadLetterTimer, so it must say something"
-      | T.null (T.strip (tmDeadLetter timer))
+      | T.null (T.strip ((.deadLetter) timer))
       ]
 
     -- The timer worker marks a timer Fired only when the fire action returns the
@@ -3653,39 +3653,39 @@ validateProcess languageContract spec p =
     -- dispatch produces no such id, so the row is left Firing and requeued on a
     -- later pass — which is exactly Retry. Fired is not reachable.
     notMineArm =
-      [ mkSurfaceRefusal languageContract (locLine (tmLoc timer)) TimerNotMineUnsupported $
+      [ mkSurfaceRefusal languageContract (locLine ((.loc) timer)) TimerNotMineUnsupported $
           "timer '"
-            <> tmName timer
+            <> (.name) timer
             <> "' maps not-mine => Fired, but the timer worker marks a timer Fired only when the fire action returns the id of the event it appended; a dispatch that is not this timer's has no such id, so the row is requeued instead. Write 'not-mine Retry'"
-      | notMine (fireDisposition (tmFire timer)) == OFired
+      | (.notMine) ((.disposition) ((.fire) timer)) == OFired
       ]
-    aggregates = [a | NAggregate a <- specNodes spec]
-    aggNames = map aggName aggregates
-    projectionTables = [projTable projection | aggregate <- aggregates, Just projection <- [aggProjection aggregate]]
-    inputFields = map fieldName (inFields (procInput p))
-    timeFields = [fieldName f | f <- inFields (procInput p), fieldType f == Just "Time"]
-    timer = procTimer p
-    pl = locLine (procLoc p)
+    aggregates = [a | NAggregate a <- (.nodes) spec]
+    aggNames = map (.name) aggregates
+    projectionTables = [(.table) projection | aggregate <- aggregates, Just projection <- [(.projection) aggregate]]
+    inputFields = map (.name) ((.fields) ((.input) p))
+    timeFields = [(.name) f | f <- (.fields) ((.input) p), (.valueType) f == Just "Time"]
+    timer = (.timer) p
+    pl = locLine ((.loc) p)
 
     sagaCategoryRule =
       [ mkErr pl SagaCategoryIllegal $
-          "saga category " <> T.pack (show (sagaCategory (procSaga p))) <> " " <> reason
-      | Just reason <- [sagaCategoryError (sagaCategory (procSaga p))]
+          "saga category " <> T.pack (show ((.category) ((.saga) p))) <> " " <> reason
+      | Just reason <- [sagaCategoryError ((.category) ((.saga) p))]
       ]
 
     -- TIME IS INJECTED, NOT SAMPLED: fireAt's field must be a declared :Time
     -- input field. (FireAtExpr has no clock-sampling constructor, so this is a
     -- field-resolution + typed-as-Time check.)
     noWallClock =
-      let f = faField (tmFireAt timer)
+      let f = (.field) ((.fireAt) timer)
        in if f `notElem` inputFields
             then
-              [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
-                  "timer '" <> tmName timer <> "' fireAt field '" <> f <> "' is not a field of input '" <> inName (procInput p) <> "'"
+              [ mkErr (locLine ((.loc) timer)) ProcessFireAtNotInjected $
+                  "timer '" <> (.name) timer <> "' fireAt field '" <> f <> "' is not a field of input '" <> (.name) ((.input) p) <> "'"
               ]
             else
-              [ mkErr (locLine (tmLoc timer)) ProcessFireAtNotInjected $
-                  "timer '" <> tmName timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> inName (procInput p) <> "'"
+              [ mkErr (locLine ((.loc) timer)) ProcessFireAtNotInjected $
+                  "timer '" <> (.name) timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> (.name) ((.input) p) <> "'"
               | f `notElem` timeFields
               ]
 
@@ -3693,70 +3693,70 @@ validateProcess languageContract spec p =
     -- supply a commandId/id.
     runtimeOwnedDispatchId =
       [ mkErr pl ProcessDispatchIdSupplied $
-          "advance command '" <> advCommand advance <> "' supplies a runtime-owned id field '" <> fbName binding <> "'; remove it"
-      | let advance = hAdvance (procHandle p),
-        binding <- advFields advance,
-        fbName binding `elem` (["commandId", "id"] :: [Name])
+          "advance command '" <> (.advCommand) advance <> "' supplies a runtime-owned id field '" <> (.name) binding <> "'; remove it"
+      | let advance = (.advance) ((.handle) p),
+        binding <- (.advFields) advance,
+        (.name) binding `elem` (["commandId", "id"] :: [Name])
       ]
-        ++ [ mkErr (locLine (dispLoc d)) ProcessDispatchIdSupplied $
-               "dispatch to '" <> dispTarget d <> "' supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
-           | d <- hDispatch (procHandle p),
-             b <- dispFields d,
-             fbName b `elem` (["commandId", "id"] :: [Name])
+        ++ [ mkErr (locLine ((.loc) d)) ProcessDispatchIdSupplied $
+               "dispatch to '" <> (.target) d <> "' supplies a runtime-owned id field '" <> (.name) b <> "'; remove it"
+           | d <- (.dispatch) ((.handle) p),
+             b <- (.fields) d,
+             (.name) b `elem` (["commandId", "id"] :: [Name])
            ]
-        ++ [ mkErr (locLine (tmLoc timer)) ProcessDispatchIdSupplied $
-               "timer fire supplies a runtime-owned id field '" <> fbName b <> "'; remove it"
-           | b <- fireFields (tmFire timer),
-             fbName b `elem` (["commandId", "id"] :: [Name])
+        ++ [ mkErr (locLine ((.loc) timer)) ProcessDispatchIdSupplied $
+               "timer fire supplies a runtime-owned id field '" <> (.name) b <> "'; remove it"
+           | b <- (.fields) ((.fire) timer),
+             (.name) b `elem` (["commandId", "id"] :: [Name])
            ]
 
     -- Aggregate, command, field, timer, and projection references must resolve.
     crossNodeCoupling =
-      [ mkErr pl ProcessUnresolvedRef ("saga '" <> sagaAgg (procSaga p) <> "' does not resolve to a declared aggregate")
-      | sagaAgg (procSaga p) `notElem` aggNames
+      [ mkErr pl ProcessUnresolvedRef ("saga '" <> (.agg) ((.saga) p) <> "' does not resolve to a declared aggregate")
+      | (.agg) ((.saga) p) `notElem` aggNames
       ]
-        ++ [ mkErr pl ProcessUnresolvedRef ("target '" <> procTarget p <> "' does not resolve to a declared aggregate")
-           | procTarget p `notElem` aggNames
+        ++ [ mkErr pl ProcessUnresolvedRef ("target '" <> (.target) p <> "' does not resolve to a declared aggregate")
+           | (.target) p `notElem` aggNames
            ]
-        ++ [ mkErr (locLine (tmLoc timer)) ProcessUnresolvedRef ("timer fire target '" <> fireTarget (tmFire timer) <> "' must be the saga or the target aggregate")
-           | fireTarget (tmFire timer) `notElem` [sagaAgg (procSaga p), procTarget p]
+        ++ [ mkErr (locLine ((.loc) timer)) ProcessUnresolvedRef ("timer fire target '" <> (.target) ((.fire) timer) <> "' must be the saga or the target aggregate")
+           | (.target) ((.fire) timer) `notElem` [(.agg) ((.saga) p), (.target) p]
            ]
-        ++ resolveCommand pl "advance" (sagaAgg (procSaga p)) (advCommand advance) (advFields advance)
-        ++ concatMap resolveDispatch (hDispatch (procHandle p))
-        ++ resolveCommand (locLine (tmLoc timer)) "timer fire" (fireTarget fire) (fireCommand fire) (fireFields fire)
+        ++ resolveCommand pl "advance" ((.agg) ((.saga) p)) ((.advCommand) advance) ((.advFields) advance)
+        ++ concatMap resolveDispatch ((.dispatch) ((.handle) p))
+        ++ resolveCommand (locLine ((.loc) timer)) "timer fire" ((.target) fire) ((.command) fire) ((.fields) fire)
         ++ [ mkErr pl ProcessUnresolvedRef $
-               "process '" <> procId p <> "' schedules undeclared timer '" <> hSchedule (procHandle p) <> "'; declared timer is '" <> tmName timer <> "'"
-           | hSchedule (procHandle p) /= tmName timer
+               "process '" <> (.id) p <> "' schedules undeclared timer '" <> (.schedule) ((.handle) p) <> "'; declared timer is '" <> (.name) timer <> "'"
+           | (.schedule) ((.handle) p) /= (.name) timer
            ]
         ++ [ mkErr pl ProcessUnresolvedRef $
-               "process '" <> procId p <> "' references undeclared projection table '" <> projection <> "'"
-           | projection <- procProjections p,
+               "process '" <> (.id) p <> "' references undeclared projection table '" <> projection <> "'"
+           | projection <- (.projections) p,
              projection `notElem` projectionTables
            ]
       where
-        advance = hAdvance (procHandle p)
-        fire = tmFire timer
+        advance = (.advance) ((.handle) p)
+        fire = (.fire) timer
         resolveDispatch dispatch =
           resolveCommand
-            (locLine (dispLoc dispatch))
+            (locLine ((.loc) dispatch))
             "dispatch"
-            (dispTarget dispatch)
-            (dispCommand dispatch)
-            (dispFields dispatch)
+            ((.target) dispatch)
+            ((.command) dispatch)
+            ((.fields) dispatch)
         resolveCommand diagnosticLine context target command bindings = case lookupAggregate target of
           Nothing -> []
-          Just aggregate -> case [decl | decl <- aggCommands aggregate, cmdName decl == command] of
+          Just aggregate -> case [decl | decl <- (.commands) aggregate, (.name) decl == command] of
             [] ->
               [ mkErr diagnosticLine ProcessUnresolvedRef $
                   context <> " command '" <> command <> "' is not declared by aggregate '" <> target <> "'"
               ]
             (declaration : _) ->
               [ mkErr diagnosticLine ProcessFieldBindingUnresolved $
-                  context <> " command '" <> command <> "' binds undeclared target field '" <> fbName binding <> "'"
+                  context <> " command '" <> command <> "' binds undeclared target field '" <> (.name) binding <> "'"
               | binding <- bindings,
-                fbName binding `notElem` map aggregateFieldName (cmdFields declaration)
+                (.name) binding `notElem` map (.name) ((.fields) declaration)
               ]
-        lookupAggregate name = case [aggregate | aggregate <- aggregates, aggName aggregate == name] of
+        lookupAggregate name = case [aggregate | aggregate <- aggregates, (.name) aggregate == name] of
           (aggregate : _) -> Just aggregate
           [] -> Nothing
 
@@ -3766,19 +3766,19 @@ validateProcess languageContract spec p =
 
     correlateFieldRule =
       [ mkErr pl ProcessKeyFieldUnknown $
-          "correlate references 'input." <> corrField (procCorrelate p) <> "' but input '" <> inName (procInput p) <> "' does not declare that field"
-      | corrField (procCorrelate p) `notElem` inputFields
+          "correlate references 'input." <> (.field) ((.correlate) p) <> "' but input '" <> (.name) ((.input) p) <> "' does not declare that field"
+      | (.field) ((.correlate) p) `notElem` inputFields
       ]
 
     dispatchKeyRules =
-      [ mkErr (locLine (dispLoc dispatch)) ProcessDispatchKeyUnresolved $
-          "dispatch to '" <> dispTarget dispatch <> "' uses unresolved key '" <> dispKey dispatch <> "'; expected correlationId or input.<declared-field>"
-      | dispatch <- hDispatch (procHandle p),
-        not (processKeyInScope (dispKey dispatch))
+      [ mkErr (locLine ((.loc) dispatch)) ProcessDispatchKeyUnresolved $
+          "dispatch to '" <> (.target) dispatch <> "' uses unresolved key '" <> (.key) dispatch <> "'; expected correlationId or input.<declared-field>"
+      | dispatch <- (.dispatch) ((.handle) p),
+        not (processKeyInScope ((.key) dispatch))
       ]
-        ++ [ mkErr (locLine (tmLoc timer)) ProcessDispatchKeyUnresolved $
-               "timer fire to '" <> fireTarget (tmFire timer) <> "' uses unresolved key '" <> fireKey (tmFire timer) <> "'; expected correlationId or input.<declared-field>"
-           | not (processKeyInScope (fireKey (tmFire timer)))
+        ++ [ mkErr (locLine ((.loc) timer)) ProcessDispatchKeyUnresolved $
+               "timer fire to '" <> (.target) ((.fire) timer) <> "' uses unresolved key '" <> (.key) ((.fire) timer) <> "'; expected correlationId or input.<declared-field>"
+           | not (processKeyInScope ((.key) ((.fire) timer)))
            ]
 
     processKeyInScope value =
@@ -3788,25 +3788,25 @@ validateProcess languageContract spec p =
           Nothing -> False
 
     bindingScopeRules =
-      bindingRules pl "advance" inputFields (advFields (hAdvance (procHandle p)))
+      bindingRules pl "advance" inputFields ((.advFields) ((.advance) ((.handle) p)))
         ++ concatMap
-          (\dispatch -> bindingRules (locLine (dispLoc dispatch)) "dispatch" inputFields (dispFields dispatch))
-          (hDispatch (procHandle p))
+          (\dispatch -> bindingRules (locLine ((.loc) dispatch)) "dispatch" inputFields ((.fields) dispatch))
+          ((.dispatch) ((.handle) p))
         ++ bindingRules
-          (locLine (tmLoc timer))
+          (locLine ((.loc) timer))
           "timer fire"
-          (inputFields <> map fbName (tmPayload timer) <> ["timerId"])
-          (fireFields (tmFire timer))
+          (inputFields <> map (.name) ((.payload) timer) <> ["timerId"])
+          ((.fields) ((.fire) timer))
 
     bindingRules diagnosticLine context bareScope bindings =
       [ mkErr diagnosticLine ProcessBindingUnscoped $
-          context <> " binding '" <> fbName binding <> maybe "" ("=" <>) (fbValue binding) <> "' is outside the process input and timer scopes"
+          context <> " binding '" <> (.name) binding <> maybe "" ("=" <>) ((.value) binding) <> "' is outside the process input and timer scopes"
       | binding <- bindings,
         not (bindingInScope bareScope binding)
       ]
 
-    bindingInScope bareScope binding = case fbValue binding of
-      Nothing -> fbName binding `elem` bareScope
+    bindingInScope bareScope binding = case (.value) binding of
+      Nothing -> (.name) binding `elem` bareScope
       Just value
         | isQuoted value -> True
         | value == "timer.id" -> True
@@ -3816,46 +3816,46 @@ validateProcess languageContract spec p =
     isQuoted value = T.length value >= 2 && T.head value == '"' && T.last value == '"'
 
     idFieldRules =
-      [ mkErr (locLine (tmLoc timer)) TimerIdFieldNotCorrelation $
-          "timer '" <> tmName timer <> "' " <> context <> " derives from '" <> ideField expression <> "'; only correlationId is implemented by generated runtime code"
-      | (context, expression) <- [("id", tmId timer), ("fired-event-id", fireFiredEventId (tmFire timer))],
-        ideField expression /= "correlationId"
+      [ mkErr (locLine ((.loc) timer)) TimerIdFieldNotCorrelation $
+          "timer '" <> (.name) timer <> "' " <> context <> " derives from '" <> (.field) expression <> "'; only correlationId is implemented by generated runtime code"
+      | (context, expression) <- [("id", (.id) timer), ("fired-event-id", (.firedEventId) ((.fire) timer))],
+        (.field) expression /= "correlationId"
       ]
 
     fireWindowRule =
-      windowRangeRule languageContract (locLine (tmLoc timer)) ("timer '" <> tmName timer <> "' fireAt") (faWindow (tmFireAt timer))
+      windowRangeRule languageContract (locLine ((.loc) timer)) ("timer '" <> (.name) timer <> "' fireAt") ((.window) ((.fireAt) timer))
 
     timerCeiling =
-      [ mkErr (locLine (tmLoc timer)) ProcessTimerCeilingInvalid $
-          "timer '" <> tmName timer <> "' max-attempts must be at least 1"
-      | tmMaxAttempts timer < 1
+      [ mkErr (locLine ((.loc) timer)) ProcessTimerCeilingInvalid $
+          "timer '" <> (.name) timer <> "' max-attempts must be at least 1"
+      | (.maxAttempts) timer < 1
       ]
 
     policyRules =
       policyConsistency
-        (procId p)
-        (procLoc p)
-        (procRejected p)
-        [ (dispCommand dispatch, dispLoc dispatch, dispDisposition dispatch)
-        | dispatch <- hDispatch (procHandle p)
+        ((.id) p)
+        ((.loc) p)
+        ((.rejected) p)
+        [ ((.command) dispatch, (.loc) dispatch, (.disposition) dispatch)
+        | dispatch <- (.dispatch) ((.handle) p)
         ]
 
     ambiguityRule =
-      [ mkErr (locLine (tmLoc timer)) AmbiguousMarkedBenign $
-          "timer '" <> tmName timer <> "' maps on-ambiguous => Fired; CommandAmbiguous means multiple aggregate edges matched and is never a benign success. Use on-ambiguous Retry so the attempts ceiling dead-letters the definition bug"
-      | onAmbiguous (fireDisposition (tmFire timer)) == OFired
+      [ mkErr (locLine ((.loc) timer)) AmbiguousMarkedBenign $
+          "timer '" <> (.name) timer <> "' maps on-ambiguous => Fired; CommandAmbiguous means multiple aggregate edges matched and is never a benign success. Use on-ambiguous Retry so the attempts ceiling dead-letters the definition bug"
+      | (.onAmbiguous) ((.disposition) ((.fire) timer)) == OFired
       ]
 
     -- Surface the dangerous benign inversions the author confirmed (warnings).
     benignInversions =
-      [ Diagnostic (locLine (tmLoc timer)) Warning ProcessBenignInversion [] $
-          "timer '" <> tmName timer <> "' maps on-reject => Fired (a CommandRejected is treated as benign success)"
-      | onReject (fireDisposition (tmFire timer)) == OFired
+      [ Diagnostic (locLine ((.loc) timer)) Warning ProcessBenignInversion [] $
+          "timer '" <> (.name) timer <> "' maps on-reject => Fired (a CommandRejected is treated as benign success)"
+      | (.onReject) ((.disposition) ((.fire) timer)) == OFired
       ]
-        ++ [ Diagnostic (locLine (dispLoc d)) Warning ProcessBenignInversion [] $
-               "dispatch to '" <> dispTarget d <> "' maps on-duplicate => AckOk (a duplicate is treated as benign success)"
-           | d <- hDispatch (procHandle p),
-             onDuplicate (dispDisposition d) == DAckOk
+        ++ [ Diagnostic (locLine ((.loc) d)) Warning ProcessBenignInversion [] $
+               "dispatch to '" <> (.target) d <> "' maps on-duplicate => AckOk (a duplicate is treated as benign success)"
+           | d <- (.dispatch) ((.handle) p),
+             (.onDuplicate) ((.disposition) d) == DAckOk
            ]
 
 -- | Explain why a process saga category is illegal.  The first four cases
@@ -3884,15 +3884,15 @@ runtimeIdentityError allowsHyphen identity
 logicalFieldSelector :: Text -> Text
 logicalFieldSelector raw =
   case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-    Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+    Right derived -> HaskellName.renderLowerCamelName ((.lowerCamel) derived)
     Left _ -> raw
   where
     site =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.GeneratedFieldSite,
-          HaskellName.siteLogicalName = raw,
-          HaskellName.siteOwner = "validation field resolution",
-          HaskellName.siteLine = 0
+        { HaskellName.kind = HaskellName.GeneratedFieldSite,
+          HaskellName.logicalName = raw,
+          HaskellName.owner = "validation field resolution",
+          HaskellName.line = 0
         }
 
 -- | EP-108 rules for a stateless content-based router.
@@ -3915,56 +3915,56 @@ validateRouter languageContract typeGraphResult spec router =
     onAppendedArm =
       [ mkSurfaceRefusal languageContract dispatchLine DispatchOnAppendedUnsupported $
           "router dispatch '"
-            <> rdCommand dispatch
+            <> (.command) dispatch
             <> "' maps on-appended => "
-            <> dispText (onAppended (rdDisposition dispatch))
+            <> dispText ((.onAppended) ((.disposition) dispatch))
             <> ", but a successful append is always acked: no runtime path retries or dead-letters an event it just appended. Write 'on-appended AckOk'"
-      | onAppended (rdDisposition dispatch) /= DAckOk
+      | (.onAppended) ((.disposition) dispatch) /= DAckOk
       ]
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
-    readModels = [readModel | NReadModel readModel <- specNodes spec]
-    inputFields = map fieldName (inFields (rtInput router))
-    resolvedFields = rvRow (rtResolve router)
-    dispatch = rtDispatch router
-    routerLine = locLine (rtLoc router)
-    dispatchLine = locLine (rdLoc dispatch)
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    readModels = [readModel | NReadModel readModel <- (.nodes) spec]
+    inputFields = map (.name) ((.fields) ((.input) router))
+    resolvedFields = (.row) ((.resolve) router)
+    dispatch = (.dispatch) router
+    routerLine = locLine ((.loc) router)
+    dispatchLine = locLine ((.loc) dispatch)
 
-    targetAggregate = case [aggregate | aggregate <- aggregates, aggName aggregate == rtTarget router] of
+    targetAggregate = case [aggregate | aggregate <- aggregates, (.name) aggregate == (.target) router] of
       aggregate : _ -> Just aggregate
       [] -> Nothing
 
-    projectionTables = [projTable projection | aggregate <- aggregates, Just projection <- [aggProjection aggregate]]
+    projectionTables = [(.table) projection | aggregate <- aggregates, Just projection <- [(.projection) aggregate]]
 
     references =
       [ mkErr routerLine RouterUnresolvedRef $
-          "router '" <> rtId router <> "' targets aggregate '" <> rtTarget router <> "' but no such aggregate is declared"
+          "router '" <> (.id) router <> "' targets aggregate '" <> (.target) router <> "' but no such aggregate is declared"
       | targetAggregate == Nothing
       ]
         ++ [ mkErr routerLine RouterUnresolvedRef $
-               "router '" <> rtId router <> "' references undeclared projection table '" <> projection <> "'"
-           | projection <- rtProjections router,
+               "router '" <> (.id) router <> "' references undeclared projection table '" <> projection <> "'"
+           | projection <- (.projections) router,
              projection `notElem` projectionTables
            ]
 
-    keyField = case rvSource (rtResolve router) of
+    keyField = case (.source) ((.resolve) router) of
       ResolveDeclarative {} -> []
       _ ->
         [ mkErr routerLine RouterKeyFieldUnknown $
-            "key references 'input." <> corrField (rtKey router) <> "' but input '" <> inName (rtInput router) <> "' does not declare that field"
-        | corrField (rtKey router) `notElem` inputFields
+            "key references 'input." <> (.field) ((.key) router) <> "' but input '" <> (.name) ((.input) router) <> "' does not declare that field"
+        | (.field) ((.key) router) `notElem` inputFields
         ]
 
-    bindingScope = case rvSource (rtResolve router) of
+    bindingScope = case (.source) ((.resolve) router) of
       ResolveDeclarative {} -> []
       _ ->
         [ mkErr dispatchLine RouterBindingUnscoped $
-            "dispatch binding '" <> fbName binding <> maybe "" ("=" <>) (fbValue binding) <> "' is outside the router input and resolve-row scopes"
-        | binding <- rdFields dispatch,
+            "dispatch binding '" <> (.name) binding <> maybe "" ("=" <>) ((.value) binding) <> "' is outside the router input and resolve-row scopes"
+        | binding <- (.fields) dispatch,
           not (bindingInScope binding)
         ]
       where
-        bindingInScope binding = case fbValue binding of
-          Nothing -> fbName binding `elem` inputFields
+        bindingInScope binding = case (.value) binding of
+          Nothing -> (.name) binding `elem` inputFields
           Just value
             | isQuoted value -> True
             | Just field <- T.stripPrefix "input." value -> field `elem` inputFields
@@ -3974,36 +3974,36 @@ validateRouter languageContract typeGraphResult spec router =
 
     commandReference = case targetAggregate of
       Nothing -> []
-      Just aggregate -> case [command | command <- aggCommands aggregate, cmdName command == rdCommand dispatch] of
+      Just aggregate -> case [command | command <- (.commands) aggregate, (.name) command == (.command) dispatch] of
         [] ->
           [ mkErr dispatchLine RouterCommandUnknown $
-              "dispatch command '" <> rdCommand dispatch <> "' is not declared by aggregate '" <> aggName aggregate <> "'"
+              "dispatch command '" <> (.command) dispatch <> "' is not declared by aggregate '" <> (.name) aggregate <> "'"
           ]
         command : _ ->
           [ mkErr dispatchLine RouterCommandUnknown $
-              "dispatch command '" <> rdCommand dispatch <> "' binds undeclared target field '" <> fbName binding <> "'"
-          | binding <- rdFields dispatch,
-            fbName binding `notElem` map aggregateFieldName (cmdFields command)
+              "dispatch command '" <> (.command) dispatch <> "' binds undeclared target field '" <> (.name) binding <> "'"
+          | binding <- (.fields) dispatch,
+            (.name) binding `notElem` map (.name) ((.fields) command)
           ]
 
-    readModelReference = case rvSource (rtResolve router) of
+    readModelReference = case (.source) ((.resolve) router) of
       ResolveHole -> []
       ResolveDeclarative {} -> []
       ResolveReadModel name ->
-        case [readModel | readModel <- readModels, rmName readModel == name] of
+        case [readModel | readModel <- readModels, (.name) readModel == name] of
           [] ->
-            [ mkErr (locLine (rvLoc (rtResolve router))) RouterUnresolvedRef $
-                "router '" <> rtId router <> "' resolve names readmodel '" <> name <> "' but no such readmodel node is declared"
+            [ mkErr (locLine ((.loc) ((.resolve) router))) RouterUnresolvedRef $
+                "router '" <> (.id) router <> "' resolve names readmodel '" <> name <> "' but no such readmodel node is declared"
             ]
           readModel : _ ->
-            [ mkErr (locLine (rvLoc (rtResolve router))) RouterReadModelUnverified $
-                "router '" <> rtId router <> "' resolve row field '" <> column <> "' is not a declared column of readmodel '" <> name <> "'"
+            [ mkErr (locLine ((.loc) ((.resolve) router))) RouterReadModelUnverified $
+                "router '" <> (.id) router <> "' resolve row field '" <> column <> "' is not a declared column of readmodel '" <> name <> "'"
             | enforcesSpecSurfaceClosures languageContract,
-              column <- rvRow (rtResolve router),
-              column `notElem` map (logicalFieldSelector . rmcName) (rmColumns readModel)
+              column <- (.row) ((.resolve) router),
+              column `notElem` map (logicalFieldSelector . (.rmcName)) ((.columns) readModel)
             ]
 
-    selectionChecks = case rvSource (rtResolve router) of
+    selectionChecks = case (.source) ((.resolve) router) of
       ResolveDeclarative {} -> case typeGraphResult of
         Left _ -> []
         Right graph -> case RouterSelection.checkRouterSelection languageContract graph spec router of
@@ -4013,23 +4013,23 @@ validateRouter languageContract typeGraphResult spec router =
 
     policyRules =
       policyConsistency
-        (rtId router)
-        (rtLoc router)
-        (rtRejected router)
-        [(rdCommand dispatch, rdLoc dispatch, rdDisposition dispatch)]
+        ((.id) router)
+        ((.loc) router)
+        ((.rejected) router)
+        [((.command) dispatch, (.loc) dispatch, (.disposition) dispatch)]
 
     duplicateNotice =
       [ Diagnostic dispatchLine Warning RouterBenignInversion [] $
-          "router dispatch '" <> rdCommand dispatch <> "' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign"
-      | onDuplicate (rdDisposition dispatch) == DAckOk
+          "router dispatch '" <> (.command) dispatch <> "' maps on-duplicate => AckOk; Keiro.Router confirms the event id against the target stream before treating the duplicate as benign"
+      | (.onDuplicate) ((.disposition) dispatch) == DAckOk
       ]
 
 routerSelectionDiagnostic :: RouterSelection.RouterSelectionDiagnostic -> Diagnostic
 routerSelectionDiagnostic diagnostic =
   mkErr
-    (locLine (RouterSelection.selectionDiagnosticLoc diagnostic))
-    (routerSelectionDiagnosticCode (RouterSelection.selectionDiagnosticCode diagnostic))
-    (RouterSelection.selectionDiagnosticMessage diagnostic)
+    (locLine ((.loc) diagnostic))
+    (routerSelectionDiagnosticCode ((.code) diagnostic))
+    ((.message) diagnostic)
 
 routerSelectionDiagnosticCode :: RouterSelection.RouterSelectionDiagnosticCode -> DiagnosticCode
 routerSelectionDiagnosticCode = \case
@@ -4072,7 +4072,7 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
       [ mkErr (locLine dispatchLoc) PolicyContradiction $
           "dispatch '" <> command <> "' declares on-failed DeadLetter, but node '" <> nodeName <> "' does not declare rejected => deadLetter; align the dispatch story with the node-level RejectedCommandPolicy"
       | (command, dispatchLoc, disposition) <- dispatches,
-        DDeadLetter _ <- [onFailed disposition],
+        DDeadLetter _ <- [(.onFailed) disposition],
         rejectedPolicy /= PolDeadLetter
       ]
 
@@ -4082,14 +4082,14 @@ policyConsistency nodeName nodeLoc rejectedPolicy dispatches = contradictions ++
         [ mkErr (locLine dispatchLoc) PolicyContradiction $
             "dispatch '" <> command <> "' has a different on-failed action from another dispatch in node '" <> nodeName <> "'; the runtime applies one RejectedCommandPolicy to the whole failure group"
         | (command, dispatchLoc, disposition) <- rest,
-          not (sameFailureAction (onFailed disposition) (onFailed firstDisposition))
+          not (sameFailureAction ((.onFailed) disposition) ((.onFailed) firstDisposition))
         ]
 
     unused =
       [ Diagnostic (locLine nodeLoc) Warning PolicyDeadLetterUnused [] $
           "node '" <> nodeName <> "' declares rejected => deadLetter but no dispatch on-failed arm says DeadLetter; the runtime policy is live, but the per-dispatch notation does not acknowledge it"
       | rejectedPolicy == PolDeadLetter,
-        all (not . isDeadLetter . onFailed . third) dispatches
+        all (not . isDeadLetter . (.onFailed) . third) dispatches
       ]
 
     ambiguityWarning =
@@ -4130,9 +4130,9 @@ validateAggregate languageContract typeGraphResult spec agg =
     ]
   where
     emptyAggregate =
-      [ mkErr (locLine (aggLoc agg)) AggregateEmpty $
+      [ mkErr (locLine ((.loc) agg)) AggregateEmpty $
           "aggregate '"
-            <> aggName agg
+            <> (.name) agg
             <> "' declares "
             <> renderMissing missingAggregateParts
             <> "; scaffold cannot lower an empty aggregate -- declare at least one command, one event, and one transition"
@@ -4141,9 +4141,9 @@ validateAggregate languageContract typeGraphResult spec agg =
     missingAggregateParts =
       [ label
       | (isMissing, label) <-
-          [ (null (aggCommands agg), "no commands"),
-            (null (aggEvents agg), "no events"),
-            (null (aggTransitions agg), "no transitions")
+          [ (null ((.commands) agg), "no commands"),
+            (null ((.events) agg), "no events"),
+            (null ((.transitions) agg), "no transitions")
           ],
         isMissing
       ]
@@ -4152,140 +4152,140 @@ validateAggregate languageContract typeGraphResult spec agg =
     renderMissing [firstPart, secondPart] = firstPart <> " and " <> secondPart
     renderMissing parts = T.intercalate ", " (init parts) <> ", and " <> last parts
 
-    states = Set.fromList (map stName (aggStates agg))
-    terminals = Set.fromList [stName s | s <- aggStates agg, stTerminal s]
+    states = Set.fromList (map (.name) ((.states) agg))
+    terminals = Set.fromList [(.name) s | s <- (.states) agg, (.terminal) s]
     commandFields :: Map Name [Name]
-    commandFields = Map.fromList [(cmdName c, map aggregateFieldName (cmdFields c)) | c <- aggCommands agg]
+    commandFields = Map.fromList [((.name) c, map (.name) ((.fields) c)) | c <- (.commands) agg]
     commandNames = Map.keysSet commandFields
-    eventNames = Set.fromList (map evName (aggEvents agg))
-    enumCtorNames = Set.fromList [c | e <- specEnums spec, (c, _) <- enumCtors e]
-    ruleNames = Set.fromList (map ruleName (specRules spec))
-    registerNames = Set.fromList (map regName (aggRegs agg))
+    eventNames = Set.fromList (map (.name) ((.events) agg))
+    enumCtorNames = Set.fromList [c | e <- (.enums) spec, (c, _) <- (.ctors) e]
+    ruleNames = Set.fromList (map (.name) ((.rules) spec))
+    registerNames = Set.fromList (map (.name) ((.regs) agg))
 
     eventFieldsFor event =
-      case evBody event of
+      case (.body) event of
         EventFields fields -> fields
         EventFromCommand commandName ->
           [ field
-          | command <- aggCommands agg,
-            cmdName command == commandName,
-            field <- cmdFields command
+          | command <- (.commands) agg,
+            (.name) command == commandName,
+            field <- (.fields) command
           ]
 
     fieldWireKeyRules =
       concat
         [ wireKeyRulesForRecord
-            ("aggregate '" <> aggName agg <> "' command '" <> cmdName command <> "'")
+            ("aggregate '" <> (.name) agg <> "' command '" <> (.name) command <> "'")
             Nothing
-            (map resolveAggregateFieldIdentity (cmdFields command))
-        | command <- aggCommands agg
+            (map resolveAggregateFieldIdentity ((.fields) command))
+        | command <- (.commands) agg
         ]
         <> concat
           [ wireKeyRulesForRecord
-              ("aggregate '" <> aggName agg <> "' event '" <> evName event <> "'")
+              ("aggregate '" <> (.name) agg <> "' event '" <> (.name) event <> "'")
               (Just ("kind", "event envelope key"))
               (map resolveAggregateFieldIdentity (eventFieldsFor event))
-          | event <- aggEvents agg
+          | event <- (.events) agg
           ]
 
-    snapshotRules = case aggSnapshot agg of
+    snapshotRules = case (.snapshot) agg of
       Nothing -> []
       Just snapshot ->
-        [ mkErr (locLine (snapLoc snapshot)) SnapshotIntervalInvalid $
-            "aggregate '" <> aggName agg <> "': snapshot every requires an interval of at least 1; non-positive runtime intervals silently disable snapshots"
-        | SnapEvery interval <- [snapPolicy snapshot],
+        [ mkErr (locLine ((.loc) snapshot)) SnapshotIntervalInvalid $
+            "aggregate '" <> (.name) agg <> "': snapshot every requires an interval of at least 1; non-positive runtime intervals silently disable snapshots"
+        | SnapEvery interval <- [(.policy) snapshot],
           interval < 1
         ]
-          ++ [ mkErr (locLine (snapLoc snapshot)) SnapshotCodecFixtureInvalid $
-                 "aggregate '" <> aggName agg <> "': snapshot state-codec version must be at least 1 and shape-hash must be non-empty"
-             | snapCodecVersion snapshot < 1 || T.null (snapShapeHash snapshot)
+          ++ [ mkErr (locLine ((.loc) snapshot)) SnapshotCodecFixtureInvalid $
+                 "aggregate '" <> (.name) agg <> "': snapshot state-codec version must be at least 1 and shape-hash must be non-empty"
+             | (.codecVersion) snapshot < 1 || T.null ((.shapeHash) snapshot)
              ]
 
-    wirePolicyRules = case aggWire agg of
+    wirePolicyRules = case (.wire) agg of
       Just wire
         | enforcesSpecSurfaceClosures languageContract,
-          wireKind wire /= "ctorName" || wireFields wire /= "camelCase" ->
-            [ mkErr (locLine (aggLoc agg)) WireClauseUnsupported $
+          (.kind) wire /= "ctorName" || (.fields) wire /= "camelCase" ->
+            [ mkErr (locLine ((.loc) agg)) WireClauseUnsupported $
                 "aggregate '"
-                  <> aggName agg
+                  <> (.name) agg
                   <> "' wire clause describes kind="
-                  <> wireKind wire
+                  <> (.kind) wire
                   <> " fields="
-                  <> wireFields wire
+                  <> (.fields) wire
                   <> "; generated bytes currently support only kind=ctorName fields=camelCase"
             ]
       _ -> []
 
     duplicateMembers =
-      [ mkErr (locLine (cmdLoc c)) DuplicateCommandName $
-          "aggregate '" <> aggName agg <> "' declares command '" <> cmdName c <> "' more than once"
-      | c <- duplicatesBy cmdName (aggCommands agg)
+      [ mkErr (locLine ((.loc) c)) DuplicateCommandName $
+          "aggregate '" <> (.name) agg <> "' declares command '" <> (.name) c <> "' more than once"
+      | c <- duplicatesBy (.name) ((.commands) agg)
       ]
-        ++ [ mkErr (locLine (evLoc e)) DuplicateEventName $
-               "aggregate '" <> aggName agg <> "' declares event '" <> evName e <> "' more than once"
-           | e <- duplicatesBy evName (aggEvents agg)
+        ++ [ mkErr (locLine ((.loc) e)) DuplicateEventName $
+               "aggregate '" <> (.name) agg <> "' declares event '" <> (.name) e <> "' more than once"
+           | e <- duplicatesBy (.name) ((.events) agg)
            ]
-        ++ [ mkErr (locLine (aggregateFieldLoc field)) AggregateDuplicateFieldName $
-               "aggregate '" <> aggName agg <> "' command '" <> cmdName command <> "' declares field '" <> aggregateFieldName field <> "' more than once"
-           | command <- aggCommands agg,
-             field <- duplicatesBy aggregateFieldName (cmdFields command)
+        ++ [ mkErr (locLine ((.loc) field)) AggregateDuplicateFieldName $
+               "aggregate '" <> (.name) agg <> "' command '" <> (.name) command <> "' declares field '" <> (.name) field <> "' more than once"
+           | command <- (.commands) agg,
+             field <- duplicatesBy (.name) ((.fields) command)
            ]
-        ++ [ mkErr (locLine (aggregateFieldLoc field)) AggregateDuplicateFieldName $
-               "aggregate '" <> aggName agg <> "' event '" <> evName event <> "' declares field '" <> aggregateFieldName field <> "' more than once"
-           | event <- aggEvents agg,
-             EventFields fields <- [evBody event],
-             field <- duplicatesBy aggregateFieldName fields
+        ++ [ mkErr (locLine ((.loc) field)) AggregateDuplicateFieldName $
+               "aggregate '" <> (.name) agg <> "' event '" <> (.name) event <> "' declares field '" <> (.name) field <> "' more than once"
+           | event <- (.events) agg,
+             EventFields fields <- [(.body) event],
+             field <- duplicatesBy (.name) fields
            ]
-        ++ [ mkErr (locLine (stLoc state)) AggregateDuplicateState $
-               "aggregate '" <> aggName agg <> "' declares state '" <> stName state <> "' more than once"
-           | state <- duplicatesBy stName (aggStates agg)
+        ++ [ mkErr (locLine ((.loc) state)) AggregateDuplicateState $
+               "aggregate '" <> (.name) agg <> "' declares state '" <> (.name) state <> "' more than once"
+           | state <- duplicatesBy (.name) ((.states) agg)
            ]
-        ++ [ mkErr (locLine (regLoc register)) AggregateDuplicateRegister $
-               "aggregate '" <> aggName agg <> "' declares register '" <> regName register <> "' more than once"
+        ++ [ mkErr (locLine ((.loc) register)) AggregateDuplicateRegister $
+               "aggregate '" <> (.name) agg <> "' declares register '" <> (.name) register <> "' more than once"
            | enforcesSpecSurfaceClosures languageContract,
-             register <- duplicatesBy regName (aggRegs agg)
+             register <- duplicatesBy (.name) ((.regs) agg)
            ]
-        ++ [ mkErr (locLine (tLoc transition)) TransitionDuplicateUnguarded $
+        ++ [ mkErr (locLine ((.loc) transition)) TransitionDuplicateUnguarded $
                "aggregate '"
-                 <> aggName agg
+                 <> (.name) agg
                  <> "' has more than one live unguarded transition for '"
-                 <> tSource transition
+                 <> (.source) transition
                  <> " -- "
-                 <> tCommand transition
+                 <> (.command) transition
                  <> "'; every matching command would be ambiguous"
            | group <- duplicateGroupsBy transitionKey unguardedTransitions,
              transition <- group
            ]
-        ++ [ mkErr (locLine (tLoc guarded)) TransitionUnguardedSibling $
+        ++ [ mkErr (locLine ((.loc) guarded)) TransitionUnguardedSibling $
                "aggregate '"
-                 <> aggName agg
+                 <> (.name) agg
                  <> "' guarded transition '"
-                 <> tSource guarded
+                 <> (.source) guarded
                  <> " -- "
-                 <> tCommand guarded
+                 <> (.command) guarded
                  <> "' overlaps an unguarded sibling at line "
-                 <> tInt (locLine (tLoc unguarded))
+                 <> tInt (locLine ((.loc) unguarded))
            | enforcesSpecSurfaceClosures languageContract,
              guarded <- liveTransitions,
-             tGuard guarded /= Nothing,
+             (.guard) guarded /= Nothing,
              unguarded : _ <- [[candidate | candidate <- unguardedTransitions, transitionKey candidate == transitionKey guarded]]
            ]
-    liveTransitions = [transition | transition <- aggTransitions agg, tMode transition == TmLive]
-    unguardedTransitions = [transition | transition <- liveTransitions, tGuard transition == Nothing]
-    transitionKey transition = (tSource transition, tCommand transition)
+    liveTransitions = [transition | transition <- (.transitions) agg, (.mode) transition == TmLive]
+    unguardedTransitions = [transition | transition <- liveTransitions, (.guard) transition == Nothing]
+    transitionKey transition = ((.source) transition, (.command) transition)
 
     eventBodyRefs =
-      [ mkErr (locLine (evLoc e)) UndeclaredCommand $
-          "event '" <> evName e <> "' copies fields from undeclared command '" <> command <> "'"
-      | e <- aggEvents agg,
-        EventFromCommand command <- [evBody e],
+      [ mkErr (locLine ((.loc) e)) UndeclaredCommand $
+          "event '" <> (.name) e <> "' copies fields from undeclared command '" <> command <> "'"
+      | e <- (.events) agg,
+        EventFromCommand command <- [(.body) e],
         command `Set.notMember` commandNames
       ]
 
     outputMappingRules =
-      [ mkErr (locLine (tLoc transition)) EventOutputCommandMismatch $
+      [ mkErr (locLine ((.loc) transition)) EventOutputCommandMismatch $
           "transition '"
-            <> tSource transition
+            <> (.source) transition
             <> " -- "
             <> consuming
             <> "' emits event '"
@@ -4293,28 +4293,28 @@ validateAggregate languageContract typeGraphResult spec agg =
             <> "' declared as fields("
             <> declared
             <> "); generated identity output is legal only when the transition consumes that same command"
-      | transition <- aggTransitions agg,
-        (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
+      | transition <- (.transitions) agg,
+        (emitIndex, eventName) <- zip [1 ..] ((.emits) transition),
         Left OutputCommandMismatch {declaredSourceCommand = declared, consumingTransitionCommand = consuming} <- [eventOutputMappingFromGraphResult typeGraphResult spec agg transition emitIndex eventName]
       ]
 
-    registerInitialScope = concatMap checkRegisterInitial (aggRegs agg)
-    checkRegisterInitial r = case [e | e <- specEnums spec, TRef (enumName e) == regType r] of
-      (e : _) -> case enumBinding e of
+    registerInitialScope = concatMap checkRegisterInitial ((.regs) agg)
+    checkRegisterInitial r = case [e | e <- (.enums) spec, TRef ((.name) e) == (.valueType) r] of
+      (e : _) -> case (.binding) e of
         Just _ ->
           [ outOfScope r "declaration-owned symbol selected by" "initial"
           | regInitialBare r /= Just "initial"
           ]
         Nothing ->
-          [ outOfScope r "constructor of enum" (enumName e)
-          | regInitialBare r `notElem` map (Just . fst) (enumCtors e)
+          [ outOfScope r "constructor of enum" ((.name) e)
+          | regInitialBare r `notElem` map (Just . fst) ((.ctors) e)
           ]
       []
-        | regType r == TRef (aggName agg <> "Vertex") ->
-            [ outOfScope r "state of aggregate" (aggName agg)
+        | (.valueType) r == TRef ((.name) agg <> "Vertex") ->
+            [ outOfScope r "state of aggregate" ((.name) agg)
             | maybe True (`Set.notMember` states) (regInitialBare r)
             ]
-        | Just identifier <- firstMatching (\declaration -> regType r == TRef (idName declaration)) (specIds spec) -> case idBinding identifier of
+        | Just identifier <- firstMatching (\declaration -> (.valueType) r == TRef ((.name) declaration)) ((.ids) spec) -> case (.binding) identifier of
             Just _ ->
               [ outOfScope r "declaration-owned symbol selected by" "initial"
               | regInitialBare r /= Just "initial"
@@ -4325,9 +4325,9 @@ validateAggregate languageContract typeGraphResult spec agg =
               ]
         | otherwise -> []
     outOfScope r expected domain =
-      mkErr (locLine (regLoc r)) RegisterInitialOutOfScope $
-        "register '" <> regName r <> "' initial '" <> renderRegInitial (regInitial r) <> "' is not a " <> expected <> " '" <> domain <> "'"
-    regInitialBare r = case regInitial r of
+      mkErr (locLine ((.loc) r)) RegisterInitialOutOfScope $
+        "register '" <> (.name) r <> "' initial '" <> renderRegInitial ((.initial) r) <> "' is not a " <> expected <> " '" <> domain <> "'"
+    regInitialBare r = case (.initial) r of
       RegInitBare value -> Just value
       RegInitText _ -> Nothing
     renderRegInitial = \case
@@ -4336,39 +4336,39 @@ validateAggregate languageContract typeGraphResult spec agg =
 
     -- Rule 1: declared-reference for command / emit / goto / source.
     declaredRefs =
-      concatMap transitionRefs (aggTransitions agg)
+      concatMap transitionRefs ((.transitions) agg)
     transitionRefs t =
-      [ mkErr (locLine (tLoc t)) UndeclaredCommand $
-          "transition references undeclared command '" <> tCommand t <> "'"
-      | not (tCommand t `Set.member` commandNames)
+      [ mkErr (locLine ((.loc) t)) UndeclaredCommand $
+          "transition references undeclared command '" <> (.command) t <> "'"
+      | not ((.command) t `Set.member` commandNames)
       ]
-        ++ [ mkErr (locLine (tLoc t)) UndeclaredState $
-               "transition source '" <> tSource t <> "' is not a declared state"
-           | not (tSource t `Set.member` states)
+        ++ [ mkErr (locLine ((.loc) t)) UndeclaredState $
+               "transition source '" <> (.source) t <> "' is not a declared state"
+           | not ((.source) t `Set.member` states)
            ]
-        ++ [ mkErr (locLine (tLoc t)) UndeclaredState $
-               "transition goto '" <> tGoto t <> "' is not a declared state"
-           | not (tGoto t `Set.member` states)
+        ++ [ mkErr (locLine ((.loc) t)) UndeclaredState $
+               "transition goto '" <> (.goto) t <> "' is not a declared state"
+           | not ((.goto) t `Set.member` states)
            ]
-        ++ [ mkErr (locLine (tLoc t)) UndeclaredEvent $
+        ++ [ mkErr (locLine ((.loc) t)) UndeclaredEvent $
                "emit references undeclared event '" <> ev <> "'"
-           | ev <- tEmits t,
+           | ev <- (.emits) t,
              not (ev `Set.member` eventNames)
            ]
 
     -- Rule 2: reachability of every non-terminal state from the initial state
     -- (the first state in the list).
-    reachability = case map stName (aggStates agg) of
+    reachability = case map (.name) ((.states) agg) of
       [] -> []
       (initial : _) ->
         let reached = bfs (Set.singleton initial) [initial]
-         in [ mkErr (locLine (stLoc s)) UnreachableState $
-                "state '" <> stName s <> "' is not reachable from the initial state '" <> initial <> "'"
-            | s <- aggStates agg,
-              not (stTerminal s),
-              not (stName s `Set.member` reached)
+         in [ mkErr (locLine ((.loc) s)) UnreachableState $
+                "state '" <> (.name) s <> "' is not reachable from the initial state '" <> initial <> "'"
+            | s <- (.states) agg,
+              not ((.terminal) s),
+              not ((.name) s `Set.member` reached)
             ]
-    edgesFrom src = [tGoto t | t <- aggTransitions agg, tSource t == src]
+    edgesFrom src = [(.goto) t | t <- (.transitions) agg, (.source) t == src]
     bfs seen [] = seen
     bfs seen (x : xs) =
       let nexts = [n | n <- edgesFrom x, not (n `Set.member` seen)]
@@ -4376,25 +4376,25 @@ validateAggregate languageContract typeGraphResult spec agg =
 
     -- Rule 3: a terminal state has no outgoing transition.
     terminalNoOutgoing =
-      [ mkErr (locLine (tLoc t)) TerminalHasOutgoing $
-          "terminal state '" <> tSource t <> "' has an outgoing transition"
-      | t <- aggTransitions agg,
-        tSource t `Set.member` terminals
+      [ mkErr (locLine ((.loc) t)) TerminalHasOutgoing $
+          "terminal state '" <> (.source) t <> "' has an outgoing transition"
+      | t <- (.transitions) agg,
+        (.source) t `Set.member` terminals
       ]
 
     -- Rule 4: every atom in a guard or write Expr resolves to a register, a
     -- field of the transition's command, an enum constructor, a rule, or a bool.
-    guardScope = concatMap transitionScope (aggTransitions agg)
+    guardScope = concatMap transitionScope ((.transitions) agg)
     transitionScope t =
       let inScope =
             registerNames
-              `Set.union` Set.fromList (Map.findWithDefault [] (tCommand t) commandFields)
+              `Set.union` Set.fromList (Map.findWithDefault [] ((.command) t) commandFields)
               `Set.union` enumCtorNames
               `Set.union` ruleNames
               -- State names are constructors of the implicit vertex enum, so a
               -- @write reservationState := Held@ references a state legitimately.
               `Set.union` states
-          exprs = maybe [] pure (tGuard t) ++ map snd (tWrites t)
+          exprs = maybe [] pure ((.guard) t) ++ map snd ((.writes) t)
           badAtoms =
             [ n
             | e <- exprs,
@@ -4402,86 +4402,86 @@ validateAggregate languageContract typeGraphResult spec agg =
               not (n `Set.member` clockAtoms), -- clock atoms reported separately
               not (n `Set.member` inScope)
             ]
-          badTargets = [target | (target, _) <- tWrites t, target `Set.notMember` registerNames]
-       in [ mkErr (locLine (tLoc t)) WriteTargetNotRegister $
-              "write target '" <> target <> "' is not a register of aggregate '" <> aggName agg <> "'"
+          badTargets = [target | (target, _) <- (.writes) t, target `Set.notMember` registerNames]
+       in [ mkErr (locLine ((.loc) t)) WriteTargetNotRegister $
+              "write target '" <> target <> "' is not a register of aggregate '" <> (.name) agg <> "'"
           | target <- dedup badTargets
           ]
-            ++ [ mkErr (locLine (tLoc t)) GuardAtomOutOfScope $
-                   "atom '" <> n <> "' in transition '" <> tSource t <> " -- " <> tCommand t <> "' resolves to no register, command field, enum constructor, or rule"
+            ++ [ mkErr (locLine ((.loc) t)) GuardAtomOutOfScope $
+                   "atom '" <> n <> "' in transition '" <> (.source) t <> " -- " <> (.command) t <> "' resolves to no register, command field, enum constructor, or rule"
                | n <- dedup badAtoms
                ]
 
     -- Rule 5 (cross-cutting): no guard or write Expr samples a wall clock.
-    clockFree = concatMap transitionClock (aggTransitions agg)
+    clockFree = concatMap transitionClock ((.transitions) agg)
     transitionClock t =
-      let exprs = maybe [] pure (tGuard t) ++ map snd (tWrites t)
+      let exprs = maybe [] pure ((.guard) t) ++ map snd ((.writes) t)
           sampled = [n | e <- exprs, n <- exprNames e, n `Set.member` clockAtoms]
-       in [ mkErr (locLine (tLoc t)) ClockSampled $
-              "transition '" <> tSource t <> " -- " <> tCommand t <> "' samples the wall clock via '" <> n <> "'; time must be an injected input field, not sampled"
+       in [ mkErr (locLine ((.loc) t)) ClockSampled $
+              "transition '" <> (.source) t <> " -- " <> (.command) t <> "' samples the wall clock via '" <> n <> "'; time must be an injected input field, not sampled"
           | n <- dedup sampled
           ]
 
     -- EP-107: a projection references a first-class read model when one exists.
     -- Legacy standalone projections remain legal, but are surfaced as warnings.
     projectionKeyResolution =
-      [ mkErr (locLine (projLoc projection)) AggProjectionKeyUnresolved $
-          "projection '" <> projTable projection <> "' key '" <> projKey projection <> "' is not a register, command field, or event field of aggregate '" <> aggName agg <> "'"
+      [ mkErr (locLine ((.loc) projection)) AggProjectionKeyUnresolved $
+          "projection '" <> (.table) projection <> "' key '" <> (.key) projection <> "' is not a register, command field, or event field of aggregate '" <> (.name) agg <> "'"
       | enforcesSpecSurfaceClosures languageContract,
-        Just projection <- [aggProjection agg],
-        projKey projection `Set.notMember` projectionFields
+        Just projection <- [(.projection) agg],
+        (.key) projection `Set.notMember` projectionFields
       ]
     projectionFields =
       registerNames
-        `Set.union` Set.fromList [fieldDslName (resolveAggregateFieldIdentity field) | command <- aggCommands agg, field <- cmdFields command]
-        `Set.union` Set.fromList [fieldDslName (resolveAggregateFieldIdentity field) | event <- aggEvents agg, field <- eventFieldsFor event]
+        `Set.union` Set.fromList [(.dslName) (resolveAggregateFieldIdentity field) | command <- (.commands) agg, field <- (.fields) command]
+        `Set.union` Set.fromList [(.dslName) (resolveAggregateFieldIdentity field) | event <- (.events) agg, field <- eventFieldsFor event]
 
-    projectionSafety = case aggProjection agg of
+    projectionSafety = case (.projection) agg of
       Nothing -> []
-      Just projection -> case [readModel | NReadModel readModel <- specNodes spec, rmName readModel == projTable projection] of
+      Just projection -> case [readModel | NReadModel readModel <- (.nodes) spec, (.name) readModel == (.table) projection] of
         [] ->
-          [ mkErr (locLine (projLoc projection)) RmStrongInlineOnly $
-              "projection '" <> projTable projection <> "' declares consistency = Strong but has no readmodel node; a standalone projection is inline-only and has no subscription cursor"
-          | projConsistency projection == Just Strong
+          [ mkErr (locLine ((.loc) projection)) RmStrongInlineOnly $
+              "projection '" <> (.table) projection <> "' declares consistency = Strong but has no readmodel node; a standalone projection is inline-only and has no subscription cursor"
+          | (.consistency) projection == Just Strong
           ]
             ++ [ Diagnostic
-                   { line = locLine (projLoc projection),
+                   { line = locLine ((.loc) projection),
                      severity = Warning,
                      code = RmProjectionWithoutNode,
                      relatedLocations = [],
-                     message = "projection '" <> projTable projection <> "' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable"
+                     message = "projection '" <> (.table) projection <> "' has no readmodel node; registration, schema identity, consistency, and rebuild helpers are unavailable"
                    }
                ]
         (readModel : _) ->
-          [ mkErr (locLine (projLoc projection)) RmConsistencyConflict $
-              "projection '" <> projTable projection <> "' declares consistency " <> T.pack (show projectionConsistency) <> " but its readmodel node declares " <> T.pack (show readModelConsistency)
-          | Just projectionConsistency <- [projConsistency projection],
+          [ mkErr (locLine ((.loc) projection)) RmConsistencyConflict $
+              "projection '" <> (.table) projection <> "' declares consistency " <> T.pack (show projectionConsistency) <> " but its readmodel node declares " <> T.pack (show readModelConsistency)
+          | Just projectionConsistency <- [(.consistency) projection],
             Just readModelConsistency <- [legacyReadModelConsistency readModel],
             projectionConsistency /= readModelConsistency
           ]
 
     -- Rule 6 (hole-kind 3, mapping): keys are exact event names, never suffixes;
     -- duplicates and dangling keys are errors, and non-partial maps are total.
-    statusMapTotality = case aggProjection agg of
+    statusMapTotality = case (.projection) agg of
       Nothing -> []
       Just p ->
-        let evs = map evName (aggEvents agg)
-            pairs = maybe [] mapPairs (projStatusMap p)
+        let evs = map (.name) ((.events) agg)
+            pairs = maybe [] (.pairs) ((.statusMap) p)
             keys = map fst pairs
-            partial = maybe False mapPartial (projStatusMap p)
+            partial = maybe False (.partial) ((.statusMap) p)
             uncovered = [event | event <- evs, event `notElem` keys]
             dangling = [key | key <- keys, key `notElem` evs]
             duplicateKeys = map fst (duplicatesBy fst pairs)
-         in [ mkErr (locLine (projLoc p)) StatusMapDanglingKey $
-                "projection '" <> projTable p <> "' status-map key '" <> key <> "' is not an event name of aggregate '" <> aggName agg <> "'"
+         in [ mkErr (locLine ((.loc) p)) StatusMapDanglingKey $
+                "projection '" <> (.table) p <> "' status-map key '" <> key <> "' is not an event name of aggregate '" <> (.name) agg <> "'"
             | key <- dangling
             ]
-              ++ [ mkErr (locLine (projLoc p)) StatusMapDuplicateKey $
-                     "projection '" <> projTable p <> "' repeats status-map key '" <> key <> "'"
+              ++ [ mkErr (locLine ((.loc) p)) StatusMapDuplicateKey $
+                     "projection '" <> (.table) p <> "' repeats status-map key '" <> key <> "'"
                  | key <- duplicateKeys
                  ]
-              ++ [ mkErr (locLine (projLoc p)) StatusMapNotTotal $
-                     "projection '" <> projTable p <> "' status-map is not total over events {" <> T.intercalate ", " uncovered <> "}"
+              ++ [ mkErr (locLine ((.loc) p)) StatusMapNotTotal $
+                     "projection '" <> (.table) p <> "' status-map is not total over events {" <> T.intercalate ", " uncovered <> "}"
                  | not partial,
                    not (null evs),
                    not (null uncovered)
@@ -4498,29 +4498,29 @@ validateAggregate languageContract typeGraphResult spec agg =
     -- never fire forward, so its emits exist purely to invert stored events —
     -- which is exactly where a deprecated event is allowed to remain
     -- (plan 143; supersedes the guarded-but-inert retained-edge pattern).
-    liveEmittedNames = Set.fromList (concatMap tEmits [t | t <- aggTransitions agg, tMode t == TmLive])
-    replayEmittedNames = Set.fromList (concatMap tEmits [t | t <- aggTransitions agg, tMode t == TmReplayOnly])
-    maxEventVersion = maximum (1 : map evVersion (aggEvents agg))
+    liveEmittedNames = Set.fromList (concatMap (.emits) [t | t <- (.transitions) agg, (.mode) t == TmLive])
+    replayEmittedNames = Set.fromList (concatMap (.emits) [t | t <- (.transitions) agg, (.mode) t == TmReplayOnly])
+    maxEventVersion = maximum (1 : map (.version) ((.events) agg))
     upcasterSources =
       Set.fromList
         [ source
-        | event <- aggEvents agg,
-          Just (source, _) <- [evUpcastFrom event]
+        | event <- (.events) agg,
+          Just (source, _) <- [(.upcastFrom) event]
         ]
 
     -- A non-initial event version must carry a contiguous upcaster (from v-1).
     versionUpcasterRule =
-      [ mkErr (locLine (evLoc e)) EvtVersionMissingUpcaster $
-          "event '" <> evName e <> "' version " <> tInt (evVersion e) <> " has no 'upcast from v" <> tInt (evVersion e - 1) <> "' clause"
-      | e <- aggEvents agg,
-        evVersion e > 1,
-        maybe True ((/= evVersion e - 1) . fst) (evUpcastFrom e)
+      [ mkErr (locLine ((.loc) e)) EvtVersionMissingUpcaster $
+          "event '" <> (.name) e <> "' version " <> tInt ((.version) e) <> " has no 'upcast from v" <> tInt ((.version) e - 1) <> "' clause"
+      | e <- (.events) agg,
+        (.version) e > 1,
+        maybe True ((/= (.version) e - 1) . fst) ((.upcastFrom) e)
       ]
 
     -- Aggregate schema stamps are global, so every source version below the
     -- current maximum needs a permanent rung regardless of which event owns it.
     upcasterChainGapRule =
-      [ mkErr (locLine (aggLoc agg)) UpcasterChainGap $
+      [ mkErr (locLine ((.loc) agg)) UpcasterChainGap $
           "no event declares 'upcast from v"
             <> tInt missing
             <> "'; stored payloads stamped v"
@@ -4538,68 +4538,68 @@ validateAggregate languageContract typeGraphResult spec agg =
 
     -- A deprecated event must have left the write path.
     deprecatedEmitRule =
-      [ mkErr (locLine (evLoc e)) DeprecatedEventStillEmitted $
-          "deprecated event '" <> evName e <> "' is still emitted by a transition"
-      | e <- aggEvents agg,
-        evDeprecated e,
-        evName e `Set.member` liveEmittedNames
+      [ mkErr (locLine ((.loc) e)) DeprecatedEventStillEmitted $
+          "deprecated event '" <> (.name) e <> "' is still emitted by a transition"
+      | e <- (.events) agg,
+        (.deprecated) e,
+        (.name) e `Set.member` liveEmittedNames
       ]
 
     -- Retirement is a two-stage protocol. The pre-cutover marker keeps a live
     -- emitter. The deprecated stage removes that live emitter but retains a
     -- replay-only emitter until old payloads no longer need hydration.
-    eventRetirementRules = concatMap eventRetirementRule (aggEvents agg)
+    eventRetirementRules = concatMap eventRetirementRule ((.events) agg)
     eventRetirementRule event
-      | evRetiring event =
-          [ mkErr (locLine (evLoc event)) EventRetirementInProgress $
-              "retiring event '" <> evName event <> "' has no live emitting transition; keep it emitting while streams are terminalized or truncated, or cut over to 'deprecated event' with a replay-only emitting transition"
-          | evName event `Set.notMember` liveEmittedNames
+      | (.retiring) event =
+          [ mkErr (locLine ((.loc) event)) EventRetirementInProgress $
+              "retiring event '" <> (.name) event <> "' has no live emitting transition; keep it emitting while streams are terminalized or truncated, or cut over to 'deprecated event' with a replay-only emitting transition"
+          | (.name) event `Set.notMember` liveEmittedNames
           ]
             ++ [ Diagnostic
-                   { line = locLine (evLoc event),
+                   { line = locLine ((.loc) event),
                      severity = Warning,
                      code = EventRetirementInProgress,
                      relatedLocations = [],
                      message =
-                       "event '" <> evName event <> "' is retiring: it stays fully live and replayable. Keep its live emitting transition until every affected stream is terminal or truncated; then flip it to 'deprecated event' and retain an equivalent replay-only emitting transition for as long as old payloads may be hydrated"
+                       "event '" <> (.name) event <> "' is retiring: it stays fully live and replayable. Keep its live emitting transition until every affected stream is terminal or truncated; then flip it to 'deprecated event' and retain an equivalent replay-only emitting transition for as long as old payloads may be hydrated"
                    }
-               | evName event `Set.member` liveEmittedNames
+               | (.name) event `Set.member` liveEmittedNames
                ]
-      | evDeprecated event =
+      | (.deprecated) event =
           [ Diagnostic
-              { line = locLine (evLoc event),
+              { line = locLine ((.loc) event),
                 severity = Warning,
                 code = DeprecatedEventReplayHazard,
                 relatedLocations = [],
                 message =
-                  "deprecated event '" <> evName event <> "' stays decodable but is not replayable: no replay-only transition emits it, so hydration of a live stream containing it fails with HydrationNoInvertingEdge. Restore an equivalent replay-only emitting transition, or terminalize/truncate every affected stream before deployment"
+                  "deprecated event '" <> (.name) event <> "' stays decodable but is not replayable: no replay-only transition emits it, so hydration of a live stream containing it fails with HydrationNoInvertingEdge. Restore an equivalent replay-only emitting transition, or terminalize/truncate every affected stream before deployment"
               }
-          | any (not . stTerminal) (aggStates agg),
-            evName event `Set.notMember` replayEmittedNames
+          | any (not . (.terminal)) ((.states) agg),
+            (.name) event `Set.notMember` replayEmittedNames
           ]
             ++ [ Diagnostic
-                   { line = locLine (evLoc event),
+                   { line = locLine ((.loc) event),
                      severity = Warning,
                      code = EventRetirementInProgress,
                      relatedLocations = [],
                      message =
-                       "deprecated event '" <> evName event <> "' is off the live write path and remains replayable through a replay-only transition; retain that transition until every stream containing the event is terminal, truncated, or passes the replay audit"
+                       "deprecated event '" <> (.name) event <> "' is off the live write path and remains replayable through a replay-only transition; retain that transition until every stream containing the event is terminal, truncated, or passes the replay audit"
                    }
-               | evName event `Set.member` replayEmittedNames
+               | (.name) event `Set.member` replayEmittedNames
                ]
       | otherwise = []
 
     -- The explicit `wire schemaVersion=` (if any) must equal the max event version.
-    wireVersionRule = case aggWire agg of
+    wireVersionRule = case (.wire) agg of
       Just w
-        | wireSchemaVersion w /= maxEventVersion ->
+        | (.schemaVersion) w /= maxEventVersion ->
             [ Diagnostic
-                { line = locLine (aggLoc agg),
+                { line = locLine ((.loc) agg),
                   severity = Warning,
                   code = WireSchemaVersionMismatch,
                   relatedLocations = [],
                   message =
-                    "wire schemaVersion=" <> tInt (wireSchemaVersion w) <> " does not match the maximum event version " <> tInt maxEventVersion
+                    "wire schemaVersion=" <> tInt ((.schemaVersion) w) <> " does not match the maximum event version " <> tInt maxEventVersion
                 }
             ]
       _ -> []
@@ -4609,79 +4609,79 @@ validateAggregate languageContract typeGraphResult spec agg =
     -- weight (error); one whose (source, command) pair has no live sibling
     -- means the command is fully retired at that state — legitimate, but the
     -- fuller procedure is event retirement (docs/plans/139), so warn.
-    replayOnlyRules = concatMap replayOnlyRule (aggTransitions agg)
+    replayOnlyRules = concatMap replayOnlyRule ((.transitions) agg)
     replayOnlyRule t
-      | tMode t /= TmReplayOnly = []
+      | (.mode) t /= TmReplayOnly = []
       | otherwise =
-          [ mkErr (locLine (tLoc t)) ReplayOnlyEmitsNothing $
-              "replay-only transition '" <> tSource t <> " -- " <> tCommand t <> "' emits no event; a replay-only transition exists to invert stored events and is dead weight without an emit"
-          | null (tEmits t)
+          [ mkErr (locLine ((.loc) t)) ReplayOnlyEmitsNothing $
+              "replay-only transition '" <> (.source) t <> " -- " <> (.command) t <> "' emits no event; a replay-only transition exists to invert stored events and is dead weight without an emit"
+          | null ((.emits) t)
           ]
             ++ [ Diagnostic
-                   { line = locLine (tLoc t),
+                   { line = locLine ((.loc) t),
                      severity = Warning,
                      code = ReplayOnlyCommandStillLive,
                      relatedLocations = [],
                      message =
-                       "replay-only transition '" <> tSource t <> " -- " <> tCommand t <> "' has no live sibling; command '" <> tCommand t <> "' is fully retired at state '" <> tSource t <> "' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)"
+                       "replay-only transition '" <> (.source) t <> " -- " <> (.command) t <> "' has no live sibling; command '" <> (.command) t <> "' is fully retired at state '" <> (.source) t <> "' — if the intent is to retire its events too, follow the event-retirement procedure (docs/plans/139)"
                    }
-               | not (any (\sibling -> tMode sibling == TmLive && tSource sibling == tSource t && tCommand sibling == tCommand t) (aggTransitions agg))
+               | not (any (\sibling -> (.mode) sibling == TmLive && (.source) sibling == (.source) t && (.command) sibling == (.command) t) ((.transitions) agg))
                ]
 
     eventlessStateChangeRules =
-      [ mkErr (locLine (tLoc transition)) AggregateEventlessStateChange $
+      [ mkErr (locLine ((.loc) transition)) AggregateEventlessStateChange $
           "transition '"
-            <> tSource transition
+            <> (.source) transition
             <> " -- "
-            <> tCommand transition
+            <> (.command) transition
             <> "' emits no event but changes "
             <> changeDescription transition
             <> "; event-sourced state changes require persisted evidence, while a no-op must keep both vertex and registers unchanged"
-      | transition <- aggTransitions agg,
-        null (tEmits transition),
-        tSource transition /= tGoto transition || not (null (tWrites transition))
+      | transition <- (.transitions) agg,
+        null ((.emits) transition),
+        (.source) transition /= (.goto) transition || not (null ((.writes) transition))
       ]
     changeDescription transition
-      | tSource transition /= tGoto transition && not (null (tWrites transition)) = "the target vertex and registers"
-      | tSource transition /= tGoto transition = "the target vertex"
+      | (.source) transition /= (.goto) transition && not (null ((.writes) transition)) = "the target vertex and registers"
+      | (.source) transition /= (.goto) transition = "the target vertex"
       | otherwise = "registers"
 
     domainOutcomeRules =
       declarationRules
-        ++ concatMap transitionOutcomeRules (aggTransitions agg)
+        ++ concatMap transitionOutcomeRules ((.transitions) agg)
       where
         declarationRules =
           [ mkErr (locLine loc) DomainOutcomeDeclarationDuplicate $
-              "aggregate '" <> aggName agg <> "' declares domain-outcomes more than once"
-          | loc <- aggDomainOutcomeDuplicateLocs agg
+              "aggregate '" <> (.name) agg <> "' declares domain-outcomes more than once"
+          | loc <- (.domainOutcomeDuplicateLocs) agg
           ]
-            ++ case aggDomainOutcomeTypes agg of
+            ++ case (.domainOutcomeTypes) agg of
               Nothing ->
                 [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeDeclarationMissing $
-                    "transition '" <> tSource transition <> " -- " <> tCommand transition <> "' declares an outcome but aggregate '" <> aggName agg <> "' has no domain-outcomes declaration"
-                | transition <- aggTransitions agg,
-                  Just outcome <- [tOutcome transition]
+                    "transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' declares an outcome but aggregate '" <> (.name) agg <> "' has no domain-outcomes declaration"
+                | transition <- (.transitions) agg,
+                  Just outcome <- [(.outcome) transition]
                 ]
               Just _ -> []
 
         transitionOutcomeRules transition =
           [ mkErr (locLine loc) DomainOutcomeClauseDuplicate $
-              "transition '" <> tSource transition <> " -- " <> tCommand transition <> "' declares outcome more than once"
-          | loc <- tOutcomeDuplicateLocs transition
+              "transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' declares outcome more than once"
+          | loc <- (.outcomeDuplicateLocs) transition
           ]
-            ++ case (aggDomainOutcomeTypes agg, tMode transition, tOutcome transition) of
+            ++ case ((.domainOutcomeTypes) agg, (.mode) transition, (.outcome) transition) of
               (Just _, TmLive, Nothing) ->
-                [ mkErr (locLine (tLoc transition)) DomainOutcomeClauseMissing $
-                    "live transition '" <> tSource transition <> " -- " <> tCommand transition <> "' is missing its required outcome clause"
+                [ mkErr (locLine ((.loc) transition)) DomainOutcomeClauseMissing $
+                    "live transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' is missing its required outcome clause"
                 ]
               (Just _, TmReplayOnly, Just outcome) ->
                 [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeReplayOnlyClause $
-                    "replay-only transition '" <> tSource transition <> " -- " <> tCommand transition <> "' cannot declare a forward command outcome"
+                    "replay-only transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' cannot declare a forward command outcome"
                 ]
               (Just _, TmLive, Just (OutcomeAccepted loc)) ->
                 [ mkErr (locLine loc) DomainOutcomeAcceptedWithoutEvents $
-                    "accepted transition '" <> tSource transition <> " -- " <> tCommand transition <> "' must emit at least one event"
-                | null (tEmits transition)
+                    "accepted transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' must emit at least one event"
+                | null ((.emits) transition)
                 ]
               (Just _, TmLive, Just outcome@OutcomeRejected {}) -> silentRules outcome
               (Just _, TmLive, Just outcome@OutcomeNoOp {}) -> silentRules outcome
@@ -4689,16 +4689,16 @@ validateAggregate languageContract typeGraphResult spec agg =
           where
             silentRules outcome =
               [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeSilentEmits $
-                  "silent transition '" <> tSource transition <> " -- " <> tCommand transition <> "' cannot emit events"
-              | not (null (tEmits transition))
+                  "silent transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' cannot emit events"
+              | not (null ((.emits) transition))
               ]
                 ++ [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeSilentWrites $
-                       "silent transition '" <> tSource transition <> " -- " <> tCommand transition <> "' cannot write aggregate registers"
-                   | not (null (tWrites transition))
+                       "silent transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' cannot write aggregate registers"
+                   | not (null ((.writes) transition))
                    ]
                 ++ [ mkErr (locLine (transitionOutcomeLoc outcome)) DomainOutcomeSilentStateChange $
-                       "silent transition '" <> tSource transition <> " -- " <> tCommand transition <> "' must preserve its source state"
-                   | tGoto transition /= tSource transition
+                       "silent transition '" <> (.source) transition <> " -- " <> (.command) transition <> "' must preserve its source state"
+                   | (.goto) transition /= (.source) transition
                    ]
 
 -- | The validator's re-derivation of the live
@@ -4810,33 +4810,33 @@ wireKeyRulesForRecord owner reservedKey fields = invalidKeys <> duplicateKeys <>
           ]
       | otherwise = []
       where
-        key = fieldWireKey field
+        key = (.wireKey) field
         refuse detail =
-          mkErr (locLine (fieldLoc field)) FieldWireKeyInvalid $
-            owner <> " field '" <> fieldDslName field <> "' " <> detail
+          mkErr (locLine ((.loc) field)) FieldWireKeyInvalid $
+            owner <> " field '" <> (.dslName) field <> "' " <> detail
     duplicateKeys =
       [ Diagnostic
-          { line = locLine (fieldLoc field),
+          { line = locLine ((.loc) field),
             severity = Error,
             code = FieldWireKeyCollision,
-            relatedLocations = [(locLine (fieldLoc earlier), "wire key '" <> fieldWireKey field <> "' is first declared here")],
-            message = owner <> " fields resolve to duplicate wire key '" <> fieldWireKey field <> "'"
+            relatedLocations = [(locLine ((.loc) earlier), "wire key '" <> (.wireKey) field <> "' is first declared here")],
+            message = owner <> " fields resolve to duplicate wire key '" <> (.wireKey) field <> "'"
           }
       | (index, field) <- zip [0 :: Int ..] fields,
-        earlier : _ <- [[candidate | candidate <- take index fields, fieldWireKey candidate == fieldWireKey field]]
+        earlier : _ <- [[candidate | candidate <- take index fields, (.wireKey) candidate == (.wireKey) field]]
       ]
     reservedCollisions =
-      [ mkErr (locLine (fieldLoc field)) FieldWireKeyCollision $
+      [ mkErr (locLine ((.loc) field)) FieldWireKeyCollision $
           owner
             <> " field '"
-            <> fieldDslName field
+            <> (.dslName) field
             <> "' resolves to wire key '"
             <> key
             <> "', which collides with the "
             <> description
       | Just (key, description) <- [reservedKey],
         field <- fields,
-        fieldWireKey field == key
+        (.wireKey) field == key
       ]
 
 locLine :: Loc -> Int

@@ -9,9 +9,9 @@ import Data.Text (Text)
 import Data.Text qualified as T
 
 data BehaviorSourceLocation = BehaviorSourceLocation
-  { sourceFile :: !FilePath
-  , sourceLine :: !Int
-  , sourceColumn :: !Int
+  { file :: !FilePath
+  , line :: !Int
+  , column :: !Int
   }
   deriving stock (Eq, Ord, Show)
 
@@ -24,7 +24,7 @@ behaviorSourceLocation key = case key of
 
 renderBehaviorSourceLocation :: Text -> Text
 renderBehaviorSourceLocation key = case behaviorSourceLocation key of
-  Just location -> T.pack (sourceFile location) <> ":" <> tshow (sourceLine location) <> ":" <> tshow (sourceColumn location)
+  Just location -> T.pack location.file <> ":" <> tshow location.line <> ":" <> tshow location.column
   Nothing -> "<internal invariant: missing behavior source for " <> key <> ">"
 
 tshow :: Show value => value -> Text

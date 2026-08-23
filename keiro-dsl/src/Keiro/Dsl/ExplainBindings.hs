@@ -42,28 +42,28 @@ data BindingObligationKind
   deriving stock (Eq, Ord, Show)
 
 data BindingObligation = BindingObligation
-  { obligationMappedName :: !Name,
-    obligationPackage :: !Text,
-    obligationModule :: !Text,
-    obligationSymbol :: !Text,
-    obligationKind :: !BindingObligationKind,
-    obligationSignature :: !Text,
-    obligationUseSites :: ![Text],
-    obligationBindingVersion :: !(Maybe Text),
-    obligationCanonicalType :: !(Maybe Text),
-    obligationEqualityContract :: !(Maybe Text),
-    obligationIdDomainContract :: !(Maybe Text),
-    obligationCategory :: !Text
+  { mappedName :: !Name,
+    package :: !Text,
+    moduleName :: !Text,
+    symbol :: !Text,
+    kind :: !BindingObligationKind,
+    signature :: !Text,
+    useSites :: ![Text],
+    bindingVersion :: !(Maybe Text),
+    canonicalType :: !(Maybe Text),
+    equalityContract :: !(Maybe Text),
+    idDomainContract :: !(Maybe Text),
+    category :: !Text
   }
   deriving stock (Eq, Ord, Show)
 
 data BindingHole = BindingHole
-  { holeMappedName :: !Name,
-    holeModule :: !Text,
-    holeSymbol :: !Text,
-    holeKind :: !BindingObligationKind,
-    holePath :: !(Maybe Text),
-    holeSignature :: !Text
+  { mappedName :: !Name,
+    moduleName :: !Text,
+    symbol :: !Text,
+    kind :: !BindingObligationKind,
+    path :: !(Maybe Text),
+    signature :: !Text
   }
   deriving stock (Eq, Ord, Show)
 
@@ -71,18 +71,18 @@ instance ToJSON BindingObligation where
   toJSON obligation =
     object
       [ "schema" .= (1 :: Int),
-        "mappedName" .= obligationMappedName obligation,
-        "package" .= obligationPackage obligation,
-        "module" .= obligationModule obligation,
-        "symbol" .= obligationSymbol obligation,
-        "kind" .= renderKind (obligationKind obligation),
-        "signature" .= obligationSignature obligation,
-        "useSites" .= obligationUseSites obligation,
-        "bindingVersion" .= obligationBindingVersion obligation,
-        "canonicalType" .= obligationCanonicalType obligation,
-        "equalityContract" .= obligationEqualityContract obligation,
-        "idDomainContract" .= obligationIdDomainContract obligation,
-        "category" .= obligationCategory obligation
+        "mappedName" .= (.mappedName) obligation,
+        "package" .= (.package) obligation,
+        "module" .= (.moduleName) obligation,
+        "symbol" .= (.symbol) obligation,
+        "kind" .= renderKind ((.kind) obligation),
+        "signature" .= (.signature) obligation,
+        "useSites" .= (.useSites) obligation,
+        "bindingVersion" .= (.bindingVersion) obligation,
+        "canonicalType" .= (.canonicalType) obligation,
+        "equalityContract" .= (.equalityContract) obligation,
+        "idDomainContract" .= (.idDomainContract) obligation,
+        "category" .= (.category) obligation
       ]
 
 instance FromJSON BindingObligation where
@@ -111,12 +111,12 @@ instance ToJSON BindingHole where
   toJSON hole =
     object
       [ "schema" .= (1 :: Int),
-        "mappedName" .= holeMappedName hole,
-        "module" .= holeModule hole,
-        "symbol" .= holeSymbol hole,
-        "kind" .= renderKind (holeKind hole),
-        "path" .= holePath hole,
-        "signature" .= holeSignature hole
+        "mappedName" .= (.mappedName) hole,
+        "module" .= (.moduleName) hole,
+        "symbol" .= (.symbol) hole,
+        "kind" .= renderKind ((.kind) hole),
+        "path" .= (.path) hole,
+        "signature" .= (.signature) hole
       ]
 
 instance FromJSON BindingHole where
@@ -145,9 +145,9 @@ bindingObligationsForService service = do
   pure . sortOn obligationSortKey $
     concat
       [ obligationsFor graph declaration
-      | ResolvedStructural declaration _ <- Map.elems (tgDeclarations graph)
+      | ResolvedStructural declaration _ <- Map.elems ((.declarations) graph)
       ]
-      <> concatMap (nominalObligationsFor service) (Map.elems (nominalTypes nominalRegistry))
+      <> concatMap (nominalObligationsFor service) (Map.elems ((.nominalTypes) nominalRegistry))
   where
     spec = checkedSpec service
 
@@ -161,61 +161,61 @@ bindingHolesForService service = do
   pure . sortOn holeSortKey $
     concat
       [ holesFor graph declaration shape obligations
-      | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
+      | ResolvedStructural declaration shape <- Map.elems ((.declarations) graph)
       ]
       <> [ BindingHole
-             { holeMappedName = obligationMappedName obligation,
-               holeModule = obligationModule obligation,
-               holeSymbol = obligationSymbol obligation,
-               holeKind = obligationKind obligation,
-               holePath = Nothing,
-               holeSignature = obligationSignature obligation
+             { mappedName = (.mappedName) obligation,
+               moduleName = (.moduleName) obligation,
+               symbol = (.symbol) obligation,
+               kind = (.kind) obligation,
+               path = Nothing,
+               signature = (.signature) obligation
              }
          | obligation <- obligations,
-           obligationCategory obligation /= "structural"
+           (.category) obligation /= "structural"
          ]
 
 holesFor :: TypeGraph -> StructuralDecl -> ResolvedMappedShape -> [BindingObligation] -> [BindingHole]
 holesFor _graph declaration shape obligations = bindingEntries <> auxiliaryEntries
   where
-    own = filter ((== sdName declaration) . obligationMappedName) obligations
+    own = filter ((== (.name) declaration) . (.mappedName)) obligations
     binding = onlyKind BindingValue
     bindingEntries = case binding of
       Nothing -> []
       Just obligation -> map (bindingHole obligation) (shapeHolePaths shape)
     auxiliaryEntries =
       [ BindingHole
-          { holeMappedName = obligationMappedName obligation,
-            holeModule = obligationModule obligation,
-            holeSymbol = obligationSymbol obligation,
-            holeKind = obligationKind obligation,
-            holePath = Nothing,
-            holeSignature = obligationSignature obligation
+          { mappedName = (.mappedName) obligation,
+            moduleName = (.moduleName) obligation,
+            symbol = (.symbol) obligation,
+            kind = (.kind) obligation,
+            path = Nothing,
+            signature = (.signature) obligation
           }
       | obligation <- own,
-        obligationKind obligation /= BindingValue
+        (.kind) obligation /= BindingValue
       ]
-    onlyKind wanted = case filter ((== wanted) . obligationKind) own of
+    onlyKind wanted = case filter ((== wanted) . (.kind)) own of
       entry : _ -> Just entry
       [] -> Nothing
     bindingHole obligation (path, expectedType) =
       BindingHole
-        { holeMappedName = obligationMappedName obligation,
-          holeModule = obligationModule obligation,
-          holeSymbol = obligationSymbol obligation,
-          holeKind = BindingValue,
-          holePath = Just path,
-          holeSignature = obligationSymbol obligation <> "." <> path <> " :: " <> expectedType
+        { mappedName = (.mappedName) obligation,
+          moduleName = (.moduleName) obligation,
+          symbol = (.symbol) obligation,
+          kind = BindingValue,
+          path = Just path,
+          signature = (.symbol) obligation <> "." <> path <> " :: " <> expectedType
         }
 
 shapeHolePaths :: ResolvedMappedShape -> [(Text, Text)]
 shapeHolePaths =
   foldMappedShape
     MappedShapeAlgebra
-      { onRecord = \_ _ fields -> [(rwfHaskell field, renderExprType (rwfType field)) | field <- fields],
-        onEnum = \entries -> [(weCtor entry, "constructor case") | entry <- entries],
+      { onRecord = \_ _ fields -> [((.haskell) field, renderExprType ((.valueType) field)) | field <- fields],
+        onEnum = \entries -> [((.ctor) entry, "constructor case") | entry <- entries],
         onUnion = \_ arms ->
-          [ (rwaCtor arm, maybe "constructor case" renderExprType (rwaPayload arm))
+          [ ((.ctor) arm, maybe "constructor case" renderExprType ((.payload) arm))
           | arm <- arms
           ]
       }
@@ -240,73 +240,73 @@ renderExprType =
 obligationsFor :: TypeGraph -> StructuralDecl -> [BindingObligation]
 obligationsFor graph declaration = bindingEntry : fixtureEntry : initialEntries
   where
-    source = sdHaskell declaration
-    consumerType = hsModule source <> "." <> hsType source
-    shapeType = sdName declaration <> "Shape"
-    paths = map renderUsePath (usePaths graph (sdName declaration))
+    source = (.haskell) declaration
+    consumerType = (.moduleName) source <> "." <> (.valueType) source
+    shapeType = (.name) declaration <> "Shape"
+    paths = map renderUsePath (usePaths graph ((.name) declaration))
     registerPaths =
       [ renderUsePath path
-      | path@UsePath {upRoot = RootRegister {}} <- usePaths graph (sdName declaration)
+      | path@UsePath {root = RootRegister {}} <- usePaths graph ((.name) declaration)
       ]
     bindingEntry =
       obligationFor
         declaration
-        (sdBinding declaration)
+        ((.binding) declaration)
         BindingValue
         ("StructuralBinding " <> consumerType <> " " <> shapeType)
         paths
-        (Just (unBindingVersion (sdBindingVersion declaration)))
-        (Just (unCanonicalTypeId (sdCanonical declaration)))
+        (Just (unBindingVersion ((.bindingVersion) declaration)))
+        (Just (unCanonicalTypeId ((.canonical) declaration)))
     fixtureEntry =
       obligationFor
         declaration
-        (sdFixtures declaration)
+        ((.fixtures) declaration)
         FixtureValue
         ("FixtureCases " <> consumerType)
         paths
         Nothing
-        (Just (unCanonicalTypeId (sdCanonical declaration)))
-    initialEntries = case (registerPaths, sdInitial declaration) of
+        (Just (unCanonicalTypeId ((.canonical) declaration)))
+    initialEntries = case (registerPaths, (.initial) declaration) of
       ([], _) -> []
       (_, Nothing) -> []
       (_, Just initialValue) ->
-        [ obligationFor declaration initialValue InitialValue consumerType registerPaths Nothing (Just (unCanonicalTypeId (sdCanonical declaration)))
+        [ obligationFor declaration initialValue InitialValue consumerType registerPaths Nothing (Just (unCanonicalTypeId ((.canonical) declaration)))
         ]
 
 obligationFor :: StructuralDecl -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> BindingObligation
 obligationFor declaration qualified kindValue signature paths version canonical =
   BindingObligation
-    { obligationMappedName = sdName declaration,
-      obligationPackage = hsPackage (sdHaskell declaration),
-      obligationModule = ownerModule,
-      obligationSymbol = symbol,
-      obligationKind = kindValue,
-      obligationSignature = symbol <> " :: " <> signature,
-      obligationUseSites = paths,
-      obligationBindingVersion = version,
-      obligationCanonicalType = canonical,
-      obligationEqualityContract = Nothing,
-      obligationIdDomainContract = Nothing,
-      obligationCategory = "structural"
+    { mappedName = (.name) declaration,
+      package = (.package) ((.haskell) declaration),
+      moduleName = ownerModule,
+      symbol = symbol,
+      kind = kindValue,
+      signature = symbol <> " :: " <> signature,
+      useSites = paths,
+      bindingVersion = version,
+      canonicalType = canonical,
+      equalityContract = Nothing,
+      idDomainContract = Nothing,
+      category = "structural"
     }
   where
     (ownerModule, symbol) = splitQualified (unQualifiedValueName qualified)
 
 nominalObligationsFor :: CheckedService -> ResolvedNominalType -> [BindingObligation]
-nominalObligationsFor service nominal = case resolvedNominalOwnership nominal of
+nominalObligationsFor service nominal = case (.ownership) nominal of
   GeneratedNominal -> []
   ConsumerNominal binding -> bindingEntry : fixtureEntry : initialEntries
     where
-      name = resolvedNominalName nominal
-      source = consumerNominalHaskell binding
-      consumerType = hsModule source <> "." <> hsType source
-      paths = nominalUseSites spec name
+      name = (.name) nominal
+      source = (.haskell) binding
+      consumerType = (.moduleName) source <> "." <> (.valueType) source
+      paths = useSites spec name
       registerPaths = [path | path <- paths, " register " `T.isInfixOf` path]
-      category = case resolvedNominalRepresentation nominal of
+      category = case (.representation) nominal of
         IdRepresentation {} -> "nominal-id"
         EnumRepresentation {} -> "nominal-enum"
         ScalarRepresentation {} -> "nominal-scalar"
-      representation = case resolvedNominalRepresentation nominal of
+      representation = case (.representation) nominal of
         IdRepresentation prefix -> "(KindID " <> quoted prefix <> ")"
         EnumRepresentation {} -> nominalEnumRepresentationModule spec name <> "." <> name <> "Representation"
         ScalarRepresentation NominalText -> "Text"
@@ -314,14 +314,14 @@ nominalObligationsFor service nominal = case resolvedNominalOwnership nominal of
         ScalarRepresentation NominalNatural -> "Natural"
         ScalarRepresentation NominalBool -> "Bool"
         ScalarRepresentation NominalTime -> "UTCTime"
-      canonical = Just (unCanonicalTypeId (consumerNominalCanonical binding))
+      canonical = Just (unCanonicalTypeId ((.canonical) binding))
       equalityContract = nominalEqualityIdentityForService (checkedLanguageContract service) nominal
-      idContract = case resolvedNominalRepresentation nominal of
+      idContract = case (.representation) nominal of
         IdRepresentation prefix -> idDomainVersion <$> idDomainContractFor (checkedLanguageContract service) prefix
         _ -> Nothing
-      bindingEntry = nominalObligation name binding category (consumerNominalBinding binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion (consumerNominalBindingVersion binding))) canonical equalityContract idContract
-      fixtureEntry = nominalObligation name binding category (consumerNominalFixtures binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical Nothing Nothing
-      initialEntries = case (registerPaths, consumerNominalInitial binding) of
+      bindingEntry = nominalObligation name binding category ((.binding) binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion ((.bindingVersion) binding))) canonical equalityContract idContract
+      fixtureEntry = nominalObligation name binding category ((.fixtures) binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical Nothing Nothing
+      initialEntries = case (registerPaths, (.initial) binding) of
         ([], _) -> []
         (_, Nothing) -> []
         (_, Just initialValue) -> [nominalObligation name binding category initialValue InitialValue consumerType registerPaths Nothing canonical Nothing Nothing]
@@ -332,61 +332,61 @@ nominalObligationsFor service nominal = case resolvedNominalOwnership nominal of
 nominalObligation :: Name -> ConsumerNominalBinding -> Text -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> Maybe Text -> Maybe Text -> BindingObligation
 nominalObligation name binding category qualified kindValue signature paths version canonical equalityContract idDomainContract =
   BindingObligation
-    { obligationMappedName = name,
-      obligationPackage = hsPackage (consumerNominalHaskell binding),
-      obligationModule = ownerModule,
-      obligationSymbol = symbol,
-      obligationKind = kindValue,
-      obligationSignature = symbol <> " :: " <> signature,
-      obligationUseSites = paths,
-      obligationBindingVersion = version,
-      obligationCanonicalType = canonical,
-      obligationEqualityContract = equalityContract,
-      obligationIdDomainContract = idDomainContract,
-      obligationCategory = category
+    { mappedName = name,
+      package = (.package) ((.haskell) binding),
+      moduleName = ownerModule,
+      symbol = symbol,
+      kind = kindValue,
+      signature = symbol <> " :: " <> signature,
+      useSites = paths,
+      bindingVersion = version,
+      canonicalType = canonical,
+      equalityContract = equalityContract,
+      idDomainContract = idDomainContract,
+      category = category
     }
   where
     (ownerModule, symbol) = splitQualified (unQualifiedValueName qualified)
 
-nominalUseSites :: Spec -> Name -> [Text]
-nominalUseSites spec target = concatMap aggregatePaths [aggregate | NAggregate aggregate <- specNodes spec]
+useSites :: Spec -> Name -> [Text]
+useSites spec target = concatMap aggregatePaths [aggregate | NAggregate aggregate <- (.nodes) spec]
   where
     aggregatePaths aggregate =
-      [ aggName aggregate <> " command " <> cmdName command <> " ." <> aggregateFieldName field <> " : " <> target
-      | command <- aggCommands aggregate,
-        field <- cmdFields command,
+      [ (.name) aggregate <> " command " <> (.name) command <> " ." <> (.name) field <> " : " <> target
+      | command <- (.commands) aggregate,
+        field <- (.fields) command,
         fieldUses field
       ]
-        <> [ aggName aggregate <> " event " <> evName event <> " ." <> aggregateFieldName field <> " : " <> target
-           | event <- aggEvents aggregate,
+        <> [ (.name) aggregate <> " event " <> (.name) event <> " ." <> (.name) field <> " : " <> target
+           | event <- (.events) aggregate,
              field <- eventFields aggregate event,
              fieldUses field
            ]
-        <> [ aggName aggregate <> " register " <> regName register <> " : " <> target
-           | register <- aggRegs aggregate,
-             regType register == TRef target
+        <> [ (.name) aggregate <> " register " <> (.name) register <> " : " <> target
+           | register <- (.regs) aggregate,
+             (.valueType) register == TRef target
            ]
-    eventFields aggregate event = case evBody event of
+    eventFields aggregate event = case (.body) event of
       EventFields fields -> fields
-      EventFromCommand commandName -> concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
-    fieldUses field = aggregateFieldType field == Just (TRef target)
+      EventFromCommand commandName -> concat [(.fields) command | command <- (.commands) aggregate, (.name) command == commandName]
+    fieldUses field = (.valueType) field == Just (TRef target)
 
 nominalEnumRepresentationModule :: Spec -> Name -> Text
-nominalEnumRepresentationModule spec name = case maybe GeneratedPrefix id (specLayout spec) of
-  GeneratedPrefix -> root <> "Generated." <> contextName <> ".Nominal.Shape." <> name
-  CollocatedLeaf -> root <> contextName <> ".Nominal.Shape." <> name <> ".Generated"
+nominalEnumRepresentationModule spec nominalName = case maybe GeneratedPrefix id ((.layout) spec) of
+  GeneratedPrefix -> root <> "Generated." <> contextModuleName <> ".Nominal.Shape." <> nominalName
+  CollocatedLeaf -> root <> contextModuleName <> ".Nominal.Shape." <> nominalName <> ".Generated"
   where
-    root = maybe "" (<> ".") (specModuleRoot spec)
-    contextName =
+    root = maybe "" (<> ".") ((.moduleRoot) spec)
+    contextModuleName =
       case HaskellName.deriveHaskellName HaskellName.LogicalWireWord site of
-        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
-        Left _ -> specContext spec
+        Right derived -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
+        Left _ -> (.context) spec
     site =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.ContextModuleSite,
-          HaskellName.siteLogicalName = specContext spec,
-          HaskellName.siteOwner = "binding-obligation-context",
-          HaskellName.siteLine = 0
+        { HaskellName.kind = HaskellName.ContextModuleSite,
+          HaskellName.logicalName = (.context) spec,
+          HaskellName.owner = "binding-obligation-context",
+          HaskellName.line = 0
         }
 
 renderBindingObligations :: Text -> [BindingObligation] -> Text
@@ -401,35 +401,35 @@ renderBindingObligations context obligations = case obligations of
     sameOwner left right = ownerKey left == ownerKey right
     renderGroup [] = []
     renderGroup entries@(firstEntry : _) =
-      ("  " <> obligationModule firstEntry <> " (package " <> obligationPackage firstEntry <> ")")
+      ("  " <> (.moduleName) firstEntry <> " (package " <> (.package) firstEntry <> ")")
         : concatMap renderEntry entries
     renderEntry obligation =
-      [ "    " <> obligationSignature obligation,
-        "      reason: " <> renderKind (obligationKind obligation) <> " — " <> obligationCategory obligation <> " type " <> obligationMappedName obligation <> renderPaths (obligationUseSites obligation)
+      [ "    " <> (.signature) obligation,
+        "      reason: " <> renderKind ((.kind) obligation) <> " — " <> (.category) obligation <> " type " <> (.mappedName) obligation <> renderPaths ((.useSites) obligation)
       ]
-        <> maybe [] (\version -> ["      provenance: binding-version " <> quoted version]) (obligationBindingVersion obligation)
-        <> maybe [] (\canonical -> ["      canonical-type: " <> quoted canonical]) (obligationCanonicalType obligation)
-        <> maybe [] (\contract -> ["      equality-contract: " <> quoted contract]) (obligationEqualityContract obligation)
-        <> maybe [] (\contract -> ["      id-domain-contract: " <> quoted contract]) (obligationIdDomainContract obligation)
+        <> maybe [] (\version -> ["      provenance: binding-version " <> quoted version]) ((.bindingVersion) obligation)
+        <> maybe [] (\canonical -> ["      canonical-type: " <> quoted canonical]) ((.canonicalType) obligation)
+        <> maybe [] (\contract -> ["      equality-contract: " <> quoted contract]) ((.equalityContract) obligation)
+        <> maybe [] (\contract -> ["      id-domain-contract: " <> quoted contract]) ((.idDomainContract) obligation)
     renderPaths [] = " (not currently used by an aggregate root)"
     renderPaths paths = " (" <> T.intercalate "; " paths <> ")"
     quoted value = T.pack (show value)
 
 obligationSortKey :: BindingObligation -> (Text, Text, Text, BindingObligationKind, Text)
 obligationSortKey obligation =
-  ( obligationPackage obligation,
-    obligationModule obligation,
-    obligationMappedName obligation,
-    obligationKind obligation,
-    obligationSymbol obligation
+  ( (.package) obligation,
+    (.moduleName) obligation,
+    (.mappedName) obligation,
+    (.kind) obligation,
+    (.symbol) obligation
   )
 
 ownerKey :: BindingObligation -> (Text, Text)
-ownerKey obligation = (obligationPackage obligation, obligationModule obligation)
+ownerKey obligation = ((.package) obligation, (.moduleName) obligation)
 
 holeSortKey :: BindingHole -> (Text, Name, BindingObligationKind, Maybe Text, Text)
 holeSortKey hole =
-  (holeModule hole, holeMappedName hole, holeKind hole, holePath hole, holeSymbol hole)
+  ((.moduleName) hole, (.mappedName) hole, (.kind) hole, (.path) hole, (.symbol) hole)
 
 renderKind :: BindingObligationKind -> Text
 renderKind BindingValue = "binding"

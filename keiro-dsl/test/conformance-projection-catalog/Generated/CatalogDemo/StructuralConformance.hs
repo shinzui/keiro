@@ -13,9 +13,9 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.CatalogDemo.StructuralProjections qualified as StructuralProjections
+import Generated.CatalogDemo.Structural.Shape.QualificationPayload (QualificationPayloadShape(note, qualificationId))
 import CatalogDemo.MappedBindings qualified as MappedBindings
 import CatalogDemo.MappedDomain (QualificationPayload)
-import Generated.CatalogDemo.Structural.Shape.QualificationPayload qualified as ShapeQualificationPayload
 
 structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
@@ -115,11 +115,11 @@ unusedQualificationOpaqueAssertions =
     cases = fixtureCases MappedBindings.unusedQualificationCases
 
 coverageQualificationPayload :: Bool
-coverageQualificationPayload = any (isNothing . ShapeQualificationPayload.note) shapes && any (isJust . ShapeQualificationPayload.note) shapes
+coverageQualificationPayload = any (isNothing . (.note)) shapes && any (isJust . (.note)) shapes
   where
     shapes = map (bindingToShape MappedBindings.qualificationPayloadBinding . snd) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases))
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: catalog-demo.QualificationPayload.v1/qualification_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.qualificationPayloadQualificationIdWitness (\referenceOwner -> ShapeQualificationPayload.qualificationId (bindingToShape MappedBindings.qualificationPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases)))
+  [ ("projection witness agreement: catalog-demo.QualificationPayload.v1/qualification_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.qualificationPayloadQualificationIdWitness (\referenceOwner -> (bindingToShape MappedBindings.qualificationPayloadBinding referenceOwner).qualificationId) owner) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases)))
   ]

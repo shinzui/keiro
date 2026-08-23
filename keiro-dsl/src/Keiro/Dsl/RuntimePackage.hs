@@ -2,6 +2,7 @@
 -- generated Keiro modules.
 module Keiro.Dsl.RuntimePackage
   ( RuntimePackageName (..),
+    unRuntimePackageName,
     mkRuntimePackageName,
     isCabalPackageName,
   )
@@ -17,6 +18,9 @@ newtype RuntimePackageName = RuntimePackageName
   { unRuntimePackageName :: Text
   }
   deriving stock (Eq, Ord, Show)
+
+unRuntimePackageName :: RuntimePackageName -> Text
+unRuntimePackageName (RuntimePackageName value) = value
 
 -- | Validate and construct an explicit runtime package name.
 mkRuntimePackageName :: Text -> Either Text RuntimePackageName

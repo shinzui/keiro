@@ -9,6 +9,7 @@ module Keiro.Dsl.CodecCompare
   ( FixtureOrigin (..),
     DecodeOutcome (..),
     JsonPointer (..),
+    unJsonPointer,
     ComparisonDifference (..),
     HistoricalCodec (..),
     CompareObservation (..),
@@ -69,6 +70,9 @@ data DecodeOutcome
 newtype JsonPointer = JsonPointer {unJsonPointer :: Text}
   deriving stock (Eq, Ord, Show)
 
+unJsonPointer :: JsonPointer -> Text
+unJsonPointer (JsonPointer value) = value
+
 data ComparisonDifference
   = EncodedValueDifference !JsonPointer !Value !Value
   | DecodedValueDifference !JsonPointer !Value !Value
@@ -78,23 +82,23 @@ data ComparisonDifference
 -- | A historical codec is an explicit value supplied by consumer-owned test
 -- code. Its identity and version are report provenance, not dispatch keys.
 data HistoricalCodec a = HistoricalCodec
-  { hcIdentity :: !Text,
-    hcVersion :: !Text,
-    hcEncode :: !(a -> Value),
-    hcDecode :: !(Value -> Either Text a)
+  { identity :: !Text,
+    version :: !Text,
+    encode :: !(a -> Value),
+    decode :: !(Value -> Either Text a)
   }
 
 data CompareObservation
   = EncodeObservation
-      { coCaseName :: !Text,
-        coHistoricalValue :: !Value,
-        coGeneratedValue :: !Value
+      { caseName :: !Text,
+        historicalValue :: !Value,
+        generatedValue :: !Value
       }
   | DecodeObservation
-      { coFixturePath :: !FilePath,
-        coInputValue :: !Value,
-        coHistoricalDecode :: !DecodeOutcome,
-        coGeneratedDecode :: !DecodeOutcome
+      { fixturePath :: !FilePath,
+        inputValue :: !Value,
+        historicalDecode :: !DecodeOutcome,
+        generatedDecode :: !DecodeOutcome
       }
   deriving stock (Eq, Show)
 
@@ -117,23 +121,23 @@ data BranchKind
   deriving stock (Eq, Ord, Show)
 
 data DeclaredBranch = DeclaredBranch
-  { dbOrigin :: !FixtureOrigin,
-    dbPointer :: !JsonPointer,
-    dbKind :: !BranchKind
+  { origin :: !FixtureOrigin,
+    pointer :: !JsonPointer,
+    kind :: !BranchKind
   }
   deriving stock (Eq, Ord, Show)
 
 data ObservedBranch = ObservedBranch
-  { obOrigin :: !FixtureOrigin,
-    obPointer :: !JsonPointer,
-    obKind :: !BranchKind
+  { origin :: !FixtureOrigin,
+    pointer :: !JsonPointer,
+    kind :: !BranchKind
   }
   deriving stock (Eq, Ord, Show)
 
 data CoverageGap = CoverageGap
-  { cgOrigin :: !FixtureOrigin,
-    cgPointer :: !JsonPointer,
-    cgKind :: !BranchKind
+  { origin :: !FixtureOrigin,
+    pointer :: !JsonPointer,
+    kind :: !BranchKind
   }
   deriving stock (Eq, Ord, Show)
 
@@ -150,47 +154,47 @@ data BranchSchema
   deriving stock (Eq, Show)
 
 data BranchField = BranchField
-  { bfWireKey :: !Text,
-    bfPresenceOptional :: !Bool,
-    bfSchema :: !BranchSchema
+  { wireKey :: !Text,
+    presenceOptional :: !Bool,
+    schema :: !BranchSchema
   }
   deriving stock (Eq, Show)
 
 data BranchArm = BranchArm
-  { baWireTag :: !Text,
-    baPayloadSchema :: !(Maybe BranchSchema)
+  { wireTag :: !Text,
+    payloadSchema :: !(Maybe BranchSchema)
   }
   deriving stock (Eq, Show)
 
 data CompareProvenance = CompareProvenance
-  { cpHistoricalCodecIdentity :: !Text,
-    cpHistoricalCodecVersion :: !Text,
-    cpCanonicalType :: !CanonicalTypeId,
-    cpBindingSymbol :: !QualifiedValueName,
-    cpBindingVersion :: !BindingVersion,
-    cpWireFingerprint :: !Text
+  { historicalCodecIdentity :: !Text,
+    historicalCodecVersion :: !Text,
+    canonicalType :: !CanonicalTypeId,
+    bindingSymbol :: !QualifiedValueName,
+    bindingVersion :: !BindingVersion,
+    wireFingerprint :: !Text
   }
   deriving stock (Eq, Show)
 
 data ClassifiedObservation = ClassifiedObservation
-  { classifiedOrigin :: !FixtureOrigin,
-    classifiedName :: !Text,
-    classifiedVerdict :: !FixtureVerdict
+  { origin :: !FixtureOrigin,
+    name :: !Text,
+    verdict :: !FixtureVerdict
   }
   deriving stock (Eq, Show)
 
 data CompareReport = CompareReport
-  { crProvenance :: !CompareProvenance,
-    crObservations :: ![ClassifiedObservation],
-    crInputIssues :: ![CompareInputIssue],
-    crCoverageGaps :: ![CoverageGap],
-    crAuthority :: !Text
+  { provenance :: !CompareProvenance,
+    observations :: ![ClassifiedObservation],
+    inputIssues :: ![CompareInputIssue],
+    coverageGaps :: ![CoverageGap],
+    authority :: !Text
   }
   deriving stock (Eq, Show)
 
 data ReportWriteError = ReportWriteError
-  { reportWritePath :: !FilePath,
-    reportWriteMessage :: !Text
+  { path :: !FilePath,
+    message :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -227,11 +231,11 @@ compareReport ::
   CompareReport
 compareReport provenance suppliedIssues observations declaredBranches observedBranches =
   CompareReport
-    { crProvenance = provenance,
-      crObservations = classified,
-      crInputIssues = provenanceIssues provenance <> suppliedIssues <> classificationIssues,
-      crCoverageGaps = coverageGaps declaredBranches observedBranches,
-      crAuthority = authorityStatement
+    { provenance = provenance,
+      observations = classified,
+      inputIssues = provenanceIssues provenance <> suppliedIssues <> classificationIssues,
+      coverageGaps = coverageGaps declaredBranches observedBranches,
+      authority = authorityStatement
     }
   where
     outcomes = map classify observations
@@ -243,9 +247,9 @@ compareReport provenance suppliedIssues observations declaredBranches observedBr
       Right verdict ->
         Right
           ClassifiedObservation
-            { classifiedOrigin = observationOrigin observation,
-              classifiedName = observationName observation,
-              classifiedVerdict = verdict
+            { origin = observationOrigin observation,
+              name = observationName observation,
+              verdict = verdict
             }
 
 observationOrigin :: CompareObservation -> FixtureOrigin
@@ -253,28 +257,28 @@ observationOrigin EncodeObservation {} = FromBinding
 observationOrigin DecodeObservation {} = HistoricalGolden
 
 observationName :: CompareObservation -> Text
-observationName EncodeObservation {coCaseName = name} = name
-observationName DecodeObservation {coFixturePath = path} = T.pack path
+observationName EncodeObservation {caseName = name} = name
+observationName DecodeObservation {fixturePath = path} = T.pack path
 
 provenanceIssues :: CompareProvenance -> [CompareInputIssue]
 provenanceIssues provenance =
   [ HistoricalCodecProvenanceInvalid "historical codec identity must not be blank"
-  | T.null (T.strip (cpHistoricalCodecIdentity provenance))
+  | T.null (T.strip ((.historicalCodecIdentity) provenance))
   ]
     <> [ HistoricalCodecProvenanceInvalid "historical codec version must not be blank"
-       | T.null (T.strip (cpHistoricalCodecVersion provenance))
+       | T.null (T.strip ((.historicalCodecVersion) provenance))
        ]
 
 coverageGaps :: [DeclaredBranch] -> [ObservedBranch] -> [CoverageGap]
 coverageGaps declared observed =
-  [ CoverageGap (dbOrigin branch) (dbPointer branch) (dbKind branch)
+  [ CoverageGap ((.origin) branch) ((.pointer) branch) ((.kind) branch)
   | branch <- declared,
     branchKey branch `Set.notMember` observedKeys
   ]
   where
     observedKeys = Set.fromList (map observedBranchKey observed)
-    branchKey branch = (dbOrigin branch, dbPointer branch, dbKind branch)
-    observedBranchKey branch = (obOrigin branch, obPointer branch, obKind branch)
+    branchKey branch = ((.origin) branch, (.pointer) branch, (.kind) branch)
+    observedBranchKey branch = ((.origin) branch, (.pointer) branch, (.kind) branch)
 
 declaredBranchesFor :: FixtureOrigin -> BranchSchema -> [DeclaredBranch]
 declaredBranchesFor origin = Set.toAscList . go ""
@@ -290,18 +294,18 @@ declaredBranchesFor origin = Set.toAscList . go ""
       BranchMap nested -> go (appendPointer pointer "*") nested
       BranchRecord fields ->
         Set.unions
-          [ presenceBranches pointer field <> go (appendPointer pointer (bfWireKey field)) (bfSchema field)
+          [ presenceBranches pointer field <> go (appendPointer pointer ((.wireKey) field)) ((.schema) field)
           | field <- fields
           ]
       BranchUnion _tagField contentsField arms ->
         Set.unions
-          [ declared pointer (UnionArm (baWireTag arm))
-              <> maybe Set.empty (go (appendPointer pointer contentsField)) (baPayloadSchema arm)
+          [ declared pointer (UnionArm ((.wireTag) arm))
+              <> maybe Set.empty (go (appendPointer pointer contentsField)) ((.payloadSchema) arm)
           | arm <- arms
           ]
     presenceBranches pointer field
-      | bfPresenceOptional field =
-          let fieldPointer = appendPointer pointer (bfWireKey field)
+      | (.presenceOptional) field =
+          let fieldPointer = appendPointer pointer ((.wireKey) field)
            in case origin of
                 HistoricalGolden -> declared fieldPointer OptionalMissing <> declared fieldPointer OptionalPresent
                 FromBinding -> declared fieldPointer OptionalPresent
@@ -327,43 +331,43 @@ observedBranchesFor origin schema = Set.toAscList . go "" schema
         _ -> Set.empty
       BranchUnion tagField contentsField arms -> case value of
         Object values -> case KeyMap.lookup (Key.fromText tagField) values of
-          Just (String tag) -> case filter ((== tag) . baWireTag) arms of
+          Just (String tag) -> case filter ((== tag) . (.wireTag)) arms of
             arm : _ ->
               observed pointer (UnionArm tag)
-                <> case (baPayloadSchema arm, KeyMap.lookup (Key.fromText contentsField) values) of
+                <> case ((.payloadSchema) arm, KeyMap.lookup (Key.fromText contentsField) values) of
                   (Just nested, Just payload) -> go (appendPointer pointer contentsField) nested payload
                   _ -> Set.empty
             [] -> Set.empty
           _ -> Set.empty
         _ -> Set.empty
     observeField pointer values field =
-      let fieldPointer = appendPointer pointer (bfWireKey field)
-       in case KeyMap.lookup (Key.fromText (bfWireKey field)) values of
+      let fieldPointer = appendPointer pointer ((.wireKey) field)
+       in case KeyMap.lookup (Key.fromText ((.wireKey) field)) values of
             Nothing
-              | bfPresenceOptional field -> observed fieldPointer OptionalMissing
+              | (.presenceOptional) field -> observed fieldPointer OptionalMissing
               | otherwise -> Set.empty
             Just fieldValue ->
-              (if bfPresenceOptional field then observed fieldPointer OptionalPresent else Set.empty)
-                <> go fieldPointer (bfSchema field) fieldValue
+              (if (.presenceOptional) field then observed fieldPointer OptionalPresent else Set.empty)
+                <> go fieldPointer ((.schema) field) fieldValue
 
 reportSucceeded :: CompareReport -> Bool
 reportSucceeded report =
-  null (crInputIssues report)
-    && null (crCoverageGaps report)
-    && all ((== JsonParity) . classifiedVerdict) (crObservations report)
+  null ((.inputIssues) report)
+    && null ((.coverageGaps) report)
+    && all ((== JsonParity) . (.verdict)) ((.observations) report)
 
 renderCompareReport :: CompareReport -> Text
 renderCompareReport report =
   T.unlines
     ( [ "codec comparison: "
-          <> unCanonicalTypeId (cpCanonicalType provenance)
+          <> (.unCanonicalTypeId) ((.canonicalType) provenance)
           <> " (binding-version \""
-          <> unBindingVersion (cpBindingVersion provenance)
+          <> (.unBindingVersion) ((.bindingVersion) provenance)
           <> "\")",
         "historical codec: \""
-          <> cpHistoricalCodecIdentity provenance
+          <> (.historicalCodecIdentity) provenance
           <> "\" version \""
-          <> cpHistoricalCodecVersion provenance
+          <> (.historicalCodecVersion) provenance
           <> "\"",
         "observations: " <> tshow (length observations),
         "  encode parity: " <> ratio FromBinding,
@@ -371,38 +375,38 @@ renderCompareReport report =
         "requires explicit version/upcaster work: " <> tshow (length differences) <> " observations  [" <> codeText CodecCompareDifference <> "]"
       ]
         <> concatMap renderDifference differences
-        <> [ "input issues: " <> tshow (length (crInputIssues report)) <> "  [" <> codeText CodecCompareInvalidInput <> "]"
+        <> [ "input issues: " <> tshow (length ((.inputIssues) report)) <> "  [" <> codeText CodecCompareInvalidInput <> "]"
            ]
-        <> map ("  " <>) (map renderInputIssue (crInputIssues report))
-        <> [ "coverage gaps: " <> tshow (length (crCoverageGaps report)) <> "  [" <> codeText CodecCompareCoverageGap <> "]"
+        <> map ("  " <>) (map renderInputIssue ((.inputIssues) report))
+        <> [ "coverage gaps: " <> tshow (length ((.coverageGaps) report)) <> "  [" <> codeText CodecCompareCoverageGap <> "]"
            ]
-        <> map ("  " <>) (map renderCoverageGap (crCoverageGaps report))
+        <> map ("  " <>) (map renderCoverageGap ((.coverageGaps) report))
         <> [ if reportSucceeded report
                then "result: PARITY"
                else "result: NOT PARITY — " <> tshow (length differences) <> " differences",
-             crAuthority report
+             (.authority) report
            ]
     )
   where
-    provenance = crProvenance report
-    observations = crObservations report
-    differences = filter ((/= JsonParity) . classifiedVerdict) observations
+    provenance = (.provenance) report
+    observations = (.observations) report
+    differences = filter ((/= JsonParity) . (.verdict)) observations
     ratio origin =
-      let matching = filter ((== origin) . classifiedOrigin) observations
-          parityCount = length (filter ((== JsonParity) . classifiedVerdict) matching)
+      let matching = filter ((== origin) . (.origin)) observations
+          parityCount = length (filter ((== JsonParity) . (.verdict)) matching)
        in tshow parityCount <> "/" <> tshow (length matching) <> suffix origin
     suffix FromBinding = " (RFC 8785 canonical form)"
     suffix HistoricalGolden = ""
 
 renderDifference :: ClassifiedObservation -> [Text]
-renderDifference observation = case classifiedVerdict observation of
+renderDifference observation = case (.verdict) observation of
   JsonParity -> []
   RequiresVersionWork difference ->
-    [ "  " <> classifiedName observation <> " [" <> direction <> "] at " <> pointerOf difference,
+    [ "  " <> (.name) observation <> " [" <> direction <> "] at " <> pointerOf difference,
       "    " <> reasonOf difference
     ]
   where
-    direction = case classifiedOrigin observation of
+    direction = case (.origin) observation of
       FromBinding -> "encode"
       HistoricalGolden -> "decode"
 
@@ -414,11 +418,11 @@ renderInputIssue issue = case issue of
 
 renderCoverageGap :: CoverageGap -> Text
 renderCoverageGap gap =
-  originName (cgOrigin gap)
+  originName ((.origin) gap)
     <> " "
-    <> renderPointer (cgPointer gap)
+    <> renderPointer ((.pointer) gap)
     <> ": "
-    <> branchKindName (cgKind gap)
+    <> branchKindName ((.kind) gap)
 
 pointerOf :: ComparisonDifference -> Text
 pointerOf difference = case difference of
@@ -643,9 +647,9 @@ instance FromJSON CompareInputIssue where
 instance ToJSON DeclaredBranch where
   toJSON branch =
     object
-      [ "origin" .= dbOrigin branch,
-        "pointer" .= dbPointer branch,
-        "branch" .= dbKind branch
+      [ "origin" .= (.origin) branch,
+        "pointer" .= (.pointer) branch,
+        "branch" .= (.kind) branch
       ]
 
 instance FromJSON DeclaredBranch where
@@ -655,9 +659,9 @@ instance FromJSON DeclaredBranch where
 instance ToJSON ObservedBranch where
   toJSON branch =
     object
-      [ "origin" .= obOrigin branch,
-        "pointer" .= obPointer branch,
-        "branch" .= obKind branch
+      [ "origin" .= (.origin) branch,
+        "pointer" .= (.pointer) branch,
+        "branch" .= (.kind) branch
       ]
 
 instance FromJSON ObservedBranch where
@@ -668,9 +672,9 @@ instance ToJSON CoverageGap where
   toJSON gap =
     object
       [ "code" .= codeText CodecCompareCoverageGap,
-        "origin" .= cgOrigin gap,
-        "pointer" .= cgPointer gap,
-        "branch" .= cgKind gap
+        "origin" .= (.origin) gap,
+        "pointer" .= (.pointer) gap,
+        "branch" .= (.kind) gap
       ]
 
 instance FromJSON CoverageGap where
@@ -680,12 +684,12 @@ instance FromJSON CoverageGap where
 instance ToJSON CompareProvenance where
   toJSON provenance =
     object
-      [ "historicalCodecIdentity" .= cpHistoricalCodecIdentity provenance,
-        "historicalCodecVersion" .= cpHistoricalCodecVersion provenance,
-        "canonicalType" .= unCanonicalTypeId (cpCanonicalType provenance),
-        "bindingSymbol" .= unQualifiedValueName (cpBindingSymbol provenance),
-        "bindingVersion" .= unBindingVersion (cpBindingVersion provenance),
-        "wireFingerprint" .= cpWireFingerprint provenance
+      [ "historicalCodecIdentity" .= (.historicalCodecIdentity) provenance,
+        "historicalCodecVersion" .= (.historicalCodecVersion) provenance,
+        "canonicalType" .= (.unCanonicalTypeId) ((.canonicalType) provenance),
+        "bindingSymbol" .= (.unQualifiedValueName) ((.bindingSymbol) provenance),
+        "bindingVersion" .= (.unBindingVersion) ((.bindingVersion) provenance),
+        "wireFingerprint" .= (.wireFingerprint) provenance
       ]
 
 instance FromJSON CompareProvenance where
@@ -701,9 +705,9 @@ instance FromJSON CompareProvenance where
 instance ToJSON ClassifiedObservation where
   toJSON observation =
     object
-      [ "origin" .= classifiedOrigin observation,
-        "name" .= classifiedName observation,
-        "result" .= classifiedVerdict observation
+      [ "origin" .= (.origin) observation,
+        "name" .= (.name) observation,
+        "result" .= (.verdict) observation
       ]
 
 instance FromJSON ClassifiedObservation where
@@ -714,20 +718,20 @@ instance ToJSON CompareReport where
   toJSON report =
     object
       [ "schema" .= ("keiro-dsl/codec-compare-report/1" :: Text),
-        "authority" .= crAuthority report,
-        "provenance" .= crProvenance report,
+        "authority" .= (.authority) report,
+        "provenance" .= (.provenance) report,
         "success" .= reportSucceeded report,
         "summary"
           .= object
-            [ "observations" .= length (crObservations report),
-              "parity" .= length (filter ((== JsonParity) . classifiedVerdict) (crObservations report)),
-              "differences" .= length (filter ((/= JsonParity) . classifiedVerdict) (crObservations report)),
-              "inputIssues" .= length (crInputIssues report),
-              "coverageGaps" .= length (crCoverageGaps report)
+            [ "observations" .= length ((.observations) report),
+              "parity" .= length (filter ((== JsonParity) . (.verdict)) ((.observations) report)),
+              "differences" .= length (filter ((/= JsonParity) . (.verdict)) ((.observations) report)),
+              "inputIssues" .= length ((.inputIssues) report),
+              "coverageGaps" .= length ((.coverageGaps) report)
             ],
-        "observations" .= crObservations report,
-        "inputIssues" .= crInputIssues report,
-        "coverageGaps" .= crCoverageGaps report
+        "observations" .= (.observations) report,
+        "inputIssues" .= (.inputIssues) report,
+        "coverageGaps" .= (.coverageGaps) report
       ]
 
 instance FromJSON CompareReport where

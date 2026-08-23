@@ -72,14 +72,14 @@ import Text.Megaparsec.Char.Lexer qualified as L
 import Prelude hiding (span)
 
 data ContextualParseFailure = ContextualParseFailure
-  { contextualFailureCode :: !SourceLanguageErrorCode,
-    contextualFailureFeature :: !(Maybe LanguageFeature),
-    contextualFailureSpan :: !SourceSpan
+  { code :: !SourceLanguageErrorCode,
+    feature :: !(Maybe LanguageFeature),
+    span :: !SourceSpan
   }
   deriving stock (Eq, Ord, Show)
 
 instance ShowErrorComponent ContextualParseFailure where
-  showErrorComponent contextual = T.unpack (sourceLanguageErrorCodeText (contextualFailureCode contextual))
+  showErrorComponent contextual = T.unpack (sourceLanguageErrorCodeText ((.code) contextual))
 
 type P = Parsec ContextualParseFailure Text
 
@@ -116,7 +116,7 @@ bundleMessage = T.pack . parseErrorTextPretty . NE.head . bundleErrors
 
 contextualFailureAt :: SourceSpan -> SourceLanguageErrorCode -> P a
 contextualFailureAt span code =
-  customFailure ContextualParseFailure {contextualFailureCode = code, contextualFailureFeature = Nothing, contextualFailureSpan = span}
+  customFailure ContextualParseFailure {code = code, feature = Nothing, span = span}
 
 requireLanguageFeatureAt :: FrontendContext -> LanguageFeature -> SourceSpan -> P ()
 requireLanguageFeatureAt context feature span
@@ -124,9 +124,9 @@ requireLanguageFeatureAt context feature span
   | otherwise =
       customFailure
         ContextualParseFailure
-          { contextualFailureCode = LanguageFeatureRequiresVersion,
-            contextualFailureFeature = Just feature,
-            contextualFailureSpan = span
+          { code = LanguageFeatureRequiresVersion,
+            feature = Just feature,
+            span = span
           }
 
 -- | Space consumer: spaces, newlines, and @#@ line comments are all whitespace.
@@ -369,7 +369,7 @@ pField :: P Field
 pField = do
   n <- ident
   mty <- optional (symbol ":" *> ident)
-  pure Field {fieldName = n, fieldType = mty}
+  pure Field {name = n, valueType = mty}
 
 pVersion :: P Int
 pVersion = do

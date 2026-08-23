@@ -17,7 +17,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValuesForService, workflowHarnessFactValues)
 import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
-import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (mappedSurfaceFactValues, semanticImpactForService)
 import Keiro.Dsl.StructuralConformance (hasStructuralConformance, structuralConformanceModuleName)
 import Keiro.Dsl.Validate (nodeIdentity)
@@ -59,10 +59,10 @@ serviceHarnessModule ctx service = case duplicateKeys of
     moduleName = serviceConformanceModuleName ctx
     facade =
       ScaffoldModule
-        { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-          moduleText = renderServiceHarness ctx service,
+        { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+          text = renderServiceHarness ctx service,
           kind = Generated,
-          origin = "context " <> specContext (checkedSpec service) <> " service conformance facade"
+          origin = "context " <> (.context) (checkedSpec service) <> " service conformance facade"
         }
 
 renderServiceHarness :: Context -> CheckedService -> Text
@@ -112,11 +112,11 @@ aliasForNode node =
 
 harnessModuleName :: Context -> Node -> Text
 harnessModuleName ctx = \case
-  NAggregate aggregate -> genPrefixFor ctx (aggName aggregate) <> ".Harness"
-  NProcess process -> genPrefixFor ctx (procId process) <> ".ProcessHarness"
-  NRouter router -> genPrefixFor ctx (rtId router) <> ".RouterHarness"
-  NReadModel readModel -> genPrefixFor ctx (pascal (rmName readModel)) <> ".ReadModelHarness"
-  NWorkflow workflow -> genPrefixFor ctx (wfId workflow) <> ".WorkflowFacts"
+  NAggregate aggregate -> genPrefixFor ctx ((.name) aggregate) <> ".Harness"
+  NProcess process -> genPrefixFor ctx ((.id) process) <> ".ProcessHarness"
+  NRouter router -> genPrefixFor ctx ((.id) router) <> ".RouterHarness"
+  NReadModel readModel -> genPrefixFor ctx (pascal ((.name) readModel)) <> ".ReadModelHarness"
+  NWorkflow workflow -> genPrefixFor ctx ((.id) workflow) <> ".WorkflowFacts"
   node -> error ("service harness requested a module for unsupported node " <> show (nodeIdentity node))
 
 renderChecks :: Bool -> [(Node, Text)] -> [Text]
@@ -140,9 +140,9 @@ renderChecks hasStructural sources =
 checkExpression :: (Node, Text) -> Text
 checkExpression (node, alias) = case node of
   NAggregate aggregate ->
-    "[(\"aggregate/" <> aggName aggregate <> "/\" <> fact, passed) | (fact, passed) <- " <> alias <> ".harnessAssertions]"
+    "[(\"aggregate/" <> (.name) aggregate <> "/\" <> fact, passed) | (fact, passed) <- " <> alias <> ".harnessAssertions]"
   NReadModel readModel ->
-    "[(\"readmodel/" <> rmName readModel <> "/\" <> fact, passed) | (fact, passed) <- " <> alias <> ".readModelFactResults]"
+    "[(\"readmodel/" <> (.name) readModel <> "/\" <> fact, passed) | (fact, passed) <- " <> alias <> ".readModelFactResults]"
   _ -> error "checkExpression called for a fact-only node"
 
 renderFacts :: [(Text, Text)] -> [(Node, Text)] -> [Text]
@@ -182,7 +182,7 @@ renderConcatenation expressions = case expressions of
 
 serviceHarnessNodes :: CheckedService -> [Node]
 serviceHarnessNodes =
-  sortOn sortKey . filter (\node -> producesChecks node || producesFacts node) . specNodes . checkedSpec
+  sortOn sortKey . filter (\node -> producesChecks node || producesFacts node) . (.nodes) . checkedSpec
   where
     sortKey node = let (kindName, nodeName, _) = nodeIdentity node in (kindName, nodeName)
 
@@ -212,7 +212,7 @@ surfaceFactValues :: CheckedService -> [(Text, Text)]
 surfaceFactValues service
   | not
       ( languageSupportsFeature
-          (effectiveContractLanguageVersion (checkedLanguageContract service))
+          ((.contractLanguageVersion) (checkedLanguageContract service))
           MappedConsumerSurfaceSyntax
       ) =
       []

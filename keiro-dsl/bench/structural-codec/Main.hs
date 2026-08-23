@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedRecordDot #-}
-
 module Main (main) where
 
 import Conformance.Structural.Bindings qualified as Bindings

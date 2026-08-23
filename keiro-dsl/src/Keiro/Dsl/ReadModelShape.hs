@@ -23,17 +23,17 @@ import Numeric (showHex)
 -- do not duplicate physical authority owned by their target declarations.
 canonicalShape :: ReadModelNode -> Text
 canonicalShape readModel =
-  T.intercalate "|" (shapeRoot : map columnSegment (rmColumns readModel))
+  T.intercalate "|" (shapeRoot : map columnSegment ((.columns) readModel))
   where
-    shapeRoot = case rmGroup readModel of
-      Nothing -> rmTable readModel
+    shapeRoot = case (.group) readModel of
+      Nothing -> (.table) readModel
       Just _ -> "query-model"
     columnSegment columnDecl =
       T.intercalate
         ":"
-        [ rmcName columnDecl,
-          rmcType columnDecl,
-          if rmcRequired columnDecl then "req" else "null"
+        [ (.rmcName) columnDecl,
+          (.rmcType) columnDecl,
+          if (.rmcRequired) columnDecl then "req" else "null"
         ]
 
 -- | A fixed-width FNV-1a-64 digest over the canonical shape's UTF-8 bytes.
@@ -51,13 +51,13 @@ fnv1a64 input =
 
 -- | The runtime registry identity derived from context and notation name.
 registryNameFor :: Name -> ReadModelNode -> Text
-registryNameFor contextName readModel =
-  contextName <> "-" <> T.replace "_" "-" (rmName readModel)
+registryNameFor name readModel =
+  name <> "-" <> T.replace "_" "-" ((.name) readModel)
 
 -- | The explicit subscription override or its deterministic default.
 subscriptionNameFor :: Name -> ReadModelNode -> Text
-subscriptionNameFor contextName readModel =
-  fromMaybe (registryNameFor contextName readModel <> "-sub") (legacyReadModelSubscription readModel)
+subscriptionNameFor name readModel =
+  fromMaybe (registryNameFor name readModel <> "-sub") (legacyReadModelSubscription readModel)
 
 offsetBasis :: Word64
 offsetBasis = 0xcbf29ce484222325

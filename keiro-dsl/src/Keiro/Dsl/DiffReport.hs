@@ -71,10 +71,10 @@ data Remedy
   deriving stock (Eq, Show)
 
 data DiffReport = DiffReport
-  { reportGate :: !(Set CompatibilitySurface),
-    reportFindings :: ![Change],
-    reportSemanticImpact :: !(Maybe [MappedImpactDelta]),
-    reportCoordinationImpact :: !(Maybe [CoordinationImpact])
+  { gate :: !(Set CompatibilitySurface),
+    findings :: ![Change],
+    semanticImpact :: !(Maybe [MappedImpactDelta]),
+    coordinationImpact :: !(Maybe [CoordinationImpact])
   }
   deriving stock (Eq, Show)
 
@@ -94,36 +94,36 @@ diffReportWithImpacts gate findings semantic coordination = DiffReport gate find
 
 -- | One source location from a composed workspace's ownership index.
 data OwnedSite = OwnedSite
-  { osFile :: !FilePath,
-    osLine :: !Int
+  { file :: !FilePath,
+    line :: !Int
   }
   deriving stock (Eq, Show)
 
 -- | A merged-graph finding enriched with declaration and use-site ownership.
 data WorkspaceChange = WorkspaceChange
-  { wcChange :: !Change,
-    wcDeclarationSite :: !(Maybe OwnedSite),
-    wcUseSites :: ![(Text, Maybe OwnedSite)]
+  { change :: !Change,
+    declarationSite :: !(Maybe OwnedSite),
+    useSites :: ![(Text, Maybe OwnedSite)]
   }
   deriving stock (Eq, Show)
 
 -- | Provenance for the two workspace graphs compared by one command.
 data WorkspaceMeta = WorkspaceMeta
-  { wmIdentity :: !Text,
-    wmManifest :: !FilePath,
-    wmSince :: !Text,
-    wmMembersOld :: ![FilePath],
-    wmMembersNew :: ![FilePath],
-    wmAdoptionBaseline :: !Bool
+  { identity :: !Text,
+    manifest :: !FilePath,
+    since :: !Text,
+    membersOld :: ![FilePath],
+    membersNew :: ![FilePath],
+    adoptionBaseline :: !Bool
   }
   deriving stock (Eq, Show)
 
 data WorkspaceDiffReport = WorkspaceDiffReport
-  { workspaceReportMeta :: !WorkspaceMeta,
-    workspaceReportGate :: !(Set CompatibilitySurface),
-    workspaceReportFindings :: ![WorkspaceChange],
-    workspaceReportSemanticImpact :: !(Maybe [MappedImpactDelta]),
-    workspaceReportCoordinationImpact :: !(Maybe [CoordinationImpact])
+  { meta :: !WorkspaceMeta,
+    gate :: !(Set CompatibilitySurface),
+    findings :: ![WorkspaceChange],
+    semanticImpact :: !(Maybe [MappedImpactDelta]),
+    coordinationImpact :: !(Maybe [CoordinationImpact])
   }
   deriving stock (Eq, Show)
 
@@ -143,30 +143,30 @@ instance ToJSON DiffReport where
   toJSON report =
     object $
       [ "schema" .= ("keiro-dsl/diff-report/1" :: Text),
-        "gate" .= map surfaceName (Set.toAscList (reportGate report)),
-        "breaking" .= (any (gatedBreaking (reportGate report)) (reportFindings report) || coordinationBreaking (reportCoordinationImpact report)),
-        "findings" .= map (findingValue (reportGate report)) (reportFindings report)
+        "gate" .= map surfaceName (Set.toAscList ((.gate) report)),
+        "breaking" .= (any (gatedBreaking ((.gate) report)) ((.findings) report) || coordinationBreaking ((.coordinationImpact) report)),
+        "findings" .= map (findingValue ((.gate) report)) ((.findings) report)
       ]
-        <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [reportSemanticImpact report]]
-        <> ["coordinationImpact" .= impact | Just impact <- [reportCoordinationImpact report]]
+        <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [(.semanticImpact) report]]
+        <> ["coordinationImpact" .= impact | Just impact <- [(.coordinationImpact) report]]
 
 instance ToJSON WorkspaceDiffReport where
   toJSON report =
     object $
       [ "schema" .= ("keiro-dsl/diff-report/1" :: Text),
-        "gate" .= map surfaceName (Set.toAscList (workspaceReportGate report)),
-        "breaking" .= (any (gatedBreaking (workspaceReportGate report) . wcChange) (workspaceReportFindings report) || coordinationBreaking (workspaceReportCoordinationImpact report)),
-        "findings" .= map (workspaceFindingValue (workspaceReportGate report)) (workspaceReportFindings report),
-        "workspace" .= workspaceMetaValue (workspaceReportMeta report)
+        "gate" .= map surfaceName (Set.toAscList ((.gate) report)),
+        "breaking" .= (any (gatedBreaking ((.gate) report) . (.change)) ((.findings) report) || coordinationBreaking ((.coordinationImpact) report)),
+        "findings" .= map (workspaceFindingValue ((.gate) report)) ((.findings) report),
+        "workspace" .= workspaceMetaValue ((.meta) report)
       ]
-        <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [workspaceReportSemanticImpact report]]
-        <> ["coordinationImpact" .= impact | Just impact <- [workspaceReportCoordinationImpact report]]
+        <> ["semanticImpact" .= semanticImpactValue impact | Just impact <- [(.semanticImpact) report]]
+        <> ["coordinationImpact" .= impact | Just impact <- [(.coordinationImpact) report]]
 
 semanticImpactValue :: [MappedImpactDelta] -> Value
 semanticImpactValue impact = object ["declarations" .= impact]
 
 coordinationBreaking :: Maybe [CoordinationImpact] -> Bool
-coordinationBreaking = maybe False (any ((== CoordinationBreaking) . coordinationSeverity))
+coordinationBreaking = maybe False (any ((== CoordinationBreaking) . (.severity)))
 
 -- | Human-facing semantic dependency summary, kept separate from ordinary
 -- compatibility findings and generated-file evidence.
@@ -175,14 +175,14 @@ renderSemanticImpact [] = []
 renderSemanticImpact impact = "semantic impact:" : concatMap renderDelta impact
   where
     renderDelta delta =
-      [ "  " <> unMappedKey (impactDeclaration delta),
-        "    previous aggregate consumers: " <> renderBaseline (impactPreviousEvidence delta) (renderConsumers (impactPreviousConsumers delta)),
-        "    current aggregate consumers:  " <> renderConsumers (impactCurrentConsumers delta),
-        "    previous roots: " <> maybe "baseline unavailable" renderEvidence (impactPreviousEvidence delta),
-        "    current roots:  " <> maybe "baseline unavailable" renderEvidence (impactCurrentEvidence delta),
-        "    previous consequences: " <> maybe "baseline unavailable" renderConsequences (impactPreviousConsequences delta),
-        "    current consequences:  " <> maybe "baseline unavailable" renderConsequences (impactCurrentConsequences delta),
-        "    service-conformance: " <> if impactServiceConformance delta then "impacted" else "unchanged"
+      [ "  " <> (.unMappedKey) ((.declaration) delta),
+        "    previous aggregate consumers: " <> renderBaseline ((.previousEvidence) delta) (renderConsumers ((.previousConsumers) delta)),
+        "    current aggregate consumers:  " <> renderConsumers ((.currentConsumers) delta),
+        "    previous roots: " <> maybe "baseline unavailable" renderEvidence ((.previousEvidence) delta),
+        "    current roots:  " <> maybe "baseline unavailable" renderEvidence ((.currentEvidence) delta),
+        "    previous consequences: " <> maybe "baseline unavailable" renderConsequences ((.previousConsequences) delta),
+        "    current consequences:  " <> maybe "baseline unavailable" renderConsequences ((.currentConsequences) delta),
+        "    service-conformance: " <> if (.serviceConformance) delta then "impacted" else "unchanged"
       ]
     renderConsumers aggregateConsumers = case map consumerName (Set.toAscList aggregateConsumers) of
       [] -> "(none)"
@@ -192,8 +192,8 @@ renderSemanticImpact impact = "semantic impact:" : concatMap renderDelta impact
     renderBaseline (Just _) value = value
     renderEvidence values = renderSet renderRoot values
     renderRoot evidence =
-      T.intercalate "|" [mappedRootKindIdentity (evidenceRootKind evidence), mappedConsumerIdentity (evidenceConsumer evidence), evidencePath evidence]
-        <> maybe "" ("|" <>) (evidenceOperation evidence)
+      T.intercalate "|" [mappedRootKindIdentity ((.rootKind) evidence), mappedConsumerIdentity ((.consumer) evidence), (.path) evidence]
+        <> maybe "" ("|" <>) ((.operation) evidence)
     renderConsequences = renderSet mappedConsequenceIdentity
     renderSet render values = case map render (Set.toAscList values) of
       [] -> "(none)"
@@ -205,43 +205,43 @@ findingValue gate change = object (findingPairs gate change)
 workspaceFindingValue :: Set CompatibilitySurface -> WorkspaceChange -> Value
 workspaceFindingValue gate workspaceChange =
   object
-    ( findingPairs gate (wcChange workspaceChange)
-        <> maybe [] (\site -> ["declaration" .= ownedSiteValue site]) (wcDeclarationSite workspaceChange)
-        <> ["useSites" .= map useSiteValue (wcUseSites workspaceChange) | not (null (wcUseSites workspaceChange))]
+    ( findingPairs gate ((.change) workspaceChange)
+        <> maybe [] (\site -> ["declaration" .= ownedSiteValue site]) ((.declarationSite) workspaceChange)
+        <> ["useSites" .= map useSiteValue ((.useSites) workspaceChange) | not (null ((.useSites) workspaceChange))]
     )
 
 findingPairs :: Set CompatibilitySurface -> Change -> [Pair]
 findingPairs gate change =
-  [ "label" .= labelName (deriveLabel gate (ckVector kind)),
-    "node" .= ckNode kind,
-    "facet" .= ckFacet kind,
-    "subject" .= ckSubject kind,
-    "code" .= T.pack (show (ckCode kind)),
-    "paths" .= ckPaths kind,
-    "vector" .= vectorValue (ckVector kind),
-    "detail" .= ckDetail kind,
-    "remedies" .= map renderRemedy (NonEmpty.toList (remediationFor (ckContext kind) (ckCode kind)))
+  [ "label" .= labelName (deriveLabel gate ((.vector) kind)),
+    "node" .= (.node) kind,
+    "facet" .= (.facet) kind,
+    "subject" .= (.subject) kind,
+    "code" .= T.pack (show ((.code) kind)),
+    "paths" .= (.paths) kind,
+    "vector" .= vectorValue ((.vector) kind),
+    "detail" .= (.detail) kind,
+    "remedies" .= map renderRemedy (NonEmpty.toList (remediationFor ((.context) kind) ((.code) kind)))
   ]
-    <> ["mappedPersistedSurface" .= mappedPersistedImpactValue impact | Just impact <- [ckMappedPersistedImpact kind]]
-    <> ["mappedConsequences" .= map mappedConsequenceIdentity (Set.toAscList (ckMappedConsequences kind)) | not (Set.null (ckMappedConsequences kind))]
+    <> ["mappedPersistedSurface" .= mappedPersistedImpactValue impact | Just impact <- [(.mappedPersistedImpact) kind]]
+    <> ["mappedConsequences" .= map mappedConsequenceIdentity (Set.toAscList ((.mappedConsequences) kind)) | not (Set.null ((.mappedConsequences) kind))]
   where
     kind = changeKind change
 
 ownedSiteValue :: OwnedSite -> Value
-ownedSiteValue site = object ["file" .= osFile site, "line" .= osLine site]
+ownedSiteValue site = object ["file" .= (.file) site, "line" .= (.line) site]
 
 useSiteValue :: (Text, Maybe OwnedSite) -> Value
 useSiteValue (path, site) =
   object
     ( ["path" .= path]
-        <> maybe [] (\owned -> ["file" .= osFile owned, "line" .= osLine owned]) site
+        <> maybe [] (\owned -> ["file" .= (.file) owned, "line" .= (.line) owned]) site
     )
 
 mappedPersistedImpactValue :: MappedPersistedImpact -> Value
 mappedPersistedImpactValue impact =
   object
-    [ "surface" .= persistedSurfaceName (mappedPersistedSurface impact),
-      "verdict" .= verdictName (mappedPersistedVerdict impact)
+    [ "surface" .= persistedSurfaceName ((.surface) impact),
+      "verdict" .= verdictName ((.verdict) impact)
     ]
 
 persistedSurfaceName :: MappedPersistedSurface -> Text
@@ -252,24 +252,24 @@ persistedSurfaceName (WorkqueueHistory name) = "workqueue-history:" <> name
 workspaceMetaValue :: WorkspaceMeta -> Value
 workspaceMetaValue meta =
   object
-    [ "identity" .= wmIdentity meta,
-      "manifest" .= wmManifest meta,
-      "since" .= wmSince meta,
-      "membersOld" .= wmMembersOld meta,
-      "membersNew" .= wmMembersNew meta,
-      "adoptionBaseline" .= wmAdoptionBaseline meta
+    [ "identity" .= (.identity) meta,
+      "manifest" .= (.manifest) meta,
+      "since" .= (.since) meta,
+      "membersOld" .= (.membersOld) meta,
+      "membersNew" .= (.membersNew) meta,
+      "adoptionBaseline" .= (.adoptionBaseline) meta
     ]
 
 vectorValue :: CompatibilityVector -> Value
 vectorValue vector =
   object
-    [ "private-history-read" .= verdictName (cvPrivateHistoryRead vector),
-      "old-binary-read-new-events" .= verdictName (cvOldBinaryReadNewEvents vector),
-      "snapshot-hydration" .= verdictName (cvSnapshotHydration vector),
-      "public-consumer" .= verdictName (cvPublicConsumer vector),
-      "persisted-identity" .= verdictName (cvPersistedIdentity vector),
-      "consumer-build" .= verdictName (cvConsumerBuild vector),
-      "rollout" .= map rolloutName (Set.toAscList (cvRollout vector))
+    [ "private-history-read" .= verdictName ((.privateHistoryRead) vector),
+      "old-binary-read-new-events" .= verdictName ((.oldBinaryReadNewEvents) vector),
+      "snapshot-hydration" .= verdictName ((.snapshotHydration) vector),
+      "public-consumer" .= verdictName ((.publicConsumer) vector),
+      "persisted-identity" .= verdictName ((.persistedIdentity) vector),
+      "consumer-build" .= verdictName ((.consumerBuild) vector),
+      "rollout" .= map rolloutName (Set.toAscList ((.rollout) vector))
     ]
 
 remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
@@ -308,45 +308,45 @@ remediationFor context code
       RemedyDeploymentOrder RolloutWorkersFirst :| [RemedyDrainWorkqueue, RemedyTransitionalQueueCodec, RemedyRunConformance]
   | code `elem` identityCodes =
       RemedyDoNotDeploy "revert the re-keying change or perform an explicit operational identity migration" :| []
-  | code == EnumCtorAdded = case Set.toAscList (cvRollout vector) of
+  | code == EnumCtorAdded = case Set.toAscList ((.rollout) vector) of
       rollout : _ -> RemedyDeploymentOrder rollout :| [snapshotRemedy]
       [] -> snapshotRemedy :| []
-  | cvConsumerBuild vector `elem` [VAdvisory, VBreaking] =
+  | (.consumerBuild) vector `elem` [VAdvisory, VBreaking] =
       RemedyRecompileConsumers :| [RemedyRunConformance]
   | Just rollout <- firstRollout = RemedyDeploymentOrder rollout :| [RemedyRunConformance]
-  | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+  | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
   | otherwise = RemedyRunConformance :| []
   where
     vector = classifyCompatibility context code
-    firstRollout = case Set.toAscList (cvRollout vector) of
+    firstRollout = case Set.toAscList ((.rollout) vector) of
       rollout : _ -> Just rollout
       [] -> Nothing
     snapshotRemedy
-      | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump
+      | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump
       | otherwise = RemedyRunConformance
     mappedWireRemedy
-      | Set.member RolloutDrainRequired (cvRollout vector) = queueMappedRemedy
-      | cvPrivateHistoryRead vector == VBreaking =
+      | Set.member RolloutDrainRequired ((.rollout) vector) = queueMappedRemedy
+      | (.privateHistoryRead) vector == VBreaking =
           RemedyVersionBump :| [RemedyUpcaster, RemedyDeploymentOrder RolloutStopTheWorld]
-      | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+      | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
       | otherwise = RemedyRecompileConsumers :| [RemedyRunConformance]
     mappedAdditionRemedy
-      | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
-      | Set.member RolloutDrainRequired (cvRollout vector) = queueMappedRemedy
+      | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+      | Set.member RolloutDrainRequired ((.rollout) vector) = queueMappedRemedy
       | Just rollout <- firstRollout = RemedyDeploymentOrder rollout :| [RemedyRunConformance]
       | otherwise = RemedyRunConformance :| []
     mappedConformanceRemedy
-      | cvSnapshotHydration vector == VAdvisory = RemedyRunConformance :| [RemedyStateCodecBump]
-      | Set.member RolloutDrainRequired (cvRollout vector) = queueMappedRemedy
+      | (.snapshotHydration) vector == VAdvisory = RemedyRunConformance :| [RemedyStateCodecBump]
+      | Set.member RolloutDrainRequired ((.rollout) vector) = queueMappedRemedy
       | otherwise = RemedyRunConformance :| []
     queueMappedRemedy =
       RemedyDeploymentOrder RolloutWorkersFirst
         :| [RemedyDrainWorkqueue, RemedyTransitionalQueueCodec, RemedyRecompileConsumers, RemedyRunConformance]
     mappedSnapshotConformanceRemedy
-      | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
+      | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump :| [RemedyRunConformance]
       | otherwise = RemedyRunConformance :| []
     mappedCanonicalRemedy
-      | cvSnapshotHydration vector == VAdvisory = RemedyStateCodecBump :| [RemedyRecompileConsumers, RemedyRunConformance]
+      | (.snapshotHydration) vector == VAdvisory = RemedyStateCodecBump :| [RemedyRecompileConsumers, RemedyRunConformance]
       | otherwise = RemedyRecompileConsumers :| [RemedyRunConformance]
     mappedWireCodes =
       [ MappedFieldAddedNoDefault,
@@ -437,29 +437,29 @@ renderFinding change =
     headline =
       headlineName change
         <> ": "
-        <> ckNode kind
+        <> (.node) kind
         <> " "
-        <> ckFacet kind
+        <> (.facet) kind
         <> " "
-        <> ckSubject kind
+        <> (.subject) kind
         <> ": "
-        <> ckDetail kind
+        <> (.detail) kind
         <> codeSuffix change kind
     vectorDetail
-      | vectorIsUniform (ckVector kind) = ""
-      | otherwise = "\n" <> renderVectorLine (ckVector kind)
-    persistedDetail = case ckMappedPersistedImpact kind of
+      | vectorIsUniform ((.vector) kind) = ""
+      | otherwise = "\n" <> renderVectorLine ((.vector) kind)
+    persistedDetail = case (.mappedPersistedImpact) kind of
       Nothing -> ""
       Just impact ->
         "\n    mapped-persisted-surface: "
-          <> persistedSurfaceName (mappedPersistedSurface impact)
+          <> persistedSurfaceName ((.surface) impact)
           <> "="
-          <> verdictName (mappedPersistedVerdict impact)
+          <> verdictName ((.verdict) impact)
     consequenceDetail
-      | Set.null (ckMappedConsequences kind) = ""
+      | Set.null ((.mappedConsequences) kind) = ""
       | otherwise =
           "\n    mapped-consequences: "
-            <> T.intercalate ", " (map mappedConsequenceIdentity (Set.toAscList (ckMappedConsequences kind)))
+            <> T.intercalate ", " (map mappedConsequenceIdentity (Set.toAscList ((.mappedConsequences) kind)))
 
 renderVectorLine :: CompatibilityVector -> Text
 renderVectorLine vector =
@@ -470,27 +470,27 @@ renderVectorLine vector =
           let verdict = verdictFor surface vector,
           verdict /= VNotApplicable
         ]
-          <> ["rollout=" <> T.intercalate "," (map rolloutName (Set.toAscList (cvRollout vector))) | not (Set.null (cvRollout vector))]
+          <> ["rollout=" <> T.intercalate "," (map rolloutName (Set.toAscList ((.rollout) vector))) | not (Set.null ((.rollout) vector))]
       )
 
 renderExplainBlock :: Change -> Text
 renderExplainBlock change =
   "explain ["
-    <> T.pack (show (ckCode kind))
+    <> T.pack (show ((.code) kind))
     <> "]\n"
-    <> T.unlines ["  path: " <> path | path <- ckPaths kind]
+    <> T.unlines ["  path: " <> path | path <- (.paths) kind]
     <> T.unlines (map ("  direction: " <>) directions)
     <> T.unlines ["  remedy: " <> renderRemedy remedy | remedy <- NonEmpty.toList remedies]
   where
     kind = changeKind change
-    vector = ckVector kind
+    vector = (.vector) kind
     directions =
       [ surfaceName surface <> " is " <> verdictName verdict <> "; " <> directionMeaning surface verdict
       | surface <- [minBound .. maxBound],
         let verdict = verdictFor surface vector,
         verdict `elem` [VAdvisory, VBreaking]
       ]
-    remedies = remediationFor (ckContext kind) (ckCode kind)
+    remedies = remediationFor ((.context) kind) ((.code) kind)
 
 surfaceName :: CompatibilitySurface -> Text
 surfaceName surface = case surface of
@@ -540,7 +540,7 @@ headlineName Breaking {} = "BREAKING"
 
 codeSuffix :: Change -> ChangeKind -> Text
 codeSuffix Additive {} _ = ""
-codeSuffix _ kind = " [" <> T.pack (show (ckCode kind)) <> "]"
+codeSuffix _ kind = " [" <> T.pack (show ((.code) kind)) <> "]"
 
 changeKind :: Change -> ChangeKind
 changeKind (Additive kind) = kind
@@ -549,7 +549,7 @@ changeKind (Breaking kind) = kind
 
 vectorIsUniform :: CompatibilityVector -> Bool
 vectorIsUniform vector =
-  Set.null (cvRollout vector)
+  Set.null ((.rollout) vector)
     && all (`elem` [VCompatible, VNotApplicable]) [verdictFor surface vector | surface <- [minBound .. maxBound]]
 
 directionMeaning :: CompatibilitySurface -> SurfaceVerdict -> Text

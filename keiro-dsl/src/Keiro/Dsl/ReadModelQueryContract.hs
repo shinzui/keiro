@@ -32,17 +32,17 @@ data QueryContractPosition
   deriving stock (Eq, Ord, Show)
 
 data QueryContractIdentity = QueryContractIdentity
-  { qciReadModel :: !Name,
-    qciPosition :: !QueryContractPosition,
-    qciTypeExpression :: !Text,
-    qciMappedDependencies :: ![Name]
+  { readModel :: !Name,
+    position :: !QueryContractPosition,
+    typeExpression :: !Text,
+    mappedDependencies :: ![Name]
   }
   deriving stock (Eq, Ord, Show)
 
 data QueryContractDrift = QueryContractDrift
-  { qcdKey :: !(Name, QueryContractPosition),
-    qcdPrevious :: !(Maybe QueryContractIdentity),
-    qcdCurrent :: !(Maybe QueryContractIdentity)
+  { key :: !(Name, QueryContractPosition),
+    previous :: !(Maybe QueryContractIdentity),
+    current :: !(Maybe QueryContractIdentity)
   }
   deriving stock (Eq, Show)
 
@@ -61,10 +61,10 @@ instance FromJSON QueryContractPosition where
 instance ToJSON QueryContractIdentity where
   toJSON identity =
     object
-      [ "readModel" .= qciReadModel identity,
-        "position" .= qciPosition identity,
-        "typeExpression" .= qciTypeExpression identity,
-        "mappedDependencies" .= qciMappedDependencies identity
+      [ "readModel" .= (.readModel) identity,
+        "position" .= (.position) identity,
+        "typeExpression" .= (.typeExpression) identity,
+        "mappedDependencies" .= (.mappedDependencies) identity
       ]
 
 instance FromJSON QueryContractIdentity where
@@ -76,7 +76,7 @@ instance FromJSON QueryContractIdentity where
       <*> fields .: "mappedDependencies"
 
 queryContractIdentityKey :: QueryContractIdentity -> (Name, QueryContractPosition)
-queryContractIdentityKey identity = (qciReadModel identity, qciPosition identity)
+queryContractIdentityKey identity = ((.readModel) identity, (.position) identity)
 
 queryContractDrift :: [QueryContractIdentity] -> [QueryContractIdentity] -> [QueryContractDrift]
 queryContractDrift current previous =
@@ -99,16 +99,16 @@ queryContractIdentitiesForService service = do
   fmap (sortOn queryContractIdentityKey . concat) (traverse (identitiesFor graph) readModels)
   where
     spec = checkedSpec service
-    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    readModels = [readModel | NReadModel readModel <- (.nodes) spec]
 
 identitiesFor :: TypeGraph -> ReadModelNode -> Either (NonEmpty TypeGraphError) [QueryContractIdentity]
 identitiesFor _ ReadModelNode {queryTypes = Nothing} = Right []
 identitiesFor graph readModel@ReadModelNode {queryTypes = Just queryPair} = do
-  inputExpression <- resolve QueryInputConsumer (inputLoc queryPair) (input queryPair)
-  resultExpression <- resolve QueryResultConsumer (resultLoc queryPair) (result queryPair)
+  inputExpression <- resolve QueryInputConsumer ((.inputLoc) queryPair) ((.input) queryPair)
+  resultExpression <- resolve QueryResultConsumer ((.resultLoc) queryPair) ((.result) queryPair)
   pure
-    [ identity QueryInputConsumer (input queryPair) inputExpression,
-      identity QueryResultConsumer (result queryPair) resultExpression
+    [ identity QueryInputConsumer ((.input) queryPair) inputExpression,
+      identity QueryResultConsumer ((.result) queryPair) resultExpression
     ]
   where
     resolve position location expression =
@@ -116,13 +116,13 @@ identitiesFor graph readModel@ReadModelNode {queryTypes = Just queryPair} = do
         Left failure -> Left (failure :| [])
         Right resolved -> Right resolved
       where
-        owner = "readmodel '" <> rmName readModel <> "' query " <> positionLabel position
+        owner = "readmodel '" <> (.name) readModel <> "' query " <> positionLabel position
     identity position sourceExpression resolved =
       QueryContractIdentity
-        { qciReadModel = rmName readModel,
-          qciPosition = position,
-          qciTypeExpression = renderTypeExpr sourceExpression,
-          qciMappedDependencies = Set.toAscList (Set.map unMappedKey (mappedClosure graph resolved))
+        { readModel = (.name) readModel,
+          position = position,
+          typeExpression = renderTypeExpr sourceExpression,
+          mappedDependencies = Set.toAscList (Set.map unMappedKey (mappedClosure graph resolved))
         }
 
 mappedClosure :: TypeGraph -> ResolvedTypeExpr -> Set MappedKey
@@ -139,7 +139,7 @@ mappedClosure graph =
         onOptional = id,
         onList = id,
         onMap = id,
-        onRef = \key -> Set.insert key (Map.findWithDefault Set.empty key (tgReachability graph))
+        onRef = \key -> Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph))
       }
 
 positionLabel :: QueryContractPosition -> Text

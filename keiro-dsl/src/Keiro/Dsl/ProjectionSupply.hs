@@ -18,12 +18,12 @@ import Keiro.Dsl.Grammar
 -- normalized by identity; source locations remain available for structured
 -- diagnostics and generated evidence.
 data ResolvedProjectionSupply = ResolvedProjectionSupply
-  { supplyQueryModel :: !Name,
-    supplyProjectionOwner :: !Name,
-    supplyRebuildGroup :: !Name,
-    supplyObservedTargets :: !(NonEmpty Name),
-    supplyQueryLoc :: !Loc,
-    supplyOwnerLoc :: !Loc
+  { queryModel :: !Name,
+    projectionOwner :: !Name,
+    rebuildGroup :: !Name,
+    observedTargets :: !(NonEmpty Name),
+    queryLoc :: !Loc,
+    ownerLoc :: !Loc
   }
   deriving stock (Eq, Show)
 
@@ -57,45 +57,45 @@ analyzeProjectionSupplies spec =
   where
     catalogReadModels =
       sortOn
-        rmName
+        (.name)
         [ readModel
-        | NReadModel readModel <- specNodes spec,
-          rmGroup readModel /= Nothing
+        | NReadModel readModel <- (.nodes) spec,
+          (.group) readModel /= Nothing
         ]
     targetsByName =
       Map.fromList
-        [ (ptName target, target)
-        | NProjectionTarget target <- specNodes spec
+        [ ((.name) target, target)
+        | NProjectionTarget target <- (.nodes) spec
         ]
     groupsByTarget =
       Map.fromListWith
         (<>)
-        [ (targetName, [rgName groupNode])
-        | NRebuildGroup groupNode <- specNodes spec,
-          targetName <- rgTargets groupNode
+        [ (targetName, [(.name) groupNode])
+        | NRebuildGroup groupNode <- (.nodes) spec,
+          targetName <- (.targets) groupNode
         ]
     ownersByTarget =
       Map.fromListWith
         (<>)
         [ (targetName, [owner])
-        | NProjectionOwner owner <- specNodes spec,
-          targetName <- poTargets owner
+        | NProjectionOwner owner <- (.nodes) spec,
+          targetName <- (.targets) owner
         ]
     legacyProjections =
       [ (aggregate, projection)
-      | NAggregate aggregate <- specNodes spec,
-        Just projection <- [aggProjection aggregate]
+      | NAggregate aggregate <- (.nodes) spec,
+        Just projection <- [(.projection) aggregate]
       ]
 
     analyzeReadModel readModel =
       (resolved, sortOn issueSortKey (legacyIssues <> structuralIssues))
       where
-        observedTargets = sort (nub (rmObservedTargets readModel))
-        queryGroup = maybe (error "catalog read model lost its group") id (rmGroup readModel)
+        observedTargets = sort (nub ((.observedTargets) readModel))
+        queryGroup = maybe (error "catalog read model lost its group") id ((.group) readModel)
         legacyIssues =
           [ SupplyLegacyProjectionConflict readModel aggregate projection
           | (aggregate, projection) <- legacyProjections,
-            projTable projection == rmName readModel
+            (.table) projection == (.name) readModel
           ]
         targetIssues = concatMap (issuesForTarget readModel queryGroup) observedTargets
         structuralIssues
@@ -106,11 +106,11 @@ analyzeProjectionSupplies spec =
               [owner] ->
                 [ SupplyOwnerGroupMismatch readModel targetName owner
                 | targetName <- observedTargets,
-                  poGroup owner /= queryGroup
+                  (.group) owner /= queryGroup
                 ]
               owners -> [SupplyQueryWithMultipleOwners readModel owners]
         supplierOwners =
-          sortOn poName
+          sortOn (.name)
             . nubByOwner
             $ [ owner
               | targetName <- observedTargets,
@@ -120,14 +120,14 @@ analyzeProjectionSupplies spec =
           [] -> case supplierOwners of
             [owner] ->
               [ ResolvedProjectionSupply
-                  { supplyQueryModel = rmName readModel,
-                    supplyProjectionOwner = poName owner,
-                    supplyRebuildGroup = queryGroup,
-                    supplyObservedTargets = case observedTargets of
+                  { queryModel = (.name) readModel,
+                    projectionOwner = (.name) owner,
+                    rebuildGroup = queryGroup,
+                    observedTargets = case observedTargets of
                       target : rest -> target :| rest
                       [] -> error "resolved projection supply lost observed targets",
-                    supplyQueryLoc = rmLoc readModel,
-                    supplyOwnerLoc = poLoc owner
+                    queryLoc = (.loc) readModel,
+                    ownerLoc = (.loc) owner
                   }
               ]
             _ -> []
@@ -143,21 +143,21 @@ analyzeProjectionSupplies spec =
           [ SupplyObservedTargetOutsideGroup readModel targetName
           | Map.findWithDefault [] targetName groupsByTarget /= [queryGroup]
           ]
-        ownerIssues = case sortOn poName (Map.findWithDefault [] targetName ownersByTarget) of
+        ownerIssues = case sortOn (.name) (Map.findWithDefault [] targetName ownersByTarget) of
           [] -> [SupplyObservedTargetWithoutOwner readModel targetName]
           [_] -> []
           owners -> [SupplyObservedTargetWithMultipleOwners readModel targetName owners]
 
-    nubByOwner = Map.elems . Map.fromList . map (\owner -> (poName owner, owner))
+    nubByOwner = Map.elems . Map.fromList . map (\owner -> ((.name) owner, owner))
 
 issueSortKey :: ProjectionSupplyIssue -> (Name, Int, Name)
 issueSortKey = \case
-  SupplyObservedTargetsEmpty readModel -> (rmName readModel, 0, "")
-  SupplyObservedTargetUnknown readModel targetName -> (rmName readModel, 1, targetName)
-  SupplyObservedTargetOutsideGroup readModel targetName -> (rmName readModel, 2, targetName)
-  SupplyObservedTargetWithoutOwner readModel targetName -> (rmName readModel, 3, targetName)
-  SupplyObservedTargetWithMultipleOwners readModel targetName _ -> (rmName readModel, 4, targetName)
-  SupplyOwnerGroupMismatch readModel targetName _ -> (rmName readModel, 5, targetName)
-  SupplyQueryWithoutOwner readModel -> (rmName readModel, 6, "")
-  SupplyQueryWithMultipleOwners readModel _ -> (rmName readModel, 7, "")
-  SupplyLegacyProjectionConflict readModel aggregate _ -> (rmName readModel, 8, aggName aggregate)
+  SupplyObservedTargetsEmpty readModel -> ((.name) readModel, 0, "")
+  SupplyObservedTargetUnknown readModel targetName -> ((.name) readModel, 1, targetName)
+  SupplyObservedTargetOutsideGroup readModel targetName -> ((.name) readModel, 2, targetName)
+  SupplyObservedTargetWithoutOwner readModel targetName -> ((.name) readModel, 3, targetName)
+  SupplyObservedTargetWithMultipleOwners readModel targetName _ -> ((.name) readModel, 4, targetName)
+  SupplyOwnerGroupMismatch readModel targetName _ -> ((.name) readModel, 5, targetName)
+  SupplyQueryWithoutOwner readModel -> ((.name) readModel, 6, "")
+  SupplyQueryWithMultipleOwners readModel _ -> ((.name) readModel, 7, "")
+  SupplyLegacyProjectionConflict readModel aggregate _ -> ((.name) readModel, 8, (.name) aggregate)

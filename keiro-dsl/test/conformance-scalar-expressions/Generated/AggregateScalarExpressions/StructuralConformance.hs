@@ -11,7 +11,7 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.AggregateScalarExpressions.StructuralProjections qualified as StructuralProjections
-import Generated.AggregateScalarExpressions.Structural.Shape.Limits qualified as ShapeLimits
+import Generated.AggregateScalarExpressions.Structural.Shape.Limits (LimitsShape(ceiling, minimum))
 import ScalarExpressions.Bindings qualified as Bindings
 import ScalarExpressions.Domain (Limits)
 
@@ -47,6 +47,6 @@ coverageLimits = True
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: scalar-expressions.Limits.v1/ceiling", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsCeilingWitness (\referenceOwner -> ShapeLimits.ceiling (bindingToShape Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
-  , ("projection witness agreement: scalar-expressions.Limits.v1/minimum", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsMinimumWitness (\referenceOwner -> ShapeLimits.minimum (bindingToShape Bindings.limitsBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
+  [ ("projection witness agreement: scalar-expressions.Limits.v1/ceiling", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsCeilingWitness (\referenceOwner -> (bindingToShape Bindings.limitsBinding referenceOwner).ceiling) owner) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
+  , ("projection witness agreement: scalar-expressions.Limits.v1/minimum", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.limitsMinimumWitness (\referenceOwner -> (bindingToShape Bindings.limitsBinding referenceOwner).minimum) owner) (NonEmpty.toList (fixtureCases Bindings.limitsCases)))
   ]

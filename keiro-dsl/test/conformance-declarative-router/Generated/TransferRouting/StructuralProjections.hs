@@ -13,10 +13,10 @@ module Generated.TransferRouting.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Generated.TransferRouting.Structural.Shape.HospitalLoadRow (HospitalLoadRowShape(availableBeds, hospitalId, region))
+import Generated.TransferRouting.Structural.Shape.TransferRouteInput (TransferRouteInputShape(region, transferNeedId))
 import Conformance.DeclarativeRouter.Bindings qualified as Bindings
 import Conformance.DeclarativeRouter.Domain (HospitalLoadRow, TransferRouteInput)
-import Generated.TransferRouting.Structural.Shape.HospitalLoadRow qualified as ShapeHospitalLoadRow
-import Generated.TransferRouting.Structural.Shape.TransferRouteInput qualified as ShapeTransferRouteInput
 
 data HospitalLoadRowAvailableBedsProjection
 
@@ -25,7 +25,7 @@ instance FieldProjection HospitalLoadRowAvailableBedsProjection where
   type FieldOwner HospitalLoadRowAvailableBedsProjection = HospitalLoadRow
   type FieldResult HospitalLoadRowAvailableBedsProjection = Int
   fieldShapeId _ = "conformance.declarative-router.HospitalLoadRow.v1"
-  projectFieldValue _ owner = ShapeHospitalLoadRow.availableBeds (bindingToShape Bindings.hospitalLoadRowBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.hospitalLoadRowBinding owner).availableBeds
 
 hospitalLoadRowAvailableBedsWitness :: FieldWitness HospitalLoadRowAvailableBedsProjection
 hospitalLoadRowAvailableBedsWitness = fieldWitness @HospitalLoadRowAvailableBedsProjection
@@ -37,7 +37,7 @@ instance FieldProjection HospitalLoadRowHospitalIdProjection where
   type FieldOwner HospitalLoadRowHospitalIdProjection = HospitalLoadRow
   type FieldResult HospitalLoadRowHospitalIdProjection = Text
   fieldShapeId _ = "conformance.declarative-router.HospitalLoadRow.v1"
-  projectFieldValue _ owner = ShapeHospitalLoadRow.hospitalId (bindingToShape Bindings.hospitalLoadRowBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.hospitalLoadRowBinding owner).hospitalId
 
 hospitalLoadRowHospitalIdWitness :: FieldWitness HospitalLoadRowHospitalIdProjection
 hospitalLoadRowHospitalIdWitness = fieldWitness @HospitalLoadRowHospitalIdProjection
@@ -49,7 +49,7 @@ instance FieldProjection HospitalLoadRowRegionProjection where
   type FieldOwner HospitalLoadRowRegionProjection = HospitalLoadRow
   type FieldResult HospitalLoadRowRegionProjection = Text
   fieldShapeId _ = "conformance.declarative-router.HospitalLoadRow.v1"
-  projectFieldValue _ owner = ShapeHospitalLoadRow.region (bindingToShape Bindings.hospitalLoadRowBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.hospitalLoadRowBinding owner).region
 
 hospitalLoadRowRegionWitness :: FieldWitness HospitalLoadRowRegionProjection
 hospitalLoadRowRegionWitness = fieldWitness @HospitalLoadRowRegionProjection
@@ -61,7 +61,7 @@ instance FieldProjection TransferRouteInputRegionProjection where
   type FieldOwner TransferRouteInputRegionProjection = TransferRouteInput
   type FieldResult TransferRouteInputRegionProjection = Text
   fieldShapeId _ = "conformance.declarative-router.TransferRouteInput.v1"
-  projectFieldValue _ owner = ShapeTransferRouteInput.region (bindingToShape Bindings.transferRouteInputBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.transferRouteInputBinding owner).region
 
 transferRouteInputRegionWitness :: FieldWitness TransferRouteInputRegionProjection
 transferRouteInputRegionWitness = fieldWitness @TransferRouteInputRegionProjection
@@ -73,7 +73,7 @@ instance FieldProjection TransferRouteInputTransferNeedIdProjection where
   type FieldOwner TransferRouteInputTransferNeedIdProjection = TransferRouteInput
   type FieldResult TransferRouteInputTransferNeedIdProjection = Text
   fieldShapeId _ = "conformance.declarative-router.TransferRouteInput.v1"
-  projectFieldValue _ owner = ShapeTransferRouteInput.transferNeedId (bindingToShape Bindings.transferRouteInputBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.transferRouteInputBinding owner).transferNeedId
 
 transferRouteInputTransferNeedIdWitness :: FieldWitness TransferRouteInputTransferNeedIdProjection
 transferRouteInputTransferNeedIdWitness = fieldWitness @TransferRouteInputTransferNeedIdProjection

@@ -4,7 +4,7 @@ manifest: service.keiro-workspace
 context: workspace-nominal-proof
 module-root: (none)
 layout: prefixed
-naming-edition idiomatic-v1
+naming-edition idiomatic-v2
 member domain/project-artifact.keiro
 member domain/project.keiro
 member domain/shared.keiro

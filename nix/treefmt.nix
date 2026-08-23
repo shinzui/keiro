@@ -20,8 +20,11 @@
         # repository-wide parser extensions explicitly.
         programs.fourmolu.ghcOpts = [
           "GHC2024"
+          "DuplicateRecordFields"
           "ImportQualifiedPost"
+          "NoFieldSelectors"
           "OverloadedLabels"
+          "OverloadedRecordDot"
         ];
         programs.cabal-fmt.enable = true;
         # The keiro-dsl conformance slice is captured/scaffolded fixture source

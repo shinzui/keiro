@@ -7,6 +7,7 @@
 -- consumer contract reconciles and executes witness values in a later layer.
 module Keiro.Dsl.BehaviorCoverage
   ( BehaviorKey (..),
+    unBehaviorKey,
     ObligationKind (..),
     EvidenceLevel (..),
     GuardCoverage (..),
@@ -50,6 +51,9 @@ import Keiro.Dsl.TypeGraph (TypeGraph, TypeGraphError, resolveTypeGraph)
 newtype BehaviorKey = BehaviorKey {unBehaviorKey :: Text}
   deriving stock (Eq, Ord, Show)
 
+unBehaviorKey :: BehaviorKey -> Text
+unBehaviorKey (BehaviorKey value) = value
+
 data ObligationKind
   = LiveTransition
   | RequiredRejection
@@ -85,31 +89,31 @@ data RequirementOrigin
 -- | Current exact presentation data attached only by a source-aware reporting
 -- path. It never contributes to 'requirementCanonical' or 'BehaviorKey'.
 data BehaviorExactLocation = BehaviorExactLocation
-  { exactSourceFile :: !FilePath,
-    exactSourceLine :: !Int,
-    exactSourceColumn :: !Int
+  { sourceFile :: !FilePath,
+    sourceLine :: !Int,
+    sourceColumn :: !Int
   }
   deriving stock (Eq, Ord, Show)
 
 data BehaviorRequirement = BehaviorRequirement
-  { requirementKey :: !BehaviorKey,
-    requirementOrigin :: !RequirementOrigin,
-    requirementKind :: !ObligationKind,
-    requirementEvidence :: !EvidenceLevel,
-    requirementGuardCoverage :: !GuardCoverage,
-    requirementContext :: !Name,
-    requirementAggregate :: !Name,
-    requirementSource :: !Name,
-    requirementCommand :: !Name,
-    requirementTarget :: !(Maybe Name),
-    requirementMode :: !(Maybe TransitionMode),
-    requirementEvents :: ![Name],
-    requirementOutputs :: ![OutputEvidence],
-    requirementDomainOutcome :: !(Maybe TransitionOutcome),
-    requirementLocation :: !Loc,
-    requirementExactLocation :: !(Maybe BehaviorExactLocation),
-    requirementOwner :: !(Maybe FilePath),
-    requirementCanonical :: !Text
+  { key :: !BehaviorKey,
+    origin :: !RequirementOrigin,
+    kind :: !ObligationKind,
+    evidence :: !EvidenceLevel,
+    guardCoverage :: !GuardCoverage,
+    context :: !Name,
+    aggregate :: !Name,
+    source :: !Name,
+    command :: !Name,
+    target :: !(Maybe Name),
+    mode :: !(Maybe TransitionMode),
+    events :: ![Name],
+    outputs :: ![OutputEvidence],
+    domainOutcome :: !(Maybe TransitionOutcome),
+    location :: !Loc,
+    exactLocation :: !(Maybe BehaviorExactLocation),
+    owner :: !(Maybe FilePath),
+    canonical :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -117,14 +121,14 @@ data BehaviorRequirement = BehaviorRequirement
 -- retain enough human-readable identity to report additions and removals
 -- without re-reading or attempting to understand consumer Haskell.
 data BehaviorRecordRow = BehaviorRecordRow
-  { behaviorRecordKey :: !BehaviorKey,
-    behaviorRecordKind :: !ObligationKind,
-    behaviorRecordEvidence :: !EvidenceLevel,
-    behaviorRecordAggregate :: !Name,
-    behaviorRecordSource :: !Name,
-    behaviorRecordCommand :: !Name,
-    behaviorRecordOwner :: !(Maybe FilePath),
-    behaviorRecordOutputs :: ![OutputEvidence]
+  { key :: !BehaviorKey,
+    kind :: !ObligationKind,
+    evidence :: !EvidenceLevel,
+    aggregate :: !Name,
+    source :: !Name,
+    command :: !Name,
+    owner :: !(Maybe FilePath),
+    outputs :: ![OutputEvidence]
   }
   deriving stock (Eq, Ord, Show)
 
@@ -136,9 +140,9 @@ data BehaviorDerivationError
   deriving stock (Eq, Show)
 
 data BehaviorObligationsReport = BehaviorObligationsReport
-  { behaviorSubject :: !FilePath,
-    behaviorWorkspaceService :: !(Maybe Text),
-    behaviorRequirements :: ![BehaviorRequirement]
+  { subject :: !FilePath,
+    workspaceService :: !(Maybe Text),
+    requirements :: ![BehaviorRequirement]
   }
   deriving stock (Eq, Show)
 
@@ -189,15 +193,15 @@ instance FromJSON OutputEvidence where
 instance ToJSON BehaviorRecordRow where
   toJSON row =
     object
-      ( [ "key" .= behaviorRecordKey row,
-          "kind" .= behaviorRecordKind row,
-          "evidence" .= behaviorRecordEvidence row,
-          "aggregate" .= behaviorRecordAggregate row,
-          "source" .= behaviorRecordSource row,
-          "command" .= behaviorRecordCommand row,
-          "outputs" .= behaviorRecordOutputs row
+      ( [ "key" .= (.key) row,
+          "kind" .= (.kind) row,
+          "evidence" .= (.evidence) row,
+          "aggregate" .= (.aggregate) row,
+          "source" .= (.source) row,
+          "command" .= (.command) row,
+          "outputs" .= (.outputs) row
         ]
-          <> ["owner" .= owner | Just owner <- [behaviorRecordOwner row]]
+          <> ["owner" .= owner | Just owner <- [(.owner) row]]
       )
 
 instance FromJSON BehaviorRecordRow where
@@ -215,38 +219,38 @@ instance FromJSON BehaviorRecordRow where
 instance ToJSON BehaviorRequirement where
   toJSON requirement =
     object
-      ( [ "key" .= requirementKey requirement,
-          "kind" .= requirementKind requirement,
-          "evidence" .= requirementEvidence requirement,
-          "guardCoverage" .= requirementGuardCoverage requirement,
-          "context" .= requirementContext requirement,
-          "aggregate" .= requirementAggregate requirement,
-          "source" .= requirementSource requirement,
-          "command" .= requirementCommand requirement,
-          "target" .= requirementTarget requirement,
-          "mode" .= fmap transitionModeText (requirementMode requirement),
-          "events" .= requirementEvents requirement,
-          "outputs" .= requirementOutputs requirement,
+      ( [ "key" .= (.key) requirement,
+          "kind" .= (.kind) requirement,
+          "evidence" .= (.evidence) requirement,
+          "guardCoverage" .= (.guardCoverage) requirement,
+          "context" .= (.context) requirement,
+          "aggregate" .= (.aggregate) requirement,
+          "source" .= (.source) requirement,
+          "command" .= (.command) requirement,
+          "target" .= (.target) requirement,
+          "mode" .= fmap transitionModeText ((.mode) requirement),
+          "events" .= (.events) requirement,
+          "outputs" .= (.outputs) requirement,
           "location"
             .= object
-              ( ["line" .= maybe (unLoc (requirementLocation requirement)) exactSourceLine (requirementExactLocation requirement)]
-                  <> ["member" .= owner | Just owner <- [requirementOwner requirement]]
-                  <> ["file" .= exactSourceFile exact | Just exact <- [requirementExactLocation requirement]]
-                  <> ["column" .= exactSourceColumn exact | Just exact <- [requirementExactLocation requirement]]
-                  <> ["quality" .= maybe ("line-only" :: Text) (const "exact") (requirementExactLocation requirement)]
+              ( ["line" .= maybe (unLoc ((.location) requirement)) (.sourceLine) ((.exactLocation) requirement)]
+                  <> ["member" .= owner | Just owner <- [(.owner) requirement]]
+                  <> ["file" .= (.sourceFile) exact | Just exact <- [(.exactLocation) requirement]]
+                  <> ["column" .= (.sourceColumn) exact | Just exact <- [(.exactLocation) requirement]]
+                  <> ["quality" .= maybe ("line-only" :: Text) (const "exact") ((.exactLocation) requirement)]
               )
         ]
-          <> ["domainOutcome" .= canonicalTransitionOutcome (Just outcome) | Just outcome <- [requirementDomainOutcome requirement]]
+          <> ["domainOutcome" .= canonicalTransitionOutcome (Just outcome) | Just outcome <- [(.domainOutcome) requirement]]
       )
 
 instance ToJSON BehaviorObligationsReport where
   toJSON report =
     object
       ( [ "schema" .= ("keiro-dsl/behavior-obligations/1" :: Text),
-          "subject" .= behaviorSubject report,
-          "requirements" .= behaviorRequirements report
+          "subject" .= (.subject) report,
+          "requirements" .= (.requirements) report
         ]
-          <> ["workspace" .= object ["service" .= service] | Just service <- [behaviorWorkspaceService report]]
+          <> ["workspace" .= object ["service" .= service] | Just service <- [(.workspaceService) report]]
       )
 
 deriveBehaviorRequirements :: Spec -> Either [BehaviorDerivationError] [BehaviorRequirement]
@@ -261,9 +265,9 @@ deriveBehaviorRequirementsWithGraphResult typeGraphResult spec = case fmap conca
   Left derivationError -> Left [derivationError]
   Right raw -> do
     rejectIdentityDefects raw
-    pure (sortOn requirementKey raw)
+    pure (sortOn (.key) raw)
   where
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
 
 deriveAggregateBehaviorRequirements :: Spec -> Aggregate -> Either BehaviorDerivationError [BehaviorRequirement]
 deriveAggregateBehaviorRequirements spec = deriveAggregateBehaviorRequirementsWithGraphResult (resolveTypeGraph spec) spec
@@ -271,21 +275,21 @@ deriveAggregateBehaviorRequirements spec = deriveAggregateBehaviorRequirementsWi
 deriveAggregateBehaviorRequirementsWithGraphResult :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> Either BehaviorDerivationError [BehaviorRequirement]
 deriveAggregateBehaviorRequirementsWithGraphResult typeGraphResult spec aggregate = do
   let reachable = liveReachableStates aggregate
-      indexedTransitions = zip (map TransitionOrdinal [0 ..]) (aggTransitions aggregate)
+      indexedTransitions = zip (map TransitionOrdinal [0 ..]) ((.transitions) aggregate)
       liveTransitions =
         [ (ordinal, transition)
         | (ordinal, transition) <- indexedTransitions,
-          tMode transition == TmLive,
-          tSource transition `Set.member` reachable
+          (.mode) transition == TmLive,
+          (.source) transition `Set.member` reachable
         ]
-      replayTransitions = [(ordinal, transition) | (ordinal, transition) <- indexedTransitions, tMode transition == TmReplayOnly]
-      commands = map cmdName (aggCommands aggregate)
-      cells = [(state, command) | state <- Set.toAscList reachable, command <- commands]
-      cellTransitions state command =
+      replayTransitions = [(ordinal, transition) | (ordinal, transition) <- indexedTransitions, (.mode) transition == TmReplayOnly]
+      commands = map (\command -> command.name) ((.commands) aggregate)
+      cells = [(state, commandName) | state <- Set.toAscList reachable, commandName <- commands]
+      cellTransitions state commandName =
         [ (ordinal, transition)
         | (ordinal, transition) <- liveTransitions,
-          tSource transition == state,
-          tCommand transition == command
+          (.source) transition == state,
+          (.command) transition == commandName
         ]
       transitionRows =
         [ transitionRequirement typeGraphResult spec aggregate (cellGuardCoverage (map snd siblings)) ordinal transition
@@ -306,19 +310,38 @@ behaviorRecordRows = map toRow
   where
     toRow requirement =
       BehaviorRecordRow
-        { behaviorRecordKey = requirementKey requirement,
-          behaviorRecordKind = requirementKind requirement,
-          behaviorRecordEvidence = requirementEvidence requirement,
-          behaviorRecordAggregate = requirementAggregate requirement,
-          behaviorRecordSource = requirementSource requirement,
-          behaviorRecordCommand = requirementCommand requirement,
-          behaviorRecordOwner = requirementOwner requirement,
-          behaviorRecordOutputs = requirementOutputs requirement
+        { key = (.key) requirement,
+          kind = (.kind) requirement,
+          evidence = (.evidence) requirement,
+          aggregate = (.aggregate) requirement,
+          source = (.source) requirement,
+          command = (.command) requirement,
+          owner = (.owner) requirement,
+          outputs = (.outputs) requirement
         }
 
 attributeBehaviorOwner :: (Name -> Maybe FilePath) -> BehaviorRequirement -> BehaviorRequirement
-attributeBehaviorOwner ownerForAggregate requirement =
-  requirement {requirementOwner = ownerForAggregate (requirementAggregate requirement)}
+attributeBehaviorOwner ownerForAggregate BehaviorRequirement {key, origin, kind, evidence, guardCoverage, context, aggregate, source, command, target, mode, events, outputs, domainOutcome, location, exactLocation, canonical} =
+  BehaviorRequirement
+    { key,
+      origin,
+      kind,
+      evidence,
+      guardCoverage,
+      context,
+      aggregate,
+      source,
+      command,
+      target,
+      mode,
+      events,
+      outputs,
+      domainOutcome,
+      location,
+      exactLocation,
+      owner = ownerForAggregate aggregate,
+      canonical
+    }
 
 behaviorObligationsReport :: FilePath -> Spec -> Either [BehaviorDerivationError] BehaviorObligationsReport
 behaviorObligationsReport subject spec =
@@ -326,59 +349,59 @@ behaviorObligationsReport subject spec =
 
 transitionRequirement :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> GuardCoverage -> TransitionOrdinal -> Transition -> Either BehaviorDerivationError BehaviorRequirement
 transitionRequirement typeGraphResult spec aggregate guardCoverage ordinal transition = do
-  if null (tEmits transition) && (tSource transition /= tGoto transition || not (null (tWrites transition)))
-    then Left (EventlessStateChange (aggName aggregate) (tSource transition) (tCommand transition))
+  if null ((.emits) transition) && ((.source) transition /= (.goto) transition || not (null ((.writes) transition)))
+    then Left (EventlessStateChange ((.name) aggregate) ((.source) transition) ((.command) transition))
     else pure ()
   mappings <-
     traverse
       (\(emitIndex, eventName) -> either (Left . InvalidEventOutput eventName) Right (eventOutputMappingFromGraphResult typeGraphResult spec aggregate transition emitIndex eventName))
-      (zip [1 ..] (tEmits transition))
-  let kind = if tMode transition == TmLive then LiveTransition else ReplayTransition
+      (zip [1 ..] ((.emits) transition))
+  let kind = if (.mode) transition == TmLive then LiveTransition else ReplayTransition
       outputs = map outputEvidence mappings
       canonical = transitionCanonical spec aggregate kind transition mappings
   pure
     BehaviorRequirement
-      { requirementKey = canonicalKey canonical,
-        requirementOrigin = TransitionRequirementOrigin (aggName aggregate) ordinal,
-        requirementKind = kind,
-        requirementEvidence = transitionEvidence transition,
-        requirementGuardCoverage = guardCoverage,
-        requirementContext = specContext spec,
-        requirementAggregate = aggName aggregate,
-        requirementSource = tSource transition,
-        requirementCommand = tCommand transition,
-        requirementTarget = Just (tGoto transition),
-        requirementMode = Just (tMode transition),
-        requirementEvents = tEmits transition,
-        requirementOutputs = outputs,
-        requirementDomainOutcome = tOutcome transition,
-        requirementLocation = tLoc transition,
-        requirementExactLocation = Nothing,
-        requirementOwner = Nothing,
-        requirementCanonical = canonical
+      { key = canonicalKey canonical,
+        origin = TransitionRequirementOrigin ((.name) aggregate) ordinal,
+        kind = kind,
+        evidence = transitionEvidence transition,
+        guardCoverage = guardCoverage,
+        context = (.context) spec,
+        aggregate = (.name) aggregate,
+        source = (.source) transition,
+        command = (.command) transition,
+        target = Just ((.goto) transition),
+        mode = Just ((.mode) transition),
+        events = (.emits) transition,
+        outputs = outputs,
+        domainOutcome = (.outcome) transition,
+        location = (.loc) transition,
+        exactLocation = Nothing,
+        owner = Nothing,
+        canonical = canonical
       }
 
 rejectionRequirement :: Spec -> Aggregate -> Name -> Name -> BehaviorRequirement
 rejectionRequirement spec aggregate state command =
   BehaviorRequirement
-    { requirementKey = canonicalKey canonical,
-      requirementOrigin = RejectionRequirementOrigin (aggName aggregate) state,
-      requirementKind = RequiredRejection,
-      requirementEvidence = aggregateEvidence aggregate,
-      requirementGuardCoverage = GuardNotApplicable,
-      requirementContext = specContext spec,
-      requirementAggregate = aggName aggregate,
-      requirementSource = state,
-      requirementCommand = command,
-      requirementTarget = Nothing,
-      requirementMode = Nothing,
-      requirementEvents = [],
-      requirementOutputs = [],
-      requirementDomainOutcome = Nothing,
-      requirementLocation = maybe (aggLoc aggregate) stLoc (find ((== state) . stName) (aggStates aggregate)),
-      requirementExactLocation = Nothing,
-      requirementOwner = Nothing,
-      requirementCanonical = canonical
+    { key = canonicalKey canonical,
+      origin = RejectionRequirementOrigin ((.name) aggregate) state,
+      kind = RequiredRejection,
+      evidence = aggregateEvidence aggregate,
+      guardCoverage = GuardNotApplicable,
+      context = (.context) spec,
+      aggregate = (.name) aggregate,
+      source = state,
+      command = command,
+      target = Nothing,
+      mode = Nothing,
+      events = [],
+      outputs = [],
+      domainOutcome = Nothing,
+      location = maybe ((.loc) aggregate) (.loc) (find ((== state) . (.name)) ((.states) aggregate)),
+      exactLocation = Nothing,
+      owner = Nothing,
+      canonical = canonical
     }
   where
     canonical =
@@ -386,8 +409,8 @@ rejectionRequirement spec aggregate state command =
         "|"
         [ "behavior-v1",
           "kind=rejection",
-          "context=" <> specContext spec,
-          "aggregate=" <> aggName aggregate,
+          "context=" <> (.context) spec,
+          "aggregate=" <> (.name) aggregate,
           "source=" <> state,
           "command=" <> command
         ]
@@ -398,27 +421,27 @@ transitionCanonical spec aggregate kind transition mappings =
     "|"
     ( [ "behavior-v1",
         "kind=" <> obligationKindText kind,
-        "context=" <> specContext spec,
-        "aggregate=" <> aggName aggregate,
-        "mode=" <> transitionModeText (tMode transition),
-        "source=" <> tSource transition,
-        "command=" <> tCommand transition,
-        "implementation=" <> implementationText (tImplementation transition),
-        "guard=" <> maybe "" renderExpr (tGuard transition),
-        "writes=" <> T.intercalate ";" [name <> ":=" <> renderExpr expression | (name, expression) <- tWrites transition],
-        "events=" <> T.intercalate "," (tEmits transition),
+        "context=" <> (.context) spec,
+        "aggregate=" <> (.name) aggregate,
+        "mode=" <> transitionModeText ((.mode) transition),
+        "source=" <> (.source) transition,
+        "command=" <> (.command) transition,
+        "implementation=" <> implementationText ((.implementation) transition),
+        "guard=" <> maybe "" renderExpr ((.guard) transition),
+        "writes=" <> T.intercalate ";" [name <> ":=" <> renderExpr expression | (name, expression) <- (.writes) transition],
+        "events=" <> T.intercalate "," ((.emits) transition),
         "outputs=" <> T.intercalate "," (map eventOutputCanonical mappings),
-        "target=" <> tGoto transition
+        "target=" <> (.goto) transition
       ]
         ++ outcomeSegments
     )
   where
-    outcomeSegments = case aggDomainOutcomeTypes aggregate of
+    outcomeSegments = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just declaration ->
-        [ "outcome-rejection-type=" <> rejectionType declaration,
-          "outcome-no-op-type=" <> noOpType declaration,
-          "domain-outcome=" <> canonicalTransitionOutcome (tOutcome transition)
+        [ "outcome-rejection-type=" <> (.rejectionType) declaration,
+          "outcome-no-op-type=" <> (.noOpType) declaration,
+          "domain-outcome=" <> canonicalTransitionOutcome ((.outcome) transition)
         ]
 
 canonicalKey :: Text -> BehaviorKey
@@ -430,25 +453,25 @@ outputEvidence mapping = case mapping of
   HandOwnedEventOutput obligation -> HandOwnedOutput obligation
 
 transitionEvidence :: Transition -> EvidenceLevel
-transitionEvidence transition = case tImplementation transition of
+transitionEvidence transition = case (.implementation) transition of
   LegacyHoleImplementation -> LegacyRuntimeWitness
   GeneratedImplementation -> GeneratedAuthoritative
   HoleImplementation -> HoleWitnessed
 
 aggregateEvidence :: Aggregate -> EvidenceLevel
 aggregateEvidence aggregate
-  | any ((/= LegacyHoleImplementation) . tImplementation) (aggTransitions aggregate) = GeneratedAuthoritative
+  | any ((/= LegacyHoleImplementation) . (.implementation)) ((.transitions) aggregate) = GeneratedAuthoritative
   | otherwise = LegacyRuntimeWitness
 
 cellGuardCoverage :: [Transition] -> GuardCoverage
 cellGuardCoverage transitions
-  | any ((== Nothing) . tGuard) transitions = GuardTotal
+  | any ((== Nothing) . (.guard)) transitions = GuardTotal
   | any crossesOneWayProjection guards = GuardUnknown
   | complementary = GuardTotal
   | all isLiteralFalse guards = GuardPartial
   | otherwise = GuardUnknown
   where
-    guards = [guard | transition <- transitions, Just guard <- [tGuard transition]]
+    guards = [guard | transition <- transitions, Just guard <- [(.guard) transition]]
     complementary = or [left == complementExpr right | left <- guards, right <- guards, left /= right]
     isLiteralFalse (EAtom (ABool False)) = True
     isLiteralFalse _ = False
@@ -468,22 +491,22 @@ crossesOneWayProjection expression = case expression of
 
 replayGuardCoverage :: Transition -> GuardCoverage
 replayGuardCoverage transition
-  | maybe False crossesOneWayProjection (tGuard transition) = GuardUnknown
+  | maybe False crossesOneWayProjection ((.guard) transition) = GuardUnknown
   | otherwise = GuardNotApplicable
 
 liveReachableStates :: Aggregate -> Set Name
-liveReachableStates aggregate = case map stName (aggStates aggregate) of
+liveReachableStates aggregate = case map (\state -> state.name) ((.states) aggregate) of
   [] -> Set.empty
   initial : _ -> go (Set.singleton initial) [initial]
   where
     go seen [] = seen
     go seen (source : remaining) =
       let next =
-            [ tGoto transition
-            | transition <- aggTransitions aggregate,
-              tMode transition == TmLive,
-              tSource transition == source,
-              tGoto transition `Set.notMember` seen
+            [ (.goto) transition
+            | transition <- (.transitions) aggregate,
+              (.mode) transition == TmLive,
+              (.source) transition == source,
+              (.goto) transition `Set.notMember` seen
             ]
        in go (foldr Set.insert seen next) (remaining <> next)
 
@@ -492,18 +515,18 @@ rejectIdentityDefects requirements = case duplicateErrors <> collisionErrors of
   [] -> Right ()
   errors -> Left errors
   where
-    byCanonical = groupsOn requirementCanonical requirements
+    byCanonical = groupsOn (.canonical) requirements
     duplicateErrors =
-      [ DuplicateBehaviorIdentity canonical (map requirementLocation duplicates)
+      [ DuplicateBehaviorIdentity canonicalIdentity (map (\requirement -> requirement.location) duplicates)
       | duplicates@(first : _ : _) <- byCanonical,
-        let canonical = requirementCanonical first
+        let canonicalIdentity = (.canonical) first
       ]
-    byKey = groupsOn requirementKey requirements
+    byKey = groupsOn (.key) requirements
     collisionErrors =
-      [ BehaviorKeyCollision key canonicals
+      [ BehaviorKeyCollision behaviorKey canonicals
       | collisions@(first : _ : _) <- byKey,
-        let key = requirementKey first,
-        let canonicals = Set.toAscList (Set.fromList (map requirementCanonical collisions)),
+        let behaviorKey = (.key) first,
+        let canonicals = Set.toAscList (Set.fromList (map (\requirement -> requirement.canonical) collisions)),
         length canonicals > 1
       ]
 
@@ -513,40 +536,40 @@ groupsOn key = groupBy (\left right -> key left == key right) . sortOn key
 renderBehaviorObligationsText :: BehaviorObligationsReport -> Text
 renderBehaviorObligationsText report =
   T.unlines
-    ( [ "behavior obligations: " <> T.pack (behaviorSubject report),
+    ( [ "behavior obligations: " <> T.pack ((.subject) report),
         "schema: keiro-dsl/behavior-obligations/1",
-        "required: " <> tshow (length (behaviorRequirements report))
+        "required: " <> tshow (length ((.requirements) report))
       ]
-        <> map renderRequirement (behaviorRequirements report)
+        <> map renderRequirement ((.requirements) report)
     )
   where
     renderRequirement requirement =
-      unBehaviorKey (requirementKey requirement)
+      unBehaviorKey ((.key) requirement)
         <> " "
-        <> obligationKindText (requirementKind requirement)
+        <> obligationKindText ((.kind) requirement)
         <> " "
-        <> requirementAggregate requirement
+        <> (.aggregate) requirement
         <> ":"
-        <> requirementSource requirement
+        <> (.source) requirement
         <> " -- "
-        <> requirementCommand requirement
+        <> (.command) requirement
         <> " ["
-        <> evidenceLevelText (requirementEvidence requirement)
+        <> evidenceLevelText ((.evidence) requirement)
         <> ", guard="
-        <> guardCoverageText (requirementGuardCoverage requirement)
+        <> guardCoverageText ((.guardCoverage) requirement)
         <> "]"
-        <> maybe (renderLineOnly requirement) renderExact (requirementExactLocation requirement)
+        <> maybe (renderLineOnly requirement) renderExact ((.exactLocation) requirement)
     renderExact exact =
       " "
-        <> T.pack (exactSourceFile exact)
+        <> T.pack ((.sourceFile) exact)
         <> ":"
-        <> tshow (exactSourceLine exact)
+        <> tshow ((.sourceLine) exact)
         <> ":"
-        <> tshow (exactSourceColumn exact)
+        <> tshow ((.sourceColumn) exact)
         <> " [location-quality=exact]"
     renderLineOnly requirement =
       " line "
-        <> tshow (unLoc (requirementLocation requirement))
+        <> tshow (unLoc ((.location) requirement))
         <> " [location-quality=line-only]"
 
 encodeBehaviorObligationsJson :: BehaviorObligationsReport -> Text

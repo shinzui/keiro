@@ -41,18 +41,18 @@ pProcess = do
   timer <- pTimerNode
   pure
     ProcessNode
-      { procId = pid,
-        procName = nm,
-        procInput = inp,
-        procCorrelate = corr,
-        procSaga = saga,
-        procTarget = tgt,
-        procProjections = projs,
-        procHandle = handle,
-        procRejected = rejected,
-        procPoison = poison,
-        procTimer = timer,
-        procLoc = loc
+      { id = pid,
+        name = nm,
+        input = inp,
+        correlate = corr,
+        saga = saga,
+        target = tgt,
+        projections = projs,
+        handle = handle,
+        rejected = rejected,
+        poison = poison,
+        timer = timer,
+        loc = loc
       }
 
 pRouter :: FrontendContext -> P RouterNode
@@ -65,7 +65,7 @@ pRouter context = do
   (inp, typedInputSpan) <- pRouterInputDecl context
   key <- pRouterKey (maybe False (const True) typedInputSpan)
   resolved <- pResolveDecl context
-  case (typedInputSpan, rvSource resolved) of
+  case (typedInputSpan, (.source) resolved) of
     (Just _, ResolveDeclarative {}) -> pure ()
     (Nothing, ResolveReadModel {}) -> pure ()
     (Nothing, ResolveHole) -> pure ()
@@ -80,17 +80,17 @@ pRouter context = do
   poison <- pPolicyLine "poison"
   pure
     RouterNode
-      { rtId = rid,
-        rtName = nm,
-        rtInput = inp,
-        rtKey = key,
-        rtResolve = resolved,
-        rtTarget = target,
-        rtProjections = projections,
-        rtDispatch = dispatch,
-        rtRejected = rejected,
-        rtPoison = poison,
-        rtLoc = loc
+      { id = rid,
+        name = nm,
+        input = inp,
+        key = key,
+        resolve = resolved,
+        target = target,
+        projections = projections,
+        dispatch = dispatch,
+        rejected = rejected,
+        poison = poison,
+        loc = loc
       }
 
 pRouterKey :: Bool -> P CorrelateDecl
@@ -99,7 +99,7 @@ pRouterKey declarative = do
   _ <- keyword "input" *> symbol "."
   field <- ident
   via <- if declarative then pure "idText" else keyword "via" *> ident
-  pure CorrelateDecl {corrField = field, corrVia = via}
+  pure CorrelateDecl {field = field, via = via}
 
 pResolveDecl :: FrontendContext -> P ResolveDecl
 pResolveDecl context = do
@@ -114,14 +114,14 @@ pCustomResolve loc = do
   source <- choice [ResolveReadModel <$> (keyword "read-model" *> ident), ResolveHole <$ keyword "hole"]
   keyword "row"
   row <- braces (many ident)
-  pure ResolveDecl {rvSource = source, rvRow = row, rvLoc = loc}
+  pure ResolveDecl {source = source, row = row, loc = loc}
 
 pDeclarativeResolve :: FrontendContext -> Loc -> P ResolveDecl
 pDeclarativeResolve context loc = do
   marker <- withOwnedSpan (keyword "declarative")
   requireLanguageFeatureAt context DeclarativeRouterSelectionSyntax (spanOf marker)
   selection <- braces (pRouterSelection context loc)
-  pure ResolveDecl {rvSource = ResolveDeclarative selection, rvRow = [], rvLoc = loc}
+  pure ResolveDecl {source = ResolveDeclarative selection, row = [], loc = loc}
 
 pRouterSelection :: FrontendContext -> Loc -> P RouterSelectionDecl
 pRouterSelection context loc = do
@@ -157,30 +157,30 @@ pRouterSelection context loc = do
   (partial, partialLoc) <- locatedClause "partial" pSelectionPolicyName
   pure
     RouterSelectionDecl
-      { rsIdentity = identity,
-        rsIdentityLoc = identityLoc,
-        rsVersion = version,
-        rsVersionLoc = versionLoc,
-        rsQuery = query,
-        rsQueryLoc = queryLoc,
-        rsQueryInput = queryInput,
-        rsQueryInputLoc = queryInputLoc,
-        rsPredicate = predicate,
-        rsRecipient = recipient,
-        rsLimit = recipientLimit,
-        rsOrder = order,
-        rsOrderLoc = orderLoc,
-        rsDedupe = dedupe,
-        rsDedupeLoc = dedupeLoc,
-        rsEmptyPolicy = emptyPolicy,
-        rsEmptyPolicyLoc = emptyPolicyLoc,
-        rsFailurePolicy = failurePolicy,
-        rsFailurePolicyLoc = failurePolicyLoc,
-        rsRedelivery = redelivery,
-        rsRedeliveryLoc = redeliveryLoc,
-        rsPartial = partial,
-        rsPartialLoc = partialLoc,
-        rsLoc = loc
+      { identity = identity,
+        identityLoc = identityLoc,
+        version = version,
+        versionLoc = versionLoc,
+        query = query,
+        queryLoc = queryLoc,
+        queryInput = queryInput,
+        queryInputLoc = queryInputLoc,
+        predicate = predicate,
+        recipient = recipient,
+        limit = recipientLimit,
+        order = order,
+        orderLoc = orderLoc,
+        dedupe = dedupe,
+        dedupeLoc = dedupeLoc,
+        emptyPolicy = emptyPolicy,
+        emptyPolicyLoc = emptyPolicyLoc,
+        failurePolicy = failurePolicy,
+        failurePolicyLoc = failurePolicyLoc,
+        redelivery = redelivery,
+        redeliveryLoc = redeliveryLoc,
+        partial = partial,
+        partialLoc = partialLoc,
+        loc = loc
       }
 
 locatedClause :: Text -> P a -> P (a, Loc)
@@ -214,7 +214,7 @@ pRouterDispatch = do
       <$> (keyword "on-appended" *> pDisp)
       <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
       <*> (symbol ";" *> keyword "on-failed" *> pDisp)
-  pure RouterDispatchNode {rdCommand = command, rdFields = fields, rdDisposition = disposition, rdLoc = loc}
+  pure RouterDispatchNode {command = command, fields = fields, disposition = disposition, loc = loc}
 
 -- | @dispatch-id strategy=uuidv5 from=(…)@ where the tuple is fixed by the
 -- runtime that derives the id. The line documents a derivation the spec cannot
@@ -250,7 +250,7 @@ pInputDecl = do
   keyword "input"
   nm <- ident
   fs <- braces (many pField)
-  pure InputDecl {inName = nm, inFields = fs, inType = Nothing, inLoc = loc}
+  pure InputDecl {name = nm, fields = fs, valueType = Nothing, loc = loc}
 
 pRouterInputDecl :: FrontendContext -> P (InputDecl, Maybe SourceSpan)
 pRouterInputDecl context = do
@@ -261,10 +261,10 @@ pRouterInputDecl context = do
     [ do
         marker <- withOwnedSpan (symbol ":")
         inputType <- pMappedTypeExpr context
-        pure (InputDecl {inName = name, inFields = [], inType = Just inputType, inLoc = loc}, Just (spanOf marker)),
+        pure (InputDecl {name = name, fields = [], valueType = Just inputType, loc = loc}, Just (spanOf marker)),
       do
         fields <- braces (many pField)
-        pure (InputDecl {inName = name, inFields = fields, inType = Nothing, inLoc = loc}, Nothing)
+        pure (InputDecl {name = name, fields = fields, valueType = Nothing, loc = loc}, Nothing)
     ]
 
 pCorrelate :: P CorrelateDecl
@@ -274,7 +274,7 @@ pCorrelate = do
   f <- ident
   keyword "via"
   v <- ident
-  pure CorrelateDecl {corrField = f, corrVia = v}
+  pure CorrelateDecl {field = f, via = v}
 
 pSaga :: P SagaRef
 pSaga = do
@@ -282,7 +282,7 @@ pSaga = do
   agg <- ident
   keyword "category"
   categoryName <- stringLit
-  pure SagaRef {sagaAgg = agg, sagaCategory = categoryName}
+  pure SagaRef {agg = agg, category = categoryName}
 
 pHandle :: P HandleNode
 pHandle = do
@@ -292,7 +292,7 @@ pHandle = do
   disps <- many pDispatch
   keyword "schedule"
   sched <- ident
-  pure HandleNode {hOn = onName, hAdvance = adv, hDispatch = disps, hSchedule = sched}
+  pure HandleNode {on = onName, advance = adv, dispatch = disps, schedule = sched}
 
 pAdvance :: P AdvanceNode
 pAdvance = do
@@ -315,7 +315,7 @@ pDispatch = do
       <$> (keyword "on-appended" *> pDisp)
       <*> (symbol ";" *> keyword "on-duplicate" *> pDisp)
       <*> (symbol ";" *> keyword "on-failed" *> pDisp)
-  pure DispatchNode {dispTarget = tgt, dispKey = key, dispCommand = cmd, dispFields = fs, dispDisposition = disp, dispLoc = loc}
+  pure DispatchNode {target = tgt, key = key, command = cmd, fields = fs, disposition = disp, loc = loc}
 
 pDisp :: P Disp
 pDisp =
@@ -353,15 +353,15 @@ pTimerNode = do
   dl <- stringLit
   pure
     TimerNode
-      { tmName = nm,
-        tmId = tid,
-        tmFireAt = fat,
-        tmPayload = pay,
-        tmFire = fire,
-        tmDecodeUnknown = unk,
-        tmMaxAttempts = ma,
-        tmDeadLetter = dl,
-        tmLoc = loc
+      { name = nm,
+        id = tid,
+        fireAt = fat,
+        payload = pay,
+        fire = fire,
+        decodeUnknown = unk,
+        maxAttempts = ma,
+        deadLetter = dl,
+        loc = loc
       }
 
 pIdExpr :: P IdExpr
@@ -370,7 +370,7 @@ pIdExpr = do
   pfx <- stringLit
   _ <- symbol "<>"
   field <- ident
-  pure IdExpr {ideStrategy = UuidV5Id, idePrefix = pfx, ideField = field}
+  pure IdExpr {strategy = UuidV5Id, prefix = pfx, field = field}
 
 pFireAt :: P FireAtExpr
 pFireAt = do
@@ -378,7 +378,7 @@ pFireAt = do
   f <- ident
   _ <- symbol "+"
   w <- pWindow
-  pure FireAtExpr {faField = f, faWindow = w}
+  pure FireAtExpr {field = f, window = w}
 
 pFire :: P FireNode
 pFire = do
@@ -397,7 +397,7 @@ pFire = do
       <*> (symbol ";" *> keyword "on-ambiguous" *> pFireOutcome)
       <*> (symbol ";" *> keyword "on-error" *> pFireOutcome)
       <*> (symbol ";" *> keyword "not-mine" *> pFireOutcome)
-  pure FireNode {fireTarget = tgt, fireKey = key, fireCommand = cmd, fireFields = fs, fireFiredEventId = fid, fireDisposition = disp}
+  pure FireNode {target = tgt, key = key, command = cmd, fields = fs, firedEventId = fid, disposition = disp}
 
 pFireOutcome :: P FireOutcome
 pFireOutcome = choice [OFired <$ keyword "Fired", ORetry <$ keyword "Retry"]
@@ -406,7 +406,7 @@ pFieldBinding :: P FieldBinding
 pFieldBinding = do
   n <- ident
   v <- optional (symbol "=" *> pBindingValue)
-  pure FieldBinding {fbName = n, fbValue = v}
+  pure FieldBinding {name = n, value = v}
 
 -- | A binding value: a quoted string (kept quoted) or a dotted reference.
 pBindingValue :: P Text

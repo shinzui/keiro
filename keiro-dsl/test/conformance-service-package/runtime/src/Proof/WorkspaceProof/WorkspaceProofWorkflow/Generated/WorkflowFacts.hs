@@ -5,33 +5,33 @@ module Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts (Work
 -- A driver asserts them against a hand-written expectation, so a spec
 -- change (e.g. renaming an await) reddens a specific assertion.
 data WorkflowFacts = WorkflowFacts
-  { workflowFactName :: !String
-  , workflowFactIdVia :: !String
-  , workflowFactIdField :: !String
-  , workflowFactBody :: ![String]
-  , workflowFactAwaitLabels :: ![String]
-  , workflowFactPatchIds :: ![String]
+  { name :: !String
+  , idVia :: !String
+  , idField :: !String
+  , body :: ![String]
+  , awaitLabels :: ![String]
+  , patchIds :: ![String]
   }
   deriving stock (Eq, Show)
 
 workflowFacts :: WorkflowFacts
 workflowFacts =
   WorkflowFacts
-    { workflowFactName = "workspace-proof-workflow"
-    , workflowFactIdVia = "idText"
-    , workflowFactIdField = "proofId"
-    , workflowFactBody = ["step:summarize-proof"]
-    , workflowFactAwaitLabels = []
-    , workflowFactPatchIds = []
+    { name = "workspace-proof-workflow"
+    , idVia = "idText"
+    , idField = "proofId"
+    , body = ["step:summarize-proof"]
+    , awaitLabels = []
+    , patchIds = []
     }
 
 -- | Base-library projection used by the service-level conformance facade.
 workflowFactValues :: [(String, String)]
 workflowFactValues =
-  [ ("name", workflowFactName workflowFacts)
-  , ("idVia", workflowFactIdVia workflowFacts)
-  , ("idField", workflowFactIdField workflowFacts)
-  , ("body", show (workflowFactBody workflowFacts))
-  , ("awaits", show (workflowFactAwaitLabels workflowFacts))
-  , ("patches", show (workflowFactPatchIds workflowFacts))
+  [ ("name", workflowFacts.name)
+  , ("idVia", workflowFacts.idVia)
+  , ("idField", workflowFacts.idField)
+  , ("body", show workflowFacts.body)
+  , ("awaits", show workflowFacts.awaitLabels)
+  , ("patches", show workflowFacts.patchIds)
   ]

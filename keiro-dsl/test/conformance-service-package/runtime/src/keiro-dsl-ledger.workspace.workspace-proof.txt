@@ -4,7 +4,7 @@ manifest: service.keiro-workspace
 context: workspace-proof
 module-root: Proof
 layout: collocated
-naming-edition idiomatic-v1
+naming-edition idiomatic-v2
 member domain/alpha.keiro
 member domain/beta.keiro
 member domain/evidence.keiro

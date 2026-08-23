@@ -6,9 +6,7 @@
 -- normalized service-level input used after parsing and workspace composition.
 -- It deliberately wraps 'Spec' rather than becoming part of the graph.
 module Keiro.Dsl.SemanticContract
-  ( EffectiveLanguageContract,
-    effectiveContractLanguageVersion,
-    effectiveRuntimeProfile,
+  ( EffectiveLanguageContract (..),
     effectiveRuntimeSemantics,
     effectiveLanguageSupport,
     languageContractNotice,
@@ -35,13 +33,13 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar (Spec)
 import Keiro.Dsl.LanguageVersion
-  ( LanguageSupport (..),
+  ( LanguageDefinition (..),
+    LanguageSupport (..),
     LanguageVersion,
     ParsedSource (..),
     RuntimeSemanticsProfile,
     SourceLanguage (..),
     currentStableLanguageVersion,
-    definitionRuntimeSemanticsProfile,
     effectiveLanguageVersion,
     languageSupportForVersion,
     languageSupportText,
@@ -62,22 +60,22 @@ import Keiro.Dsl.TypeGraph (TypeGraph, TypeGraphError, resolveTypeGraph)
 -- fold, replay, diff, and generation planners consume that discriminator rather
 -- than re-deriving policy from source text.
 data EffectiveLanguageContract = EffectiveLanguageContract
-  { effectiveContractLanguageVersion :: !LanguageVersion,
-    effectiveRuntimeProfile :: !RuntimeSemanticsProfile
+  { contractLanguageVersion :: !LanguageVersion,
+    runtimeProfile :: !RuntimeSemanticsProfile
   }
   deriving stock (Eq, Ord, Show)
 
 -- | Stable compatibility projection for records, JSON, and diagnostics.
 -- Runtime behavior queries 'effectiveRuntimeProfile' capabilities instead.
 effectiveRuntimeSemantics :: EffectiveLanguageContract -> Text
-effectiveRuntimeSemantics = runtimeProfileIdentifier . effectiveRuntimeProfile
+effectiveRuntimeSemantics = runtimeProfileIdentifier . (.runtimeProfile)
 
 -- | Lifecycle classification derived from the authoritative language registry.
 effectiveLanguageSupport :: EffectiveLanguageContract -> LanguageSupport
 effectiveLanguageSupport contract =
   fromMaybe
     (error "keiro-dsl internal invariant: effective contract selected an unregistered language version")
-    (languageSupportForVersion (effectiveContractLanguageVersion contract))
+    (languageSupportForVersion ((.contractLanguageVersion) contract))
 
 -- | One stderr line naming a compatibility-only effective contract. Published
 -- stable and active candidate sources stay silent.
@@ -88,7 +86,7 @@ languageContractNotice subject sourceFormSummary contract
       Just
         ( T.pack subject
             <> ": language contract: effective keiro-dsl "
-            <> languageVersionText (effectiveContractLanguageVersion contract)
+            <> languageVersionText ((.contractLanguageVersion) contract)
             <> " ("
             <> sourceFormSummary
             <> ", "
@@ -105,7 +103,7 @@ languageContractNotice subject sourceFormSummary contract
 instance ToJSON EffectiveLanguageContract where
   toJSON contract =
     object
-      [ "languageVersion" .= languageVersionNumber (effectiveContractLanguageVersion contract),
+      [ "languageVersion" .= languageVersionNumber ((.contractLanguageVersion) contract),
         "runtimeSemantics" .= effectiveRuntimeSemantics contract,
         "languageSupport" .= languageSupportText (effectiveLanguageSupport contract)
       ]
@@ -145,42 +143,42 @@ effectiveLanguageContractForVersion version = do
   definition <- lookupLanguageDefinition version
   pure
     EffectiveLanguageContract
-      { effectiveContractLanguageVersion = version,
-        effectiveRuntimeProfile = definitionRuntimeSemanticsProfile definition
+      { contractLanguageVersion = version,
+        runtimeProfile = (.runtimeSemanticsProfile) definition
       }
 
 -- | Deduplicated, stable replay-fold segments explicitly declared by the
 -- effective runtime capabilities. Grammar-, validation-, and codec-only
 -- changes deliberately contribute no segment.
 runtimeSemanticsFingerprintSegments :: EffectiveLanguageContract -> [Text]
-runtimeSemanticsFingerprintSegments = runtimeProfileFoldSegments . effectiveRuntimeProfile
+runtimeSemanticsFingerprintSegments = runtimeProfileFoldSegments . (.runtimeProfile)
 
 -- | A normalized service graph paired with the effective contract under which
 -- it was checked. Member-level declared/legacy provenance intentionally stays
 -- on 'ParsedSource' or 'Keiro.Dsl.Workspace.WorkspaceMember'.
 data CheckedService = CheckedService
-  { serviceLanguageContract :: !EffectiveLanguageContract,
-    serviceSpec :: !Spec,
-    serviceTypeGraph :: Either (NonEmpty TypeGraphError) TypeGraph,
-    serviceProjectionSupplies :: ProjectionSupplyAnalysis
+  { languageContract :: !EffectiveLanguageContract,
+    spec :: !Spec,
+    typeGraph :: Either (NonEmpty TypeGraphError) TypeGraph,
+    projectionSupplies :: ProjectionSupplyAnalysis
   }
 
 checkedLanguageContract :: CheckedService -> EffectiveLanguageContract
-checkedLanguageContract = serviceLanguageContract
+checkedLanguageContract = (.languageContract)
 
 checkedSpec :: CheckedService -> Spec
-checkedSpec = serviceSpec
+checkedSpec = (.spec)
 
 -- | Shared, lazily forced resolution of 'checkedSpec'. This derived value is
 -- never serialized and is deliberately excluded from Eq and Show.
 checkedTypeGraph :: CheckedService -> Either (NonEmpty TypeGraphError) TypeGraph
-checkedTypeGraph = serviceTypeGraph
+checkedTypeGraph = (.typeGraph)
 
 -- | Shared, lazily forced projection-supply analysis of 'checkedSpec'. This
 -- derived value is never serialized and is deliberately excluded from Eq and
 -- Show.
 checkedProjectionSupplies :: CheckedService -> ProjectionSupplyAnalysis
-checkedProjectionSupplies = serviceProjectionSupplies
+checkedProjectionSupplies = (.projectionSupplies)
 
 -- | Replace a service's spec while preserving its effective language contract
 -- and rebuilding the lazy whole-spec analysis cache for the replacement.
@@ -205,7 +203,7 @@ instance Show CheckedService where
 -- selected contract.
 checkedSource :: ParsedSource -> CheckedService
 checkedSource parsed =
-  checkedService (parsedSourceLanguage parsed) (parsedSpec parsed)
+  checkedService ((.sourceLanguage) parsed) ((.spec) parsed)
 
 -- | Construct a service from a source-language selection and normalized graph.
 -- Workspace composition uses this only after proving that every member has the
@@ -219,10 +217,10 @@ checkedService sourceLanguage spec =
 checkedServiceForContract :: EffectiveLanguageContract -> Spec -> CheckedService
 checkedServiceForContract languageContract spec =
   CheckedService
-    { serviceLanguageContract = languageContract,
-      serviceSpec = spec,
-      serviceTypeGraph = resolveTypeGraph spec,
-      serviceProjectionSupplies = analyzeProjectionSupplies spec
+    { languageContract = languageContract,
+      spec = spec,
+      typeGraph = resolveTypeGraph spec,
+      projectionSupplies = analyzeProjectionSupplies spec
     }
 
 -- | Compatibility bridge for callers that historically supplied only 'Spec'.

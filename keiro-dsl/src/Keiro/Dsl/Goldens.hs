@@ -27,7 +27,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as TL
 import Keiro.Dsl.AggregateType
-import Keiro.Dsl.FieldIdentity (fieldWireKey)
+import Keiro.Dsl.FieldIdentity (ResolvedFieldIdentity (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (Agg (..), ResolvedCtor (..), defaultContext, resolveAgg)
@@ -39,12 +39,12 @@ data GoldenEvidence = SynthesizedWeakStandIn | FileOwnedFixture
   deriving stock (Eq, Show)
 
 data GoldenPayload = GoldenPayload
-  { goldenContext :: !Text,
-    goldenAggregate :: !Text,
-    goldenEvent :: !Text,
-    goldenVersion :: !Int,
-    goldenJson :: !Text,
-    goldenEvidence :: !GoldenEvidence
+  { context :: !Text,
+    aggregate :: !Text,
+    event :: !Text,
+    version :: !Int,
+    json :: !Text,
+    evidence :: !GoldenEvidence
   }
   deriving stock (Eq, Show)
 
@@ -53,23 +53,23 @@ data GoldenPayload = GoldenPayload
 goldensForDiff :: Spec -> Spec -> [GoldenPayload]
 goldensForDiff oldSpec newSpec =
   [ GoldenPayload
-      { goldenContext = specContext oldSpec,
-        goldenAggregate = aggName oldAggregate,
-        goldenEvent = evName oldEvent,
-        goldenVersion = evVersion oldEvent,
-        goldenJson = renderGolden oldSpec oldResolved oldResolvedEvent,
-        goldenEvidence = SynthesizedWeakStandIn
+      { context = (.context) oldSpec,
+        aggregate = (.name) oldAggregate,
+        event = (.name) oldEvent,
+        version = (.version) oldEvent,
+        json = renderGolden oldSpec oldResolved oldResolvedEvent,
+        evidence = SynthesizedWeakStandIn
       }
   | oldAggregate <- aggregates oldSpec,
-    Just newAggregate <- [find ((== aggName oldAggregate) . aggName) (aggregates newSpec)],
-    let oldResolved = resolveAgg (defaultContext (specContext oldSpec)) oldSpec oldAggregate,
-    oldEvent <- aggEvents oldAggregate,
-    Just newEvent <- [find ((== evName oldEvent) . evName) (aggEvents newAggregate)],
-    evVersion newEvent > evVersion oldEvent,
-    Just oldResolvedEvent <- [find ((== evName oldEvent) . rcName) (aEvents oldResolved)]
+    Just newAggregate <- [find ((== (.name) oldAggregate) . (.name)) (aggregates newSpec)],
+    let oldResolved = resolveAgg (defaultContext ((.context) oldSpec)) oldSpec oldAggregate,
+    oldEvent <- (.events) oldAggregate,
+    Just newEvent <- [find ((== (.name) oldEvent) . (.name)) ((.events) newAggregate)],
+    (.version) newEvent > (.version) oldEvent,
+    Just oldResolvedEvent <- [find ((== (.name) oldEvent) . (.name)) ((.events) oldResolved)]
   ]
   where
-    aggregates spec = [aggregate | NAggregate aggregate <- specNodes spec]
+    aggregates spec = [aggregate | NAggregate aggregate <- (.nodes) spec]
 
 -- | Write newly synthesized fixtures below
 -- @<root>/<context>/<aggregate>/<event>.v<version>.json@. Existing files are
@@ -85,62 +85,72 @@ emitGoldenPayloads root oldSpec newSpec =
         then pure []
         else do
           createDirectoryIfMissing True (takeDirectory path)
-          TIO.writeFile path (goldenJson golden)
+          TIO.writeFile path ((.json) golden)
           pure [path]
 
 -- | Load only the fixtures relevant to declared upcasters in @spec@.
 -- @root@ may name the global golden root or its context child directory.
 loadGoldenPayloads :: FilePath -> Spec -> IO [GoldenPayload]
 loadGoldenPayloads root spec = do
-  contextRoot <- resolveContextRoot root (T.unpack (specContext spec))
+  contextRoot <- resolveContextRoot root (T.unpack ((.context) spec))
   fmap concat . traverse (loadAggregate contextRoot) $ aggregates spec
   where
-    aggregates current = [aggregate | NAggregate aggregate <- specNodes current]
+    aggregates current = [aggregate | NAggregate aggregate <- (.nodes) current]
 
     loadAggregate contextRoot aggregate =
-      fmap concat . traverse (loadEvent contextRoot aggregate) $ aggEvents aggregate
+      fmap concat . traverse (loadEvent contextRoot aggregate) $ (.events) aggregate
 
-    loadEvent contextRoot aggregate event = case evUpcastFrom event of
+    loadEvent contextRoot aggregate event = case (.upcastFrom) event of
       Nothing -> pure []
       Just (sourceVersion, _) -> do
         let golden =
               GoldenPayload
-                { goldenContext = specContext spec,
-                  goldenAggregate = aggName aggregate,
-                  goldenEvent = evName event,
-                  goldenVersion = sourceVersion,
-                  goldenJson = "",
-                  goldenEvidence = FileOwnedFixture
+                { context = (.context) spec,
+                  aggregate = (.name) aggregate,
+                  event = (.name) event,
+                  version = sourceVersion,
+                  json = "",
+                  evidence = FileOwnedFixture
                 }
             path = contextRoot </> aggregateRelativePath golden
         exists <- doesFileExist path
         if exists
           then do
             contents <- TIO.readFile path
-            pure [golden {goldenJson = contents}]
+            pure [goldenWithJson contents golden]
           else pure []
+
+    goldenWithJson json golden =
+      GoldenPayload
+        { context = golden.context,
+          aggregate = golden.aggregate,
+          event = golden.event,
+          version = golden.version,
+          json,
+          evidence = golden.evidence
+        }
 
 goldenRelativePath :: GoldenPayload -> FilePath
 goldenRelativePath golden =
-  T.unpack (goldenContext golden) </> aggregateRelativePath golden
+  T.unpack ((.context) golden) </> aggregateRelativePath golden
 
 aggregateRelativePath :: GoldenPayload -> FilePath
 aggregateRelativePath golden =
-  T.unpack (goldenAggregate golden)
-    </> T.unpack (goldenEvent golden)
+  T.unpack ((.aggregate) golden)
+    </> T.unpack ((.event) golden)
       <> ".v"
-      <> show (goldenVersion golden)
+      <> show ((.version) golden)
       <> ".json"
 
 resolveContextRoot :: FilePath -> FilePath -> IO FilePath
-resolveContextRoot root contextName = do
-  let nested = root </> contextName
+resolveContextRoot root name = do
+  let nested = root </> name
   nestedExists <- doesDirectoryExist nested
   pure $
     if nestedExists
       then nested
       else
-        if takeFileName (dropTrailingPathSeparator root) == contextName
+        if takeFileName (dropTrailingPathSeparator root) == name
           then root
           else nested
 
@@ -150,13 +160,13 @@ renderGolden spec aggregate event =
   where
     graph = either (const Nothing) Just (resolveTypeGraph spec)
     entries =
-      (Key.fromText "kind", String (rcName event))
-        : [(Key.fromText (fieldWireKey identity), sampleValue graph spec aggregate fieldType) | (identity, fieldType) <- rcFields event]
+      (Key.fromText "kind", String ((.name) event))
+        : [(Key.fromText ((.wireKey) identity), sampleValue graph spec aggregate valueType) | (identity, valueType) <- (.fields) event]
 
 sampleValue :: Maybe TypeGraph -> Spec -> Agg -> ResolvedAggregateType -> Value
 sampleValue graph spec _aggregate resolvedType =
   case resolvedType of
-    AggregateNominal nominal -> case resolvedNominalRepresentation nominal of
+    AggregateNominal nominal -> case (.representation) nominal of
       IdRepresentation prefix -> String (prefix <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
       EnumRepresentation constructors -> String (snd (NE.head constructors))
       ScalarRepresentation NominalText -> String "sample"
@@ -168,15 +178,15 @@ sampleValue graph spec _aggregate resolvedType =
       String
         ( fromMaybe
             "sample"
-            ( stName
-                <$> ( find ((== vertexType) . (<> "Vertex") . aggName) aggregates
-                        >>= listToMaybe . aggStates
+            ( (.name)
+                <$> ( find ((== vertexType) . (<> "Vertex") . (.name)) aggregates
+                        >>= listToMaybe . (.states)
                     )
             )
         )
     AggregateMapped key
       | Just resolved <- graph,
-        Just declaration <- Map.lookup key (tgDeclarations resolved) ->
+        Just declaration <- Map.lookup key ((.declarations) resolved) ->
           sampleMappedDeclaration resolved declaration
       | otherwise -> emptyObject
     AggregateInt -> Number 1
@@ -186,7 +196,7 @@ sampleValue graph spec _aggregate resolvedType =
     AggregateTime -> String "2026-01-02T03:04:05.123456789012Z"
     AggregateText -> String "sample"
   where
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
 
 sampleMappedDeclaration :: TypeGraph -> ResolvedMappedDecl -> Value
 sampleMappedDeclaration graph =
@@ -202,26 +212,26 @@ sampleMappedShape graph =
     MappedShapeAlgebra
       { onRecord = \_ _ fields ->
           Object . KeyMap.fromList $
-            [ (Key.fromText (rwfKey field), sampleMappedExpression graph (rwfType field))
+            [ (Key.fromText ((.key) field), sampleMappedExpression graph ((.valueType) field))
             | field <- fields,
               includeField field
             ],
         onEnum = \entries -> case entries of
-          firstEntry : _ -> String (weTag firstEntry)
+          firstEntry : _ -> String ((.tag) firstEntry)
           [] -> String "sample",
         onUnion = \encoding arms -> case arms of
           firstArm : _ ->
             Object . KeyMap.fromList $
-              [(Key.fromText (ueTagField encoding), String (rwaTag firstArm))]
-                <> [ (Key.fromText (ueContentsField encoding), sampleMappedExpression graph payload)
-                   | payload <- maybeToList (rwaPayload firstArm)
+              [(Key.fromText ((.tagField) encoding), String ((.tag) firstArm))]
+                <> [ (Key.fromText ((.contentsField) encoding), sampleMappedExpression graph payload)
+                   | payload <- maybeToList ((.payload) firstArm)
                    ]
           [] -> emptyObject
       }
   where
-    includeField field = case rwfPresence field of
+    includeField field = case (.presence) field of
       PRequired -> True
-      POptional -> isNothingValue (rwfOnMissing field)
+      POptional -> isNothingValue ((.onMissing) field)
 
 sampleMappedExpression :: TypeGraph -> ResolvedTypeExpr -> Value
 sampleMappedExpression graph =
@@ -237,7 +247,7 @@ sampleMappedExpression graph =
         onOptional = id,
         onList = \value -> Array (pure value),
         onMap = \value -> Object (KeyMap.singleton (Key.fromText "sample") value),
-        onRef = \key -> maybe emptyObject (sampleMappedDeclaration graph) (Map.lookup key (tgDeclarations graph))
+        onRef = \key -> maybe emptyObject (sampleMappedDeclaration graph) (Map.lookup key ((.declarations) graph))
       }
 
 emptyObject :: Value

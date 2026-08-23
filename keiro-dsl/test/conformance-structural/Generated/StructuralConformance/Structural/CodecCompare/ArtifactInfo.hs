@@ -29,7 +29,7 @@ compareWithHistorical historicalCodec goldenDirectory = do
       entries = [entry | Right entry <- loaded]
       typedCases = NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)
       encodeObservations =
-        [ EncodeObservation label (hcEncode historicalCodec value) (GeneratedCodec.encodeArtifactInfoMapped value)
+        [ EncodeObservation label (historicalCodec.encode value) (GeneratedCodec.encodeArtifactInfoMapped value)
         | (label, value) <- typedCases
         ]
       decodeObservations = [observation | (observation, _) <- entries]
@@ -43,12 +43,12 @@ compareWithHistorical historicalCodec goldenDirectory = do
       declared = declaredBranchesFor FromBinding branchSchema <> declaredBranchesFor HistoricalGolden branchSchema
       provenance =
         CompareProvenance
-          { cpHistoricalCodecIdentity = hcIdentity historicalCodec
-          , cpHistoricalCodecVersion = hcVersion historicalCodec
-          , cpCanonicalType = CanonicalTypeId "conformance.structural.ArtifactInfo.v1"
-          , cpBindingSymbol = QualifiedValueName "Conformance.Structural.Bindings.artifactInfoBinding"
-          , cpBindingVersion = BindingVersion "1"
-          , cpWireFingerprint = "f3b9417666fcf445"
+          { historicalCodecIdentity = historicalCodec.identity
+          , historicalCodecVersion = historicalCodec.version
+          , canonicalType = CanonicalTypeId "conformance.structural.ArtifactInfo.v1"
+          , bindingSymbol = QualifiedValueName "Conformance.Structural.Bindings.artifactInfoBinding"
+          , bindingVersion = BindingVersion "1"
+          , wireFingerprint = "f3b9417666fcf445"
           }
   pure (compareReport provenance inputIssues (encodeObservations <> decodeObservations) declared (typedObserved <> historicalObserved))
 
@@ -58,7 +58,7 @@ loadGolden historicalCodec path = do
   pure $ case decoded of
     Left reason -> Left (HistoricalGoldenUnreadable path (fromString reason))
     Right inputValue ->
-      let historicalDecoded = hcDecode historicalCodec inputValue
+      let historicalDecoded = historicalCodec.decode inputValue
           historicalOutcome = normalizeDecode historicalDecoded
           generatedOutcome = normalizeDecode (GeneratedCodec.decodeArtifactInfoMapped inputValue)
           observation = DecodeObservation path inputValue historicalOutcome generatedOutcome

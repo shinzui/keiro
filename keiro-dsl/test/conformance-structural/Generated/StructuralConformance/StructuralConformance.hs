@@ -13,12 +13,12 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
+import Generated.StructuralConformance.Structural.Shape.ArtifactInfo (ArtifactInfoShape(artifactHash, artifactKey, displayName))
+import Generated.StructuralConformance.Structural.Shape.ArtifactMetadata (ArtifactMetadataShape(note))
 import Conformance.Structural.Bindings qualified as Bindings
 import Conformance.Structural.Domain (ArtifactInfo, ArtifactKind, ArtifactLocation, ArtifactMetadata)
-import Generated.StructuralConformance.Structural.Shape.ArtifactInfo qualified as ShapeArtifactInfo
 import Generated.StructuralConformance.Structural.Shape.ArtifactKind qualified as ShapeArtifactKind
 import Generated.StructuralConformance.Structural.Shape.ArtifactLocation qualified as ShapeArtifactLocation
-import Generated.StructuralConformance.Structural.Shape.ArtifactMetadata qualified as ShapeArtifactMetadata
 
 structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
@@ -103,7 +103,7 @@ vendorGeometryOpaqueAssertions =
     cases = fixtureCases Bindings.geometryCases
 
 coverageArtifactInfo :: Bool
-coverageArtifactInfo = any (isNothing . ShapeArtifactInfo.artifactHash) shapes && any (isJust . ShapeArtifactInfo.artifactHash) shapes
+coverageArtifactInfo = any (isNothing . (.artifactHash)) shapes && any (isJust . (.artifactHash)) shapes
   where
     shapes = map (bindingToShape Bindings.artifactInfoBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases))
 
@@ -118,12 +118,12 @@ coverageArtifactLocation = any (\case ShapeArtifactLocation.LocalFile{} -> True;
     shapes = map (bindingToShape Bindings.artifactLocationBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactLocationCases))
 
 coverageArtifactMetadata :: Bool
-coverageArtifactMetadata = any (isNothing . ShapeArtifactMetadata.note) shapes && any (isJust . ShapeArtifactMetadata.note) shapes
+coverageArtifactMetadata = any (isNothing . (.note)) shapes && any (isJust . (.note)) shapes
   where
     shapes = map (bindingToShape Bindings.artifactMetadataBinding . snd) (NonEmpty.toList (fixtureCases Bindings.artifactMetadataCases))
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.structural.ArtifactInfo.v1/artifact_key", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoArtifactKeyWitness (\referenceOwner -> ShapeArtifactInfo.artifactKey (bindingToShape Bindings.artifactInfoBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
-  , ("projection witness agreement: conformance.structural.ArtifactInfo.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoDisplayNameWitness (\referenceOwner -> ShapeArtifactInfo.displayName (bindingToShape Bindings.artifactInfoBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
+  [ ("projection witness agreement: conformance.structural.ArtifactInfo.v1/artifact_key", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoArtifactKeyWitness (\referenceOwner -> (bindingToShape Bindings.artifactInfoBinding referenceOwner).artifactKey) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
+  , ("projection witness agreement: conformance.structural.ArtifactInfo.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoDisplayNameWitness (\referenceOwner -> (bindingToShape Bindings.artifactInfoBinding referenceOwner).displayName) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
   ]

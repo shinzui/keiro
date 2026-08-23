@@ -96,13 +96,13 @@ projectionMappedImpact service semantic =
     derivedConsumers =
       Set.fromList
         [ derived
-        | mappedConsumers <- Map.elems (impactDeclarationConsumers semantic),
+        | mappedConsumers <- Map.elems ((.declarationConsumers) semantic),
           DerivedProjectionConsumer derived <- Set.toList mappedConsumers
         ]
     mappedRoots =
       sort . nub $
         [ ProjectionMappedRoot derived declarationKey usePath
-        | (declarationKey, usePathValues) <- Map.toAscList (impactUsePaths semantic),
+        | (declarationKey, usePathValues) <- Map.toAscList ((.usePaths) semantic),
           usePath <- usePathValues,
           aggregate <- maybeToList (eventAuthority usePath),
           derived <- Set.toAscList derivedConsumers,
@@ -111,7 +111,7 @@ projectionMappedImpact service semantic =
     operational =
       mapMaybeOperation
         (Set.toAscList (Set.fromList [derived | ProjectionMappedRoot derived _ _ <- mappedRoots]))
-    unsupportedSources = impactUnsupportedProjectionSources semantic
+    unsupportedSources = (.unsupportedProjectionSources) semantic
 
     mapMaybeOperation = foldr (maybe id (:) . operationFor graph spec) []
     mapMaybeUnsupported = foldr (maybe id (:) . unsupportedFor spec) []
@@ -125,13 +125,13 @@ projectionMappedImpactForService service = case checkedTypeGraph service of
   Right graph -> Just (projectionMappedImpact service (semanticImpact graph))
 
 projectionConsumersFor :: ProjectionMappedImpact -> MappedKey -> Set DerivedMappedConsumer
-projectionConsumersFor impact declarationKey = Map.findWithDefault Set.empty declarationKey (consumers impact)
+projectionConsumersFor impact declarationKey = Map.findWithDefault Set.empty declarationKey ((.consumers) impact)
 
 projectionOperationsFor :: ProjectionMappedImpact -> MappedKey -> [ProjectionOperationalImpact]
 projectionOperationsFor impact declarationKey =
   [ operation
   | derived <- Set.toAscList (projectionConsumersFor impact declarationKey),
-    operation <- maybeToList (Map.lookup derived (operations impact))
+    operation <- maybeToList (Map.lookup derived ((.operations) impact))
   ]
 
 -- | Stable source metadata for generated aggregate codecs. Existing aggregate
@@ -163,7 +163,7 @@ projectionAggregateSourceFingerprintWithGraph maybeGraph aggregate =
         [ renderUsePath (UsePath site (useSiteSegments graph site))
             <> "|wire="
             <> wireFingerprint graph (unMappedKey declarationKey)
-        | site@(RootEventField authority _ _ declarationKey) <- tgUseSites graph,
+        | site@(RootEventField authority _ _ declarationKey) <- (.useSites) graph,
           authority == aggregate
         ]
 
@@ -173,11 +173,11 @@ projectionAggregateSourceFingerprintWithGraph maybeGraph aggregate =
 -- dependency. Category/all boundaries remain explicit and untyped.
 renderProjectionMappedImpact :: ProjectionMappedImpact -> [Text]
 renderProjectionMappedImpact impact
-  | Map.null (consumers impact) && null (unsupported impact) = []
+  | Map.null ((.consumers) impact) && null ((.unsupported) impact) = []
   | otherwise =
       ["projection mapped impact:"]
-        <> concatMap renderDeclaration (Map.toAscList (consumers impact))
-        <> renderUnsupported (unsupported impact)
+        <> concatMap renderDeclaration (Map.toAscList ((.consumers) impact))
+        <> renderUnsupported ((.unsupported) impact)
   where
     renderDeclaration (declarationKey, derivedConsumers) =
       ["  " <> unMappedKey declarationKey]
@@ -186,10 +186,10 @@ renderProjectionMappedImpact impact
       [ "    " <> mappedConsumerIdentity (DerivedProjectionConsumer derived),
         "      inherited event roots: " <> renderSet (Set.fromList (pathsFor declarationKey derived))
       ]
-        <> maybe [] (pure . ("      operation: " <>) . renderOperation) (Map.lookup derived (operations impact))
+        <> maybe [] (pure . ("      operation: " <>) . renderOperation) (Map.lookup derived ((.operations) impact))
     pathsFor declarationKey derived =
       [ renderUsePath inheritedPath
-      | ProjectionMappedRoot candidate declaration inheritedPath <- roots impact,
+      | ProjectionMappedRoot candidate declaration inheritedPath <- (.roots) impact,
         candidate == derived,
         declaration == declarationKey
       ]
@@ -236,17 +236,17 @@ operationFor graph spec derived = case derived of
         { consumer = derived,
           group = Nothing,
           targets = Set.singleton projection,
-          readModels = Set.fromList [rmName readModel | readModel <- readModelNodes spec, rmName readModel == projection],
+          readModels = Set.fromList [(.name) readModel | readModel <- readModelNodes spec, (.name) readModel == projection],
           replayable = False,
           sourceFingerprint = projectionAggregateSourceFingerprintWithGraph graph aggregate
         }
   CatalogProjectionConsumer ownerName aggregate -> do
-    owner <- find ((== ownerName) . poName) (projectionOwners spec)
+    owner <- find ((== ownerName) . (.name)) (projectionOwners spec)
     pure
       ProjectionOperationalImpact
         { consumer = derived,
-          group = Just (poGroup owner),
-          targets = Set.fromList (poTargets owner),
+          group = Just ((.group) owner),
+          targets = Set.fromList ((.targets) owner),
           readModels = observingReadModels spec owner,
           replayable = isReplayable owner,
           sourceFingerprint = projectionAggregateSourceFingerprintWithGraph graph aggregate
@@ -254,12 +254,12 @@ operationFor graph spec derived = case derived of
 
 unsupportedFor :: Spec -> UnsupportedProjectionSource -> Maybe UnsupportedProjectionImpact
 unsupportedFor spec boundary = do
-  owner <- find ((== unsupportedOwner boundary) . poName) (projectionOwners spec)
+  owner <- find ((== unsupportedOwner boundary) . (.name)) (projectionOwners spec)
   pure
     UnsupportedProjectionImpact
       { source = boundary,
-        group = poGroup owner,
-        targets = Set.fromList (poTargets owner),
+        group = (.group) owner,
+        targets = Set.fromList ((.targets) owner),
         readModels = observingReadModels spec owner,
         replayable = isReplayable owner
       }
@@ -267,14 +267,14 @@ unsupportedFor spec boundary = do
 observingReadModels :: Spec -> ProjectionOwnerNode -> Set Name
 observingReadModels spec owner =
   Set.fromList
-    [ rmName readModel
+    [ (.name) readModel
     | readModel <- readModelNodes spec,
-      rmGroup readModel == Just (poGroup owner),
-      not (Set.disjoint (Set.fromList (rmObservedTargets readModel)) (Set.fromList (poTargets owner)))
+      (.group) readModel == Just ((.group) owner),
+      not (Set.disjoint (Set.fromList ((.observedTargets) readModel)) (Set.fromList ((.targets) owner)))
     ]
 
 eventAuthority :: UsePath -> Maybe Name
-eventAuthority UsePath {upRoot = RootEventField aggregate _ _ _} = Just aggregate
+eventAuthority UsePath {root = RootEventField aggregate _ _ _} = Just aggregate
 eventAuthority _ = Nothing
 
 derivedAuthority :: DerivedMappedConsumer -> Name
@@ -286,13 +286,13 @@ unsupportedOwner (UnsupportedCatalogCategory owner _) = owner
 unsupportedOwner (UnsupportedCatalogAll owner) = owner
 
 projectionOwners :: Spec -> [ProjectionOwnerNode]
-projectionOwners spec = [owner | NProjectionOwner owner <- specNodes spec]
+projectionOwners spec = [owner | NProjectionOwner owner <- (.nodes) spec]
 
 readModelNodes :: Spec -> [ReadModelNode]
-readModelNodes spec = [readModel | NReadModel readModel <- specNodes spec]
+readModelNodes spec = [readModel | NReadModel readModel <- (.nodes) spec]
 
 isReplayable :: ProjectionOwnerNode -> Bool
-isReplayable owner = case poReplay owner of
+isReplayable owner = case (.replay) owner of
   ProjectionReplayExplicit -> True
   ProjectionLiveOnly _ -> False
 

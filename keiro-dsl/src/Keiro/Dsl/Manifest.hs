@@ -89,7 +89,7 @@ renderManifestForServiceWithFacade facadeModule specName mods service =
       ++ consumerBlocks
   where
     plan = consumerPlanForService service
-    moduleNames = sort (map (moduleNameOf . modulePath) mods)
+    moduleNames = sort (map (moduleNameOf . (.path)) mods)
     otherModules = case facadeModule of
       Nothing -> moduleNames
       Just facade -> filter (/= facade) moduleNames
@@ -97,16 +97,16 @@ renderManifestForServiceWithFacade facadeModule specName mods service =
       Nothing -> []
       Just facade -> ["", "exposed-modules:", "    " <> facade]
     consumerBlocks
-      | null (consumerMappings plan) = []
+      | null ((.mappings) plan) = []
       | otherwise =
           [ "",
             "consumer-packages:"
           ]
-            ++ map ("    " <>) (consumerPackages plan)
+            ++ map ("    " <>) ((.packages) plan)
             ++ [ "",
                  "consumer-modules:"
                ]
-            ++ map ("    " <>) (consumerModules plan)
+            ++ map ("    " <>) ((.modules) plan)
 
 -- | The dotted module name recovered from a 'ScaffoldModule' path: drop the
 -- trailing @.hs@ and replace @/@ with @.@.
@@ -120,7 +120,7 @@ manifestDependencies = manifestDependenciesForService . legacyCheckedService
 
 manifestDependenciesForService :: CheckedService -> [Text]
 manifestDependenciesForService service =
-  sort (nub ("base" : consumerPackages (consumerPlanForService service) <> concatMap (depsForNode service) (specNodes spec)))
+  sort (nub ("base" : (.packages) (consumerPlanForService service) <> concatMap (depsForNode service) ((.nodes) spec)))
   where
     spec = checkedSpec service
 
@@ -149,9 +149,9 @@ depsForNode service n = case n of
     hasTypedContractId contract =
       or
         [ contractIdDomainContractFor (checkedLanguageContract service) prefix /= Nothing
-        | event <- ctrEvents contract,
-          field <- ceFields event,
-          CTypeId prefix <- [cfType field]
+        | event <- (.events) contract,
+          field <- (.fields) event,
+          CTypeId prefix <- [(.valueType) field]
         ]
 
 workqueueDependencies :: WorkqueueNode -> [Text]
@@ -159,7 +159,7 @@ workqueueDependencies workqueue =
   ["containers" | any (typeExprUses isMap) expressions]
     <> ["time" | any (typeExprUses isTime) expressions]
   where
-    expressions = [expression | field <- wqPayload workqueue, TypedQueueExpression expression <- [wqfType field]]
+    expressions = [expression | field <- (.payload) workqueue, TypedQueueExpression expression <- [(.valueType) field]]
     isMap (TMap _) = True
     isMap _ = False
     isTime TTime = True
@@ -178,9 +178,9 @@ readModelDependencies readModel =
     <> ["containers" | any (typeExprUses isMap) expressions]
     <> ["time" | any (typeExprUses isTime) expressions]
   where
-    expressions = case queryTypes readModel of
+    expressions = case (.queryTypes) readModel of
       Nothing -> []
-      Just queryPair -> [input queryPair, result queryPair]
+      Just queryPair -> [(.input) queryPair, (.result) queryPair]
     isJson TJson = True
     isJson _ = False
     isMap TMap {} = True
@@ -205,8 +205,8 @@ aggregateDependencies service aggregate =
         <> Set.fromList
           [ "mmzk-typeid"
           | AggregateNominal nominal <- resolvedTypes,
-            IdRepresentation {} <- [resolvedNominalRepresentation nominal],
-            ConsumerNominal {} <- [resolvedNominalOwnership nominal]
+            IdRepresentation {} <- [(.representation) nominal],
+            ConsumerNominal {} <- [(.ownership) nominal]
           ]
     )
   where
@@ -214,17 +214,17 @@ aggregateDependencies service aggregate =
     symbols = aggregateSymbolsFromGraphResult (checkedTypeGraph service) spec
     resolvedTypes =
       [ resolvedType
-      | register <- aggRegs aggregate,
-        Right resolvedType <- [resolveAggregateType symbols (regLoc register) RegisterUse (regType register)]
+      | register <- (.regs) aggregate,
+        Right resolvedType <- [resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register)]
       ]
         <> [ resolvedType
-           | command <- aggCommands aggregate,
-             field <- cmdFields command,
+           | command <- (.commands) aggregate,
+             field <- (.fields) command,
              Right resolvedType <- [inferAggregateFieldType symbols aggregate CommandFieldUse field]
            ]
         <> [ resolvedType
-           | event <- aggEvents aggregate,
-             EventFields fields <- [evBody event],
+           | event <- (.events) aggregate,
+             EventFields fields <- [(.body) event],
              field <- fields,
              Right resolvedType <- [inferAggregateFieldType symbols aggregate EventFieldUse field]
            ]

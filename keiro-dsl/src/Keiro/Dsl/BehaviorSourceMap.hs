@@ -17,15 +17,8 @@ import Data.Text (Text)
 import Keiro.Dsl.BehaviorCoverage
   ( BehaviorExactLocation (..),
     BehaviorKey,
-    BehaviorRequirement,
+    BehaviorRequirement (..),
     RequirementOrigin (..),
-    requirementAggregate,
-    requirementCanonical,
-    requirementCommand,
-    requirementExactLocation,
-    requirementKey,
-    requirementOrigin,
-    requirementSource,
   )
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex
@@ -42,23 +35,23 @@ data BehaviorSourceFailureCode
   deriving stock (Eq, Ord, Show)
 
 data BehaviorSourceFailure = BehaviorSourceFailure
-  { failureCode :: !BehaviorSourceFailureCode,
-    failureKey :: !BehaviorKey,
-    failureOrigin :: !RequirementOrigin,
-    failureAggregate :: !Text,
-    failureState :: !Text,
-    failureCommand :: !Text,
-    failureSourceSubject :: !SourceSubject,
-    failureSpan :: !(Maybe SourceSpan),
-    failureMessage :: !Text
+  { code :: !BehaviorSourceFailureCode,
+    key :: !BehaviorKey,
+    origin :: !RequirementOrigin,
+    aggregate :: !Text,
+    state :: !Text,
+    command :: !Text,
+    sourceSubject :: !SourceSubject,
+    span :: !(Maybe SourceSpan),
+    message :: !Text
   }
   deriving stock (Eq, Show)
 
 data BehaviorSourceEntry = BehaviorSourceEntry
-  { behaviorSourceKey :: !BehaviorKey,
-    behaviorSourceFile :: !FilePath,
-    behaviorSourceLine :: !Int,
-    behaviorSourceColumn :: !Int
+  { key :: !BehaviorKey,
+    file :: !FilePath,
+    line :: !Int,
+    column :: !Int
   }
   deriving stock (Eq, Ord, Show)
 
@@ -76,44 +69,44 @@ planBehaviorSourceMap requirements sourceIndex =
       | otherwise -> Left (missingJoinFailures requirementKeys entryKeys)
     failures -> Left (sortOn failureSortKey failures)
   where
-    duplicateFailures = concatMap duplicateKeyFailure (groupsOn requirementKey requirements)
+    duplicateFailures = concatMap duplicateKeyFailure (groupsOn (.key) requirements)
     duplicateKeyFailure duplicates@(first : _ : _) =
       [ BehaviorSourceFailure
-          { failureCode = BehaviorSourceAnchorCollision,
-            failureKey = requirementKey first,
-            failureOrigin = requirementOrigin first,
-            failureAggregate = requirementAggregate first,
-            failureState = requirementSource first,
-            failureCommand = requirementCommand first,
-            failureSourceSubject = requirementSourceSubject (requirementOrigin first),
-            failureSpan = Nothing,
-            failureMessage =
-              if Set.size (Set.fromList (map requirementCanonical duplicates)) > 1
+          { code = BehaviorSourceAnchorCollision,
+            key = (.key) first,
+            origin = (.origin) first,
+            aggregate = (.aggregate) first,
+            state = (.source) first,
+            command = (.command) first,
+            sourceSubject = requirementSourceSubject ((.origin) first),
+            span = Nothing,
+            message =
+              if Set.size (Set.fromList (map (.canonical) duplicates)) > 1
                 then "behavior key identifies more than one canonical obligation"
                 else "behavior key occurs more than once in the requirement inventory"
           }
       ]
     duplicateKeyFailure _ = []
-    uniqueRequirements = [requirement | [requirement] <- groupsOn requirementKey requirements]
+    uniqueRequirements = [requirement | [requirement] <- groupsOn (.key) requirements]
     planned = map (planEntry sourceIndex) uniqueRequirements
     anchorFailures = [failure | Left failure <- planned]
-    sortedEntries = sortOn behaviorSourceKey [entry | Right entry <- planned]
-    requirementKeys = Set.fromList (map requirementKey requirements)
-    entryKeys = Set.fromList (map behaviorSourceKey sortedEntries)
+    sortedEntries = sortOn (.key) [entry | Right entry <- planned]
+    requirementKeys = Set.fromList (map (.key) requirements)
+    entryKeys = Set.fromList (map (.key) sortedEntries)
     missingJoinFailures expected actual =
       [ BehaviorSourceFailure
-          { failureCode = BehaviorSourceAnchorMissing,
-            failureKey = requirementKey requirement,
-            failureOrigin = requirementOrigin requirement,
-            failureAggregate = requirementAggregate requirement,
-            failureState = requirementSource requirement,
-            failureCommand = requirementCommand requirement,
-            failureSourceSubject = requirementSourceSubject (requirementOrigin requirement),
-            failureSpan = Nothing,
-            failureMessage = "behavior requirement is absent from the completed source-map join"
+          { code = BehaviorSourceAnchorMissing,
+            key = (.key) requirement,
+            origin = (.origin) requirement,
+            aggregate = (.aggregate) requirement,
+            state = (.source) requirement,
+            command = (.command) requirement,
+            sourceSubject = requirementSourceSubject ((.origin) requirement),
+            span = Nothing,
+            message = "behavior requirement is absent from the completed source-map join"
           }
       | requirement <- requirements,
-        requirementKey requirement `Set.member` (expected Set.\\ actual)
+        (.key) requirement `Set.member` (expected Set.\\ actual)
       ]
 
 -- | Attach exact presentation data after a successful complete join. Unknown
@@ -123,19 +116,41 @@ planBehaviorSourceMap requirements sourceIndex =
 attachBehaviorSourceLocations :: [BehaviorSourceEntry] -> [BehaviorRequirement] -> [BehaviorRequirement]
 attachBehaviorSourceLocations entries = map attach
   where
-    byKey = Map.fromList [(behaviorSourceKey entry, entry) | entry <- entries]
-    attach requirement = case Map.lookup (requirementKey requirement) byKey of
+    byKey = Map.fromList [((.key) entry, entry) | entry <- entries]
+    attach requirement = case Map.lookup ((.key) requirement) byKey of
       Nothing -> requirement
       Just entry ->
-        requirement
-          { requirementExactLocation =
-              Just
-                BehaviorExactLocation
-                  { exactSourceFile = behaviorSourceFile entry,
-                    exactSourceLine = behaviorSourceLine entry,
-                    exactSourceColumn = behaviorSourceColumn entry
-                  }
-          }
+        replaceRequirementExactLocation
+          ( Just
+              BehaviorExactLocation
+                { sourceFile = entry.file,
+                  sourceLine = entry.line,
+                  sourceColumn = entry.column
+                }
+          )
+          requirement
+
+    replaceRequirementExactLocation exactLocation requirement =
+      BehaviorRequirement
+        { key = requirement.key,
+          origin = requirement.origin,
+          kind = requirement.kind,
+          evidence = requirement.evidence,
+          guardCoverage = requirement.guardCoverage,
+          context = requirement.context,
+          aggregate = requirement.aggregate,
+          source = requirement.source,
+          command = requirement.command,
+          target = requirement.target,
+          mode = requirement.mode,
+          events = requirement.events,
+          outputs = requirement.outputs,
+          domainOutcome = requirement.domainOutcome,
+          location = requirement.location,
+          exactLocation,
+          owner = requirement.owner,
+          canonical = requirement.canonical
+        }
 
 planEntry :: SemanticSourceIndex -> BehaviorRequirement -> Either BehaviorSourceFailure BehaviorSourceEntry
 planEntry sourceIndex requirement =
@@ -146,24 +161,24 @@ planEntry sourceIndex requirement =
     Just (ExactSourcePosition, SourceSpan {source, start = SourcePoint {line, column}}) ->
       Right
         BehaviorSourceEntry
-          { behaviorSourceKey = requirementKey requirement,
-            behaviorSourceFile = source,
-            behaviorSourceLine = line,
-            behaviorSourceColumn = column
+          { key = (.key) requirement,
+            file = source,
+            line = line,
+            column = column
           }
   where
-    subject = requirementSourceSubject (requirementOrigin requirement)
-    failure failureCode failureSpan failureMessage =
+    subject = requirementSourceSubject ((.origin) requirement)
+    failure code sourceSpan message =
       BehaviorSourceFailure
-        { failureCode,
-          failureKey = requirementKey requirement,
-          failureOrigin = requirementOrigin requirement,
-          failureAggregate = requirementAggregate requirement,
-          failureState = requirementSource requirement,
-          failureCommand = requirementCommand requirement,
-          failureSourceSubject = subject,
-          failureSpan,
-          failureMessage
+        { code,
+          key = (.key) requirement,
+          origin = (.origin) requirement,
+          aggregate = (.aggregate) requirement,
+          state = (.source) requirement,
+          command = (.command) requirement,
+          sourceSubject = subject,
+          span = sourceSpan,
+          message
         }
 
 requirementSourceSubject :: RequirementOrigin -> SourceSubject
@@ -175,5 +190,5 @@ groupsOn :: (Ord key) => (value -> key) -> [value] -> [[value]]
 groupsOn key = groupBy (\left right -> key left == key right) . sortOn key
 
 failureSortKey :: BehaviorSourceFailure -> (BehaviorSourceFailureCode, BehaviorKey, RequirementOrigin)
-failureSortKey BehaviorSourceFailure {failureCode, failureKey, failureOrigin} =
-  (failureCode, failureKey, failureOrigin)
+failureSortKey BehaviorSourceFailure {code, key, origin} =
+  (code, key, origin)

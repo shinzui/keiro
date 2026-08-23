@@ -58,7 +58,7 @@ structuralConformanceModule ctx service = do
     Left failures -> Left [StructuralConformanceGraphFailure (T.pack (show failures))]
     Right resolved -> Right resolved
   let inventory = serviceMappedInventory (semanticImpact graph)
-      missing = [key | key <- inventory, Map.notMember key (tgDeclarations graph)]
+      missing = [key | key <- inventory, Map.notMember key ((.declarations) graph)]
   case missing of
     key : keys -> Left (map StructuralConformanceInventoryMissing (key : keys))
     [] -> case inventory of
@@ -68,39 +68,39 @@ structuralConformanceModule ctx service = do
             moduleName = structuralConformanceModuleName ctx
          in Right . Just $
               ScaffoldModule
-                { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-                  moduleText = renderStructuralConformance rendering,
+                { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+                  text = renderStructuralConformance rendering,
                   kind = Generated,
-                  origin = "context " <> specContext (checkedSpec service) <> " structural conformance"
+                  origin = "context " <> (.context) (checkedSpec service) <> " structural conformance"
                 }
 
 data ConformanceRendering = ConformanceRendering
-  { renderingContext :: !Context,
-    renderingGraph :: !TypeGraph,
-    renderingDeclarations :: ![ResolvedMappedDecl],
-    renderingProjections :: ![StructuralProjection],
-    renderingImportPlan :: !HaskellImportPlan
+  { context :: !Context,
+    graph :: !TypeGraph,
+    declarations :: ![ResolvedMappedDecl],
+    projections :: ![StructuralProjection],
+    importPlan :: !HaskellImportPlan
   }
 
 conformanceRendering :: Context -> TypeGraph -> [MappedKey] -> ConformanceRendering
 conformanceRendering ctx graph inventory = rendering
   where
-    declarations = [declaration | key <- inventory, Just declaration <- [Map.lookup key (tgDeclarations graph)]]
+    declarations = [declaration | key <- inventory, Just declaration <- [Map.lookup key ((.declarations) graph)]]
     projections = map (resolveProjectionModules ctx) (projectionSpecs graph)
     rendering =
       ConformanceRendering
-        { renderingContext = ctx,
-          renderingGraph = graph,
-          renderingDeclarations = declarations,
-          renderingProjections = projections,
-          renderingImportPlan = conformanceImportPlan ctx declarations projections
+        { context = ctx,
+          graph = graph,
+          declarations = declarations,
+          projections = projections,
+          importPlan = conformanceImportPlan ctx declarations projections
         }
 
 renderStructuralConformance :: ConformanceRendering -> Text
 renderStructuralConformance rendering =
   T.unlines $
     [ generatedBanner,
-      "module " <> structuralConformanceModuleName (renderingContext rendering),
+      "module " <> structuralConformanceModuleName ((.context) rendering),
       "  ( structuralConformanceAssertions",
       "  ) where",
       ""
@@ -124,19 +124,19 @@ renderStructuralConformance rendering =
       <> concatMap (coverageDecl rendering) structural
       <> projectionAssertionDecls rendering structural
   where
-    structural = [(declaration, shape) | ResolvedStructural declaration shape <- renderingDeclarations rendering]
-    opaque = [declaration | ResolvedOpaque declaration <- renderingDeclarations rendering]
+    structural = [(declaration, shape) | ResolvedStructural declaration shape <- (.declarations) rendering]
+    opaque = [declaration | ResolvedOpaque declaration <- (.declarations) rendering]
     assertionLists =
-      [lowerFirst (sdName declaration) <> "BindingAssertions" | (declaration, _) <- structural]
-        <> [lowerFirst (odName declaration) <> "OpaqueAssertions" | declaration <- opaque]
+      [lowerFirst ((.name) declaration) <> "BindingAssertions" | (declaration, _) <- structural]
+        <> [lowerFirst ((.name) declaration) <> "OpaqueAssertions" | declaration <- opaque]
         <> [ "[(\"fixture coverage: "
-               <> unCanonicalTypeId (sdCanonical declaration)
+               <> unCanonicalTypeId ((.canonical) declaration)
                <> "\", coverage"
-               <> sdName declaration
+               <> (.name) declaration
                <> ")]"
            | (declaration, _) <- structural
            ]
-        <> ["structuralProjectionAssertions" | not (null (renderingProjections rendering))]
+        <> ["structuralProjectionAssertions" | not (null ((.projections) rendering))]
 
 conformanceImports :: ConformanceRendering -> [Text]
 conformanceImports rendering =
@@ -148,27 +148,48 @@ conformanceImports rendering =
     <> ["import Keiki.Core (fieldWitnessAgrees)" | not (null projections)]
     <> ["import Keiki.Shape (CanonicalTypeName (..))" | not (null structural)]
     <> ["import Keiro.Codec.Structural (" <> T.intercalate ", " structuralCodecImports <> ")"]
-    <> [ "import " <> structuralProjectionModuleName (renderingContext rendering) <> " qualified as StructuralProjections"
+    <> [ "import " <> structuralProjectionModuleName ((.context) rendering) <> " qualified as StructuralProjections"
        | not (null projections)
        ]
-    <> T.lines (renderPlannedImports (renderingImportPlan rendering))
+    <> fieldScopeImports
+    <> T.lines (renderPlannedImports ((.importPlan) rendering))
   where
-    declarations = renderingDeclarations rendering
+    declarations = (.declarations) rendering
     structural = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
     opaque = [declaration | ResolvedOpaque declaration <- declarations]
-    projections = renderingProjections rendering
+    projections = (.projections) rendering
+    fieldScopeImports =
+      [ "import " <> shapeModule <> " (" <> lastSegment shapeModule <> "Shape(" <> T.intercalate ", " (Set.toAscList selectors) <> "))"
+      | (shapeModule, selectors) <- Map.toAscList selectorsByModule
+      ]
+    selectorsByModule =
+      Map.fromListWith
+        Set.union
+        ( [ (structuralShapeModuleName ((.context) rendering) ((.name) declaration), Set.singleton ((.haskell) field))
+          | (declaration, RRecord _ _ fields) <- structural,
+            field <- fields,
+            isOptional ((.valueType) field)
+          ]
+            <> [ (shapeModule, Set.singleton selector)
+               | projection <- projections,
+                 (shapeModule, selector) <- (.selectors) projection
+               ]
+        )
     structuralCodecImports =
       ["FixtureCases (..)"]
         <> if null structural then [] else ["bindingDomainRoundTrip", "bindingShapeRoundTrip", "bindingToShape"]
     shapeUsesMaybe (_, shape) = case shape of
-      RRecord _ _ fields -> any (isOptional . rwfType) fields
-      RUnion _ arms -> any (maybe False isOptional . rwaPayload) arms
+      RRecord _ _ fields -> any (isOptional . (.valueType)) fields
+      RUnion _ arms -> any (maybe False isOptional . (.payload)) arms
       REnum {} -> False
     isOptional ROptional {} = True
     isOptional _ = False
 
+lastSegment :: Text -> Text
+lastSegment = last . T.splitOn "."
+
 conformanceImportPlan :: Context -> [ResolvedMappedDecl] -> [StructuralProjection] -> HaskellImportPlan
-conformanceImportPlan ctx declarations projections =
+conformanceImportPlan ctx declarations _projections =
   either
     (error . ("validated structural conformance import planning failed: " <>) . show)
     id
@@ -187,9 +208,9 @@ conformanceImportPlan ctx declarations projections =
         | declaration <- declarations,
           reference <- case declaration of
             ResolvedStructural structural _ ->
-              conformanceTypeReference (sdHaskell structural)
-                : map conformanceQualifiedValueReference [sdBinding structural, sdFixtures structural]
-            ResolvedOpaque opaque -> [conformanceQualifiedValueReference (odFixtures opaque)]
+              conformanceTypeReference ((.haskell) structural)
+                : map conformanceQualifiedValueReference [(.binding) structural, (.fixtures) structural]
+            ResolvedOpaque opaque -> [conformanceQualifiedValueReference ((.fixtures) opaque)]
         ]
     shapeReferences =
       Set.fromList
@@ -197,17 +218,11 @@ conformanceImportPlan ctx declarations projections =
         | ResolvedStructural declaration shape <- declarations,
           reference <- structuralShapeReferences ctx declaration shape
         ]
-    projectionReferences =
-      Set.fromList
-        [ HaskellReference shapeModule selector ValueNamespace RequireQualified
-        | projection <- projections,
-          (shapeModule, selector) <- spSelectors projection
-        ]
-    references = declarationReferences <> shapeReferences <> projectionReferences
+    references = declarationReferences <> shapeReferences
 
 conformanceTypeReference :: HaskellSource -> HaskellReference
 conformanceTypeReference source =
-  HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified
+  HaskellReference ((.moduleName) source) ((.valueType) source) TypeNamespace PreferUnqualified
 
 conformanceQualifiedValueReference :: QualifiedValueName -> HaskellReference
 conformanceQualifiedValueReference qualified =
@@ -224,21 +239,20 @@ structuralShapeReferences :: Context -> StructuralDecl -> ResolvedMappedShape ->
 structuralShapeReferences ctx declaration =
   foldMappedShape
     MappedShapeAlgebra
-      { onRecord = \constructor _ fields -> constructorRef constructor : map (valueRef . rwfHaskell) fields,
-        onEnum = map (constructorRef . weCtor),
-        onUnion = \_ -> map (constructorRef . rwaCtor)
+      { onRecord = \_constructor _ _fields -> [],
+        onEnum = map (constructorRef . (.ctor)),
+        onUnion = \_ -> map (constructorRef . (.ctor))
       }
   where
-    moduleName = structuralShapeModuleName ctx (sdName declaration)
+    moduleName = structuralShapeModuleName ctx ((.name) declaration)
     constructorRef constructor = HaskellReference moduleName constructor ConstructorNamespace RequireQualified
-    valueRef value = HaskellReference moduleName value ValueNamespace RequireQualified
 
 renderReference :: ConformanceRendering -> HaskellReference -> Text
 renderReference rendering reference =
   either
     (error . ("validated structural conformance reference failed: " <>) . show)
     id
-    (renderPlannedReference (renderingImportPlan rendering) reference)
+    (renderPlannedReference ((.importPlan) rendering) reference)
 
 bindingAssertionDecl :: ConformanceRendering -> (StructuralDecl, ResolvedMappedShape) -> [Text]
 bindingAssertionDecl rendering (declaration, _shape) =
@@ -257,11 +271,11 @@ bindingAssertionDecl rendering (declaration, _shape) =
     "    cases = fixtureCases " <> fixtures
   ]
   where
-    valueName = lowerFirst (sdName declaration) <> "BindingAssertions"
-    canonical = unCanonicalTypeId (sdCanonical declaration)
-    consumerType = renderReference rendering (conformanceTypeReference (sdHaskell declaration))
-    binding = renderReference rendering (conformanceQualifiedValueReference (sdBinding declaration))
-    fixtures = renderReference rendering (conformanceQualifiedValueReference (sdFixtures declaration))
+    valueName = lowerFirst ((.name) declaration) <> "BindingAssertions"
+    canonical = unCanonicalTypeId ((.canonical) declaration)
+    consumerType = renderReference rendering (conformanceTypeReference ((.haskell) declaration))
+    binding = renderReference rendering (conformanceQualifiedValueReference ((.binding) declaration))
+    fixtures = renderReference rendering (conformanceQualifiedValueReference ((.fixtures) declaration))
 
 opaqueAssertionDecl :: ConformanceRendering -> OpaqueDecl -> [Text]
 opaqueAssertionDecl rendering declaration =
@@ -276,15 +290,15 @@ opaqueAssertionDecl rendering declaration =
     "    cases = fixtureCases " <> fixtures
   ]
   where
-    valueName = lowerFirst (odName declaration) <> "OpaqueAssertions"
-    label = unCodecIdentity (odCodecIdentity declaration) <> "@" <> unCodecVersion (odCodecVersion declaration)
-    fixtures = renderReference rendering (conformanceQualifiedValueReference (odFixtures declaration))
+    valueName = lowerFirst ((.name) declaration) <> "OpaqueAssertions"
+    label = unCodecIdentity ((.codecIdentity) declaration) <> "@" <> unCodecVersion ((.codecVersion) declaration)
+    fixtures = renderReference rendering (conformanceQualifiedValueReference ((.fixtures) declaration))
 
 coverageDecl :: ConformanceRendering -> (StructuralDecl, ResolvedMappedShape) -> [Text]
 coverageDecl rendering (declaration, shape) =
   [ "",
-    "coverage" <> sdName declaration <> " :: Bool",
-    "coverage" <> sdName declaration <> " = " <> coverageExpression rendering declaration shape
+    "coverage" <> (.name) declaration <> " :: Bool",
+    "coverage" <> (.name) declaration <> " = " <> coverageExpression rendering declaration shape
   ]
 
 coverageExpression :: ConformanceRendering -> StructuralDecl -> ResolvedMappedShape -> Text
@@ -292,34 +306,34 @@ coverageExpression rendering declaration shape = case obligations of
   [] -> "True"
   _ -> T.intercalate " && " obligations <> "\n  where\n    shapes = map (bindingToShape " <> binding <> " . snd) (NonEmpty.toList (fixtureCases " <> fixtures <> "))"
   where
-    shapeModule = structuralShapeModuleName (renderingContext rendering) (sdName declaration)
-    binding = renderReference rendering (conformanceQualifiedValueReference (sdBinding declaration))
-    fixtures = renderReference rendering (conformanceQualifiedValueReference (sdFixtures declaration))
+    shapeModule = structuralShapeModuleName ((.context) rendering) ((.name) declaration)
+    binding = renderReference rendering (conformanceQualifiedValueReference ((.binding) declaration))
+    fixtures = renderReference rendering (conformanceQualifiedValueReference ((.fixtures) declaration))
     obligations = case shape of
       RRecord _ _ fields -> concatMap (recordFieldObligation rendering shapeModule) fields
       REnum entries ->
-        [ "any (\\case " <> renderReference rendering (HaskellReference shapeModule (weCtor entry) ConstructorNamespace RequireQualified) <> " -> True; _ -> False) shapes"
+        [ "any (\\case " <> renderReference rendering (HaskellReference shapeModule ((.ctor) entry) ConstructorNamespace RequireQualified) <> " -> True; _ -> False) shapes"
         | entry <- entries
         ]
       RUnion _ arms -> concatMap (unionArmObligations rendering shapeModule) arms
 
 recordFieldObligation :: ConformanceRendering -> Text -> ResolvedWireField -> [Text]
-recordFieldObligation rendering shapeModule field = case rwfType field of
+recordFieldObligation _rendering _shapeModule field = case (.valueType) field of
   ROptional _ ->
     [ "any (isNothing . " <> selector <> ") shapes",
       "any (isJust . " <> selector <> ") shapes"
     ]
   _ -> []
   where
-    selector = renderReference rendering (HaskellReference shapeModule (rwfHaskell field) ValueNamespace RequireQualified)
+    selector = "(." <> (.haskell) field <> ")"
 
 unionArmObligations :: ConformanceRendering -> Text -> ResolvedWireArm -> [Text]
 unionArmObligations rendering shapeModule arm =
   ["any (\\case " <> patternText <> " -> True; _ -> False) shapes"] <> optionalPayload
   where
-    constructor = renderReference rendering (HaskellReference shapeModule (rwaCtor arm) ConstructorNamespace RequireQualified)
-    patternText = constructor <> maybe "" (const "{}") (rwaPayload arm)
-    optionalPayload = case rwaPayload arm of
+    constructor = renderReference rendering (HaskellReference shapeModule ((.ctor) arm) ConstructorNamespace RequireQualified)
+    patternText = constructor <> maybe "" (const "{}") ((.payload) arm)
+    optionalPayload = case (.payload) arm of
       Just (ROptional _) ->
         [ "any (\\case " <> constructor <> " Nothing -> True; _ -> False) shapes",
           "any (\\case " <> constructor <> " (Just _) -> True; _ -> False) shapes"
@@ -337,52 +351,52 @@ projectionAssertionDecls rendering structural
         "  ]"
       ]
   where
-    specs = renderingProjections rendering
+    specs = (.projections) rendering
     assertion spec =
       "(\"projection witness agreement: "
-        <> unCanonicalTypeId (spCanonical spec)
-        <> spPointer spec
+        <> unCanonicalTypeId ((.canonical) spec)
+        <> (.pointer) spec
         <> "\", all (\\(_, owner) -> fieldWitnessAgrees StructuralProjections."
-        <> spWitness spec
+        <> (.witness) spec
         <> " (\\referenceOwner -> "
         <> projectionGetter rendering "referenceOwner" spec
         <> ") owner) (NonEmpty.toList (fixtureCases "
         <> ownerFixtures spec
         <> ")))"
-    ownerFixtures spec = case find (\(declaration, _) -> sdCanonical declaration == spCanonical spec) structural of
-      Just (declaration, _) -> renderReference rendering (conformanceQualifiedValueReference (sdFixtures declaration))
+    ownerFixtures spec = case find (\(declaration, _) -> (.canonical) declaration == (.canonical) spec) structural of
+      Just (declaration, _) -> renderReference rendering (conformanceQualifiedValueReference ((.fixtures) declaration))
       Nothing -> "error \"projection owner fixtures missing\""
 
 projectionGetter :: ConformanceRendering -> Text -> StructuralProjection -> Text
 projectionGetter rendering owner spec =
   foldl
-    ( \value (shapeModule, selector) ->
-        renderReference rendering (HaskellReference shapeModule selector ValueNamespace RequireQualified)
-          <> " ("
+    ( \value (_shapeModule, selector) ->
+        "("
           <> value
-          <> ")"
+          <> ")."
+          <> selector
     )
-    ("bindingToShape " <> renderReference rendering (conformanceQualifiedValueReference (spBinding spec)) <> " " <> owner)
-    (spSelectors spec)
+    ("bindingToShape " <> renderReference rendering (conformanceQualifiedValueReference ((.binding) spec)) <> " " <> owner)
+    ((.selectors) spec)
 
 structuralShapeModuleName :: Context -> Name -> Text
-structuralShapeModuleName ctx name = case placement ctx of
+structuralShapeModuleName ctx name = case (.placement) ctx of
   GeneratedPrefix -> root <> "Generated." <> contextSegment <> ".Structural.Shape." <> name
   CollocatedLeaf -> root <> contextSegment <> ".Generated.Structural.Shape." <> name
   where
-    root = if T.null (moduleRoot ctx) then "" else moduleRoot ctx <> "."
-    contextSegment = pascalFromKebab (contextName ctx)
+    root = if T.null ((.moduleRoot) ctx) then "" else (.moduleRoot) ctx <> "."
+    contextSegment = pascalFromKebab ((.name) ctx)
 
 structuralProjectionModuleName :: Context -> Text
 structuralProjectionModuleName ctx = contextStructuralPrefix ctx <> ".StructuralProjections"
 
 contextStructuralPrefix :: Context -> Text
-contextStructuralPrefix ctx = case placement ctx of
+contextStructuralPrefix ctx = case (.placement) ctx of
   GeneratedPrefix -> root <> "Generated." <> contextSegment
   CollocatedLeaf -> root <> contextSegment <> ".Generated"
   where
-    root = if T.null (moduleRoot ctx) then "" else moduleRoot ctx <> "."
-    contextSegment = pascalFromKebab (contextName ctx)
+    root = if T.null ((.moduleRoot) ctx) then "" else (.moduleRoot) ctx <> "."
+    contextSegment = pascalFromKebab ((.name) ctx)
 
 tshow :: (Show value) => value -> Text
 tshow = T.pack . show

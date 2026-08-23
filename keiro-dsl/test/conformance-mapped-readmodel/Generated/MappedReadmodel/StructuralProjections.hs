@@ -15,13 +15,13 @@ module Generated.MappedReadmodel.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Generated.MappedReadmodel.Structural.Shape.AccountLookup (AccountLookupShape(accountId, tenant))
+import Generated.MappedReadmodel.Structural.Shape.AccountProfile (AccountProfileShape(displayName))
+import Generated.MappedReadmodel.Structural.Shape.AccountSummary (AccountSummaryShape(accountId, tenant))
+import Generated.MappedReadmodel.Structural.Shape.TenantKey (TenantKeyShape(tenantId))
+import Generated.MappedReadmodel.Structural.Shape.UnusedFilter (UnusedFilterShape(prefix))
 import Conformance.MappedReadModel.Bindings qualified as Bindings
 import Conformance.MappedReadModel.Domain (AccountLookup, AccountProfile, AccountSummary, TenantKey, UnusedFilter)
-import Generated.MappedReadmodel.Structural.Shape.AccountLookup qualified as ShapeAccountLookup
-import Generated.MappedReadmodel.Structural.Shape.AccountProfile qualified as ShapeAccountProfile
-import Generated.MappedReadmodel.Structural.Shape.AccountSummary qualified as ShapeAccountSummary
-import Generated.MappedReadmodel.Structural.Shape.TenantKey qualified as ShapeTenantKey
-import Generated.MappedReadmodel.Structural.Shape.UnusedFilter qualified as ShapeUnusedFilter
 
 data AccountLookupAccountIdProjection
 
@@ -30,7 +30,7 @@ instance FieldProjection AccountLookupAccountIdProjection where
   type FieldOwner AccountLookupAccountIdProjection = AccountLookup
   type FieldResult AccountLookupAccountIdProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.AccountLookup.v1"
-  projectFieldValue _ owner = ShapeAccountLookup.accountId (bindingToShape Bindings.accountLookupBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.accountLookupBinding owner).accountId
 
 accountLookupAccountIdWitness :: FieldWitness AccountLookupAccountIdProjection
 accountLookupAccountIdWitness = fieldWitness @AccountLookupAccountIdProjection
@@ -42,7 +42,7 @@ instance FieldProjection AccountLookupTenantTenantIdProjection where
   type FieldOwner AccountLookupTenantTenantIdProjection = AccountLookup
   type FieldResult AccountLookupTenantTenantIdProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.AccountLookup.v1"
-  projectFieldValue _ owner = ShapeTenantKey.tenantId (ShapeAccountLookup.tenant (bindingToShape Bindings.accountLookupBinding owner))
+  projectFieldValue _ owner = ((bindingToShape Bindings.accountLookupBinding owner).tenant).tenantId
 
 accountLookupTenantTenantIdWitness :: FieldWitness AccountLookupTenantTenantIdProjection
 accountLookupTenantTenantIdWitness = fieldWitness @AccountLookupTenantTenantIdProjection
@@ -54,7 +54,7 @@ instance FieldProjection AccountProfileDisplayNameProjection where
   type FieldOwner AccountProfileDisplayNameProjection = AccountProfile
   type FieldResult AccountProfileDisplayNameProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.AccountProfile.v1"
-  projectFieldValue _ owner = ShapeAccountProfile.displayName (bindingToShape Bindings.accountProfileBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.accountProfileBinding owner).displayName
 
 accountProfileDisplayNameWitness :: FieldWitness AccountProfileDisplayNameProjection
 accountProfileDisplayNameWitness = fieldWitness @AccountProfileDisplayNameProjection
@@ -66,7 +66,7 @@ instance FieldProjection AccountSummaryAccountIdProjection where
   type FieldOwner AccountSummaryAccountIdProjection = AccountSummary
   type FieldResult AccountSummaryAccountIdProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.AccountSummary.v1"
-  projectFieldValue _ owner = ShapeAccountSummary.accountId (bindingToShape Bindings.accountSummaryBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.accountSummaryBinding owner).accountId
 
 accountSummaryAccountIdWitness :: FieldWitness AccountSummaryAccountIdProjection
 accountSummaryAccountIdWitness = fieldWitness @AccountSummaryAccountIdProjection
@@ -78,7 +78,7 @@ instance FieldProjection AccountSummaryTenantTenantIdProjection where
   type FieldOwner AccountSummaryTenantTenantIdProjection = AccountSummary
   type FieldResult AccountSummaryTenantTenantIdProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.AccountSummary.v1"
-  projectFieldValue _ owner = ShapeTenantKey.tenantId (ShapeAccountSummary.tenant (bindingToShape Bindings.accountSummaryBinding owner))
+  projectFieldValue _ owner = ((bindingToShape Bindings.accountSummaryBinding owner).tenant).tenantId
 
 accountSummaryTenantTenantIdWitness :: FieldWitness AccountSummaryTenantTenantIdProjection
 accountSummaryTenantTenantIdWitness = fieldWitness @AccountSummaryTenantTenantIdProjection
@@ -90,7 +90,7 @@ instance FieldProjection TenantKeyTenantIdProjection where
   type FieldOwner TenantKeyTenantIdProjection = TenantKey
   type FieldResult TenantKeyTenantIdProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.TenantKey.v1"
-  projectFieldValue _ owner = ShapeTenantKey.tenantId (bindingToShape Bindings.tenantKeyBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.tenantKeyBinding owner).tenantId
 
 tenantKeyTenantIdWitness :: FieldWitness TenantKeyTenantIdProjection
 tenantKeyTenantIdWitness = fieldWitness @TenantKeyTenantIdProjection
@@ -102,7 +102,7 @@ instance FieldProjection UnusedFilterPrefixProjection where
   type FieldOwner UnusedFilterPrefixProjection = UnusedFilter
   type FieldResult UnusedFilterPrefixProjection = Text
   fieldShapeId _ = "conformance.mapped-readmodel.UnusedFilter.v1"
-  projectFieldValue _ owner = ShapeUnusedFilter.prefix (bindingToShape Bindings.unusedFilterBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.unusedFilterBinding owner).prefix
 
 unusedFilterPrefixWitness :: FieldWitness UnusedFilterPrefixProjection
 unusedFilterPrefixWitness = fieldWitness @UnusedFilterPrefixProjection

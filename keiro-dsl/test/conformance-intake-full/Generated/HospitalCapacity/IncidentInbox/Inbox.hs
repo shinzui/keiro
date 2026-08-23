@@ -24,8 +24,8 @@ inboxPersistence = PersistDedupeOnly
 
 -- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.
 data InboxFailure = InboxFailure
-  { inboxFailureReason :: !Text
-  , inboxFailureAttempt :: !(Maybe Int)
+  { reason :: !Text
+  , attempt :: !(Maybe Int)
   }
   deriving stock (Eq, Show)
 

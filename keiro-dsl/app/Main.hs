@@ -1,6 +1,5 @@
--- | The @keiro-dsl@ command-line tool. EP-1 ships the @parse@ and @check@
--- subcommands; a later milestone adds @scaffold@ to the same
--- optparse-applicative command tree.
+-- | The @keiro-dsl@ command-line tool, including parsing, checking, diffing,
+-- scaffolding, and explicit generated-Haskell edition migration.
 module Main (main) where
 
 import Control.Monad (when)
@@ -30,14 +29,14 @@ import Keiro.Dsl.PrettyPrint (renderSource, renderSpec)
 import Keiro.Dsl.ReplayImpact (renderReplayImpact, replayImpactServices)
 import Keiro.Dsl.RuntimePackage (RuntimePackageName, mkRuntimePackageName)
 import Keiro.Dsl.Scaffold (Context (..), ScaffoldModule (..), codecComparisonBanner, codecComparisonModule)
-import Keiro.Dsl.ScaffoldRun (checkIndexedServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
-import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSource, checkedSpec, effectiveContractLanguageVersion, languageContractNotice)
+import Keiro.Dsl.ScaffoldRun (checkIndexedServiceDiagnostics, executeServiceScaffoldWithRuntimePackageAndMigrations, planIndexedServiceScaffoldWithRuntimePackageAndGoldens, renderRefusals, renderScaffoldReport)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSource, checkedSpec, languageContractNotice)
 import Keiro.Dsl.Skeleton (skeletonFor)
 import Keiro.Dsl.SourceIndex (ParsedSourceDocument (..), SemanticSourceIndex, emptySemanticSourceIndex)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), DiagnosticOrigin (..), Severity (..), diagnosticCodeText, diagnosticOrigin, minimumLanguageDiagnostics, parseDiagnosticCode, renderDiagnostic, validateService)
 import Keiro.Dsl.Workspace (ContentSource (..), LineMap (..), OwnershipIndex (..), WorkspaceDiagnostic (..), WorkspaceFailure (..), WorkspaceFile (..), WorkspaceLocation (..), WorkspaceManifest (..), WorkspaceMember (..), WorkspaceMemberRef (..), WorkspaceSpec (..), checkWorkspace, checkWorkspaceForService, checkedWorkspace, fileContentSource, isWorkspacePath, loadWorkspace, nodeOwner, parseWorkspaceManifest, renderWorkspaceDiagnostic, renderWorkspaceFailure, renderWorkspaceManifest)
 import Keiro.Dsl.WorkspaceDiff (WorkspaceChange (..), WorkspaceMeta (..), diffWorkspaces, renderWorkspaceFinding, workspaceDiffReportWithImpacts)
-import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithNameMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
+import Keiro.Dsl.WorkspaceScaffold (executeWorkspaceScaffoldWithMigrations, planWorkspaceScaffoldWithRuntimePackageAndGoldens, renderWorkspaceScaffoldReport)
 import Numeric.Natural (Natural)
 import Options.Applicative
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesFileExist)
@@ -53,7 +52,7 @@ data Command
   | Check FilePath CheckOptions
   | Inspect FilePath InspectionFormat
   | BehaviorObligations FilePath BehaviorFormat
-  | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
+  | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
   | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
   | New String
 
@@ -109,7 +108,7 @@ commands =
           (info (BehaviorObligations <$> fileArg <*> behaviorFormatOpt <**> helper) (progDesc "List static aggregate behavior obligations for a .keiro file or workspace"))
         <> command
           "scaffold"
-          (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> optional runtimePackageOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> applyNameMigrationsSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
+          (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> optional runtimePackageOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> applyNameMigrationsSwitch <*> applyGeneratedHaskellEditionSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
         <> command
           "diff"
           (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <*> diffCoverageOptions <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
@@ -141,6 +140,9 @@ forceGeneratedOverwriteSwitch = switch (long "force-generated-overwrite" <> help
 
 applyNameMigrationsSwitch :: Parser Bool
 applyNameMigrationsSwitch = switch (long "apply-name-migrations" <> help "Apply reviewed generated-Haskell source and sidecar moves with recoverable backups")
+
+applyGeneratedHaskellEditionSwitch :: Parser Bool
+applyGeneratedHaskellEditionSwitch = switch (long "apply-generated-haskell-edition" <> help "Adopt idiomatic-v2 generated Haskell with durable idiomatic-v1 backups and a Hole remediation report")
 
 goldensOpt :: Parser FilePath
 goldensOpt = strOption (long "goldens" <> metavar "DIR" <> help "Golden-payload root to embed in generated aggregate harnesses")
@@ -265,15 +267,15 @@ parseDenyCodes raw = traverse parseOne (T.splitOn "," (T.pack raw))
 -- immediate error, and this one could only ever be a silent no-op.
 validateCheckDenyCodes :: CheckOptions -> IO ()
 validateCheckDenyCodes options = do
-  when (CoverageOpaqueGateExceeded `elem` checkDenyCodes options) $ do
+  when (CoverageOpaqueGateExceeded `elem` (.checkDenyCodes) options) $ do
     TIO.hPutStrLn
       stderr
       "check: --deny CoverageOpaqueGateExceeded can never match; the code is the error --fail-on-opaque itself raises, so pass --fail-on-opaque instead of denying it"
     exitFailure
-  case [diagnosticCode | diagnosticCode <- checkDenyCodes options, diagnosticOrigin diagnosticCode == CoverageDiagnostic, diagnosticCode /= CoverageOpaqueGateExceeded] of
+  case [diagnosticCode | diagnosticCode <- (.checkDenyCodes) options, diagnosticOrigin diagnosticCode == CoverageDiagnostic, diagnosticCode /= CoverageOpaqueGateExceeded] of
     [] -> pure ()
     unreachable
-      | Just _ <- checkCoverage options -> pure ()
+      | Just _ <- (.checkCoverage) options -> pure ()
       | otherwise -> do
           TIO.hPutStrLn
             stderr
@@ -346,29 +348,29 @@ workspaceSourceFormSummary workspace =
     <> T.pack (show legacyCount)
     <> " legacy-unversioned member(s)"
   where
-    legacyCount = length [() | member <- wsMembers workspace, LegacyUnversioned <- [wmSourceLanguage member]]
+    legacyCount = length [() | member <- (.members) workspace, LegacyUnversioned <- [(.sourceLanguage) member]]
 
 minimumWorkspaceLanguageDiagnostics :: LanguageVersion -> WorkspaceSpec -> [WorkspaceDiagnostic]
 minimumWorkspaceLanguageDiagnostics floorVersion workspace
   | effectiveVersion >= floorVersion = []
   | otherwise =
       [ WorkspaceDiagnostic
-          { wdLocations =
+          { locations =
               NE.fromList
                 ( WorkspaceLocation WorkspaceManifestFile 1 ""
                     : [ WorkspaceLocation
-                          (WorkspaceMemberFile (wmPath member))
-                          (sourceLanguageLine (wmSourceLanguage member))
+                          (WorkspaceMemberFile ((.path) member))
+                          (sourceLanguageLine ((.sourceLanguage) member))
                           ( "member selects effective language version "
-                              <> languageVersionText (effectiveLanguageVersion (wmSourceLanguage member))
+                              <> languageVersionText (effectiveLanguageVersion ((.sourceLanguage) member))
                           )
-                      | member <- wsMembers workspace
+                      | member <- (.members) workspace
                       ]
                 ),
-            wdSeverity = Error,
-            wdCode = LanguageVersionBelowMinimum,
-            wdSourceLanguageCause = Nothing,
-            wdMessage =
+            severity = Error,
+            code = LanguageVersionBelowMinimum,
+            sourceLanguageCause = Nothing,
+            message =
               "effective language version "
                 <> languageVersionText effectiveVersion
                 <> " (workspace-composed) is below the required minimum "
@@ -379,28 +381,28 @@ minimumWorkspaceLanguageDiagnostics floorVersion workspace
           }
       ]
   where
-    effectiveVersion = effectiveContractLanguageVersion (checkedLanguageContract (checkedWorkspace workspace))
+    effectiveVersion = (.contractLanguageVersion) (checkedLanguageContract (checkedWorkspace workspace))
     sourceLanguageLine LegacyUnversioned = 1
     sourceLanguageLine DeclaredLanguage {languageVersionLoc = Loc lineNumber} = lineNumber
 
 deniesWarningCode :: CheckOptions -> DiagnosticCode -> Bool
 deniesWarningCode options diagnosticCode =
-  checkDenyWarnings options || diagnosticCode `elem` checkDenyCodes options
+  (.checkDenyWarnings) options || diagnosticCode `elem` (.checkDenyCodes) options
 
 deniedSourceWarningCodes :: CheckOptions -> [Diagnostic] -> [DiagnosticCode]
 deniedSourceWarningCodes options diagnostics =
-  [ code diagnostic
+  [ (.code) diagnostic
   | diagnostic <- diagnostics,
-    severity diagnostic == Warning,
-    deniesWarningCode options (code diagnostic)
+    (.severity) diagnostic == Warning,
+    deniesWarningCode options ((.code) diagnostic)
   ]
 
 deniedWorkspaceWarningCodes :: CheckOptions -> [WorkspaceDiagnostic] -> [DiagnosticCode]
 deniedWorkspaceWarningCodes options diagnostics =
-  [ wdCode diagnostic
+  [ (.code) diagnostic
   | diagnostic <- diagnostics,
-    wdSeverity diagnostic == Warning,
-    deniesWarningCode options (wdCode diagnostic)
+    (.severity) diagnostic == Warning,
+    deniesWarningCode options ((.code) diagnostic)
   ]
 
 emitDeniedWarningSummary :: [DiagnosticCode] -> IO ()
@@ -416,9 +418,9 @@ emitDeniedWarningSummary deniedCodes =
 checkReportEnforcement :: CheckOptions -> CheckReport.CheckReportEnforcement
 checkReportEnforcement options =
   CheckReport.CheckReportEnforcement
-    { CheckReport.reportMinLanguage = checkMinLanguage options,
-      CheckReport.reportDenyWarnings = checkDenyWarnings options,
-      CheckReport.reportDenyCodes = checkDenyCodes options
+    { CheckReport.minLanguage = (.checkMinLanguage) options,
+      CheckReport.denyWarnings = (.checkDenyWarnings) options,
+      CheckReport.denyCodes = (.checkDenyCodes) options
     }
 
 -- | Write a check report to @--report-out@, creating any missing parent
@@ -431,7 +433,7 @@ writeCheckReportFile options report =
         createDirectoryIfMissing True (takeDirectory path)
         Aeson.encodeFile path report
     )
-    (checkReportOut options)
+    ((.checkReportOut) options)
 
 writeSourceCheckReport :: FilePath -> ParsedSource -> CheckedService -> CheckOptions -> [Diagnostic] -> IO ()
 writeSourceCheckReport subject parsedSource service options diagnostics =
@@ -439,7 +441,7 @@ writeSourceCheckReport subject parsedSource service options diagnostics =
     options
     ( CheckReport.checkReport
         subject
-        (parsedSourceLanguage parsedSource)
+        ((.sourceLanguage) parsedSource)
         (checkedLanguageContract service)
         enforcement
         diagnostics
@@ -494,8 +496,8 @@ run (Inspect fp format)
   | isWorkspacePath fp = runWorkspaceInspect fp format
 run (BehaviorObligations fp format)
   | isWorkspacePath fp = runWorkspaceBehaviorObligations fp format
-run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest)
-  | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest
+run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest)
+  | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest
 run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
   | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
 run (Parse fp) = do
@@ -504,27 +506,27 @@ run (Parse fp) = do
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource} -> TIO.putStrLn (renderSource parsedSource)
+    Right ParsedSourceDocument {parsedSource = parsedSource} -> TIO.putStrLn (renderSource parsedSource)
 run (Check fp options) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} -> do
+    Right ParsedSourceDocument {parsedSource = parsedSource, sourceIndex = sourceIndex} -> do
       validateCheckDenyCodes options
       let service = checkedSource parsedSource
           spec = checkedSpec service
-          floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion (parsedSourceLanguage parsedSource)) (checkMinLanguage options)
+          floorDiags = maybe [] (\floorVersion -> minimumLanguageDiagnostics floorVersion ((.sourceLanguage) parsedSource)) ((.checkMinLanguage) options)
           semanticDiags = floorDiags <> checkIndexedServiceDiagnostics Nothing sourceIndex (mkContext Nothing False spec) service
-          semanticFailed = any ((== Error) . severity) semanticDiags
-      emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
+          semanticFailed = any ((== Error) . (.severity)) semanticDiags
+      emitLanguageContractNotice fp (sourceFormText ((.sourceLanguage) parsedSource)) service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) semanticDiags
       -- Coverage is part of this invocation's diagnostic surface, not a
       -- success-path artifact: its findings must reach the deny policy, the exit
       -- code, and the check report. It still runs only after semantic validation
       -- passes, because an unresolvable graph has nothing to cover.
-      coveragePlan <- planCheckCoverage fp service (if semanticFailed then Nothing else checkCoverage options)
+      coveragePlan <- planCheckCoverage fp service (if semanticFailed then Nothing else (.checkCoverage) options)
       coverageOk <- emitPlannedCoverage coveragePlan
       let diags = semanticDiags <> plannedCoverageDiagnostics coveragePlan
           deniedWarningCodes = deniedSourceWarningCodes options diags
@@ -533,30 +535,30 @@ run (Check fp options) = do
       if semanticFailed || not coverageOk || not (null deniedWarningCodes)
         then exitFailure
         else do
-          when (checkEmit options) (TIO.putStrLn (renderSource parsedSource))
-          if checkExplainBindings options
+          when ((.checkEmit) options) (TIO.putStrLn (renderSource parsedSource))
+          if (.checkExplainBindings) options
             then case bindingObligationsForService service of
               Left graphErrors -> do
                 hPutStrLn stderr ("validated spec did not resolve its mapped type graph: " <> show graphErrors)
                 exitFailure
-              Right obligations -> TIO.putStrLn (renderBindingObligations (specContext spec) obligations)
+              Right obligations -> TIO.putStrLn (renderBindingObligations ((.context) spec) obligations)
             else pure ()
-          when (not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
-run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest) = do
+          when (not ((.checkEmit) options) && not ((.checkExplainBindings) options)) (putStrLn "OK")
+run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
     Left failure -> do
       hPutStrLn stderr (T.unpack (renderParseFailure failure))
       exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} -> do
+    Right ParsedSourceDocument {parsedSource = parsedSource, sourceIndex = sourceIndex} -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
-      emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage parsedSource)) service
+      emitLanguageContractNotice fp (sourceFormText ((.sourceLanguage) parsedSource)) service
       -- Validation gate: never scaffold an invalid spec. Abort on any
       -- error-severity diagnostic before writing a single module.
       let diags = validateService service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diags
-      when (any ((== Error) . severity) diags) exitFailure
+      when (any ((== Error) . (.severity)) diags) exitFailure
       let ctx = mkContext cliRoot cliCollocate spec
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
@@ -570,7 +572,7 @@ run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwr
           case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
-              result <- executeServiceScaffoldWithRuntimePackageAndNameMigrations cliRuntimePackage applyNameMigrations out forceGeneratedOverwrite fp (parsedSourceLanguage parsedSource) ctx service modules
+              result <- executeServiceScaffoldWithRuntimePackageAndMigrations cliRuntimePackage applyNameMigrations applyGeneratedHaskellEdition out forceGeneratedOverwrite fp ((.sourceLanguage) parsedSource) ctx service modules
               case result of
                 Left refusals -> do
                   mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
@@ -586,19 +588,19 @@ run (Inspect fp InspectionJson) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource} ->
+    Right ParsedSourceDocument {parsedSource = parsedSource} ->
       TLIO.putStrLn
-        (AesonText.encodeToLazyText (sourceInspection fp (parsedSourceLanguage parsedSource) (checkedSource parsedSource)))
+        (AesonText.encodeToLazyText (sourceInspection fp ((.sourceLanguage) parsedSource) (checkedSource parsedSource)))
 run (BehaviorObligations fp format) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
     Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
-    Right ParsedSourceDocument {documentParsedSource = parsedSource, documentSourceIndex = sourceIndex} -> do
+    Right ParsedSourceDocument {parsedSource = parsedSource, sourceIndex = sourceIndex} -> do
       let service = checkedSource parsedSource
           spec = checkedSpec service
           diagnostics = validateService service
       mapM_ (TIO.hPutStrLn stderr . renderDiagnostic fp) diagnostics
-      if any ((== Error) . severity) diagnostics
+      if any ((== Error) . (.severity)) diagnostics
         then exitFailure
         else case sourceAwareBehaviorReport fp Nothing sourceIndex spec of
           Left failure -> renderBehaviorReportFailure failure
@@ -621,14 +623,14 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
           case (,) <$> parseSourceDocument (ref <> ":" <> relPath) (T.pack oldText) <*> parseSourceDocument fp newText of
             Left failure -> hPutStrLn stderr (T.unpack (renderParseFailure failure)) >> exitFailure
             Right
-              ( ParsedSourceDocument {documentParsedSource = oldSource},
-                ParsedSourceDocument {documentParsedSource = newSource}
+              ( ParsedSourceDocument {parsedSource = oldSource},
+                ParsedSourceDocument {parsedSource = newSource}
                 ) -> do
                 let oldService = checkedSource oldSource
                     newService = checkedSource newSource
                     oldSpec = checkedSpec oldService
                     newSpec = checkedSpec newService
-                emitLanguageContractNotice fp (sourceFormText (parsedSourceLanguage newSource)) newService
+                emitLanguageContractNotice fp (sourceFormText ((.sourceLanguage) newSource)) newService
                 case (,) <$> diffSources oldSource newSource <*> replayImpactServices oldService newService of
                   Left surfaceError -> TIO.hPutStrLn stderr (renderFoldSurfaceError surfaceError) >> exitFailure
                   Right (changes, impact) -> do
@@ -646,7 +648,7 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                     mapM_ (`Aeson.encodeFile` impact) replayImpactOut
                     mapM_ (\path -> Aeson.encodeFile path (diffReportWithImpacts effectiveGate changes semanticImpact coordination)) reportOut
                     coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-                    if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . coordinationSeverity) coordination || not coverageOk then exitFailure else pure ()
+                    if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . (.severity)) coordination || not coverageOk then exitFailure else pure ()
 
 -- | @parse@ on a workspace manifest: read it, parse it, and print it back in
 -- canonical form (clauses in order, members codepoint-sorted).
@@ -685,22 +687,22 @@ runWorkspaceInspect fp InspectionJson = do
                 [ "schema" .= ("keiro-dsl/source-inspection/1" :: T.Text),
                   "kind" .= ("workspace" :: T.Text),
                   "path" .= fp,
-                  "service" .= wsService workspace,
+                  "service" .= (.service) workspace,
                   "effectiveSemanticContract" .= checkedLanguageContract (checkedWorkspace workspace),
-                  "members" .= map memberInspection (wsMembers workspace)
+                  "members" .= map memberInspection ((.members) workspace)
                 ]
             )
         )
   where
     memberInspection member =
       Aeson.object
-        [ "path" .= wmPath member,
+        [ "path" .= (.path) member,
           "sourceForm" .= sourceFormText sourceLanguage,
           "declaredLanguageVersion" .= declaredLanguageVersionMaybe sourceLanguage,
           "effectiveLanguageVersion" .= effectiveLanguageVersion sourceLanguage
         ]
       where
-        sourceLanguage = wmSourceLanguage member
+        sourceLanguage = (.sourceLanguage) member
 
 runWorkspaceBehaviorObligations :: FilePath -> BehaviorFormat -> IO ()
 runWorkspaceBehaviorObligations fp format = do
@@ -710,7 +712,7 @@ runWorkspaceBehaviorObligations fp format = do
     Right workspace -> do
       let diagnostics = checkWorkspace workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diagnostics
-      if any ((== Error) . wdSeverity) diagnostics
+      if any ((== Error) . (.severity)) diagnostics
         then exitFailure
         else case workspaceBehaviorReport workspace of
           Left failure -> renderBehaviorReportFailure failure
@@ -719,17 +721,19 @@ runWorkspaceBehaviorObligations fp format = do
 workspaceBehaviorReport :: WorkspaceSpec -> Either BehaviorReportFailure Behavior.BehaviorObligationsReport
 workspaceBehaviorReport workspace =
   sourceAwareBehaviorReport
-    (wsManifestPath workspace)
-    (Just (wsService workspace))
-    (wsSourceIndex workspace)
+    ((.manifestPath) workspace)
+    (Just ((.service) workspace))
+    ((.sourceIndex) workspace)
     (checkedSpec (checkedWorkspace workspace))
     >>= \report ->
       pure
-        report
-          { Behavior.behaviorRequirements =
+        Behavior.BehaviorObligationsReport
+          { Behavior.subject = report.subject,
+            Behavior.workspaceService = report.workspaceService,
+            Behavior.requirements =
               map
-                (Behavior.attributeBehaviorOwner (fmap fst . nodeOwner (wsOwnership workspace) "aggregate"))
-                (Behavior.behaviorRequirements report)
+                (Behavior.attributeBehaviorOwner (fmap fst . nodeOwner workspace.ownership "aggregate"))
+                report.requirements
           }
 
 data BehaviorReportFailure
@@ -742,9 +746,9 @@ sourceAwareBehaviorReport subject workspaceService sourceIndex spec = do
   sourceEntries <- either (Left . BehaviorReportSourceFailed) Right (BehaviorSource.planBehaviorSourceMap requirements sourceIndex)
   pure
     Behavior.BehaviorObligationsReport
-      { Behavior.behaviorSubject = subject,
-        Behavior.behaviorWorkspaceService = workspaceService,
-        Behavior.behaviorRequirements = BehaviorSource.attachBehaviorSourceLocations sourceEntries requirements
+      { Behavior.subject = subject,
+        Behavior.workspaceService = workspaceService,
+        Behavior.requirements = BehaviorSource.attachBehaviorSourceLocations sourceEntries requirements
       }
 
 writeBehaviorReport :: BehaviorFormat -> Behavior.BehaviorObligationsReport -> IO ()
@@ -765,11 +769,11 @@ renderBehaviorReportFailure failure = case failure of
       ( \sourceFailure ->
           hPutStrLn
             stderr
-            ( show (BehaviorSource.failureCode sourceFailure)
+            ( show ((.code) sourceFailure)
                 <> " "
-                <> T.unpack (Behavior.unBehaviorKey (BehaviorSource.failureKey sourceFailure))
+                <> T.unpack (Behavior.unBehaviorKey ((.key) sourceFailure))
                 <> ": "
-                <> T.unpack (BehaviorSource.failureMessage sourceFailure)
+                <> T.unpack ((.message) sourceFailure)
             )
       )
       errors
@@ -795,15 +799,15 @@ runWorkspaceCheck fp options = do
       exitFailure
     Right workspace -> do
       let service = checkedWorkspace workspace
-          floorDiags = maybe [] (\floorVersion -> minimumWorkspaceLanguageDiagnostics floorVersion workspace) (checkMinLanguage options)
+          floorDiags = maybe [] (\floorVersion -> minimumWorkspaceLanguageDiagnostics floorVersion workspace) ((.checkMinLanguage) options)
           semanticDiags = floorDiags <> checkWorkspaceForService workspace service
           spec = checkedSpec service
-          semanticFailed = any ((== Error) . wdSeverity) semanticDiags
+          semanticFailed = any ((== Error) . (.severity)) semanticDiags
       emitWorkspaceLanguageContractNotice fp workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) semanticDiags
       -- Same contract as the single-spec path: coverage findings are gated
       -- diagnostics, not success-path output. See `run (Check …)` above.
-      coveragePlan <- planCheckCoverage fp service (if semanticFailed then Nothing else checkCoverage options)
+      coveragePlan <- planCheckCoverage fp service (if semanticFailed then Nothing else (.checkCoverage) options)
       coverageOk <- emitPlannedCoverage coveragePlan
       let diags = semanticDiags <> map (workspaceCoverageDiagnostic fp) (plannedCoverageFindings coveragePlan)
           deniedWarningCodes = deniedWorkspaceWarningCodes options diags
@@ -812,15 +816,15 @@ runWorkspaceCheck fp options = do
       if semanticFailed || not coverageOk || not (null deniedWarningCodes)
         then exitFailure
         else do
-          when (checkEmit options) (TIO.putStrLn (renderSpec spec))
-          if checkExplainBindings options
+          when ((.checkEmit) options) (TIO.putStrLn (renderSpec spec))
+          if (.checkExplainBindings) options
             then case bindingObligationsForService service of
               Left graphErrors -> do
                 hPutStrLn stderr ("validated workspace did not resolve its mapped type graph: " <> show graphErrors)
                 exitFailure
-              Right obligations -> TIO.putStrLn (renderBindingObligations (wsContext workspace) obligations)
+              Right obligations -> TIO.putStrLn (renderBindingObligations ((.context) workspace) obligations)
             else pure ()
-          when (not (checkEmit options) && not (checkExplainBindings options)) (putStrLn "OK")
+          when (not ((.checkEmit) options) && not ((.checkExplainBindings) options)) (putStrLn "OK")
 
 -- | @scaffold@ on a workspace manifest: compose the whole service, then plan
 -- and emit the complete module set for every member in one invocation.
@@ -842,10 +846,11 @@ runWorkspaceScaffold ::
   Bool ->
   Bool ->
   Bool ->
+  Bool ->
   Maybe FilePath ->
   Maybe (String, FilePath) ->
   IO ()
-runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations cliGoldens comparisonRequest = do
+runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest = do
   loaded <- loadWorkspace (fileContentSource (takeDirectory fp)) fp
   case loaded of
     Left failure -> do
@@ -857,12 +862,12 @@ runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGenerate
       -- error-severity diagnostic before writing a single module.
       let diags = checkWorkspace workspace
       mapM_ (TIO.hPutStrLn stderr . renderWorkspaceDiagnostic fp) diags
-      when (any ((== Error) . wdSeverity) diags) exitFailure
+      when (any ((== Error) . (.severity)) diags) exitFailure
       let spec = checkedSpec (checkedWorkspace workspace)
           ctx = workspaceContext cliRoot cliCollocate workspace
           effectiveRuntimePackage = case cliRuntimePackage of
             Just packageName -> Just packageName
-            Nothing -> wsRuntimePackage workspace
+            Nothing -> (.runtimePackage) workspace
           goldenRoot = fromMaybe (takeDirectory fp </> "golden-payloads") cliGoldens
       goldens <- loadGoldenPayloads goldenRoot spec
       case ( planWorkspaceScaffoldWithRuntimePackageAndGoldens goldens effectiveRuntimePackage goldenRoot ctx workspace,
@@ -877,7 +882,7 @@ runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGenerate
           case comparisonReady of
             Left comparisonError -> TIO.hPutStrLn stderr comparisonError >> exitFailure
             Right () -> do
-              result <- executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyNameMigrations plan
+              result <- executeWorkspaceScaffoldWithMigrations out forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition plan
               case result of
                 Left refusals -> do
                   mapM_ (TIO.hPutStrLn stderr) (renderRefusals refusals)
@@ -963,18 +968,18 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                         Right (workspaceChanges, impact) -> do
                           written <- maybe (pure []) (\root -> emitGoldenPayloads root oldSpec newSpec) goldenRoot
                           mapM_ (putStrLn . ("golden: wrote synthesized weak stand-in " <>)) written
-                          let changes = map wcChange workspaceChanges
+                          let changes = map (.change) workspaceChanges
                               effectiveGate = gateWith gatedSurfaces
                               semanticImpact = CheckedDiff.mappedSemanticImpactForServices oldService newService
                               coordination = coordinationImpact oldService newService semanticImpact
                               reportMeta =
                                 WorkspaceMeta
-                                  { wmIdentity = wsService newWorkspace,
-                                    wmManifest = fp,
-                                    wmSince = T.pack ref,
-                                    wmMembersOld = map wmPath (wsMembers oldWorkspace),
-                                    wmMembersNew = map wmPath (wsMembers newWorkspace),
-                                    wmAdoptionBaseline = adoptionBaseline
+                                  { identity = (.service) newWorkspace,
+                                    manifest = fp,
+                                    since = T.pack ref,
+                                    membersOld = map (.path) ((.members) oldWorkspace),
+                                    membersNew = map (.path) ((.members) newWorkspace),
+                                    adoptionBaseline = adoptionBaseline
                                   }
                           mapM_ (TIO.putStrLn . renderWorkspaceFinding) workspaceChanges
                           mapM_ TIO.putStrLn (renderSemanticImpact semanticImpact)
@@ -985,7 +990,7 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                           mapM_ (`Aeson.encodeFile` impact) replayImpactOut
                           mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReportWithImpacts reportMeta effectiveGate workspaceChanges semanticImpact coordination)) reportOut
                           coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-                          if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . coordinationSeverity) coordination || not coverageOk then exitFailure else pure ()
+                          if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . (.severity)) coordination || not coverageOk then exitFailure else pure ()
 
 -- | A @git show@ backed source rooted at a workspace manifest directory.
 gitContentSource :: FilePath -> String -> FilePath -> ContentSource
@@ -1010,41 +1015,63 @@ loadAdoptionBaseline ::
   WorkspaceSpec ->
   IO (Either WorkspaceFailure WorkspaceSpec)
 loadAdoptionBaseline oldSource manifestPath currentManifest newWorkspace = do
-  present <- traverse presentAtRevision (NE.toList (wmfMembers currentManifest))
+  present <- traverse presentAtRevision (NE.toList ((.members) currentManifest))
   case NE.nonEmpty [member | (member, True) <- present] of
     Nothing -> pure (Right (emptyWorkspaceBaseline newWorkspace))
     Just members ->
-      let oldManifest = currentManifest {wmfMembers = members}
+      let oldManifest =
+            WorkspaceManifest
+              { service = (.service) currentManifest,
+                serviceLoc = (.serviceLoc) currentManifest,
+                runtimePackage = (.runtimePackage) currentManifest,
+                runtimePackageLoc = (.runtimePackageLoc) currentManifest,
+                moduleRoot = (.moduleRoot) currentManifest,
+                moduleRootLoc = (.moduleRootLoc) currentManifest,
+                layout = (.layout) currentManifest,
+                layoutLoc = (.layoutLoc) currentManifest,
+                members = members
+              }
           manifestName = takeFileName manifestPath
           baselineSource =
             ContentSource
               { csRead = \relative ->
                   if relative == manifestName
                     then pure (Right (renderWorkspaceManifest oldManifest))
-                    else csRead oldSource relative
+                    else (.csRead) oldSource relative
               }
        in loadWorkspace baselineSource manifestPath
   where
     presentAtRevision member = do
-      result <- csRead oldSource (wmrPath member)
+      result <- (.csRead) oldSource ((.path) member)
       pure (member, either (const False) (const True) result)
 
 -- | The sound old side when every current member is new at the adoption ref.
 emptyWorkspaceBaseline :: WorkspaceSpec -> WorkspaceSpec
 emptyWorkspaceBaseline workspace =
-  workspace
-    { wsMembers = [],
-      wsMergedSpec =
-        (wsMergedSpec workspace)
-          { specIds = [],
-            specEnums = [],
-            specRules = [],
-            specMapped = [],
-            specNodes = []
+  WorkspaceSpec
+    { service = workspace.service,
+      manifestPath = workspace.manifestPath,
+      languageContract = workspace.languageContract,
+      context = workspace.context,
+      runtimePackage = workspace.runtimePackage,
+      moduleRoot = workspace.moduleRoot,
+      layout = workspace.layout,
+      members = [],
+      mergedSpec =
+        Spec
+          { context = workspace.mergedSpec.context,
+            moduleRoot = workspace.mergedSpec.moduleRoot,
+            layout = workspace.mergedSpec.layout,
+            ids = [],
+            enums = [],
+            rules = [],
+            nominalScalars = workspace.mergedSpec.nominalScalars,
+            mapped = [],
+            nodes = []
           },
-      wsSourceIndex = emptySemanticSourceIndex,
-      wsLineMap = LineMap [],
-      wsOwnership = OwnershipIndex mempty mempty
+      sourceIndex = emptySemanticSourceIndex,
+      lineMap = LineMap [],
+      ownership = OwnershipIndex mempty mempty
     }
 
 workspaceGoldenRoot :: FilePath -> FilePath -> FilePath
@@ -1066,12 +1093,12 @@ printWorkspaceFailureLines fp = mapM_ (TIO.hPutStrLn stderr) . renderWorkspaceFa
 workspaceContext :: Maybe String -> Bool -> WorkspaceSpec -> Context
 workspaceContext cliRoot cliCollocate workspace =
   Context
-    { contextName = wsContext workspace,
-      moduleRoot = maybe (fromMaybe "" (wsModuleRoot workspace)) T.pack cliRoot,
+    { name = (.context) workspace,
+      moduleRoot = maybe (fromMaybe "" ((.moduleRoot) workspace)) T.pack cliRoot,
       placement =
         if cliCollocate
           then CollocatedLeaf
-          else fromMaybe GeneratedPrefix (wsLayout workspace)
+          else fromMaybe GeneratedPrefix ((.layout) workspace)
     }
 
 shouldExplain :: Change -> Bool
@@ -1093,7 +1120,7 @@ trim = f . f where f = reverse . dropWhile (`elem` (" \t\r\n" :: String))
 preflightComparison :: FilePath -> Maybe (String, FilePath) -> Maybe ScaffoldModule -> IO (Either T.Text ())
 preflightComparison _ Nothing Nothing = pure (Right ())
 preflightComparison out (Just (_, requestedPath)) (Just comparisonModule) = do
-  let expectedPath = normalise (out </> modulePath comparisonModule)
+  let expectedPath = normalise (out </> (.path) comparisonModule)
       actualPath = normalise requestedPath
   if actualPath /= expectedPath
     then
@@ -1120,7 +1147,7 @@ writeComparison :: Maybe (String, FilePath) -> Maybe ScaffoldModule -> IO ()
 writeComparison Nothing Nothing = pure ()
 writeComparison (Just (_, path)) (Just comparisonModule) = do
   createDirectoryIfMissing True (takeDirectory path)
-  TIO.writeFile path (moduleText comparisonModule)
+  TIO.writeFile path ((.text) comparisonModule)
   TIO.hPutStrLn stderr ("comparison generated " <> T.pack path <> " (migration evidence only)")
 writeComparison _ _ = hPutStrLn stderr "internal error: incomplete codec-comparison output" >> exitFailure
 
@@ -1141,11 +1168,11 @@ planCheckCoverage specPath service (Just options) =
     Left graphErrors -> CoverageUnresolved (show graphErrors)
     Right baseReport ->
       PlannedCoverage
-        (checkCoveragePath options)
-        (if checkFailOnOpaque options then Coverage.failOnOpaque baseReport else baseReport)
+        ((.checkCoveragePath) options)
+        (if (.checkFailOnOpaque) options then Coverage.failOnOpaque baseReport else baseReport)
 
 plannedCoverageFindings :: PlannedCoverage -> [Coverage.CoverageFinding]
-plannedCoverageFindings (PlannedCoverage _ report) = Coverage.coverageFindings report
+plannedCoverageFindings (PlannedCoverage _ report) = (.findings) report
 plannedCoverageFindings _ = []
 
 -- | Coverage findings as ordinary source diagnostics. They carry no line, which
@@ -1154,8 +1181,8 @@ plannedCoverageDiagnostics :: PlannedCoverage -> [Diagnostic]
 plannedCoverageDiagnostics plan =
   [ Diagnostic
       { line = 0,
-        severity = Coverage.findingSeverity finding,
-        code = Coverage.findingCode finding,
+        severity = (.severity) finding,
+        code = (.code) finding,
         relatedLocations = [],
         message = Coverage.coverageFindingMessage finding
       }
@@ -1167,11 +1194,11 @@ plannedCoverageDiagnostics plan =
 workspaceCoverageDiagnostic :: FilePath -> Coverage.CoverageFinding -> WorkspaceDiagnostic
 workspaceCoverageDiagnostic _ finding =
   WorkspaceDiagnostic
-    { wdLocations = NE.fromList [WorkspaceLocation WorkspaceManifestFile 0 ""],
-      wdSeverity = Coverage.findingSeverity finding,
-      wdCode = Coverage.findingCode finding,
-      wdSourceLanguageCause = Nothing,
-      wdMessage = Coverage.coverageFindingMessage finding
+    { locations = NE.fromList [WorkspaceLocation WorkspaceManifestFile 0 ""],
+      severity = (.severity) finding,
+      code = (.code) finding,
+      sourceLanguageCause = Nothing,
+      message = Coverage.coverageFindingMessage finding
     }
 
 emitPlannedCoverage :: PlannedCoverage -> IO Bool
@@ -1189,12 +1216,12 @@ runDiffCoverage specPath reference oldSpec newSpec (Just options) =
       hPutStrLn stderr ("diff specs did not resolve their mapped type graph for coverage: " <> show graphErrors)
       pure False
     Right baseReport -> do
-      let report = if diffFailOnOpaqueIncrease options then Coverage.failOnOpaqueIncrease baseReport else baseReport
-      emitCoverageReport (diffCoveragePath options) report
+      let report = if (.diffFailOnOpaqueIncrease) options then Coverage.failOnOpaqueIncrease baseReport else baseReport
+      emitCoverageReport ((.diffCoveragePath) options) report
 
 emitCoverageReport :: FilePath -> Coverage.CoverageReport -> IO Bool
 emitCoverageReport path report = do
-  mapM_ (TIO.hPutStrLn stderr . Coverage.renderCoverageFinding (Coverage.coverageSpec report)) (Coverage.coverageFindings report)
+  mapM_ (TIO.hPutStrLn stderr . Coverage.renderCoverageFinding ((.spec) report)) ((.findings) report)
   TIO.putStr (Coverage.renderCoverageSummary report)
   Coverage.writeCoverageReport path report
   putStrLn ("coverage report written to " <> path)
@@ -1205,10 +1232,10 @@ emitCoverageReport path report = do
 mkContext :: Maybe String -> Bool -> Spec -> Context
 mkContext cliRoot cliCollocate spec =
   Context
-    { contextName = specContext spec,
-      moduleRoot = maybe (fromMaybe "" (specModuleRoot spec)) T.pack cliRoot,
+    { name = (.context) spec,
+      moduleRoot = maybe (fromMaybe "" ((.moduleRoot) spec)) T.pack cliRoot,
       placement =
         if cliCollocate
           then CollocatedLeaf
-          else fromMaybe GeneratedPrefix (specLayout spec)
+          else fromMaybe GeneratedPrefix ((.layout) spec)
     }

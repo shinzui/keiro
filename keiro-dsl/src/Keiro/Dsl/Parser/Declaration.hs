@@ -25,7 +25,7 @@ pIdDecl context = do
   _ <- symbol "="
   pfx <- wireWord
   binding <- optionalLanguageFeature context NominalBindingSyntax "using" pUsingNominalBinding
-  pure IdDecl {idName = name, idPrefix = pfx, idBinding = binding, idLoc = loc}
+  pure IdDecl {name = name, prefix = pfx, binding = binding, loc = loc}
 
 pEnumDecl :: FrontendContext -> P EnumDecl
 pEnumDecl context = do
@@ -34,7 +34,7 @@ pEnumDecl context = do
   name <- ident
   ctors <- braces (many pEnumCtor)
   binding <- optionalLanguageFeature context NominalBindingSyntax "using" pUsingNominalBinding
-  pure EnumDecl {enumName = name, enumCtors = ctors, enumBinding = binding, enumLoc = loc}
+  pure EnumDecl {name = name, ctors = ctors, binding = binding, loc = loc}
   where
     pEnumCtor = do
       c <- ident
@@ -57,11 +57,11 @@ pRuleDecl context = do
       elements = map snd parsedCases
   pure
     ( RuleDecl
-        { ruleName = name,
-          ruleDomain = dom,
-          ruleCodomain = cod,
-          ruleCases = cases,
-          ruleLoc = loc
+        { name = name,
+          domain = dom,
+          codomain = cod,
+          cases = cases,
+          loc = loc
         },
       elements
     )

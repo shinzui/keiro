@@ -29,7 +29,7 @@ type ParseError = Text
 -- | Parse a @.keiro@ source. The 'FilePath' is used only as the source name in
 -- diagnostics; it need not exist on disk.
 parseSpec :: FilePath -> Text -> Either ParseError Spec
-parseSpec sourceName input = parsedSpec <$> first renderParseFailure (parseSource sourceName input)
+parseSpec sourceName input = (.spec) <$> first renderParseFailure (parseSource sourceName input)
 
 -- | Convenience wrapper for callers without a source name (tests, stdin).
 parseSpecText :: Text -> Either ParseError Spec

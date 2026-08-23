@@ -93,10 +93,10 @@ data HaskellOccurrenceSpace
 -- | The source declaration responsible for a generated occurrence.  The
 -- owner and kind form a stable identity; the line is evidence, not identity.
 data NameSite = NameSite
-  { siteKind :: !NameSiteKind,
-    siteLogicalName :: !Text,
-    siteOwner :: !Text,
-    siteLine :: !Int
+  { kind :: !NameSiteKind,
+    logicalName :: !Text,
+    owner :: !Text,
+    line :: !Int
   }
   deriving stock (Eq, Ord, Show)
 
@@ -105,16 +105,16 @@ data NameSite = NameSite
 -- normally empty; record fields use their owning record so
 -- DuplicateRecordFields can keep identical selectors on different records.
 data HaskellOccurrenceKey = HaskellOccurrenceKey
-  { occurrenceModule :: !Text,
-    occurrenceSpace :: !HaskellOccurrenceSpace,
-    occurrenceScope :: !Text,
-    occurrenceName :: !Text
+  { moduleName :: !Text,
+    space :: !HaskellOccurrenceSpace,
+    scope :: !Text,
+    name :: !Text
   }
   deriving stock (Eq, Ord, Show)
 
 data PlannedOccurrence = PlannedOccurrence
-  { plannedOccurrenceKey :: !HaskellOccurrenceKey,
-    plannedOccurrenceSite :: !NameSite
+  { key :: !HaskellOccurrenceKey,
+    site :: !NameSite
   }
   deriving stock (Eq, Ord, Show)
 
@@ -129,20 +129,23 @@ data HaskellNameError
 data GeneratedHaskellNamingEdition
   = LegacyNamingV1
   | IdiomaticNamingV1
+  | IdiomaticNamingV2
   deriving stock (Eq, Ord, Show)
 
 currentGeneratedHaskellNamingEdition :: GeneratedHaskellNamingEdition
-currentGeneratedHaskellNamingEdition = IdiomaticNamingV1
+currentGeneratedHaskellNamingEdition = IdiomaticNamingV2
 
 renderGeneratedHaskellNamingEdition :: GeneratedHaskellNamingEdition -> Text
 renderGeneratedHaskellNamingEdition = \case
   LegacyNamingV1 -> "legacy-v1"
   IdiomaticNamingV1 -> "idiomatic-v1"
+  IdiomaticNamingV2 -> "idiomatic-v2"
 
 parseGeneratedHaskellNamingEdition :: Text -> Maybe GeneratedHaskellNamingEdition
 parseGeneratedHaskellNamingEdition = \case
   "legacy-v1" -> Just LegacyNamingV1
   "idiomatic-v1" -> Just IdiomaticNamingV1
+  "idiomatic-v2" -> Just IdiomaticNamingV2
   _ -> Nothing
 
 renderUpperCamelName :: UpperCamelName -> Text
@@ -162,7 +165,7 @@ renderModuleName (HaskellModuleName value) = value
 -- below and are intentionally never re-cased here.
 deriveHaskellName :: NameSourceKind -> NameSite -> Either HaskellNameError DerivedHaskellName
 deriveHaskellName source site
-  | source == ExplicitHaskellName = Left (InvalidExplicitHaskellName site (siteLogicalName site))
+  | source == ExplicitHaskellName = Left (InvalidExplicitHaskellName site ((.logicalName) site))
   | otherwise = do
       words' <- segmentLogicalName (source == LogicalWireWord) site
       case words' of
@@ -181,7 +184,7 @@ deriveHaskellName source site
 deriveLowerHelperName :: NameSourceKind -> Text -> NameSite -> Either HaskellNameError LowerCamelName
 deriveLowerHelperName source suffix site = do
   derived <- deriveHaskellName source site
-  checkedLowerOccurrence site (renderLowerCamelName (lowerCamel derived) <> suffix)
+  checkedLowerOccurrence site (renderLowerCamelName ((.lowerCamel) derived) <> suffix)
 
 checkedModuleSegment :: NameSite -> Text -> Either HaskellNameError HaskellModuleSegment
 checkedModuleSegment site candidate
@@ -212,16 +215,16 @@ checkedLowerOccurrence site candidate
 plannedOccurrence :: Text -> HaskellOccurrenceSpace -> Text -> Text -> NameSite -> PlannedOccurrence
 plannedOccurrence targetModule space scope rendered site =
   PlannedOccurrence
-    { plannedOccurrenceKey =
+    { key =
         HaskellOccurrenceKey
-          { occurrenceModule = T.toCaseFold targetModule,
-            occurrenceSpace = space,
-            occurrenceScope = T.toCaseFold scope,
-            occurrenceName = case space of
+          { moduleName = T.toCaseFold targetModule,
+            space = space,
+            scope = T.toCaseFold scope,
+            name = case space of
               ModuleSpace -> T.toCaseFold rendered
               _ -> rendered
           },
-      plannedOccurrenceSite = site
+      site = site
     }
 
 -- | Report deterministic collisions independently of declaration traversal
@@ -238,8 +241,8 @@ detectNameCollisions occurrences =
       Map.filter ((> 1) . Set.size) $
         Map.fromListWith
           Set.union
-          [ (plannedOccurrenceKey occurrence, Set.singleton (plannedOccurrenceSite occurrence))
-          | occurrence <- sortOn plannedOccurrenceKey occurrences
+          [ ((.key) occurrence, Set.singleton ((.site) occurrence))
+          | occurrence <- sortOn (.key) occurrences
           ]
 
 segmentLogicalName :: Bool -> NameSite -> Either HaskellNameError [Text]
@@ -251,7 +254,7 @@ segmentLogicalName allowHyphen site
   | any T.null separated = Left (EmptyNameSegment site)
   | otherwise = Right (concatMap splitCamelWord separated)
   where
-    raw = siteLogicalName site
+    raw = (.logicalName) site
     badUnderscore =
       T.isPrefixOf "_" raw
         || T.isSuffixOf "_" raw

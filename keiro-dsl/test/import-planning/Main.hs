@@ -47,9 +47,10 @@ main = hspec $ describe "haskell import planning" $ do
     let local = typeReference "Consumer.Domain" "Domain"
         reserved = typeReference "Consumer.Map" "Map"
         environment =
-          defaultImportEnvironment
-            { localNames = Set.singleton "Domain",
-              reservedQualifiers = Set.insert "Map" (reservedQualifiers defaultImportEnvironment)
+          ImportEnvironment
+            { targetModule = defaultImportEnvironment.targetModule,
+              localNames = Set.singleton "Domain",
+              reservedQualifiers = Set.insert "Map" defaultImportEnvironment.reservedQualifiers
             }
         plan = expectImportPlan environment (Set.fromList [local, reserved])
     renderPlannedImports plan

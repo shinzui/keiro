@@ -10,6 +10,7 @@
 module Keiro.Dsl.EventOutput
   ( CheckedFieldCopy (..),
     OutputObligationKey (..),
+    unOutputObligationKey,
     EventOutputMapping (..),
     EventOutputError (..),
     eventOutputMapping,
@@ -42,14 +43,17 @@ data CheckedFieldCopy = CheckedFieldCopy
 newtype OutputObligationKey = OutputObligationKey {unOutputObligationKey :: Text}
   deriving stock (Eq, Ord, Show)
 
+unOutputObligationKey :: OutputObligationKey -> Text
+unOutputObligationKey (OutputObligationKey value) = value
+
 -- | Exclusive ownership of one event term emitted by one transition.
 data EventOutputMapping
   = GeneratedCommandIdentity
-      { outputSourceCommand :: !Name,
-        outputFields :: ![CheckedFieldCopy]
+      { sourceCommand :: !Name,
+        fields :: ![CheckedFieldCopy]
       }
   | HandOwnedEventOutput
-      { outputObligation :: !OutputObligationKey
+      { obligation :: !OutputObligationKey
       }
   deriving stock (Eq, Ord, Show)
 
@@ -76,43 +80,43 @@ eventOutputMappingFromGraph graph = eventOutputMappingFromGraphResult (Right gra
 
 eventOutputMappingFromGraphResult :: Either (NonEmpty TypeGraphError) TypeGraph -> Spec -> Aggregate -> Transition -> Int -> Name -> Either EventOutputError EventOutputMapping
 eventOutputMappingFromGraphResult typeGraphResult spec aggregate transition emitIndex eventName = do
-  event <- maybe (Left (OutputEventMissing eventName)) Right (find ((== eventName) . evName) (aggEvents aggregate))
-  case (tImplementation transition, evBody event) of
+  event <- maybe (Left (OutputEventMissing eventName)) Right (find ((== eventName) . (.name)) ((.events) aggregate))
+  case ((.implementation) transition, (.body) event) of
     (LegacyHoleImplementation, _) -> pure handOwned
     (_, EventFields _) -> pure handOwned
     (_, EventFromCommand sourceCommand)
-      | sourceCommand /= tCommand transition ->
+      | sourceCommand /= (.command) transition ->
           Left
             OutputCommandMismatch
               { declaredSourceCommand = sourceCommand,
-                consumingTransitionCommand = tCommand transition,
+                consumingTransitionCommand = (.command) transition,
                 emittedEventName = eventName
               }
       | otherwise -> do
-          command <- maybe (Left (OutputSourceCommandMissing sourceCommand)) Right (find ((== sourceCommand) . cmdName) (aggCommands aggregate))
-          fields <- traverse checkedCopy (cmdFields command)
+          command <- maybe (Left (OutputSourceCommandMissing sourceCommand)) Right (find ((== sourceCommand) . (.name)) ((.commands) aggregate))
+          fields <- traverse checkedCopy ((.fields) command)
           pure
             GeneratedCommandIdentity
-              { outputSourceCommand = sourceCommand,
-                outputFields = fields
+              { sourceCommand = sourceCommand,
+                fields = fields
               }
   where
     symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
     handOwned =
       HandOwnedEventOutput
-        { outputObligation =
+        { obligation =
             OutputObligationKey
               ( T.intercalate
                   "/"
                   [ "event-output-v1",
-                    aggName aggregate,
-                    transitionModeName (tMode transition),
-                    tSource transition,
-                    tCommand transition,
-                    maybe "unguarded" renderExpr (tGuard transition),
-                    T.intercalate ";" [register <> ":=" <> renderExpr expression | (register, expression) <- tWrites transition],
-                    T.intercalate "," (tEmits transition),
-                    tGoto transition,
+                    (.name) aggregate,
+                    transitionModeName ((.mode) transition),
+                    (.source) transition,
+                    (.command) transition,
+                    maybe "unguarded" renderExpr ((.guard) transition),
+                    T.intercalate ";" [register <> ":=" <> renderExpr expression | (register, expression) <- (.writes) transition],
+                    T.intercalate "," ((.emits) transition),
+                    (.goto) transition,
                     T.pack (show emitIndex),
                     eventName
                   ]
@@ -125,11 +129,11 @@ eventOutputMappingFromGraphResult typeGraphResult spec aggregate transition emit
         then
           pure
             CheckedFieldCopy
-              { outputSelector = aggregateFieldName field,
-                outputWireName = aggregateFieldName field,
+              { outputSelector = (.name) field,
+                outputWireName = (.name) field,
                 outputFieldType = commandType
               }
-        else Left (OutputFieldTypeMismatch (aggregateFieldName field) commandType eventType)
+        else Left (OutputFieldTypeMismatch ((.name) field) commandType eventType)
 
 -- | Canonical ownership text used by fold and behavior fingerprints.
 eventOutputCanonical :: EventOutputMapping -> Text
@@ -140,11 +144,11 @@ eventOutputCanonical mapping = case mapping of
       <> "["
       <> T.intercalate
         ","
-        [ outputSelector field
+        [ (.outputSelector) field
             <> "="
-            <> outputWireName field
+            <> (.outputWireName) field
             <> ":"
-            <> aggregateCanonicalName (outputFieldType field)
+            <> aggregateCanonicalName ((.outputFieldType) field)
         | field <- fields
         ]
       <> "]"

@@ -25,7 +25,9 @@ executable keiro-dsl-behavior-complete-report
     DuplicateRecordFields
     ImportQualifiedPost
     LambdaCase
+    NoFieldSelectors
     OverloadedLabels
+    OverloadedRecordDot
     OverloadedStrings
 
   ghc-options:        -Wall

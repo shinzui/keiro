@@ -9,8 +9,7 @@ module Keiro.Dsl.SidecarMigration
   ( SidecarScope (..),
     SidecarMoveDisposition (..),
     SidecarMove (..),
-    PreparedSidecarMove,
-    preparedSidecarMove,
+    PreparedSidecarMove (..),
     planSidecarMigrations,
     applyPreparedSidecarMoves,
     renderSidecarMove,
@@ -23,7 +22,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Keiro.Dsl.ConformancePackage
-  ( ConformancePackagePlan (cppDirectory),
+  ( ConformancePackagePlan (..),
     parseLegacyConformancePackageRecord,
     renderConformancePackageRecord,
   )
@@ -45,16 +44,16 @@ data SidecarMoveDisposition
   deriving stock (Eq, Show)
 
 data SidecarMove = SidecarMove
-  { sidecarOldPath :: !FilePath,
-    sidecarNewPath :: !FilePath,
-    sidecarBackupPath :: !(Maybe FilePath),
-    sidecarMoveDisposition :: !SidecarMoveDisposition
+  { oldPath :: !FilePath,
+    newPath :: !FilePath,
+    backupPath :: !(Maybe FilePath),
+    moveDisposition :: !SidecarMoveDisposition
   }
   deriving stock (Eq, Show)
 
 data PreparedSidecarMove = PreparedSidecarMove
-  { preparedSidecarMove :: !SidecarMove,
-    preparedConvertedContents :: !(Maybe Text)
+  { sidecarMove :: !SidecarMove,
+    convertedContents :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
@@ -85,7 +84,7 @@ planSidecarMigrations out scope conformancePlan = do
       moves = [move | Right (Just move) <- results]
   pure $ if null errors then Right moves else Left errors
   where
-    plannedDirectory = fmap cppDirectory conformancePlan
+    plannedDirectory = fmap (.directory) conformancePlan
     plannedDirectories = maybe [] (: []) plannedDirectory
 
 -- | Directories under @out@ holding a legacy conformance record, excluding the
@@ -150,14 +149,14 @@ planOrdinary out (oldRelative, newRelative) = do
         else
           pure . Right . Just $
             PreparedSidecarMove
-              { preparedSidecarMove =
+              { sidecarMove =
                   SidecarMove
-                    { sidecarOldPath = oldRelative,
-                      sidecarNewPath = newRelative,
-                      sidecarBackupPath = Nothing,
-                      sidecarMoveDisposition = RenameSidecar
+                    { oldPath = oldRelative,
+                      newPath = newRelative,
+                      backupPath = Nothing,
+                      moveDisposition = RenameSidecar
                     },
-                preparedConvertedContents = Nothing
+                convertedContents = Nothing
               }
 
 planConformance :: FilePath -> FilePath -> FilePath -> IO (Either Text (Maybe PreparedSidecarMove))
@@ -181,14 +180,14 @@ planConformance out oldRelative newRelative = do
                 else
                   pure . Right . Just $
                     PreparedSidecarMove
-                      { preparedSidecarMove =
+                      { sidecarMove =
                           SidecarMove
-                            { sidecarOldPath = oldRelative,
-                              sidecarNewPath = newRelative,
-                              sidecarBackupPath = Just backupRelative,
-                              sidecarMoveDisposition = ConvertLegacyConformanceLedger
+                            { oldPath = oldRelative,
+                              newPath = newRelative,
+                              backupPath = Just backupRelative,
+                              moveDisposition = ConvertLegacyConformanceLedger
                             },
-                        preparedConvertedContents = Just (preserveBanner legacyContents <> renderConformancePackageRecord record)
+                        convertedContents = Just (preserveBanner legacyContents <> renderConformancePackageRecord record)
                       }
 
 prepareRetirement :: FilePath -> FilePath -> FilePath -> IO (Either Text (Maybe PreparedSidecarMove))
@@ -200,14 +199,14 @@ prepareRetirement out oldRelative newRelative = do
     else
       pure . Right . Just $
         PreparedSidecarMove
-          { preparedSidecarMove =
+          { sidecarMove =
               SidecarMove
-                { sidecarOldPath = oldRelative,
-                  sidecarNewPath = newRelative,
-                  sidecarBackupPath = Just backupRelative,
-                  sidecarMoveDisposition = RetireLegacySidecar
+                { oldPath = oldRelative,
+                  newPath = newRelative,
+                  backupPath = Just backupRelative,
+                  moveDisposition = RetireLegacySidecar
                 },
-            preparedConvertedContents = Nothing
+            convertedContents = Nothing
           }
 
 sidecarBackupRelative :: FilePath -> FilePath
@@ -223,22 +222,22 @@ preserveBanner contents = T.unlines [line | line <- T.lines contents, isGenerate
 applyPreparedSidecarMoves :: FilePath -> [PreparedSidecarMove] -> IO ()
 applyPreparedSidecarMoves out = mapM_ applyOne
   where
-    applyOne prepared = case sidecarMoveDisposition move of
+    applyOne prepared = case (.moveDisposition) move of
       RenameSidecar -> do
         createDirectoryIfMissing True (takeDirectory newPath)
         renameFile oldPath newPath
       RetireLegacySidecar -> retire move oldPath
-      ConvertLegacyConformanceLedger -> case preparedConvertedContents prepared of
+      ConvertLegacyConformanceLedger -> case (.convertedContents) prepared of
         Nothing -> error "prepared conformance sidecar conversion lacks converted contents"
         Just converted -> do
           writeTextAtomic newPath converted
           retire move oldPath
       where
-        move = preparedSidecarMove prepared
-        oldPath = out </> sidecarOldPath move
-        newPath = out </> sidecarNewPath move
+        move = (.sidecarMove) prepared
+        oldPath = out </> (.oldPath) move
+        newPath = out </> (.newPath) move
 
-    retire move oldPath = case sidecarBackupPath move of
+    retire move oldPath = case (.backupPath) move of
       Nothing -> error "prepared sidecar retirement lacks a backup path"
       Just backupRelative -> do
         let backupPath = out </> backupRelative
@@ -261,10 +260,10 @@ cleanupTemporary (temporary, handle) = do
   when exists (removeFile temporary)
 
 renderSidecarMove :: SidecarMove -> Text
-renderSidecarMove move = case sidecarMoveDisposition move of
-  RenameSidecar -> path (sidecarOldPath move) <> " -> " <> path (sidecarNewPath move)
-  RetireLegacySidecar -> path (sidecarOldPath move) <> " -> retired to " <> backup
-  ConvertLegacyConformanceLedger -> path (sidecarOldPath move) <> " -> " <> path (sidecarNewPath move) <> "; original retired to " <> backup
+renderSidecarMove move = case (.moveDisposition) move of
+  RenameSidecar -> path ((.oldPath) move) <> " -> " <> path ((.newPath) move)
+  RetireLegacySidecar -> path ((.oldPath) move) <> " -> retired to " <> backup
+  ConvertLegacyConformanceLedger -> path ((.oldPath) move) <> " -> " <> path ((.newPath) move) <> "; original retired to " <> backup
   where
     path = T.pack
-    backup = maybe "<missing-backup>" path (sidecarBackupPath move)
+    backup = maybe "<missing-backup>" path ((.backupPath) move)

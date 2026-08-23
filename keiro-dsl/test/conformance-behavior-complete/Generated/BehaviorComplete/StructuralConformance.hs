@@ -12,9 +12,9 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.BehaviorComplete.StructuralProjections qualified as StructuralProjections
+import Generated.BehaviorComplete.Structural.Shape.StartPayload (StartPayloadShape(label, note))
 import BehaviorComplete.Bindings qualified as Bindings
 import BehaviorComplete.Domain (StartPayload)
-import Generated.BehaviorComplete.Structural.Shape.StartPayload qualified as ShapeStartPayload
 
 structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
@@ -44,11 +44,11 @@ startPayloadBindingAssertions =
     cases = fixtureCases Bindings.startPayloadCases
 
 coverageStartPayload :: Bool
-coverageStartPayload = any (isNothing . ShapeStartPayload.note) shapes && any (isJust . ShapeStartPayload.note) shapes
+coverageStartPayload = any (isNothing . (.note)) shapes && any (isJust . (.note)) shapes
   where
     shapes = map (bindingToShape Bindings.startPayloadBinding . snd) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases))
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.startPayloadDisplayLabelWitness (\referenceOwner -> ShapeStartPayload.label (bindingToShape Bindings.startPayloadBinding referenceOwner)) owner) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases)))
+  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.startPayloadDisplayLabelWitness (\referenceOwner -> (bindingToShape Bindings.startPayloadBinding referenceOwner).label) owner) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases)))
   ]

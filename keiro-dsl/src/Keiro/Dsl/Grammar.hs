@@ -7,6 +7,7 @@ module Keiro.Dsl.Grammar
   ( -- * Names and source locations
     Name,
     Loc (..),
+    unLoc,
     noLoc,
 
     -- * Shared declarations
@@ -187,6 +188,9 @@ type Name = Text
 newtype Loc = Loc {unLoc :: Int}
   deriving stock (Show)
 
+unLoc :: Loc -> Int
+unLoc (Loc value) = value
+
 instance Eq Loc where
   _ == _ = True
 
@@ -197,20 +201,20 @@ noLoc = Loc 0
 -- | @id TransferReservationId prefix=rsv@ — declares an id newtype over 'Text'
 -- and its prefix tag.
 data IdDecl = IdDecl
-  { idName :: !Name,
-    idPrefix :: !Text,
-    idBinding :: !(Maybe NominalBindingDecl),
-    idLoc :: !Loc
+  { name :: !Name,
+    prefix :: !Text,
+    binding :: !(Maybe NominalBindingDecl),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @enum PatientAcuity { RedTag=red … }@ — a closed enumeration; each
 -- constructor carries its wire spelling (the right-hand side of @=@).
 data EnumDecl = EnumDecl
-  { enumName :: !Name,
-    enumCtors :: ![(Name, Text)],
-    enumBinding :: !(Maybe NominalBindingDecl),
-    enumLoc :: !Loc
+  { name :: !Name,
+    ctors :: ![(Name, Text)],
+    binding :: !(Maybe NominalBindingDecl),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -218,11 +222,11 @@ data EnumDecl = EnumDecl
 -- @Ctor => bool ; …@ — a total function from an enum to a value, used as a
 -- derived atom inside guards.
 data RuleDecl = RuleDecl
-  { ruleName :: !Name,
-    ruleDomain :: !Name,
-    ruleCodomain :: !Name,
-    ruleCases :: ![(Name, Expr)],
-    ruleLoc :: !Loc
+  { name :: !Name,
+    domain :: !Name,
+    codomain :: !Name,
+    cases :: ![(Name, Expr)],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -262,37 +266,37 @@ data OnMissing
   deriving stock (Eq, Show, Generic)
 
 data WireField = WireField
-  { wfHaskell :: !Name,
-    wfKey :: !Text,
-    wfType :: !TypeExpr,
-    wfPresence :: !Presence,
-    wfOnMissing :: !(Maybe OnMissing),
-    wfLoc :: !Loc
+  { haskell :: !Name,
+    key :: !Text,
+    valueType :: !TypeExpr,
+    presence :: !Presence,
+    onMissing :: !(Maybe OnMissing),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 wireFieldLoc :: WireField -> Loc
-wireFieldLoc WireField {wfLoc = loc} = loc
+wireFieldLoc WireField {loc} = loc
 
 data UnionEncoding = TaggedObject
-  { ueTagField :: !Text,
-    ueContentsField :: !Text,
-    ueUnknownFields :: !UnknownFields
+  { tagField :: !Text,
+    contentsField :: !Text,
+    unknownFields :: !UnknownFields
   }
   deriving stock (Eq, Show, Generic)
 
 data WireEnum = WireEnum
-  { weCtor :: !Name,
-    weTag :: !Text,
-    weLoc :: !Loc
+  { ctor :: !Name,
+    tag :: !Text,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 data WireArm = WireArm
-  { waCtor :: !Name,
-    waTag :: !Text,
-    waPayload :: !(Maybe TypeExpr),
-    waLoc :: !Loc
+  { ctor :: !Name,
+    tag :: !Text,
+    payload :: !(Maybe TypeExpr),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -303,9 +307,9 @@ data MappedShape
   deriving stock (Eq, Show, Generic)
 
 data HaskellSource = HaskellSource
-  { hsPackage :: !Text,
-    hsModule :: !Text,
-    hsType :: !Name
+  { package :: !Text,
+    moduleName :: !Text,
+    valueType :: !Name
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -314,13 +318,13 @@ data HaskellSource = HaskellSource
 -- The fields remain optional only so validation can report every missing fact at
 -- the owning declaration. Downstream code consumes the checked nominal registry.
 data NominalBindingDecl = NominalBindingDecl
-  { nominalHaskell :: !(Maybe HaskellSource),
-    nominalBinding :: !(Maybe Text),
-    nominalBindingVersion :: !(Maybe Text),
-    nominalCanonicalType :: !(Maybe Text),
-    nominalFixtures :: !(Maybe Text),
-    nominalInitial :: !(Maybe Text),
-    nominalLoc :: !Loc
+  { haskell :: !(Maybe HaskellSource),
+    binding :: !(Maybe Text),
+    bindingVersion :: !(Maybe Text),
+    canonicalType :: !(Maybe Text),
+    fixtures :: !(Maybe Text),
+    initial :: !(Maybe Text),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -329,10 +333,10 @@ data NominalBindingDecl = NominalBindingDecl
 -- The raw representation name is retained so @keiro-dsl check@ owns the stable
 -- unsupported-representation diagnostic instead of the low-level parser.
 data NominalScalarDecl = NominalScalarDecl
-  { nominalScalarName :: !Name,
-    nominalScalarRepresentation :: !Name,
-    nominalScalarBinding :: !NominalBindingDecl,
-    nominalScalarLoc :: !Loc
+  { name :: !Name,
+    representation :: !Name,
+    binding :: !NominalBindingDecl,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -363,8 +367,8 @@ data MappedDecl
 -- (e.g. an event name → projection status). @mapPartial@ records whether the
 -- spec author explicitly marked the table partial over its domain.
 data Mapping = Mapping
-  { mapPairs :: ![(Name, Name)],
-    mapPartial :: !Bool
+  { pairs :: ![(Name, Name)],
+    partial :: !Bool
   }
   deriving stock (Eq, Show, Generic)
 
@@ -474,10 +478,10 @@ data RegInitial
   deriving stock (Eq, Show, Generic)
 
 data RegDecl = RegDecl
-  { regName :: !Name,
-    regType :: !TypeExpr,
-    regInitial :: !RegInitial,
-    regLoc :: !Loc
+  { name :: !Name,
+    valueType :: !TypeExpr,
+    initial :: !RegInitial,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -485,9 +489,9 @@ data RegDecl = RegDecl
 -- trailing @!@ (no outgoing transitions allowed). The first 'StateDecl' in an
 -- aggregate's list is its initial state.
 data StateDecl = StateDecl
-  { stName :: !Name,
-    stTerminal :: !Bool,
-    stLoc :: !Loc
+  { name :: !Name,
+    terminal :: !Bool,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -498,27 +502,27 @@ data StateDecl = StateDecl
 -- the complete 'TypeExpr' grammar so semantic validation can reject unsupported
 -- direct shapes with a located diagnostic.
 data AggregateField = AggregateField
-  { aggregateFieldName :: !Name,
-    aggregateFieldSelector :: !(Maybe Name),
-    aggregateFieldWireKey :: !(Maybe Text),
-    aggregateFieldType :: !(Maybe TypeExpr),
-    aggregateFieldLoc :: !Loc
+  { name :: !Name,
+    selector :: !(Maybe Name),
+    wireKey :: !(Maybe Text),
+    valueType :: !(Maybe TypeExpr),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | A generic field used by process and router nodes. Aggregate fields are
 -- kept separate so widening aggregate syntax does not widen those node families.
 data Field = Field
-  { fieldName :: !Name,
-    fieldType :: !(Maybe Name)
+  { name :: !Name,
+    valueType :: !(Maybe Name)
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @command Name { field … }@ — a command constructor.
 data Command = Command
-  { cmdName :: !Name,
-    cmdFields :: ![AggregateField],
-    cmdLoc :: !Loc
+  { name :: !Name,
+    fields :: ![AggregateField],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -528,23 +532,23 @@ data Command = Command
 -- reproducing the EP-1 surface. These fields live on the shared 'Event' so every
 -- node family's events inherit schema-versioning for free.
 data Event = Event
-  { evName :: !Name,
-    evBody :: !EventBody,
+  { name :: !Name,
+    body :: !EventBody,
     -- | The schema version of this event shape. Default 1; written @vN@ for N>1.
-    evVersion :: !Int,
+    version :: !Int,
     -- | The source version this shape migrates /from/, paired with the upcaster
     --     hole. @Just (n-1, …)@ for a @vN@ shape; 'Nothing' for v1.
-    evUpcastFrom :: !(Maybe (Int, Hole)),
+    upcastFrom :: !(Maybe (Int, Hole)),
     -- | Retirement is in progress. The event must keep at least one live
     --     emitting transition while operators terminalize or truncate affected
     --     streams; cut over to @deprecated@ plus a replay-only emitting transition
     --     afterwards.
-    evRetiring :: !Bool,
+    retiring :: !Bool,
     -- | Retired from the write path (no live transition may @emit@ it) but
     --     still decodable from the log. A replay-only emitting transition must remain
     --     while live streams can still contain the event.
-    evDeprecated :: !Bool,
-    evLoc :: !Loc
+    deprecated :: !Bool,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -584,19 +588,19 @@ transitionOutcomeLoc (OutcomeNoOp _ loc) = loc
 -- | A transition @Src -- Command --> clauses@. Clauses may be written
 -- indentation-stacked or @;@-separated on one line.
 data Transition = Transition
-  { tSource :: !Name,
-    tCommand :: !Name,
-    tImplementation :: !TransitionImplementation,
-    tGuard :: !(Maybe Expr),
-    tWrites :: ![(Name, Expr)],
-    tEmits :: ![Name],
-    tOutcome :: !(Maybe TransitionOutcome),
+  { source :: !Name,
+    command :: !Name,
+    implementation :: !TransitionImplementation,
+    guard :: !(Maybe Expr),
+    writes :: ![(Name, Expr)],
+    emits :: ![Name],
+    outcome :: !(Maybe TransitionOutcome),
     -- | Locations of clauses after the first. Invalid syntax is retained long
     -- enough for semantic validation to emit stable located diagnostics.
-    tOutcomeDuplicateLocs :: ![Loc],
-    tGoto :: !Name,
-    tMode :: !TransitionMode,
-    tLoc :: !Loc
+    outcomeDuplicateLocs :: ![Loc],
+    goto :: !Name,
+    mode :: !TransitionMode,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -624,20 +628,20 @@ data TransitionMode = TmLive | TmReplayOnly
 -- | @wire kind=ctorName fields=camelCase schemaVersion=1@ — how events
 -- serialize.
 data WireSpec = WireSpec
-  { wireKind :: !Text,
-    wireFields :: !Text,
-    wireSchemaVersion :: !Int
+  { kind :: !Text,
+    fields :: !Text,
+    schemaVersion :: !Int
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @projection table consistency=… key=… status-map { … }@ — the read-model
 -- projection and its event→status 'Mapping' (hole-kind 3).
 data ProjectionSpec = ProjectionSpec
-  { projTable :: !Name,
-    projConsistency :: !(Maybe Consistency),
-    projKey :: !Name,
-    projStatusMap :: !(Maybe Mapping),
-    projLoc :: !Loc
+  { table :: !Name,
+    consistency :: !(Maybe Consistency),
+    key :: !Name,
+    statusMap :: !(Maybe Mapping),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -650,30 +654,30 @@ data SnapPolicy = SnapEvery !Int | SnapOnTerminal
 
 -- | Snapshot policy plus the captured live state-codec identity.
 data SnapshotSpec = SnapshotSpec
-  { snapPolicy :: !SnapPolicy,
-    snapCodecVersion :: !Int,
-    snapShapeHash :: !Text,
-    snapLoc :: !Loc
+  { policy :: !SnapPolicy,
+    codecVersion :: !Int,
+    shapeHash :: !Text,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | An @aggregate@ node: a consistency boundary whose state is rebuilt by
 -- replaying events.
 data Aggregate = Aggregate
-  { aggName :: !Name,
-    aggRegs :: ![RegDecl],
-    aggStates :: ![StateDecl],
-    aggCommands :: ![Command],
-    aggEvents :: ![Event],
-    aggTransitions :: ![Transition],
-    aggDomainOutcomeTypes :: !(Maybe DomainOutcomeTypes),
+  { name :: !Name,
+    regs :: ![RegDecl],
+    states :: ![StateDecl],
+    commands :: ![Command],
+    events :: ![Event],
+    transitions :: ![Transition],
+    domainOutcomeTypes :: !(Maybe DomainOutcomeTypes),
     -- | Locations of declarations after the first; see
     -- 'tOutcomeDuplicateLocs'.
-    aggDomainOutcomeDuplicateLocs :: ![Loc],
-    aggWire :: !(Maybe WireSpec),
-    aggProjection :: !(Maybe ProjectionSpec),
-    aggSnapshot :: !(Maybe SnapshotSpec),
-    aggLoc :: !Loc
+    domainOutcomeDuplicateLocs :: ![Loc],
+    wire :: !(Maybe WireSpec),
+    projection :: !(Maybe ProjectionSpec),
+    snapshot :: !(Maybe SnapshotSpec),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -683,26 +687,26 @@ data Aggregate = Aggregate
 -- A bare field reuses the input field of the same name; @name=value@ binds it to
 -- an expression (kept as raw text, e.g. @timerId=timer.id@).
 data FieldBinding = FieldBinding
-  { fbName :: !Name,
-    fbValue :: !(Maybe Text)
+  { name :: !Name,
+    value :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @input SurgeInput { hospitalId … observedAt:Time }@ — the process's incoming
 -- event shape (one field must be a @:Time@ field used by the timer deadline).
 data InputDecl = InputDecl
-  { inName :: !Name,
-    inFields :: ![Field],
-    inType :: !(Maybe TypeExpr),
-    inLoc :: !Loc
+  { name :: !Name,
+    fields :: ![Field],
+    valueType :: !(Maybe TypeExpr),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @correlate input.hospitalId via idText@ — the correlation key (hole-kind 1
 -- derivation + hole-kind 4 field-source).
 data CorrelateDecl = CorrelateDecl
-  { corrField :: !Name,
-    corrVia :: !Name
+  { field :: !Name,
+    via :: !Name
   }
   deriving stock (Eq, Show, Generic)
 
@@ -710,8 +714,8 @@ data CorrelateDecl = CorrelateDecl
 -- the validated stream category used with @Keiro.Stream.entityStream@.  For a
 -- correlation id @c@, the saga stream is @<category>-<c>@.
 data SagaRef = SagaRef
-  { sagaAgg :: !Name,
-    sagaCategory :: !Text
+  { agg :: !Name,
+    category :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
@@ -737,30 +741,30 @@ data AdvanceNode = AdvanceNode
 
 -- | @dispatch Hospital\@input.hospitalId ActivateSurge { … } on-appended … on-duplicate … on-failed …@.
 data DispatchNode = DispatchNode
-  { dispTarget :: !Name,
-    dispKey :: !Text,
-    dispCommand :: !Name,
-    dispFields :: ![FieldBinding],
-    dispDisposition :: !DispatchDisposition,
-    dispLoc :: !Loc
+  { target :: !Name,
+    key :: !Text,
+    command :: !Name,
+    fields :: ![FieldBinding],
+    disposition :: !DispatchDisposition,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | The @on <Input>@ reaction: a self-advance, zero or more dispatches, and a
 -- @schedule@ of the timer.
 data HandleNode = HandleNode
-  { hOn :: !Name,
-    hAdvance :: !AdvanceNode,
-    hDispatch :: ![DispatchNode],
-    hSchedule :: !Name
+  { on :: !Name,
+    advance :: !AdvanceNode,
+    dispatch :: ![DispatchNode],
+    schedule :: !Name
   }
   deriving stock (Eq, Show, Generic)
 
 -- | A deterministic id derivation: @uuidv5 \"prefix:\" <> correlationId@.
 data IdExpr = IdExpr
-  { ideStrategy :: !IdStrategy,
-    idePrefix :: !Text,
-    ideField :: !Name
+  { strategy :: !IdStrategy,
+    prefix :: !Text,
+    field :: !Name
   }
   deriving stock (Eq, Show, Generic)
 
@@ -771,8 +775,8 @@ data IdStrategy = UuidV5Id
 -- There is no clock-sampling constructor, so the no-wall-clock rule holds by
 -- construction.
 data FireAtExpr = FireAtExpr
-  { faField :: !Name,
-    faWindow :: !Text
+  { field :: !Name,
+    window :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
@@ -792,26 +796,26 @@ data FireDisposition = FireDisposition
 
 -- | @fire dispatch Surge\@correlationId MarkSurgeTimerFired { … } fired-event-id … on-ok …@.
 data FireNode = FireNode
-  { fireTarget :: !Name,
-    fireKey :: !Text,
-    fireCommand :: !Name,
-    fireFields :: ![FieldBinding],
-    fireFiredEventId :: !IdExpr,
-    fireDisposition :: !FireDisposition
+  { target :: !Name,
+    key :: !Text,
+    command :: !Name,
+    fields :: ![FieldBinding],
+    firedEventId :: !IdExpr,
+    disposition :: !FireDisposition
   }
   deriving stock (Eq, Show, Generic)
 
 -- | A nested @timer@ sub-node of a process.
 data TimerNode = TimerNode
-  { tmName :: !Name,
-    tmId :: !IdExpr,
-    tmFireAt :: !FireAtExpr,
-    tmPayload :: ![FieldBinding],
-    tmFire :: !FireNode,
-    tmDecodeUnknown :: !Name,
-    tmMaxAttempts :: !Int,
-    tmDeadLetter :: !Text,
-    tmLoc :: !Loc
+  { name :: !Name,
+    id :: !IdExpr,
+    fireAt :: !FireAtExpr,
+    payload :: ![FieldBinding],
+    fire :: !FireNode,
+    decodeUnknown :: !Name,
+    maxAttempts :: !Int,
+    deadLetter :: !Text,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -823,19 +827,19 @@ data PolicyChoice = PolHalt | PolDeadLetter | PolSkip
 -- (runtime-owned uuidv5), so it is implicit in the AST and always rendered.
 data ProcessNode = ProcessNode
   { -- | The block identifier (@process HospitalSurge@), used for module names.
-    procId :: !Name,
+    id :: !Name,
     -- | The define-once ProcessManager @name@ (@name \"hospital-surge\"@).
-    procName :: !Text,
-    procInput :: !InputDecl,
-    procCorrelate :: !CorrelateDecl,
-    procSaga :: !SagaRef,
-    procTarget :: !Name,
-    procProjections :: ![Name],
-    procHandle :: !HandleNode,
-    procRejected :: !PolicyChoice,
-    procPoison :: !PolicyChoice,
-    procTimer :: !TimerNode,
-    procLoc :: !Loc
+    name :: !Text,
+    input :: !InputDecl,
+    correlate :: !CorrelateDecl,
+    saga :: !SagaRef,
+    target :: !Name,
+    projections :: ![Name],
+    handle :: !HandleNode,
+    rejected :: !PolicyChoice,
+    poison :: !PolicyChoice,
+    timer :: !TimerNode,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -852,30 +856,30 @@ data SelectionDispositionSyntax
 -- Policy spellings that are not yet admitted remain raw names so validation,
 -- rather than parsing, owns stable diagnostics for future-looking values.
 data RouterSelectionDecl = RouterSelectionDecl
-  { rsIdentity :: !Text,
-    rsIdentityLoc :: !Loc,
-    rsVersion :: !Natural,
-    rsVersionLoc :: !Loc,
-    rsQuery :: !Name,
-    rsQueryLoc :: !Loc,
-    rsQueryInput :: !Name,
-    rsQueryInputLoc :: !Loc,
-    rsPredicate :: !Expr,
-    rsRecipient :: !Expr,
-    rsLimit :: !(Maybe (Natural, Loc)),
-    rsOrder :: !Name,
-    rsOrderLoc :: !Loc,
-    rsDedupe :: !Name,
-    rsDedupeLoc :: !Loc,
-    rsEmptyPolicy :: !SelectionDispositionSyntax,
-    rsEmptyPolicyLoc :: !Loc,
-    rsFailurePolicy :: !SelectionDispositionSyntax,
-    rsFailurePolicyLoc :: !Loc,
-    rsRedelivery :: !Name,
-    rsRedeliveryLoc :: !Loc,
-    rsPartial :: !Name,
-    rsPartialLoc :: !Loc,
-    rsLoc :: !Loc
+  { identity :: !Text,
+    identityLoc :: !Loc,
+    version :: !Natural,
+    versionLoc :: !Loc,
+    query :: !Name,
+    queryLoc :: !Loc,
+    queryInput :: !Name,
+    queryInputLoc :: !Loc,
+    predicate :: !Expr,
+    recipient :: !Expr,
+    limit :: !(Maybe (Natural, Loc)),
+    order :: !Name,
+    orderLoc :: !Loc,
+    dedupe :: !Name,
+    dedupeLoc :: !Loc,
+    emptyPolicy :: !SelectionDispositionSyntax,
+    emptyPolicyLoc :: !Loc,
+    failurePolicy :: !SelectionDispositionSyntax,
+    failurePolicyLoc :: !Loc,
+    redelivery :: !Name,
+    redeliveryLoc :: !Loc,
+    partial :: !Name,
+    partialLoc :: !Loc,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -886,17 +890,17 @@ data ResolveSource
   deriving stock (Eq, Show, Generic)
 
 data ResolveDecl = ResolveDecl
-  { rvSource :: !ResolveSource,
-    rvRow :: ![Name],
-    rvLoc :: !Loc
+  { source :: !ResolveSource,
+    row :: ![Name],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 data RouterDispatchNode = RouterDispatchNode
-  { rdCommand :: !Name,
-    rdFields :: ![FieldBinding],
-    rdDisposition :: !DispatchDisposition,
-    rdLoc :: !Loc
+  { command :: !Name,
+    fields :: ![FieldBinding],
+    disposition :: !DispatchDisposition,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -904,17 +908,17 @@ data RouterDispatchNode = RouterDispatchNode
 -- the mandatory @stable@ token on the resolve clause is an author acknowledgement
 -- that retry attempts accumulate the union of resolved target identities.
 data RouterNode = RouterNode
-  { rtId :: !Name,
-    rtName :: !Text,
-    rtInput :: !InputDecl,
-    rtKey :: !CorrelateDecl,
-    rtResolve :: !ResolveDecl,
-    rtTarget :: !Name,
-    rtProjections :: ![Name],
-    rtDispatch :: !RouterDispatchNode,
-    rtRejected :: !PolicyChoice,
-    rtPoison :: !PolicyChoice,
-    rtLoc :: !Loc
+  { id :: !Name,
+    name :: !Text,
+    input :: !InputDecl,
+    key :: !CorrelateDecl,
+    resolve :: !ResolveDecl,
+    target :: !Name,
+    projections :: ![Name],
+    dispatch :: !RouterDispatchNode,
+    rejected :: !PolicyChoice,
+    poison :: !PolicyChoice,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -925,19 +929,19 @@ data ContractType = CTypeId !Text | CText | CInt
   deriving stock (Eq, Show, Generic)
 
 data ContractField = ContractField
-  { cfName :: !Name,
-    cfSelector :: !(Maybe Name),
-    cfWireKey :: !(Maybe Text),
-    cfType :: !ContractType,
-    cfLoc :: !Loc
+  { name :: !Name,
+    selector :: !(Maybe Name),
+    wireKey :: !(Maybe Text),
+    valueType :: !ContractType,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @event <Name> on <topicAlias> { field: type … }@ within a contract.
 data ContractEvent = ContractEvent
-  { ceName :: !Name,
-    ceTopic :: !Name,
-    ceFields :: ![ContractField]
+  { name :: !Name,
+    topic :: !Name,
+    fields :: ![ContractField]
   }
   deriving stock (Eq, Show, Generic)
 
@@ -945,13 +949,13 @@ data ContractEvent = ContractEvent
 -- and referenced by both producer (@emit@) and consumer (@intake@). EP-5's
 -- pgmq @dispatch@ also couples to it.
 data ContractNode = ContractNode
-  { ctrName :: !Name,
-    ctrSchemaVersion :: !Int,
-    ctrDiscriminator :: !Name,
+  { name :: !Name,
+    schemaVersion :: !Int,
+    discriminator :: !Name,
     -- | (topic alias, real Kafka topic string)
-    ctrTopics :: ![(Name, Text)],
-    ctrEvents :: ![ContractEvent],
-    ctrLoc :: !Loc
+    topics :: ![(Name, Text)],
+    events :: ![ContractEvent],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -967,10 +971,10 @@ data WireSource
 
 -- | One envelope-binding row: @bind <field> from <source> [required] [cross-check body]@.
 data BindRow = BindRow
-  { brField :: !Name,
-    brSource :: !WireSource,
-    brRequired :: !Bool,
-    brCrossCheck :: !Bool
+  { field :: !Name,
+    source :: !WireSource,
+    required :: !Bool,
+    crossCheck :: !Bool
   }
   deriving stock (Eq, Show, Generic)
 
@@ -986,18 +990,18 @@ data InboxAction
 
 -- | One row of the mandatory, complete inbox disposition table.
 data DispositionRow = DispositionRow
-  { drOutcome :: !Name,
-    drAction :: !InboxAction,
-    drLoc :: !Loc
+  { outcome :: !Name,
+    action :: !InboxAction,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | The body decode-strictness decision (hole-kind 6).
 data DecodeSpec = DecodeSpec
   { -- | the envelope policy text, e.g. @strict-required lenient-optional@
-    decEnvelope :: !Text,
-    decBodyStrict :: !Bool,
-    decBodySchemaVersion :: !Int
+    envelope :: !Text,
+    bodyStrict :: !Bool,
+    bodySchemaVersion :: !Int
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1009,17 +1013,17 @@ data InkPersist = InkPersistFull | InkPersistDedupeOnly
 -- block (brokers/groupId/offsetReset) is hole-kind 8, delegated to deployment
 -- and not modelled here.
 data IntakeNode = IntakeNode
-  { inkName :: !Name,
-    inkContract :: !Name,
-    inkTopic :: !Name,
-    inkAccept :: ![Name],
-    inkBinds :: ![BindRow],
-    inkDedupeKey :: !Name,
-    inkDedupePolicy :: !Name,
-    inkPersist :: !InkPersist,
-    inkDecode :: !DecodeSpec,
-    inkDisposition :: ![DispositionRow],
-    inkLoc :: !Loc
+  { name :: !Name,
+    contract :: !Name,
+    topic :: !Name,
+    accept :: ![Name],
+    binds :: ![BindRow],
+    dedupeKey :: !Name,
+    dedupePolicy :: !Name,
+    persist :: !InkPersist,
+    decode :: !DecodeSpec,
+    disposition :: ![DispositionRow],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1031,49 +1035,49 @@ newtype DeriveSpec = DeriveSpec {dsPrefix :: Maybe Text}
 
 -- | One @\"value\" => EventType@ row of an emit's status mapping.
 data EmitMapRow = EmitMapRow
-  { emrValue :: !Text,
-    emrEvent :: !Name,
-    emrLoc :: !Loc
+  { value :: !Text,
+    event :: !Name,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | An @emit@ (outbox) node: maps a private status discriminant to contract
 -- event types, with a mandatory explicit @_ => skip@ catch-all.
 data EmitNode = EmitNode
-  { emName :: !Name,
-    emContract :: !Name,
-    emTopic :: !Name,
-    emSource :: !Text,
-    emKey :: !Name,
-    emDiscriminant :: !Name,
-    emMap :: ![EmitMapRow],
+  { name :: !Name,
+    contract :: !Name,
+    topic :: !Name,
+    source :: !Text,
+    key :: !Name,
+    discriminant :: !Name,
+    map :: ![EmitMapRow],
     -- | whether the explicit @_ => skip@ catch-all is present
-    emSkip :: !Bool,
-    emMessageId :: !DeriveSpec,
-    emIdempotencyKey :: !DeriveSpec,
-    emLoc :: !Loc
+    skip :: !Bool,
+    messageId :: !DeriveSpec,
+    idempotencyKey :: !DeriveSpec,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | @backoff <kind> <window>@, e.g. @backoff constant 2s@.
 data BackoffSpec = BackoffSpec
-  { boKind :: !Name,
-    boWindow :: !Text,
-    boMax :: !(Maybe Text),
-    boMultiplier :: !(Maybe Text)
+  { kind :: !Name,
+    window :: !Text,
+    max :: !(Maybe Text),
+    multiplier :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
 
 -- | A @publisher@ node: the at-least-once publishing policy for an emit's topic.
 data PublisherNode = PublisherNode
-  { pubName :: !Name,
-    pubEmit :: !Name,
-    pubOrdering :: !Name,
-    pubMaxAttempts :: !Int,
-    pubBackoff :: !BackoffSpec,
+  { name :: !Name,
+    emit :: !Name,
+    ordering :: !Name,
+    maxAttempts :: !Int,
+    backoff :: !BackoffSpec,
     -- | @outboxId stable from <field>@: retries coalesce on (source, this field)
-    pubOutboxField :: !Name,
-    pubLoc :: !Loc
+    outboxField :: !Name,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1103,19 +1107,19 @@ data QueuePayloadType
 
 -- | One @field -> \"wire_name\" type required@ row of a workqueue payload.
 data WqField = WqField
-  { wqfName :: !Name,
-    wqfWire :: !Text,
-    wqfType :: !QueuePayloadType,
-    wqfLoc :: !Loc
+  { name :: !Name,
+    wire :: !Text,
+    valueType :: !QueuePayloadType,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | One row of a workqueue's consumer @JobOutcome@ disposition (reusing
 -- 'InboxAction': @retry <window>@ \/ @deadLetter@).
 data WqDispRow = WqDispRow
-  { wqdOutcome :: !Name,
-    wqdAction :: !InboxAction,
-    wqdLoc :: !Loc
+  { outcome :: !Name,
+    action :: !InboxAction,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1125,9 +1129,9 @@ data WqOrdering = WqUnordered | WqFifoThroughput | WqFifoRoundRobin
 
 -- | A FIFO message-group key derived from one payload field.
 data WqGroupKey = WqGroupKey
-  { gkField :: !Name,
-    gkVia :: !Name,
-    gkFixture :: !(Maybe Text)
+  { field :: !Name,
+    via :: !Name,
+    fixture :: !(Maybe Text)
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1142,38 +1146,38 @@ data WqProvision
 -- /captured fixture/ (hole-kind 1): the validator re-derives the physical name
 -- from @logical@ and flags any divergence (the drift hazard at the dedup site).
 data WorkqueueNode = WorkqueueNode
-  { wqName :: !Name,
-    wqLogical :: !Text,
-    wqPhysical :: !Text,
-    wqDlq :: !Text,
-    wqTable :: !Text,
-    wqOrdering :: !WqOrdering,
-    wqGroupKey :: !(Maybe WqGroupKey),
-    wqProvision :: !WqProvision,
-    wqPayloadName :: !Name,
-    wqPayload :: ![WqField],
-    wqMaxRetries :: !Int,
-    wqDelay :: !Text,
-    wqDlqOn :: !Bool,
-    wqDisposition :: ![WqDispRow],
-    wqLoc :: !Loc
+  { name :: !Name,
+    logical :: !Text,
+    physical :: !Text,
+    dlq :: !Text,
+    table :: !Text,
+    ordering :: !WqOrdering,
+    groupKey :: !(Maybe WqGroupKey),
+    provision :: !WqProvision,
+    payloadName :: !Name,
+    payload :: ![WqField],
+    maxRetries :: !Int,
+    delay :: !Text,
+    dlqOn :: !Bool,
+    disposition :: ![WqDispRow],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | A pgmq @dispatch@ node: a read-model→enqueue coupling with a fan-out hole
 -- and a dedup check (one arm of which is a raw-SQL hole).
 data PgmqDispatchNode = PgmqDispatchNode
-  { pdName :: !Name,
-    pdSourceReadModel :: !Name,
-    pdSourceKey :: !Name,
-    pdFanoutBody :: !Name,
-    pdDedupKey :: !Name,
-    pdDedupReadModel :: !Name,
-    pdDedupReadModelField :: !Text,
-    pdDedupQueue :: !Name,
-    pdDedupQueueField :: !Text,
-    pdEnqueueTo :: !Name,
-    pdLoc :: !Loc
+  { name :: !Name,
+    sourceReadModel :: !Name,
+    sourceKey :: !Name,
+    fanoutBody :: !Name,
+    dedupKey :: !Name,
+    dedupReadModel :: !Name,
+    dedupReadModelField :: !Text,
+    dedupQueue :: !Name,
+    dedupQueueField :: !Text,
+    enqueueTo :: !Name,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1233,39 +1237,39 @@ data ReadModelQueryTypes = ReadModelQueryTypes
 -- | A registered, versioned SQL read model. Columns define its shape identity;
 -- the runtime table remains owned by codd migrations rather than the DSL.
 data ReadModelNode = ReadModelNode
-  { rmName :: !Name,
-    rmTable :: !Text,
-    rmSchema :: !Text,
-    rmColumns :: ![RmColumn],
-    rmVersion :: !Int,
-    rmShape :: !Text,
-    rmFreshness :: !QueryFreshnessNode,
-    rmSupply :: !ReadModelSupply,
-    rmGroup :: !(Maybe Name),
-    rmObservedTargets :: ![Name],
-    rmBackingTarget :: !(Maybe Name),
+  { name :: !Name,
+    table :: !Text,
+    schema :: !Text,
+    columns :: ![RmColumn],
+    version :: !Int,
+    shape :: !Text,
+    freshness :: !QueryFreshnessNode,
+    supply :: !ReadModelSupply,
+    group :: !(Maybe Name),
+    observedTargets :: ![Name],
+    backingTarget :: !(Maybe Name),
     queryTypes :: !(Maybe ReadModelQueryTypes),
-    rmLoc :: !Loc
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 legacyReadModelConsistency :: ReadModelNode -> Maybe Consistency
-legacyReadModelConsistency readModel = case rmSupply readModel of
+legacyReadModelConsistency readModel = case (.supply) readModel of
   LegacyReadModelSupply {legacyConsistency} -> Just legacyConsistency
   OwnerDerivedSupply -> Nothing
 
 legacyReadModelScope :: ReadModelNode -> Maybe RmScope
-legacyReadModelScope readModel = case rmSupply readModel of
+legacyReadModelScope readModel = case (.supply) readModel of
   LegacyReadModelSupply {legacyScope} -> legacyScope
   OwnerDerivedSupply -> Nothing
 
 legacyReadModelFeed :: ReadModelNode -> Maybe RmFeed
-legacyReadModelFeed readModel = case rmSupply readModel of
+legacyReadModelFeed readModel = case (.supply) readModel of
   LegacyReadModelSupply {legacyFeed} -> Just legacyFeed
   OwnerDerivedSupply -> Nothing
 
 legacyReadModelSubscription :: ReadModelNode -> Maybe Text
-legacyReadModelSubscription readModel = case rmSupply readModel of
+legacyReadModelSubscription readModel = case (.supply) readModel of
   LegacyReadModelSupply {legacySubscription} -> legacySubscription
   OwnerDerivedSupply -> Nothing
 
@@ -1276,21 +1280,21 @@ data TargetResetPolicy = TargetClear | TargetPreserve
 
 -- | One physical PostgreSQL target owned by exactly one catalog group.
 data ProjectionTargetNode = ProjectionTargetNode
-  { ptName :: !Name,
-    ptSchema :: !Text,
-    ptTable :: !Text,
-    ptReset :: !TargetResetPolicy,
-    ptDependsOn :: ![Name],
-    ptLoc :: !Loc
+  { name :: !Name,
+    schema :: !Text,
+    table :: !Text,
+    reset :: !TargetResetPolicy,
+    dependsOn :: ![Name],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 -- | One atomic lifecycle group and its deterministic target preparation order.
 data RebuildGroupNode = RebuildGroupNode
-  { rgName :: !Name,
-    rgTargets :: ![Name],
-    rgOrder :: ![Name],
-    rgLoc :: !Loc
+  { name :: !Name,
+    targets :: ![Name],
+    order :: ![Name],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1301,31 +1305,31 @@ data PromotionObjectKindNode
   deriving stock (Eq, Ord, Show, Generic)
 
 data PromotionObjectNode = PromotionObjectNode
-  { rpoKind :: !PromotionObjectKindNode,
-    rpoGenerationName :: !Text,
-    rpoCanonicalName :: !Text
+  { kind :: !PromotionObjectKindNode,
+    generationName :: !Text,
+    canonicalName :: !Text
   }
   deriving stock (Eq, Show, Generic)
 
 -- | Application-owned schema contract for one target in a projection
 -- revision. The DSL carries stable identities, never raw DDL.
 data RevisionTargetNode = RevisionTargetNode
-  { prtTarget :: !Name,
-    prtSchemaVersion :: !Text,
-    prtProvisioner :: !Text,
-    prtProvisionerVersion :: !Int,
-    prtExpectedShape :: !Text,
-    prtValidator :: !Text,
-    prtValidatorVersion :: !Int,
-    prtPromotionObjects :: ![PromotionObjectNode]
+  { target :: !Name,
+    schemaVersion :: !Text,
+    provisioner :: !Text,
+    provisionerVersion :: !Int,
+    expectedShape :: !Text,
+    validator :: !Text,
+    validatorVersion :: !Int,
+    promotionObjects :: ![PromotionObjectNode]
   }
   deriving stock (Eq, Show, Generic)
 
 data ProjectionRevisionNode = ProjectionRevisionNode
-  { prvName :: !Name,
-    prvGroup :: !Name,
-    prvTargets :: ![RevisionTargetNode],
-    prvLoc :: !Loc
+  { name :: !Name,
+    group :: !Name,
+    targets :: ![RevisionTargetNode],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1333,14 +1337,14 @@ data ProjectionRevisionNode = ProjectionRevisionNode
 -- contract. The result shape is deliberately absent: lowering obtains it from
 -- the checked read-model binding so source and runtime identity cannot drift.
 data ExternalReadNode = ExternalReadNode
-  { erName :: !Name,
-    erVersion :: !Int,
-    erQueryModel :: !Name,
-    erResultSchema :: !Text,
-    erResultType :: !Text,
-    erCompatibleRevisions :: ![Name],
-    erSurfaceGeneration :: !Int,
-    erLoc :: !Loc
+  { name :: !Name,
+    version :: !Int,
+    queryModel :: !Name,
+    resultSchema :: !Text,
+    resultType :: !Text,
+    compatibleRevisions :: ![Name],
+    surfaceGeneration :: !Int,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1348,7 +1352,7 @@ data ExternalReadNode = ExternalReadNode
 -- so source-level duplicate detection keys by contract and version together.
 externalReadNodeIdentity :: ExternalReadNode -> Name
 externalReadNodeIdentity externalRead =
-  erName externalRead <> "_v" <> T.pack (show (erVersion externalRead))
+  (.name) externalRead <> "_v" <> T.pack (show ((.version) externalRead))
 
 -- | A replay source selected by a projection owner.
 data CatalogSource
@@ -1375,17 +1379,17 @@ data ProjectionReplayPolicy
 
 -- | One ordered live/replay handler declaration in the service catalog.
 data ProjectionOwnerNode = ProjectionOwnerNode
-  { poName :: !Name,
-    poSources :: ![CatalogSource],
-    poDelivery :: !ProjectionDelivery,
-    poGroup :: !Name,
-    poTargets :: ![Name],
-    poOrder :: !Int,
-    poSubscription :: !(Maybe Text),
-    poDedup :: !(Maybe Text),
-    poCheckpointOnMissing :: ![CheckpointOnMissingNode],
-    poReplay :: !ProjectionReplayPolicy,
-    poLoc :: !Loc
+  { name :: !Name,
+    sources :: ![CatalogSource],
+    delivery :: !ProjectionDelivery,
+    group :: !Name,
+    targets :: ![Name],
+    order :: !Int,
+    subscription :: !(Maybe Text),
+    dedup :: !(Maybe Text),
+    checkpointOnMissing :: ![CheckpointOnMissingNode],
+    replay :: !ProjectionReplayPolicy,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1411,22 +1415,22 @@ data WfBodyItem
 -- | A durable @workflow@ node.
 data WorkflowNode = WorkflowNode
   { -- | block identifier (e.g. @HospitalTransferReservation@)
-    wfId :: !Name,
+    id :: !Name,
     -- | the stable @name "…"@ (journal stream + every deterministic id)
-    wfStable :: !Text,
-    wfInput :: !Name,
-    wfInputFields :: ![Field],
-    wfOutput :: !Name,
+    stable :: !Text,
+    input :: !Name,
+    inputFields :: ![Field],
+    output :: !Name,
     -- | @id from input.<field>@; 'Nothing' for @id from input@
-    wfIdField :: !(Maybe Name),
-    wfIdVia :: !Name,
-    wfBody :: ![WfBodyItem],
-    wfLoc :: !Loc
+    idField :: !(Maybe Name),
+    idVia :: !Name,
+    body :: ![WfBodyItem],
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 workflowNodeLoc :: WorkflowNode -> Loc
-workflowNodeLoc WorkflowNode {wfLoc = loc} = loc
+workflowNodeLoc WorkflowNode {loc = loc} = loc
 
 -- | The four operation shapes.
 data OperationShape
@@ -1441,9 +1445,9 @@ data OperationShape
   deriving stock (Eq, Show, Generic)
 
 data OperationNode = OperationNode
-  { opName :: !Name,
-    opShape :: !OperationShape,
-    opLoc :: !Loc
+  { name :: !Name,
+    shape :: !OperationShape,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -1489,14 +1493,14 @@ data Placement
 -- and the list of nodes. 'specModuleRoot' and 'specLayout' are 'Nothing' when the
 -- spec omits the clauses, reproducing the historical default.
 data Spec = Spec
-  { specContext :: !Name,
-    specModuleRoot :: !(Maybe Text),
-    specLayout :: !(Maybe Placement),
-    specIds :: ![IdDecl],
-    specEnums :: ![EnumDecl],
-    specRules :: ![RuleDecl],
-    specNominalScalars :: ![NominalScalarDecl],
-    specMapped :: ![MappedDecl],
-    specNodes :: ![Node]
+  { context :: !Name,
+    moduleRoot :: !(Maybe Text),
+    layout :: !(Maybe Placement),
+    ids :: ![IdDecl],
+    enums :: ![EnumDecl],
+    rules :: ![RuleDecl],
+    nominalScalars :: ![NominalScalarDecl],
+    mapped :: ![MappedDecl],
+    nodes :: ![Node]
   }
   deriving stock (Eq, Show, Generic)

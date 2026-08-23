@@ -6,10 +6,15 @@
 -- unrepresentable.
 module Keiro.Dsl.TypeGraph
   ( QualifiedValueName (..),
+    unQualifiedValueName,
     CanonicalTypeId (..),
+    unCanonicalTypeId,
     BindingVersion (..),
+    unBindingVersion,
     CodecIdentity (..),
+    unCodecIdentity,
     CodecVersion (..),
+    unCodecVersion,
     mkQualifiedValueName,
     mkCanonicalTypeId,
     mkBindingVersion,
@@ -21,6 +26,7 @@ module Keiro.Dsl.TypeGraph
     OpaqueDecl (..),
     checkMappedDecl,
     MappedKey (..),
+    unMappedKey,
     ResolvedTypeExpr (..),
     ResolvedWireField (..),
     ResolvedWireArm (..),
@@ -71,17 +77,32 @@ import Numeric (showHex)
 newtype QualifiedValueName = QualifiedValueName {unQualifiedValueName :: Text}
   deriving stock (Eq, Ord, Show, Generic)
 
+unQualifiedValueName :: QualifiedValueName -> Text
+unQualifiedValueName (QualifiedValueName value) = value
+
 newtype CanonicalTypeId = CanonicalTypeId {unCanonicalTypeId :: Text}
   deriving stock (Eq, Ord, Show, Generic)
+
+unCanonicalTypeId :: CanonicalTypeId -> Text
+unCanonicalTypeId (CanonicalTypeId value) = value
 
 newtype BindingVersion = BindingVersion {unBindingVersion :: Text}
   deriving stock (Eq, Ord, Show, Generic)
 
+unBindingVersion :: BindingVersion -> Text
+unBindingVersion (BindingVersion value) = value
+
 newtype CodecIdentity = CodecIdentity {unCodecIdentity :: Text}
   deriving stock (Eq, Ord, Show, Generic)
 
+unCodecIdentity :: CodecIdentity -> Text
+unCodecIdentity (CodecIdentity value) = value
+
 newtype CodecVersion = CodecVersion {unCodecVersion :: Text}
   deriving stock (Eq, Ord, Show, Generic)
+
+unCodecVersion :: CodecVersion -> Text
+unCodecVersion (CodecVersion value) = value
 
 data MappedDeclError
   = MissingHaskellSource !Name
@@ -124,25 +145,25 @@ mkCodecVersion value
   | otherwise = Right (CodecVersion value)
 
 data StructuralDecl = StructuralDecl
-  { sdName :: !Name,
-    sdHaskell :: !HaskellSource,
-    sdBinding :: !QualifiedValueName,
-    sdBindingVersion :: !BindingVersion,
-    sdCanonical :: !CanonicalTypeId,
-    sdFixtures :: !QualifiedValueName,
-    sdInitial :: !(Maybe QualifiedValueName),
-    sdLoc :: !Loc
+  { name :: !Name,
+    haskell :: !HaskellSource,
+    binding :: !QualifiedValueName,
+    bindingVersion :: !BindingVersion,
+    canonical :: !CanonicalTypeId,
+    fixtures :: !QualifiedValueName,
+    initial :: !(Maybe QualifiedValueName),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 data OpaqueDecl = OpaqueDecl
-  { odName :: !Name,
-    odHaskell :: !HaskellSource,
-    odCodecIdentity :: !CodecIdentity,
-    odCodecVersion :: !CodecVersion,
-    odFixtures :: !QualifiedValueName,
-    odInitial :: !(Maybe QualifiedValueName),
-    odLoc :: !Loc
+  { name :: !Name,
+    haskell :: !HaskellSource,
+    codecIdentity :: !CodecIdentity,
+    codecVersion :: !CodecVersion,
+    fixtures :: !QualifiedValueName,
+    initial :: !(Maybe QualifiedValueName),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -162,14 +183,14 @@ checkMappedDecl MappedStructural {msName = name, msHaskell = haskell, msBinding 
   pure
     ( CheckedStructural
         StructuralDecl
-          { sdName = name,
-            sdHaskell = checkedHaskell,
-            sdBinding = checkedBinding,
-            sdBindingVersion = checkedBindingVersion,
-            sdCanonical = checkedCanonical,
-            sdFixtures = checkedFixtures,
-            sdInitial = checkedInitial,
-            sdLoc = loc
+          { name = name,
+            haskell = checkedHaskell,
+            binding = checkedBinding,
+            bindingVersion = checkedBindingVersion,
+            canonical = checkedCanonical,
+            fixtures = checkedFixtures,
+            initial = checkedInitial,
+            loc = loc
           }
         shape
     )
@@ -182,13 +203,13 @@ checkMappedDecl MappedOpaque {moName = name, moHaskell = haskell, moCodecId = co
   pure
     ( CheckedOpaque
         OpaqueDecl
-          { odName = name,
-            odHaskell = checkedHaskell,
-            odCodecIdentity = checkedCodecIdentity,
-            odCodecVersion = checkedCodecVersion,
-            odFixtures = checkedFixtures,
-            odInitial = checkedInitial,
-            odLoc = loc
+          { name = name,
+            haskell = checkedHaskell,
+            codecIdentity = checkedCodecIdentity,
+            codecVersion = checkedCodecVersion,
+            fixtures = checkedFixtures,
+            initial = checkedInitial,
+            loc = loc
           }
     )
 
@@ -200,6 +221,9 @@ liftOne = first (:| [])
 
 newtype MappedKey = MappedKey {unMappedKey :: Name}
   deriving stock (Eq, Ord, Show, Generic)
+
+unMappedKey :: MappedKey -> Name
+unMappedKey (MappedKey value) = value
 
 data ResolvedTypeExpr
   = RText
@@ -216,20 +240,20 @@ data ResolvedTypeExpr
   deriving stock (Eq, Show, Generic)
 
 data ResolvedWireField = ResolvedWireField
-  { rwfHaskell :: !Name,
-    rwfKey :: !Text,
-    rwfType :: !ResolvedTypeExpr,
-    rwfPresence :: !Presence,
-    rwfOnMissing :: !(Maybe OnMissing),
-    rwfLoc :: !Loc
+  { haskell :: !Name,
+    key :: !Text,
+    valueType :: !ResolvedTypeExpr,
+    presence :: !Presence,
+    onMissing :: !(Maybe OnMissing),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 data ResolvedWireArm = ResolvedWireArm
-  { rwaCtor :: !Name,
-    rwaTag :: !Text,
-    rwaPayload :: !(Maybe ResolvedTypeExpr),
-    rwaLoc :: !Loc
+  { ctor :: !Name,
+    tag :: !Text,
+    payload :: !(Maybe ResolvedTypeExpr),
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
@@ -271,8 +295,8 @@ data PathSeg
   deriving stock (Eq, Ord, Show, Generic)
 
 data UsePath = UsePath
-  { upRoot :: !UseSite,
-    upSegments :: ![PathSeg]
+  { root :: !UseSite,
+    segments :: ![PathSeg]
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -292,20 +316,20 @@ data UnsupportedProjectionSource
   deriving stock (Eq, Ord, Show, Generic)
 
 data TypeGraph = TypeGraph
-  { tgDeclarations :: !(Map MappedKey ResolvedMappedDecl),
-    tgReachability :: !(Map MappedKey (Set MappedKey)),
-    tgUseSites :: ![UseSite],
-    tgRootSegments :: !(Map UseSite [PathSeg]),
-    tgDerivedMappedConsumers :: ![DerivedMappedConsumer],
-    tgReplayableProjectionGroups :: !(Map DerivedMappedConsumer Name),
-    tgProjectionOperationalIdentities :: !(Map DerivedMappedConsumer Text),
-    tgUnsupportedProjectionSources :: ![UnsupportedProjectionSource]
+  { declarations :: !(Map MappedKey ResolvedMappedDecl),
+    reachability :: !(Map MappedKey (Set MappedKey)),
+    useSites :: ![UseSite],
+    rootSegments :: !(Map UseSite [PathSeg]),
+    derivedMappedConsumers :: ![DerivedMappedConsumer],
+    replayableProjectionGroups :: !(Map DerivedMappedConsumer Name),
+    projectionOperationalIdentities :: !(Map DerivedMappedConsumer Text),
+    unsupportedProjectionSources :: ![UnsupportedProjectionSource]
   }
   deriving stock (Eq, Show, Generic)
 
 resolveTypeGraph :: Spec -> Either (NonEmpty TypeGraphError) TypeGraph
 resolveTypeGraph spec = do
-  checked <- collectChecked (specMapped spec)
+  checked <- collectChecked ((.mapped) spec)
   rejectMany (ambiguityErrors spec checked)
   let keyByName = Map.fromList [(checkedName decl, MappedKey (checkedName decl)) | decl <- checked]
       (resolveErrors, resolvedPairs) = partitionEithers (map (resolveCheckedDecl keyByName) checked)
@@ -317,62 +341,62 @@ resolveTypeGraph spec = do
   rejectMany rootErrors
   pure
     TypeGraph
-      { tgDeclarations = declarations,
-        tgReachability = reachability,
-        tgUseSites = map fst (catMaybes rootSites),
-        tgRootSegments = Map.fromList (catMaybes rootSites),
-        tgDerivedMappedConsumers = sort (derivedMappedConsumers spec),
-        tgReplayableProjectionGroups = replayableProjectionGroups spec,
-        tgProjectionOperationalIdentities = projectionOperationalIdentities spec,
-        tgUnsupportedProjectionSources = sort (unsupportedProjectionSources spec)
+      { declarations = declarations,
+        reachability = reachability,
+        useSites = map fst (catMaybes rootSites),
+        rootSegments = Map.fromList (catMaybes rootSites),
+        derivedMappedConsumers = sort (derivedMappedConsumers spec),
+        replayableProjectionGroups = replayableProjectionGroups spec,
+        projectionOperationalIdentities = projectionOperationalIdentities spec,
+        unsupportedProjectionSources = sort (unsupportedProjectionSources spec)
       }
 
 derivedMappedConsumers :: Spec -> [DerivedMappedConsumer]
 derivedMappedConsumers spec =
-  [ AggregateInlineProjectionConsumer (aggName aggregate) (projTable projection)
-  | NAggregate aggregate <- specNodes spec,
-    Just projection <- [aggProjection aggregate]
+  [ AggregateInlineProjectionConsumer ((.name) aggregate) ((.table) projection)
+  | NAggregate aggregate <- (.nodes) spec,
+    Just projection <- [(.projection) aggregate]
   ]
-    <> [ CatalogProjectionConsumer (poName owner) aggregate
-       | NProjectionOwner owner <- specNodes spec,
-         CatalogAggregate aggregate <- poSources owner
+    <> [ CatalogProjectionConsumer ((.name) owner) aggregate
+       | NProjectionOwner owner <- (.nodes) spec,
+         CatalogAggregate aggregate <- (.sources) owner
        ]
 
 replayableProjectionGroups :: Spec -> Map DerivedMappedConsumer Name
 replayableProjectionGroups spec =
   Map.fromList
-    [ (CatalogProjectionConsumer (poName owner) aggregate, poGroup owner)
-    | NProjectionOwner owner <- specNodes spec,
-      poReplay owner == ProjectionReplayExplicit,
-      CatalogAggregate aggregate <- poSources owner
+    [ (CatalogProjectionConsumer ((.name) owner) aggregate, (.group) owner)
+    | NProjectionOwner owner <- (.nodes) spec,
+      (.replay) owner == ProjectionReplayExplicit,
+      CatalogAggregate aggregate <- (.sources) owner
     ]
 
 projectionOperationalIdentities :: Spec -> Map DerivedMappedConsumer Text
 projectionOperationalIdentities spec =
   Map.fromList (inlineRows <> catalogRows)
   where
-    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    readModels = [readModel | NReadModel readModel <- (.nodes) spec]
     inlineRows =
-      [ ( AggregateInlineProjectionConsumer (aggName aggregate) (projTable projection),
-          renderOperation Nothing [projTable projection] [rmName readModel | readModel <- readModels, rmName readModel == projTable projection] False
+      [ ( AggregateInlineProjectionConsumer ((.name) aggregate) ((.table) projection),
+          renderOperation Nothing [(.table) projection] [(.name) readModel | readModel <- readModels, (.name) readModel == (.table) projection] False
         )
-      | NAggregate aggregate <- specNodes spec,
-        Just projection <- [aggProjection aggregate]
+      | NAggregate aggregate <- (.nodes) spec,
+        Just projection <- [(.projection) aggregate]
       ]
     catalogRows =
-      [ ( CatalogProjectionConsumer (poName owner) aggregate,
+      [ ( CatalogProjectionConsumer ((.name) owner) aggregate,
           renderOperation
-            (Just (poGroup owner))
-            (poTargets owner)
-            [ rmName readModel
+            (Just ((.group) owner))
+            ((.targets) owner)
+            [ (.name) readModel
             | readModel <- readModels,
-              rmGroup readModel == Just (poGroup owner),
-              not (Set.disjoint (Set.fromList (rmObservedTargets readModel)) (Set.fromList (poTargets owner)))
+              (.group) readModel == Just ((.group) owner),
+              not (Set.disjoint (Set.fromList ((.observedTargets) readModel)) (Set.fromList ((.targets) owner)))
             ]
-            (poReplay owner == ProjectionReplayExplicit)
+            ((.replay) owner == ProjectionReplayExplicit)
         )
-      | NProjectionOwner owner <- specNodes spec,
-        CatalogAggregate aggregate <- poSources owner
+      | NProjectionOwner owner <- (.nodes) spec,
+        CatalogAggregate aggregate <- (.sources) owner
       ]
     renderOperation groupName targets observers canReplay =
       T.intercalate
@@ -386,12 +410,12 @@ projectionOperationalIdentities spec =
 unsupportedProjectionSources :: Spec -> [UnsupportedProjectionSource]
 unsupportedProjectionSources spec =
   [ boundary
-  | NProjectionOwner owner <- specNodes spec,
-    source <- poSources owner,
+  | NProjectionOwner owner <- (.nodes) spec,
+    source <- (.sources) owner,
     boundary <- case source of
       CatalogAggregate _ -> []
-      CatalogCategory category -> [UnsupportedCatalogCategory (poName owner) category]
-      CatalogAll -> [UnsupportedCatalogAll (poName owner)]
+      CatalogCategory category -> [UnsupportedCatalogCategory ((.name) owner) category]
+      CatalogAll -> [UnsupportedCatalogAll ((.name) owner)]
   ]
 
 collectChecked :: [MappedDecl] -> Either (NonEmpty TypeGraphError) [CheckedMappedDecl]
@@ -414,8 +438,8 @@ rawName MappedStructural {msName = name} = name
 rawName MappedOpaque {moName = name} = name
 
 checkedName :: CheckedMappedDecl -> Name
-checkedName (CheckedStructural declaration _) = sdName declaration
-checkedName (CheckedOpaque declaration) = odName declaration
+checkedName (CheckedStructural declaration _) = (.name) declaration
+checkedName (CheckedOpaque declaration) = (.name) declaration
 
 ambiguityErrors :: Spec -> [CheckedMappedDecl] -> [TypeGraphError]
 ambiguityErrors spec declarations =
@@ -427,17 +451,17 @@ ambiguityErrors spec declarations =
     builtins = ["Text", "Int", "Bool", "Natural", "Time", "UTCTime", "Json", "Optional", "List", "Map"]
     originPairs =
       [(checkedName declaration, "mapped") | declaration <- declarations]
-        ++ [(idName declaration, "id") | declaration <- specIds spec]
-        ++ [(enumName declaration, "enum") | declaration <- specEnums spec]
+        ++ [((.name) declaration, "id") | declaration <- (.ids) spec]
+        ++ [((.name) declaration, "enum") | declaration <- (.enums) spec]
         ++ [(name, "built-in") | name <- builtins]
     allOrigins = Map.fromListWith (++) [(name, [origin]) | (name, origin) <- originPairs]
 
 resolveCheckedDecl :: Map Name MappedKey -> CheckedMappedDecl -> Either TypeGraphError (MappedKey, ResolvedMappedDecl)
 resolveCheckedDecl _ (CheckedOpaque declaration) =
-  Right (MappedKey (odName declaration), ResolvedOpaque declaration)
+  Right (MappedKey ((.name) declaration), ResolvedOpaque declaration)
 resolveCheckedDecl keyByName (CheckedStructural declaration shape) = do
-  resolvedShape <- resolveShape keyByName (sdName declaration) shape
-  pure (MappedKey (sdName declaration), ResolvedStructural declaration resolvedShape)
+  resolvedShape <- resolveShape keyByName ((.name) declaration) shape
+  pure (MappedKey ((.name) declaration), ResolvedStructural declaration resolvedShape)
 
 resolveShape :: Map Name MappedKey -> Name -> MappedShape -> Either TypeGraphError ResolvedMappedShape
 resolveShape keyByName owner (ShapeRecord constructor unknownFields fields) =
@@ -445,11 +469,11 @@ resolveShape keyByName owner (ShapeRecord constructor unknownFields fields) =
   where
     resolveField field =
       ResolvedWireField
-        (wfHaskell field)
-        (wfKey field)
-        <$> resolveExpr keyByName owner (wireFieldLoc field) (wfType field)
-        <*> pure (wfPresence field)
-        <*> pure (wfOnMissing field)
+        ((.haskell) field)
+        ((.key) field)
+        <$> resolveExpr keyByName owner (wireFieldLoc field) ((.valueType) field)
+        <*> pure ((.presence) field)
+        <*> pure ((.onMissing) field)
         <*> pure (wireFieldLoc field)
 resolveShape _ _ (ShapeEnum entries) = Right (REnum entries)
 resolveShape keyByName owner (ShapeUnion encoding arms) =
@@ -457,10 +481,10 @@ resolveShape keyByName owner (ShapeUnion encoding arms) =
   where
     resolveArm arm =
       ResolvedWireArm
-        (waCtor arm)
-        (waTag arm)
-        <$> traverse (resolveExpr keyByName owner (waLoc arm)) (waPayload arm)
-        <*> pure (waLoc arm)
+        ((.ctor) arm)
+        ((.tag) arm)
+        <$> traverse (resolveExpr keyByName owner ((.loc) arm)) ((.payload) arm)
+        <*> pure ((.loc) arm)
 
 resolveExpr :: Map Name MappedKey -> Name -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
 resolveExpr _ _ _ TText = Right RText
@@ -482,7 +506,7 @@ resolveExpr names owner loc (TRef name) =
 resolveTypeExpression :: TypeGraph -> Text -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
 resolveTypeExpression graph owner loc = resolveExpr keyByName owner loc
   where
-    keyByName = Map.fromList [(unMappedKey key, key) | key <- Map.keys (tgDeclarations graph)]
+    keyByName = Map.fromList [(unMappedKey key, key) | key <- Map.keys ((.declarations) graph)]
 
 cycleErrors :: Map MappedKey ResolvedMappedDecl -> [TypeGraphError]
 cycleErrors declarations =
@@ -507,9 +531,9 @@ refsInShape :: ResolvedMappedShape -> Set MappedKey
 refsInShape =
   foldMappedShape
     MappedShapeAlgebra
-      { onRecord = \_ _ fields -> Set.unions (map (refsInExpr . rwfType) fields),
+      { onRecord = \_ _ fields -> Set.unions (map (refsInExpr . (.valueType)) fields),
         onEnum = const Set.empty,
-        onUnion = \_ arms -> Set.unions (map (maybe Set.empty refsInExpr . rwaPayload) arms)
+        onUnion = \_ arms -> Set.unions (map (maybe Set.empty refsInExpr . (.payload)) arms)
       }
 
 refsInExpr :: ResolvedTypeExpr -> Set MappedKey
@@ -545,47 +569,47 @@ collectUseSites keyByName spec =
     <> concatMap workqueueSites workqueues
     <> concatMap readModelSites readModels
   where
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
-    workqueues = [workqueue | NWorkqueue workqueue <- specNodes spec]
-    readModels = [readModel | NReadModel readModel <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    workqueues = [workqueue | NWorkqueue workqueue <- (.nodes) spec]
+    readModels = [readModel | NReadModel readModel <- (.nodes) spec]
     aggregateSites aggregate =
-      [ (RootCommandField (aggName aggregate) (cmdName command) (aggregateFieldName field) key, [])
-      | command <- aggCommands aggregate,
-        field <- cmdFields command,
-        key <- maybeToList (aggregateFieldType field >>= typeRefName >>= (`Map.lookup` keyByName))
+      [ (RootCommandField ((.name) aggregate) ((.name) command) ((.name) field) key, [])
+      | command <- (.commands) aggregate,
+        field <- (.fields) command,
+        key <- maybeToList ((.valueType) field >>= typeRefName >>= (`Map.lookup` keyByName))
       ]
-        ++ [ (RootEventField (aggName aggregate) (evName event) (aggregateFieldName field) key, [])
-           | event <- aggEvents aggregate,
+        ++ [ (RootEventField ((.name) aggregate) ((.name) event) ((.name) field) key, [])
+           | event <- (.events) aggregate,
              field <- eventFields aggregate event,
-             key <- maybeToList (aggregateFieldType field >>= typeRefName >>= (`Map.lookup` keyByName))
+             key <- maybeToList ((.valueType) field >>= typeRefName >>= (`Map.lookup` keyByName))
            ]
-        ++ [ (RootRegister (aggName aggregate) (regName register) key, [])
-           | register <- aggRegs aggregate,
-             key <- maybeToList (typeRefName (regType register) >>= (`Map.lookup` keyByName))
+        ++ [ (RootRegister ((.name) aggregate) ((.name) register) key, [])
+           | register <- (.regs) aggregate,
+             key <- maybeToList (typeRefName ((.valueType) register) >>= (`Map.lookup` keyByName))
            ]
 
     workqueueSites workqueue =
       [ consumerSite
-          ("workqueue '" <> wqName workqueue <> "' payload field '" <> wqfName field <> "'")
-          (wqfLoc field)
-          (RootWorkqueueField (wqName workqueue) (wqfName field))
+          ("workqueue '" <> (.name) workqueue <> "' payload field '" <> (.name) field <> "'")
+          ((.loc) field)
+          (RootWorkqueueField ((.name) workqueue) ((.name) field))
           expression
-      | field <- wqPayload workqueue,
-        TypedQueueExpression expression <- [wqfType field]
+      | field <- (.payload) workqueue,
+        TypedQueueExpression expression <- [(.valueType) field]
       ]
 
-    readModelSites readModel = case queryTypes readModel of
+    readModelSites readModel = case (.queryTypes) readModel of
       Nothing -> []
       Just ReadModelQueryTypes {input, result, inputLoc, resultLoc} ->
         [ consumerSite
-            ("readmodel '" <> rmName readModel <> "' query input")
+            ("readmodel '" <> (.name) readModel <> "' query input")
             inputLoc
-            (RootReadModelQueryInput (rmName readModel))
+            (RootReadModelQueryInput ((.name) readModel))
             input,
           consumerSite
-            ("readmodel '" <> rmName readModel <> "' query result")
+            ("readmodel '" <> (.name) readModel <> "' query result")
             resultLoc
-            (RootReadModelQueryResult (rmName readModel))
+            (RootReadModelQueryResult ((.name) readModel))
             result
         ]
 
@@ -611,21 +635,21 @@ collectUseSites keyByName spec =
       RRef key -> Just (key, [])
     prepend segment = fmap (\(key, segments) -> (key, segment : segments))
 
-    eventFields aggregate event = case evBody event of
+    eventFields aggregate event = case (.body) event of
       EventFields fields -> fields
       EventFromCommand commandName ->
-        concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+        concat [(.fields) command | command <- (.commands) aggregate, (.name) command == commandName]
 
     maybeToList = maybe [] pure
     typeRefName (TRef name) = Just name
     typeRefName _ = Nothing
 
 usePaths :: TypeGraph -> Name -> [UsePath]
-usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclarations graph) of
+usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declarations) graph) of
   Nothing -> []
   Just _ ->
     [ UsePath site segments
-    | site <- tgUseSites graph,
+    | site <- (.useSites) graph,
       segments <- sitePaths site
     ]
   where
@@ -638,7 +662,7 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclaratio
 
     pathsFromDecl visited current
       | current `Set.member` visited = []
-      | otherwise = case Map.lookup current (tgDeclarations graph) of
+      | otherwise = case Map.lookup current ((.declarations) graph) of
           Nothing -> []
           Just declaration ->
             foldMappedDecl
@@ -653,13 +677,13 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) (tgDeclaratio
         MappedShapeAlgebra
           { onRecord = \_ _ fields ->
               concat
-                [ map (SegField (rwfHaskell field) (rwfKey field) :) (pathsInExpr visited (rwfType field))
+                [ map (SegField ((.haskell) field) ((.key) field) :) (pathsInExpr visited ((.valueType) field))
                 | field <- fields
                 ],
             onEnum = const [],
             onUnion = \_ arms ->
               concat
-                [ map (SegArm (rwaCtor arm) (rwaTag arm) :) (maybe [] (pathsInExpr visited) (rwaPayload arm))
+                [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (pathsInExpr visited) ((.payload) arm))
                 | arm <- arms
                 ]
           }
@@ -690,7 +714,7 @@ siteKey (RootReadModelQueryResult _ key) = key
 -- | Container path segments attached to a consumer root before its first
 -- mapped declaration reference.
 useSiteSegments :: TypeGraph -> UseSite -> [PathSeg]
-useSiteSegments graph site = Map.findWithDefault [] site (tgRootSegments graph)
+useSiteSegments graph site = Map.findWithDefault [] site ((.rootSegments) graph)
 
 renderUsePath :: UsePath -> Text
 renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderSegment segments)
@@ -734,17 +758,17 @@ data TypeExprAlgebra a = TypeExprAlgebra
 
 foldTypeExpr :: TypeExprAlgebra a -> ResolvedTypeExpr -> a
 foldTypeExpr algebra = \case
-  RText -> onText algebra
-  RInt -> onInt algebra
-  RInteger -> onInteger algebra
-  RBool -> onBool algebra
-  RNatural -> onNatural algebra
-  RTime -> onTime algebra
-  RJson -> onJson algebra
-  ROptional value -> onOptional algebra (foldTypeExpr algebra value)
-  RList value -> onList algebra (foldTypeExpr algebra value)
-  RMap value -> onMap algebra (foldTypeExpr algebra value)
-  RRef key -> onRef algebra key
+  RText -> (.onText) algebra
+  RInt -> (.onInt) algebra
+  RInteger -> (.onInteger) algebra
+  RBool -> (.onBool) algebra
+  RNatural -> (.onNatural) algebra
+  RTime -> (.onTime) algebra
+  RJson -> (.onJson) algebra
+  ROptional value -> (.onOptional) algebra (foldTypeExpr algebra value)
+  RList value -> (.onList) algebra (foldTypeExpr algebra value)
+  RMap value -> (.onMap) algebra (foldTypeExpr algebra value)
+  RRef key -> (.onRef) algebra key
 
 data MappedShapeAlgebra a = MappedShapeAlgebra
   { onRecord :: Name -> UnknownFields -> [ResolvedWireField] -> a,
@@ -754,9 +778,9 @@ data MappedShapeAlgebra a = MappedShapeAlgebra
 
 foldMappedShape :: MappedShapeAlgebra a -> ResolvedMappedShape -> a
 foldMappedShape algebra = \case
-  RRecord constructor unknownFields fields -> onRecord algebra constructor unknownFields fields
-  REnum entries -> onEnum algebra entries
-  RUnion encoding arms -> onUnion algebra encoding arms
+  RRecord constructor unknownFields fields -> (.onRecord) algebra constructor unknownFields fields
+  REnum entries -> (.onEnum) algebra entries
+  RUnion encoding arms -> (.onUnion) algebra encoding arms
 
 data MappedDeclAlgebra a = MappedDeclAlgebra
   { onStructuralDecl :: StructuralDecl -> ResolvedMappedShape -> a,
@@ -765,13 +789,13 @@ data MappedDeclAlgebra a = MappedDeclAlgebra
 
 foldMappedDecl :: MappedDeclAlgebra a -> ResolvedMappedDecl -> a
 foldMappedDecl algebra = \case
-  ResolvedStructural declaration shape -> onStructuralDecl algebra declaration shape
-  ResolvedOpaque declaration -> onOpaqueDecl algebra declaration
+  ResolvedStructural declaration shape -> (.onStructuralDecl) algebra declaration shape
+  ResolvedOpaque declaration -> (.onOpaqueDecl) algebra declaration
 
 wireFingerprint :: TypeGraph -> Name -> Text
 wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
   where
-    declarations = tgDeclarations graph
+    declarations = (.declarations) graph
 
     wireDecl visited key
       | key `Set.member` visited = "recursive"
@@ -782,7 +806,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
               MappedDeclAlgebra
                 { onStructuralDecl = \_ shape -> wireShape (Set.insert key visited) shape,
                   onOpaqueDecl = \opaque ->
-                    "opaque(" <> atom (unCodecIdentity (odCodecIdentity opaque)) <> "," <> atom (unCodecVersion (odCodecVersion opaque)) <> ")"
+                    "opaque(" <> atom (unCodecIdentity ((.codecIdentity) opaque)) <> "," <> atom (unCodecVersion ((.codecVersion) opaque)) <> ")"
                 }
               declaration
 
@@ -790,31 +814,31 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       foldMappedShape
         MappedShapeAlgebra
           { onRecord = \_ unknownFields fields ->
-              "record(" <> renderUnknown unknownFields <> ";" <> T.intercalate ";" (map (wireField visited) (sortOn rwfKey fields)) <> ")",
+              "record(" <> renderUnknown unknownFields <> ";" <> T.intercalate ";" (map (wireField visited) (sortOn (.key) fields)) <> ")",
             onEnum = \entries ->
-              "enum(" <> T.intercalate ";" (map (atom . weTag) (sortOn weTag entries)) <> ")",
+              "enum(" <> T.intercalate ";" (map (atom . (.tag)) (sortOn (.tag) entries)) <> ")",
             onUnion = \encoding arms ->
               "union("
-                <> atom (ueTagField encoding)
+                <> atom ((.tagField) encoding)
                 <> ","
-                <> atom (ueContentsField encoding)
+                <> atom ((.contentsField) encoding)
                 <> ","
-                <> renderUnknown (ueUnknownFields encoding)
+                <> renderUnknown ((.unknownFields) encoding)
                 <> ";"
-                <> T.intercalate ";" (map (wireArm visited) (sortOn rwaTag arms))
+                <> T.intercalate ";" (map (wireArm visited) (sortOn (.tag) arms))
                 <> ")"
           }
 
     wireField visited field =
-      atom (rwfKey field)
+      atom ((.key) field)
         <> ":"
-        <> wireExpr visited (rwfType field)
+        <> wireExpr visited ((.valueType) field)
         <> ":"
-        <> renderPresence (rwfPresence field)
+        <> renderPresence ((.presence) field)
         <> ":"
-        <> maybe "none" (renderDefault field) (rwfOnMissing field)
+        <> maybe "none" (renderDefault field) ((.onMissing) field)
 
-    wireArm visited arm = atom (rwaTag arm) <> maybe ":unit" ((":" <>) . wireExpr visited) (rwaPayload arm)
+    wireArm visited arm = atom ((.tag) arm) <> maybe ":unit" ((":" <>) . wireExpr visited) ((.payload) arm)
 
     wireExpr visited = \case
       RText -> "text"
@@ -830,10 +854,10 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       RRef key -> wireDecl visited key
 
     renderDefault field (OmCtor constructor) =
-      case rwfType field of
+      case (.valueType) field of
         RRef key -> case Map.lookup key declarations of
           Just (ResolvedStructural _ (REnum entries)) ->
-            maybe ("ctor:" <> atom constructor) ("enum:" <>) (lookup constructor [(weCtor entry, atom (weTag entry)) | entry <- entries])
+            maybe ("ctor:" <> atom constructor) ("enum:" <>) (lookup constructor [((.ctor) entry, atom ((.tag) entry)) | entry <- entries])
           _ -> "ctor:" <> atom constructor
         _ -> "ctor:" <> atom constructor
     renderDefault _ value = T.pack (show value)

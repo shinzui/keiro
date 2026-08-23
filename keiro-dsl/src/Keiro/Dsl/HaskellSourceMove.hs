@@ -21,24 +21,24 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word64, Word8)
 import Keiro.Dsl.HaskellName qualified as HaskellName
-import Keiro.Dsl.Scaffold (ModuleKind, ModuleRole, ScaffoldModule, modulePath, moduleRole)
+import Keiro.Dsl.Scaffold (ModuleKind, ModuleRole, ScaffoldModule (..), moduleRole)
 import Numeric (showHex)
 
 data SourceMove = SourceMove
-  { moveRole :: !ModuleRole,
-    moveKind :: !ModuleKind,
-    moveOldModule :: !Text,
-    moveNewModule :: !Text,
-    moveOldPath :: !FilePath,
-    moveNewPath :: !FilePath,
-    moveBackupPath :: !FilePath,
+  { role :: !ModuleRole,
+    kind :: !ModuleKind,
+    oldModule :: !Text,
+    newModule :: !Text,
+    oldPath :: !FilePath,
+    newPath :: !FilePath,
+    backupPath :: !FilePath,
     -- | Digest of the exact legacy bytes.  Planning cannot populate it because
     -- it is pure and filesystem-independent; the complete migration preflight
     -- hydrates it before a move is reported or applied.
-    moveContentDigest :: !(Maybe Text),
+    contentDigest :: !(Maybe Text),
     -- | Digest of the token-aware transformed bytes, used with the durable
     -- migration state to recognize an installed or prepared crash state.
-    moveTransformedDigest :: !(Maybe Text)
+    transformedDigest :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
@@ -58,10 +58,10 @@ planSourceMoves ::
 planSourceMoves previous current =
   case errors of
     first : rest -> Left (first :| rest)
-    [] -> Right (sortOn moveOldPath moves)
+    [] -> Right (sortOn (.oldPath) moves)
   where
     currentByRole = Map.fromListWith (<>) [(moduleRole scaffoldModule, [scaffoldModule]) | scaffoldModule <- current]
-    currentByModule = Map.fromListWith (<>) [(moduleNameFromPath (modulePath scaffoldModule), [scaffoldModule]) | scaffoldModule <- current]
+    currentByModule = Map.fromListWith (<>) [(moduleNameFromPath ((.path) scaffoldModule), [scaffoldModule]) | scaffoldModule <- current]
     planned = map pair previous
     errors = [err | Left err <- planned]
     moves = [move | Right (Just move) <- planned]
@@ -75,28 +75,28 @@ planSourceMoves previous current =
       case candidate of
         Nothing -> Right Nothing
         Just currentModule
-          | modulePath currentModule == previousPath -> Right Nothing
-          | normalizeLegacyModuleName (moduleNameFromPath previousPath) /= moduleNameFromPath (modulePath currentModule) -> Right Nothing
+          | (.path) currentModule == previousPath -> Right Nothing
+          | normalizeLegacyModuleName (moduleNameFromPath previousPath) /= moduleNameFromPath ((.path) currentModule) -> Right Nothing
           | otherwise ->
               Right . Just $
                 SourceMove
-                  { moveRole = moduleRole currentModule,
-                    moveKind = previousKind,
-                    moveOldModule = moduleNameFromPath previousPath,
-                    moveNewModule = moduleNameFromPath (modulePath currentModule),
-                    moveOldPath = previousPath,
-                    moveNewPath = modulePath currentModule,
-                    moveBackupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/" <> previousPath,
-                    moveContentDigest = Nothing,
-                    moveTransformedDigest = Nothing
+                  { role = moduleRole currentModule,
+                    kind = previousKind,
+                    oldModule = moduleNameFromPath previousPath,
+                    newModule = moduleNameFromPath ((.path) currentModule),
+                    oldPath = previousPath,
+                    newPath = (.path) currentModule,
+                    backupPath = ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/" <> previousPath,
+                    contentDigest = Nothing,
+                    transformedDigest = Nothing
                   }
 
     uniqueRole _ [] = Right Nothing
     uniqueRole _ [candidate] = Right (Just candidate)
-    uniqueRole role candidates = Left (AmbiguousModuleRole role (map modulePath candidates))
+    uniqueRole role candidates = Left (AmbiguousModuleRole role (map (.path) candidates))
     uniqueLegacy _ [] = Right Nothing
     uniqueLegacy _ [candidate] = Right (Just candidate)
-    uniqueLegacy path candidates = Left (AmbiguousLegacyModule path (map modulePath candidates))
+    uniqueLegacy path candidates = Left (AmbiguousLegacyModule path (map (.path) candidates))
 
 moduleNameFromPath :: FilePath -> Text
 moduleNameFromPath = T.replace "/" "." . T.dropEnd 3 . T.pack
@@ -106,15 +106,15 @@ normalizeLegacyModuleName = T.intercalate "." . map normalizeSegment . T.splitOn
   where
     normalizeSegment segment =
       case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-        Right derived -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
+        Right derived -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
         Left _ -> segment
       where
         site =
           HaskellName.NameSite
-            { HaskellName.siteKind = HaskellName.NodeModuleSite,
-              HaskellName.siteLogicalName = segment,
-              HaskellName.siteOwner = "legacy-module-segment",
-              HaskellName.siteLine = 0
+            { HaskellName.kind = HaskellName.NodeModuleSite,
+              HaskellName.logicalName = segment,
+              HaskellName.owner = "legacy-module-segment",
+              HaskellName.line = 0
             }
 
 data LexState

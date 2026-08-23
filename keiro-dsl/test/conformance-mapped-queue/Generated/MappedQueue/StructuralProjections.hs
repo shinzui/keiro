@@ -10,9 +10,9 @@ module Generated.MappedQueue.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Generated.MappedQueue.Structural.Shape.JobPayload (JobPayloadShape(jobId, label))
 import Conformance.MappedQueue.Bindings qualified as Bindings
 import Conformance.MappedQueue.Domain (JobPayload)
-import Generated.MappedQueue.Structural.Shape.JobPayload qualified as ShapeJobPayload
 
 data JobPayloadJobIdProjection
 
@@ -21,7 +21,7 @@ instance FieldProjection JobPayloadJobIdProjection where
   type FieldOwner JobPayloadJobIdProjection = JobPayload
   type FieldResult JobPayloadJobIdProjection = Text
   fieldShapeId _ = "conformance.mapped-queue.JobPayload.v1"
-  projectFieldValue _ owner = ShapeJobPayload.jobId (bindingToShape Bindings.jobPayloadBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.jobPayloadBinding owner).jobId
 
 jobPayloadJobIdWitness :: FieldWitness JobPayloadJobIdProjection
 jobPayloadJobIdWitness = fieldWitness @JobPayloadJobIdProjection
@@ -33,7 +33,7 @@ instance FieldProjection JobPayloadLabelProjection where
   type FieldOwner JobPayloadLabelProjection = JobPayload
   type FieldResult JobPayloadLabelProjection = Text
   fieldShapeId _ = "conformance.mapped-queue.JobPayload.v1"
-  projectFieldValue _ owner = ShapeJobPayload.label (bindingToShape Bindings.jobPayloadBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.jobPayloadBinding owner).label
 
 jobPayloadLabelWitness :: FieldWitness JobPayloadLabelProjection
 jobPayloadLabelWitness = fieldWitness @JobPayloadLabelProjection

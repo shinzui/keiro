@@ -4,7 +4,7 @@ module-root: (none)
 layout: prefixed
 source-language {"declaredLanguageVersion":3,"effectiveLanguageVersion":3,"sourceForm":"declared"}
 semantic-contract {"languageSupport":"compatibility-only","languageVersion":3,"runtimeSemantics":"keiro-dsl/runtime-semantics/2"}
-naming-edition idiomatic-v1
+naming-edition idiomatic-v2
 module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration behavior source map","path":"Generated/IdDomainMigration/BehaviorSourceMap.hs"}
 module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration generated nominal declarations","path":"Generated/IdDomainMigration/Nominals.hs"}
 module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context id-domain-migration generated nominal ID internals","path":"Generated/IdDomainMigration/Nominals/Internal.hs"}

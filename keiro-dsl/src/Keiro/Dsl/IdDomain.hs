@@ -20,14 +20,14 @@ import Data.Text qualified as T
 import Keiro.Codec.IdDomain
 import Keiro.Dsl.Grammar (ContractEvent (..), ContractField (..), ContractNode (..), ContractType (..), IdDecl (..), Node (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, effectiveRuntimeProfile)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec)
 
 -- | Versions 1 and 2 intentionally return 'Nothing': their generated IDs
 -- admitted arbitrary text. Runtime-semantics generation 2 is the first
 -- enforcing contract.
 idDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
 idDomainContractFor languageContract prefix
-  | runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) GeneratedIdDomainTypeIdV7 =
+  | runtimeProfileHasCapability ((.runtimeProfile) languageContract) GeneratedIdDomainTypeIdV7 =
       Just (typeIdV7Domain prefix)
   | otherwise = Nothing
 
@@ -35,7 +35,7 @@ idDomainContractFor languageContract prefix
 -- in runtime semantics 3. Aggregate IDs retain the independent selector above.
 contractIdDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
 contractIdDomainContractFor languageContract prefix
-  | runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) ContractIdDomainTypeIdV7 = Just (typeIdV7Domain prefix)
+  | runtimeProfileHasCapability ((.runtimeProfile) languageContract) ContractIdDomainTypeIdV7 = Just (typeIdV7Domain prefix)
   | otherwise = Nothing
 
 -- | Durable identity for the runtime admission domain of one declaration.
@@ -60,15 +60,15 @@ idDomainIdentitiesForService service =
     spec = checkedSpec service
     languageContract = checkedLanguageContract service
     aggregateIdentities =
-      [ idDomainIdentity (idName declaration) contract
-      | declaration <- specIds spec,
-        Just contract <- [idDomainContractFor languageContract (idPrefix declaration)]
+      [ idDomainIdentity ((.name) declaration) contract
+      | declaration <- (.ids) spec,
+        Just contract <- [idDomainContractFor languageContract ((.prefix) declaration)]
       ]
     contractIdentities =
-      [ idDomainIdentity ("contract:" <> ctrName contractNode <> "." <> ceName event <> "." <> cfName field) contract
-      | NContract contractNode <- specNodes spec,
-        event <- ctrEvents contractNode,
-        field <- ceFields event,
-        CTypeId prefix <- [cfType field],
+      [ idDomainIdentity ("contract:" <> (.name) contractNode <> "." <> (.name) event <> "." <> (.name) field) contract
+      | NContract contractNode <- (.nodes) spec,
+        event <- (.events) contractNode,
+        field <- (.fields) event,
+        CTypeId prefix <- [(.valueType) field],
         Just contract <- [contractIdDomainContractFor languageContract prefix]
       ]

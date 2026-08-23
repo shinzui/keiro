@@ -1,5 +1,3 @@
-{-# LANGUAGE NoFieldSelectors #-}
-
 -- | Source locations used by the Keiro language frontend.
 --
 -- Offsets count tokens in the parsed 'Text' stream. Spans are half-open: the

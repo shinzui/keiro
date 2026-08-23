@@ -1,5 +1,3 @@
-{-# LANGUAGE NoFieldSelectors #-}
-
 module Keiro.Dsl.FrontendSurface (frontendSurfaceSpec) where
 
 import Control.Monad (forM_)
@@ -159,15 +157,15 @@ frontendSurfaceSpec = do
       document <- case parseSourceDocument "semantic-source-index.keiro" source of
         Left failure -> expectationFailure (show failure) >> fail "unreachable"
         Right value -> pure value
-      let ParsedSourceDocument {documentParsedSource, documentSourceIndex} = document
-      parseSource "semantic-source-index.keiro" source `shouldBe` Right documentParsedSource
-      length (semanticSourceEntries documentSourceIndex) `shouldBe` 7
-      case lookupSourceSpan (AggregateStateSubject "Journey" "Closed") documentSourceIndex of
+      let ParsedSourceDocument {parsedSource, sourceIndex} = document
+      parseSource "semantic-source-index.keiro" source `shouldBe` Right parsedSource
+      length (semanticSourceEntries sourceIndex) `shouldBe` 7
+      case lookupSourceSpan (AggregateStateSubject "Journey" "Closed") sourceIndex of
         Just (ExactSourcePosition, SourceSpan {source = spanSource, start = SourcePoint {line, column}}) -> do
           spanSource `shouldBe` "semantic-source-index.keiro"
           (line, column) `shouldBe` (6, 23)
         other -> expectationFailure ("expected exact terminal-state location, got " <> show other)
-      case lookupSourceSpan (AggregateTransitionSubject "Journey" (TransitionOrdinal 1)) documentSourceIndex of
+      case lookupSourceSpan (AggregateTransitionSubject "Journey" (TransitionOrdinal 1)) sourceIndex of
         Just (ExactSourcePosition, SourceSpan {start = SourcePoint {line, column}}) ->
           (line, column) `shouldBe` (14, 3)
         other -> expectationFailure ("expected exact replay-only transition location, got " <> show other)
@@ -188,11 +186,11 @@ frontendSurfaceSpec = do
       document <- case parseSourceDocument "parser-parity.keiro" richParitySource of
         Left failure -> expectationFailure (show failure) >> fail "unreachable"
         Right parsed -> pure parsed
-      let ParsedSourceDocument {documentParsedSource} = document
-      documentParsedSource `shouldBe` lowered
+      let ParsedSourceDocument {parsedSource} = document
+      parsedSource `shouldBe` lowered
       parseSource "parser-parity.keiro" richParitySource `shouldBe` Right lowered
-      parseSpec "parser-parity.keiro" richParitySource `shouldBe` Right (parsedSpec lowered)
-      parseSpecText richParitySource `shouldBe` Right (parsedSpec lowered)
+      parseSpec "parser-parity.keiro" richParitySource `shouldBe` Right lowered.spec
+      parseSpecText richParitySource `shouldBe` Right lowered.spec
 
     it "preserves top-level source order before grouping the semantic graph" $ do
       let source = T.unlines ["context ordering", "id FirstId prefix=first", "enum Mode { On=on Off=off }", "id SecondId prefix=second"]
@@ -201,8 +199,8 @@ frontendSurfaceSpec = do
         SurfaceSource {spec = Located {value = SurfaceSpec {items}}} ->
           map topItemKind items `shouldBe` ["id", "enum", "id"]
       lowered <- lowerRight surface
-      map idName (specIds (parsedSpec lowered)) `shouldBe` ["FirstId", "SecondId"]
-      map enumName (specEnums (parsedSpec lowered)) `shouldBe` ["Mode"]
+      map (.name) lowered.spec.ids `shouldBe` ["FirstId", "SecondId"]
+      map (.name) lowered.spec.enums `shouldBe` ["Mode"]
 
     it "refuses surface evidence attributed to another source" $ do
       surface <- parseSurfaceRight "owned.keiro" "context owned\n"
@@ -220,11 +218,11 @@ frontendSurfaceSpec = do
 
     it "lowers every accepted 0.7 fixture to the compatibility result" $ do
       manifest <- readCompatibilityManifest
-      forM_ [row | row <- manifestSources manifest, sourceResult row == "accept"] $ \row -> do
-        source <- readRepoText (sourcePath row)
-        surface <- parseSurfaceRight (sourcePath row) source
+      forM_ [row | row <- manifest.manifestSources, row.sourceResult == "accept"] $ \row -> do
+        source <- readRepoText row.sourcePath
+        surface <- parseSurfaceRight row.sourcePath source
         lowered <- lowerRight surface
-        parseSource (sourcePath row) source `shouldBe` Right lowered
+        parseSource row.sourcePath source `shouldBe` Right lowered
 
   describe "parser module boundaries" $ do
     it "keeps the public parser facade free of Megaparsec and grammar productions" $ do
@@ -438,7 +436,7 @@ pointAfterMegaparsec = T.foldl' advance (0, 1, 1)
 
 isFailure :: SourceIndexFailureCode -> Either SourceIndexFailure value -> Bool
 isFailure expected = \case
-  Left SourceIndexFailure {failureCode} -> failureCode == expected
+  Left SourceIndexFailure {code} -> code == expected
   Right _ -> False
 
 isFacadeImport :: Text -> Bool

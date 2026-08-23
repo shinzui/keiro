@@ -38,10 +38,10 @@ data QualificationPreference
   deriving stock (Eq, Ord, Show)
 
 data HaskellReference = HaskellReference
-  { referenceModule :: !Text,
-    referenceName :: !Text,
-    referenceNamespace :: !HaskellNamespace,
-    referenceQualification :: !QualificationPreference
+  { moduleName :: !Text,
+    name :: !Text,
+    namespace :: !HaskellNamespace,
+    qualification :: !QualificationPreference
   }
   deriving stock (Eq, Ord, Show)
 
@@ -61,9 +61,9 @@ data HaskellImportError
   deriving stock (Eq, Show)
 
 data HaskellImportPlan = HaskellImportPlan
-  { importPlanTargetModule :: !Text,
-    importPlanDeclarations :: !(Set Text),
-    importPlanReferences :: !(Map HaskellReference Text)
+  { targetModule :: !Text,
+    declarations :: !(Set Text),
+    references :: !(Map HaskellReference Text)
   }
 
 planHaskellImports :: ImportEnvironment -> Set HaskellReference -> Either HaskellImportError HaskellImportPlan
@@ -74,35 +74,35 @@ planHaskellImports environment references = do
   plannedReferences <- Map.fromList <$> traverse (renderReference aliases) orderedReferences
   pure
     HaskellImportPlan
-      { importPlanTargetModule = target,
-        importPlanDeclarations = explicitDeclarations <> qualifiedDeclarations aliases,
-        importPlanReferences = plannedReferences
+      { targetModule = target,
+        declarations = explicitDeclarations <> qualifiedDeclarations aliases,
+        references = plannedReferences
       }
   where
-    target = targetModule environment
+    target = (.targetModule) environment
     orderedReferences = Set.toAscList references
     occurrenceOwners =
       Map.fromListWith
         (<>)
-        [ (referenceName reference, Set.singleton (referenceModule reference, referenceName reference))
+        [ ((.name) reference, Set.singleton ((.moduleName) reference, (.name) reference))
         | reference <- orderedReferences,
-          referenceNamespace reference == TypeNamespace,
-          referenceQualification reference == PreferUnqualified
+          (.namespace) reference == TypeNamespace,
+          (.qualification) reference == PreferUnqualified
         ]
     unqualified reference =
-      referenceNamespace reference == TypeNamespace
-        && referenceQualification reference == PreferUnqualified
-        && Set.notMember (referenceName reference) (localNames environment)
-        && Set.notMember (referenceName reference) (reservedQualifiers environment)
-        && maybe False ((== 1) . Set.size) (Map.lookup (referenceName reference) occurrenceOwners)
+      (.namespace) reference == TypeNamespace
+        && (.qualification) reference == PreferUnqualified
+        && Set.notMember ((.name) reference) ((.localNames) environment)
+        && Set.notMember ((.name) reference) ((.reservedQualifiers) environment)
+        && maybe False ((== 1) . Set.size) (Map.lookup ((.name) reference) occurrenceOwners)
     unqualifiedReferences = Set.filter unqualified references
-    unqualifiedNames = Set.map referenceName unqualifiedReferences
+    unqualifiedNames = Set.map (.name) unqualifiedReferences
     qualifiedModules =
-      Set.map referenceModule (references `Set.difference` unqualifiedReferences)
+      Set.map (.moduleName) (references `Set.difference` unqualifiedReferences)
     explicitImports =
       Map.fromListWith
         (<>)
-        [ (referenceModule reference, Set.singleton (referenceName reference))
+        [ ((.moduleName) reference, Set.singleton ((.name) reference))
         | reference <- Set.toAscList unqualifiedReferences
         ]
     explicitDeclarations =
@@ -116,20 +116,20 @@ planHaskellImports environment references = do
         | (moduleName, alias) <- Map.toAscList aliases
         ]
     renderReference aliases reference
-      | Set.member reference unqualifiedReferences = pure (reference, referenceName reference)
-      | otherwise = case Map.lookup (referenceModule reference) aliases of
-          Nothing -> Left (ImpossibleHaskellAlias target (Set.singleton (referenceModule reference)))
-          Just alias -> pure (reference, alias <> "." <> referenceName reference)
+      | Set.member reference unqualifiedReferences = pure (reference, (.name) reference)
+      | otherwise = case Map.lookup ((.moduleName) reference) aliases of
+          Nothing -> Left (ImpossibleHaskellAlias target (Set.singleton ((.moduleName) reference)))
+          Just alias -> pure (reference, alias <> "." <> (.name) reference)
 
 renderPlannedImports :: HaskellImportPlan -> Text
-renderPlannedImports = T.intercalate "\n" . Set.toAscList . importPlanDeclarations
+renderPlannedImports = T.intercalate "\n" . Set.toAscList . (.declarations)
 
 renderPlannedReference :: HaskellImportPlan -> HaskellReference -> Either HaskellImportError Text
 renderPlannedReference plan reference =
   maybe
-    (Left (MissingHaskellReference (importPlanTargetModule plan) reference))
+    (Left (MissingHaskellReference ((.targetModule) plan) reference))
     Right
-    (Map.lookup reference (importPlanReferences plan))
+    (Map.lookup reference ((.references) plan))
 
 allocateAliases :: ImportEnvironment -> Set Text -> Set Text -> Either HaskellImportError (Map Text Text)
 allocateAliases environment unqualifiedNames modules = do
@@ -141,7 +141,7 @@ allocateAliases environment unqualifiedNames modules = do
           | (moduleName, candidates) <- Map.toAscList moduleCandidates,
             candidate <- candidates
           ]
-      occupied = reservedQualifiers environment <> localNames environment <> unqualifiedNames
+      occupied = (.reservedQualifiers) environment <> (.localNames) environment <> unqualifiedNames
       choose moduleName candidates =
         case find (isAvailable moduleName candidateOwners occupied) candidates of
           Just candidate -> candidate
@@ -161,7 +161,7 @@ allocateAliases environment unqualifiedNames modules = do
           ]
   if Set.null impossibleModules
     then pure aliases
-    else Left (ImpossibleHaskellAlias (targetModule environment) impossibleModules)
+    else Left (ImpossibleHaskellAlias ((.targetModule) environment) impossibleModules)
 
 isAvailable :: Text -> Map Text (Set Text) -> Set Text -> Text -> Bool
 isAvailable moduleName candidateOwners occupied candidate =
@@ -183,13 +183,13 @@ moduleComponents = T.splitOn "."
 
 validateReference :: Text -> HaskellReference -> Either HaskellImportError ()
 validateReference target reference = do
-  validateModuleName target (referenceModule reference)
-  if referenceModule reference == target
+  validateModuleName target ((.moduleName) reference)
+  if (.moduleName) reference == target
     then Left (HaskellSelfImport target)
     else pure ()
-  if validOccurrence (referenceNamespace reference) (referenceName reference)
+  if validOccurrence ((.namespace) reference) ((.name) reference)
     then pure ()
-    else Left (InvalidHaskellOccurrence target (referenceNamespace reference) (referenceName reference))
+    else Left (InvalidHaskellOccurrence target ((.namespace) reference) ((.name) reference))
 
 validateModuleName :: Text -> Text -> Either HaskellImportError ()
 validateModuleName target candidate

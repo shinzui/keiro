@@ -117,16 +117,16 @@ data LanguageBodyParser
 -- Constructors stay private so a released profile can only be selected from
 -- the authoritative registry rather than widened ad hoc by parser callers.
 data SyntaxProfile = SyntaxProfile
-  { profileIdentifier :: !Text,
-    profileFeatures :: !(Set LanguageFeature)
+  { identifier :: !Text,
+    features :: !(Set LanguageFeature)
   }
   deriving stock (Eq, Show, Generic)
 
 syntaxProfileIdentifier :: SyntaxProfile -> Text
-syntaxProfileIdentifier SyntaxProfile {profileIdentifier} = profileIdentifier
+syntaxProfileIdentifier SyntaxProfile {identifier} = identifier
 
 syntaxProfileSupportsFeature :: SyntaxProfile -> LanguageFeature -> Bool
-syntaxProfileSupportsFeature SyntaxProfile {profileFeatures} feature = Set.member feature profileFeatures
+syntaxProfileSupportsFeature SyntaxProfile {features} feature = Set.member feature features
 
 -- | One independently selectable runtime behavior in a registered language
 -- contract. Constructors shipped in a release are append-only; the active
@@ -147,17 +147,17 @@ data RuntimeCapability
 -- constructor stays private so callers select only an authoritative registry
 -- profile rather than widening runtime behavior ad hoc.
 data RuntimeSemanticsProfile = RuntimeSemanticsProfile
-  { runtimeSemanticsIdentifier :: !Text,
-    runtimeSemanticsCapabilities :: !(Set RuntimeCapability)
+  { identifier :: !Text,
+    capabilities :: !(Set RuntimeCapability)
   }
   deriving stock (Eq, Ord, Show, Generic)
 
 runtimeProfileIdentifier :: RuntimeSemanticsProfile -> Text
-runtimeProfileIdentifier RuntimeSemanticsProfile {runtimeSemanticsIdentifier} = runtimeSemanticsIdentifier
+runtimeProfileIdentifier RuntimeSemanticsProfile {identifier} = identifier
 
 runtimeProfileHasCapability :: RuntimeSemanticsProfile -> RuntimeCapability -> Bool
-runtimeProfileHasCapability RuntimeSemanticsProfile {runtimeSemanticsCapabilities} capability =
-  Set.member capability runtimeSemanticsCapabilities
+runtimeProfileHasCapability RuntimeSemanticsProfile {capabilities} capability =
+  Set.member capability capabilities
 
 -- | Optional replay-fold identity contributed by one capability.  Duplicate
 -- tokens intentionally collapse at the profile boundary so the two coupled
@@ -172,11 +172,11 @@ capabilityFoldSegment TypedDomainCommandOutcomes = Nothing
 capabilityFoldSegment SeparatedProjectionQueryPolicy = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
-runtimeProfileFoldSegments RuntimeSemanticsProfile {runtimeSemanticsCapabilities} =
+runtimeProfileFoldSegments RuntimeSemanticsProfile {capabilities} =
   Set.toAscList
     ( Set.fromList
         [ segment
-        | capability <- Set.toAscList runtimeSemanticsCapabilities,
+        | capability <- Set.toAscList capabilities,
           Just segment <- [capabilityFoldSegment capability]
         ]
     )
@@ -205,22 +205,22 @@ data LanguageMaturity
 -- | One language-registry entry. Published entries are immutable; an active
 -- pre-release candidate is not a published compatibility contract yet.
 data LanguageDefinition = LanguageDefinition
-  { definitionVersion :: !LanguageVersion,
-    definitionPredecessor :: !(Maybe LanguageVersion),
+  { version :: !LanguageVersion,
+    predecessor :: !(Maybe LanguageVersion),
     -- | Compatibility projection retained for the 0.7 public API. Parser
     -- dispatch uses 'definitionSyntaxProfile', never this historical tag.
-    definitionBodyParser :: !LanguageBodyParser,
-    definitionSyntaxProfile :: !SyntaxProfile,
-    definitionRuntimeSemanticsProfile :: !RuntimeSemanticsProfile,
-    definitionSupport :: !LanguageSupport,
-    definitionMaturity :: !LanguageMaturity
+    bodyParser :: !LanguageBodyParser,
+    syntaxProfile :: !SyntaxProfile,
+    runtimeSemanticsProfile :: !RuntimeSemanticsProfile,
+    support :: !LanguageSupport,
+    maturity :: !LanguageMaturity
   }
   deriving stock (Eq, Show, Generic)
 
 -- | Stable compatibility projection used by serialized records and diagnostic
 -- text.  Runtime behavior must query 'definitionRuntimeSemanticsProfile'.
 definitionRuntimeSemantics :: LanguageDefinition -> Text
-definitionRuntimeSemantics = runtimeProfileIdentifier . definitionRuntimeSemanticsProfile
+definitionRuntimeSemantics = runtimeProfileIdentifier . (.runtimeSemanticsProfile)
 
 version1 :: LanguageVersion
 version1 = LanguageVersion 1
@@ -269,7 +269,7 @@ profileV3 =
     "keiro-dsl/syntax-profile/3"
     ( Set.insert
         FieldAliasSyntax
-        (profileFeatures profileV2)
+        ((.features) profileV2)
     )
 
 profileV4 :: SyntaxProfile
@@ -284,7 +284,7 @@ profileV4 =
                 DomainCommandOutcomeSyntax
                 ( Set.insert
                     MappedConsumerSurfaceSyntax
-                    (Set.insert ExternalReadContractSyntax (Set.insert ProjectionCatalogSyntax (profileFeatures profileV3)))
+                    (Set.insert ExternalReadContractSyntax (Set.insert ProjectionCatalogSyntax ((.features) profileV3)))
                 )
             )
         )
@@ -320,17 +320,17 @@ runtimeProfileV4 =
     "keiro-dsl/runtime-semantics/4"
     ( Set.insert
         SeparatedProjectionQueryPolicy
-        (Set.insert TypedDomainCommandOutcomes (Set.insert ProjectionCatalogRuntime (runtimeSemanticsCapabilities runtimeProfileV3)))
+        (Set.insert TypedDomainCommandOutcomes (Set.insert ProjectionCatalogRuntime ((.capabilities) runtimeProfileV3)))
     )
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
-supportedLanguageVersions = definitionVersion <$> languageRegistry
+supportedLanguageVersions = (.version) <$> languageRegistry
 
 -- | The one published registry entry recommended for stable sources.
 currentStableLanguageVersion :: LanguageVersion
 currentStableLanguageVersion =
-  case [definitionVersion definition | definition <- NE.toList languageRegistry, definitionSupport definition == Stable] of
+  case [(.version) definition | definition <- NE.toList languageRegistry, (.support) definition == Stable] of
     [version] -> version
     _ -> error "keiro-dsl internal invariant: language registry must contain exactly one stable version"
 
@@ -339,17 +339,17 @@ currentStableLanguageVersion =
 -- published; otherwise authoring falls back to the published stable contract.
 currentAuthoringLanguageVersion :: LanguageVersion
 currentAuthoringLanguageVersion =
-  case [definitionVersion definition | definition <- NE.toList languageRegistry, definitionMaturity definition == CandidateLanguage] of
+  case [(.version) definition | definition <- NE.toList languageRegistry, (.maturity) definition == CandidateLanguage] of
     [] -> currentStableLanguageVersion
     [version] -> version
     _ -> error "keiro-dsl internal invariant: language registry must contain at most one candidate version"
 
 languageSupportForVersion :: LanguageVersion -> Maybe LanguageSupport
-languageSupportForVersion version = definitionSupport <$> lookupLanguageDefinition version
+languageSupportForVersion version = (.support) <$> lookupLanguageDefinition version
 
 lookupLanguageDefinition :: LanguageVersion -> Maybe LanguageDefinition
 lookupLanguageDefinition version =
-  find ((== version) . definitionVersion) (NE.toList languageRegistry)
+  find ((== version) . (.version)) (NE.toList languageRegistry)
 
 -- | Grammar-owned syntax introduced after the frozen version-1 contract.
 -- Keeping these gates beside the released-language registry prevents the
@@ -371,20 +371,20 @@ data LanguageFeature
 -- | The first released contract that owns each grammar feature.
 languageFeatureMinimumVersion :: LanguageFeature -> LanguageVersion
 languageFeatureMinimumVersion feature =
-  case find (\definition -> syntaxProfileSupportsFeature (definitionSyntaxProfile definition) feature) (NE.toList languageRegistry) of
-    Just definition -> definitionVersion definition
+  case find (\definition -> syntaxProfileSupportsFeature ((.syntaxProfile) definition) feature) (NE.toList languageRegistry) of
+    Just definition -> (.version) definition
     Nothing -> error "keiro-dsl internal invariant: a released language feature has no owning profile"
 
 languageVersionsSupportingFeature :: LanguageFeature -> [LanguageVersion]
 languageVersionsSupportingFeature feature =
-  [ definitionVersion definition
+  [ (.version) definition
   | definition <- NE.toList languageRegistry,
-    syntaxProfileSupportsFeature (definitionSyntaxProfile definition) feature
+    syntaxProfileSupportsFeature ((.syntaxProfile) definition) feature
   ]
 
 languageSupportsFeature :: LanguageVersion -> LanguageFeature -> Bool
 languageSupportsFeature version feature =
-  maybe False (\definition -> syntaxProfileSupportsFeature (definitionSyntaxProfile definition) feature) (lookupLanguageDefinition version)
+  maybe False (\definition -> syntaxProfileSupportsFeature ((.syntaxProfile) definition) feature) (lookupLanguageDefinition version)
 
 effectiveLanguageVersion :: SourceLanguage -> LanguageVersion
 effectiveLanguageVersion LegacyUnversioned = version1
@@ -428,18 +428,18 @@ sourceLanguageErrorCodeText = T.pack . show
 
 -- | A source-selection failure with the original member-local source line.
 data SourceLanguageDiagnostic = SourceLanguageDiagnostic
-  { sourceLanguageErrorCode :: !SourceLanguageErrorCode,
-    sourceLanguageSource :: !FilePath,
-    sourceLanguageLoc :: !Loc,
-    sourceLanguageToken :: !(Maybe Text),
-    sourceLanguageDeclaredVersion :: !(Maybe LanguageVersion),
-    sourceLanguageSupportedVersions :: !(NonEmpty LanguageVersion)
+  { errorCode :: !SourceLanguageErrorCode,
+    source :: !FilePath,
+    loc :: !Loc,
+    token :: !(Maybe Text),
+    declaredVersion :: !(Maybe LanguageVersion),
+    supportedVersions :: !(NonEmpty LanguageVersion)
   }
   deriving stock (Eq, Show)
 
 renderSourceLanguageDiagnostic :: SourceLanguageDiagnostic -> Text
 renderSourceLanguageDiagnostic diagnostic =
-  T.pack (sourceLanguageSource diagnostic)
+  T.pack ((.source) diagnostic)
     <> ":"
     <> T.pack (show line)
     <> ":1: error ["
@@ -447,15 +447,15 @@ renderSourceLanguageDiagnostic diagnostic =
     <> "]: "
     <> sourceLanguageDiagnosticMessage diagnostic
   where
-    Loc line = sourceLanguageLoc diagnostic
-    code = sourceLanguageErrorCode diagnostic
+    Loc line = (.loc) diagnostic
+    code = (.errorCode) diagnostic
 
 sourceLanguageDiagnosticMessage :: SourceLanguageDiagnostic -> Text
 sourceLanguageDiagnosticMessage diagnostic = detail
   where
-    code = sourceLanguageErrorCode diagnostic
-    supported = T.intercalate ", " (map languageVersionText (NE.toList (sourceLanguageSupportedVersions diagnostic)))
-    token = maybe "<missing>" id (sourceLanguageToken diagnostic)
+    code = (.errorCode) diagnostic
+    supported = T.intercalate ", " (map languageVersionText (NE.toList ((.supportedVersions) diagnostic)))
+    token = maybe "<missing>" id ((.token) diagnostic)
     detail = case code of
       InvalidLanguageVersion ->
         "invalid language preamble; expected `language keiro-dsl <positive-decimal>`, found `"
@@ -463,7 +463,7 @@ sourceLanguageDiagnosticMessage diagnostic = detail
           <> "`"
       UnsupportedLanguageVersion ->
         "declared keiro-dsl language version "
-          <> maybe token languageVersionText (sourceLanguageDeclaredVersion diagnostic)
+          <> maybe token languageVersionText ((.declaredVersion) diagnostic)
           <> " is unsupported; supported versions: "
           <> supported
       DuplicateLanguagePreamble ->
@@ -474,34 +474,34 @@ sourceLanguageDiagnosticMessage diagnostic = detail
         "selected syntax requires keiro-dsl language version "
           <> languageVersionText requiredVersion
           <> "; selected version "
-          <> maybe token languageVersionText (sourceLanguageDeclaredVersion diagnostic)
+          <> maybe token languageVersionText ((.declaredVersion) diagnostic)
         where
           requiredVersion =
             case reverse publishedCompatibilityVersions of
               latestCompatibility : _ -> latestCompatibility
               [] -> case reverse publishedVersions of
                 latestPublished : _ -> latestPublished
-                [] -> NE.last (sourceLanguageSupportedVersions diagnostic)
+                [] -> NE.last ((.supportedVersions) diagnostic)
           supportedDefinitions =
             [ (version, definition)
-            | version <- NE.toList (sourceLanguageSupportedVersions diagnostic),
+            | version <- NE.toList ((.supportedVersions) diagnostic),
               Just definition <- [lookupLanguageDefinition version]
             ]
           publishedVersions =
-            [version | (version, definition) <- supportedDefinitions, definitionMaturity definition == PublishedLanguage]
+            [version | (version, definition) <- supportedDefinitions, (.maturity) definition == PublishedLanguage]
           -- Released compatibility diagnostics are byte-stable. Publishing a
           -- successor must not rewrite the predecessor version they recommend.
           publishedCompatibilityVersions =
             [ version
             | (version, definition) <- supportedDefinitions,
-              definitionMaturity definition == PublishedLanguage,
-              definitionSupport definition == CompatibilityOnly
+              (.maturity) definition == PublishedLanguage,
+              (.support) definition == CompatibilityOnly
             ]
 
 -- | A parsed document with its source declaration preserved beside its graph.
 data ParsedSource = ParsedSource
-  { parsedSourceLanguage :: !SourceLanguage,
-    parsedSpec :: !Spec
+  { sourceLanguage :: !SourceLanguage,
+    spec :: !Spec
   }
   deriving stock (Eq, Show)
 

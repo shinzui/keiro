@@ -99,6 +99,7 @@ module Keiro.Dsl.Scaffold
     generatedBanner,
     generatedBannerFor,
     isGeneratedBannerLine,
+    modernizeScaffoldModule,
     stampGeneratedModule,
     stampGeneratedModules,
   )
@@ -138,7 +139,7 @@ import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint, p
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.RouterSelection
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, effectiveContractLanguageVersion, effectiveLanguageContract, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (sagaCategoryError)
@@ -149,8 +150,8 @@ import Text.Read (readMaybe)
 -- directory), its full text, and whether it is overwritten every run
 -- ('Generated') or written only when absent ('HoleStub').
 data ScaffoldModule = ScaffoldModule
-  { modulePath :: !FilePath,
-    moduleText :: !Text,
+  { path :: !FilePath,
+    text :: !Text,
     kind :: !ModuleKind,
     origin :: !Text
   }
@@ -160,24 +161,24 @@ data ScaffoldModule = ScaffoldModule
 -- independent of the cased module path: source-name migrations pair artifacts
 -- by this role, then compare their old and current paths.
 data ModuleRole = ModuleRole
-  { roleOwnerKind :: !Text,
-    roleOwnerName :: !Text,
-    roleFamily :: !Text
+  { ownerKind :: !Text,
+    ownerName :: !Text,
+    family :: !Text
   }
   deriving stock (Eq, Ord, Show)
 
 moduleRole :: ScaffoldModule -> ModuleRole
 moduleRole scaffoldModule =
   ModuleRole
-    { roleOwnerKind = headOr "module" originWords,
-      roleOwnerName = origin scaffoldModule,
-      roleFamily = case reverse (T.splitOn "." moduleName) of
+    { ownerKind = headOr "module" originWords,
+      ownerName = (.origin) scaffoldModule,
+      family = case reverse (T.splitOn "." moduleName) of
         family : _ -> family
         [] -> moduleName
     }
   where
-    originWords = T.words (origin scaffoldModule)
-    moduleName = T.replace "/" "." (T.dropEnd 3 (T.pack (modulePath scaffoldModule)))
+    originWords = T.words ((.origin) scaffoldModule)
+    moduleName = T.replace "/" "." (T.dropEnd 3 (T.pack ((.path) scaffoldModule)))
     headOr fallback = \case
       value : _ -> value
       [] -> fallback
@@ -193,7 +194,7 @@ data ModuleKind
 -- module-namespace root, and the placement style. Extended additively (never
 -- re-shaped) by later verticals.
 data Context = Context
-  { contextName :: !Text,
+  { name :: !Text,
     -- | @""@ means no namespace prefix (the historical default).
     moduleRoot :: !Text,
     -- | 'GeneratedPrefix' is the historical default.
@@ -205,8 +206,8 @@ data Context = Context
 -- The declaration itself is context-owned; these use sites determine the
 -- aggregate modules that import it.
 data NominalUseSite = NominalUseSite
-  { nominalUseAggregate :: !Name,
-    nominalUseKind :: !AggregateUseSite
+  { aggregate :: !Name,
+    kind :: !AggregateUseSite
   }
   deriving stock (Eq, Ord, Show)
 
@@ -214,10 +215,10 @@ data NominalUseSite = NominalUseSite
 -- service points at the same context-level module, while retaining its source
 -- location through 'ResolvedNominalType' and all aggregate use sites explicitly.
 data NominalGenerationOwner = NominalGenerationOwner
-  { nominalDeclaration :: !ResolvedNominalType,
-    nominalModule :: !Text,
-    nominalUseSites :: !(Set.Set NominalUseSite),
-    nominalEqualityUsed :: !Bool
+  { declaration :: !ResolvedNominalType,
+    moduleName :: !Text,
+    useSites :: !(Set.Set NominalUseSite),
+    equalityUsed :: !Bool
   }
   deriving stock (Eq, Show)
 
@@ -225,7 +226,7 @@ data NominalGenerationOwner = NominalGenerationOwner
 -- for the given @context@ name. Callers that do not care about placement (the
 -- @parse@ path, tests) build their context with this.
 defaultContext :: Text -> Context
-defaultContext name = Context {contextName = name, moduleRoot = "", placement = GeneratedPrefix}
+defaultContext name = Context {name = name, moduleRoot = "", placement = GeneratedPrefix}
 
 -- | The generated-layer namespace for a node, honouring the root prefix and the
 -- placement style. The 'Text' argument is the already-pascalised node name (e.g.
@@ -233,14 +234,14 @@ defaultContext name = Context {contextName = name, moduleRoot = "", placement = 
 -- @\<root\>.Generated.\<Ctx\>.\<Node\>@ (identical to the historical layout); for
 -- 'CollocatedLeaf' it is @\<root\>.\<Ctx\>.\<Node\>.Generated@.
 genPrefixFor :: Context -> Text -> Text
-genPrefixFor ctx node = case placement ctx of
+genPrefixFor ctx node = case (.placement) ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> "." <> node
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> "." <> node <> ".Generated"
 
 -- | The generated-layer namespace shared by modules emitted once for a whole
 -- service context, such as Nominals, ReplayAudit, and Conformance.
 contextGeneratedPrefix :: Context -> Text
-contextGeneratedPrefix ctx = case placement ctx of
+contextGeneratedPrefix ctx = case (.placement) ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated"
 
@@ -261,8 +262,8 @@ behaviorSourceMapModule _ [] = Nothing
 behaviorSourceMapModule ctx entries =
   Just
     ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-        moduleText =
+      { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+        text =
           nl
             ( renderGeneratedLanguagePragmas []
                 <> [ generatedBanner,
@@ -286,21 +287,21 @@ behaviorSourceMapModule ctx entries =
                      "behaviorSourceLocation key = case key of"
                    ]
                 <> [ "  "
-                       <> tshow (Behavior.unBehaviorKey (BehaviorSource.behaviorSourceKey entry))
+                       <> tshow (Behavior.unBehaviorKey ((.key) entry))
                        <> " -> Just (BehaviorSourceLocation "
-                       <> tshow (T.pack (BehaviorSource.behaviorSourceFile entry))
+                       <> tshow (T.pack ((.file) entry))
                        <> " "
-                       <> tshow' (BehaviorSource.behaviorSourceLine entry)
+                       <> tshow' ((.line) entry)
                        <> " "
-                       <> tshow' (BehaviorSource.behaviorSourceColumn entry)
+                       <> tshow' ((.column) entry)
                        <> ")"
-                   | entry <- sortOn BehaviorSource.behaviorSourceKey entries
+                   | entry <- sortOn (.key) entries
                    ]
                 <> [ "  _ -> Nothing",
                      "",
                      "renderBehaviorSourceLocation :: Text -> Text",
                      "renderBehaviorSourceLocation key = case behaviorSourceLocation key of",
-                     "  Just location -> T.pack (sourceFile location) <> \":\" <> tshow (sourceLine location) <> \":\" <> tshow (sourceColumn location)",
+                     "  Just location -> T.pack location.sourceFile <> \":\" <> tshow location.sourceLine <> \":\" <> tshow location.sourceColumn",
                      "  Nothing -> \"<internal invariant: missing behavior source for \" <> key <> \">\"",
                      "",
                      "tshow :: Show value => value -> Text",
@@ -308,18 +309,18 @@ behaviorSourceMapModule ctx entries =
                    ]
             ),
         kind = Generated,
-        origin = "context " <> contextName ctx <> " behavior source map"
+        origin = "context " <> (.name) ctx <> " behavior source map"
       }
   where
     moduleName = contextGeneratedPrefix ctx <> ".BehaviorSourceMap"
 
 -- | The root namespace prefix, dot-terminated, or @""@ when no root is set.
 rootPrefix :: Context -> Text
-rootPrefix ctx = case moduleRoot ctx of r | T.null r -> ""; r -> r <> "."
+rootPrefix ctx = case (.moduleRoot) ctx of r | T.null r -> ""; r -> r <> "."
 
 -- | The context name in PascalCase, e.g. @hospital-capacity@ -> @HospitalCapacity@.
 ctxPascalOf :: Context -> Text
-ctxPascalOf = pascalFromKebab . contextName
+ctxPascalOf = pascalFromKebab . (.name)
 
 --------------------------------------------------------------------------------
 -- Firewall self-check (M3)
@@ -382,11 +383,11 @@ firewallSurface =
 -- maximal munch, and keiki imports are checked independently of token spelling.
 firewallBreaches :: [ScaffoldModule] -> [(FilePath, Text, Int)]
 firewallBreaches mods =
-  [ (modulePath m, breach, n)
+  [ ((.path) m, breach, n)
   | m <- mods,
-    kind m == Generated,
+    (.kind) m == Generated,
     not (authoritativeScalarModule m),
-    (n, line) <- zip [1 ..] (T.lines (moduleText m)),
+    (n, line) <- zip [1 ..] (T.lines ((.text) m)),
     breach <- lineBreaches line
   ]
 
@@ -399,10 +400,10 @@ authoritativeScalarModule :: ScaffoldModule -> Bool
 authoritativeScalarModule scaffoldModule =
   "/Transducer.hs" `isSuffixOf` path
     || ( "/EventStream.hs" `isSuffixOf` path
-           && "DomainCommandHandler" `T.isInfixOf` moduleText scaffoldModule
+           && "DomainCommandHandler" `T.isInfixOf` (.text) scaffoldModule
        )
   where
-    path = modulePath scaffoldModule
+    path = (.path) scaffoldModule
 
 lineBreaches :: Text -> [Text]
 lineBreaches line = case importModule line of
@@ -411,11 +412,11 @@ lineBreaches line = case importModule line of
   where
     tokenBreaches = mapMaybe breachFor
     breachFor (IdentToken ident)
-      | ident `elem` forbiddenIdents firewallSurface = Just ident
+      | ident `elem` (.forbiddenIdents) firewallSurface = Just ident
     breachFor (QualifiedToken qualifier)
-      | qualifier `elem` forbiddenQualifiers firewallSurface = Just (qualifier <> ".*")
+      | qualifier `elem` (.forbiddenQualifiers) firewallSurface = Just (qualifier <> ".*")
     breachFor (SymbolToken symbol)
-      | symbol `elem` forbiddenSymbolic firewallSurface = Just symbol
+      | symbol `elem` (.forbiddenSymbolic) firewallSurface = Just symbol
     breachFor _ = Nothing
 
 data CodeToken = IdentToken !Text | QualifiedToken !Text | SymbolToken !Text
@@ -457,8 +458,8 @@ importBreaches :: Text -> [Text]
 importBreaches line = case importModule line of
   Nothing -> []
   Just imported
-    | imported `elem` forbiddenImports firewallSurface -> ["import:" <> imported]
-    | Just allowed <- lookup imported (restrictedImports firewallSurface),
+    | imported `elem` (.forbiddenImports) firewallSurface -> ["import:" <> imported]
+    | Just allowed <- lookup imported ((.restrictedImports) firewallSurface),
       not (hasAllowedExplicitImportList allowed line) ->
         ["import:" <> imported]
     | otherwise -> []
@@ -484,70 +485,70 @@ hasAllowedExplicitImportList allowed line =
 
 -- | Resolved, denormalized view of an aggregate used by every emitter.
 data Agg = Agg
-  { aContext :: !Context,
-    aCheckedService :: !CheckedService,
-    aLanguageContract :: !EffectiveLanguageContract,
-    aSpec :: !Spec,
-    aAggregate :: !Aggregate,
-    aCtxPascal :: !Text,
-    aName :: !Text,
-    aLoc :: !Loc,
-    aVertexType :: !Text,
-    aIds :: ![IdDecl],
-    aEnums :: ![EnumDecl],
-    aRegs :: ![ResolvedRegister],
-    aStates :: ![StateDecl],
-    aCommands :: ![ResolvedCtor],
-    aEvents :: ![ResolvedCtor],
-    aDomainOutcomeTypes :: !(Maybe ResolvedDomainOutcomeTypes),
+  { context :: !Context,
+    checkedService :: !CheckedService,
+    languageContract :: !EffectiveLanguageContract,
+    spec :: !Spec,
+    aggregate :: !Aggregate,
+    ctxPascal :: !Text,
+    name :: !Text,
+    loc :: !Loc,
+    vertexType :: !Text,
+    ids :: ![IdDecl],
+    enums :: ![EnumDecl],
+    regs :: ![ResolvedRegister],
+    states :: ![StateDecl],
+    commands :: ![ResolvedCtor],
+    events :: ![ResolvedCtor],
+    domainOutcomeTypes :: !(Maybe ResolvedDomainOutcomeTypes),
     -- | Generated IDs and enums used by this aggregate, in stable name order.
-    aGeneratedNominals :: ![ResolvedNominalType],
-    aTransitions :: ![Transition],
-    aOutputMappings :: !(Map.Map (Int, Int) EventOutputMapping),
-    aWire :: !WireSpec,
-    aProjection :: !(Maybe ProjectionSpec),
-    aSnapshot :: !(Maybe SnapshotSpec),
-    aFoldFingerprint :: !Text,
-    aReadModels :: ![ReadModelNode],
-    aTypeGraph :: !(Maybe TypeGraph),
-    aSymbols :: !AggregateSymbols,
+    generatedNominals :: ![ResolvedNominalType],
+    transitions :: ![Transition],
+    outputMappings :: !(Map.Map (Int, Int) EventOutputMapping),
+    wire :: !WireSpec,
+    projection :: !(Maybe ProjectionSpec),
+    snapshot :: !(Maybe SnapshotSpec),
+    foldFingerprint :: !Text,
+    readModels :: ![ReadModelNode],
+    typeGraph :: !(Maybe TypeGraph),
+    symbols :: !AggregateSymbols,
     -- | e.g. @Generated.HospitalCapacity.Reservation@
-    aGenPrefix :: !Text,
+    genPrefix :: !Text,
     -- | e.g. @HospitalCapacity.Reservation@
-    aHolePrefix :: !Text
+    holePrefix :: !Text
   }
 
 data ResolvedDomainOutcomeTypes = ResolvedDomainOutcomeTypes
-  { resolvedRejectionType :: !ResolvedAggregateType,
-    resolvedNoOpType :: !ResolvedAggregateType
+  { rejectionType :: !ResolvedAggregateType,
+    noOpType :: !ResolvedAggregateType
   }
   deriving stock (Eq, Show)
 
 aggregateCheckedService :: Agg -> CheckedService
-aggregateCheckedService = aCheckedService
+aggregateCheckedService = (.checkedService)
 
 data ResolvedRegister = ResolvedRegister
-  { rrName :: !Name,
-    rrType :: !ResolvedAggregateType,
-    rrInitial :: !ResolvedRegisterInitial,
-    rrLoc :: !Loc
+  { name :: !Name,
+    valueType :: !ResolvedAggregateType,
+    initial :: !ResolvedRegisterInitial,
+    loc :: !Loc
   }
   deriving stock (Eq, Show)
 
 -- | A command or event constructor with its fully-resolved field identities and
 -- aggregate types.
 data ResolvedCtor = ResolvedCtor
-  { rcName :: !Text,
+  { name :: !Text,
     -- | (DSL/selector/wire identity, canonical aggregate type)
-    rcFields :: ![(ResolvedFieldIdentity, ResolvedAggregateType)],
+    fields :: ![(ResolvedFieldIdentity, ResolvedAggregateType)],
     -- | EP-2: schema version (1 for commands and unversioned events).
-    rcVersion :: !Int,
+    version :: !Int,
     -- | EP-2: the source version this event migrates from (the upcaster step).
-    rcUpcastFrom :: !(Maybe Int)
+    upcastFrom :: !(Maybe Int)
   }
 
 defaultWire :: WireSpec
-defaultWire = WireSpec {wireKind = "ctorName", wireFields = "camelCase", wireSchemaVersion = 1}
+defaultWire = WireSpec {kind = "ctorName", fields = "camelCase", schemaVersion = 1}
 
 resolveAgg :: Context -> Spec -> Aggregate -> Agg
 resolveAgg ctx spec = resolveAggForService ctx (legacyCheckedService spec)
@@ -556,89 +557,86 @@ resolveAgg ctx spec = resolveAggForService ctx (legacyCheckedService spec)
 resolveAggForService :: Context -> CheckedService -> Aggregate -> Agg
 resolveAggForService ctx service agg =
   Agg
-    { aContext = ctx,
-      aCheckedService = service,
-      aLanguageContract = checkedLanguageContract service,
-      aSpec = spec,
-      aAggregate = agg,
-      aCtxPascal = ctxPascal,
-      aName = nm,
-      aLoc = aggLoc agg,
-      aVertexType = vertexType,
-      aIds = specIds spec,
-      aEnums = specEnums spec,
-      aRegs = map resolveRegister (aggRegs agg),
-      aStates = aggStates agg,
-      aCommands = map resolveCommand (aggCommands agg),
-      aEvents = map resolveEvent (aggEvents agg),
-      aDomainOutcomeTypes = resolvedDomainOutcomeTypes,
-      aGeneratedNominals = generatedNominalsInTypes aggregateResolvedTypes,
-      aTransitions = aggTransitions agg,
-      aOutputMappings =
+    { context = ctx,
+      checkedService = service,
+      languageContract = checkedLanguageContract service,
+      spec = spec,
+      aggregate = agg,
+      ctxPascal = ctxPascal,
+      name = nm,
+      loc = (.loc) agg,
+      vertexType = vertexType,
+      ids = (.ids) spec,
+      enums = (.enums) spec,
+      regs = map resolveRegister ((.regs) agg),
+      states = (.states) agg,
+      commands = map resolveCommand ((.commands) agg),
+      events = map resolveEvent ((.events) agg),
+      domainOutcomeTypes = resolvedDomainOutcomeTypes,
+      generatedNominals = generatedNominalsInTypes aggregateResolvedTypes,
+      transitions = (.transitions) agg,
+      outputMappings =
         Map.fromList
           [ ( (transitionIndex, emitIndex),
               orDieOutput (eventOutputMappingFromGraphResult typeGraphResult spec agg transition emitIndex eventName)
             )
-          | (transitionIndex, transition) <- zip [1 ..] (aggTransitions agg),
-            (emitIndex, eventName) <- zip [1 ..] (tEmits transition)
+          | (transitionIndex, transition) <- zip [1 ..] ((.transitions) agg),
+            (emitIndex, eventName) <- zip [1 ..] ((.emits) transition)
           ],
-      aWire = fromMaybe defaultWire (aggWire agg),
-      aProjection = aggProjection agg,
-      aSnapshot = aggSnapshot agg,
-      aFoldFingerprint = either (error . T.unpack . renderFoldSurfaceError) id (aggregateFoldFingerprintForService service agg),
-      aReadModels = [readModel | NReadModel readModel <- specNodes spec],
-      aTypeGraph = either (const Nothing) Just typeGraphResult,
-      aSymbols = symbols,
-      aGenPrefix = genPrefixFor ctx nm,
-      aHolePrefix = holePrefixFor ctx nm
+      wire = fromMaybe defaultWire ((.wire) agg),
+      projection = (.projection) agg,
+      snapshot = (.snapshot) agg,
+      foldFingerprint = either (error . T.unpack . renderFoldSurfaceError) id (aggregateFoldFingerprintForService service agg),
+      readModels = [readModel | NReadModel readModel <- (.nodes) spec],
+      typeGraph = either (const Nothing) Just typeGraphResult,
+      symbols = symbols,
+      genPrefix = genPrefixFor ctx nm,
+      holePrefix = holePrefixFor ctx nm
     }
   where
     spec = checkedSpec service
-    nm = aggName agg
+    nm = (.name) agg
     typeGraphResult = checkedTypeGraph service
     symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
-    ctxPascal = pascalFromKebab (contextName ctx)
+    ctxPascal = pascalFromKebab ((.name) ctx)
     vertexType = nm <> "Vertex"
-    commandFieldTypes = [(cmdName c, cmdFields c) | c <- aggCommands agg]
-    resolveCommand c = (mkCtor CommandFieldUse (cmdName c) (cmdFields c)) {rcVersion = 1, rcUpcastFrom = Nothing}
+    commandFieldTypes = [((.name) c, (.fields) c) | c <- (.commands) agg]
+    resolveCommand c = mkCtor CommandFieldUse ((.name) c) ((.fields) c) 1 Nothing
     resolveEvent e =
-      (mkCtor EventFieldUse (evName e) (eventFields e))
-        { rcVersion = evVersion e,
-          rcUpcastFrom = fst <$> evUpcastFrom e
-        }
+      mkCtor EventFieldUse ((.name) e) (eventFields e) ((.version) e) (fst <$> (.upcastFrom) e)
       where
-        eventFields ev = case evBody ev of
+        eventFields ev = case (.body) ev of
           EventFields fs -> fs
           EventFromCommand cn -> fromMaybe [] (lookup cn commandFieldTypes)
-    mkCtor useSite cn fs =
+    mkCtor useSite cn fs version upcastFrom =
       ResolvedCtor
-        { rcName = cn,
-          rcFields = map (\field -> (resolveAggregateFieldIdentity field, orDie (inferAggregateFieldType symbols agg useSite field))) fs,
-          rcVersion = 1,
-          rcUpcastFrom = Nothing
+        { name = cn,
+          fields = map (\field -> (resolveAggregateFieldIdentity field, orDie (inferAggregateFieldType symbols agg useSite field))) fs,
+          version,
+          upcastFrom
         }
     aggregateResolvedTypes =
-      map rrType (map resolveRegister (aggRegs agg))
-        <> map snd (concatMap rcFields (map resolveCommand (aggCommands agg)))
-        <> map snd (concatMap rcFields (map resolveEvent (aggEvents agg)))
-    resolvedDomainOutcomeTypes = case aggDomainOutcomeTypes agg of
+      map (.valueType) (map resolveRegister ((.regs) agg))
+        <> map snd (concatMap (.fields) (map resolveCommand ((.commands) agg)))
+        <> map snd (concatMap (.fields) (map resolveEvent ((.events) agg)))
+    resolvedDomainOutcomeTypes = case (.domainOutcomeTypes) agg of
       Nothing -> Nothing
       Just declaration ->
         Just
           ResolvedDomainOutcomeTypes
-            { resolvedRejectionType = resolveOutcomeType declaration (rejectionType declaration),
-              resolvedNoOpType = resolveOutcomeType declaration (noOpType declaration)
+            { rejectionType = resolveOutcomeType declaration ((.rejectionType) declaration),
+              noOpType = resolveOutcomeType declaration ((.noOpType) declaration)
             }
     resolveOutcomeType declaration name =
-      orDie (resolveAggregateType symbols (outcomeTypesLoc declaration) HaskellLoweringUse (TRef name))
+      orDie (resolveAggregateType symbols ((.outcomeTypesLoc) declaration) HaskellLoweringUse (TRef name))
     resolveRegister register =
-      let resolvedType = orDie (resolveAggregateType symbols (regLoc register) RegisterUse (regType register))
-          resolvedInitial = orDie (resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register))
+      let resolvedType = orDie (resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register))
+          resolvedInitial = orDie (resolveRegisterInitial symbols ((.loc) register) resolvedType ((.initial) register))
        in ResolvedRegister
-            { rrName = regName register,
-              rrType = resolvedType,
-              rrInitial = resolvedInitial,
-              rrLoc = regLoc register
+            { name = (.name) register,
+              valueType = resolvedType,
+              initial = resolvedInitial,
+              loc = (.loc) register
             }
     orDie = either (error . ("validated aggregate resolution failed: " <>) . show) id
     orDieOutput = either (error . ("validated aggregate output resolution failed: " <>) . show) id
@@ -649,9 +647,9 @@ resolveAggForService ctx service agg =
 generatedNominalsInTypes :: [ResolvedAggregateType] -> [ResolvedNominalType]
 generatedNominalsInTypes resolvedTypes =
   Map.elems . Map.fromList $
-    [ (resolvedNominalName nominal, nominal)
+    [ ((.name) nominal, nominal)
     | AggregateNominal nominal <- resolvedTypes,
-      GeneratedNominal <- [resolvedNominalOwnership nominal]
+      GeneratedNominal <- [(.ownership) nominal]
     ]
 
 -- | Plan declaration ownership and use closure without emitting text. Parsing
@@ -663,25 +661,25 @@ planNominalGeneration ctx spec = planNominalGenerationForService ctx (legacyChec
 planNominalGenerationForService :: Context -> CheckedService -> Either (NonEmpty NominalTypeError) [NominalGenerationOwner]
 planNominalGenerationForService ctx service = do
   registry <- resolveNominalTypes spec
-  let aggregates = [resolveAggForService ctx service aggregate | NAggregate aggregate <- specNodes spec]
+  let aggregates = [resolveAggForService ctx service aggregate | NAggregate aggregate <- (.nodes) spec]
       generated =
         [ nominal
-        | nominal <- Map.elems (nominalTypes registry),
-          GeneratedNominal <- [resolvedNominalOwnership nominal]
+        | nominal <- Map.elems ((.nominalTypes) registry),
+          GeneratedNominal <- [(.ownership) nominal]
         ]
   pure
     [ NominalGenerationOwner
-        { nominalDeclaration = nominal,
-          nominalModule = generatedNominalModule ctx,
-          nominalUseSites = Set.fromList (concatMap (usesFor nominal) aggregates),
-          nominalEqualityUsed = any (nominalEqualityUsedInGeneratedExpressions nominal) aggregates
+        { declaration = nominal,
+          moduleName = generatedNominalModule ctx,
+          useSites = Set.fromList (concatMap (usesFor nominal) aggregates),
+          equalityUsed = any (nominalEqualityUsedInGeneratedExpressions nominal) aggregates
         }
     | nominal <- generated
     ]
   where
     spec = checkedSpec service
     usesFor nominal aggregate =
-      [ NominalUseSite (aName aggregate) useKind
+      [ NominalUseSite ((.name) aggregate) useKind
       | useKind <- aggregateUseKinds nominal aggregate
       ]
 
@@ -691,9 +689,9 @@ nominalEqualityUsedInGeneratedExpressions nominal aggregate =
     (anyTypedExpression comparesNominal)
     (resolvedGeneratedExpressions aggregate <> resolvedOutcomeExpressions aggregate)
   where
-    comparesNominal expression = case typedScalarNode expression of
-      TypedEqual left _ -> typedScalarType left == AggregateNominal nominal
-      TypedNotEqual left _ -> typedScalarType left == AggregateNominal nominal
+    comparesNominal expression = case (.node) expression of
+      TypedEqual left _ -> (.valueType) left == AggregateNominal nominal
+      TypedNotEqual left _ -> (.valueType) left == AggregateNominal nominal
       _ -> False
 
 aggregateUseKinds :: ResolvedNominalType -> Agg -> [AggregateUseSite]
@@ -705,16 +703,16 @@ aggregateUseKinds nominal aggregate =
       <> [CodecUse | nominal `elem` eventNominals]
       <> [SnapshotUse | hasSnapshot aggregate && nominal `elem` registerNominals]
       <> [HarnessSampleUse | nominal `elem` commandNominals || nominal `elem` eventNominals]
-      <> [HaskellLoweringUse | nominal `elem` (aGeneratedNominals aggregate <> outcomeNominals)]
+      <> [HaskellLoweringUse | nominal `elem` ((.generatedNominals) aggregate <> outcomeNominals)]
   where
-    registerNominals = generatedNominalsInTypes (map rrType (aRegs aggregate))
-    commandNominals = generatedNominalsInTypes (map snd (concatMap rcFields (aCommands aggregate)))
-    eventNominals = generatedNominalsInTypes (map snd (concatMap rcFields (aEvents aggregate)))
+    registerNominals = generatedNominalsInTypes (map (.valueType) ((.regs) aggregate))
+    commandNominals = generatedNominalsInTypes (map snd (concatMap (.fields) ((.commands) aggregate)))
+    eventNominals = generatedNominalsInTypes (map snd (concatMap (.fields) ((.events) aggregate)))
     outcomeNominals =
       generatedNominalsInTypes
         [ resolvedType
-        | outcomeTypes <- maybeToList (aDomainOutcomeTypes aggregate),
-          resolvedType <- [resolvedRejectionType outcomeTypes, resolvedNoOpType outcomeTypes]
+        | outcomeTypes <- maybeToList ((.domainOutcomeTypes) aggregate),
+          resolvedType <- [(.rejectionType) outcomeTypes, (.noOpType) outcomeTypes]
         ]
 
 --------------------------------------------------------------------------------
@@ -747,7 +745,7 @@ scaffoldStructuralOwnersForService :: Context -> CheckedService -> [(ScaffoldMod
 scaffoldStructuralOwnersForService ctx service = case checkedTypeGraph service of
   Left _ -> []
   Right graph ->
-    [(shapeModule ctx graph entry, [sdName (fst entry)]) | entry <- structural]
+    [(shapeModule ctx graph entry, [(.name) (fst entry)]) | entry <- structural]
       <> projectionModules
       <> generatedNominalOwners ctx service
       <> nominalRepresentationOwners ctx spec
@@ -756,14 +754,14 @@ scaffoldStructuralOwnersForService ctx service = case checkedTypeGraph service o
     where
       structural =
         [ (declaration, shape)
-        | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
+        | ResolvedStructural declaration shape <- Map.elems ((.declarations) graph)
         ]
       projectionModules =
         [ ( ScaffoldModule
-              { modulePath = T.unpack (T.replace "." "/" (structuralProjectionModule ctx) <> ".hs"),
-                moduleText = emitStructuralProjections ctx graph,
+              { path = T.unpack (T.replace "." "/" (structuralProjectionModule ctx) <> ".hs"),
+                text = emitStructuralProjections ctx graph,
                 kind = Generated,
-                origin = "context " <> specContext spec <> " mapped structural facade"
+                origin = "context " <> (.context) spec <> " mapped structural facade"
               },
             []
           )
@@ -779,7 +777,7 @@ scaffoldStructuralOwnersForService ctx service = case checkedTypeGraph service o
 codecComparisonModule :: Context -> Spec -> Name -> Either Text ScaffoldModule
 codecComparisonModule ctx spec requestedName = do
   graph <- either (Left . ("mapped type graph did not resolve: " <>) . T.pack . show) Right (resolveTypeGraph spec)
-  (declaration, shape) <- case Map.lookup (MappedKey requestedName) (tgDeclarations graph) of
+  (declaration, shape) <- case Map.lookup (MappedKey requestedName) ((.declarations) graph) of
     Nothing -> Left ("codec comparison target is not a mapped declaration: " <> requestedName)
     Just (ResolvedOpaque _) ->
       Left
@@ -788,7 +786,7 @@ codecComparisonModule ctx spec requestedName = do
             <> " is opaque; finite evidence must never upgrade an opaque declaration to a structural claim"
         )
     Just (ResolvedStructural declaration shape) -> Right (declaration, shape)
-  owner <- case sortOn aggName (comparisonOwners declaration) of
+  owner <- case sortOn (.name) (comparisonOwners declaration) of
     [] ->
       Left
         ( "codec comparison target "
@@ -799,21 +797,21 @@ codecComparisonModule ctx spec requestedName = do
   let moduleName = structuralPrefix ctx <> ".CodecCompare." <> requestedName
   pure
     ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-        moduleText = emitCodecComparison ctx moduleName graph declaration shape owner,
+      { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+        text = emitCodecComparison ctx moduleName graph declaration shape owner,
         kind = Generated,
         origin = "non-production codec comparison " <> requestedName
       }
   where
     comparisonOwners declaration =
       [ aggregate
-      | NAggregate aggregate <- specNodes spec,
+      | NAggregate aggregate <- (.nodes) spec,
         let resolved = resolveAgg ctx spec aggregate,
-        any ((== sdName declaration) . mappedName) (codecMappedDeclarations resolved)
+        any ((== (.name) declaration) . mappedName) (codecMappedDeclarations resolved)
       ]
       where
-        mappedName (ResolvedStructural structural _) = sdName structural
-        mappedName (ResolvedOpaque opaque) = odName opaque
+        mappedName (ResolvedStructural structural _) = (.name) structural
+        mappedName (ResolvedOpaque opaque) = (.name) opaque
 
 codecComparisonBanner :: Text
 codecComparisonBanner =
@@ -852,7 +850,7 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
       "      entries = [entry | Right entry <- loaded]",
       "      typedCases = NonEmpty.toList (fixtureCases " <> fixtureReference <> ")",
       "      encodeObservations =",
-      "        [ EncodeObservation label (hcEncode historicalCodec value) (GeneratedCodec.encode" <> name <> "Mapped value)",
+      "        [ EncodeObservation label (historicalCodec.encode value) (GeneratedCodec.encode" <> name <> "Mapped value)",
       "        | (label, value) <- typedCases",
       "        ]",
       "      decodeObservations = [observation | (observation, _) <- entries]",
@@ -866,12 +864,12 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
       "      declared = declaredBranchesFor FromBinding branchSchema <> declaredBranchesFor HistoricalGolden branchSchema",
       "      provenance =",
       "        CompareProvenance",
-      "          { cpHistoricalCodecIdentity = hcIdentity historicalCodec",
-      "          , cpHistoricalCodecVersion = hcVersion historicalCodec",
-      "          , cpCanonicalType = CanonicalTypeId " <> tshow (unCanonicalTypeId (sdCanonical declaration)),
-      "          , cpBindingSymbol = QualifiedValueName " <> tshow (unQualifiedValueName (sdBinding declaration)),
-      "          , cpBindingVersion = BindingVersion " <> tshow (unBindingVersion (sdBindingVersion declaration)),
-      "          , cpWireFingerprint = " <> tshow (wireFingerprint graph name),
+      "          { historicalCodecIdentity = historicalCodec.identity",
+      "          , historicalCodecVersion = historicalCodec.version",
+      "          , canonicalType = CanonicalTypeId " <> tshow (unCanonicalTypeId ((.canonical) declaration)),
+      "          , bindingSymbol = QualifiedValueName " <> tshow (unQualifiedValueName ((.binding) declaration)),
+      "          , bindingVersion = BindingVersion " <> tshow (unBindingVersion ((.bindingVersion) declaration)),
+      "          , wireFingerprint = " <> tshow (wireFingerprint graph name),
       "          }",
       "  pure (compareReport provenance inputIssues (encodeObservations <> decodeObservations) declared (typedObserved <> historicalObserved))",
       "",
@@ -881,7 +879,7 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
       "  pure $ case decoded of",
       "    Left reason -> Left (HistoricalGoldenUnreadable path (fromString reason))",
       "    Right inputValue ->",
-      "      let historicalDecoded = hcDecode historicalCodec inputValue",
+      "      let historicalDecoded = historicalCodec.decode inputValue",
       "          historicalOutcome = normalizeDecode historicalDecoded",
       "          generatedOutcome = normalizeDecode (GeneratedCodec.decode" <> name <> "Mapped inputValue)",
       "          observation = DecodeObservation path inputValue historicalOutcome generatedOutcome",
@@ -900,17 +898,17 @@ emitCodecComparison ctx moduleName graph declaration shape owner =
       "branchSchema = " <> renderBranchSchema (branchSchemaFor graph (ResolvedStructural declaration shape))
     ]
   where
-    name = sdName declaration
-    domainType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
-    codecModule = genPrefixFor ctx (aggName owner) <> ".Codec"
-    fixtureReference = renderReferenceOrDie importPlan (qualifiedValueReference (sdFixtures declaration))
+    name = (.name) declaration
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) declaration))
+    codecModule = genPrefixFor ctx ((.name) owner) <> ".Codec"
+    fixtureReference = renderReferenceOrDie importPlan (qualifiedValueReference ((.fixtures) declaration))
     importPlan =
       planImportsOrDie
         moduleName
         Set.empty
         ( Set.fromList
-            [ haskellTypeReference (sdHaskell declaration),
-              qualifiedValueReference (sdFixtures declaration)
+            [ haskellTypeReference ((.haskell) declaration),
+              qualifiedValueReference ((.fixtures) declaration)
             ]
         )
 
@@ -924,17 +922,17 @@ branchSchemaFor graph =
               { onRecord = \_ _ fields ->
                   BranchRecord
                     [ BranchField
-                        (rwfKey field)
-                        (rwfPresence field == POptional)
-                        (branchExpr graph (rwfType field))
+                        ((.key) field)
+                        ((.presence) field == POptional)
+                        (branchExpr graph ((.valueType) field))
                     | field <- fields
                     ],
                 onEnum = const BranchScalar,
                 onUnion = \encoding arms ->
                   BranchUnion
-                    (ueTagField encoding)
-                    (ueContentsField encoding)
-                    [BranchArm (rwaTag arm) (branchExpr graph <$> rwaPayload arm) | arm <- arms]
+                    ((.tagField) encoding)
+                    ((.contentsField) encoding)
+                    [BranchArm ((.tag) arm) (branchExpr graph <$> (.payload) arm) | arm <- arms]
               }
             shape,
         onOpaqueDecl = const BranchScalar
@@ -954,7 +952,7 @@ branchExpr graph =
         onOptional = BranchOptional,
         onList = BranchList,
         onMap = BranchMap,
-        onRef = \key -> maybe BranchScalar (branchSchemaFor graph) (Map.lookup key (tgDeclarations graph))
+        onRef = \key -> maybe BranchScalar (branchSchemaFor graph) (Map.lookup key ((.declarations) graph))
       }
 
 renderBranchSchema :: BranchSchema -> Text
@@ -968,11 +966,11 @@ renderBranchSchema schema = case schema of
       <> T.intercalate
         ", "
         [ "BranchField "
-            <> tshow (bfWireKey field)
+            <> tshow ((.wireKey) field)
             <> " "
-            <> (if bfPresenceOptional field then "True" else "False")
+            <> (if (.presenceOptional) field then "True" else "False")
             <> " ("
-            <> renderBranchSchema (bfSchema field)
+            <> renderBranchSchema ((.schema) field)
             <> ")"
         | field <- fields
         ]
@@ -986,9 +984,9 @@ renderBranchSchema schema = case schema of
       <> T.intercalate
         ", "
         [ "BranchArm "
-            <> tshow (baWireTag arm)
+            <> tshow ((.wireTag) arm)
             <> " "
-            <> maybe "Nothing" (\nested -> "(Just (" <> renderBranchSchema nested <> "))") (baPayloadSchema arm)
+            <> maybe "Nothing" (\nested -> "(Just (" <> renderBranchSchema nested <> "))") ((.payloadSchema) arm)
         | arm <- arms
         ]
       <> "]"
@@ -1015,15 +1013,15 @@ bindingSkeletonOwnersWithObligations :: Context -> Spec -> TypeGraph -> Either e
 bindingSkeletonOwnersWithObligations ctx spec graph obligationResult = case obligationResult of
   Left _ -> []
   Right obligations ->
-    [ (emitBindingSkeleton ctx spec graph owner entries, nub (map obligationMappedName entries))
-    | (owner, entries) <- Map.toAscList (Map.fromListWith (<>) [(obligationModule obligation, [obligation]) | obligation <- obligations])
+    [ (emitBindingSkeleton ctx spec graph owner entries, nub (map (.mappedName) entries))
+    | (owner, entries) <- Map.toAscList (Map.fromListWith (<>) [((.moduleName) obligation, [obligation]) | obligation <- obligations])
     ]
 
 emitBindingSkeleton :: Context -> Spec -> TypeGraph -> Text -> [BindingObligation] -> ScaffoldModule
 emitBindingSkeleton ctx spec graph owner obligations =
   ScaffoldModule
-    { modulePath = T.unpack (T.replace "." "/" owner <> ".hs"),
-      moduleText =
+    { path = T.unpack (T.replace "." "/" owner <> ".hs"),
+      text =
         nl $
           [ "{-# LANGUAGE DataKinds #-}",
             "{-# LANGUAGE LambdaCase #-}",
@@ -1042,7 +1040,7 @@ emitBindingSkeleton ctx spec graph owner obligations =
     }
   where
     exportLines =
-      [ (if index == (0 :: Int) then "    " else "  , ") <> obligationSymbol obligation
+      [ (if index == (0 :: Int) then "    " else "  , ") <> (.symbol) obligation
       | (index, obligation) <- zip [0 ..] obligations
       ]
     importPlan = bindingSkeletonImportPlan ctx spec graph owner obligations
@@ -1053,76 +1051,76 @@ emitBindingSkeleton ctx spec graph owner obligations =
     staticImports =
       sort . nub $
         [ "Keiro.Codec.Structural (FixtureCases, StructuralBinding (..))"
-        | any (\obligation -> obligationCategory obligation == "structural" && obligationKind obligation `elem` [BindingValue, FixtureValue]) obligations
+        | any (\obligation -> (.category) obligation == "structural" && (.kind) obligation `elem` [BindingValue, FixtureValue]) obligations
         ]
           <> [ "Keiro.Codec.Nominal (NominalBinding (..), NominalFixtureCases)"
-             | any ((/= "structural") . obligationCategory) obligations
+             | any ((/= "structural") . (.category)) obligations
              ]
           <> [ "Data.KindID (KindID)"
              | obligation <- obligations,
                Just (nominal, _) <- [nominalFor obligation],
-               IdRepresentation {} <- [resolvedNominalRepresentation nominal]
+               IdRepresentation {} <- [(.representation) nominal]
              ]
           <> [ "Data.Text (Text)"
              | obligation <- obligations,
                Just (nominal, _) <- [nominalFor obligation],
-               ScalarRepresentation NominalText <- [resolvedNominalRepresentation nominal]
+               ScalarRepresentation NominalText <- [(.representation) nominal]
              ]
           <> [ "Data.Time (UTCTime)"
              | obligation <- obligations,
                Just (nominal, _) <- [nominalFor obligation],
-               ScalarRepresentation NominalTime <- [resolvedNominalRepresentation nominal]
+               ScalarRepresentation NominalTime <- [(.representation) nominal]
              ]
           <> [ "Numeric.Natural (Natural)"
              | obligation <- obligations,
                Just (nominal, _) <- [nominalFor obligation],
-               ScalarRepresentation NominalNatural <- [resolvedNominalRepresentation nominal]
+               ScalarRepresentation NominalNatural <- [(.representation) nominal]
              ]
     renderObligation obligation = case structuralFor obligation of
       Nothing -> case nominalFor obligation of
         Just (nominal, binding) -> renderNominalObligation nominal binding obligation
         Nothing -> ["-- HOLE: declaration disappeared before skeleton rendering"]
-      Just (declaration, shape) -> case obligationKind obligation of
+      Just (declaration, shape) -> case (.kind) obligation of
         BindingValue -> renderBinding importPlan ctx declaration shape obligation
         FixtureValue ->
-          [ "-- HOLE: provide deterministic labelled conformance fixtures for " <> sdName declaration,
+          [ "-- HOLE: provide deterministic labelled conformance fixtures for " <> (.name) declaration,
             renderStructuralObligationSignature importPlan declaration obligation,
-            obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> sdName declaration <> " fixtures")
+            (.symbol) obligation <> " = error " <> tshow ("HOLE: fill " <> (.name) declaration <> " fixtures")
           ]
         InitialValue ->
-          [ "-- HOLE: provide the initial register value for " <> sdName declaration,
+          [ "-- HOLE: provide the initial register value for " <> (.name) declaration,
             renderStructuralObligationSignature importPlan declaration obligation,
-            obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> sdName declaration <> " initial value")
+            (.symbol) obligation <> " = error " <> tshow ("HOLE: fill " <> (.name) declaration <> " initial value")
           ]
-    structuralFor obligation = case Map.lookup (MappedKey (obligationMappedName obligation)) (tgDeclarations graph) of
+    structuralFor obligation = case Map.lookup (MappedKey ((.mappedName) obligation)) ((.declarations) graph) of
       Just (ResolvedStructural declaration shape) -> Just (declaration, shape)
       _ -> Nothing
     nominalFor obligation = do
       registry <- either (const Nothing) Just (resolveNominalTypes spec)
-      nominal <- lookupNominalType (obligationMappedName obligation) registry
-      binding <- case resolvedNominalOwnership nominal of
+      nominal <- lookupNominalType ((.mappedName) obligation) registry
+      binding <- case (.ownership) nominal of
         ConsumerNominal value -> Just value
         GeneratedNominal -> Nothing
       pure (nominal, binding)
-    renderNominalObligation nominal binding obligation = case obligationKind obligation of
+    renderNominalObligation nominal binding obligation = case (.kind) obligation of
       BindingValue ->
         [ "-- HOLE: complete both total directions; the generated codec remains wire authority.",
           renderNominalObligationSignature importPlan ctx nominal binding obligation,
-          obligationSymbol obligation <> " =",
+          (.symbol) obligation <> " =",
           "  NominalBinding",
-          "    { nominalToRepresentation = \\_domainValue -> error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " nominalToRepresentation"),
-          "    , nominalFromRepresentation = \\_representationValue -> error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " nominalFromRepresentation"),
+          "    { nominalToRepresentation = \\_domainValue -> error " <> tshow ("HOLE: fill " <> (.name) nominal <> " nominalToRepresentation"),
+          "    , nominalFromRepresentation = \\_representationValue -> error " <> tshow ("HOLE: fill " <> (.name) nominal <> " nominalFromRepresentation"),
           "    }"
         ]
       FixtureValue ->
-        [ "-- HOLE: provide deterministic labelled expected-wire fixtures for " <> resolvedNominalName nominal,
+        [ "-- HOLE: provide deterministic labelled expected-wire fixtures for " <> (.name) nominal,
           renderNominalObligationSignature importPlan ctx nominal binding obligation,
-          obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " fixtures")
+          (.symbol) obligation <> " = error " <> tshow ("HOLE: fill " <> (.name) nominal <> " fixtures")
         ]
       InitialValue ->
-        [ "-- HOLE: provide the initial register value for " <> resolvedNominalName nominal,
+        [ "-- HOLE: provide the initial register value for " <> (.name) nominal,
           renderNominalObligationSignature importPlan ctx nominal binding obligation,
-          obligationSymbol obligation <> " = error " <> tshow ("HOLE: fill " <> resolvedNominalName nominal <> " initial value")
+          (.symbol) obligation <> " = error " <> tshow ("HOLE: fill " <> (.name) nominal <> " initial value")
         ]
     intercalateBlank [] = []
     intercalateBlank (section : rest) = section <> concatMap ("" :) rest
@@ -1130,8 +1128,8 @@ emitBindingSkeleton ctx spec graph owner obligations =
 renderBinding :: HaskellImportPlan -> Context -> StructuralDecl -> ResolvedMappedShape -> BindingObligation -> [Text]
 renderBinding importPlan ctx declaration shape obligation =
   [ "-- HOLE: complete both total directions; wire policy remains in the generated codec.",
-    obligationSymbol obligation <> " :: StructuralBinding " <> domainType <> " " <> shapeType,
-    obligationSymbol obligation <> " =",
+    (.symbol) obligation <> " :: StructuralBinding " <> domainType <> " " <> shapeType,
+    (.symbol) obligation <> " =",
     "  StructuralBinding",
     "    { bindingToShape = \\case"
   ]
@@ -1140,17 +1138,17 @@ renderBinding importPlan ctx declaration shape obligation =
     <> indentCases (bindingCases False)
     <> ["    }"]
   where
-    domainType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
-    shapeModuleName = structuralShapeModule ctx (sdName declaration)
-    shapeType = renderReferenceOrDie importPlan (qualifiedTypeReference shapeModuleName (sdName declaration <> "Shape"))
-    domainCtor constructor = renderReferenceOrDie importPlan (constructorReference (hsModule (sdHaskell declaration)) constructor)
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) declaration))
+    shapeModuleName = structuralShapeModule ctx ((.name) declaration)
+    shapeType = renderReferenceOrDie importPlan (qualifiedTypeReference shapeModuleName ((.name) declaration <> "Shape"))
+    domainCtor constructor = renderReferenceOrDie importPlan (constructorReference ((.moduleName) ((.haskell) declaration)) constructor)
     shapeCtor constructor = renderReferenceOrDie importPlan (constructorReference shapeModuleName constructor)
     indentCases = map ("      " <>)
     bindingCases toShapeDirection =
       foldMappedShape
         MappedShapeAlgebra
           { onRecord = \constructor _ fields -> [recordCase toShapeDirection constructor fields],
-            onEnum = \entries -> map (enumCase toShapeDirection . weCtor) entries,
+            onEnum = \entries -> map (enumCase toShapeDirection . (.ctor)) entries,
             onUnion = \_ arms -> map (unionCase toShapeDirection) arms
           }
         shape
@@ -1159,9 +1157,9 @@ renderBinding importPlan ctx declaration shape obligation =
         <> arguments variables
         <> " -> "
         <> targetCtor
-        <> arguments (map (holeFor toShapeDirection . rwfHaskell) fields)
+        <> arguments (map (holeFor toShapeDirection . (.haskell)) fields)
       where
-        variables = map (("_" <>) . (<> "Value") . rwfHaskell) fields
+        variables = map (("_" <>) . (<> "Value") . (.haskell)) fields
         sourceCtor = if toShapeDirection then domainCtor constructor else shapeCtor constructor
         targetCtor = if toShapeDirection then shapeCtor constructor else domainCtor constructor
     enumCase toShapeDirection constructor =
@@ -1170,60 +1168,60 @@ renderBinding importPlan ctx declaration shape obligation =
         sourceCtor = if toShapeDirection then domainCtor constructor else shapeCtor constructor
     unionCase toShapeDirection arm =
       sourceCtor
-        <> maybe "" (const " _payloadValue") (rwaPayload arm)
+        <> maybe "" (const " _payloadValue") ((.payload) arm)
         <> " -> "
-        <> case rwaPayload arm of
-          Nothing -> holeFor toShapeDirection (rwaCtor arm)
-          Just _ -> targetCtor <> " " <> holeFor toShapeDirection (rwaCtor arm <> ".payload")
+        <> case (.payload) arm of
+          Nothing -> holeFor toShapeDirection ((.ctor) arm)
+          Just _ -> targetCtor <> " " <> holeFor toShapeDirection ((.ctor) arm <> ".payload")
       where
-        sourceCtor = if toShapeDirection then domainCtor (rwaCtor arm) else shapeCtor (rwaCtor arm)
-        targetCtor = if toShapeDirection then shapeCtor (rwaCtor arm) else domainCtor (rwaCtor arm)
+        sourceCtor = if toShapeDirection then domainCtor ((.ctor) arm) else shapeCtor ((.ctor) arm)
+        targetCtor = if toShapeDirection then shapeCtor ((.ctor) arm) else domainCtor ((.ctor) arm)
     arguments [] = ""
     arguments values = " " <> T.unwords values
-    holeFor toShapeDirection fieldName =
+    holeFor toShapeDirection name =
       "(error "
         <> tshow
           ( "HOLE: fill "
-              <> sdName declaration
+              <> (.name) declaration
               <> (if toShapeDirection then " bindingToShape." else " bindingFromShape.")
-              <> fieldName
+              <> name
           )
         <> ")"
 
 bindingSkeletonImportPlan :: Context -> Spec -> TypeGraph -> Text -> [BindingObligation] -> HaskellImportPlan
 bindingSkeletonImportPlan ctx spec graph owner obligations =
-  planImportsOrDie owner (Set.fromList (map obligationSymbol obligations)) (Set.fromList (concatMap obligationReferences obligations))
+  planImportsOrDie owner (Set.fromList (map (.symbol) obligations)) (Set.fromList (concatMap obligationReferences obligations))
   where
-    obligationReferences obligation = case Map.lookup (MappedKey (obligationMappedName obligation)) (tgDeclarations graph) of
+    obligationReferences obligation = case Map.lookup (MappedKey ((.mappedName) obligation)) ((.declarations) graph) of
       Just (ResolvedStructural declaration shape) ->
-        haskellTypeReference (sdHaskell declaration)
-          : [ qualifiedTypeReference shapeModuleName (sdName declaration <> "Shape")
-            | obligationKind obligation == BindingValue
+        haskellTypeReference ((.haskell) declaration)
+          : [ qualifiedTypeReference shapeModuleName ((.name) declaration <> "Shape")
+            | (.kind) obligation == BindingValue
             ]
             <> [ reference
-               | obligationKind obligation == BindingValue,
+               | (.kind) obligation == BindingValue,
                  constructor <- structuralConstructorNames shape,
                  reference <-
-                   [ constructorReference (hsModule (sdHaskell declaration)) constructor,
+                   [ constructorReference ((.moduleName) ((.haskell) declaration)) constructor,
                      constructorReference shapeModuleName constructor
                    ]
                ]
         where
-          shapeModuleName = structuralShapeModule ctx (sdName declaration)
-      _ -> case nominalForName (obligationMappedName obligation) of
+          shapeModuleName = structuralShapeModule ctx ((.name) declaration)
+      _ -> case nominalForName ((.mappedName) obligation) of
         Just (nominal, binding) ->
-          haskellTypeReference (consumerNominalHaskell binding)
+          haskellTypeReference ((.haskell) binding)
             : [ qualifiedTypeReference
-                  (nominalRepresentationModule ctx (resolvedNominalName nominal))
-                  (resolvedNominalName nominal <> "Representation")
-              | obligationKind obligation == BindingValue,
-                EnumRepresentation {} <- [resolvedNominalRepresentation nominal]
+                  (nominalRepresentationModule ctx ((.name) nominal))
+                  ((.name) nominal <> "Representation")
+              | (.kind) obligation == BindingValue,
+                EnumRepresentation {} <- [(.representation) nominal]
               ]
         Nothing -> []
     nominalForName name = do
       registry <- either (const Nothing) Just (resolveNominalTypes spec)
       nominal <- lookupNominalType name registry
-      binding <- case resolvedNominalOwnership nominal of
+      binding <- case (.ownership) nominal of
         ConsumerNominal value -> Just value
         GeneratedNominal -> Nothing
       pure (nominal, binding)
@@ -1233,25 +1231,25 @@ structuralConstructorNames =
   foldMappedShape
     MappedShapeAlgebra
       { onRecord = \constructor _ _ -> [constructor],
-        onEnum = map weCtor,
-        onUnion = \_ -> map rwaCtor
+        onEnum = map (.ctor),
+        onUnion = \_ -> map (.ctor)
       }
 
 structuralShapeReferences :: Context -> StructuralDecl -> ResolvedMappedShape -> [HaskellReference]
 structuralShapeReferences ctx declaration shape =
-  qualifiedTypeReference moduleName (sdName declaration <> "Shape")
+  qualifiedTypeReference moduleName ((.name) declaration <> "Shape")
     : [constructorReference moduleName constructor | constructor <- structuralConstructorNames shape]
       <> [ HaskellReference moduleName selector ValueNamespace RequireQualified
          | selector <- structuralSelectorNames shape
          ]
   where
-    moduleName = structuralShapeModule ctx (sdName declaration)
+    moduleName = structuralShapeModule ctx ((.name) declaration)
 
 structuralSelectorNames :: ResolvedMappedShape -> [Text]
 structuralSelectorNames =
   foldMappedShape
     MappedShapeAlgebra
-      { onRecord = \_ _ -> map rwfHaskell,
+      { onRecord = \_ _ -> map (.haskell),
         onEnum = const [],
         onUnion = \_ _ -> []
       }
@@ -1264,45 +1262,45 @@ nominalRepresentationEncoderReference ctx nominal =
     ValueNamespace
     RequireQualified
   where
-    name = resolvedNominalName nominal
+    name = (.name) nominal
 
 nominalRepresentationConstructorReference :: Context -> ResolvedNominalType -> Text -> HaskellReference
 nominalRepresentationConstructorReference ctx nominal constructor =
   HaskellReference
-    (nominalRepresentationModule ctx (resolvedNominalName nominal))
+    (nominalRepresentationModule ctx ((.name) nominal))
     constructor
     ConstructorNamespace
     RequireQualified
 
 renderStructuralObligationSignature :: HaskellImportPlan -> StructuralDecl -> BindingObligation -> Text
 renderStructuralObligationSignature importPlan declaration obligation =
-  obligationSymbol obligation
+  (.symbol) obligation
     <> " :: "
-    <> case obligationKind obligation of
+    <> case (.kind) obligation of
       BindingValue -> error "structural binding signatures are rendered with renderBinding"
       FixtureValue -> "FixtureCases " <> domainType
       InitialValue -> domainType
   where
-    domainType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) declaration))
 
 renderNominalObligationSignature :: HaskellImportPlan -> Context -> ResolvedNominalType -> ConsumerNominalBinding -> BindingObligation -> Text
 renderNominalObligationSignature importPlan ctx nominal binding obligation =
-  obligationSymbol obligation
+  (.symbol) obligation
     <> " :: "
-    <> case obligationKind obligation of
+    <> case (.kind) obligation of
       BindingValue -> "NominalBinding " <> domainType <> " " <> representationType
       FixtureValue -> "NominalFixtureCases " <> domainType
       InitialValue -> domainType
   where
-    domainType = renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
-    representationType = case resolvedNominalRepresentation nominal of
+    domainType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding))
+    representationType = case (.representation) nominal of
       IdRepresentation prefix -> "(KindID " <> tshow prefix <> ")"
       EnumRepresentation {} ->
         renderReferenceOrDie
           importPlan
           ( qualifiedTypeReference
-              (nominalRepresentationModule ctx (resolvedNominalName nominal))
-              (resolvedNominalName nominal <> "Representation")
+              (nominalRepresentationModule ctx ((.name) nominal))
+              ((.name) nominal <> "Representation")
           )
       ScalarRepresentation NominalText -> "Text"
       ScalarRepresentation NominalInt -> "Int"
@@ -1321,14 +1319,14 @@ constructorReference moduleName constructor =
 shapeModule :: Context -> TypeGraph -> (StructuralDecl, ResolvedMappedShape) -> ScaffoldModule
 shapeModule ctx graph (declaration, shape) =
   ScaffoldModule
-    { modulePath = T.unpack (T.replace "." "/" (structuralShapeModule ctx (sdName declaration)) <> ".hs"),
-      moduleText = emitShape ctx graph declaration shape,
+    { path = T.unpack (T.replace "." "/" (structuralShapeModule ctx ((.name) declaration)) <> ".hs"),
+      text = emitShape ctx graph declaration shape,
       kind = Generated,
-      origin = nodeOrigin "mapped structural" (sdName declaration) (sdLoc declaration)
+      origin = nodeOrigin "mapped structural" ((.name) declaration) ((.loc) declaration)
     }
 
 structuralPrefix :: Context -> Text
-structuralPrefix ctx = case placement ctx of
+structuralPrefix ctx = case (.placement) ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Structural"
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.Structural"
 
@@ -1336,7 +1334,7 @@ structuralShapeModule :: Context -> Name -> Text
 structuralShapeModule ctx name = structuralPrefix ctx <> ".Shape." <> name
 
 nominalRepresentationModule :: Context -> Name -> Text
-nominalRepresentationModule ctx name = case placement ctx of
+nominalRepresentationModule ctx name = case (.placement) ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Nominal.Shape." <> name
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Nominal.Shape." <> name <> ".Generated"
 
@@ -1350,19 +1348,19 @@ generatedNominalOwners ctx service = case planNominalGenerationForService ctx se
   Right [] -> []
   Right owners ->
     [ ( ScaffoldModule
-          { modulePath = T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> ".hs"),
-            moduleText = emitGeneratedNominals languageContract ctx owners,
+          { path = T.unpack (T.replace "." "/" (generatedNominalModule ctx) <> ".hs"),
+            text = emitGeneratedNominals languageContract ctx owners,
             kind = Generated,
-            origin = "context " <> specContext spec <> " generated nominal declarations"
+            origin = "context " <> (.context) spec <> " generated nominal declarations"
           },
         []
       )
     ]
       <> [ ( ScaffoldModule
-               { modulePath = T.unpack (T.replace "." "/" (generatedNominalInternalModule ctx) <> ".hs"),
-                 moduleText = emitGeneratedNominalInternals ctx enforcingIds,
+               { path = T.unpack (T.replace "." "/" (generatedNominalInternalModule ctx) <> ".hs"),
+                 text = emitGeneratedNominalInternals ctx enforcingIds,
                  kind = Generated,
-                 origin = "context " <> specContext spec <> " generated nominal ID internals"
+                 origin = "context " <> (.context) spec <> " generated nominal ID internals"
                },
              []
            )
@@ -1372,8 +1370,8 @@ generatedNominalOwners ctx service = case planNominalGenerationForService ctx se
       enforcingIds =
         [ (nominal, contract)
         | owner <- owners,
-          let nominal = nominalDeclaration owner,
-          IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+          let nominal = (.declaration) owner,
+          IdRepresentation prefix <- [(.representation) nominal],
           Just contract <- [idDomainContractFor languageContract prefix]
         ]
   where
@@ -1397,27 +1395,27 @@ emitGeneratedNominals languageContract ctx owners =
         <> if T.null declarations then [] else ["", declarations]
     )
   where
-    usesEquality = any nominalEqualityUsed owners
-    exactEqualityOwners = [owner | owner <- owners, nominalEqualityUsed owner, exactOwner (nominalDeclaration owner)]
-    inexactEqualityOwners = [owner | owner <- owners, nominalEqualityUsed owner, not (exactOwner (nominalDeclaration owner))]
+    usesEquality = any (.equalityUsed) owners
+    exactEqualityOwners = [owner | owner <- owners, (.equalityUsed) owner, exactOwner ((.declaration) owner)]
+    inexactEqualityOwners = [owner | owner <- owners, (.equalityUsed) owner, not (exactOwner ((.declaration) owner))]
     usesExactEquality = not (null exactEqualityOwners)
     usesInexactEquality = not (null inexactEqualityOwners)
     legacyNominals =
       [ nominal
       | owner <- owners,
-        let nominal = nominalDeclaration owner,
-        case resolvedNominalRepresentation nominal of
+        let nominal = (.declaration) owner,
+        case (.representation) nominal of
           IdRepresentation prefix -> not (isJust (idDomainContractFor languageContract prefix))
           EnumRepresentation {} -> True
           ScalarRepresentation {} -> False
       ]
-    hasExactEnum = any (\owner -> case resolvedNominalRepresentation (nominalDeclaration owner) of EnumRepresentation {} -> True; _ -> False) exactEqualityOwners
-    hasExactEnforcedId = any (\owner -> case resolvedNominalRepresentation (nominalDeclaration owner) of IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix); _ -> False) exactEqualityOwners
+    hasExactEnum = any (\owner -> case (.representation) ((.declaration) owner) of EnumRepresentation {} -> True; _ -> False) exactEqualityOwners
+    hasExactEnforcedId = any (\owner -> case (.representation) ((.declaration) owner) of IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix); _ -> False) exactEqualityOwners
     enforcingIds =
       [ nominal
       | owner <- owners,
-        let nominal = nominalDeclaration owner,
-        IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+        let nominal = (.declaration) owner,
+        IdRepresentation prefix <- [(.representation) nominal],
         Just _ <- [idDomainContractFor languageContract prefix]
       ]
     moduleHeader
@@ -1431,19 +1429,19 @@ emitGeneratedNominals languageContract ctx owners =
     ownerExports owner =
       baseExports <> equalityExports
       where
-        nominal = nominalDeclaration owner
-        name = resolvedNominalName nominal
-        baseExports = case resolvedNominalRepresentation nominal of
+        nominal = (.declaration) owner
+        name = (.name) nominal
+        baseExports = case (.representation) nominal of
           IdRepresentation prefix
             | Just _ <- idDomainContractFor languageContract prefix ->
                 [name, "parse" <> name, "mk" <> name, nominalTextName nominal]
           _ -> [name <> " (..)", nominalTextName nominal]
         equalityExports =
-          if nominalEqualityUsed owner
+          if (.equalityUsed) owner
             then [nominalEqualityTagName nominal, nominalEqualityWitnessName nominal]
             else []
     localExtensions =
-      [ExtDeriveAnyClass | any (nominalUsesDeriveAnyClass . nominalDeclaration) owners]
+      [ExtDeriveAnyClass | any (nominalUsesDeriveAnyClass . (.declaration)) owners]
         <> [ExtTypeFamilies | usesEquality]
     baseImports =
       ["import Data.Aeson (FromJSON, ToJSON)" | not (null legacyNominals)]
@@ -1473,23 +1471,23 @@ emitGeneratedNominals languageContract ctx owners =
           <> " ("
           <> T.intercalate
             ", "
-            (concatMap (\nominal -> [resolvedNominalName nominal, "mk" <> resolvedNominalName nominal, "parse" <> resolvedNominalName nominal, nominalTextName nominal]) enforcingIds)
+            (concatMap (\nominal -> [(.name) nominal, "mk" <> (.name) nominal, "parse" <> (.name) nominal, nominalTextName nominal]) enforcingIds)
           <> ")"
       | not (null enforcingIds)
       ]
     declarations = T.dropWhileEnd (== '\n') (sectionsOf [map emitOwner owners])
-    emitOwner owner = emitGeneratedNominal languageContract (nominalEqualityUsed owner) (nominalDeclaration owner)
-    exactOwner nominal = case resolvedNominalRepresentation nominal of
+    emitOwner owner = emitGeneratedNominal languageContract ((.equalityUsed) owner) ((.declaration) owner)
+    exactOwner nominal = case (.representation) nominal of
       EnumRepresentation {} -> True
       IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
       ScalarRepresentation {} -> False
-    nominalUsesDeriveAnyClass nominal = case resolvedNominalRepresentation nominal of
+    nominalUsesDeriveAnyClass nominal = case (.representation) nominal of
       IdRepresentation prefix -> not (isJust (idDomainContractFor languageContract prefix))
       EnumRepresentation {} -> True
       ScalarRepresentation {} -> False
 
 emitGeneratedNominal :: EffectiveLanguageContract -> Bool -> ResolvedNominalType -> Text
-emitGeneratedNominal languageContract equalityUsed nominal = case resolvedNominalRepresentation nominal of
+emitGeneratedNominal languageContract equalityUsed nominal = case (.representation) nominal of
   IdRepresentation prefix
     | Just _ <- idDomainContractFor languageContract prefix ->
         nl equalitySection
@@ -1521,7 +1519,7 @@ emitGeneratedNominal languageContract equalityUsed nominal = case resolvedNomina
   ScalarRepresentation {} ->
     error "generated nominal scalar reached generated declaration emission"
   where
-    name = resolvedNominalName nominal
+    name = (.name) nominal
     equalitySection = if equalityUsed then ["", emitGeneratedNominalEquality languageContract nominal] else []
 
 emitGeneratedNominalEquality :: EffectiveLanguageContract -> ResolvedNominalType -> Text
@@ -1542,11 +1540,11 @@ emitGeneratedNominalEquality languageContract nominal =
            witnessName <> " = " <> witnessConstructor <> " @" <> tagName
          ]
   where
-    name = resolvedNominalName nominal
+    name = (.name) nominal
     tagName = nominalEqualityTagName nominal
     witnessName = nominalEqualityWitnessName nominal
     equalityIdentity = fromMaybe (error "generated nominal equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
-    (exactInstance, witnessConstructor) = case resolvedNominalRepresentation nominal of
+    (exactInstance, witnessConstructor) = case (.representation) nominal of
       IdRepresentation prefix -> case idDomainContractFor languageContract prefix of
         Nothing -> ([], "fieldWitness")
         Just _ ->
@@ -1592,9 +1590,9 @@ emitGeneratedNominalInternals ctx nominals =
     ]
   where
     exportsFor (nominal, _) =
-      [ resolvedNominalName nominal,
-        "parse" <> resolvedNominalName nominal,
-        "mk" <> resolvedNominalName nominal,
+      [ (.name) nominal,
+        "parse" <> (.name) nominal,
+        "mk" <> (.name) nominal,
         nominalTextName nominal,
         legacyNominalConstructorName nominal
       ]
@@ -1626,14 +1624,14 @@ emitGeneratedNominalInternals ctx nominals =
           legacyNominalConstructorName nominal <> " = " <> name
         ]
       where
-        name = resolvedNominalName nominal
+        name = (.name) nominal
         textName = nominalTextName nominal
 
 nominalEqualityTagName :: ResolvedNominalType -> Text
-nominalEqualityTagName nominal = resolvedNominalName nominal <> "EqualityProjection"
+nominalEqualityTagName nominal = (.name) nominal <> "EqualityProjection"
 
 nominalEqualityWitnessName :: ResolvedNominalType -> Text
-nominalEqualityWitnessName nominal = lowerFirst (resolvedNominalName nominal) <> "EqualityWitness"
+nominalEqualityWitnessName nominal = lowerFirst ((.name) nominal) <> "EqualityWitness"
 
 renderNonEmpty :: [Text] -> Text
 renderNonEmpty values = case values of
@@ -1641,7 +1639,7 @@ renderNonEmpty values = case values of
   firstValue : rest -> firstValue <> " :| [" <> T.intercalate ", " rest <> "]"
 
 nominalTextName :: ResolvedNominalType -> Text
-nominalTextName = (<> "Text") . lowerFirst . resolvedNominalName
+nominalTextName = (<> "Text") . lowerFirst . (.name)
 
 -- | Explicit type/constructor imports for exactly the generated declarations a
 -- generated aggregate module uses. Keeping an import list avoids making every
@@ -1653,7 +1651,7 @@ generatedNominalTypeImports ctx nominals =
   [ "import "
       <> generatedNominalModule ctx
       <> " ("
-      <> T.intercalate ", " [resolvedNominalName nominal <> " (..)" | nominal <- stableNominals nominals]
+      <> T.intercalate ", " [(.name) nominal <> " (..)" | nominal <- stableNominals nominals]
       <> ")"
   ]
 
@@ -1677,13 +1675,13 @@ generatedNominalTypeImportsWithParsers service ctx nominals parsing =
       <> ")"
   ]
   where
-    parsingNames = map resolvedNominalName (stableNominals parsing)
-    importsFor nominal = case resolvedNominalRepresentation nominal of
+    parsingNames = map (.name) (stableNominals parsing)
+    importsFor nominal = case (.representation) nominal of
       IdRepresentation prefix
         | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix ->
-            [resolvedNominalName nominal]
-              <> ["parse" <> resolvedNominalName nominal | resolvedNominalName nominal `elem` parsingNames]
-      _ -> [resolvedNominalName nominal <> " (..)"]
+            [(.name) nominal]
+              <> ["parse" <> (.name) nominal | (.name) nominal `elem` parsingNames]
+      _ -> [(.name) nominal <> " (..)"]
 
 generatedNominalCodecImports :: CheckedService -> Context -> [ResolvedNominalType] -> [Text]
 generatedNominalCodecImports _ _ [] = []
@@ -1708,38 +1706,38 @@ generatedNominalCodecImports service ctx nominals =
        | not (null enforcingIds)
        ]
   where
-    publicImports nominal = case resolvedNominalRepresentation nominal of
+    publicImports nominal = case (.representation) nominal of
       IdRepresentation prefix
         | Just _ <- idDomainContractFor (checkedLanguageContract service) prefix -> [nominalTextName nominal]
-      _ -> [resolvedNominalName nominal <> " (..)", nominalTextName nominal]
+      _ -> [(.name) nominal <> " (..)", nominalTextName nominal]
     enforcingIds =
       [ nominal
       | nominal <- stableNominals nominals,
-        IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
+        IdRepresentation prefix <- [(.representation) nominal],
         Just _ <- [idDomainContractFor (checkedLanguageContract service) prefix]
       ]
 
 legacyNominalConstructorName :: ResolvedNominalType -> Text
-legacyNominalConstructorName nominal = "unsafe" <> resolvedNominalName nominal <> "FromLegacyText"
+legacyNominalConstructorName nominal = "unsafe" <> (.name) nominal <> "FromLegacyText"
 
 stableNominals :: [ResolvedNominalType] -> [ResolvedNominalType]
-stableNominals = Map.elems . Map.fromList . map (\nominal -> (resolvedNominalName nominal, nominal))
+stableNominals = Map.elems . Map.fromList . map (\nominal -> ((.name) nominal, nominal))
 
 nominalRepresentationOwners :: Context -> Spec -> [(ScaffoldModule, [Name])]
 nominalRepresentationOwners ctx spec = case resolveNominalTypes spec of
   Left _ -> []
   Right registry ->
-    [ (nominalRepresentationModuleValue ctx nominal constructors, [resolvedNominalName nominal])
-    | nominal <- Map.elems (nominalTypes registry),
-      ConsumerNominal {} <- [resolvedNominalOwnership nominal],
-      EnumRepresentation constructors <- [resolvedNominalRepresentation nominal]
+    [ (nominalRepresentationModuleValue ctx nominal constructors, [(.name) nominal])
+    | nominal <- Map.elems ((.nominalTypes) registry),
+      ConsumerNominal {} <- [(.ownership) nominal],
+      EnumRepresentation constructors <- [(.representation) nominal]
     ]
 
 nominalRepresentationModuleValue :: Context -> ResolvedNominalType -> NonEmpty (Name, Text) -> ScaffoldModule
 nominalRepresentationModuleValue ctx nominal constructors =
   ScaffoldModule
-    { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-      moduleText =
+    { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+      text =
         nl
           [ generatedBanner,
             "module " <> moduleName <> " (" <> representationType <> " (..), " <> encoderName <> ") where",
@@ -1755,15 +1753,15 @@ nominalRepresentationModuleValue ctx nominal constructors =
             nl ["  " <> constructor <> " -> " <> tshow wire | (constructor, wire) <- NE.toList constructors]
           ],
       kind = Generated,
-      origin = nodeOrigin "bound nominal enum representation" (resolvedNominalName nominal) (resolvedNominalLoc nominal)
+      origin = nodeOrigin "bound nominal enum representation" ((.name) nominal) ((.loc) nominal)
     }
   where
-    moduleName = nominalRepresentationModule ctx (resolvedNominalName nominal)
-    representationType = resolvedNominalName nominal <> "Representation"
-    encoderName = lowerFirst (resolvedNominalName nominal) <> "RepresentationText"
+    moduleName = nominalRepresentationModule ctx ((.name) nominal)
+    representationType = (.name) nominal <> "Representation"
+    encoderName = lowerFirst ((.name) nominal) <> "RepresentationText"
 
 nominalProjectionModule :: Context -> Text
-nominalProjectionModule ctx = case placement ctx of
+nominalProjectionModule ctx = case (.placement) ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".NominalProjections"
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.NominalProjections"
 
@@ -1772,10 +1770,10 @@ nominalProjectionOwners ctx service = case nominalProjectionTypes (checkedTypeGr
   [] -> []
   nominals ->
     [ ( ScaffoldModule
-          { modulePath = T.unpack (T.replace "." "/" (nominalProjectionModule ctx) <> ".hs"),
-            moduleText = emitNominalProjections (checkedLanguageContract service) ctx nominals,
+          { path = T.unpack (T.replace "." "/" (nominalProjectionModule ctx) <> ".hs"),
+            text = emitNominalProjections (checkedLanguageContract service) ctx nominals,
             kind = Generated,
-            origin = "context " <> specContext spec <> " nominal scalar projection facade"
+            origin = "context " <> (.context) spec <> " nominal scalar projection facade"
           },
         []
       )
@@ -1786,23 +1784,23 @@ nominalProjectionOwners ctx service = case nominalProjectionTypes (checkedTypeGr
 nominalProjectionTypes :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [ResolvedNominalType]
 nominalProjectionTypes typeGraphResult spec =
   Map.elems . Map.fromList $
-    [ (resolvedNominalName nominal, nominal)
-    | aggregate <- [value | NAggregate value <- specNodes spec],
+    [ ((.name) nominal, nominal)
+    | aggregate <- [value | NAggregate value <- (.nodes) spec],
       resolved <- registerTypes aggregate <> commandTypes aggregate,
       AggregateNominal nominal <- [resolved],
-      ConsumerNominal {} <- [resolvedNominalOwnership nominal]
+      ConsumerNominal {} <- [(.ownership) nominal]
     ]
   where
     symbols = aggregateSymbolsFromGraphResult typeGraphResult spec
     registerTypes aggregate =
       [ resolved
-      | register <- aggRegs aggregate,
-        Right resolved <- [resolveAggregateType symbols (regLoc register) RegisterUse (regType register)]
+      | register <- (.regs) aggregate,
+        Right resolved <- [resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register)]
       ]
     commandTypes aggregate =
       [ resolved
-      | command <- aggCommands aggregate,
-        field <- cmdFields command,
+      | command <- (.commands) aggregate,
+        field <- (.fields) command,
         Right resolved <- [inferAggregateFieldType symbols aggregate CommandFieldUse field]
       ]
 
@@ -1844,7 +1842,7 @@ emitNominalProjections languageContract ctx nominals =
              | any hasExactDomain nominals
              ]
           <> ["Numeric.Natural (Natural)" | any (hasScalar NominalNatural) nominals]
-    hasExactProjection nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
+    hasExactProjection nominal = case (.representation) nominal of ScalarRepresentation {} -> False; _ -> True
     hasInexactProjection = any (not . hasExactProjection) nominals
     hasReconstruction = any hasExactProjection nominals
     coreImports =
@@ -1854,24 +1852,24 @@ emitNominalProjections languageContract ctx nominals =
     nominalCodecImports =
       ["nominalToRepresentation"]
         <> ["nominalFromRepresentation" | hasReconstruction]
-    hasScalar wanted nominal = resolvedNominalRepresentation nominal == ScalarRepresentation wanted
-    hasId nominal = case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False
-    hasEnforcedId nominal = case resolvedNominalRepresentation nominal of
+    hasScalar wanted nominal = (.representation) nominal == ScalarRepresentation wanted
+    hasId nominal = case (.representation) nominal of IdRepresentation {} -> True; _ -> False
+    hasEnforcedId nominal = case (.representation) nominal of
       IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
       _ -> False
-    hasUnenforcedId nominal = case resolvedNominalRepresentation nominal of
+    hasUnenforcedId nominal = case (.representation) nominal of
       IdRepresentation prefix -> isNothing (idDomainContractFor languageContract prefix)
       _ -> False
-    hasExactDomain nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation {} -> False; _ -> True
-    usesText nominal = case resolvedNominalRepresentation nominal of ScalarRepresentation NominalText -> True; IdRepresentation {} -> True; EnumRepresentation {} -> True; _ -> False
+    hasExactDomain nominal = case (.representation) nominal of ScalarRepresentation {} -> False; _ -> True
+    usesText nominal = case (.representation) nominal of ScalarRepresentation NominalText -> True; IdRepresentation {} -> True; EnumRepresentation {} -> True; _ -> False
     importPlan =
       planImportsOrDie
         moduleName
         ( Set.fromList
             [ tagName
             | nominal <- nominals,
-              tagName <- case resolvedNominalRepresentation nominal of
-                ScalarRepresentation {} -> [resolvedNominalName nominal <> "NominalProjection"]
+              tagName <- case (.representation) nominal of
+                ScalarRepresentation {} -> [(.name) nominal <> "NominalProjection"]
                 IdRepresentation {} -> [nominalEqualityTagName nominal]
                 EnumRepresentation {} -> [nominalEqualityTagName nominal]
             ]
@@ -1879,25 +1877,25 @@ emitNominalProjections languageContract ctx nominals =
         ( Set.fromList
             [ reference
             | nominal <- nominals,
-              ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+              ConsumerNominal binding <- [(.ownership) nominal],
               reference <-
-                [ haskellTypeReference (consumerNominalHaskell binding),
-                  qualifiedValueReference (consumerNominalBinding binding)
+                [ haskellTypeReference ((.haskell) binding),
+                  qualifiedValueReference ((.binding) binding)
                 ]
-                  <> case resolvedNominalRepresentation nominal of
+                  <> case (.representation) nominal of
                     EnumRepresentation constructors ->
-                      HaskellReference representationModule (lowerFirst (resolvedNominalName nominal) <> "RepresentationText") ValueNamespace RequireQualified
+                      HaskellReference representationModule (lowerFirst ((.name) nominal) <> "RepresentationText") ValueNamespace RequireQualified
                         : [ HaskellReference representationModule constructor ConstructorNamespace RequireQualified
                           | (constructor, _) <- NE.toList constructors
                           ]
                       where
-                        representationModule = nominalRepresentationModule ctx (resolvedNominalName nominal)
+                        representationModule = nominalRepresentationModule ctx ((.name) nominal)
                     _ -> []
             ]
         )
-    emitNominalProjection nominal = case resolvedNominalOwnership nominal of
+    emitNominalProjection nominal = case (.ownership) nominal of
       GeneratedNominal -> ""
-      ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+      ConsumerNominal binding -> case (.representation) nominal of
         ScalarRepresentation {} -> emitScalarProjection nominal binding
         IdRepresentation prefix -> emitConsumerIdProjection nominal binding prefix
         EnumRepresentation constructors -> emitConsumerEnumProjection nominal binding constructors
@@ -1907,16 +1905,16 @@ emitNominalProjections languageContract ctx nominals =
           "",
           "instance FieldProjection " <> tagName <> " where",
           "  type FieldName " <> tagName <> " = " <> tshow name,
-          "  type FieldOwner " <> tagName <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding)),
-          "  type FieldResult " <> tagName <> " = " <> scalarHaskellType (resolvedNominalRepresentation nominal),
-          "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (consumerNominalCanonical binding)),
-          "  projectFieldValue _ = nominalToRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)),
+          "  type FieldOwner " <> tagName <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding)),
+          "  type FieldResult " <> tagName <> " = " <> scalarHaskellType ((.representation) nominal),
+          "  fieldShapeId _ = " <> tshow (unCanonicalTypeId ((.canonical) binding)),
+          "  projectFieldValue _ = nominalToRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding)),
           "",
           witnessName <> " :: FieldWitness " <> tagName,
           witnessName <> " = fieldWitness @" <> tagName
         ]
       where
-        name = resolvedNominalName nominal
+        name = (.name) nominal
         tagName = name <> "NominalProjection"
         witnessName = lowerFirst name <> "Witness"
     emitConsumerIdProjection nominal binding prefix =
@@ -1947,12 +1945,12 @@ emitNominalProjections languageContract ctx nominals =
                ]
         )
       where
-        name = resolvedNominalName nominal
+        name = (.name) nominal
         tagName = nominalEqualityTagName nominal
         witnessName = nominalEqualityWitnessName nominal
         patternName = lowerFirst name <> "EqualityPattern"
-        ownerType = renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
-        bindingName = renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
+        ownerType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding))
+        bindingName = renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding))
         equalityIdentity = fromMaybe (error "consumer ID equality contract missing") (nominalEqualityIdentityForService languageContract nominal)
         enforced = isJust (idDomainContractFor languageContract prefix)
         patternLines
@@ -1997,11 +1995,11 @@ emitNominalProjections languageContract ctx nominals =
                witnessName <> " = exactFieldWitness @" <> tagName
              ]
       where
-        name = resolvedNominalName nominal
+        name = (.name) nominal
         tagName = nominalEqualityTagName nominal
         witnessName = nominalEqualityWitnessName nominal
-        ownerType = renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
-        bindingName = renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
+        ownerType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding))
+        bindingName = renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding))
         representationModule = nominalRepresentationModule ctx name
         encoderName = renderReferenceOrDie importPlan (HaskellReference representationModule (lowerFirst name <> "RepresentationText") ValueNamespace RequireQualified)
         representationConstructor constructor = renderReferenceOrDie importPlan (HaskellReference representationModule constructor ConstructorNamespace RequireQualified)
@@ -2031,8 +2029,8 @@ emitShape ctx graph declaration shape =
       <> ["" | not (null imports) || not (T.null (renderPlannedImports importPlan))]
       <> [shapeDeclaration]
   where
-    moduleName = structuralShapeModule ctx (sdName declaration)
-    shapeType = sdName declaration <> "Shape"
+    moduleName = structuralShapeModule ctx ((.name) declaration)
+    shapeType = (.name) declaration <> "Shape"
     requirements = shapeRequirements ctx graph shape
     languagePragmas = renderGeneratedLanguagePragmas []
     imports =
@@ -2050,7 +2048,7 @@ emitShape ctx graph declaration shape =
               nl $
                 ["data " <> shapeType <> " = " <> constructor]
                   <> recordFields
-                    [ (rwfHaskell field, renderShapeType importPlan ctx graph (rwfType field))
+                    [ ((.haskell) field, renderShapeType importPlan ctx graph ((.valueType) field))
                     | field <- fields
                     ]
                   <> ["  deriving stock (Eq, Generic, Show)"],
@@ -2058,7 +2056,7 @@ emitShape ctx graph declaration shape =
               "data "
                 <> shapeType
                 <> " = "
-                <> T.intercalate " | " (map weCtor entries)
+                <> T.intercalate " | " (map (.ctor) entries)
                 <> "\n  deriving stock (Eq, Generic, Show)",
             onUnion = \_ arms ->
               nl $
@@ -2070,7 +2068,7 @@ emitShape ctx graph declaration shape =
                       <> ["  deriving stock (Eq, Generic, Show)"]
           }
         shape
-    renderArm arm = rwaCtor arm <> maybe "" ((" !" <>) . renderShapeType importPlan ctx graph) (rwaPayload arm)
+    renderArm arm = (.ctor) arm <> maybe "" ((" !" <>) . renderShapeType importPlan ctx graph) ((.payload) arm)
     importPlan =
       planImportsOrDie
         moduleName
@@ -2090,9 +2088,9 @@ shapeRequirements :: Context -> TypeGraph -> ResolvedMappedShape -> [ShapeRequir
 shapeRequirements ctx graph =
   foldMappedShape
     MappedShapeAlgebra
-      { onRecord = \_ _ fields -> concatMap (exprRequirements ctx graph . rwfType) fields,
+      { onRecord = \_ _ fields -> concatMap (exprRequirements ctx graph . (.valueType)) fields,
         onEnum = const [],
-        onUnion = \_ arms -> concatMap (maybe [] (exprRequirements ctx graph) . rwaPayload) arms
+        onUnion = \_ arms -> concatMap (maybe [] (exprRequirements ctx graph) . (.payload)) arms
       }
 
 exprRequirements :: Context -> TypeGraph -> ResolvedTypeExpr -> [ShapeRequirement]
@@ -2109,17 +2107,17 @@ exprRequirements ctx graph =
         onOptional = id,
         onList = id,
         onMap = (ReqMap :) . (ReqText :),
-        onRef = \key -> case Map.lookup key (tgDeclarations graph) of
+        onRef = \key -> case Map.lookup key ((.declarations) graph) of
           Just (ResolvedStructural declaration _) ->
             [ ReqReference
                 ( HaskellReference
-                    (structuralShapeModule ctx (sdName declaration))
-                    (sdName declaration <> "Shape")
+                    (structuralShapeModule ctx ((.name) declaration))
+                    ((.name) declaration <> "Shape")
                     TypeNamespace
                     RequireQualified
                 )
             ]
-          Just (ResolvedOpaque declaration) -> [ReqReference (haskellTypeReference (odHaskell declaration))]
+          Just (ResolvedOpaque declaration) -> [ReqReference (haskellTypeReference ((.haskell) declaration))]
           Nothing -> []
       }
 
@@ -2136,16 +2134,16 @@ renderShapeType importPlan ctx graph =
           onTime = atomicShapeType "UTCTime",
           onJson = atomicShapeType "Value",
           onOptional = applicationShapeType . ("Maybe " <>) . renderStrictOrApplicationArgument,
-          onList = atomicShapeType . ("[" <>) . (<> "]") . renderedShapeTypeText,
+          onList = atomicShapeType . ("[" <>) . (<> "]") . (.text),
           onMap = applicationShapeType . ("Map Text " <>) . renderStrictOrApplicationArgument,
           onRef =
-            atomicShapeType . \key -> case Map.lookup key (tgDeclarations graph) of
+            atomicShapeType . \key -> case Map.lookup key ((.declarations) graph) of
               Just (ResolvedStructural nested _) ->
                 renderReferenceOrDie
                   importPlan
-                  (HaskellReference (structuralShapeModule ctx (sdName nested)) (sdName nested <> "Shape") TypeNamespace RequireQualified)
+                  (HaskellReference (structuralShapeModule ctx ((.name) nested)) ((.name) nested <> "Shape") TypeNamespace RequireQualified)
               Just (ResolvedOpaque opaque) ->
-                renderReferenceOrDie importPlan (haskellTypeReference (odHaskell opaque))
+                renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) opaque))
               Nothing -> "()"
         }
 
@@ -2154,8 +2152,8 @@ data ShapeTypePrecedence
   | ApplicationShapeType
 
 data RenderedShapeType = RenderedShapeType
-  { renderedShapeTypePrecedence :: !ShapeTypePrecedence,
-    renderedShapeTypeText :: !Text
+  { precedence :: !ShapeTypePrecedence,
+    text :: !Text
   }
 
 atomicShapeType :: Text -> RenderedShapeType
@@ -2165,27 +2163,27 @@ applicationShapeType :: Text -> RenderedShapeType
 applicationShapeType = RenderedShapeType ApplicationShapeType
 
 renderStrictOrApplicationArgument :: RenderedShapeType -> Text
-renderStrictOrApplicationArgument rendered = case renderedShapeTypePrecedence rendered of
-  AtomicShapeType -> renderedShapeTypeText rendered
-  ApplicationShapeType -> "(" <> renderedShapeTypeText rendered <> ")"
+renderStrictOrApplicationArgument rendered = case (.precedence) rendered of
+  AtomicShapeType -> (.text) rendered
+  ApplicationShapeType -> "(" <> (.text) rendered <> ")"
 
 data StructuralProjection = StructuralProjection
-  { spTag :: !Text,
-    spWitness :: !Text,
-    spPointer :: !Text,
-    spOwner :: !HaskellSource,
-    spResult :: !Text,
-    spCanonical :: !CanonicalTypeId,
-    spBinding :: !QualifiedValueName,
-    spSelectors :: ![(Text, Text)]
+  { tag :: !Text,
+    witness :: !Text,
+    pointer :: !Text,
+    owner :: !HaskellSource,
+    result :: !Text,
+    canonical :: !CanonicalTypeId,
+    binding :: !QualifiedValueName,
+    selectors :: ![(Text, Text)]
   }
   deriving stock (Eq, Show)
 
 projectionSpecs :: TypeGraph -> [StructuralProjection]
 projectionSpecs graph =
-  sortOn spTag . allocateProjectionNames . concat $
+  sortOn (.tag) . allocateProjectionNames . concat $
     [ projectionsForRoot graph declaration shape
-    | ResolvedStructural declaration shape <- Map.elems (tgDeclarations graph)
+    | ResolvedStructural declaration shape <- Map.elems ((.declarations) graph)
     ]
 
 projectionsForRoot :: TypeGraph -> StructuralDecl -> ResolvedMappedShape -> [StructuralProjection]
@@ -2195,49 +2193,49 @@ projectionsForRoot graph root rootShape = case rootShape of
   RUnion {} -> []
   where
     walkField keys selectors field
-      | rwfPresence field /= PRequired = []
-      | otherwise = case projectionScalar (rwfType field) of
-          Just result -> [mkProjection (keys <> [rwfKey field]) (selectors <> [(shapeModuleForOwner, rwfHaskell field)]) result]
-          Nothing -> case rwfType field of
-            RRef key -> case Map.lookup key (tgDeclarations graph) of
+      | (.presence) field /= PRequired = []
+      | otherwise = case projectionScalar ((.valueType) field) of
+          Just result -> [mkProjection (keys <> [(.key) field]) (selectors <> [(shapeModuleForOwner, (.haskell) field)]) result]
+          Nothing -> case (.valueType) field of
+            RRef key -> case Map.lookup key ((.declarations) graph) of
               Just (ResolvedStructural nested (RRecord _ _ nestedFields)) ->
                 concatMap
-                  (walkNested nested (keys <> [rwfKey field]) (selectors <> [(shapeModuleForOwner, rwfHaskell field)]))
+                  (walkNested nested (keys <> [(.key) field]) (selectors <> [(shapeModuleForOwner, (.haskell) field)]))
                   nestedFields
               _ -> []
             _ -> []
       where
-        shapeModuleForOwner = "__SHAPE__." <> sdName root
+        shapeModuleForOwner = "__SHAPE__." <> (.name) root
 
     walkNested owner keys selectors field
-      | rwfPresence field /= PRequired = []
-      | otherwise = case projectionScalar (rwfType field) of
-          Just result -> [mkProjection (keys <> [rwfKey field]) (selectors <> [(shapeModuleFor owner, rwfHaskell field)]) result]
-          Nothing -> case rwfType field of
-            RRef key -> case Map.lookup key (tgDeclarations graph) of
+      | (.presence) field /= PRequired = []
+      | otherwise = case projectionScalar ((.valueType) field) of
+          Just result -> [mkProjection (keys <> [(.key) field]) (selectors <> [(shapeModuleFor owner, (.haskell) field)]) result]
+          Nothing -> case (.valueType) field of
+            RRef key -> case Map.lookup key ((.declarations) graph) of
               Just (ResolvedStructural nested (RRecord _ _ nestedFields)) ->
                 concatMap
-                  (walkNested nested (keys <> [rwfKey field]) (selectors <> [(shapeModuleFor owner, rwfHaskell field)]))
+                  (walkNested nested (keys <> [(.key) field]) (selectors <> [(shapeModuleFor owner, (.haskell) field)]))
                   nestedFields
               _ -> []
             _ -> []
 
     -- Context is supplied when rendering; this marker is replaced there.
-    shapeModuleFor declaration = "__SHAPE__." <> sdName declaration
+    shapeModuleFor declaration = "__SHAPE__." <> (.name) declaration
     mkProjection keys selectors result =
       StructuralProjection
-        { spTag = nameStem <> "Projection",
-          spWitness = lowerFirst nameStem <> "Witness",
-          spPointer = pointer,
-          spOwner = sdHaskell root,
-          spResult = result,
-          spCanonical = sdCanonical root,
-          spBinding = sdBinding root,
-          spSelectors = selectors
+        { tag = nameStem <> "Projection",
+          witness = lowerFirst nameStem <> "Witness",
+          pointer = pointer,
+          owner = (.haskell) root,
+          result = result,
+          canonical = (.canonical) root,
+          binding = (.binding) root,
+          selectors = selectors
         }
       where
         pointer = T.concat ["/" <> escapePointer key | key <- keys]
-        nameStem = projectionNameStem (sdName root) pointer
+        nameStem = projectionNameStem ((.name) root) pointer
 
 projectionScalar :: ResolvedTypeExpr -> Maybe Text
 projectionScalar = \case
@@ -2270,7 +2268,7 @@ projectionNameStem owner pointer =
 allocateProjectionNames :: [StructuralProjection] -> [StructuralProjection]
 allocateProjectionNames specs = concatMap allocateGroup groups
   where
-    groups = groupBy (\left right -> spTag left == spTag right) (sortOn spTag specs)
+    groups = groupBy (\left right -> (.tag) left == (.tag) right) (sortOn (.tag) specs)
     allocateGroup [spec] = [spec]
     allocateGroup collided = reverse named
       where
@@ -2287,21 +2285,27 @@ allocateProjectionNames specs = concatMap allocateGroup groups
                     then ""
                     else tshow' occurrence
            in (Map.insert shortDigest occurrence seen, renameWithSuffix suffix spec : allocated)
-    projectionIdentity spec = unCanonicalTypeId (spCanonical spec) <> "#" <> spPointer spec
+    projectionIdentity spec = unCanonicalTypeId ((.canonical) spec) <> "#" <> (.pointer) spec
     renameWithSuffix suffix spec =
-      spec
-        { spTag = nameStem <> suffix <> "Projection",
-          spWitness = lowerFirst nameStem <> suffix <> "Witness"
+      StructuralProjection
+        { tag = nameStem <> suffix <> "Projection",
+          witness = lowerFirst nameStem <> suffix <> "Witness",
+          pointer = spec.pointer,
+          owner = spec.owner,
+          result = spec.result,
+          canonical = spec.canonical,
+          binding = spec.binding,
+          selectors = spec.selectors
         }
       where
-        nameStem = fromMaybe (spTag spec) (T.stripSuffix "Projection" (spTag spec))
+        nameStem = fromMaybe ((.tag) spec) (T.stripSuffix "Projection" ((.tag) spec))
 
 projectionWitnessName :: TypeGraph -> MappedKey -> Text -> Maybe Text
 projectionWitnessName graph owner pointer = do
-  ResolvedStructural declaration _ <- Map.lookup owner (tgDeclarations graph)
-  spWitness
+  ResolvedStructural declaration _ <- Map.lookup owner ((.declarations) graph)
+  (.witness)
     <$> find
-      (\spec -> spCanonical spec == sdCanonical declaration && spPointer spec == pointer)
+      (\spec -> (.canonical) spec == (.canonical) declaration && (.pointer) spec == pointer)
       (projectionSpecs graph)
 
 emitStructuralProjections :: Context -> TypeGraph -> Text
@@ -2312,67 +2316,79 @@ emitStructuralProjections ctx graph =
            "-- Equality witnesses are emitted for Text, Int, Bool, Natural, and UTCTime.",
            "-- Int, Natural, and UTCTime belong to Keiki's ordered subset.",
            "module " <> moduleName,
-           "  ( " <> T.intercalate "\n  , " (map spWitness specs),
+           "  ( " <> T.intercalate "\n  , " (map (.witness) specs),
            "  ) where",
            ""
          ]
       <> staticImports
+      <> fieldScopeImports
       <> T.lines (renderPlannedImports importPlan)
       <> concatMap renderProjection specs
   where
     moduleName = structuralProjectionModule ctx
     specs = map (resolveProjectionModules ctx) (projectionSpecs graph)
-    resultTypes = Set.fromList (map spResult specs)
+    resultTypes = Set.fromList (map (.result) specs)
     staticImports =
       ["import Data.Text (Text)" | "Text" `Set.member` resultTypes]
         <> ["import Data.Time (UTCTime)" | "UTCTime" `Set.member` resultTypes]
         <> ["import Numeric.Natural (Natural)" | "Natural" `Set.member` resultTypes]
         <> ["import Keiro.Codec.Structural (bindingToShape)" | not (null specs)]
         <> ["import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)" | not (null specs)]
+    fieldScopeImports =
+      [ "import " <> shapeModuleName <> " (" <> lastSegment shapeModuleName <> "Shape(" <> T.intercalate ", " (Set.toAscList selectors) <> "))"
+      | (shapeModuleName, selectors) <- Map.toAscList selectorsByModule
+      ]
+    selectorsByModule =
+      Map.fromListWith
+        Set.union
+        [ (shapeModuleName, Set.singleton selector)
+        | spec <- specs,
+          (shapeModuleName, selector) <- (.selectors) spec
+        ]
     importPlan =
       planImportsOrDie
         moduleName
-        (Set.fromList (map spTag specs))
+        (Set.fromList (map (.tag) specs))
         ( Set.fromList
-            ( [haskellTypeReference (spOwner spec) | spec <- specs]
-                <> [qualifiedValueReference (spBinding spec) | spec <- specs]
-                <> [ HaskellReference shapeModuleName selector ValueNamespace RequireQualified
-                   | spec <- specs,
-                     (shapeModuleName, selector) <- spSelectors spec
-                   ]
+            ( [haskellTypeReference ((.owner) spec) | spec <- specs]
+                <> [qualifiedValueReference ((.binding) spec) | spec <- specs]
             )
         )
     renderProjection spec =
       [ "",
-        "data " <> spTag spec,
+        "data " <> (.tag) spec,
         "",
-        "instance FieldProjection " <> spTag spec <> " where",
-        "  type FieldName " <> spTag spec <> " = " <> tshow (spPointer spec),
-        "  type FieldOwner " <> spTag spec <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference (spOwner spec)),
-        "  type FieldResult " <> spTag spec <> " = " <> spResult spec,
-        "  fieldShapeId _ = " <> tshow (unCanonicalTypeId (spCanonical spec)),
+        "instance FieldProjection " <> (.tag) spec <> " where",
+        "  type FieldName " <> (.tag) spec <> " = " <> tshow ((.pointer) spec),
+        "  type FieldOwner " <> (.tag) spec <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference ((.owner) spec)),
+        "  type FieldResult " <> (.tag) spec <> " = " <> (.result) spec,
+        "  fieldShapeId _ = " <> tshow (unCanonicalTypeId ((.canonical) spec)),
         "  projectFieldValue _ owner = " <> renderGetter spec,
         "",
-        spWitness spec <> " :: FieldWitness " <> spTag spec,
-        spWitness spec <> " = fieldWitness @" <> spTag spec
+        (.witness) spec <> " :: FieldWitness " <> (.tag) spec,
+        (.witness) spec <> " = fieldWitness @" <> (.tag) spec
       ]
     renderGetter spec =
       foldl
-        ( \value (shapeModuleName, selector) ->
-            renderReferenceOrDie importPlan (HaskellReference shapeModuleName selector ValueNamespace RequireQualified)
-              <> " ("
-              <> value
-              <> ")"
+        ( \value (_shapeModuleName, selector) ->
+            "(" <> value <> ")." <> selector
         )
-        ("bindingToShape " <> renderReferenceOrDie importPlan (qualifiedValueReference (spBinding spec)) <> " owner")
-        (spSelectors spec)
+        ("bindingToShape " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) spec)) <> " owner")
+        ((.selectors) spec)
 
 resolveProjectionModules :: Context -> StructuralProjection -> StructuralProjection
 resolveProjectionModules ctx spec =
-  spec
-    { spSelectors =
+  StructuralProjection
+    { tag = spec.tag,
+      witness = spec.witness,
+      pointer = spec.pointer,
+      owner = spec.owner,
+      result = spec.result,
+      canonical = spec.canonical,
+      binding = spec.binding,
+      selectors =
         [ (replaceModule marker, selector)
-        | (marker, selector) <- spSelectors spec
+        | (marker, selector) <- spec.selectors
         ]
     }
   where
@@ -2382,7 +2398,7 @@ resolveProjectionModules ctx spec =
 
 haskellTypeReference :: HaskellSource -> HaskellReference
 haskellTypeReference source =
-  HaskellReference (hsModule source) (hsType source) TypeNamespace PreferUnqualified
+  HaskellReference ((.moduleName) source) ((.valueType) source) TypeNamespace PreferUnqualified
 
 qualifiedValueReference :: QualifiedValueName -> HaskellReference
 qualifiedValueReference qualified =
@@ -2478,10 +2494,11 @@ aggregateNeedsHoleModule aggregate
 emitBehaviorContract :: Agg -> Text
 emitBehaviorContract aggregate =
   nl $
-    renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null (aRegs aggregate))]
+    renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null ((.regs) aggregate))]
       <> [ generatedBanner,
-           "module " <> aGenPrefix aggregate <> ".BehaviorContract",
+           "module " <> (.genPrefix) aggregate <> ".BehaviorContract",
            "  ( BehaviorKey (..)",
+           "  , unBehaviorKey",
            "  , ObligationKind (..)",
            "  , EvidenceLevel (..)",
            "  , GuardCoverage (..)",
@@ -2498,10 +2515,10 @@ emitBehaviorContract aggregate =
            "  , renderBehaviorConformanceText",
            "  ) where",
            "",
-           "import " <> aGenPrefix aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
-           "import " <> aGenPrefix aggregate <> ".Domain",
-           "import " <> aGenPrefix aggregate <> ".Transducer (" <> valueStem <> "Transducer)",
-           "import " <> contextGeneratedPrefix (aContext aggregate) <> ".BehaviorSourceMap qualified as BehaviorSourceMap"
+           "import " <> (.genPrefix) aggregate <> ".Codec (encode" <> name <> "Event, parse" <> name <> "Event, " <> valueStem <> "Codec)",
+           "import " <> (.genPrefix) aggregate <> ".Domain",
+           "import " <> (.genPrefix) aggregate <> ".Transducer (" <> valueStem <> "Transducer)",
+           "import " <> contextGeneratedPrefix ((.context) aggregate) <> ".BehaviorSourceMap qualified as BehaviorSourceMap"
          ]
       <> outcomeBehaviorImports
       <> [ "import Data.Aeson (ToJSON (..), object, (.=))",
@@ -2517,6 +2534,9 @@ emitBehaviorContract aggregate =
            "newtype BehaviorKey = BehaviorKey { unBehaviorKey :: Text }",
            "  deriving stock (Eq, Ord, Show)",
            "",
+           "unBehaviorKey :: BehaviorKey -> Text",
+           "unBehaviorKey (BehaviorKey value) = value",
+           "",
            "data ObligationKind = LiveTransition | RequiredRejection | ReplayTransition",
            "  deriving stock (Eq, Ord, Show)",
            "",
@@ -2531,10 +2551,10 @@ emitBehaviorContract aggregate =
            "  , requirementKind :: !ObligationKind",
            "  , requirementEvidence :: !EvidenceLevel",
            "  , requirementGuardCoverage :: !GuardCoverage",
-           "  , requirementSource :: !" <> aVertexType aggregate,
+           "  , requirementSource :: !" <> (.vertexType) aggregate,
            "  , requirementCommandName :: !Text",
-           "  , requirementExpectedEdge :: !(Maybe (K.EdgeRef " <> aVertexType aggregate <> "))",
-           "  , requirementTarget :: !(Maybe " <> aVertexType aggregate <> ")",
+           "  , requirementExpectedEdge :: !(Maybe (K.EdgeRef " <> (.vertexType) aggregate <> "))",
+           "  , requirementTarget :: !(Maybe " <> (.vertexType) aggregate <> ")",
            "  , requirementEventKinds :: ![Text]",
            "  }",
            "  deriving stock (Eq, Show)",
@@ -2575,10 +2595,10 @@ emitBehaviorContract aggregate =
            "",
            "instance ToJSON BehaviorFailure where",
            "  toJSON behaviorFailure = object",
-           "    [ \"key\" .= unBehaviorKey (failureKey behaviorFailure)",
-           "    , \"subject\" .= failureSubject behaviorFailure",
-           "    , \"code\" .= failureCode behaviorFailure",
-           "    , \"detail\" .= failureDetail behaviorFailure",
+           "    [ \"key\" .= unBehaviorKey behaviorFailure.failureKey",
+           "    , \"subject\" .= behaviorFailure.failureSubject",
+           "    , \"code\" .= behaviorFailure.failureCode",
+           "    , \"detail\" .= behaviorFailure.failureDetail",
            "    ]",
            "",
            "data BehaviorConformanceReport = BehaviorConformanceReport",
@@ -2597,15 +2617,15 @@ emitBehaviorContract aggregate =
            "instance ToJSON BehaviorConformanceReport where",
            "  toJSON report = object",
            "    [ \"schema\" .= (\"keiro/behavior-conformance/1\" :: Text)",
-           "    , \"required\" .= keyTexts (reportRequired report)",
-           "    , \"filled\" .= keyTexts (reportFilled report)",
-           "    , \"pending\" .= keyTexts (reportPending report)",
-           "    , \"missing\" .= keyTexts (reportMissing report)",
-           "    , \"duplicate\" .= keyTexts (reportDuplicate report)",
-           "    , \"stale\" .= keyTexts (reportStale report)",
-           "    , \"failed\" .= reportFailed report",
-           "    , \"verified\" .= keyTexts (reportVerified report)",
-           "    , \"unverified\" .= keyTexts (reportUnverified report)",
+           "    , \"required\" .= keyTexts report.reportRequired",
+           "    , \"filled\" .= keyTexts report.reportFilled",
+           "    , \"pending\" .= keyTexts report.reportPending",
+           "    , \"missing\" .= keyTexts report.reportMissing",
+           "    , \"duplicate\" .= keyTexts report.reportDuplicate",
+           "    , \"stale\" .= keyTexts report.reportStale",
+           "    , \"failed\" .= report.reportFailed",
+           "    , \"verified\" .= keyTexts report.reportVerified",
+           "    , \"unverified\" .= keyTexts report.reportUnverified",
            "    ]",
            "",
            "behaviorRequirements :: [BehaviorRequirement]",
@@ -2622,12 +2642,12 @@ emitBehaviorContract aggregate =
            "    , reportMissing = sortedKeys [key | key <- Map.keys requiredByKey, Map.notMember key witnessGroups]",
            "    , reportDuplicate = sortedKeys [key | (key, rows) <- Map.toList witnessGroups, length rows > 1]",
            "    , reportStale = sortedKeys [key | key <- Map.keys witnessGroups, Map.notMember key requiredByKey]",
-           "    , reportFailed = sortOn (unBehaviorKey . failureKey) failures",
-           "    , reportVerified = sortedKeys [requirementKey requirement | (requirement, Right ()) <- executions, proofStrength requirement]",
-           "    , reportUnverified = sortedKeys [requirementKey requirement | (requirement, Right ()) <- executions, not (proofStrength requirement)]",
+           "    , reportFailed = sortOn (unBehaviorKey . (.failureKey)) failures",
+           "    , reportVerified = sortedKeys [requirement.requirementKey | (requirement, Right ()) <- executions, proofStrength requirement]",
+           "    , reportUnverified = sortedKeys [requirement.requirementKey | (requirement, Right ()) <- executions, not (proofStrength requirement)]",
            "    }",
            " where",
-           "  requiredByKey = Map.fromList [(requirementKey requirement, requirement) | requirement <- behaviorRequirements]",
+           "  requiredByKey = Map.fromList [(requirement.requirementKey, requirement) | requirement <- behaviorRequirements]",
            "  witnessGroups = Map.fromListWith (flip (<>)) [(behaviorWitnessKey witness, [witness]) | witness <- witnesses]",
            "  executions =",
            "    [ (requirement, runWitness requirement witness)",
@@ -2642,27 +2662,27 @@ emitBehaviorContract aggregate =
            "",
            "behaviorConformancePassedWith :: Bool -> BehaviorConformanceReport -> Bool",
            "behaviorConformancePassedWith failOnUnverified report =",
-           "  null (reportPending report)",
-           "    && null (reportMissing report)",
-           "    && null (reportDuplicate report)",
-           "    && null (reportStale report)",
-           "    && null (reportFailed report)",
-           "    && (not failOnUnverified || null (reportUnverified report))",
+           "  null report.reportPending",
+           "    && null report.reportMissing",
+           "    && null report.reportDuplicate",
+           "    && null report.reportStale",
+           "    && null report.reportFailed",
+           "    && (not failOnUnverified || null report.reportUnverified)",
            "",
            "renderBehaviorConformanceText :: BehaviorConformanceReport -> Text",
            "renderBehaviorConformanceText report = T.unlines",
            "  [ \"behavior conformance: " <> name <> "\"",
            "  , \"schema: keiro/behavior-conformance/1\"",
-           "  , countLine \"required\" (reportRequired report)",
-           "  , countLine \"filled\" (reportFilled report)",
-           "  , countLine \"pending\" (reportPending report)",
-           "  , countLine \"missing\" (reportMissing report)",
-           "  , countLine \"duplicate\" (reportDuplicate report)",
-           "  , countLine \"stale\" (reportStale report)",
-           "  , \"failed: \" <> tshow (length (reportFailed report))",
-           "  , countLine \"verified\" (reportVerified report)",
-           "  , countLine \"unverified\" (reportUnverified report)",
-           "  ] <> T.unlines [\"FAIL \" <> unBehaviorKey (failureKey behaviorFailure) <> \" \" <> failureSubject behaviorFailure <> \" [\" <> failureCode behaviorFailure <> \"] \" <> failureDetail behaviorFailure | behaviorFailure <- reportFailed report]",
+           "  , countLine \"required\" report.reportRequired",
+           "  , countLine \"filled\" report.reportFilled",
+           "  , countLine \"pending\" report.reportPending",
+           "  , countLine \"missing\" report.reportMissing",
+           "  , countLine \"duplicate\" report.reportDuplicate",
+           "  , countLine \"stale\" report.reportStale",
+           "  , \"failed: \" <> tshow (length report.reportFailed)",
+           "  , countLine \"verified\" report.reportVerified",
+           "  , countLine \"unverified\" report.reportUnverified",
+           "  ] <> T.unlines [\"FAIL \" <> unBehaviorKey behaviorFailure.failureKey <> \" \" <> behaviorFailure.failureSubject <> \" [\" <> behaviorFailure.failureCode <> \"] \" <> behaviorFailure.failureDetail | behaviorFailure <- report.reportFailed]",
            "",
            "runWitness :: BehaviorRequirement -> BehaviorWitness -> Either BehaviorFailure ()",
            "runWitness requirement witness = case witness of",
@@ -2673,14 +2693,14 @@ emitBehaviorContract aggregate =
            "runLive :: BehaviorRequirement -> [" <> name <> "Event] -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runLive requirement history command expectation = do",
            "  settled <- settleHistory requirement \"history\" history",
-           "  ensure requirement (K.replaySuccessState settled == requirementSource requirement) \"history-wrong-source\" \"history does not settle at the required source vertex\"",
-           "  ensure requirement (commandKind command == requirementCommandName requirement) \"command-mismatch\" \"witness command constructor does not match the required state/command cell\"",
-           "  case requirementKind requirement of",
+           "  ensure requirement (K.replaySuccessState settled == requirement.requirementSource) \"history-wrong-source\" \"history does not settle at the required source vertex\"",
+           "  ensure requirement (commandKind command == requirement.requirementCommandName) \"command-mismatch\" \"witness command constructor does not match the required state/command cell\"",
+           "  case requirement.requirementKind of",
            "    ReplayTransition -> failure requirement \"witness-kind\" \"a replay-only requirement needs ReplayWitness\"",
            "    RequiredRejection -> runRejection requirement (K.replaySuccessState settled, K.replaySuccessRegs settled) command expectation",
            "    LiveTransition -> runAcceptance requirement (K.replaySuccessState settled, K.replaySuccessRegs settled) command expectation",
            "",
-           "runRejection :: BehaviorRequirement -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
+           "runRejection :: BehaviorRequirement -> (" <> (.vertexType) aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runRejection requirement seed command expectation = case expectation of",
            "  Emits _ -> failure requirement \"expectation-kind\" \"a rejection requirement cannot expect emitted events\""
          ]
@@ -2692,7 +2712,7 @@ emitBehaviorContract aggregate =
            "    Left K.AmbiguousEdges {} -> failure requirement \"ambiguous-edges\" \"AmbiguousEdges can never satisfy a rejection witness\"",
            "    Right _ -> failure requirement \"unexpected-acceptance\" \"runtime accepted a command required to reject\"",
            "",
-           "runAcceptance :: BehaviorRequirement -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
+           "runAcceptance :: BehaviorRequirement -> (" <> (.vertexType) aggregate <> ", K.RegFile " <> name <> "Regs) -> " <> name <> "Command -> LiveExpectation -> Either BehaviorFailure ()",
            "runAcceptance requirement seed command expectation = case expectation of",
            "  Rejects _ -> failure requirement \"expectation-kind\" \"a live-transition requirement needs Emits or NoOp\""
          ]
@@ -2705,7 +2725,7 @@ emitBehaviorContract aggregate =
            "      let expected = NonEmpty.toList expectedEvents",
            "          actual = K.stepSuccessOutputs success",
            "      ensure requirement (actual == expected) \"event-value-mismatch\" (\"runtime event values differ from the exact witness expectation; actual=\" <> tshow actual <> \" expected=\" <> tshow expected)",
-           "      ensure requirement (map eventKind actual == requirementEventKinds requirement) \"event-envelope-mismatch\" (\"runtime event kinds differ from the declared ordered envelope; actual=\" <> tshow (map eventKind actual) <> \" expected=\" <> tshow (requirementEventKinds requirement))",
+           "      ensure requirement (map eventKind actual == requirement.requirementEventKinds) \"event-envelope-mismatch\" (\"runtime event kinds differ from the declared ordered envelope; actual=\" <> tshow (map eventKind actual) <> \" expected=\" <> tshow requirement.requirementEventKinds)",
            "      decoded <- either (failure requirement \"emitted-codec-decode\") Right (decodeEvents actual)",
            "      replayed <- case K.applyEventsDetailedEither " <> valueStem <> "Transducer seed decoded of",
            "        Left replayFailure -> failure requirement \"emitted-replay-failed\" (tshow replayFailure)",
@@ -2716,37 +2736,37 @@ emitBehaviorContract aggregate =
          ]
       <> outcomeSilentRunnerLines
       <> [ "",
-           "checkAcceptedEnvelope :: BehaviorRequirement -> K.StepSuccess " <> name <> "Regs " <> aVertexType aggregate <> " " <> name <> "Event -> Either BehaviorFailure ()",
+           "checkAcceptedEnvelope :: BehaviorRequirement -> K.StepSuccess " <> name <> "Regs " <> (.vertexType) aggregate <> " " <> name <> "Event -> Either BehaviorFailure ()",
            "checkAcceptedEnvelope requirement success = do",
            "  ensure requirement (K.stepSuccessMode success == K.Live) \"forward-mode\" (\"forward execution selected a non-live edge; actual=\" <> tshow (K.stepSuccessMode success) <> \" expected=\" <> tshow K.Live)",
-           "  ensure requirement (Just (K.stepSuccessEdge success) == requirementExpectedEdge requirement) \"edge-attribution\" (\"runtime selected a different guarded sibling; actual=\" <> tshow (Just (K.stepSuccessEdge success)) <> \" expected=\" <> tshow (requirementExpectedEdge requirement))",
-           "  ensure requirement (Just (K.stepSuccessState success) == requirementTarget requirement) \"target-mismatch\" (\"runtime reached a different target vertex; actual=\" <> tshow (Just (K.stepSuccessState success)) <> \" expected=\" <> tshow (requirementTarget requirement))",
+           "  ensure requirement (Just (K.stepSuccessEdge success) == requirement.requirementExpectedEdge) \"edge-attribution\" (\"runtime selected a different guarded sibling; actual=\" <> tshow (Just (K.stepSuccessEdge success)) <> \" expected=\" <> tshow requirement.requirementExpectedEdge)",
+           "  ensure requirement (Just (K.stepSuccessState success) == requirement.requirementTarget) \"target-mismatch\" (\"runtime reached a different target vertex; actual=\" <> tshow (Just (K.stepSuccessState success)) <> \" expected=\" <> tshow requirement.requirementTarget)",
            "",
            "runReplay :: BehaviorRequirement -> [" <> name <> "Event] -> [" <> name <> "Event] -> Either BehaviorFailure ()",
-           "runReplay requirement prefix chunk = case requirementKind requirement of",
+           "runReplay requirement prefix chunk = case requirement.requirementKind of",
            "  ReplayTransition -> do",
            "    settled <- settleHistory requirement \"history-prefix\" prefix",
-           "    ensure requirement (K.replaySuccessState settled == requirementSource requirement) \"history-wrong-source\" \"history prefix does not settle at the replay edge source\"",
+           "    ensure requirement (K.replaySuccessState settled == requirement.requirementSource) \"history-wrong-source\" \"history prefix does not settle at the replay edge source\"",
            "    ensure requirement (not (null chunk)) \"empty-replay-chunk\" \"a replay-only edge has no observable empty chunk\"",
            "    decoded <- either (failure requirement \"replay-chunk-codec-decode\") Right (decodeEvents chunk)",
            "    replayed <- case K.applyEventsDetailedEither " <> valueStem <> "Transducer (K.replaySuccessState settled, K.replaySuccessRegs settled) decoded of",
            "      Left replayFailure -> failure requirement \"replay-chunk-failed\" (tshow replayFailure)",
            "      Right replaySuccess -> Right replaySuccess",
-           "    ensure requirement (Just (K.replaySuccessState replayed) == requirementTarget requirement) \"target-mismatch\" (\"replay chunk reached a different target vertex; actual=\" <> tshow (Just (K.replaySuccessState replayed)) <> \" expected=\" <> tshow (requirementTarget requirement))",
+           "    ensure requirement (Just (K.replaySuccessState replayed) == requirement.requirementTarget) \"target-mismatch\" (\"replay chunk reached a different target vertex; actual=\" <> tshow (Just (K.replaySuccessState replayed)) <> \" expected=\" <> tshow requirement.requirementTarget)",
            "    checkSingleAttribution requirement K.ReplayOnly (length decoded) (K.replaySuccessTrace replayed)",
            "  _ -> failure requirement \"witness-kind\" \"ReplayWitness supplied for a non-replay requirement\"",
            "",
-           "checkSingleAttribution :: BehaviorRequirement -> K.EdgeMode -> Int -> [K.ReplayAttribution " <> aVertexType aggregate <> "] -> Either BehaviorFailure ()",
+           "checkSingleAttribution :: BehaviorRequirement -> K.EdgeMode -> Int -> [K.ReplayAttribution " <> (.vertexType) aggregate <> "] -> Either BehaviorFailure ()",
            "checkSingleAttribution requirement expectedMode eventCount trace = case trace of",
            "  [attribution] -> do",
-           "    ensure requirement (Just (K.replayAttributionEdge attribution) == requirementExpectedEdge requirement) \"replay-edge-attribution\" (\"replay selected a different edge; actual=\" <> tshow (Just (K.replayAttributionEdge attribution)) <> \" expected=\" <> tshow (requirementExpectedEdge requirement))",
+           "    ensure requirement (Just (K.replayAttributionEdge attribution) == requirement.requirementExpectedEdge) \"replay-edge-attribution\" (\"replay selected a different edge; actual=\" <> tshow (Just (K.replayAttributionEdge attribution)) <> \" expected=\" <> tshow requirement.requirementExpectedEdge)",
            "    ensure requirement (K.replayAttributionMode attribution == expectedMode) \"replay-mode-attribution\" (\"replay selected the wrong live/replay-only phase; actual=\" <> tshow (K.replayAttributionMode attribution) <> \" expected=\" <> tshow expectedMode)",
-           "    ensure requirement (K.replayAttributionSource attribution == requirementSource requirement) \"replay-source-attribution\" (\"replay attribution starts at the wrong source; actual=\" <> tshow (K.replayAttributionSource attribution) <> \" expected=\" <> tshow (requirementSource requirement))",
-           "    ensure requirement (Just (K.replayAttributionTarget attribution) == requirementTarget requirement) \"replay-target-attribution\" (\"replay attribution ends at the wrong target; actual=\" <> tshow (Just (K.replayAttributionTarget attribution)) <> \" expected=\" <> tshow (requirementTarget requirement))",
+           "    ensure requirement (K.replayAttributionSource attribution == requirement.requirementSource) \"replay-source-attribution\" (\"replay attribution starts at the wrong source; actual=\" <> tshow (K.replayAttributionSource attribution) <> \" expected=\" <> tshow requirement.requirementSource)",
+           "    ensure requirement (Just (K.replayAttributionTarget attribution) == requirement.requirementTarget) \"replay-target-attribution\" (\"replay attribution ends at the wrong target; actual=\" <> tshow (Just (K.replayAttributionTarget attribution)) <> \" expected=\" <> tshow requirement.requirementTarget)",
            "    ensure requirement (K.replayAttributionSpan attribution == K.ReplayEventSpan 0 eventCount) \"replay-span-attribution\" (\"replay attribution did not consume the exact chunk; actual=\" <> tshow (K.replayAttributionSpan attribution) <> \" expected=\" <> tshow (K.ReplayEventSpan 0 eventCount))",
            "  _ -> failure requirement \"replay-trace-cardinality\" \"expected exactly one completed-edge attribution\"",
            "",
-           "settleHistory :: BehaviorRequirement -> Text -> [" <> name <> "Event] -> Either BehaviorFailure (K.ReplaySuccess " <> name <> "Regs " <> aVertexType aggregate <> ")",
+           "settleHistory :: BehaviorRequirement -> Text -> [" <> name <> "Event] -> Either BehaviorFailure (K.ReplaySuccess " <> name <> "Regs " <> (.vertexType) aggregate <> ")",
            "settleHistory requirement label history = do",
            "  decoded <- either (failure requirement (label <> \"-codec-decode\")) Right (decodeEvents history)",
            "  case K.applyEventsDetailedEither " <> valueStem <> "Transducer (" <> initialVertex aggregate <> ", initial" <> name <> "Regs) decoded of",
@@ -2766,8 +2786,8 @@ emitBehaviorContract aggregate =
            "",
            "proofStrength :: BehaviorRequirement -> Bool",
            "proofStrength requirement =",
-           "  requirementEvidence requirement == GeneratedAuthoritative",
-           "    && requirementGuardCoverage requirement `elem` [GuardTotal, GuardNotApplicable]",
+           "  requirement.requirementEvidence == GeneratedAuthoritative",
+           "    && requirement.requirementGuardCoverage `elem` [GuardTotal, GuardNotApplicable]",
            "",
            "behaviorWitnessKey :: BehaviorWitness -> BehaviorKey",
            "behaviorWitnessKey witness = case witness of",
@@ -2785,13 +2805,13 @@ emitBehaviorContract aggregate =
            "failure requirement code detail =",
            "  Left",
            "    ( BehaviorFailure",
-           "        (requirementKey requirement)",
-           "        (tshow (requirementSource requirement) <> \" x \" <> requirementCommandName requirement <> \": \" <> kindPhrase <> \" (\" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey (requirementKey requirement)) <> \")\")",
+           "        requirement.requirementKey",
+           "        (tshow requirement.requirementSource <> \" x \" <> requirement.requirementCommandName <> \": \" <> kindPhrase <> \" (\" <> BehaviorSourceMap.renderBehaviorSourceLocation (unBehaviorKey requirement.requirementKey) <> \")\")",
            "        code",
            "        detail",
            "    )",
            " where",
-           "  kindPhrase = case requirementKind requirement of",
+           "  kindPhrase = case requirement.requirementKind of",
            "    LiveTransition -> \"live transition\"",
            "    RequiredRejection -> \"required rejection\"",
            "    ReplayTransition -> \"replay-only transition\"",
@@ -2805,40 +2825,40 @@ emitBehaviorContract aggregate =
            "tshow = T.pack . show"
          ]
   where
-    name = aName aggregate
+    name = (.name) aggregate
     valueStem = lowerFirst name
     handlerName = valueStem <> "DomainCommandHandler"
-    outcomeResultTypes = case aDomainOutcomeTypes aggregate of
+    outcomeResultTypes = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
-      Just outcomeTypes -> [resolvedRejectionType outcomeTypes, resolvedNoOpType outcomeTypes]
+      Just outcomeTypes -> [(.rejectionType) outcomeTypes, (.noOpType) outcomeTypes]
     outcomeImportPlan = eventStreamImportPlan aggregate outcomeResultTypes []
     outcomeGeneratedNominals = generatedNominalsInTypes outcomeResultTypes
-    outcomeBehaviorImports = case aDomainOutcomeTypes aggregate of
+    outcomeBehaviorImports = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just _ ->
-        ["import " <> aGenPrefix aggregate <> ".EventStream (" <> handlerName <> ")"]
+        ["import " <> (.genPrefix) aggregate <> ".EventStream (" <> handlerName <> ")"]
           <> [ "import "
-                 <> generatedNominalModule (aContext aggregate)
+                 <> generatedNominalModule ((.context) aggregate)
                  <> " ("
-                 <> T.intercalate ", " (map resolvedNominalName (stableNominals outcomeGeneratedNominals))
+                 <> T.intercalate ", " (map (.name) (stableNominals outcomeGeneratedNominals))
                  <> ")"
              | not (null outcomeGeneratedNominals)
              ]
           <> T.lines (renderPlannedImports outcomeImportPlan)
           <> ["import Keiro.Command (DomainCommandHandler (..), SilentCommandContext (..), SilentDomainDecision (..))"]
-    outcomeExpectationConstructors = case aDomainOutcomeTypes aggregate of
+    outcomeExpectationConstructors = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just outcomeTypes ->
-        [ "  | RejectedWith " <> renderDomainType outcomeImportPlan aggregate (resolvedRejectionType outcomeTypes),
-          "  | NoOpWith " <> renderDomainType outcomeImportPlan aggregate (resolvedNoOpType outcomeTypes)
+        [ "  | RejectedWith " <> renderDomainType outcomeImportPlan aggregate ((.rejectionType) outcomeTypes),
+          "  | NoOpWith " <> renderDomainType outcomeImportPlan aggregate ((.noOpType) outcomeTypes)
         ]
-    outcomeGenericRejectionCases = case aDomainOutcomeTypes aggregate of
+    outcomeGenericRejectionCases = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just _ ->
         [ "  RejectedWith _ -> failure requirement \"expectation-kind\" \"an unmatched-command rejection cannot expect a selected domain rejection\"",
           "  NoOpWith _ -> failure requirement \"expectation-kind\" \"an unmatched-command rejection cannot expect a selected domain no-op\""
         ]
-    genericNoOpAcceptanceLines = case aDomainOutcomeTypes aggregate of
+    genericNoOpAcceptanceLines = case (.domainOutcomeTypes) aggregate of
       Just _ -> ["  NoOp -> failure requirement \"expectation-kind\" \"an outcome-enabled transition requires RejectedWith or NoOpWith exact reason evidence\""]
       Nothing ->
         [ "  NoOp -> case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
@@ -2849,7 +2869,7 @@ emitBehaviorContract aggregate =
           "      ensure requirement (K.stepSuccessState success == fst seed) \"noop-vertex-change\" \"NoOp changed the control vertex\"",
           "      ensure requirement (regsEqual (K.stepSuccessRegs success) (snd seed)) \"noop-register-change\" \"NoOp changed one or more registers\""
         ]
-    outcomeExactAcceptanceCases = case aDomainOutcomeTypes aggregate of
+    outcomeExactAcceptanceCases = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just _ ->
         [ "  RejectedWith expectedReason -> do",
@@ -2863,15 +2883,15 @@ emitBehaviorContract aggregate =
           "      SilentRejected actualReason -> failure requirement \"domain-outcome-kind\" (\"expected a selected no-op but classifier returned rejection \" <> tshow actualReason)",
           "      SilentNoOp actualReason -> ensure requirement (actualReason == expectedReason) \"domain-noop-reason\" (\"selected no-op reason differs; actual=\" <> tshow actualReason <> \" expected=\" <> tshow expectedReason)"
         ]
-    outcomeSilentRunnerLines = case aDomainOutcomeTypes aggregate of
+    outcomeSilentRunnerLines = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
       Just outcomeTypes ->
         [ "",
           "runSilentDecision",
           "  :: BehaviorRequirement",
-          "  -> (" <> aVertexType aggregate <> ", K.RegFile " <> name <> "Regs)",
+          "  -> (" <> (.vertexType) aggregate <> ", K.RegFile " <> name <> "Regs)",
           "  -> " <> name <> "Command",
-          "  -> Either BehaviorFailure (SilentDomainDecision " <> renderDomainType outcomeImportPlan aggregate (resolvedRejectionType outcomeTypes) <> " " <> renderDomainType outcomeImportPlan aggregate (resolvedNoOpType outcomeTypes) <> ")",
+          "  -> Either BehaviorFailure (SilentDomainDecision " <> renderDomainType outcomeImportPlan aggregate ((.rejectionType) outcomeTypes) <> " " <> renderDomainType outcomeImportPlan aggregate ((.noOpType) outcomeTypes) <> ")",
           "runSilentDecision requirement seed command = case K.stepDetailedEither " <> valueStem <> "Transducer seed command of",
           "  Left stepFailure -> failure requirement \"unexpected-rejection\" (tshow stepFailure)",
           "  Right success -> do",
@@ -2895,17 +2915,17 @@ emitBehaviorContract aggregate =
         "applyEventsDetailedEither",
         "stepDetailedEither"
       ]
-        <> ["(!)" | not (null (aRegs aggregate))]
+        <> ["(!)" | not (null ((.regs) aggregate))]
 
 renderCommandKind :: Agg -> [Text]
-renderCommandKind aggregate = case aCommands aggregate of
-  [] -> ["", "commandKind :: " <> aName aggregate <> "Command -> Text", "commandKind _ = \"\""]
+renderCommandKind aggregate = case (.commands) aggregate of
+  [] -> ["", "commandKind :: " <> (.name) aggregate <> "Command -> Text", "commandKind _ = \"\""]
   commands ->
     [ "",
-      "commandKind :: " <> aName aggregate <> "Command -> Text",
+      "commandKind :: " <> (.name) aggregate <> "Command -> Text",
       "commandKind command = case command of"
     ]
-      <> ["  " <> rcName command <> " _ -> " <> tshow (rcName command) | command <- commands]
+      <> ["  " <> (.name) command <> " _ -> " <> tshow ((.name) command) | command <- commands]
 
 renderBehaviorRequirementList :: Agg -> [Text]
 renderBehaviorRequirementList aggregate =
@@ -2921,98 +2941,98 @@ renderBehaviorRequirementList aggregate =
     render index requirement =
       [ (if index == (0 :: Int) then "  [ -- " else "  , -- ") <> behaviorRequirementLabel aggregate requirement,
         "    BehaviorRequirement",
-        "      { requirementKey = BehaviorKey " <> tshow (Behavior.unBehaviorKey (Behavior.requirementKey requirement)),
-        "      , requirementKind = " <> T.pack (show (Behavior.requirementKind requirement)),
-        "      , requirementEvidence = " <> T.pack (show (Behavior.requirementEvidence requirement)),
-        "      , requirementGuardCoverage = " <> T.pack (show (Behavior.requirementGuardCoverage requirement)),
-        "      , requirementSource = " <> vertexCtor aggregate (Behavior.requirementSource requirement),
-        "      , requirementCommandName = " <> tshow (Behavior.requirementCommand requirement),
+        "      { requirementKey = BehaviorKey " <> tshow (Behavior.unBehaviorKey ((.key) requirement)),
+        "      , requirementKind = " <> T.pack (show ((.kind) requirement)),
+        "      , requirementEvidence = " <> T.pack (show ((.evidence) requirement)),
+        "      , requirementGuardCoverage = " <> T.pack (show ((.guardCoverage) requirement)),
+        "      , requirementSource = " <> vertexCtor aggregate ((.source) requirement),
+        "      , requirementCommandName = " <> tshow ((.command) requirement),
         "      , requirementExpectedEdge = " <> edgeExpr aggregate requirement,
-        "      , requirementTarget = " <> maybe "Nothing" (\target -> "Just " <> vertexCtor aggregate target) (Behavior.requirementTarget requirement),
-        "      , requirementEventKinds = " <> renderBehaviorTextList (Behavior.requirementEvents requirement),
+        "      , requirementTarget = " <> maybe "Nothing" (\target -> "Just " <> vertexCtor aggregate target) ((.target) requirement),
+        "      , requirementEventKinds = " <> renderBehaviorTextList ((.events) requirement),
         "      }"
       ]
 
 behaviorRequirementLabel :: Agg -> Behavior.BehaviorRequirement -> Text
 behaviorRequirementLabel aggregate requirement =
-  vertexCtor aggregate (Behavior.requirementSource requirement)
+  vertexCtor aggregate ((.source) requirement)
     <> " x "
-    <> Behavior.requirementCommand requirement
+    <> (.command) requirement
     <> ": "
-    <> ( case Behavior.requirementKind requirement of
+    <> ( case (.kind) requirement of
            Behavior.LiveTransition -> "live transition"
            Behavior.RequiredRejection -> "required rejection"
            Behavior.ReplayTransition -> "replay-only transition"
        )
 
 edgeExpr :: Agg -> Behavior.BehaviorRequirement -> Text
-edgeExpr aggregate requirement = case Behavior.requirementKind requirement of
+edgeExpr aggregate requirement = case (.kind) requirement of
   Behavior.RequiredRejection -> "Nothing"
   _ -> case behaviorEdgeIndex aggregate requirement of
-    Nothing -> error ("required behavior transition missing from resolved aggregate: " <> T.unpack (Behavior.requirementCanonical requirement))
+    Nothing -> error ("required behavior transition missing from resolved aggregate: " <> T.unpack ((.canonical) requirement))
     Just edgeIndex ->
       "(Just (K.EdgeRef "
-        <> vertexCtor aggregate (Behavior.requirementSource requirement)
+        <> vertexCtor aggregate ((.source) requirement)
         <> " "
         <> tshow' edgeIndex
         <> "))"
 
 behaviorEdgeIndex :: Agg -> Behavior.BehaviorRequirement -> Maybe Int
-behaviorEdgeIndex aggregate requirement = case Behavior.requirementOrigin requirement of
+behaviorEdgeIndex aggregate requirement = case (.origin) requirement of
   Behavior.RejectionRequirementOrigin {} -> Nothing
   Behavior.TransitionRequirementOrigin originAggregate (SourceIndex.TransitionOrdinal ordinal) -> do
-    transition <- case drop ordinal (aTransitions aggregate) of
+    transition <- case drop ordinal ((.transitions) aggregate) of
       candidate : _ -> Just candidate
       [] -> Nothing
-    if originAggregate == aName aggregate
-      && tSource transition == Behavior.requirementSource requirement
-      && tCommand transition == Behavior.requirementCommand requirement
+    if originAggregate == (.name) aggregate
+      && (.source) transition == (.source) requirement
+      && (.command) transition == (.command) requirement
       then
         Just
           ( length
               [ ()
-              | candidate <- take ordinal (aTransitions aggregate),
-                tSource candidate == tSource transition
+              | candidate <- take ordinal ((.transitions) aggregate),
+                (.source) candidate == (.source) transition
               ]
           )
       else Nothing
 
 behaviorRequirementsFor :: Agg -> [Behavior.BehaviorRequirement]
 behaviorRequirementsFor aggregate =
-  case Behavior.deriveAggregateBehaviorRequirements (aSpec aggregate) (aAggregate aggregate) of
+  case Behavior.deriveAggregateBehaviorRequirements ((.spec) aggregate) ((.aggregate) aggregate) of
     Left derivationError -> error ("validated aggregate failed behavior derivation: " <> show derivationError)
-    Right requirements -> sortOn Behavior.requirementKey requirements
+    Right requirements -> sortOn (.key) requirements
 
 renderBehaviorTextList :: [Text] -> Text
 renderBehaviorTextList values = "[" <> T.intercalate ", " (map tshow values) <> "]"
 
 regsEqualityExpression :: Agg -> Text
-regsEqualityExpression aggregate = case aRegs aggregate of
+regsEqualityExpression aggregate = case (.regs) aggregate of
   [] -> "regsEqual _ _ = True"
   registers ->
     "regsEqual left right = "
       <> T.intercalate
         " && "
-        [ "(left K.! #" <> rrName register <> ") == (right K.! #" <> rrName register <> ")"
+        [ "(left K.! #" <> (.name) register <> ") == (right K.! #" <> (.name) register <> ")"
         | register <- registers
         ]
 
 behaviorHoleModule :: Agg -> ScaffoldModule
 behaviorHoleModule aggregate =
   ScaffoldModule
-    { modulePath = T.unpack (T.replace "." "/" (aHolePrefix aggregate) <> "/BehaviorHoles.hs"),
-      moduleText = emitBehaviorHoles aggregate,
+    { path = T.unpack (T.replace "." "/" ((.holePrefix) aggregate) <> "/BehaviorHoles.hs"),
+      text = emitBehaviorHoles aggregate,
       kind = HoleStub,
-      origin = nodeOrigin "aggregate behavior witnesses" (aName aggregate) (aLoc aggregate)
+      origin = nodeOrigin "aggregate behavior witnesses" ((.name) aggregate) ((.loc) aggregate)
     }
 
 emitBehaviorHoles :: Agg -> Text
 emitBehaviorHoles aggregate =
   nl $
     [ "-- Consumer-owned behavioral witnesses. Created once; never overwritten.",
-      "module " <> aHolePrefix aggregate <> ".BehaviorHoles (behaviorWitnesses) where",
+      "module " <> (.holePrefix) aggregate <> ".BehaviorHoles (behaviorWitnesses) where",
       "",
-      "import " <> aGenPrefix aggregate <> ".BehaviorContract",
+      "import " <> (.genPrefix) aggregate <> ".BehaviorContract",
       "",
       "behaviorWitnesses :: [BehaviorWitness]",
       "behaviorWitnesses ="
@@ -3022,7 +3042,7 @@ emitBehaviorHoles aggregate =
         requirements ->
           [ (if index == (0 :: Int) then "  [ " else "  , ")
               <> "Pending (BehaviorKey "
-              <> tshow (Behavior.unBehaviorKey (Behavior.requirementKey requirement))
+              <> tshow (Behavior.unBehaviorKey ((.key) requirement))
               <> ") -- "
               <> behaviorRequirementLabel aggregate requirement
           | (index, requirement) <- zip [0 ..] requirements
@@ -3040,14 +3060,14 @@ scaffoldReplayAudit ctx spec
   | null aggregates = []
   | otherwise =
       [ ScaffoldModule
-          { modulePath = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-            moduleText = emitReplayAudit,
+          { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+            text = emitReplayAudit,
             kind = Generated,
-            origin = "context " <> specContext spec <> " replay-audit assembly"
+            origin = "context " <> (.context) spec <> " replay-audit assembly"
           }
       ]
   where
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
     moduleName = contextGeneratedPrefix ctx <> ".ReplayAudit"
     emitReplayAudit =
       nl $
@@ -3063,7 +3083,7 @@ scaffoldReplayAudit ctx spec
                "module " <> moduleName <> " (auditTargets) where",
                ""
              ]
-          ++ [ "import " <> genPrefixFor ctx (aggName aggregate) <> ".EventStream qualified as " <> aggName aggregate
+          ++ [ "import " <> genPrefixFor ctx ((.name) aggregate) <> ".EventStream qualified as " <> (.name) aggregate
              | aggregate <- aggregates
              ]
           ++ [ "import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)",
@@ -3081,26 +3101,26 @@ scaffoldReplayAudit ctx spec
                 "        }"
               ]
             | (index, aggregate) <- zip [0 ..] aggregates,
-              let aggregateName = aggName aggregate
+              let aggregateName = (.name) aggregate
             ]
           ++ ["  ]"]
 
 genModule :: Agg -> Text -> Text -> ScaffoldModule
 genModule a name body =
   ScaffoldModule
-    { modulePath = T.unpack (T.replace "." "/" (aGenPrefix a) <> "/" <> name <> ".hs"),
-      moduleText = body,
+    { path = T.unpack (T.replace "." "/" ((.genPrefix) a) <> "/" <> name <> ".hs"),
+      text = body,
       kind = Generated,
-      origin = nodeOrigin "aggregate" (aName a) (aLoc a)
+      origin = nodeOrigin "aggregate" ((.name) a) ((.loc) a)
     }
 
 holeModule :: Agg -> Text -> ScaffoldModule
 holeModule a body =
   ScaffoldModule
-    { modulePath = T.unpack (T.replace "." "/" (aHolePrefix a) <> "/" <> "Holes.hs"),
-      moduleText = body,
+    { path = T.unpack (T.replace "." "/" ((.holePrefix) a) <> "/" <> "Holes.hs"),
+      text = body,
       kind = HoleStub,
-      origin = nodeOrigin "aggregate" (aName a) (aLoc a)
+      origin = nodeOrigin "aggregate" ((.name) a) ((.loc) a)
     }
 
 --------------------------------------------------------------------------------
@@ -3124,14 +3144,14 @@ scaffoldContractForService ctx service = scaffoldContractWithLanguage ctx (check
 scaffoldContractWithLanguage :: Context -> EffectiveLanguageContract -> ContractNode -> [ScaffoldModule]
 scaffoldContractWithLanguage ctx languageContract c =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Contract.hs"),
-        moduleText = emitContractGen languageContract genPrefix c,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/Contract.hs"),
+        text = emitContractGen languageContract genPrefix c,
         kind = Generated,
-        origin = nodeOrigin "contract" (ctrName c) (ctrLoc c)
+        origin = nodeOrigin "contract" ((.name) c) ((.loc) c)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (pascal (ctrName c))
+    genPrefix = genPrefixFor ctx (pascal ((.name) c))
 
 emitContractGen :: EffectiveLanguageContract -> Text -> ContractNode -> Text
 emitContractGen languageContract genPrefix c =
@@ -3158,28 +3178,28 @@ emitContractGen languageContract genPrefix c =
            ]
         ++ topicConstants
         ++ [ "",
-             "-- the closed payload set (discriminated by " <> tshow (ctrDiscriminator c) <> ")"
+             "-- the closed payload set (discriminated by " <> tshow ((.discriminator) c) <> ")"
            ]
-        ++ [emitPayloadAdt languageContract payloadTy (ctrEvents c)]
+        ++ [emitPayloadAdt languageContract payloadTy ((.events) c)]
         ++ [ "",
              "messageTypeOf :: " <> payloadTy <> " -> Text",
              "messageTypeOf = \\case"
            ]
-        ++ ["  " <> ceName e <> " {} -> " <> tshow (ceName e) | e <- ctrEvents c]
+        ++ ["  " <> (.name) e <> " {} -> " <> tshow ((.name) e) | e <- (.events) c]
         ++ [ "",
              "encode" <> payloadTy <> " :: " <> payloadTy <> " -> Value",
              "encode" <> payloadTy <> " = \\case"
            ]
-        ++ concatMap encodeArm (ctrEvents c)
+        ++ concatMap encodeArm ((.events) c)
         ++ [ "",
              "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy,
              "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
              "  where",
              "    go o = do",
-             "      kind <- explicitParseField (withText " <> tshow (ctrDiscriminator c) <> " validateMessageType) o " <> tshow (ctrDiscriminator c),
+             "      kind <- explicitParseField (withText " <> tshow ((.discriminator) c) <> " validateMessageType) o " <> tshow ((.discriminator) c),
              "      case kind of"
            ]
-        ++ concatMap decodeArm (ctrEvents c)
+        ++ concatMap decodeArm ((.events) c)
         ++ [ "        _ -> fail \"validated message type was not handled\"",
              "",
              "mapLeftText :: Either String b -> Either Text b",
@@ -3187,15 +3207,15 @@ emitContractGen languageContract genPrefix c =
              "",
              "validateMessageType :: Text -> Parser Text",
              "validateMessageType kind",
-             "  | kind `elem` " <> renderTextList (map ceName (ctrEvents c)) <> " = pure kind",
-             "  | otherwise = " <> renderUnknownFailure "message type" "kind" (map ceName (ctrEvents c))
+             "  | kind `elem` " <> renderTextList (map (.name) ((.events) c)) <> " = pure kind",
+             "  | otherwise = " <> renderUnknownFailure "message type" "kind" (map (.name) ((.events) c))
            ]
   )
     <> if hasTypedTypeIds then "\n" else ""
   where
-    payloadTy = pascal (ctrName c) <> "Payload"
-    hasTypedTypeIds = any (any (isTypedTypeId . cfType) . ceFields) (ctrEvents c)
-    usesPlainFieldDecode = any (any (not . isTypedTypeId . cfType) . ceFields) (ctrEvents c)
+    payloadTy = pascal ((.name) c) <> "Payload"
+    hasTypedTypeIds = any (any (isTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
+    usesPlainFieldDecode = any (any (not . isTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
     pragmas =
       renderGeneratedLanguagePragmas
         ( [ExtDuplicateRecordFields | contractNeedsDuplicateRecordFields c]
@@ -3208,8 +3228,8 @@ emitContractGen languageContract genPrefix c =
       [ "module " <> genPrefix <> ".Contract",
         "  ( " <> payloadTy <> " (..)"
       ]
-        ++ ["  , " <> ceName event <> "Data (..)" | event <- ctrEvents c]
-        ++ ["  , " <> lowerFirst alias <> "Topic" | (alias, _) <- ctrTopics c]
+        ++ ["  , " <> (.name) event <> "Data (..)" | event <- (.events) c]
+        ++ ["  , " <> lowerFirst alias <> "Topic" | (alias, _) <- (.topics) c]
         ++ [ "  , messageTypeOf",
              "  , encode" <> payloadTy,
              "  , parse" <> payloadTy,
@@ -3219,17 +3239,17 @@ emitContractGen languageContract genPrefix c =
       | hasTypedTypeIds =
           [ T.intercalate
               "\n\n"
-              [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- ctrTopics c]
+              [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- (.topics) c]
           ]
-      | otherwise = [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- ctrTopics c]
+      | otherwise = [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- (.topics) c]
     isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
     isTypedTypeId _ = False
     aesonTypesImport = "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
     encodeArm e =
-      [ "  " <> ceName e <> " payload ->",
+      [ "  " <> (.name) e <> " payload ->",
         "    object"
       ]
-        ++ objectEntriesFor ((tshow (ctrDiscriminator c) <> " .= (" <> tshow (ceName e) <> " :: Text)") : map encodeField (ceFields e))
+        ++ objectEntriesFor ((tshow ((.discriminator) c) <> " .= (" <> tshow ((.name) e) <> " :: Text)") : map encodeField ((.fields) e))
         ++ ["      ]"]
     lead 0 kv = "      [ " <> kv
     lead _ kv = "      , " <> kv
@@ -3242,61 +3262,61 @@ emitContractGen languageContract genPrefix c =
           ]
       | otherwise = [lead index entry | (index, entry) <- zip [(0 :: Int) ..] entries]
     decodeArm e =
-      ["        " <> tshow (ceName e) <> " ->"]
-        ++ case ceFields e of
-          [] -> ["          pure (" <> ceName e <> " " <> ceName e <> "Data)"]
+      ["        " <> tshow ((.name) e) <> " ->"]
+        ++ case (.fields) e of
+          [] -> ["          pure (" <> (.name) e <> " " <> (.name) e <> "Data)"]
           fields ->
-            [ "          " <> ceName e,
-              "            <$> ( " <> ceName e <> "Data"
+            [ "          " <> (.name) e,
+              "            <$> ( " <> (.name) e <> "Data"
             ]
               ++ [ (if index == 0 then "                    <$> " else "                    <*> ") <> decodeField field
                  | (index, field) <- zip [(0 :: Int) ..] fields
                  ]
               ++ ["                )"]
     encodeField field =
-      tshow (fieldWireKey identity)
+      tshow ((.wireKey) identity)
         <> " .= "
-        <> case cfType field of
+        <> case (.valueType) field of
           CTypeId prefix
-            | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> fieldSelector identity
-          _ -> "payload." <> fieldSelector identity
+            | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> (.selector) identity
+          _ -> "payload." <> (.selector) identity
       where
         identity = resolveContractFieldIdentity field
-    decodeField field = case cfType field of
+    decodeField field = case (.valueType) field of
       CTypeId prefix
         | isJust (contractIdDomainContractFor languageContract prefix) ->
             "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow wireKey
       _ -> "o .: " <> tshow wireKey
       where
-        wireKey = fieldWireKey (resolveContractFieldIdentity field)
+        wireKey = (.wireKey) (resolveContractFieldIdentity field)
 
 contractNeedsDuplicateRecordFields :: ContractNode -> Bool
-contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map (fieldSelector . resolveContractFieldIdentity) . ceFields) . ctrEvents
+contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map ((.selector) . resolveContractFieldIdentity) . (.fields)) . (.events)
 
 contractUsesRecordDot :: ContractNode -> Bool
-contractUsesRecordDot = any (not . null . ceFields) . ctrEvents
+contractUsesRecordDot = any (not . null . (.fields)) . (.events)
 
 emitPayloadAdt :: EffectiveLanguageContract -> Text -> [ContractEvent] -> Text
 emitPayloadAdt languageContract tyName events =
   sectionsOf [map dataRecord events, [sumDecl]]
   where
-    hasTypedTypeIds = any (any (isTypedTypeId . cfType) . ceFields) events
+    hasTypedTypeIds = any (any (isTypedTypeId . (.valueType)) . (.fields)) events
     isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
     isTypedTypeId _ = False
-    hsType CText = "Text"
-    hsType CInt = "Int"
-    hsType (CTypeId prefix)
+    valueType CText = "Text"
+    valueType CInt = "Int"
+    valueType (CTypeId prefix)
       | isJust (contractIdDomainContractFor languageContract prefix) = "(KindID " <> tshow prefix <> ")"
       | otherwise = "Text"
     dataRecord e =
       "data "
-        <> ceName e
+        <> (.name) e
         <> "Data = "
-        <> ceName e
+        <> (.name) e
         <> (if hasTypedTypeIds then "Data {" else "Data { ")
-        <> T.intercalate ", " [fieldSelector (resolveContractFieldIdentity f) <> " :: !" <> hsType (cfType f) | f <- ceFields e]
+        <> T.intercalate ", " [(.selector) (resolveContractFieldIdentity f) <> " :: !" <> valueType ((.valueType) f) | f <- (.fields) e]
         <> (if hasTypedTypeIds then "}\n  deriving stock (Eq, Show)" else " }\n  deriving stock (Eq, Show)")
-    arm e = ceName e <> " !" <> ceName e <> "Data"
+    arm e = (.name) e <> " !" <> (.name) e <> "Data"
     sumDecl = case events of
       [] -> "data " <> tyName <> " = " <> tyName <> "Empty\n  deriving stock (Eq, Show)"
       (e : es) ->
@@ -3321,14 +3341,14 @@ emitPayloadAdt languageContract tyName events =
 scaffoldIntake :: Context -> IntakeNode -> [ScaffoldModule]
 scaffoldIntake ctx i =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Inbox.hs"),
-        moduleText = emitIntakeGen genPrefix i,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/Inbox.hs"),
+        text = emitIntakeGen genPrefix i,
         kind = Generated,
-        origin = nodeOrigin "intake" (inkName i) (inkLoc i)
+        origin = nodeOrigin "intake" ((.name) i) ((.loc) i)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (pascal (inkName i))
+    genPrefix = genPrefixFor ctx (pascal ((.name) i))
 
 emitIntakeGen :: Text -> IntakeNode -> Text
 emitIntakeGen genPrefix i =
@@ -3350,13 +3370,13 @@ emitIntakeGen genPrefix i =
            "",
            "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.",
            "inboxDedupePolicy :: InboxDedupePolicy",
-           "inboxDedupePolicy = " <> inkDedupePolicy i,
+           "inboxDedupePolicy = " <> (.dedupePolicy) i,
            "",
            "-- | Success-path envelope retention passed to runInboxTransactionWith.",
            "-- Failures always retain their full operator-facing dead-letter envelope.",
            "-- Dedupe-only success rows decode with an empty payload.",
            "inboxPersistence :: InboxPersistence",
-           "inboxPersistence = " <> persistenceCtor (inkPersist i),
+           "inboxPersistence = " <> persistenceCtor ((.persist) i),
            "",
            "-- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.",
            "data InboxFailure = InboxFailure",
@@ -3382,7 +3402,7 @@ emitIntakeGen genPrefix i =
            "inboxDispositionFor :: " <> outcomeType <> " -> " <> dispositionType,
            "inboxDispositionFor outcome = case outcome of"
          ]
-      ++ ["  " <> outcomeConstructor (drOutcome row) <> " -> " <> actionExpression (drAction row) | row <- inkDisposition i]
+      ++ ["  " <> outcomeConstructor ((.outcome) row) <> " -> " <> actionExpression ((.action) row) | row <- (.disposition) i]
       ++ [ "",
            "-- Lower the LIVE Keiro.Inbox.Types.InboxResult without an open fallback.",
            "inboxDisposition :: InboxResult a -> " <> dispositionType,
@@ -3404,11 +3424,11 @@ emitIntakeGen genPrefix i =
            "  InboxAccept -> InboxAccept"
          ]
   where
-    stem = pascal (inkName i)
+    stem = pascal ((.name) i)
     outcomeType = stem <> "Outcome"
     dispositionType = stem <> "Disposition"
     outcomeConstructor = (stem <>) . pascal
-    outcomeConstructors = map (outcomeConstructor . drOutcome) (inkDisposition i)
+    outcomeConstructors = map (outcomeConstructor . (.outcome)) ((.disposition) i)
     actionExpression IAckOk = "InboxAccept"
     actionExpression (IRetry win) = "InboxRetryAfter (RetryDelay " <> windowText win <> ") Nothing"
     actionExpression (IDeadLetter mr) = "InboxDeadLetter " <> maybe "Nothing" (\reason -> "(Just " <> tshow reason <> ")") mr <> " Nothing"
@@ -3425,14 +3445,14 @@ emitIntakeGen genPrefix i =
 scaffoldPublisher :: Context -> PublisherNode -> [ScaffoldModule]
 scaffoldPublisher ctx pb =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Publisher.hs"),
-        moduleText = emitPublisherGen genPrefix pb,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/Publisher.hs"),
+        text = emitPublisherGen genPrefix pb,
         kind = Generated,
-        origin = nodeOrigin "publisher" (pubName pb) (pubLoc pb)
+        origin = nodeOrigin "publisher" ((.name) pb) ((.loc) pb)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (pascal (pubName pb))
+    genPrefix = genPrefixFor ctx (pascal ((.name) pb))
 
 emitPublisherGen :: Text -> PublisherNode -> Text
 emitPublisherGen genPrefix pb =
@@ -3448,28 +3468,28 @@ emitPublisherGen genPrefix pb =
       -- unconditional import makes a constant-backoff publisher warn under
       -- -Wunused-imports. Generated code compiles under -Werror.
       "import Keiro.Outbox.Types (BackoffSchedule (..), OrderingPolicy (..)"
-        <> (if boKind (pubBackoff pb) == "exponential" then ", ExponentialBackoffOptions (..)" else "")
+        <> (if (.kind) ((.backoff) pb) == "exponential" then ", ExponentialBackoffOptions (..)" else "")
         <> ")",
       "",
       "publisherOrdering :: OrderingPolicy",
-      "publisherOrdering = " <> pubOrdering pb,
+      "publisherOrdering = " <> (.ordering) pb,
       "",
       "publisherBackoff :: BackoffSchedule",
-      "publisherBackoff = " <> backoffExpr (pubBackoff pb),
+      "publisherBackoff = " <> backoffExpr ((.backoff) pb),
       "",
       "publisherMaxAttempts :: Int",
-      "publisherMaxAttempts = " <> tshow' (pubMaxAttempts pb)
+      "publisherMaxAttempts = " <> tshow' ((.maxAttempts) pb)
     ]
   where
-    backoffExpr b = case boKind b of
-      "constant" -> "ConstantBackoff " <> windowText (boWindow b)
+    backoffExpr b = case (.kind) b of
+      "constant" -> "ConstantBackoff " <> windowText ((.window) b)
       "exponential" ->
         "ExponentialBackoff ExponentialBackoffOptions { initial = "
-          <> windowText (boWindow b)
+          <> windowText ((.window) b)
           <> ", maxDelay = "
-          <> maybe "0" windowText (boMax b)
+          <> maybe "0" windowText ((.max) b)
           <> ", multiplier = "
-          <> fromMaybe "0" (boMultiplier b)
+          <> fromMaybe "0" ((.multiplier) b)
           <> " }"
       _ -> "error \"keiro-dsl: unlowerable backoff kind\""
 
@@ -3485,7 +3505,7 @@ scaffoldWorkqueue :: Context -> WorkqueueNode -> [ScaffoldModule]
 scaffoldWorkqueue ctx w =
   scaffoldWorkqueueWithQueueText ctx w (emitWorkqueueGen genPrefix w)
   where
-    genPrefix = genPrefixFor ctx (pascal (wqName w))
+    genPrefix = genPrefixFor ctx (pascal ((.name) w))
 
 -- | Service-aware workqueue generation resolves candidate type expressions
 -- against the checked graph. Legacy scalar workqueues deliberately stay on
@@ -3494,9 +3514,9 @@ scaffoldWorkqueueForService :: Context -> CheckedService -> WorkqueueNode -> [Sc
 scaffoldWorkqueueForService ctx service workqueue =
   scaffoldWorkqueueWithQueueText ctx workqueue queueText
   where
-    genPrefix = genPrefixFor ctx (pascal (wqName workqueue))
+    genPrefix = genPrefixFor ctx (pascal ((.name) workqueue))
     queueText
-      | any isTypedQueueField (wqPayload workqueue) =
+      | any isTypedQueueField ((.payload) workqueue) =
           case checkedTypeGraph service of
             Left errors -> error ("checked workqueue type graph failed: " <> show errors)
             Right graph -> emitMappedWorkqueueGen ctx genPrefix graph workqueue
@@ -3505,29 +3525,29 @@ scaffoldWorkqueueForService ctx service workqueue =
 scaffoldWorkqueueWithQueueText :: Context -> WorkqueueNode -> Text -> [ScaffoldModule]
 scaffoldWorkqueueWithQueueText ctx w queueText =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Queue.hs"),
-        moduleText = queueText,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/Queue.hs"),
+        text = queueText,
         kind = Generated,
-        origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
+        origin = nodeOrigin "workqueue" ((.name) w) ((.loc) w)
       },
     ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/QueuePolicy.hs"),
-        moduleText = emitQueuePolicy genPrefix w,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/QueuePolicy.hs"),
+        text = emitQueuePolicy genPrefix w,
         kind = Generated,
-        origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
+        origin = nodeOrigin "workqueue" ((.name) w) ((.loc) w)
       },
     ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/QueueCodec.hs"),
-        moduleText = emitQueueCodec genPrefix w,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/QueueCodec.hs"),
+        text = emitQueueCodec genPrefix w,
         kind = Generated,
-        origin = nodeOrigin "workqueue" (wqName w) (wqLoc w)
+        origin = nodeOrigin "workqueue" ((.name) w) ((.loc) w)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (pascal (wqName w))
+    genPrefix = genPrefixFor ctx (pascal ((.name) w))
 
 isTypedQueueField :: WqField -> Bool
-isTypedQueueField field = case wqfType field of
+isTypedQueueField field = case (.valueType) field of
   LegacyQueueScalar {} -> False
   TypedQueueExpression {} -> True
 
@@ -3550,14 +3570,14 @@ emitWorkqueueGen genPrefix w =
            "import qualified Data.Text as T",
            "",
            "queuePhysical, queueDlq, queueTable :: Text",
-           "queuePhysical = " <> tshow (wqPhysical w),
-           "queueDlq = " <> tshow (wqDlq w),
-           "queueTable = " <> tshow (wqTable w),
+           "queuePhysical = " <> tshow ((.physical) w),
+           "queueDlq = " <> tshow ((.dlq) w),
+           "queueTable = " <> tshow ((.table) w),
            ""
          ]
       ++ groupKeyLines
       ++ [ "data " <> payloadTy <> " = " <> payloadTy,
-           "  { " <> T.intercalate "\n  , " [wqfName f <> " :: !" <> payloadFieldType f | f <- wqPayload w],
+           "  { " <> T.intercalate "\n  , " [(.name) f <> " :: !" <> payloadFieldType f | f <- (.payload) w],
            "  }",
            "  deriving stock (Eq, Show)",
            "",
@@ -3565,59 +3585,59 @@ emitWorkqueueGen genPrefix w =
            "encode" <> payloadTy <> " p =",
            "  object"
          ]
-      ++ [lead i (tshow (wqfWire f) <> " .= p." <> wqfName f) | (i, f) <- zip [(0 :: Int) ..] (wqPayload w)]
+      ++ [lead i (tshow ((.wire) f) <> " .= p." <> (.name) f) | (i, f) <- zip [(0 :: Int) ..] ((.payload) w)]
       ++ [ "    ]",
            "",
            "parse" <> payloadTy <> " :: Value -> Either Text " <> payloadTy,
            "parse" <> payloadTy <> " = mapLeftText . parseEither (withObject " <> tshow payloadTy <> " go)",
            "  where",
-           "    go o = " <> payloadTy <> fieldApps (wqPayload w),
+           "    go o = " <> payloadTy <> fieldApps ((.payload) w),
            "",
            "mapLeftText :: Either String b -> Either Text b",
            "mapLeftText = either (Left . T.pack) Right"
          ]
   where
-    payloadTy = wqPayloadName w
-    payloadFieldType field = case wqfType field of
-      LegacyQueueScalar scalar -> hsType (queueScalarName scalar)
+    payloadTy = (.payloadName) w
+    payloadFieldType field = case (.valueType) field of
+      LegacyQueueScalar scalar -> valueType (queueScalarName scalar)
       TypedQueueExpression _ -> error "keiro-dsl internal invariant: mapped queue lowering is pending"
-    groupKeyExport = case wqGroupKey w of
+    groupKeyExport = case (.groupKey) w of
       Nothing -> ""
       Just groupKey
-        | gkVia groupKey == "raw" -> "  , groupKeyField, groupKeyFor"
+        | (.via) groupKey == "raw" -> "  , groupKeyField, groupKeyFor"
         | otherwise -> "  , groupKeyField"
-    groupKeyLines = case wqGroupKey w of
+    groupKeyLines = case (.groupKey) w of
       Nothing -> []
       Just groupKey -> common <> derivationLines groupKey
         where
           common =
             [ "groupKeyField :: Text",
-              "groupKeyField = " <> tshow (gkField groupKey),
+              "groupKeyField = " <> tshow ((.field) groupKey),
               ""
             ]
           derivationLines key
-            | gkVia key == "raw" =
+            | (.via) key == "raw" =
                 [ "groupKeyFor :: " <> payloadTy <> " -> Text",
-                  "groupKeyFor payload = payload." <> gkField key,
+                  "groupKeyFor payload = payload." <> (.field) key,
                   ""
                 ]
             | otherwise =
-                [ "-- Opaque group-key derivation '" <> gkVia key <> "' remains hand-owned.",
-                  "-- Captured fixture: " <> fromMaybe "<missing>" (gkFixture key),
+                [ "-- Opaque group-key derivation '" <> (.via) key <> "' remains hand-owned.",
+                  "-- Captured fixture: " <> fromMaybe "<missing>" ((.fixture) key),
                   ""
                 ]
-    hsType "bool" = "Bool"
-    hsType "int" = "Int"
-    hsType _ = "Text"
+    valueType "bool" = "Bool"
+    valueType "int" = "Int"
+    valueType _ = "Text"
     lead 0 kv = "    [ " <> kv
     lead _ kv = "    , " <> kv
     fieldApps [] = ""
-    fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow (wqfWire f) | f <- fs]
+    fieldApps fs = " <$> " <> T.intercalate " <*> " ["o .: " <> tshow ((.wire) f) | f <- fs]
 
 data ResolvedQueueField = ResolvedQueueField
-  { resolvedQueueField :: !WqField,
-    resolvedQueueExpression :: !(Maybe ResolvedTypeExpr),
-    resolvedQueueCodecPlan :: !(Maybe MappedCodecPlan)
+  { field :: !WqField,
+    expression :: !(Maybe ResolvedTypeExpr),
+    codecPlan :: !(Maybe MappedCodecPlan)
   }
 
 emitMappedWorkqueueGen :: Context -> Text -> TypeGraph -> WorkqueueNode -> Text
@@ -3639,14 +3659,14 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
       <> mappedQueueImports
       <> [ "",
            "queuePhysical, queueDlq, queueTable :: Text",
-           "queuePhysical = " <> tshow (wqPhysical workqueue),
-           "queueDlq = " <> tshow (wqDlq workqueue),
-           "queueTable = " <> tshow (wqTable workqueue),
+           "queuePhysical = " <> tshow ((.physical) workqueue),
+           "queueDlq = " <> tshow ((.dlq) workqueue),
+           "queueTable = " <> tshow ((.table) workqueue),
            ""
          ]
       <> groupKeyLines
       <> [ "data " <> payloadType <> " = " <> payloadType,
-           "  { " <> T.intercalate "\n  , " [wqfName raw <> " :: " <> strictQueueFieldType (queueFieldType field) | field@ResolvedQueueField {resolvedQueueField = raw} <- fields],
+           "  { " <> T.intercalate "\n  , " [(.name) raw <> " :: " <> strictQueueFieldType (queueFieldType field) | field@ResolvedQueueField {field = raw} <- fields],
            "  }",
            "  deriving stock (Eq, Show)",
            ""
@@ -3656,7 +3676,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
            "encode" <> payloadType <> " payload =",
            "  object"
          ]
-      <> [queueLead index (tshow (wqfWire raw) <> " .= " <> encodeQueueField field) | (index, field@ResolvedQueueField {resolvedQueueField = raw}) <- zip [(0 :: Int) ..] fields]
+      <> [queueLead index (tshow ((.wire) raw) <> " .= " <> encodeQueueField field) | (index, field@ResolvedQueueField {field = raw}) <- zip [(0 :: Int) ..] fields]
       <> [ "    ]",
            "",
            "parse" <> payloadType <> " :: Value -> Either Text " <> payloadType,
@@ -3670,36 +3690,36 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
       <> optionalFieldHelper
       <> unknownFieldHelper
   where
-    payloadType = wqPayloadName workqueue
-    fields = map resolveField (wqPayload workqueue)
-    resolveField raw = case wqfType raw of
+    payloadType = (.payloadName) workqueue
+    fields = map resolveField ((.payload) workqueue)
+    resolveField raw = case (.valueType) raw of
       LegacyQueueScalar {} -> ResolvedQueueField raw Nothing Nothing
       TypedQueueExpression expression ->
-        case resolveTypeExpression graph owner (wqfLoc raw) expression of
+        case resolveTypeExpression graph owner ((.loc) raw) expression of
           Left failure -> error ("checked queue expression failed: " <> show failure)
           Right resolved ->
             ResolvedQueueField raw (Just resolved) (Just (mappedCodecPlanOrDie graph resolved))
       where
-        owner = "workqueue '" <> wqName workqueue <> "' payload field '" <> wqfName raw <> "'"
-    plans = [plan | ResolvedQueueField {resolvedQueueCodecPlan = Just plan} <- fields]
-    rootExpressions = [expression | ResolvedQueueField {resolvedQueueExpression = Just expression} <- fields]
-    selectedKeys = Set.unions (map (dependencies . consumerType) plans)
-    declarations = mapMaybe (`Map.lookup` tgDeclarations graph) (Set.toAscList selectedKeys)
+        owner = "workqueue '" <> (.name) workqueue <> "' payload field '" <> (.name) raw <> "'"
+    plans = [plan | ResolvedQueueField {codecPlan = Just plan} <- fields]
+    rootExpressions = [expression | ResolvedQueueField {expression = Just expression} <- fields]
+    selectedKeys = Set.unions (map ((.dependencies) . (.consumerType)) plans)
+    declarations = mapMaybe (`Map.lookup` (.declarations) graph) (Set.toAscList selectedKeys)
     structuralDeclarations = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
     mappedCodecExports (declaration, _) =
-      [ "  , encode" <> sdName declaration <> "Mapped",
-        "  , decode" <> sdName declaration <> "Mapped"
+      [ "  , encode" <> (.name) declaration <> "Mapped",
+        "  , decode" <> (.name) declaration <> "Mapped"
       ]
     hasStructural = not (null structuralDeclarations)
     allExpressions = rootExpressions <> concatMap (shapeTypeExpressions . snd) structuralDeclarations
     importsPlanReferences =
-      Set.unions (map (consumerTypeReferences . consumerType) plans)
+      Set.unions (map (consumerTypeReferences . (.consumerType)) plans)
         <> Set.fromList
           [ reference
           | (declaration, shape) <- structuralDeclarations,
             reference <-
-              haskellTypeReference (sdHaskell declaration)
-                : qualifiedValueReference (sdBinding declaration)
+              haskellTypeReference ((.haskell) declaration)
+                : qualifiedValueReference ((.binding) declaration)
                 : structuralShapeReferences ctx declaration shape
           ]
     importPlan =
@@ -3707,12 +3727,12 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
         (genPrefix <> ".Queue")
         (Set.singleton payloadType)
         importsPlanReferences
-    plannedModules = Set.map referenceModule importsPlanReferences
+    plannedModules = Set.map (.moduleName) importsPlanReferences
     opaqueInstanceImports =
       sort . nub $
-        [ hsModule (odHaskell declaration) <> " ()"
+        [ (.moduleName) ((.haskell) declaration) <> " ()"
         | ResolvedOpaque declaration <- declarations,
-          Set.notMember (hsModule (odHaskell declaration)) plannedModules
+          Set.notMember ((.moduleName) ((.haskell) declaration)) plannedModules
         ]
     usesMap = any typeUsesMap allExpressions
     usesOptionalValue = any typeUsesOptional allExpressions
@@ -3753,8 +3773,8 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     aesonTypesImports =
       ["Parser" | usesParser]
         <> ["explicitParseField", "parseEither"]
-    queueFieldType ResolvedQueueField {resolvedQueueField = raw, resolvedQueueExpression = Nothing} = legacyQueueType raw
-    queueFieldType ResolvedQueueField {resolvedQueueExpression = Just expression} =
+    queueFieldType ResolvedQueueField {field = raw, expression = Nothing} = legacyQueueType raw
+    queueFieldType ResolvedQueueField {expression = Just expression} =
       unHaskellTypeOccurrence $
         either
           (error . ("validated queue consumer type rendering failed: " <>) . show)
@@ -3763,45 +3783,45 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     strictQueueFieldType rendered
       | T.any (== ' ') rendered && not ("[" `T.isPrefixOf` rendered) = "!(" <> rendered <> ")"
       | otherwise = "!" <> rendered
-    legacyQueueType raw = case wqfType raw of
+    legacyQueueType raw = case (.valueType) raw of
       LegacyQueueScalar scalar -> case queueScalarName scalar of
         "bool" -> "Bool"
         "int" -> "Int"
         _ -> "Text"
       TypedQueueExpression {} -> error "typed queue field reached legacy type rendering"
-    encodeQueueField ResolvedQueueField {resolvedQueueField = raw, resolvedQueueCodecPlan = Nothing} = "payload." <> wqfName raw
-    encodeQueueField ResolvedQueueField {resolvedQueueField = raw, resolvedQueueCodecPlan = Just plan} =
-      renderMappedEncode graph ConsumerValueBoundary plan ("payload." <> wqfName raw)
-    decodeQueueField ResolvedQueueField {resolvedQueueField = raw, resolvedQueueCodecPlan = Nothing} =
-      "objectValue .: " <> tshow (wqfWire raw)
-    decodeQueueField ResolvedQueueField {resolvedQueueField = raw, resolvedQueueCodecPlan = Just plan} =
+    encodeQueueField ResolvedQueueField {field = raw, codecPlan = Nothing} = "payload." <> (.name) raw
+    encodeQueueField ResolvedQueueField {field = raw, codecPlan = Just plan} =
+      renderMappedEncode graph ConsumerValueBoundary plan ("payload." <> (.name) raw)
+    decodeQueueField ResolvedQueueField {field = raw, codecPlan = Nothing} =
+      "objectValue .: " <> tshow ((.wire) raw)
+    decodeQueueField ResolvedQueueField {field = raw, codecPlan = Just plan} =
       "explicitParseField ("
         <> renderMappedParse graph ConsumerValueBoundary plan
         <> ") objectValue "
-        <> tshow (wqfWire raw)
+        <> tshow ((.wire) raw)
     queueFieldApplications [] = ""
     queueFieldApplications values = " <$> " <> T.intercalate " <*> " (map decodeQueueField values)
-    groupKeyExport = case wqGroupKey workqueue of
+    groupKeyExport = case (.groupKey) workqueue of
       Nothing -> ""
       Just groupKey
-        | gkVia groupKey == "raw" -> "  , groupKeyField, groupKeyFor"
+        | (.via) groupKey == "raw" -> "  , groupKeyField, groupKeyFor"
         | otherwise -> "  , groupKeyField"
-    groupKeyLines = case wqGroupKey workqueue of
+    groupKeyLines = case (.groupKey) workqueue of
       Nothing -> []
       Just groupKey ->
         [ "groupKeyField :: Text",
-          "groupKeyField = " <> tshow (gkField groupKey),
+          "groupKeyField = " <> tshow ((.field) groupKey),
           ""
         ]
-          <> if gkVia groupKey == "raw"
+          <> if (.via) groupKey == "raw"
             then
               [ "groupKeyFor :: " <> payloadType <> " -> Text",
-                "groupKeyFor payload = payload." <> gkField groupKey,
+                "groupKeyFor payload = payload." <> (.field) groupKey,
                 ""
               ]
             else
-              [ "-- Opaque group-key derivation '" <> gkVia groupKey <> "' remains hand-owned.",
-                "-- Captured fixture: " <> fromMaybe "<missing>" (gkFixture groupKey),
+              [ "-- Opaque group-key derivation '" <> (.via) groupKey <> "' remains hand-owned.",
+                "-- Captured fixture: " <> fromMaybe "<missing>" ((.fixture) groupKey),
                 ""
               ]
     optionalFieldHelper =
@@ -3826,17 +3846,17 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
             "    extras = filter (`notElem` allowed) (map Key.toText (KeyMap.keys objectValue))"
           ]
         else []
-    isLegacy ResolvedQueueField {resolvedQueueCodecPlan = Nothing} = True
-    isLegacy ResolvedQueueField {resolvedQueueCodecPlan = Just _} = False
+    isLegacy ResolvedQueueField {codecPlan = Nothing} = True
+    isLegacy ResolvedQueueField {codecPlan = Just _} = False
     isEnumShape REnum {} = True
     isEnumShape _ = False
     isTextShape REnum {} = True
     isTextShape RUnion {} = True
     isTextShape _ = False
     rejectsUnknown (RRecord _ RejectUnknown _) = True
-    rejectsUnknown (RUnion encoding _) = ueUnknownFields encoding == RejectUnknown
+    rejectsUnknown (RUnion encoding _) = (.unknownFields) encoding == RejectUnknown
     rejectsUnknown _ = False
-    hasOptionalField (RRecord _ _ shapeFields) = any ((== POptional) . rwfPresence) shapeFields
+    hasOptionalField (RRecord _ _ shapeFields) = any ((== POptional) . (.presence)) shapeFields
     hasOptionalField _ = False
 
 queueLead :: Int -> Text -> Text
@@ -3844,29 +3864,19 @@ queueLead 0 keyValue = "    [ " <> keyValue
 queueLead _ keyValue = "    , " <> keyValue
 
 typeUsesNatural :: ResolvedTypeExpr -> Bool
-typeUsesNatural = foldTypeExpr (falseAlgebra {onNatural = True})
-  where
-    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False id id id (const False))
 
 typeUsesTime :: ResolvedTypeExpr -> Bool
-typeUsesTime = foldTypeExpr (falseAlgebra {onTime = True})
-  where
-    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False id id id (const False))
 
 typeUsesText :: ResolvedTypeExpr -> Bool
-typeUsesText = foldTypeExpr (falseAlgebra {onText = True, onMap = const True})
-  where
-    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False id id (const True) (const False))
 
 typeUsesJson :: ResolvedTypeExpr -> Bool
-typeUsesJson = foldTypeExpr (falseAlgebra {onJson = True})
-  where
-    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False True id id id (const False))
 
 typeUsesParserAnnotation :: ResolvedTypeExpr -> Bool
-typeUsesParserAnnotation = foldTypeExpr (falseAlgebra {onList = const True, onMap = const True})
-  where
-    falseAlgebra = TypeExprAlgebra False False False False False False False id id id (const False)
+typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False id (const True) (const True) (const False))
 
 typeUsesParseJson :: TypeGraph -> ResolvedTypeExpr -> Bool
 typeUsesParseJson graph =
@@ -3882,7 +3892,7 @@ typeUsesParseJson graph =
         onOptional = id,
         onList = const True,
         onMap = const True,
-        onRef = \key -> case Map.lookup key (tgDeclarations graph) of
+        onRef = \key -> case Map.lookup key ((.declarations) graph) of
           Just ResolvedOpaque {} -> True
           _ -> False
       }
@@ -3892,8 +3902,8 @@ typeUsesToJson = typeUsesParseJson
 
 workqueueUsesRecordDot :: WorkqueueNode -> Bool
 workqueueUsesRecordDot workqueue =
-  not (null (wqPayload workqueue))
-    || maybe False ((== "raw") . gkVia) (wqGroupKey workqueue)
+  not (null ((.payload) workqueue))
+    || maybe False ((== "raw") . (.via)) ((.groupKey) workqueue)
 
 -- | Emit the versioned PGMQ envelope adapter.  The payload record remains
 -- symbol-free and dependency-light in Queue.hs; this runtime-facing module is
@@ -3932,8 +3942,8 @@ emitQueueCodec genPrefix w =
       stem <> "JobCodec = keiroJobCodec " <> stem <> "PayloadCodec"
     ]
   where
-    payloadTy = wqPayloadName w
-    stem = lowerFirst (T.concat (map pascal (T.splitOn "_" (wqName w))))
+    payloadTy = (.payloadName) w
+    stem = lowerFirst (T.concat (map pascal (T.splitOn "_" ((.name) w))))
 
 -- | Emit the pgmq retry policy + JobOutcome disposition compiled against the
 -- LIVE @Keiro.PGMQ.Job@ runtime (RetryPolicy / JobOutcome / RetryDelay). This pins
@@ -3965,23 +3975,23 @@ emitQueuePolicy genPrefix w =
       "retryPolicy :: RetryPolicy",
       "retryPolicy =",
       "  RetryPolicy",
-      "    { maxRetries = " <> tshow' (wqMaxRetries w),
-      "    , defaultRetryDelay = RetryDelay " <> windowText (wqDelay w),
-      "    , useDeadLetter = " <> (if wqDlqOn w then "True" else "False"),
+      "    { maxRetries = " <> tshow' ((.maxRetries) w),
+      "    , defaultRetryDelay = RetryDelay " <> windowText ((.delay) w),
+      "    , useDeadLetter = " <> (if (.dlqOn) w then "True" else "False"),
       "    }",
       "",
       "-- The consumer JobOutcome disposition over the spec's named domain outcomes,",
       "-- lowered to the live Keiro.PGMQ.Job.JobOutcome.",
       "data " <> outcomeType,
-      "  = " <> T.intercalate "\n  | " (map (pascal . wqdOutcome) (wqDisposition w)),
+      "  = " <> T.intercalate "\n  | " (map (pascal . (.outcome)) ((.disposition) w)),
       "  deriving stock (Eq, Show)",
       "",
       "jobOutcomeFor :: " <> outcomeType <> " -> JobOutcome",
       "jobOutcomeFor o = case o of"
     ]
-      ++ ["  " <> pascal (wqdOutcome r) <> " -> " <> outcome (wqdAction r) | r <- wqDisposition w]
+      ++ ["  " <> pascal ((.outcome) r) <> " -> " <> outcome ((.action) r) | r <- (.disposition) w]
   where
-    outcomeType = T.concat (map pascal (T.splitOn "_" (wqName w))) <> "Outcome"
+    outcomeType = T.concat (map pascal (T.splitOn "_" ((.name) w))) <> "Outcome"
     queuePolicyImports =
       [ "JobOrdering (..)",
         "JobOutcome (..)",
@@ -3990,22 +4000,22 @@ emitQueuePolicy genPrefix w =
         "RetryDelay (..)",
         "RetryPolicy (..)"
       ]
-        <> ( case wqProvision w of
+        <> ( case (.provision) w of
                WqStandard -> ["standardProvision"]
                WqUnlogged -> ["unloggedProvision"]
                WqPartitioned {} -> ["PartitionSpec (..)", "partitionedProvision"]
            )
-        <> ["withFifoIndexProvision" | wqOrdering w /= WqUnordered]
+        <> ["withFifoIndexProvision" | (.ordering) w /= WqUnordered]
         <> ["withOrdering"]
-    orderingCtor = case wqOrdering w of
+    orderingCtor = case (.ordering) w of
       WqUnordered -> "Unordered"
       WqFifoThroughput -> "FifoThroughput"
       WqFifoRoundRobin -> "FifoRoundRobin"
     provisionExpr = fifoWrap baseProvision
-    fifoWrap expression = case wqOrdering w of
+    fifoWrap expression = case (.ordering) w of
       WqUnordered -> expression
       _ -> "withFifoIndexProvision (" <> expression <> ")"
-    baseProvision = case wqProvision w of
+    baseProvision = case (.provision) w of
       WqStandard -> "standardProvision"
       WqUnlogged -> "unloggedProvision"
       WqPartitioned interval retention ->
@@ -4030,23 +4040,23 @@ scaffoldReadModel ctx readModel =
   [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel),
     generated "ReadModel" (emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel),
     ScaffoldModule
-      { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles",
-        moduleText = emitReadModelHoles tableModule readModelHolePrefix stem readModel,
+      { path = modulePathFor readModelHolePrefix "ReadModelHoles",
+        text = emitReadModelHoles tableModule readModelHolePrefix stem readModel,
         kind = HoleStub,
         origin = readModelOrigin
       }
   ]
   where
-    nodeSegment = pascal (rmName readModel)
+    nodeSegment = pascal ((.name) readModel)
     stem = readModelStem readModel
     readModelModule = genPrefixFor ctx nodeSegment
     tableModule = readModelModule <> ".ReadModelTable"
     readModelHolePrefix = holePrefixFor ctx nodeSegment
-    readModelOrigin = nodeOrigin "readmodel" (rmName readModel) (rmLoc readModel)
+    readModelOrigin = nodeOrigin "readmodel" ((.name) readModel) ((.loc) readModel)
     generated leaf body =
       ScaffoldModule
-        { modulePath = modulePathFor readModelModule leaf,
-          moduleText = body,
+        { path = modulePathFor readModelModule leaf,
+          text = body,
           kind = Generated,
           origin = readModelOrigin
         }
@@ -4055,13 +4065,13 @@ scaffoldReadModel ctx readModel =
 -- for the candidate typed query pair. Legacy read models stay on
 -- 'scaffoldReadModel' so their generated and create-once bytes remain exact.
 scaffoldReadModelForService :: Context -> CheckedService -> ReadModelNode -> [ScaffoldModule]
-scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
+scaffoldReadModelForService ctx service readModel = case (.queryTypes) readModel of
   Nothing ->
     [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel),
       generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (ownerDerivedCursor service readModel) Nothing stem readModel),
       ScaffoldModule
-        { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles",
-          moduleText = emitReadModelHoles tableModule readModelHolePrefix stem readModel,
+        { path = modulePathFor readModelHolePrefix "ReadModelHoles",
+          text = emitReadModelHoles tableModule readModelHolePrefix stem readModel,
           kind = HoleStub,
           origin = readModelOrigin
         }
@@ -4071,60 +4081,75 @@ scaffoldReadModelForService ctx service readModel = case queryTypes readModel of
       generated "QueryContract" (emitReadModelQueryContract queryContractModule graph stem readModel queryPair),
       generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (ownerDerivedCursor service readModel) (Just queryContractModule) stem readModel),
       ScaffoldModule
-        { modulePath = modulePathFor readModelHolePrefix "ReadModelHoles",
-          moduleText = emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem readModel,
+        { path = modulePathFor readModelHolePrefix "ReadModelHoles",
+          text = emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem readModel,
           kind = HoleStub,
           origin = readModelOrigin
         }
     ]
   where
-    nodeSegment = pascal (rmName readModel)
+    nodeSegment = pascal ((.name) readModel)
     stem = readModelStem readModel
     readModelModule = genPrefixFor ctx nodeSegment
     tableModule = readModelModule <> ".ReadModelTable"
     queryContractModule = readModelModule <> ".QueryContract"
     readModelHolePrefix = holePrefixFor ctx nodeSegment
-    readModelOrigin = nodeOrigin "readmodel" (rmName readModel) (rmLoc readModel)
+    readModelOrigin = nodeOrigin "readmodel" ((.name) readModel) ((.loc) readModel)
     graph = case checkedTypeGraph service of
       Left errors -> error ("checked read-model type graph failed: " <> show errors)
       Right value -> value
     generated leaf body =
       ScaffoldModule
-        { modulePath = modulePathFor readModelModule leaf,
-          moduleText = body,
+        { path = modulePathFor readModelModule leaf,
+          text = body,
           kind = Generated,
           origin = readModelOrigin
         }
 
 ownerDerivedCursor :: CheckedService -> ReadModelNode -> Maybe Text
 ownerDerivedCursor service readModel = do
-  ownerName <- case [ supplyProjectionOwner supply
-                    | supply <- resolvedProjectionSupplies (checkedProjectionSupplies service),
-                      supplyQueryModel supply == rmName readModel
+  ownerName <- case [ (.projectionOwner) supply
+                    | supply <- (.resolvedProjectionSupplies) (checkedProjectionSupplies service),
+                      (.queryModel) supply == (.name) readModel
                     ] of
     [name] -> Just name
     _ -> Nothing
-  owner <- case [candidate | NProjectionOwner candidate <- specNodes (checkedSpec service), poName candidate == ownerName] of
+  owner <- case [candidate | NProjectionOwner candidate <- (.nodes) (checkedSpec service), (.name) candidate == ownerName] of
     [candidate] -> Just candidate
     _ -> Nothing
-  case poDelivery owner of
+  case (.delivery) owner of
     DeliveryInline -> Nothing
-    DeliverySubscription -> poSubscription owner
+    DeliverySubscription -> (.subscription) owner
 
 -- | Resolve a catalog-bound read model's physical binding to its backing
 -- target's coordinates, by name. An unbound or unresolvable model is returned
 -- unchanged; validation rejects those forms before scaffolding.
 resolveCatalogReadModel :: Spec -> ReadModelNode -> ReadModelNode
-resolveCatalogReadModel spec readModel = case rmGroup readModel of
+resolveCatalogReadModel spec readModel = case (.group) readModel of
   Nothing -> readModel
   Just _ ->
-    let backingName = case rmBackingTarget readModel of
+    let backingName = case (.backingTarget) readModel of
           Just name -> Just name
-          Nothing -> case rmObservedTargets readModel of
+          Nothing -> case (.observedTargets) readModel of
             [single] -> Just single
             _ -> Nothing
-     in case [target | NProjectionTarget target <- specNodes spec, Just (ptName target) == backingName] of
-          target : _ -> readModel {rmSchema = ptSchema target, rmTable = ptTable target}
+     in case [target | NProjectionTarget target <- (.nodes) spec, Just ((.name) target) == backingName] of
+          target : _ ->
+            ReadModelNode
+              { name = readModel.name,
+                table = target.table,
+                schema = target.schema,
+                columns = readModel.columns,
+                version = readModel.version,
+                shape = readModel.shape,
+                freshness = readModel.freshness,
+                supply = readModel.supply,
+                group = readModel.group,
+                observedTargets = readModel.observedTargets,
+                backingTarget = readModel.backingTarget,
+                queryTypes = readModel.queryTypes,
+                loc = readModel.loc
+              }
           [] -> readModel
 
 -- | Generate one service-level catalog facade and one create-once module that
@@ -4152,23 +4177,23 @@ scaffoldProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis
   | null catalogNodes = []
   | otherwise =
       [ ScaffoldModule
-          { modulePath = modulePathFor (contextGeneratedPrefix ctx) "ProjectionCatalog",
-            moduleText = emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis,
+          { path = modulePathFor (contextGeneratedPrefix ctx) "ProjectionCatalog",
+            text = emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis,
             kind = Generated,
-            origin = "projection-catalog " <> contextName ctx
+            origin = "projection-catalog " <> (.name) ctx
           },
         ScaffoldModule
-          { modulePath = modulePathFor (holePrefixFor ctx "ProjectionCatalog") "ProjectionCatalogHoles",
-            moduleText = emitProjectionCatalogHoles ctx spec owners revisions externalReads,
+          { path = modulePathFor (holePrefixFor ctx "ProjectionCatalog") "ProjectionCatalogHoles",
+            text = emitProjectionCatalogHoles ctx spec owners revisions externalReads,
             kind = HoleStub,
-            origin = "projection-catalog " <> contextName ctx
+            origin = "projection-catalog " <> (.name) ctx
           }
       ]
   where
-    catalogNodes = [() | node <- specNodes spec, isCatalogNode node]
-    owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
-    revisions = sortOn prvName [revision | NProjectionRevision revision <- specNodes spec]
-    externalReads = sortOn (\externalRead -> (erName externalRead, erVersion externalRead)) [externalRead | NExternalRead externalRead <- specNodes spec]
+    catalogNodes = [() | node <- (.nodes) spec, isCatalogNode node]
+    owners = sortOn (.order) [owner | NProjectionOwner owner <- (.nodes) spec]
+    revisions = sortOn (.name) [revision | NProjectionRevision revision <- (.nodes) spec]
+    externalReads = sortOn (\externalRead -> ((.name) externalRead, (.version) externalRead)) [externalRead | NExternalRead externalRead <- (.nodes) spec]
     isCatalogNode NProjectionTarget {} = True
     isCatalogNode NRebuildGroup {} = True
     isCatalogNode NProjectionRevision {} = True
@@ -4254,40 +4279,40 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
   where
     moduleName = contextGeneratedPrefix ctx <> ".ProjectionCatalog"
     holesModule = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
-    targets = [target | NProjectionTarget target <- specNodes spec]
-    groups = [groupNode | NRebuildGroup groupNode <- specNodes spec]
-    revisions = sortOn prvName [revision | NProjectionRevision revision <- specNodes spec]
-    externalReads = sortOn (\externalRead -> (erName externalRead, erVersion externalRead)) [externalRead | NExternalRead externalRead <- specNodes spec]
+    targets = [target | NProjectionTarget target <- (.nodes) spec]
+    groups = [groupNode | NRebuildGroup groupNode <- (.nodes) spec]
+    revisions = sortOn (.name) [revision | NProjectionRevision revision <- (.nodes) spec]
+    externalReads = sortOn (\externalRead -> ((.name) externalRead, (.version) externalRead)) [externalRead | NExternalRead externalRead <- (.nodes) spec]
     -- The catalog's list order is the declared total handler order. Keeping the
     -- sort here (rather than in the runtime) makes generated inventory and replay
     -- behavior agree even when declarations are arranged for readability.
-    owners = sortOn poOrder [owner | NProjectionOwner owner <- specNodes spec]
-    inlineOwners = [owner | owner <- owners, poDelivery owner == DeliveryInline]
-    sources = nub (concatMap poSources owners)
+    owners = sortOn (.order) [owner | NProjectionOwner owner <- (.nodes) spec]
+    inlineOwners = [owner | owner <- owners, (.delivery) owner == DeliveryInline]
+    sources = nub (concatMap (.sources) owners)
     aggregateSources = nub [aggregateName | CatalogAggregate aggregateName <- sources]
     replayableAggregateSources =
       nub
         [ aggregateName
         | owner <- owners,
-          poReplay owner == ProjectionReplayExplicit,
-          CatalogAggregate aggregateName <- poSources owner
+          (.replay) owner == ProjectionReplayExplicit,
+          CatalogAggregate aggregateName <- (.sources) owner
         ]
-    asyncOwners = [owner | owner <- owners, poDelivery owner == DeliverySubscription]
+    asyncOwners = [owner | owner <- owners, (.delivery) owner == DeliverySubscription]
     projectionImports = case (null asyncOwners, null inlineOwners) of
       (False, False) -> ["import Keiro.Projection (AsyncProjection (..), InlineProjection (..))"]
       (False, True) -> ["import Keiro.Projection (AsyncProjection (..))"]
       (True, False) -> ["import Keiro.Projection (InlineProjection (..))"]
       (True, True) -> []
-    readModels = [readModel | NReadModel readModel <- specNodes spec]
-    supplies = resolvedProjectionSupplies supplyAnalysis
+    readModels = [readModel | NReadModel readModel <- (.nodes) spec]
+    supplies = (.resolvedProjectionSupplies) supplyAnalysis
     boundReadModels =
       [ readModel
       | supply <- supplies,
         readModel <- readModels,
-        rmName readModel == supplyQueryModel supply
+        (.name) readModel == (.queryModel) supply
       ]
-    readModelAlias readModel = "RM" <> pascal (rmName readModel)
-    readModelImport readModel = "import " <> genPrefixFor ctx (pascal (rmName readModel)) <> ".ReadModel qualified as " <> readModelAlias readModel
+    readModelAlias readModel = "RM" <> pascal ((.name) readModel)
+    readModelImport readModel = "import " <> genPrefixFor ctx (pascal ((.name) readModel)) <> ".ReadModel qualified as " <> readModelAlias readModel
     aggregateImports aggregateName =
       [ "import " <> genPrefixFor ctx aggregateName <> ".Codec qualified as " <> aggregateCodecAlias aggregateName
       | aggregateName `elem` replayableAggregateSources
@@ -4315,164 +4340,164 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     sourceUsesCategoryName CatalogAggregate {} = True
     targetExpr target =
       "Catalog.TargetDeclaration "
-        <> smart "mkTargetId" (ptName target)
+        <> smart "mkTargetId" ((.name) target)
         <> " (Catalog.QualifiedTable "
-        <> tshow (ptSchema target)
+        <> tshow ((.schema) target)
         <> " "
-        <> tshow (ptTable target)
+        <> tshow ((.table) target)
         <> ") "
-        <> (case ptReset target of TargetClear -> "Catalog.ClearBeforeReplay"; TargetPreserve -> "Catalog.PreserveAndReconcile")
+        <> (case (.reset) target of TargetClear -> "Catalog.ClearBeforeReplay"; TargetPreserve -> "Catalog.PreserveAndReconcile")
         <> " "
-        <> renderList (smart "mkTargetId") (ptDependsOn target)
+        <> renderList (smart "mkTargetId") ((.dependsOn) target)
         <> " "
-        <> claim ("target " <> ptName target)
+        <> claim ("target " <> (.name) target)
     groupExpr groupNode =
       "Catalog.RebuildGroupDeclaration "
-        <> smart "mkRebuildGroupId" (rgName groupNode)
+        <> smart "mkRebuildGroupId" ((.name) groupNode)
         <> " "
-        <> renderList (smart "mkTargetId") (rgOrder groupNode)
+        <> renderList (smart "mkTargetId") ((.order) groupNode)
         <> " [] "
-        <> claim ("rebuild-group " <> rgName groupNode)
+        <> claim ("rebuild-group " <> (.name) groupNode)
     revisionExpr revision =
       "Catalog.ProjectionRevision "
-        <> smart "mkProjectionRevisionId" (prvName revision)
+        <> smart "mkProjectionRevisionId" ((.name) revision)
         <> " "
-        <> smart "mkRebuildGroupId" (prvGroup revision)
+        <> smart "mkRebuildGroupId" ((.group) revision)
         <> " (Map.fromList "
-        <> renderList (revisionTargetExpr revision) (prvTargets revision)
+        <> renderList (revisionTargetExpr revision) ((.targets) revision)
         <> ") "
         <> renderList (revisionLiveHandlerExpr revision) (revisionOwners revision)
         <> " "
         <> "[Catalog.RevisionReplayAdapter "
-        <> tshow (prvName revision <> "/replay")
+        <> tshow ((.name) revision <> "/replay")
         <> " 1 "
         <> revisionRequiredTargets revision
         <> " Holes."
         <> revisionReplayName revision
         <> "] "
         <> "[Catalog.RevisionVerification "
-        <> tshow (prvName revision <> "/verification")
+        <> tshow ((.name) revision <> "/verification")
         <> " 1 "
         <> revisionRequiredTargets revision
         <> " Holes."
         <> revisionVerificationName revision
         <> "] [] "
-        <> claim ("projection-revision " <> prvName revision)
-    revisionOwners revision = [owner | owner <- owners, poGroup owner == prvGroup revision]
+        <> claim ("projection-revision " <> (.name) revision)
+    revisionOwners revision = [owner | owner <- owners, (.group) owner == (.group) revision]
     revisionLiveHandlerExpr revision owner =
       "Catalog.RevisionLiveHandler "
-        <> tshow (prvName revision <> "/" <> poName owner <> "/live")
+        <> tshow ((.name) revision <> "/" <> (.name) owner <> "/live")
         <> " 1 "
         <> revisionLiveDeliveryExpr owner
         <> " "
-        <> renderList (smart "mkTargetId") (poTargets owner)
+        <> renderList (smart "mkTargetId") ((.targets) owner)
         <> " Holes."
         <> revisionOwnerLiveName revision owner
-    revisionLiveDeliveryExpr owner = case poDelivery owner of
+    revisionLiveDeliveryExpr owner = case (.delivery) owner of
       DeliveryInline ->
         "(Catalog.RevisionInlineDelivery "
-          <> smart "mkProjectionId" (poName owner)
+          <> smart "mkProjectionId" ((.name) owner)
           <> " "
-          <> tshow (poName owner)
+          <> tshow ((.name) owner)
           <> ")"
       DeliverySubscription ->
         "(Catalog.RevisionSubscriptionDelivery "
-          <> smart "mkProjectionId" (poName owner)
+          <> smart "mkProjectionId" ((.name) owner)
           <> " "
-          <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
+          <> smart "mkSubscriptionId" (fromMaybe "" ((.subscription) owner))
           <> " "
-          <> smart "mkDedupKeyId" (fromMaybe "" (poDedup owner))
+          <> smart "mkDedupKeyId" (fromMaybe "" ((.dedup) owner))
           <> ")"
     revisionTargetExpr revision target =
       "("
-        <> smart "mkTargetId" (prtTarget target)
+        <> smart "mkTargetId" ((.target) target)
         <> ", Catalog.TargetProvisioner "
-        <> tshow (prtProvisioner target)
+        <> tshow ((.provisioner) target)
         <> " "
-        <> T.pack (show (prtProvisionerVersion target))
+        <> T.pack (show ((.provisionerVersion) target))
         <> " (Catalog.TargetSchemaVersion "
-        <> tshow (prtSchemaVersion target)
+        <> tshow ((.schemaVersion) target)
         <> ") "
-        <> tshow (prtExpectedShape target)
+        <> tshow ((.expectedShape) target)
         <> " Holes."
         <> revisionProvisionName revision target
         <> " "
-        <> tshow (prtValidator target)
+        <> tshow ((.validator) target)
         <> " "
-        <> T.pack (show (prtValidatorVersion target))
+        <> T.pack (show ((.validatorVersion) target))
         <> " (Just Holes."
         <> revisionValidateName revision target
         <> ") "
-        <> renderList promotionObjectExpr (prtPromotionObjects target)
+        <> renderList promotionObjectExpr ((.promotionObjects) target)
         <> ")"
     externalReadExpr externalRead =
       "Catalog.AllRowsExternalRead "
-        <> smart "mkExternalReadContractId" (erName externalRead)
+        <> smart "mkExternalReadContractId" ((.name) externalRead)
         <> " (Catalog.ExternalReadContractVersion "
-        <> T.pack (show (erVersion externalRead))
+        <> T.pack (show ((.version) externalRead))
         <> ") "
-        <> smart "mkQueryModelId" (erQueryModel externalRead)
+        <> smart "mkQueryModelId" ((.queryModel) externalRead)
         <> " (Catalog.QualifiedSqlType "
-        <> tshow (erResultSchema externalRead)
+        <> tshow ((.resultSchema) externalRead)
         <> " "
-        <> tshow (erResultType externalRead)
+        <> tshow ((.resultType) externalRead)
         <> ") "
         <> tshow (externalReadShape externalRead)
         <> " "
-        <> nonEmptyList (smart "mkProjectionRevisionId") (erCompatibleRevisions externalRead)
+        <> nonEmptyList (smart "mkProjectionRevisionId") ((.compatibleRevisions) externalRead)
         <> " "
-        <> T.pack (show (erSurfaceGeneration externalRead))
+        <> T.pack (show ((.surfaceGeneration) externalRead))
         <> " "
-        <> claim ("external-read " <> erName externalRead <> " v" <> T.pack (show (erVersion externalRead)))
-    externalReadShape externalRead = case [rmShape readModel | readModel <- readModels, rmName readModel == erQueryModel externalRead] of
+        <> claim ("external-read " <> (.name) externalRead <> " v" <> T.pack (show ((.version) externalRead)))
+    externalReadShape externalRead = case [(.shape) readModel | readModel <- readModels, (.name) readModel == (.queryModel) externalRead] of
       shape : _ -> shape
       [] -> "keiro-dsl invariant: validated external read query is missing"
     promotionObjectExpr promotionObject =
       "Catalog.PromotionObjectName "
-        <> ( case rpoKind promotionObject of
+        <> ( case (.kind) promotionObject of
                PromotionIndexNode -> "Catalog.PromotionIndex"
                PromotionConstraintNode -> "Catalog.PromotionConstraint"
                PromotionOwnedSequenceNode -> "Catalog.PromotionOwnedSequence"
            )
         <> " "
-        <> tshow (rpoGenerationName promotionObject)
+        <> tshow ((.generationName) promotionObject)
         <> " "
-        <> tshow (rpoCanonicalName promotionObject)
-    revisionRequiredTargets revision = renderList (smart "mkTargetId") (map prtTarget (prvTargets revision))
+        <> tshow ((.canonicalName) promotionObject)
+    revisionRequiredTargets revision = renderList (smart "mkTargetId") (map (.target) ((.targets) revision))
     subscriptionExpr owner =
       "Catalog.SubscriptionDeclaration "
-        <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
+        <> smart "mkSubscriptionId" (fromMaybe "" ((.subscription) owner))
         <> " "
-        <> tshow (fromMaybe "" (poSubscription owner))
+        <> tshow (fromMaybe "" ((.subscription) owner))
         <> " "
         <> smart "mkSourceId" (catalogSourceId (ownerPrimarySource owner))
         <> " "
         <> checkpointOnMissingExpr owner
         <> " "
-        <> claim ("projection-owner " <> poName owner <> " subscription")
+        <> claim ("projection-owner " <> (.name) owner <> " subscription")
     dedupExpr owner =
       "Catalog.DedupKeyDeclaration "
-        <> smart "mkDedupKeyId" (fromMaybe "" (poDedup owner))
+        <> smart "mkDedupKeyId" (fromMaybe "" ((.dedup) owner))
         <> " "
-        <> tshow (fromMaybe "" (poDedup owner))
+        <> tshow (fromMaybe "" ((.dedup) owner))
         <> " "
-        <> claim ("projection-owner " <> poName owner <> " dedup")
+        <> claim ("projection-owner " <> (.name) owner <> " dedup")
     queryExpr readModel =
       "Catalog.SomeQueryModelBinding (Catalog.QueryModelBinding "
-        <> smart "mkQueryModelId" (rmName readModel)
+        <> smart "mkQueryModelId" ((.name) readModel)
         <> " "
         <> readModelAlias readModel
         <> "."
         <> readModelStem readModel
         <> "ReadModel "
-        <> smart "mkRebuildGroupId" (fromMaybe "" (rmGroup readModel))
+        <> smart "mkRebuildGroupId" (fromMaybe "" ((.group) readModel))
         <> " "
-        <> renderList (smart "mkTargetId") (sort (rmObservedTargets readModel))
+        <> renderList (smart "mkTargetId") (sort ((.observedTargets) readModel))
         <> " "
-        <> claim ("readmodel " <> rmName readModel)
+        <> claim ("readmodel " <> (.name) readModel)
         <> ")"
-    ownerSetName owner = lowerFirst (pascal (poName owner)) <> "ProjectionSet"
-    ownerInlineViewName owner = lowerFirst (pascal (poName owner)) <> "InlineProjections"
+    ownerSetName owner = lowerFirst (pascal ((.name) owner)) <> "ProjectionSet"
+    ownerInlineViewName owner = lowerFirst (pascal ((.name) owner)) <> "InlineProjections"
     aggregateInlineViewName aggregateName = lowerFirst (pascal aggregateName) <> "InlineProjections"
     aggregateInlineOwners =
       [ (aggregateName, matchingOwners)
@@ -4486,7 +4511,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
       ]
     ownerEventType owner = case ownerPrimarySource owner of
       CatalogAggregate aggregateName -> aggregateDomainAlias aggregateName <> "." <> pascal aggregateName <> "Event"
-      _ -> "Holes." <> pascal (poName owner) <> "Event"
+      _ -> "Holes." <> pascal ((.name) owner) <> "Event"
     ownerDefinition owner =
       [ "",
         ownerSetName owner <> " :: Catalog.ProjectionSet " <> ownerEventType owner,
@@ -4494,16 +4519,16 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
         "  Catalog.ProjectionSet",
         "    " <> smart "mkSourceId" (catalogSourceId (ownerPrimarySource owner)),
         "    (Catalog.ProjectionDefinition",
-        "      " <> smart "mkProjectionId" (poName owner),
-        "      " <> smart "mkRebuildGroupId" (poGroup owner),
-        "      " <> nonEmptyList (smart "mkTargetId") (poTargets owner),
+        "      " <> smart "mkProjectionId" ((.name) owner),
+        "      " <> smart "mkRebuildGroupId" ((.group) owner),
+        "      " <> nonEmptyList (smart "mkTargetId") ((.targets) owner),
         "      " <> replayPolicyExpr owner,
         "      (" <> handlerExpr owner <> " :| [])",
-        "      " <> claim ("projection-owner " <> poName owner),
+        "      " <> claim ("projection-owner " <> (.name) owner),
         "      :| [])",
-        "    " <> claim ("projection-owner " <> poName owner <> " source")
+        "    " <> claim ("projection-owner " <> (.name) owner <> " source")
       ]
-        ++ if poDelivery owner == DeliveryInline
+        ++ if (.delivery) owner == DeliveryInline
           then
             [ "",
               ownerInlineViewName owner <> " :: [InlineProjection " <> ownerEventType owner <> "]",
@@ -4518,7 +4543,7 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
           <> T.intercalate ", " (map ownerInlineViewName sourceOwners)
           <> "]"
       ]
-    replayPolicyExpr owner = case poReplay owner of
+    replayPolicyExpr owner = case (.replay) owner of
       ProjectionLiveOnly reason -> "(Catalog.LiveOnly (Catalog.LiveOnlyReason " <> tshow reason <> "))"
       ProjectionReplayExplicit -> case ownerPrimarySource owner of
         CatalogAggregate aggregateName ->
@@ -4535,57 +4560,57 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
             <> " Holes."
             <> ownerReplayApplyName owner
             <> "))"
-    handlerExpr owner = case poDelivery owner of
+    handlerExpr owner = case (.delivery) owner of
       DeliveryInline ->
         "Catalog.InlineHandler (InlineProjection "
-          <> tshow (poName owner)
+          <> tshow ((.name) owner)
           <> " Holes."
           <> ownerLiveApplyName owner
           <> ") "
-          <> claim ("projection-owner " <> poName owner <> " inline-handler")
+          <> claim ("projection-owner " <> (.name) owner <> " inline-handler")
       DeliverySubscription ->
         "Catalog.AsyncHandler (AsyncProjection "
-          <> tshow (fromMaybe "" (poDedup owner))
+          <> tshow (fromMaybe "" ((.dedup) owner))
           <> " "
           <> tshow (ownerQueryRegistry owner)
           <> " "
-          <> tshow (fromMaybe "" (poSubscription owner))
+          <> tshow (fromMaybe "" ((.subscription) owner))
           <> " Holes."
           <> ownerLiveApplyName owner
           <> " Holes."
           <> ownerIdempotencyName owner
           <> ") "
-          <> smart "mkSubscriptionId" (fromMaybe "" (poSubscription owner))
+          <> smart "mkSubscriptionId" (fromMaybe "" ((.subscription) owner))
           <> " "
-          <> smart "mkDedupKeyId" (fromMaybe "" (poDedup owner))
+          <> smart "mkDedupKeyId" (fromMaybe "" ((.dedup) owner))
           <> " "
-          <> claim ("projection-owner " <> poName owner <> " async-handler")
+          <> claim ("projection-owner " <> (.name) owner <> " async-handler")
     ownerQueryRegistry owner = case matchingReadModels owner of
-      readModel : _ -> registryNameFor (contextName ctx) readModel
+      readModel : _ -> registryNameFor ((.name) ctx) readModel
       [] -> ""
     matchingReadModels owner =
       [ readModel
       | supply <- supplies,
-        supplyProjectionOwner supply == poName owner,
+        (.projectionOwner) supply == (.name) owner,
         readModel <- boundReadModels,
-        rmName readModel == supplyQueryModel supply
+        (.name) readModel == (.queryModel) supply
       ]
-    ownerLiveApplyName owner = "apply" <> pascal (poName owner) <> "Live"
-    ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"
-    ownerReplayDecodeName owner = "decode" <> pascal (poName owner) <> "Replay"
-    ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
-    revisionProvisionName revision target = "provision" <> pascal (prvName revision) <> pascal (prtTarget target)
-    revisionValidateName revision target = "validate" <> pascal (prvName revision) <> pascal (prtTarget target)
-    revisionOwnerLiveName revision owner = "apply" <> pascal (prvName revision) <> pascal (poName owner) <> "Live"
-    revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
-    revisionVerificationName revision = "verify" <> pascal (prvName revision)
-    groupIdName groupNode = lowerFirst (pascal (rgName groupNode)) <> "RebuildGroupId"
-    groupStartName groupNode = "start" <> pascal (rgName groupNode) <> "Rebuild"
+    ownerLiveApplyName owner = "apply" <> pascal ((.name) owner) <> "Live"
+    ownerReplayApplyName owner = "apply" <> pascal ((.name) owner) <> "Replay"
+    ownerReplayDecodeName owner = "decode" <> pascal ((.name) owner) <> "Replay"
+    ownerIdempotencyName owner = lowerFirst (pascal ((.name) owner)) <> "IdempotencyKey"
+    revisionProvisionName revision target = "provision" <> pascal ((.name) revision) <> pascal ((.target) target)
+    revisionValidateName revision target = "validate" <> pascal ((.name) revision) <> pascal ((.target) target)
+    revisionOwnerLiveName revision owner = "apply" <> pascal ((.name) revision) <> pascal ((.name) owner) <> "Live"
+    revisionReplayName revision = "apply" <> pascal ((.name) revision) <> "Replay"
+    revisionVerificationName revision = "verify" <> pascal ((.name) revision)
+    groupIdName groupNode = lowerFirst (pascal ((.name) groupNode)) <> "RebuildGroupId"
+    groupStartName groupNode = "start" <> pascal ((.name) groupNode) <> "Rebuild"
     groupExports groupNode = ["  , " <> groupIdName groupNode, "  , " <> groupStartName groupNode]
     groupDefinitions groupNode =
       [ "",
         groupIdName groupNode <> " :: Catalog.RebuildGroupId",
-        groupIdName groupNode <> " = " <> smart "mkRebuildGroupId" (rgName groupNode),
+        groupIdName groupNode <> " = " <> smart "mkRebuildGroupId" ((.name) groupNode),
         "",
         groupStartName groupNode <> " :: (IOE :> es, Store :> es) => Rebuild.RebuildOptions -> Eff es (Either Rebuild.CatalogRebuildError Rebuild.RebuildRunReport)",
         groupStartName groupNode <> " = Rebuild.startCatalogRebuild validatedProjectionCatalog " <> groupIdName groupNode
@@ -4595,10 +4620,10 @@ emitProjectionCatalogWith aggregateFingerprint ctx spec supplyAnalysis =
     renderList render values = "[" <> T.intercalate ", " (map render values) <> "]"
     nonEmptyList _ [] = "error \"keiro-dsl invariant: validated projection owner has no targets\""
     nonEmptyList render (value : values) = "(" <> render value <> " :| " <> renderList render values <> ")"
-    ownerPrimarySource owner = case poSources owner of
+    ownerPrimarySource owner = case (.sources) owner of
       source : _ -> source
       [] -> CatalogAll
-    checkpointOnMissingExpr owner = case poCheckpointOnMissing owner of
+    checkpointOnMissingExpr owner = case (.checkpointOnMissing) owner of
       [CheckpointFromBeginning] -> "KirokuSubscription.FromBeginning"
       [CheckpointFromCurrentHead] -> "KirokuSubscription.FromCurrentHead"
       [CheckpointFail] -> "KirokuSubscription.FailIfMissing"
@@ -4634,106 +4659,106 @@ emitProjectionCatalogHoles ctx spec owners revisions externalReads =
       ++ concatMap externalReadStubs externalReads
   where
     moduleName = holePrefixFor ctx "ProjectionCatalog" <> ".ProjectionCatalogHoles"
-    aggregateSources = nub [aggregateName | owner <- owners, CatalogAggregate aggregateName <- poSources owner]
+    aggregateSources = nub [aggregateName | owner <- owners, CatalogAggregate aggregateName <- (.sources) owner]
     exports = concatMap ownerExports owners <> concatMap revisionExports revisions <> map externalReadKeyedName externalReads
     ownerExports owner =
-      [pascal (poName owner) <> "Event" | not (isAggregateSource owner)]
+      [pascal ((.name) owner) <> "Event" | not (isAggregateSource owner)]
         <> [ownerLiveApplyName owner]
-        <> [ownerIdempotencyName owner | poDelivery owner == DeliverySubscription]
-        <> case poReplay owner of
+        <> [ownerIdempotencyName owner | (.delivery) owner == DeliverySubscription]
+        <> case (.replay) owner of
           ProjectionLiveOnly _ -> []
           ProjectionReplayExplicit -> [ownerReplayApplyName owner] <> [ownerReplayDecodeName owner | not (isAggregateSource owner)]
     ownerStubs owner =
-      ["-- Projection owner " <> poName owner <> " (order " <> T.pack (show (poOrder owner)) <> ")."]
+      ["-- Projection owner " <> (.name) owner <> " (order " <> T.pack (show ((.order) owner)) <> ")."]
         <> ["data " <> ownerEventType owner <> " = " <> ownerEventType owner | not (isAggregateSource owner)]
-        <> [ownerLiveSignature owner, ownerLiveApplyName owner <> " = error \"HOLE: fill " <> poName owner <> " live apply\""]
-        <> ( if poDelivery owner == DeliverySubscription
+        <> [ownerLiveSignature owner, ownerLiveApplyName owner <> " = error \"HOLE: fill " <> (.name) owner <> " live apply\""]
+        <> ( if (.delivery) owner == DeliverySubscription
                then
                  [ ownerIdempotencyName owner <> " :: RecordedEvent -> EventId",
-                   ownerIdempotencyName owner <> " = error \"HOLE: return the durable event id for " <> poName owner <> "\""
+                   ownerIdempotencyName owner <> " = error \"HOLE: return the durable event id for " <> (.name) owner <> "\""
                  ]
                else []
            )
         <> replayStubs owner
         <> [""]
     revisionExports revision =
-      concatMap (\target -> [revisionProvisionName revision target, revisionValidateName revision target]) (prvTargets revision)
+      concatMap (\target -> [revisionProvisionName revision target, revisionValidateName revision target]) ((.targets) revision)
         <> map (revisionOwnerLiveName revision) (revisionOwners revision)
         <> [revisionReplayName revision, revisionVerificationName revision]
     revisionStubs revision =
-      ["-- Projection revision " <> prvName revision <> "."]
-        <> concatMap targetStubs (prvTargets revision)
+      ["-- Projection revision " <> (.name) revision <> "."]
+        <> concatMap targetStubs ((.targets) revision)
         <> concatMap liveStubs (revisionOwners revision)
         <> [ revisionReplayName revision <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction (Either Catalog.ReplayDecodeError Bool)",
-             revisionReplayName revision <> " = error \"HOLE: replay revision " <> prvName revision <> " through PhysicalTargets\"",
+             revisionReplayName revision <> " = error \"HOLE: replay revision " <> (.name) revision <> " through PhysicalTargets\"",
              revisionVerificationName revision <> " :: Catalog.PhysicalTargets -> Tx.Transaction (Either Text ())",
-             revisionVerificationName revision <> " = error \"HOLE: verify revision " <> prvName revision <> " staging targets\"",
+             revisionVerificationName revision <> " = error \"HOLE: verify revision " <> (.name) revision <> " staging targets\"",
              ""
            ]
       where
         liveStubs owner =
           [ revisionOwnerLiveName revision owner <> " :: Catalog.PhysicalTargets -> RecordedEvent -> Tx.Transaction ()",
-            revisionOwnerLiveName revision owner <> " = error \"HOLE: apply " <> poName owner <> " live events for revision " <> prvName revision <> " through its owned PhysicalTargets\""
+            revisionOwnerLiveName revision owner <> " = error \"HOLE: apply " <> (.name) owner <> " live events for revision " <> (.name) revision <> " through its owned PhysicalTargets\""
           ]
         targetStubs target =
           [ revisionProvisionName revision target <> " :: Catalog.TargetProvisioningContext -> Tx.Transaction ()",
-            revisionProvisionName revision target <> " = error \"HOLE: provision target " <> prtTarget target <> " for revision " <> prvName revision <> "\"",
+            revisionProvisionName revision target <> " = error \"HOLE: provision target " <> (.target) target <> " for revision " <> (.name) revision <> "\"",
             revisionValidateName revision target <> " :: Catalog.TargetProvisioningContext -> Tx.Transaction (Either [Catalog.TargetSchemaViolation] Catalog.TargetSchemaEvidence)",
-            revisionValidateName revision target <> " = error \"HOLE: validate target " <> prtTarget target <> " for revision " <> prvName revision <> "\""
+            revisionValidateName revision target <> " = error \"HOLE: validate target " <> (.target) target <> " for revision " <> (.name) revision <> "\""
           ]
     externalReadStubs externalRead =
-      [ "-- Keyed alternative for external-read " <> erName externalRead <> " v" <> T.pack (show (erVersion externalRead)) <> ".",
+      [ "-- Keyed alternative for external-read " <> (.name) externalRead <> " v" <> T.pack (show ((.version) externalRead)) <> ".",
         "-- Supply typed arguments plus an application-owned private SQL function; do not grant callers access to that inner function.",
         externalReadKeyedName externalRead <> " :: [Catalog.SqlFunctionArgument] -> Catalog.QualifiedFunction -> Int -> Catalog.ExternalReadContract",
         externalReadKeyedName externalRead <> " arguments privateImplementation privateImplementationVersion =",
         "  Catalog.KeyedExternalRead",
-        "    " <> smart "mkExternalReadContractId" (erName externalRead),
-        "    (Catalog.ExternalReadContractVersion " <> T.pack (show (erVersion externalRead)) <> ")",
-        "    " <> smart "mkQueryModelId" (erQueryModel externalRead),
+        "    " <> smart "mkExternalReadContractId" ((.name) externalRead),
+        "    (Catalog.ExternalReadContractVersion " <> T.pack (show ((.version) externalRead)) <> ")",
+        "    " <> smart "mkQueryModelId" ((.queryModel) externalRead),
         "    arguments",
-        "    (Catalog.QualifiedSqlType " <> tshow (erResultSchema externalRead) <> " " <> tshow (erResultType externalRead) <> ")",
+        "    (Catalog.QualifiedSqlType " <> tshow ((.resultSchema) externalRead) <> " " <> tshow ((.resultType) externalRead) <> ")",
         "    privateImplementation",
         "    privateImplementationVersion",
         "    " <> tshow (externalReadShape externalRead),
-        "    " <> nonEmptyList (smart "mkProjectionRevisionId") (erCompatibleRevisions externalRead),
-        "    " <> T.pack (show (erSurfaceGeneration externalRead)),
-        "    " <> smart "mkClaimSite" ("external-read " <> erName externalRead <> " v" <> T.pack (show (erVersion externalRead)) <> " keyed helper"),
+        "    " <> nonEmptyList (smart "mkProjectionRevisionId") ((.compatibleRevisions) externalRead),
+        "    " <> T.pack (show ((.surfaceGeneration) externalRead)),
+        "    " <> smart "mkClaimSite" ("external-read " <> (.name) externalRead <> " v" <> T.pack (show ((.version) externalRead)) <> " keyed helper"),
         ""
       ]
-    replayStubs owner = case poReplay owner of
+    replayStubs owner = case (.replay) owner of
       ProjectionLiveOnly _ -> []
       ProjectionReplayExplicit ->
         ( if not (isAggregateSource owner)
             then
               [ ownerReplayDecodeName owner <> " :: RecordedEvent -> Catalog.ReplayDecodeResult " <> ownerEventType owner,
-                ownerReplayDecodeName owner <> " = error \"HOLE: classify and decode every " <> poName owner <> " source event\""
+                ownerReplayDecodeName owner <> " = error \"HOLE: classify and decode every " <> (.name) owner <> " source event\""
               ]
             else []
         )
           <> [ ownerReplayApplyName owner <> " :: " <> ownerEventType owner <> " -> RecordedEvent -> Tx.Transaction ()",
-               ownerReplayApplyName owner <> " = error \"HOLE: fill " <> poName owner <> " replay apply without live-only side effects\""
+               ownerReplayApplyName owner <> " = error \"HOLE: fill " <> (.name) owner <> " replay apply without live-only side effects\""
              ]
     ownerLiveSignature owner =
-      ownerLiveApplyName owner <> " :: " <> case poDelivery owner of
+      ownerLiveApplyName owner <> " :: " <> case (.delivery) owner of
         DeliveryInline -> ownerEventType owner <> " -> RecordedEvent -> Tx.Transaction ()"
         DeliverySubscription -> "RecordedEvent -> Tx.Transaction ()"
     ownerEventType owner = case ownerPrimarySource owner of
       CatalogAggregate aggregateName -> pascal aggregateName <> "Event"
-      _ -> pascal (poName owner) <> "Event"
+      _ -> pascal ((.name) owner) <> "Event"
     isAggregateSource owner = case ownerPrimarySource owner of CatalogAggregate {} -> True; _ -> False
-    ownerPrimarySource owner = case poSources owner of source : _ -> source; [] -> CatalogAll
-    ownerLiveApplyName owner = "apply" <> pascal (poName owner) <> "Live"
-    ownerReplayApplyName owner = "apply" <> pascal (poName owner) <> "Replay"
-    ownerReplayDecodeName owner = "decode" <> pascal (poName owner) <> "Replay"
-    ownerIdempotencyName owner = lowerFirst (pascal (poName owner)) <> "IdempotencyKey"
-    revisionProvisionName revision target = "provision" <> pascal (prvName revision) <> pascal (prtTarget target)
-    revisionValidateName revision target = "validate" <> pascal (prvName revision) <> pascal (prtTarget target)
-    revisionOwners revision = [owner | owner <- owners, poGroup owner == prvGroup revision]
-    revisionOwnerLiveName revision owner = "apply" <> pascal (prvName revision) <> pascal (poName owner) <> "Live"
-    revisionReplayName revision = "apply" <> pascal (prvName revision) <> "Replay"
-    revisionVerificationName revision = "verify" <> pascal (prvName revision)
-    externalReadKeyedName externalRead = lowerFirst (pascal (erName externalRead)) <> "V" <> T.pack (show (erVersion externalRead)) <> "KeyedExternalRead"
-    externalReadShape externalRead = case [rmShape readModel | NReadModel readModel <- specNodes spec, rmName readModel == erQueryModel externalRead] of
+    ownerPrimarySource owner = case (.sources) owner of source : _ -> source; [] -> CatalogAll
+    ownerLiveApplyName owner = "apply" <> pascal ((.name) owner) <> "Live"
+    ownerReplayApplyName owner = "apply" <> pascal ((.name) owner) <> "Replay"
+    ownerReplayDecodeName owner = "decode" <> pascal ((.name) owner) <> "Replay"
+    ownerIdempotencyName owner = lowerFirst (pascal ((.name) owner)) <> "IdempotencyKey"
+    revisionProvisionName revision target = "provision" <> pascal ((.name) revision) <> pascal ((.target) target)
+    revisionValidateName revision target = "validate" <> pascal ((.name) revision) <> pascal ((.target) target)
+    revisionOwners revision = [owner | owner <- owners, (.group) owner == (.group) revision]
+    revisionOwnerLiveName revision owner = "apply" <> pascal ((.name) revision) <> pascal ((.name) owner) <> "Live"
+    revisionReplayName revision = "apply" <> pascal ((.name) revision) <> "Replay"
+    revisionVerificationName revision = "verify" <> pascal ((.name) revision)
+    externalReadKeyedName externalRead = lowerFirst (pascal ((.name) externalRead)) <> "V" <> T.pack (show ((.version) externalRead)) <> "KeyedExternalRead"
+    externalReadShape externalRead = case [(.shape) readModel | NReadModel readModel <- (.nodes) spec, (.name) readModel == (.queryModel) externalRead] of
       shape : _ -> shape
       [] -> "keiro-dsl invariant: validated external read query is missing"
     smart constructor value = "(must (Catalog." <> constructor <> " " <> tshow value <> "))"
@@ -4749,7 +4774,7 @@ modulePathFor :: Text -> Text -> FilePath
 modulePathFor prefix leaf = T.unpack (T.replace "." "/" prefix <> "/" <> leaf <> ".hs")
 
 readModelStem :: ReadModelNode -> Text
-readModelStem = lowerFirst . T.concat . map pascal . T.splitOn "_" . rmName
+readModelStem = lowerFirst . T.concat . map pascal . T.splitOn "_" . (.name)
 
 emitReadModelTable :: Text -> Text -> ReadModelNode -> Text
 emitReadModelTable tableModule stem readModel =
@@ -4762,7 +4787,7 @@ emitReadModelTable tableModule stem readModel =
       "",
       "-- The fully-qualified, double-quoted data-table reference.",
       qualifiedName <> " :: Text",
-      qualifiedName <> " = qualifyTable " <> tshow (rmSchema readModel) <> " " <> tshow (rmTable readModel)
+      qualifiedName <> " = qualifyTable " <> tshow ((.schema) readModel) <> " " <> tshow ((.table) readModel)
     ]
   where
     qualifiedName = stem <> "QualifiedTable"
@@ -4785,8 +4810,8 @@ emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
   where
     queryInputType = pascal stem <> "QueryInput"
     queryResultType = pascal stem <> "QueryResult"
-    inputExpression = resolve "input" (inputLoc queryPair) (input queryPair)
-    resultExpression = resolve "result" (resultLoc queryPair) (result queryPair)
+    inputExpression = resolve "input" ((.inputLoc) queryPair) ((.input) queryPair)
+    resultExpression = resolve "result" ((.resultLoc) queryPair) ((.result) queryPair)
     expressions = [inputExpression, resultExpression]
     plans = map plan expressions
     references = Set.unions (map consumerTypeReferences plans)
@@ -4805,7 +4830,7 @@ emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
         id
         (resolveTypeExpression graph owner location expression)
       where
-        owner = "readmodel '" <> rmName readModel <> "' query " <> position
+        owner = "readmodel '" <> (.name) readModel <> "' query " <> position
     plan expression =
       either
         (error . ("validated read-model consumer type planning failed: " <>) . show)
@@ -4844,11 +4869,11 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
       ++ legacyLifecycleDefinitions
       ++ asyncDefinition
   where
-    catalogManaged = rmGroup readModel /= Nothing
-    ownerDerived = rmSupply readModel == OwnerDerivedSupply
+    catalogManaged = (.group) readModel /= Nothing
+    ownerDerived = (.supply) readModel == OwnerDerivedSupply
     emitsLegacyAsync = not ownerDerived && not catalogManaged && legacyReadModelFeed readModel == Just RmSubscription
-    registryName = registryNameFor (contextName ctx) readModel
-    subscriptionName = subscriptionNameFor (contextName ctx) readModel
+    registryName = registryNameFor ((.name) ctx) readModel
+    subscriptionName = subscriptionNameFor ((.name) ctx) readModel
     asyncName = registryName <> "-async"
     readModelName = stem <> "ReadModel"
     qualifiedName = stem <> "QualifiedTable"
@@ -4875,7 +4900,7 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
           T.intercalate
             ", "
             ( ["QueryCursorAuthority (..)", "ReadModel", "ReadModelBlueprint (..)"]
-                <> ( case rmFreshness readModel of
+                <> ( case (.freshness) readModel of
                        FreshnessImmediate -> ["immediateReadModel"]
                        FreshnessWaitForHead {} -> ["HeadScope (..)", "headWaitingReadModel"]
                    )
@@ -4901,7 +4926,7 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
           then truthfulDefinition
           else legacyDefinition
     truthfulDefinition =
-      ( case rmFreshness readModel of
+      ( case (.freshness) readModel of
           FreshnessImmediate -> ["  immediateReadModel " <> readModelBlueprintName]
           FreshnessWaitForHead scope ->
             [ "  case headWaitingReadModel " <> headScopeExpr scope <> " " <> readModelBlueprintName <> " of",
@@ -4914,10 +4939,10 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
              readModelBlueprintName <> " =",
              "  ReadModelBlueprint",
              "    { name = " <> tshow registryName,
-             "    , tableName = " <> tshow (rmTable readModel),
-             "    , schema = " <> tshow (rmSchema readModel),
-             "    , version = " <> tshow' (rmVersion readModel),
-             "    , shapeHash = " <> tshow (rmShape readModel),
+             "    , tableName = " <> tshow ((.table) readModel),
+             "    , schema = " <> tshow ((.schema) readModel),
+             "    , version = " <> tshow' ((.version) readModel),
+             "    , shapeHash = " <> tshow ((.shape) readModel),
              "    , cursorAuthority = " <> maybe "NoQueryCursor" (("DurableQueryCursor " <>) . tshow) resolvedCursor,
              "    , query = " <> queryName,
              "    }"
@@ -4925,11 +4950,11 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
     legacyDefinition =
       [ "  ReadModel",
         "    { name = " <> tshow registryName,
-        "    , tableName = " <> tshow (rmTable readModel),
-        "    , schema = " <> tshow (rmSchema readModel),
+        "    , tableName = " <> tshow ((.table) readModel),
+        "    , schema = " <> tshow ((.schema) readModel),
         "    , subscriptionName = " <> tshow subscriptionName,
-        "    , version = " <> tshow' (rmVersion readModel),
-        "    , shapeHash = " <> tshow (rmShape readModel),
+        "    , version = " <> tshow' ((.version) readModel),
+        "    , shapeHash = " <> tshow ((.shape) readModel),
         "    , defaultConsistency = " <> consistencyExpr legacyConsistency,
         "    , strongScope = " <> scopeExpr legacyScope,
         "    , query = " <> queryName,
@@ -4946,7 +4971,7 @@ emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix
             "-- Call once at projection startup before serving queries.",
             registerName <> " :: (Store :> es) => Eff es ()",
             registerName <> " =",
-            "  void (registerReadModel " <> tshow registryName <> " " <> tshow' (rmVersion readModel) <> " " <> tshow (rmShape readModel) <> ")",
+            "  void (registerReadModel " <> tshow registryName <> " " <> tshow' ((.version) readModel) <> " " <> tshow ((.shape) readModel) <> ")",
             "",
             startName <> " :: (Store :> es) => GlobalPosition -> Eff es ReadModelMetadata",
             startName <> " =",
@@ -5000,9 +5025,9 @@ emitReadModelHoles tableModule readModelHolePrefix stem readModel =
            "-- HOLE: query " <> qualifiedTableLiteral readModel <> " via " <> qualifiedName <> "; never rely on search_path.",
            "-- Declared columns:"
          ]
-      ++ map (("--   " <>) . readModelColumnDoc) (rmColumns readModel)
+      ++ map (("--   " <>) . readModelColumnDoc) ((.columns) readModel)
       ++ [ queryName <> " :: " <> queryInputType <> " -> Tx.Transaction " <> queryResultType,
-           queryName <> " _input = " <> qualifiedName <> " `seq` error " <> tshow ("HOLE: fill " <> rmName readModel <> " query")
+           queryName <> " _input = " <> qualifiedName <> " `seq` error " <> tshow ("HOLE: fill " <> (.name) readModel <> " query")
          ]
       ++ applyStub
   where
@@ -5011,14 +5036,14 @@ emitReadModelHoles tableModule readModelHolePrefix stem readModel =
     queryResultType = pascal stem <> "QueryResult"
     queryName = stem <> "Query"
     applyName = "apply" <> pascal stem
-    emitsLegacyAsync = rmGroup readModel == Nothing && legacyReadModelFeed readModel == Just RmSubscription
+    emitsLegacyAsync = (.group) readModel == Nothing && legacyReadModelFeed readModel == Just RmSubscription
     exports = [queryInputType, queryResultType, queryName] ++ [applyName | emitsLegacyAsync]
     applyStub
       | emitsLegacyAsync =
           [ "",
             "-- HOLE: apply one recorded event; runtime deduplication makes redelivery safe.",
             applyName <> " :: RecordedEvent -> Tx.Transaction ()",
-            applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> rmName readModel <> " async apply")
+            applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> (.name) readModel <> " async apply")
           ]
       | otherwise = []
 
@@ -5040,9 +5065,9 @@ emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem
            "-- The generated QueryContract owns query input/result type identity.",
            "-- Declared columns:"
          ]
-      ++ map (("--   " <>) . readModelColumnDoc) (rmColumns readModel)
+      ++ map (("--   " <>) . readModelColumnDoc) ((.columns) readModel)
       ++ [ queryName <> " :: " <> queryInputType <> " -> Tx.Transaction " <> queryResultType,
-           queryName <> " _input = " <> qualifiedName <> " `seq` error " <> tshow ("HOLE: fill " <> rmName readModel <> " query")
+           queryName <> " _input = " <> qualifiedName <> " `seq` error " <> tshow ("HOLE: fill " <> (.name) readModel <> " query")
          ]
       ++ applyStub
   where
@@ -5051,29 +5076,29 @@ emitTypedReadModelHoles tableModule queryContractModule readModelHolePrefix stem
     queryResultType = pascal stem <> "QueryResult"
     queryName = stem <> "Query"
     applyName = "apply" <> pascal stem
-    emitsLegacyAsync = rmGroup readModel == Nothing && legacyReadModelFeed readModel == Just RmSubscription
+    emitsLegacyAsync = (.group) readModel == Nothing && legacyReadModelFeed readModel == Just RmSubscription
     exports = [queryName] ++ [applyName | emitsLegacyAsync]
     applyStub
       | emitsLegacyAsync =
           [ "",
             "-- HOLE: apply one recorded event; runtime deduplication makes redelivery safe.",
             applyName <> " :: RecordedEvent -> Tx.Transaction ()",
-            applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> rmName readModel <> " async apply")
+            applyName <> " _recorded = error " <> tshow ("HOLE: fill " <> (.name) readModel <> " async apply")
           ]
       | otherwise = []
 
 qualifiedTableLiteral :: ReadModelNode -> Text
-qualifiedTableLiteral readModel = quoteSqlIdentifier (rmSchema readModel) <> "." <> quoteSqlIdentifier (rmTable readModel)
+qualifiedTableLiteral readModel = quoteSqlIdentifier ((.schema) readModel) <> "." <> quoteSqlIdentifier ((.table) readModel)
 
 quoteSqlIdentifier :: Text -> Text
 quoteSqlIdentifier identifier = "\"" <> T.replace "\"" "\"\"" identifier <> "\""
 
 readModelColumnDoc :: RmColumn -> Text
 readModelColumnDoc columnDecl =
-  rmcName columnDecl
+  (.rmcName) columnDecl
     <> " "
-    <> rmcType columnDecl
-    <> if rmcRequired columnDecl then " NOT NULL" else ""
+    <> (.rmcType) columnDecl
+    <> if (.rmcRequired) columnDecl then " NOT NULL" else ""
 
 --------------------------------------------------------------------------------
 -- Router + shared worker-policy lowering (EP-108)
@@ -5082,32 +5107,32 @@ readModelColumnDoc columnDecl =
 scaffoldRouter :: Context -> RouterNode -> [ScaffoldModule]
 scaffoldRouter ctx router =
   [ ScaffoldModule
-      { modulePath = modulePathFor genPrefix "Router",
-        moduleText = emitRouterGen genPrefix router,
+      { path = modulePathFor genPrefix "Router",
+        text = emitRouterGen genPrefix router,
         kind = Generated,
         origin = routerOrigin
       },
     ScaffoldModule
-      { modulePath = modulePathFor holePrefix "RouterHoles",
-        moduleText = emitRouterHoles holePrefix router,
+      { path = modulePathFor holePrefix "RouterHoles",
+        text = emitRouterHoles holePrefix router,
         kind = HoleStub,
         origin = routerOrigin
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (rtId router)
-    holePrefix = holePrefixFor ctx (rtId router)
-    routerOrigin = nodeOrigin "router" (rtId router) (rtLoc router)
+    genPrefix = genPrefixFor ctx ((.id) router)
+    holePrefix = holePrefixFor ctx ((.id) router)
+    routerOrigin = nodeOrigin "router" ((.id) router) ((.loc) router)
 
 -- | Service-aware router generation preserves the historical custom resolver
 -- vertical byte-for-byte, while a checked declarative selection becomes one
 -- fully generated module and owns no selection hole.
 scaffoldRouterForService :: Context -> CheckedService -> RouterNode -> [ScaffoldModule]
-scaffoldRouterForService ctx service router = case rvSource (rtResolve router) of
+scaffoldRouterForService ctx service router = case (.source) ((.resolve) router) of
   ResolveDeclarative {} ->
     [ ScaffoldModule
-        { modulePath = modulePathFor genPrefix "Router",
-          moduleText = emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCommand genPrefix router,
+        { path = modulePathFor genPrefix "Router",
+          text = emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCommand genPrefix router,
           kind = Generated,
           origin = routerOrigin
         }
@@ -5115,21 +5140,21 @@ scaffoldRouterForService ctx service router = case rvSource (rtResolve router) o
   _ -> scaffoldRouter ctx router
   where
     spec = checkedSpec service
-    genPrefix = genPrefixFor ctx (rtId router)
-    routerOrigin = nodeOrigin "router" (rtId router) (rtLoc router)
+    genPrefix = genPrefixFor ctx ((.id) router)
+    routerOrigin = nodeOrigin "router" ((.id) router) ((.loc) router)
     graph = case checkedTypeGraph service of
       Left errors -> error ("checked declarative router type graph failed: " <> show errors)
       Right value -> value
     selection = case checkRouterSelection (checkedLanguageContract service) graph spec router of
       Left diagnostics -> error ("checked declarative router selection failed: " <> show diagnostics)
       Right value -> value
-    readModel = case [value | NReadModel value <- specNodes spec, rmName value == checkedQueryName (checkedQuery selection)] of
+    readModel = case [value | NReadModel value <- (.nodes) spec, (.name) value == (.name) ((.query) selection)] of
       [value] -> value
       _ -> error "checked declarative router read model disappeared"
-    targetAggregate = case [aggregate | NAggregate aggregate <- specNodes spec, aggName aggregate == checkedTarget selection] of
+    targetAggregate = case [aggregate | NAggregate aggregate <- (.nodes) spec, (.name) aggregate == (.target) selection] of
       [aggregate] -> aggregate
       _ -> error "checked declarative router target aggregate disappeared"
-    targetCommand = case [command | command <- aggCommands targetAggregate, cmdName command == checkedCommand selection] of
+    targetCommand = case [command | command <- (.commands) targetAggregate, (.name) command == (.command) selection] of
       [command] -> command
       _ -> error "checked declarative router target command disappeared"
 
@@ -5144,12 +5169,12 @@ emitRouterGen genPrefix router =
       "",
       "import Data.Text (Text)"
     ]
-      ++ workerPolicyImports (rtPoison router)
+      ++ workerPolicyImports ((.poison) router)
       ++ [ "",
            "-- The STABLE router name. It participates in every target-keyed",
            "-- deterministicRouterCommandId; renaming it re-keys replayed dispatches.",
            stem <> "Name :: Text",
-           stem <> "Name = " <> tshow (rtName router),
+           stem <> "Name = " <> tshow ((.name) router),
            "",
            "-- Runtime-owned dispatch id inputs: (name, key, sourceEventId,",
            "-- targetStreamName, occurrence). Target-keyed, not positional.",
@@ -5157,9 +5182,9 @@ emitRouterGen genPrefix router =
            "-- Node-level worker policy lowered from the spec. Pass this value to",
            "-- Keiro.Router.runRouterWorkerWith; do not silently use defaultWorkerOptions."
          ]
-      ++ workerOptionsLines (stem <> "WorkerOptions") (rtRejected router) (rtPoison router)
+      ++ workerOptionsLines (stem <> "WorkerOptions") ((.rejected) router) ((.poison) router)
   where
-    stem = lowerFirst (rtId router)
+    stem = lowerFirst ((.id) router)
 
 emitDeclarativeRouterGen :: Context -> TypeGraph -> CheckedRouterSelection -> ReadModelNode -> Aggregate -> Command -> Text -> RouterNode -> Text
 emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCommand genPrefix router =
@@ -5182,7 +5207,7 @@ emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCom
       "import " <> targetModule <> ".Domain qualified as TargetDomain",
       "import " <> targetModule <> ".EventStream qualified as TargetStream"
     ]
-      <> ["import " <> targetModule <> ".Projection qualified as TargetProjection" | not (null (rtProjections router))]
+      <> ["import " <> targetModule <> ".Projection qualified as TargetProjection" | not (null ((.projections) router))]
       <> [ "import Keiki.Core (HsPred, fieldWitnessGet)",
            "import Keiro.ProcessManager (PMCommand (..), PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))",
            "import Keiro.ReadModel (runQuery)",
@@ -5205,36 +5230,36 @@ emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCom
            "import Kiroku.Store.Effect (Store)",
            "import Shibuya.Core.Ack (RetryDelay (..))"
          ]
-      <> ["import Shibuya.Core.Types (Envelope)" | rtPoison router /= PolHalt]
+      <> ["import Shibuya.Core.Types (Envelope)" | (.poison) router /= PolHalt]
       <> [ "",
            "-- The STABLE router name. It remains part of every target-keyed",
            "-- deterministic router command id; selection metadata never re-keys dispatches.",
            stem <> "Name :: Text",
-           stem <> "Name = " <> tshow (rtName router),
+           stem <> "Name = " <> tshow ((.name) router),
            "",
            "-- SHA-256 of the checked selection semantics (locations and formatting excluded).",
            stem <> "SelectionFingerprint :: Text",
-           stem <> "SelectionFingerprint = " <> tshow (checkedFingerprint selection),
+           stem <> "SelectionFingerprint = " <> tshow ((.fingerprint) selection),
            "",
            stem <> "SelectionContract :: RouterSelectionContract",
            stem <> "SelectionContract =",
            "  RouterSelectionContract",
-           "    { identity = SelectionIdentity " <> tshow (checkedIdentity selection),
+           "    { identity = SelectionIdentity " <> tshow ((.identity) selection),
            "    , version = checkedSelectionVersion",
            "    , fingerprint = SelectionFingerprint " <> stem <> "SelectionFingerprint",
            "    , limit = checkedRecipientLimit",
            "    , order = OrderByTargetStream",
            "    , dedupe = DedupeByTargetStream",
-           "    , emptyPolicy = " <> renderCheckedEmptyPolicy (checkedEmptyPolicy selection),
-           "    , failurePolicy = " <> renderCheckedFailurePolicy (checkedFailurePolicy selection),
+           "    , emptyPolicy = " <> renderCheckedEmptyPolicy ((.emptyPolicy) selection),
+           "    , failurePolicy = " <> renderCheckedFailurePolicy ((.failurePolicy) selection),
            "    , redeliveryPolicy = StableUnion",
            "    , partialPolicy = RetainSuccesses",
            "    }",
            "  where",
-           "    checkedSelectionVersion = case mkSelectionVersion " <> T.pack (show (checkedVersion selection)) <> " of",
+           "    checkedSelectionVersion = case mkSelectionVersion " <> T.pack (show ((.version) selection)) <> " of",
            "      Right value -> value",
            "      Left _ -> error \"keiro-dsl emitted a non-positive checked selection version\"",
-           "    checkedRecipientLimit = case mkRecipientLimit " <> T.pack (show (checkedLimit selection)) <> " of",
+           "    checkedRecipientLimit = case mkRecipientLimit " <> T.pack (show ((.limit) selection)) <> " of",
            "      Right value -> value",
            "      Left _ -> error \"keiro-dsl emitted a non-positive checked recipient limit\"",
            "",
@@ -5245,15 +5270,15 @@ emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCom
            stem <> "Select input = do",
            "  queryResult <- runQuery Nothing SelectionQuery." <> readModelValue <> " input",
            "  pure $ case queryResult of",
-           "    Left _ -> Left (SelectionQueryFailed " <> tshow ("read-model " <> checkedQueryName (checkedQuery selection) <> " query failed") <> ")",
+           "    Left _ -> Left (SelectionQueryFailed " <> tshow ("read-model " <> (.name) ((.query) selection) <> " query failed") <> ")",
            "    Right rows ->",
            "      Right",
            "        [ PMCommand",
-           "            { target = entityStream TargetStream." <> targetCategory <> " (" <> renderCheckedScalar graph (checkedRecipient selection) <> ")",
+           "            { target = entityStream TargetStream." <> targetCategory <> " (" <> renderCheckedScalar graph ((.recipient) selection) <> ")",
            "            , command = " <> renderSelectionCommand graph selection targetCommand,
            "            }",
            "        | row <- rows",
-           "        , " <> renderCheckedScalar graph (checkedPredicate selection),
+           "        , " <> renderCheckedScalar graph ((.predicate) selection),
            "        ]",
            "",
            stem <> " ::",
@@ -5269,26 +5294,26 @@ emitDeclarativeRouterGen ctx graph selection readModel targetAggregate targetCom
            stem <> " =",
            "  DeclarativeRouter",
            "    { name = " <> stem <> "Name",
-           "    , key = \\input -> " <> renderCheckedScalar graph (checkedKey selection),
+           "    , key = \\input -> " <> renderCheckedScalar graph ((.key) selection),
            "    , selectionContract = " <> stem <> "SelectionContract",
            "    , select = " <> stem <> "Select",
            "    , targetEventStream = TargetStream." <> targetEventStream,
-           "    , targetProjections = const " <> renderTargetProjections (rtProjections router),
+           "    , targetProjections = const " <> renderTargetProjections ((.projections) router),
            "    }",
            "",
            "-- Node-level worker policy. Pair it with runDeclarativeRouterWorkerWith.",
            "-- Selection empty/failure policy remains in the generated selection contract."
          ]
-      <> workerOptionsLines (stem <> "WorkerOptions") (rtRejected router) (rtPoison router)
+      <> workerOptionsLines (stem <> "WorkerOptions") ((.rejected) router) ((.poison) router)
   where
-    stem = lowerFirst (rtId router)
-    targetName = aggName targetAggregate
+    stem = lowerFirst ((.id) router)
+    targetName = (.name) targetAggregate
     targetModule = genPrefixFor ctx targetName
     targetCategory = lowerFirst targetName <> "CommandCategory"
     targetEventStream = lowerFirst targetName <> "EventStream"
     readModelStemValue = readModelStem readModel
     queryInputType = pascal readModelStemValue <> "QueryInput"
-    queryNodeSegment = pascal (rmName readModel)
+    queryNodeSegment = pascal ((.name) readModel)
     queryContractModule = genPrefixFor ctx queryNodeSegment <> ".QueryContract"
     readModelModule = genPrefixFor ctx queryNodeSegment
     readModelValue = readModelStemValue <> "ReadModel"
@@ -5309,7 +5334,7 @@ renderCheckedFailurePolicy = \case
   CheckedFailureHalt -> "FailureHalt"
 
 renderCheckedScalar :: TypeGraph -> CheckedScalarExpr -> Text
-renderCheckedScalar graph expression = case checkedScalarNode expression of
+renderCheckedScalar graph expression = case (.node) expression of
   CheckedPath root segments ->
     "(fieldWitnessGet StructuralProjections."
       <> witnessName segments
@@ -5336,24 +5361,24 @@ renderCheckedScalar graph expression = case checkedScalarNode expression of
     witnessName path@(first : _) =
       fromMaybe
         (error "checked scalar path has no generated structural witness")
-        (projectionWitnessName graph (checkedPathOwner first) pointer)
+        (projectionWitnessName graph ((.owner) first) pointer)
       where
-        pointer = T.concat ["/" <> escapePointer (checkedPathWireKey segment) | segment <- path]
+        pointer = T.concat ["/" <> escapePointer ((.wireKey) segment) | segment <- path]
 
 renderSelectionCommand :: TypeGraph -> CheckedRouterSelection -> Command -> Text
 renderSelectionCommand graph selection command =
   "TargetDomain."
-    <> cmdName command
+    <> (.name) command
     <> " (TargetDomain."
-    <> cmdName command
+    <> (.name) command
     <> "Data"
-    <> T.concat [" (" <> renderCheckedScalar graph (commandExpression field) <> ")" | field <- cmdFields command]
+    <> T.concat [" (" <> renderCheckedScalar graph (commandExpression field) <> ")" | field <- (.fields) command]
     <> ")"
   where
     commandExpression field =
       fromMaybe
         (error "checked declarative router command field disappeared")
-        (Map.lookup (aggregateFieldName field) (checkedCommandFields selection))
+        (Map.lookup ((.name) field) ((.commandFields) selection))
 
 emitRouterHoles :: Text -> RouterNode -> Text
 emitRouterHoles holePrefix router =
@@ -5362,15 +5387,15 @@ emitRouterHoles holePrefix router =
       "-- keiro-dsl creates it once and never overwrites it.",
       "module " <> holePrefix <> ".RouterHoles () where",
       "",
-      "-- HOLE resolve :: " <> inName (rtInput router) <> " -> Eff es [PMCommand targetCommand]",
-      "--   Spec source: " <> resolveSourceText (rvSource (rtResolve router)) <> ".",
+      "-- HOLE resolve :: " <> (.name) ((.input) router) <> " -> Eff es [PMCommand targetCommand]",
+      "--   Spec source: " <> resolveSourceText ((.source) ((.resolve) router)) <> ".",
       "--   The spec's 'stable' keyword acknowledges that retry attempts accumulate",
       "--   the UNION of resolved target identities. Keep the recipient set stable",
       "--   for a source event whenever an exact recipient set matters.",
-      "-- HOLE router value: assemble Keiro.Router.Router with name = " <> lowerFirst (rtId router) <> "Name,",
+      "-- HOLE router value: assemble Keiro.Router.Router with name = " <> lowerFirst ((.id) router) <> "Name,",
       "--   key, resolve, targetEventStream, and targetProjections; run it with",
-      "--   runRouterWorkerWith " <> lowerFirst (rtId router) <> "WorkerOptions.",
-      "-- HOLE targetProjections: spec projections = " <> renderNames (rtProjections router) <> ".",
+      "--   runRouterWorkerWith " <> lowerFirst ((.id) router) <> "WorkerOptions.",
+      "-- HOLE targetProjections: spec projections = " <> renderNames ((.projections) router) <> ".",
       "-- NOTE on-duplicate AckOk is sound because Keiro.Router confirms a duplicate",
       "--   event id against the TARGET stream via confirmBenignDuplicate before",
       "--   returning PMCommandDuplicate. Hand-rolled dispatch paths must do likewise."
@@ -5381,7 +5406,7 @@ emitRouterHoles holePrefix router =
 resolveSourceText :: ResolveSource -> Text
 resolveSourceText (ResolveReadModel name) = "read-model " <> name <> " (typically Keiro.ReadModel.runQuery)"
 resolveSourceText ResolveHole = "typed resolver hole"
-resolveSourceText (ResolveDeclarative selection) = "declarative selection " <> rsIdentity selection
+resolveSourceText (ResolveDeclarative selection) = "declarative selection " <> (.identity) selection
 
 workerPolicyImports :: PolicyChoice -> [Text]
 workerPolicyImports poison =
@@ -5433,22 +5458,22 @@ workerOptionsLines valueName rejected poison =
 scaffoldProcess :: Context -> ProcessNode -> [ScaffoldModule]
 scaffoldProcess ctx p =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/Process.hs"),
-        moduleText = emitProcessGen sagaGenPrefix genPrefix holePrefix p,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/Process.hs"),
+        text = emitProcessGen sagaGenPrefix genPrefix holePrefix p,
         kind = Generated,
-        origin = nodeOrigin "process" (procId p) (procLoc p)
+        origin = nodeOrigin "process" ((.id) p) ((.loc) p)
       },
     ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" holePrefix <> "/ProcessHoles.hs"),
-        moduleText = emitProcessHoles genPrefix holePrefix p,
+      { path = T.unpack (T.replace "." "/" holePrefix <> "/ProcessHoles.hs"),
+        text = emitProcessHoles genPrefix holePrefix p,
         kind = HoleStub,
-        origin = nodeOrigin "process" (procId p) (procLoc p)
+        origin = nodeOrigin "process" ((.id) p) ((.loc) p)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (procId p)
-    holePrefix = holePrefixFor ctx (procId p)
-    sagaGenPrefix = genPrefixFor ctx (pascal (sagaAgg (procSaga p)))
+    genPrefix = genPrefixFor ctx ((.id) p)
+    holePrefix = holePrefixFor ctx ((.id) p)
+    sagaGenPrefix = genPrefixFor ctx (pascal ((.agg) ((.saga) p)))
 
 emitProcessGen :: Text -> Text -> Text -> ProcessNode -> Text
 emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
@@ -5473,11 +5498,11 @@ emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
       "import Keiro.Stream qualified as Stream",
       "import Keiro.Timer (TimerId (..), TimerRequest (..))"
     ]
-      ++ workerPolicyImports (procPoison p)
+      ++ workerPolicyImports ((.poison) p)
       ++ [ "",
            "-- The define-once ProcessManager name (hole-kind 5: referenced, never retyped).",
            lo <> "ProcessName :: Text",
-           lo <> "ProcessName = " <> tshow (procName p),
+           lo <> "ProcessName = " <> tshow ((.name) p),
            "",
            "-- The validated saga stream category (hole-kind 5: referenced, never retyped).",
            "-- Saga streams are '<category>-<correlationId>' via Keiro.Stream.entityStream.",
@@ -5488,36 +5513,36 @@ emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
            "-- Node-level worker policy lowered from the spec. Pass this value to",
            "-- Keiro.ProcessManager.runProcessManagerWorkerWith."
          ]
-      ++ workerOptionsLines (lo <> "ProcessWorkerOptions") (procRejected p) (procPoison p)
+      ++ workerOptionsLines (lo <> "ProcessWorkerOptions") ((.rejected) p) ((.poison) p)
       ++ [ "",
            "-- The deterministic timer-request builder: id derived from the correlation",
            "-- key (hole-kind 1), processManagerName referenced, payload from the spec.",
-           "-- (timer id derived as uuidv5 of " <> tshow (idePrefix (tmId timer)) <> " <> correlationId)",
+           "-- (timer id derived as uuidv5 of " <> tshow ((.prefix) ((.id) timer)) <> " <> correlationId)",
            lo <> "TimerRequest :: Text -> UTCTime -> TimerRequest",
            lo <> "TimerRequest correlationId fireAtTime =",
            "  TimerRequest",
-           "    { timerId = TimerId (namedUuid (" <> tshow (idePrefix (tmId timer)) <> " <> correlationId))",
+           "    { timerId = TimerId (namedUuid (" <> tshow ((.prefix) ((.id) timer)) <> " <> correlationId))",
            "    , processManagerName = " <> lo <> "ProcessName",
            "    , correlationId = correlationId",
            "    , fireAt = fireAtTime",
-           "    , payload = " <> payloadExpr (tmPayload timer),
+           "    , payload = " <> payloadExpr ((.payload) timer),
            "    }",
            "",
            "-- The timer-fire disposition table (hole-kind 2), derived from the spec.",
-           "-- on-reject => " <> showOutcome (onReject fd) <> " is the benign inversion.",
+           "-- on-reject => " <> showOutcome ((.onReject) fd) <> " is the benign inversion.",
            "-- A duplicate append reaches on-error unless it is confirmed against the",
            "-- target stream. Use Keiro.ProcessManager.confirmBenignDuplicate:",
            "--   StreamName -> EventId -> CommandError -> Eff es Bool",
            "-- Fold True into the duplicate result and surface False as the failure.",
            lo <> "FireOutcome :: Either CommandError a -> Maybe ()",
            lo <> "FireOutcome result = case result of",
-           "  Right{} -> " <> outcomeToMaybe (onOk fd),
-           "  Left CommandRejected -> " <> outcomeToMaybe (onReject fd),
-           "  Left (CommandAmbiguous _) -> " <> outcomeToMaybe (onAmbiguous fd) <> "  -- explicit definition-bug arm",
-           "  Left{} -> " <> outcomeToMaybe (onError fd),
+           "  Right{} -> " <> outcomeToMaybe ((.onOk) fd),
+           "  Left CommandRejected -> " <> outcomeToMaybe ((.onReject) fd),
+           "  Left (CommandAmbiguous _) -> " <> outcomeToMaybe ((.onAmbiguous) fd) <> "  -- explicit definition-bug arm",
+           "  Left{} -> " <> outcomeToMaybe ((.onError) fd),
            "",
-           "-- max-attempts = " <> tshow' (tmMaxAttempts timer) <> ", dead-letter = " <> tshow (tmDeadLetter timer),
-           "-- (the timer worker must pass Just " <> tshow' (tmMaxAttempts timer) <> " to runTimerWorkerWith, never the",
+           "-- max-attempts = " <> tshow' ((.maxAttempts) timer) <> ", dead-letter = " <> tshow ((.deadLetter) timer),
+           "-- (the timer worker must pass Just " <> tshow' ((.maxAttempts) timer) <> " to runTimerWorkerWith, never the",
            "--  defaultTimerWorkerOptions Nothing ceiling that retries forever).",
            "",
            "-- deterministic v5 UUID of a correlation-keyed string (hole-kind 1).",
@@ -5525,11 +5550,11 @@ emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
            "namedUuid v = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack v))"
          ]
   where
-    lo = lowerFirst (procId p)
-    sagaEventStreamType = pascal (sagaAgg (procSaga p)) <> "EventStreamDef"
-    categoryName = staticCategory ("process " <> procId p) (sagaCategory (procSaga p))
-    timer = procTimer p
-    fd = fireDisposition (tmFire timer)
+    lo = lowerFirst ((.id) p)
+    sagaEventStreamType = pascal ((.agg) ((.saga) p)) <> "EventStreamDef"
+    categoryName = staticCategory ("process " <> (.id) p) ((.category) ((.saga) p))
+    timer = (.timer) p
+    fd = (.disposition) ((.fire) timer)
 
 -- | The timer payload, restricted to the spec's literal (@name=\"value\"@)
 -- bindings so it compiles in the deterministic builder. Bare fields and
@@ -5539,8 +5564,8 @@ payloadExpr fs = case [b | b <- fs, isLiteral b] of
   [] -> "object []"
   lits -> "object [ " <> T.intercalate ", " (map kv lits) <> " ]"
   where
-    isLiteral b = maybe False (const True) (fbValue b >>= stripWrappingQuotes)
-    kv b = tshow (fbName b) <> " .= (" <> maybe "\"\"" tshow (fbValue b >>= stripWrappingQuotes) <> " :: Value)"
+    isLiteral b = maybe False (const True) ((.value) b >>= stripWrappingQuotes)
+    kv b = tshow ((.name) b) <> " .= (" <> maybe "\"\"" tshow ((.value) b >>= stripWrappingQuotes) <> " :: Value)"
     stripWrappingQuotes value = T.stripPrefix "\"" value >>= T.stripSuffix "\""
 
 showOutcome :: FireOutcome -> Text
@@ -5559,14 +5584,14 @@ emitProcessHoles _genPrefix holePrefix p =
       "module " <> holePrefix <> ".ProcessHoles () where",
       "",
       "-- HOLE handle: build the ProcessManagerAction (the self-advance",
-      "--   '" <> advCommand (hAdvance (procHandle p)) <> "', the dispatch(es), and the timer) from the input.",
-      "-- HOLE streams: build streamFor with entityStream " <> lowerFirst (procId p) <> "Category;",
-      "--   build target streams with entityStream " <> lowerFirst (procTarget p) <> "CommandCategory. Never concatenate raw stream names.",
+      "--   '" <> (.advCommand) ((.advance) ((.handle) p)) <> "', the dispatch(es), and the timer) from the input.",
+      "-- HOLE streams: build streamFor with entityStream " <> lowerFirst ((.id) p) <> "Category;",
+      "--   build target streams with entityStream " <> lowerFirst ((.target) p) <> "CommandCategory. Never concatenate raw stream names.",
       "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime;",
       "--   surgeDeadline observedAt = addUTCTime surgeWindow observedAt  (TIME INJECTED).",
-      "-- HOLE fire command: construct " <> fireCommand (tmFire (procTimer p)) <> " for the timer fire,",
+      "-- HOLE fire command: construct " <> (.command) ((.fire) ((.timer) p)) <> " for the timer fire,",
       "--   keyed by correlationId; the fired-event-id is the deterministic uuidv5 of",
-      "--   " <> tshow (idePrefix (fireFiredEventId (tmFire (procTimer p)))) <> " <> correlationId.",
+      "--   " <> tshow ((.prefix) ((.firedEventId) ((.fire) ((.timer) p)))) <> " <> correlationId.",
       "-- NOTE on-duplicate AckOk is sound because the runtime confirms a duplicate",
       "--   event id against the TARGET stream via confirmBenignDuplicate before",
       "--   returning PMCommandDuplicate. Its effective signature is:",
@@ -5589,11 +5614,11 @@ emitDomain a =
           <> [ExtTemplateHaskell]
       )
       ++ [ generatedBanner,
-           "module " <> aGenPrefix a <> ".Domain where",
+           "module " <> (.genPrefix) a <> ".Domain where",
            ""
          ]
       ++ ["import Data.Aeson (FromJSON, ToJSON)" | hasSnapshot a]
-      ++ ["import Data.Proxy (Proxy (..))" | not (null (aRegs a))]
+      ++ ["import Data.Proxy (Proxy (..))" | not (null ((.regs) a))]
       ++ ["import Data.Text (Text)" | AggregateText `elem` aggregateTypes a]
       ++ [ "import GHC.Generics (Generic)",
            "import Keiki.Core (RegFile (..))"
@@ -5606,14 +5631,14 @@ emitDomain a =
            "",
            sectionsOf
              [ [emitVertex a],
-               map (emitRecord importPlan a) (aCommands a),
-               [emitSum (aName a <> "Command") (aCommands a)],
-               map (emitRecord importPlan a) (aEvents a),
-               [emitSum (aName a <> "Event") (aEvents a)],
+               map (emitRecord importPlan a) ((.commands) a),
+               [emitSum ((.name) a <> "Command") ((.commands) a)],
+               map (emitRecord importPlan a) ((.events) a),
+               [emitSum ((.name) a <> "Event") ((.events) a)],
                [emitRegsType importPlan a, emitInitialRegs importPlan a],
-               [ "$(deriveAggregateCtorsAll ''" <> aName a <> "Command ''" <> aName a <> "Regs)",
+               [ "$(deriveAggregateCtorsAll ''" <> (.name) a <> "Command ''" <> (.name) a <> "Regs)",
                  "",
-                 "$(deriveWireCtorsAll ''" <> aName a <> "Event)"
+                 "$(deriveWireCtorsAll ''" <> (.name) a <> "Event)"
                ]
              ]
          ]
@@ -5623,9 +5648,9 @@ emitDomain a =
 domainNeedsDuplicateRecordFields :: Agg -> Bool
 domainNeedsDuplicateRecordFields aggregate = hasDuplicateNames selectorNames
   where
-    commandSelectors = concatMap (map (fieldSelector . fst) . rcFields) (aCommands aggregate)
-    eventSelectors = concatMap (map (fieldSelector . fst) . rcFields) (aEvents aggregate)
-    registerSelectors = map rrName (aRegs aggregate)
+    commandSelectors = concatMap (map ((.selector) . fst) . (.fields)) ((.commands) aggregate)
+    eventSelectors = concatMap (map ((.selector) . fst) . (.fields)) ((.events) aggregate)
+    registerSelectors = map (.name) ((.regs) aggregate)
     -- deriveWireCtorsAll creates one event TermFields record that repeats each
     -- payload selector, so every field-bearing event contributes twice.
     selectorNames = commandSelectors <> eventSelectors <> eventSelectors <> registerSelectors
@@ -5634,29 +5659,29 @@ hasDuplicateNames :: [Text] -> Bool
 hasDuplicateNames names = length names /= Set.size (Set.fromList names)
 
 hasSnapshot :: Agg -> Bool
-hasSnapshot = maybe False (const True) . aSnapshot
+hasSnapshot = maybe False (const True) . (.snapshot)
 
 emitVertex :: Agg -> Text
 emitVertex a =
   nl $
-    [ "data " <> aVertexType a <> " = " <> T.intercalate " | " (map (vertexCtor a . stName) (aStates a)),
+    [ "data " <> (.vertexType) a <> " = " <> T.intercalate " | " (map (vertexCtor a . (.name)) ((.states) a)),
       "  deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)"
     ]
       ++ ["  deriving anyclass (ToJSON, FromJSON)" | hasSnapshot a]
       ++ [ line
          | hasSnapshot a,
            line <-
-             [ "instance CanonicalStateShape " <> aVertexType a,
-               "instance CanonicalTypeName " <> aVertexType a
+             [ "instance CanonicalStateShape " <> (.vertexType) a,
+               "instance CanonicalTypeName " <> (.vertexType) a
              ]
          ]
 
 emitRecord :: HaskellImportPlan -> Agg -> ResolvedCtor -> Text
 emitRecord importPlan a rc =
   nl $
-    [ "data " <> rcName rc <> "Data = " <> rcName rc <> "Data"
+    [ "data " <> (.name) rc <> "Data = " <> (.name) rc <> "Data"
     ]
-      ++ recordFields [(fieldSelector identity, renderDomainType importPlan a fieldType) | (identity, fieldType) <- rcFields rc]
+      ++ recordFields [((.selector) identity, renderDomainType importPlan a valueType) | (identity, valueType) <- (.fields) rc]
       ++ ["  deriving stock (Generic, Eq, Show)"]
 
 recordFields :: [(Text, Text)] -> [Text]
@@ -5678,7 +5703,7 @@ emitSum tyName ctors =
     [firstLine] ++ restLines ++ ["  deriving stock (Generic, Eq, Show)"]
   where
     arm rc = rc' rc
-    rc' rc = rcName rc <> " !" <> rcName rc <> "Data"
+    rc' rc = (.name) rc <> " !" <> (.name) rc <> "Data"
     (firstLine, restLines) = case ctors of
       [] -> ("data " <> tyName, [])
       (c : cs) ->
@@ -5689,13 +5714,13 @@ emitSum tyName ctors =
 emitRegsType :: HaskellImportPlan -> Agg -> Text
 emitRegsType importPlan a =
   nl $
-    ["type " <> aName a <> "Regs ="]
-      ++ regListLines importPlan a (aRegs a)
+    ["type " <> (.name) a <> "Regs ="]
+      ++ regListLines importPlan a ((.regs) a)
 
 regListLines :: HaskellImportPlan -> Agg -> [ResolvedRegister] -> [Text]
 regListLines _ _ [] = ["  '[]"]
 regListLines importPlan a rs =
-  [ lead i <> "'(" <> tshow (rrName r) <> ", " <> renderDomainType importPlan a (rrType r) <> ")"
+  [ lead i <> "'(" <> tshow ((.name) r) <> ", " <> renderDomainType importPlan a ((.valueType) r) <> ")"
   | (i, r) <- zip [(0 :: Int) ..] rs
   ]
     ++ ["   ]"]
@@ -5706,46 +5731,46 @@ regListLines importPlan a rs =
 emitInitialRegs :: HaskellImportPlan -> Agg -> Text
 emitInitialRegs importPlan a =
   nl $
-    [ "initial" <> aName a <> "Regs :: RegFile " <> aName a <> "Regs",
-      "initial" <> aName a <> "Regs ="
+    [ "initial" <> (.name) a <> "Regs :: RegFile " <> (.name) a <> "Regs",
+      "initial" <> (.name) a <> "Regs ="
     ]
-      ++ chain (aRegs a)
+      ++ chain ((.regs) a)
   where
     chain [] = ["  RNil"]
     chain rs =
-      [ "  RCons (Proxy @" <> tshow (rrName r) <> ") " <> regInitialValue importPlan a r <> " $"
+      [ "  RCons (Proxy @" <> tshow ((.name) r) <> ") " <> regInitialValue importPlan a r <> " $"
       | r <- init rs
       ]
-        ++ ["  RCons (Proxy @" <> tshow (rrName lastR) <> ") " <> regInitialValue importPlan a lastR <> " RNil"]
+        ++ ["  RCons (Proxy @" <> tshow ((.name) lastR) <> ") " <> regInitialValue importPlan a lastR <> " RNil"]
       where
         lastR = last rs
 
 -- | The Haskell initial value for a register, by the category of its type.
 regInitialValue :: HaskellImportPlan -> Agg -> ResolvedRegister -> Text
-regInitialValue importPlan aggregate register = case rrInitial register of
-  InitialId name -> case find ((== name) . resolvedNominalName) (aGeneratedNominals aggregate) >>= generatedIdSampleHaskell aggregate of
+regInitialValue importPlan aggregate register = case (.initial) register of
+  InitialId name -> case find ((== name) . (.name)) ((.generatedNominals) aggregate) >>= generatedIdSampleHaskell aggregate of
     Just value -> value
-    Nothing -> renderRegisterInitial (rrInitial register)
+    Nothing -> renderRegisterInitial ((.initial) register)
   InitialNominal _ value -> renderReferenceOrDie importPlan (qualifiedValueReference value)
   InitialMapped _ value -> renderReferenceOrDie importPlan (qualifiedValueReference value)
-  _ -> renderRegisterInitial (rrInitial register)
+  _ -> renderRegisterInitial ((.initial) register)
 
 domainImportPlan :: Agg -> HaskellImportPlan
 domainImportPlan aggregate =
   planImportsOrDie
-    (aGenPrefix aggregate <> ".Domain")
+    ((.genPrefix) aggregate <> ".Domain")
     localDeclarations
     (Set.unions (map aggregateSourceReferences (domainAggregateSources aggregate)) <> initialReferences)
   where
     localDeclarations =
       Set.fromList
-        ( [ aVertexType aggregate,
-            aName aggregate <> "Command",
-            aName aggregate <> "Event",
-            aName aggregate <> "Regs"
+        ( [ (.vertexType) aggregate,
+            (.name) aggregate <> "Command",
+            (.name) aggregate <> "Event",
+            (.name) aggregate <> "Regs"
           ]
-            <> [rcName constructor <> "Data" | constructor <- aCommands aggregate <> aEvents aggregate]
-            <> map resolvedNominalName (aGeneratedNominals aggregate)
+            <> [(.name) constructor <> "Data" | constructor <- (.commands) aggregate <> (.events) aggregate]
+            <> map (.name) ((.generatedNominals) aggregate)
         )
     initialReferences =
       Set.fromList
@@ -5756,8 +5781,8 @@ domainImportPlan aggregate =
             <> [ qualifiedValueReference initialValue
                | resolvedType <- aggregateTypes aggregate,
                  AggregateNominal nominal <- [resolvedType],
-                 ConsumerNominal binding <- [resolvedNominalOwnership nominal],
-                 initialValue <- maybeToListText (consumerNominalInitial binding)
+                 ConsumerNominal binding <- [(.ownership) nominal],
+                 initialValue <- maybeToListText ((.initial) binding)
                ]
         )
 
@@ -5766,32 +5791,32 @@ generatedNominalDomainImports aggregate
   | null nominals = []
   | otherwise =
       [ "import "
-          <> generatedNominalModule (aContext aggregate)
+          <> generatedNominalModule ((.context) aggregate)
           <> " ("
           <> T.intercalate ", " (concatMap importsFor nominals)
           <> ")"
       ]
   where
-    nominals = stableNominals (aGeneratedNominals aggregate)
-    importsFor nominal = case resolvedNominalRepresentation nominal of
+    nominals = stableNominals ((.generatedNominals) aggregate)
+    importsFor nominal = case (.representation) nominal of
       IdRepresentation prefix
-        | Just _ <- idDomainContractFor (aLanguageContract aggregate) prefix ->
-            resolvedNominalName nominal
-              : ["parse" <> resolvedNominalName nominal | needsParser nominal]
-      _ -> [resolvedNominalName nominal <> " (..)"]
+        | Just _ <- idDomainContractFor ((.languageContract) aggregate) prefix ->
+            (.name) nominal
+              : ["parse" <> (.name) nominal | needsParser nominal]
+      _ -> [(.name) nominal <> " (..)"]
     needsParser nominal =
       any
-        (\register -> rrType register == AggregateNominal nominal && case rrInitial register of InitialId {} -> True; _ -> False)
-        (aRegs aggregate)
+        (\register -> (.valueType) register == AggregateNominal nominal && case (.initial) register of InitialId {} -> True; _ -> False)
+        ((.regs) aggregate)
 
 domainStaticImports :: Agg -> [Text]
 domainStaticImports aggregate =
   Set.toAscList (Set.delete timeTypeImport sourceImports <> Set.fromList timeImports)
   where
-    sourceImports = Set.unions (map aggregateSourceStaticImports (domainAggregateSources aggregate))
+    sourceImports = Set.unions (map (.staticImports) (domainAggregateSources aggregate))
     timeTypeImport = "Data.Time.Clock (UTCTime)"
     usesTimeType = AggregateTime `elem` aggregateTypes aggregate
-    usesTimeLiteral = any (\register -> case rrInitial register of InitialTime {} -> True; _ -> False) (aRegs aggregate)
+    usesTimeLiteral = any (\register -> case (.initial) register of InitialTime {} -> True; _ -> False) ((.regs) aggregate)
     timeImports
       | usesTimeLiteral =
           [ "Data.Time.Calendar (fromGregorian)",
@@ -5802,18 +5827,18 @@ domainStaticImports aggregate =
 
 domainAggregateSources :: Agg -> [AggregateHaskellSource]
 domainAggregateSources aggregate =
-  map (aggregateConsumerHaskellSource (aSymbols aggregate)) (aggregateTypes aggregate)
+  map (aggregateConsumerHaskellSource ((.symbols) aggregate)) (aggregateTypes aggregate)
 
 aggregateTypes :: Agg -> [ResolvedAggregateType]
 aggregateTypes aggregate =
-  map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)) <> map rrType (aRegs aggregate)
+  map snd (concatMap (.fields) ((.commands) aggregate <> (.events) aggregate)) <> map (.valueType) ((.regs) aggregate)
 
 mappedUses :: Agg -> [ResolvedMappedDecl]
 mappedUses a =
   [ declaration
   | resolvedType <-
-      map snd (concatMap rcFields (aCommands a <> aEvents a))
-        <> map rrType (aRegs a),
+      map snd (concatMap (.fields) ((.commands) a <> (.events) a))
+        <> map (.valueType) ((.regs) a),
     declaration <- maybeToListText (mappedDeclFor a resolvedType)
   ]
 
@@ -5822,19 +5847,19 @@ mappedDeclFor a resolvedType = do
   key <- case resolvedType of
     AggregateMapped mappedKey -> Just mappedKey
     _ -> Nothing
-  graph <- aTypeGraph a
-  Map.lookup key (tgDeclarations graph)
+  graph <- (.typeGraph) a
+  Map.lookup key ((.declarations) graph)
 
 mappedInitial :: ResolvedMappedDecl -> Maybe QualifiedValueName
-mappedInitial (ResolvedStructural declaration _) = sdInitial declaration
-mappedInitial (ResolvedOpaque declaration) = odInitial declaration
+mappedInitial (ResolvedStructural declaration _) = (.initial) declaration
+mappedInitial (ResolvedOpaque declaration) = (.initial) declaration
 
 renderDomainType :: HaskellImportPlan -> Agg -> ResolvedAggregateType -> Text
 renderDomainType importPlan aggregate resolvedType =
   either
     (error . ("validated aggregate Haskell reference failed: " <>) . show)
     id
-    (renderAggregateHaskellSource importPlan (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType))
+    (renderAggregateHaskellSource importPlan (aggregateConsumerHaskellSource ((.symbols) aggregate) resolvedType))
 
 maybeToListText :: Maybe value -> [value]
 maybeToListText = maybe [] pure
@@ -5848,17 +5873,17 @@ emitCodec a =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedRecordDot | codecUsesRecordDot a]
       ++ [ generatedBanner,
-           "module " <> aGenPrefix a <> ".Codec (",
-           "    " <> lowerFirst (aName a) <> "Codec,",
-           "    parse" <> aName a <> "Event,",
-           "    encode" <> aName a <> "Event,"
+           "module " <> (.genPrefix) a <> ".Codec (",
+           "    " <> lowerFirst ((.name) a) <> "Codec,",
+           "    parse" <> (.name) a <> "Event,",
+           "    encode" <> (.name) a <> "Event,"
          ]
       ++ concatMap mappedExports (codecMappedDeclarations a)
       ++ [ ") where",
            "",
-           "import " <> aGenPrefix a <> ".Domain"
+           "import " <> (.genPrefix) a <> ".Domain"
          ]
-      ++ generatedNominalCodecImports (aggregateCheckedService a) (aContext a) (codecGeneratedNominals a)
+      ++ generatedNominalCodecImports (aggregateCheckedService a) ((.context) a) (codecGeneratedNominals a)
       ++ ["import Control.Monad (unless)" | codecUsesUnknownFieldRejection a]
       ++ [codecAesonImport a]
       ++ ["import Data.Aeson.Key qualified as Key" | codecUsesKeyMap a]
@@ -5933,13 +5958,13 @@ emitCodec a =
   where
     importPlan = codecImportPlan a
     mappedExports (ResolvedStructural declaration _) =
-      [ "    encode" <> sdName declaration <> "Mapped,",
-        "    decode" <> sdName declaration <> "Mapped,"
+      [ "    encode" <> (.name) declaration <> "Mapped,",
+        "    decode" <> (.name) declaration <> "Mapped,"
       ]
     mappedExports ResolvedOpaque {} = []
 
 codecUsesRecordDot :: Agg -> Bool
-codecUsesRecordDot = any (not . null . rcFields) . aEvents
+codecUsesRecordDot = any (not . null . (.fields)) . (.events)
 
 hasMappedCodec :: Agg -> Bool
 hasMappedCodec = not . null . codecMappedDeclarations
@@ -5966,7 +5991,7 @@ codecAesonImport aggregate =
 
 codecUsesObject :: Agg -> Bool
 codecUsesObject aggregate =
-  not (null (aEvents aggregate)) || any structuralUsesObject (codecMappedDeclarations aggregate)
+  not (null ((.events) aggregate)) || any structuralUsesObject (codecMappedDeclarations aggregate)
   where
     structuralUsesObject (ResolvedStructural _ shape) = case shape of REnum {} -> False; _ -> True
     structuralUsesObject ResolvedOpaque {} = False
@@ -5996,9 +6021,9 @@ codecUsesWithText aggregate =
   any nominalUsesWithText (codecGeneratedNominals aggregate <> codecConsumerNominals aggregate)
     || any mappedUsesWithText (codecMappedDeclarations aggregate)
   where
-    nominalUsesWithText nominal = case resolvedNominalRepresentation nominal of
+    nominalUsesWithText nominal = case (.representation) nominal of
       EnumRepresentation {} -> True
-      IdRepresentation {} -> case resolvedNominalOwnership nominal of ConsumerNominal {} -> True; GeneratedNominal -> False
+      IdRepresentation {} -> case (.ownership) nominal of ConsumerNominal {} -> True; GeneratedNominal -> False
       ScalarRepresentation {} -> False
     mappedUsesWithText (ResolvedStructural _ shape) = case shape of
       REnum {} -> True
@@ -6007,10 +6032,10 @@ codecUsesWithText aggregate =
     mappedUsesWithText ResolvedOpaque {} = False
 
 codecUsesDotColon :: Agg -> Bool
-codecUsesDotColon aggregate = any fieldUsesDotColon (concatMap rcFields (aEvents aggregate))
+codecUsesDotColon aggregate = any fieldUsesDotColon (concatMap (.fields) ((.events) aggregate))
   where
     fieldUsesDotColon (_, resolvedType) = case resolvedType of
-      AggregateNominal nominal -> case (resolvedNominalOwnership nominal, resolvedNominalRepresentation nominal) of
+      AggregateNominal nominal -> case ((.ownership) nominal, (.representation) nominal) of
         (GeneratedNominal, EnumRepresentation {}) -> False
         (ConsumerNominal {}, IdRepresentation {}) -> False
         (ConsumerNominal {}, EnumRepresentation {}) -> False
@@ -6027,7 +6052,7 @@ codecUsesUnknownFieldRejection = any declarationRejectsUnknown . codecMappedDecl
   where
     declarationRejectsUnknown (ResolvedStructural _ shape) = case shape of
       RRecord _ RejectUnknown _ -> True
-      RUnion encoding _ -> ueUnknownFields encoding == RejectUnknown
+      RUnion encoding _ -> (.unknownFields) encoding == RejectUnknown
       _ -> False
     declarationRejectsUnknown ResolvedOpaque {} = False
 
@@ -6042,7 +6067,7 @@ codecUsesParseJSON aggregate = any (declarationUsesAesonConversion aggregate) (c
 
 codecUsesToJSON :: Agg -> Bool
 codecUsesToJSON aggregate =
-  any directOpaqueField (concatMap rcFields (aEvents aggregate))
+  any directOpaqueField (concatMap (.fields) ((.events) aggregate))
     || any (declarationUsesAesonConversion aggregate) (codecMappedDeclarations aggregate)
   where
     directOpaqueField (_, resolvedType) = case fieldCat aggregate resolvedType of MappedOpaqueCat {} -> True; _ -> False
@@ -6061,9 +6086,9 @@ declarationUsesAesonConversion _ ResolvedOpaque {} = False
 
 shapeTypeExpressions :: ResolvedMappedShape -> [ResolvedTypeExpr]
 shapeTypeExpressions = \case
-  RRecord _ _ fields -> map rwfType fields
+  RRecord _ _ fields -> map (.valueType) fields
   REnum {} -> []
-  RUnion _ arms -> mapMaybe rwaPayload arms
+  RUnion _ arms -> mapMaybe (.payload) arms
 
 typeUsesMap :: ResolvedTypeExpr -> Bool
 typeUsesMap =
@@ -6113,7 +6138,7 @@ typeUsesAesonConversion aggregate =
         onOptional = id,
         onList = const True,
         onMap = const True,
-        onRef = \key -> case aTypeGraph aggregate >>= \graph -> Map.lookup key (tgDeclarations graph) of
+        onRef = \key -> case (.typeGraph) aggregate >>= \graph -> Map.lookup key ((.declarations) graph) of
           Just ResolvedOpaque {} -> True
           _ -> False
       }
@@ -6123,7 +6148,7 @@ codecUsesOptionalFieldHelper aggregate =
   any structuralHasOptionalField (codecMappedDeclarations aggregate)
   where
     structuralHasOptionalField (ResolvedStructural _ (RRecord _ _ fields)) =
-      any ((== POptional) . rwfPresence) fields
+      any ((== POptional) . (.presence)) fields
     structuralHasOptionalField (ResolvedStructural _ _) = False
     structuralHasOptionalField ResolvedOpaque {} = False
 
@@ -6133,14 +6158,14 @@ hasConsumerNominalCodec = not . null . codecConsumerNominals
 hasConsumerNominalIdCodec :: Agg -> Bool
 hasConsumerNominalIdCodec aggregate =
   any
-    (\nominal -> case resolvedNominalRepresentation nominal of IdRepresentation {} -> True; _ -> False)
+    (\nominal -> case (.representation) nominal of IdRepresentation {} -> True; _ -> False)
     (codecConsumerNominals aggregate)
 
 hasEnforcedConsumerNominalIdCodec :: Agg -> Bool
 hasEnforcedConsumerNominalIdCodec aggregate =
   any
-    ( \nominal -> case resolvedNominalRepresentation nominal of
-        IdRepresentation prefix -> isJust (idDomainContractFor (aLanguageContract aggregate) prefix)
+    ( \nominal -> case (.representation) nominal of
+        IdRepresentation prefix -> isJust (idDomainContractFor ((.languageContract) aggregate) prefix)
         _ -> False
     )
     (codecConsumerNominals aggregate)
@@ -6148,11 +6173,11 @@ hasEnforcedConsumerNominalIdCodec aggregate =
 emitEnumParsers :: Agg -> Text
 emitEnumParsers a =
   sectionsOf
-    [ [emitEnumParser nominal | nominal <- codecGeneratedNominals a, EnumRepresentation {} <- [resolvedNominalRepresentation nominal]]
+    [ [emitEnumParser nominal | nominal <- codecGeneratedNominals a, EnumRepresentation {} <- [(.representation) nominal]]
     ]
 
 emitEnumParser :: ResolvedNominalType -> Text
-emitEnumParser nominal = case resolvedNominalRepresentation nominal of
+emitEnumParser nominal = case (.representation) nominal of
   EnumRepresentation constructors ->
     nl $
       [ "parse" <> name <> " :: Text -> Parser " <> name,
@@ -6162,61 +6187,61 @@ emitEnumParser nominal = case resolvedNominalRepresentation nominal of
         ++ ["  tag -> " <> renderUnknownFailure name "tag" (map snd (NE.toList constructors))]
   _ -> error "non-enum reached generated enum parser emission"
   where
-    name = resolvedNominalName nominal
+    name = (.name) nominal
 
 emitConsumerNominalParsers :: HaskellImportPlan -> Agg -> Text
 emitConsumerNominalParsers importPlan aggregate = sectionsOf [map emitParser (codecConsumerNominals aggregate)]
   where
-    emitParser nominal = case (resolvedNominalRepresentation nominal, resolvedNominalOwnership nominal) of
+    emitParser nominal = case ((.representation) nominal, (.ownership) nominal) of
       (IdRepresentation prefix, ConsumerNominal binding) ->
         nl $
-          [ parserName nominal <> " :: Text -> Parser " <> renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding))
+          [ parserName nominal <> " :: Text -> Parser " <> renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding))
           ]
             <> parserBody nominal prefix binding
       (EnumRepresentation constructors, ConsumerNominal binding) ->
         nl $
-          [ parserName nominal <> " :: Text -> Parser " <> renderReferenceOrDie importPlan (haskellTypeReference (consumerNominalHaskell binding)),
+          [ parserName nominal <> " :: Text -> Parser " <> renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding)),
             parserName nominal <> " = \\case"
           ]
             <> [ "  "
                    <> tshow wire
                    <> " -> pure (nominalFromRepresentation "
-                   <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
+                   <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding))
                    <> " "
-                   <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference (aContext aggregate) nominal constructor)
+                   <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference ((.context) aggregate) nominal constructor)
                    <> ")"
                | (constructor, wire) <- NE.toList constructors
                ]
-            <> ["  tag -> " <> renderUnknownFailure (resolvedNominalName nominal <> " wire value") "tag" (map snd (NE.toList constructors))]
+            <> ["  tag -> " <> renderUnknownFailure ((.name) nominal <> " wire value") "tag" (map snd (NE.toList constructors))]
       _ -> ""
-    parserName nominal = "parse" <> resolvedNominalName nominal <> "Nominal"
-    parserBody nominal prefix binding = case idDomainContractFor (aLanguageContract aggregate) prefix of
+    parserName nominal = "parse" <> (.name) nominal <> "Nominal"
+    parserBody nominal prefix binding = case idDomainContractFor ((.languageContract) aggregate) prefix of
       Nothing ->
         [ parserName nominal <> " input = case KindID.parseText @" <> tshow prefix <> " input of",
           "  Left reason -> fail (show reason)",
-          "  Right representation -> pure (nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)) <> " representation)"
+          "  Right representation -> pure (nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding)) <> " representation)"
         ]
       Just _ ->
         [ parserName nominal <> " input = case validateIdDomainText (typeIdV7Domain " <> tshow prefix <> ") input of",
           "  Left reason -> fail (show reason)",
           "  Right () -> case KindID.parseText @" <> tshow prefix <> " input of",
           "    Left reason -> fail (show reason)",
-          "    Right representation -> pure (nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)) <> " representation)"
+          "    Right representation -> pure (nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding)) <> " representation)"
         ]
 
 emitCodecValue :: Agg -> Text
 emitCodecValue a =
   nl $
-    [ lowerFirst (aName a) <> "Codec :: Codec " <> aName a <> "Event",
-      lowerFirst (aName a) <> "Codec =",
+    [ lowerFirst ((.name) a) <> "Codec :: Codec " <> (.name) a <> "Event",
+      lowerFirst ((.name) a) <> "Codec =",
       "  Codec",
       "    { eventTypes = " <> eventTypesName a,
       "    , eventType = \\case"
     ]
-      ++ ["        " <> rcName e <> "{} -> EventType " <> tshow (rcName e) | e <- aEvents a]
+      ++ ["        " <> (.name) e <> "{} -> EventType " <> tshow ((.name) e) | e <- (.events) a]
       ++ [ "    , schemaVersion = " <> tshow' (maxEventVersion a),
-           "    , encode = encode" <> aName a <> "Event",
-           "    , decode = parse" <> aName a <> "Event",
+           "    , encode = encode" <> (.name) a <> "Event",
+           "    , decode = parse" <> (.name) a <> "Event",
            "    , upcasters = " <> upcastersExpr a,
            "    }"
          ]
@@ -6229,25 +6254,25 @@ emitEventTypes aggregate =
       eventTypesName aggregate <> " = " <> eventTypesExpr
     ]
   where
-    eventTypesExpr = case map rcName (aEvents aggregate) of
+    eventTypesExpr = case map (.name) ((.events) aggregate) of
       [] -> "error \"no events\""
       event : rest -> "EventType " <> tshow event <> " :| [" <> T.intercalate ", " (map (("EventType " <>) . tshow) rest) <> "]"
 
 eventTypesName :: Agg -> Text
-eventTypesName aggregate = lowerFirst (aName aggregate) <> "EventTypes"
+eventTypesName aggregate = lowerFirst ((.name) aggregate) <> "EventTypes"
 
 -- | The codec's @schemaVersion@: the maximum declared event version (EP-2).
 maxEventVersion :: Agg -> Int
-maxEventVersion a = maximum (1 : map rcVersion (aEvents a))
+maxEventVersion a = maximum (1 : map (.version) ((.events) a))
 
 -- | One @(sourceVersion, upcasterName)@ entry per event that declares an
 -- @upcast from@. The upcaster name is per-event (e.g. @upcastFooV1@) and its
 -- body is a hole in the hand-owned Holes module.
 upcasterEntries :: Agg -> [(Int, Text, Text)]
 upcasterEntries a =
-  [ (m, rcName e, "upcast" <> rcName e <> "V" <> tshow' m)
-  | e <- aEvents a,
-    Just m <- [rcUpcastFrom e]
+  [ (m, (.name) e, "upcast" <> (.name) e <> "V" <> tshow' m)
+  | e <- (.events) a,
+    Just m <- [(.upcastFrom) e]
   ]
 
 upcastersExpr :: Agg -> Text
@@ -6286,89 +6311,89 @@ upcasterRungDecls a = concatMap rung (upcasterRungs a)
 upcasterImport :: Agg -> Text
 upcasterImport a = case upcasterEntries a of
   [] -> ""
-  es -> "import " <> aHolePrefix a <> ".Holes (" <> T.intercalate ", " [fn | (_, _, fn) <- es] <> ")"
+  es -> "import " <> (.holePrefix) a <> ".Holes (" <> T.intercalate ", " [fn | (_, _, fn) <- es] <> ")"
 
 emitEncode :: HaskellImportPlan -> Agg -> Text
 emitEncode importPlan a =
   nl $
-    [ "encode" <> aName a <> "Event :: " <> aName a <> "Event -> Value",
-      "encode" <> aName a <> "Event = \\case"
+    [ "encode" <> (.name) a <> "Event :: " <> (.name) a <> "Event -> Value",
+      "encode" <> (.name) a <> "Event = \\case"
     ]
-      ++ concatMap encodeArm (aEvents a)
+      ++ concatMap encodeArm ((.events) a)
   where
     encodeArm e =
-      [ "  " <> rcName e <> " payload ->",
+      [ "  " <> (.name) e <> " payload ->",
         "    object"
       ]
         ++ [ lead i <> kv
-           | (i, kv) <- zip [(0 :: Int) ..] (("\"kind\" .= (" <> tshow (rcName e) <> " :: Text)") : map encodeField (rcFields e))
+           | (i, kv) <- zip [(0 :: Int) ..] (("\"kind\" .= (" <> tshow ((.name) e) <> " :: Text)") : map encodeField ((.fields) e))
            ]
         ++ ["      ]"]
     lead 0 = "      [ "
     lead _ = "      , "
     encodeField (identity, ty) =
-      tshow (fieldWireKey identity)
+      tshow ((.wireKey) identity)
         <> " .= "
-        <> encodeFieldValue (fieldSelector identity) ty
+        <> encodeFieldValue ((.selector) identity) ty
     encodeFieldValue selector ty = case ty of
       AggregateNominal nominal -> encodeNominalValue nominal ("payload." <> selector)
       _ -> case fieldCat a ty of
         MappedStructuralCat {} -> encodeMapped ty ("payload." <> selector)
         MappedOpaqueCat {} -> encodeMapped ty ("payload." <> selector)
         _ -> "payload." <> selector
-    encodeMapped (AggregateMapped key) value = case aTypeGraph a of
+    encodeMapped (AggregateMapped key) value = case (.typeGraph) a of
       Nothing -> error "mapped aggregate field has no resolved type graph"
       Just graph ->
         renderMappedEncode graph ConsumerValueBoundary (mappedCodecPlanOrDie graph (RRef key)) value
     encodeMapped _ _ = error "non-mapped aggregate type reached mapped codec lowering"
-    encodeNominalValue nominal value = case resolvedNominalOwnership nominal of
-      GeneratedNominal -> case resolvedNominalRepresentation nominal of
-        IdRepresentation {} -> lowerFirst (resolvedNominalName nominal) <> "Text " <> value
-        EnumRepresentation {} -> lowerFirst (resolvedNominalName nominal) <> "Text " <> value
+    encodeNominalValue nominal value = case (.ownership) nominal of
+      GeneratedNominal -> case (.representation) nominal of
+        IdRepresentation {} -> lowerFirst ((.name) nominal) <> "Text " <> value
+        EnumRepresentation {} -> lowerFirst ((.name) nominal) <> "Text " <> value
         ScalarRepresentation {} -> value
-      ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+      ConsumerNominal binding -> case (.representation) nominal of
         IdRepresentation {} -> "KindID.toText (nominalToRepresentation " <> bindingName binding <> " " <> value <> ")"
         EnumRepresentation {} ->
-          renderReferenceOrDie importPlan (nominalRepresentationEncoderReference (aContext a) nominal)
+          renderReferenceOrDie importPlan (nominalRepresentationEncoderReference ((.context) a) nominal)
             <> " (nominalToRepresentation "
             <> bindingName binding
             <> " "
             <> value
             <> ")"
         ScalarRepresentation {} -> "nominalToRepresentation " <> bindingName binding <> " " <> value
-    bindingName = renderReferenceOrDie importPlan . qualifiedValueReference . consumerNominalBinding
+    bindingName = renderReferenceOrDie importPlan . qualifiedValueReference . (.binding)
 
 emitDecode :: HaskellImportPlan -> Agg -> Text
 emitDecode importPlan a =
   nl $
-    [ "parse" <> aName a <> "Event :: EventType -> Value -> Either Text " <> aName a <> "Event",
-      "parse" <> aName a <> "Event (EventType tag) = mapLeftText . parseEither (withObject " <> tshow (aName a <> "Event") <> " go)",
+    [ "parse" <> (.name) a <> "Event :: EventType -> Value -> Either Text " <> (.name) a <> "Event",
+      "parse" <> (.name) a <> "Event (EventType tag) = mapLeftText . parseEither (withObject " <> tshow ((.name) a <> "Event") <> " go)",
       "  where",
       "    go o = do",
       "      case tag of"
     ]
-      ++ concatMap decodeArm (aEvents a)
+      ++ concatMap decodeArm ((.events) a)
       ++ ["        _ -> " <> renderUnknownEventTypeFailure a "tag"]
   where
     decodeArm e =
-      ["        " <> tshow (rcName e) <> " ->"]
-        ++ case rcFields e of
-          [] -> ["          pure (" <> rcName e <> " " <> rcName e <> "Data)"]
+      ["        " <> tshow ((.name) e) <> " ->"]
+        ++ case (.fields) e of
+          [] -> ["          pure (" <> (.name) e <> " " <> (.name) e <> "Data)"]
           fields ->
-            [ "          " <> rcName e,
-              "            <$> ( " <> rcName e <> "Data"
+            [ "          " <> (.name) e,
+              "            <$> ( " <> (.name) e <> "Data"
             ]
               ++ [ (if index == 0 then "                    <$> " else "                    <*> ") <> decodeField field
                  | (index, field) <- zip [(0 :: Int) ..] fields
                  ]
               ++ ["                )"]
     decodeField (identity, ty) = case ty of
-      AggregateNominal nominal -> decodeNominalField (fieldWireKey identity) nominal
+      AggregateNominal nominal -> decodeNominalField ((.wireKey) identity) nominal
       _ -> case fieldCat a ty of
-        MappedStructuralCat {} -> decodeMapped ty (fieldWireKey identity)
-        MappedOpaqueCat {} -> "o .: " <> tshow (fieldWireKey identity)
-        _ -> "o .: " <> tshow (fieldWireKey identity)
-    decodeMapped (AggregateMapped mappedKey) key = case aTypeGraph a of
+        MappedStructuralCat {} -> decodeMapped ty ((.wireKey) identity)
+        MappedOpaqueCat {} -> "o .: " <> tshow ((.wireKey) identity)
+        _ -> "o .: " <> tshow ((.wireKey) identity)
+    decodeMapped (AggregateMapped mappedKey) key = case (.typeGraph) a of
       Nothing -> error "mapped aggregate field has no resolved type graph"
       Just graph ->
         "explicitParseField "
@@ -6376,132 +6401,132 @@ emitDecode importPlan a =
           <> " o "
           <> tshow key
     decodeMapped _ _ = error "non-mapped aggregate type reached mapped codec lowering"
-    decodeNominalField name nominal = case resolvedNominalOwnership nominal of
-      GeneratedNominal -> case resolvedNominalRepresentation nominal of
-        IdRepresentation prefix -> case idDomainContractFor (aLanguageContract a) prefix of
-          Nothing -> "(" <> resolvedNominalName nominal <> " <$> o .: " <> tshow name <> ")"
+    decodeNominalField name nominal = case (.ownership) nominal of
+      GeneratedNominal -> case (.representation) nominal of
+        IdRepresentation prefix -> case idDomainContractFor ((.languageContract) a) prefix of
+          Nothing -> "(" <> (.name) nominal <> " <$> o .: " <> tshow name <> ")"
           Just _ -> "(" <> legacyNominalConstructorName nominal <> " <$> o .: " <> tshow name <> ")"
         EnumRepresentation {} ->
           "explicitParseField (withText "
-            <> tshow (resolvedNominalName nominal)
+            <> tshow ((.name) nominal)
             <> " parse"
-            <> resolvedNominalName nominal
+            <> (.name) nominal
             <> ") o "
             <> tshow name
         ScalarRepresentation {} -> "o .: " <> tshow name
-      ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+      ConsumerNominal binding -> case (.representation) nominal of
         IdRepresentation {} -> consumerNominalFieldParser name nominal
         EnumRepresentation {} -> consumerNominalFieldParser name nominal
-        ScalarRepresentation {} -> "(nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding)) <> " <$> o .: " <> tshow name <> ")"
-    consumerNominalFieldParser fieldName nominal =
+        ScalarRepresentation {} -> "(nominalFromRepresentation " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding)) <> " <$> o .: " <> tshow name <> ")"
+    consumerNominalFieldParser name nominal =
       "explicitParseField (withText "
-        <> tshow (resolvedNominalName nominal)
+        <> tshow ((.name) nominal)
         <> " parse"
-        <> resolvedNominalName nominal
+        <> (.name) nominal
         <> "Nominal) o "
-        <> tshow fieldName
+        <> tshow name
 
 codecConsumerNominals :: Agg -> [ResolvedNominalType]
 codecConsumerNominals aggregate =
   Map.elems . Map.fromList $
-    [ (resolvedNominalName nominal, nominal)
-    | event <- aEvents aggregate,
-      (_, AggregateNominal nominal) <- rcFields event,
-      ConsumerNominal {} <- [resolvedNominalOwnership nominal]
+    [ ((.name) nominal, nominal)
+    | event <- (.events) aggregate,
+      (_, AggregateNominal nominal) <- (.fields) event,
+      ConsumerNominal {} <- [(.ownership) nominal]
     ]
 
 codecGeneratedNominals :: Agg -> [ResolvedNominalType]
 codecGeneratedNominals aggregate =
   generatedNominalsInTypes
     [ resolvedType
-    | event <- aEvents aggregate,
-      (_, resolvedType) <- rcFields event
+    | event <- (.events) aggregate,
+      (_, resolvedType) <- (.fields) event
     ]
 
 codecImportPlan :: Agg -> HaskellImportPlan
 codecImportPlan aggregate =
   planImportsOrDie
-    (aGenPrefix aggregate <> ".Codec")
-    (Set.fromList [aName aggregate <> "Event"])
+    ((.genPrefix) aggregate <> ".Codec")
+    (Set.fromList [(.name) aggregate <> "Event"])
     (Set.fromList (nominalReferences <> mappedReferences <> nominalRepresentationReferences <> shapeReferences))
   where
     nominalReferences =
       [ reference
       | nominal <- codecConsumerNominals aggregate,
-        ConsumerNominal binding <- [resolvedNominalOwnership nominal],
-        reference <- qualifiedValueReference (consumerNominalBinding binding) : nominalParserTypeReferences nominal binding
+        ConsumerNominal binding <- [(.ownership) nominal],
+        reference <- qualifiedValueReference ((.binding) binding) : nominalParserTypeReferences nominal binding
       ]
-    nominalParserTypeReferences nominal binding = case resolvedNominalRepresentation nominal of
-      IdRepresentation {} -> [haskellTypeReference (consumerNominalHaskell binding)]
-      EnumRepresentation {} -> [haskellTypeReference (consumerNominalHaskell binding)]
+    nominalParserTypeReferences nominal binding = case (.representation) nominal of
+      IdRepresentation {} -> [haskellTypeReference ((.haskell) binding)]
+      EnumRepresentation {} -> [haskellTypeReference ((.haskell) binding)]
       ScalarRepresentation {} -> []
     mappedReferences =
       [ reference
       | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate,
         reference <-
-          [ haskellTypeReference (sdHaskell declaration),
-            qualifiedValueReference (sdBinding declaration)
+          [ haskellTypeReference ((.haskell) declaration),
+            qualifiedValueReference ((.binding) declaration)
           ]
       ]
     nominalRepresentationReferences =
       [ reference
       | nominal <- codecConsumerNominals aggregate,
-        EnumRepresentation constructors <- [resolvedNominalRepresentation nominal],
+        EnumRepresentation constructors <- [(.representation) nominal],
         reference <-
-          nominalRepresentationEncoderReference (aContext aggregate) nominal
-            : [ nominalRepresentationConstructorReference (aContext aggregate) nominal constructor
+          nominalRepresentationEncoderReference ((.context) aggregate) nominal
+            : [ nominalRepresentationConstructorReference ((.context) aggregate) nominal constructor
               | (constructor, _) <- NE.toList constructors
               ]
       ]
     shapeReferences =
       [ reference
       | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate,
-        reference <- structuralShapeReferences (aContext aggregate) declaration shape
+        reference <- structuralShapeReferences ((.context) aggregate) declaration shape
       ]
 
 codecNominalImports :: Agg -> [Text]
 codecNominalImports _ = []
 
 codecMappedImports :: Agg -> [Text]
-codecMappedImports a = case aTypeGraph a of
+codecMappedImports a = case (.typeGraph) a of
   Nothing -> []
   Just graph ->
     sort . nub $
-      [ hsModule (odHaskell declaration) <> " ()"
+      [ (.moduleName) ((.haskell) declaration) <> " ()"
       | ResolvedOpaque declaration <- codecMappedDeclarations a
       ]
-        <> [ hsModule (odHaskell declaration) <> " ()"
+        <> [ (.moduleName) ((.haskell) declaration) <> " ()"
            | ResolvedStructural _ shape <- codecMappedDeclarations a,
              key <- directShapeRefs shape,
-             Just (ResolvedOpaque declaration) <- [Map.lookup key (tgDeclarations graph)]
+             Just (ResolvedOpaque declaration) <- [Map.lookup key ((.declarations) graph)]
            ]
 
 codecMappedDeclarations :: Agg -> [ResolvedMappedDecl]
-codecMappedDeclarations a = case aTypeGraph a of
+codecMappedDeclarations a = case (.typeGraph) a of
   Nothing -> []
   Just graph ->
-    mapMaybe (\key -> Map.lookup key (tgDeclarations graph)) (sort (Map.keys selected))
+    mapMaybe (\key -> Map.lookup key ((.declarations) graph)) (sort (Map.keys selected))
     where
       roots =
         [ key
-        | event <- aEvents a,
-          (_, AggregateMapped key) <- rcFields event,
-          Map.member key (tgDeclarations graph)
+        | event <- (.events) a,
+          (_, AggregateMapped key) <- (.fields) event,
+          Map.member key ((.declarations) graph)
         ]
       selected =
         Map.fromList
           [ (key, ())
           | root <- roots,
-            key <- root : maybe [] (Map.keys . Map.fromSet (const ())) (Map.lookup root (tgReachability graph))
+            key <- root : maybe [] (Map.keys . Map.fromSet (const ())) (Map.lookup root ((.reachability) graph))
           ]
 
 directShapeRefs :: ResolvedMappedShape -> [MappedKey]
 directShapeRefs =
   foldMappedShape
     MappedShapeAlgebra
-      { onRecord = \_ _ fields -> concatMap (exprRefs . rwfType) fields,
+      { onRecord = \_ _ fields -> concatMap (exprRefs . (.valueType)) fields,
         onEnum = const [],
-        onUnion = \_ arms -> concatMap (maybe [] exprRefs . rwaPayload) arms
+        onUnion = \_ arms -> concatMap (maybe [] exprRefs . (.payload)) arms
       }
 
 exprRefs :: ResolvedTypeExpr -> [MappedKey]
@@ -6522,12 +6547,12 @@ exprRefs =
       }
 
 emitMappedCodecs :: HaskellImportPlan -> Agg -> Text
-emitMappedCodecs importPlan a = case aTypeGraph a of
+emitMappedCodecs importPlan a = case (.typeGraph) a of
   Nothing -> ""
   Just graph ->
     T.intercalate
       "\n\n"
-      [ emitStructuralCodec importPlan (aContext a) graph declaration shape
+      [ emitStructuralCodec importPlan ((.context) a) graph declaration shape
       | ResolvedStructural declaration shape <- codecMappedDeclarations a
       ]
 
@@ -6550,10 +6575,10 @@ emitStructuralCodec importPlan ctx graph declaration shape =
       emitShapeDecoder importPlan ctx graph declaration shape
     ]
   where
-    name = sdName declaration
-    consumerType = renderReferenceOrDie importPlan (haskellTypeReference (sdHaskell declaration))
+    name = (.name) declaration
+    consumerType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) declaration))
     shapeType = renderReferenceOrDie importPlan (qualifiedTypeReference (structuralShapeModule ctx name) (name <> "Shape"))
-    binding = renderReferenceOrDie importPlan (qualifiedValueReference (sdBinding declaration))
+    binding = renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) declaration))
 
 emitShapeEncoder :: HaskellImportPlan -> Context -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
 emitShapeEncoder importPlan ctx graph declaration =
@@ -6563,37 +6588,36 @@ emitShapeEncoder importPlan ctx graph declaration =
           nl $
             ["encode" <> name <> "Shape shape =", "  object"]
               <> objectEntries
-                [ tshow (rwfKey field)
+                [ tshow ((.key) field)
                     <> " .= "
-                    <> encodeShapeExpr graph (rwfType field) (shapeValue (rwfHaskell field) <> " shape")
+                    <> encodeShapeExpr graph ((.valueType) field) ("shape." <> (.haskell) field)
                 | field <- fields
                 ],
         onEnum = \entries ->
           nl $
             ["encode" <> name <> "Shape = \\case"]
-              <> ["  " <> shapeConstructor (weCtor entry) <> " -> String " <> tshow (weTag entry) | entry <- entries],
+              <> ["  " <> shapeConstructor ((.ctor) entry) <> " -> String " <> tshow ((.tag) entry) | entry <- entries],
         onUnion = \encoding arms ->
           nl $
             ["encode" <> name <> "Shape = \\case"]
               <> concatMap (unionEncodeArm encoding) arms
       }
   where
-    name = sdName declaration
+    name = (.name) declaration
     shapeModuleName = structuralShapeModule ctx name
     shapeConstructor constructor = renderReferenceOrDie importPlan (constructorReference shapeModuleName constructor)
-    shapeValue value = renderReferenceOrDie importPlan (HaskellReference shapeModuleName value ValueNamespace RequireQualified)
     unionEncodeArm encoding arm =
-      [ "  " <> shapeConstructor (rwaCtor arm) <> payloadPattern <> " ->",
+      [ "  " <> shapeConstructor ((.ctor) arm) <> payloadPattern <> " ->",
         "    object"
       ]
         <> objectEntries
-          ( [tshow (ueTagField encoding) <> " .= (" <> tshow (rwaTag arm) <> " :: Text)"]
-              <> [ tshow (ueContentsField encoding) <> " .= " <> encodeShapeExpr graph payload "payload"
-                 | payload <- maybeToListText (rwaPayload arm)
+          ( [tshow ((.tagField) encoding) <> " .= (" <> tshow ((.tag) arm) <> " :: Text)"]
+              <> [ tshow ((.contentsField) encoding) <> " .= " <> encodeShapeExpr graph payload "payload"
+                 | payload <- maybeToListText ((.payload) arm)
                  ]
           )
       where
-        payloadPattern = maybe "" (const " payload") (rwaPayload arm)
+        payloadPattern = maybe "" (const " payload") ((.payload) arm)
 
 emitShapeDecoder :: HaskellImportPlan -> Context -> TypeGraph -> StructuralDecl -> ResolvedMappedShape -> Text
 emitShapeDecoder importPlan ctx graph declaration =
@@ -6603,7 +6627,7 @@ emitShapeDecoder importPlan ctx graph declaration =
           nl $
             [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do"
             ]
-              <> rejectLine "  " unknownFields (map rwfKey fields) "objectValue"
+              <> rejectLine "  " unknownFields (map (.key) fields) "objectValue"
               <> [ "  " <> shapeConstructor constructor,
                    "    <$> " <> T.intercalate "\n    <*> " (map (decodeRecordField importPlan ctx graph) fields)
                  ],
@@ -6611,12 +6635,12 @@ emitShapeDecoder importPlan ctx graph declaration =
           nl $
             [ "parse" <> name <> "Shape = withText " <> tshow (name <> "Shape") <> " $ \\tag -> case tag of"
             ]
-              <> ["  " <> tshow (weTag entry) <> " -> pure " <> shapeConstructor (weCtor entry) | entry <- entries]
-              <> ["  unknownTag -> " <> renderUnknownFailure (name <> " wire value") "unknownTag" (map weTag entries)],
+              <> ["  " <> tshow ((.tag) entry) <> " -> pure " <> shapeConstructor ((.ctor) entry) | entry <- entries]
+              <> ["  unknownTag -> " <> renderUnknownFailure (name <> " wire value") "unknownTag" (map (.tag) entries)],
         onUnion = \encoding arms ->
           nl $
             [ "parse" <> name <> "Shape = withObject " <> tshow (name <> "Shape") <> " $ \\objectValue -> do",
-              "  tag <- explicitParseField (withText " <> tshow (name <> " tag") <> " validate" <> name <> "Tag) objectValue " <> tshow (ueTagField encoding),
+              "  tag <- explicitParseField (withText " <> tshow (name <> " tag") <> " validate" <> name <> "Tag) objectValue " <> tshow ((.tagField) encoding),
               "  case tag of"
             ]
               <> concatMap (unionDecodeArm encoding) arms
@@ -6624,35 +6648,35 @@ emitShapeDecoder importPlan ctx graph declaration =
                    "",
                    "validate" <> name <> "Tag :: Text -> Parser Text",
                    "validate" <> name <> "Tag tag",
-                   "  | tag `elem` " <> renderTextList (map rwaTag arms) <> " = pure tag",
-                   "  | otherwise = " <> renderUnknownFailure (name <> " union tag") "tag" (map rwaTag arms)
+                   "  | tag `elem` " <> renderTextList (map (.tag) arms) <> " = pure tag",
+                   "  | otherwise = " <> renderUnknownFailure (name <> " union tag") "tag" (map (.tag) arms)
                  ]
       }
   where
-    name = sdName declaration
+    name = (.name) declaration
     shapeModuleName = structuralShapeModule ctx name
     shapeConstructor constructor = renderReferenceOrDie importPlan (constructorReference shapeModuleName constructor)
     rejectLine _ IgnoreUnknown _ _ = []
     rejectLine indent RejectUnknown allowed objectName =
       [indent <> "rejectUnknownFields " <> tshow name <> " " <> renderTextList allowed <> " " <> objectName]
     unionDecodeArm encoding arm =
-      ["    " <> tshow (rwaTag arm) <> " -> do"]
-        <> rejectLine "      " (ueUnknownFields encoding) allowed "objectValue"
-        <> [ case rwaPayload arm of
-               Nothing -> "      pure " <> shapeConstructor (rwaCtor arm)
+      ["    " <> tshow ((.tag) arm) <> " -> do"]
+        <> rejectLine "      " ((.unknownFields) encoding) allowed "objectValue"
+        <> [ case (.payload) arm of
+               Nothing -> "      pure " <> shapeConstructor ((.ctor) arm)
                Just payload ->
                  "      "
-                   <> shapeConstructor (rwaCtor arm)
+                   <> shapeConstructor ((.ctor) arm)
                    <> " <$> explicitParseField ("
                    <> decodeShapeExpr graph payload
                    <> ") objectValue "
-                   <> tshow (ueContentsField encoding)
+                   <> tshow ((.contentsField) encoding)
            ]
       where
-        allowed = ueTagField encoding : [ueContentsField encoding | rwaPayload arm /= Nothing]
+        allowed = (.tagField) encoding : [(.contentsField) encoding | (.payload) arm /= Nothing]
 
 decodeRecordField :: HaskellImportPlan -> Context -> TypeGraph -> ResolvedWireField -> Text
-decodeRecordField importPlan ctx graph field = case rwfPresence field of
+decodeRecordField importPlan ctx graph field = case (.presence) field of
   PRequired ->
     "explicitParseField (" <> decoder <> ") objectValue " <> key
   POptional ->
@@ -6663,11 +6687,11 @@ decodeRecordField importPlan ctx graph field = case rwfPresence field of
       <> ") objectValue "
       <> key
   where
-    key = tshow (rwfKey field)
-    decoder = decodeShapeExpr graph (rwfType field)
-    missing = case rwfOnMissing field of
-      Nothing -> "fail " <> tshow ("missing optional field without default: " <> rwfKey field)
-      Just onMissing -> "pure " <> renderMissingDefault importPlan ctx graph (rwfType field) onMissing
+    key = tshow ((.key) field)
+    decoder = decodeShapeExpr graph ((.valueType) field)
+    missing = case (.onMissing) field of
+      Nothing -> "fail " <> tshow ("missing optional field without default: " <> (.key) field)
+      Just onMissing -> "pure " <> renderMissingDefault importPlan ctx graph ((.valueType) field) onMissing
 
 encodeShapeExpr :: TypeGraph -> ResolvedTypeExpr -> Text -> Text
 encodeShapeExpr graph expression =
@@ -6693,8 +6717,8 @@ renderMissingDefault importPlan ctx graph expression = \case
   OmEmptyList -> "[]"
   OmEmptyMap -> "Map.empty"
   OmCtor constructor -> case expression of
-    RRef key -> case Map.lookup key (tgDeclarations graph) of
-      Just (ResolvedStructural declaration _) -> renderReferenceOrDie importPlan (constructorReference (structuralShapeModule ctx (sdName declaration)) constructor)
+    RRef key -> case Map.lookup key ((.declarations) graph) of
+      Just (ResolvedStructural declaration _) -> renderReferenceOrDie importPlan (constructorReference (structuralShapeModule ctx ((.name) declaration)) constructor)
       _ -> constructor
     _ -> constructor
 
@@ -6742,20 +6766,20 @@ renderUnknownEventTypeFailure aggregate variable =
 --------------------------------------------------------------------------------
 
 hasVersion2Ownership :: Agg -> Bool
-hasVersion2Ownership = any ((/= LegacyHoleImplementation) . tImplementation) . aTransitions
+hasVersion2Ownership = any ((/= LegacyHoleImplementation) . (.implementation)) . (.transitions)
 
 transitionEntries :: Agg -> [(Int, Transition)]
 transitionEntries aggregate =
-  [ (layoutDeclarationIndex entry, layoutTransition entry)
-  | entry <- transitionLayout (aTransitions aggregate)
+  [ ((.declarationIndex) entry, (.transition) entry)
+  | entry <- transitionLayout ((.transitions) aggregate)
   ]
 
 transitionStem :: Int -> Transition -> Text
 transitionStem index transition =
   "transition"
     <> tshow' index
-    <> pascal (tSource transition)
-    <> pascal (tCommand transition)
+    <> pascal ((.source) transition)
+    <> pascal ((.command) transition)
 
 guardFunctionName :: Int -> Transition -> Text
 guardFunctionName index transition = transitionStem index transition <> "Guard"
@@ -6793,47 +6817,47 @@ obsoleteGeneratedOutputHooksForService service =
 
 obsoleteGeneratedOutputHooksWith :: (Aggregate -> Transition -> Int -> Name -> Either EventOutputError EventOutputMapping) -> Spec -> [(Name, Text)]
 obsoleteGeneratedOutputHooksWith outputMapping spec =
-  [ ( aggName aggregate,
+  [ ( (.name) aggregate,
       outputFunctionName transitionIndex transition emitIndex eventName
     )
-  | aggregate <- [value | NAggregate value <- specNodes spec],
-    entry <- transitionLayout (aggTransitions aggregate),
-    let transitionIndex = layoutDeclarationIndex entry
-        transition = layoutTransition entry,
-    (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
+  | aggregate <- [value | NAggregate value <- (.nodes) spec],
+    entry <- transitionLayout ((.transitions) aggregate),
+    let transitionIndex = (.declarationIndex) entry
+        transition = (.transition) entry,
+    (emitIndex, eventName) <- zip [1 ..] ((.emits) transition),
     Right GeneratedCommandIdentity {} <- [outputMapping aggregate transition emitIndex eventName]
   ]
 
 commandForTransition :: Agg -> Transition -> ResolvedCtor
 commandForTransition aggregate transition =
   fromMaybe
-    (error ("validated aggregate command disappeared: " <> T.unpack (tCommand transition)))
-    (find ((== tCommand transition) . rcName) (aCommands aggregate))
+    (error ("validated aggregate command disappeared: " <> T.unpack ((.command) transition)))
+    (find ((== (.command) transition) . (.name)) ((.commands) aggregate))
 
 eventForName :: Agg -> Name -> ResolvedCtor
 eventForName aggregate eventName =
   fromMaybe
     (error ("validated aggregate event disappeared: " <> T.unpack eventName))
-    (find ((== eventName) . rcName) (aEvents aggregate))
+    (find ((== eventName) . (.name)) ((.events) aggregate))
 
 commandFieldsType :: Transition -> Text
-commandFieldsType transition = "RegFieldsOf " <> tCommand transition <> "Data"
+commandFieldsType transition = "RegFieldsOf " <> (.command) transition <> "Data"
 
 payloadProjectionType :: Agg -> Transition -> Text
 payloadProjectionType aggregate transition =
   "B.PayloadProj "
-    <> aName aggregate
+    <> (.name) aggregate
     <> "Regs "
-    <> aName aggregate
+    <> (.name) aggregate
     <> "Command ("
     <> commandFieldsType transition
     <> ")"
 
 data ResolvedGeneratedTransition = ResolvedGeneratedTransition
-  { resolvedTransitionIndex :: !Int,
-    resolvedTransitionSource :: !Transition,
-    resolvedTransitionGuard :: !(Maybe TypedScalarExpr),
-    resolvedTransitionWrites :: ![(Name, TypedScalarExpr)]
+  { index :: !Int,
+    source :: !Transition,
+    guard :: !(Maybe TypedScalarExpr),
+    writes :: ![(Name, TypedScalarExpr)]
   }
   deriving stock (Eq, Show)
 
@@ -6841,9 +6865,9 @@ data SilentOutcomeKind = RejectedOutcome | NoOpOutcome
   deriving stock (Eq, Show)
 
 data ResolvedSilentOutcome = ResolvedSilentOutcome
-  { resolvedSilentLayout :: !TransitionLayoutEntry,
-    resolvedSilentKind :: !SilentOutcomeKind,
-    resolvedSilentReason :: !TypedScalarExpr
+  { layout :: !TransitionLayoutEntry,
+    kind :: !SilentOutcomeKind,
+    reason :: !TypedScalarExpr
   }
   deriving stock (Eq, Show)
 
@@ -6852,19 +6876,19 @@ data ResolvedSilentOutcome = ResolvedSilentOutcome
 resolvedGeneratedTransitions :: Agg -> [ResolvedGeneratedTransition]
 resolvedGeneratedTransitions aggregate =
   [ ResolvedGeneratedTransition
-      { resolvedTransitionIndex = index,
-        resolvedTransitionSource = transition,
-        resolvedTransitionGuard = resolvedGuard index transition <$> tGuard transition,
-        resolvedTransitionWrites =
+      { index = index,
+        source = transition,
+        guard = resolvedGuard index transition <$> (.guard) transition,
+        writes =
           [ (registerName, resolvedWrite index transition registerName expression)
-          | (registerName, expression) <- tWrites transition
+          | (registerName, expression) <- (.writes) transition
           ]
       }
   | (index, transition) <- transitionEntries aggregate,
-    tImplementation transition == GeneratedImplementation
+    (.implementation) transition == GeneratedImplementation
   ]
   where
-    environment transition = expressionEnvironmentWith (aSymbols aggregate) (aTypeGraph aggregate) (aSpec aggregate) (aAggregate aggregate) transition
+    environment transition = expressionEnvironmentWith ((.symbols) aggregate) ((.typeGraph) aggregate) ((.spec) aggregate) ((.aggregate) aggregate) transition
     resolvedGuard index transition expression =
       expressionOrDie (guardFunctionName index transition) (resolveGuardExpr (environment transition) expression)
     resolvedWrite index transition registerName expression =
@@ -6877,36 +6901,36 @@ generatedTransitionExpressions :: [ResolvedGeneratedTransition] -> [TypedScalarE
 generatedTransitionExpressions = concatMap transitionExpressions
   where
     transitionExpressions resolved =
-      maybe [] pure (resolvedTransitionGuard resolved)
-        <> map snd (resolvedTransitionWrites resolved)
+      maybe [] pure ((.guard) resolved)
+        <> map snd ((.writes) resolved)
 
 resolvedSilentOutcomes :: Agg -> [ResolvedSilentOutcome]
 resolvedSilentOutcomes aggregate =
   [ ResolvedSilentOutcome
-      { resolvedSilentLayout = entry,
-        resolvedSilentKind = kind,
-        resolvedSilentReason = resolveReason entry expected expression
+      { layout = entry,
+        kind = kind,
+        reason = resolveReason entry expected expression
       }
-  | entry <- transitionLayout (aTransitions aggregate),
-    let transition = layoutTransition entry,
-    tMode transition == TmLive,
+  | entry <- transitionLayout ((.transitions) aggregate),
+    let transition = (.transition) entry,
+    (.mode) transition == TmLive,
     (kind, expected, expression) <- outcomeReason transition
   ]
   where
-    outcomeReason transition = case (aDomainOutcomeTypes aggregate, tOutcome transition) of
+    outcomeReason transition = case ((.domainOutcomeTypes) aggregate, (.outcome) transition) of
       (Just outcomeTypes, Just (OutcomeRejected expression _)) ->
-        [(RejectedOutcome, resolvedRejectionType outcomeTypes, expression)]
+        [(RejectedOutcome, (.rejectionType) outcomeTypes, expression)]
       (Just outcomeTypes, Just (OutcomeNoOp expression _)) ->
-        [(NoOpOutcome, resolvedNoOpType outcomeTypes, expression)]
+        [(NoOpOutcome, (.noOpType) outcomeTypes, expression)]
       _ -> []
     resolveReason entry expected expression =
-      let transition = layoutTransition entry
-          owner = transitionStem (layoutDeclarationIndex entry) transition <> "OutcomeReason"
-          environment = expressionEnvironmentWith (aSymbols aggregate) (aTypeGraph aggregate) (aSpec aggregate) (aAggregate aggregate) transition
+      let transition = (.transition) entry
+          owner = transitionStem ((.declarationIndex) entry) transition <> "OutcomeReason"
+          environment = expressionEnvironmentWith ((.symbols) aggregate) ((.typeGraph) aggregate) ((.spec) aggregate) ((.aggregate) aggregate) transition
        in expressionOrDie owner (resolveScalarExpr environment (ExpectScalarType expected) expression)
 
 resolvedOutcomeExpressions :: Agg -> [TypedScalarExpr]
-resolvedOutcomeExpressions = map resolvedSilentReason . resolvedSilentOutcomes
+resolvedOutcomeExpressions = map (.reason) . resolvedSilentOutcomes
 
 -- | Guard expressions only.
 --
@@ -6916,13 +6940,13 @@ resolvedOutcomeExpressions = map resolvedSilentReason . resolvedSilentOutcomes
 -- error under the generated-output @-Werror@. Literals name their type in either
 -- position and are collected separately.
 generatedTransitionGuards :: [ResolvedGeneratedTransition] -> [TypedScalarExpr]
-generatedTransitionGuards = concatMap (maybe [] pure . resolvedTransitionGuard)
+generatedTransitionGuards = concatMap (maybe [] pure . (.guard))
 
 -- | Every literal node in an expression tree.
 typedExpressionLiterals :: TypedScalarExpr -> [TypedScalarExpr]
 typedExpressionLiterals expression = own <> concatMap typedExpressionLiterals (typedExpressionChildren expression)
   where
-    own = case typedScalarNode expression of
+    own = case (.node) expression of
       TypedLiteral {} -> [expression]
       _ -> []
 
@@ -6930,8 +6954,8 @@ typedExpressionLiterals expression = own <> concatMap typedExpressionLiterals (t
 typedExpressionLiteralTypes :: TypedScalarExpr -> [ResolvedAggregateType]
 typedExpressionLiteralTypes expression = own <> concatMap typedExpressionLiteralTypes (typedExpressionChildren expression)
   where
-    own = case typedScalarNode expression of
-      TypedLiteral {} -> [typedScalarType expression]
+    own = case (.node) expression of
+      TypedLiteral {} -> [(.valueType) expression]
       _ -> []
 
 anyTypedExpression :: (TypedScalarExpr -> Bool) -> TypedScalarExpr -> Bool
@@ -6939,7 +6963,7 @@ anyTypedExpression predicate expression =
   predicate expression || any (anyTypedExpression predicate) (typedExpressionChildren expression)
 
 typedExpressionChildren :: TypedScalarExpr -> [TypedScalarExpr]
-typedExpressionChildren expression = case typedScalarNode expression of
+typedExpressionChildren expression = case (.node) expression of
   TypedLiteral {} -> []
   TypedRoot {} -> []
   TypedProject {} -> []
@@ -6955,19 +6979,19 @@ typedExpressionChildren expression = case typedScalarNode expression of
 typedConsumerLiteralNominals :: TypedScalarExpr -> [ResolvedNominalType]
 typedConsumerLiteralNominals expression = own <> concatMap typedConsumerLiteralNominals (typedExpressionChildren expression)
   where
-    own = case (typedScalarType expression, typedScalarNode expression) of
+    own = case ((.valueType) expression, (.node) expression) of
       (AggregateNominal nominal, TypedLiteral ScalarEnumValue {})
-        | ConsumerNominal {} <- resolvedNominalOwnership nominal -> [nominal]
+        | ConsumerNominal {} <- (.ownership) nominal -> [nominal]
       (AggregateNominal nominal, TypedLiteral ScalarIdValue {})
-        | ConsumerNominal {} <- resolvedNominalOwnership nominal -> [nominal]
+        | ConsumerNominal {} <- (.ownership) nominal -> [nominal]
       _ -> []
 
 typedGeneratedNominals :: TypedScalarExpr -> [ResolvedNominalType]
 typedGeneratedNominals expression = own <> concatMap typedGeneratedNominals (typedExpressionChildren expression)
   where
-    own = case typedScalarType expression of
+    own = case (.valueType) expression of
       AggregateNominal nominal
-        | GeneratedNominal <- resolvedNominalOwnership nominal -> [nominal]
+        | GeneratedNominal <- (.ownership) nominal -> [nominal]
       _ -> []
 
 expressionOrDie :: Text -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr -> TypedScalarExpr
@@ -6979,8 +7003,8 @@ data ProjectionAliasTarget
   deriving stock (Eq, Show)
 
 data ProjectionAlias = ProjectionAlias
-  { projectionAliasTarget :: !ProjectionAliasTarget,
-    projectionAliasName :: !Text
+  { target :: !ProjectionAliasTarget,
+    name :: !Text
   }
   deriving stock (Eq, Show)
 
@@ -6988,22 +7012,22 @@ projectionAliasesForTransition :: ResolvedGeneratedTransition -> [ProjectionAlia
 projectionAliasesForTransition resolved = allocateAliases targets
   where
     expressions =
-      maybe [] pure (resolvedTransitionGuard resolved)
-        <> map snd (resolvedTransitionWrites resolved)
+      maybe [] pure ((.guard) resolved)
+        <> map snd ((.writes) resolved)
     targets = nub (concatMap projectionAliasTargets expressions)
 
 projectionAliasTargets :: TypedScalarExpr -> [ProjectionAliasTarget]
 projectionAliasTargets expression = own <> comparisonTargets <> concatMap projectionAliasTargets children
   where
     children = typedExpressionChildren expression
-    own = case typedScalarNode expression of
+    own = case (.node) expression of
       TypedProject provenance projection -> [StructuralProjectionAlias provenance projection]
       _ -> []
-    comparisonTargets = case typedScalarNode expression of
+    comparisonTargets = case (.node) expression of
       TypedEqual left right -> mapMaybe nominalTarget [left, right]
       TypedNotEqual left right -> mapMaybe nominalTarget [left, right]
       _ -> []
-    nominalTarget operand = case (typedScalarType operand, typedScalarNode operand) of
+    nominalTarget operand = case ((.valueType) operand, (.node) operand) of
       (AggregateNominal nominal, TypedRoot provenance)
         | nominalComparisonProjection nominal -> Just (NominalProjectionAlias nominal provenance)
       _ -> Nothing
@@ -7031,7 +7055,7 @@ projectionAliasBase target = prefix <> pascal rootName <> pathSuffix
       StructuralProjectionAlias _ projection ->
         T.concat
           [ normaliseAliasPart (unescapePointer segment)
-          | segment <- filter (not . T.null) (T.splitOn "/" (scalarProjectionPointer projection))
+          | segment <- filter (not . T.null) (T.splitOn "/" ((.pointer) projection))
           ]
 
 normaliseAliasPart :: Text -> Text
@@ -7046,8 +7070,8 @@ projectionAliasFor :: [ProjectionAlias] -> ProjectionAliasTarget -> Text
 projectionAliasFor aliases target =
   maybe
     (error ("resolved projection alias disappeared: " <> show target))
-    projectionAliasName
-    (find ((== target) . projectionAliasTarget) aliases)
+    (.name)
+    (find ((== target) . (.target)) aliases)
 
 data RenderAssociativity = RenderLeft | RenderRight | RenderNonAssociative
   deriving stock (Eq, Show)
@@ -7056,8 +7080,8 @@ data RenderOperandSide = RenderLeftOperand | RenderRightOperand
   deriving stock (Eq, Show)
 
 data RenderedKeikiExpr = RenderedKeikiExpr
-  { renderedKeikiText :: !Text,
-    renderedKeikiPrecedence :: !Int
+  { text :: !Text,
+    precedence :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -7077,22 +7101,22 @@ renderedInfix precedence associativity operator left right =
 
 renderInfixChild :: Int -> RenderAssociativity -> RenderOperandSide -> RenderedKeikiExpr -> Text
 renderInfixChild parentPrecedence associativity side child
-  | renderedKeikiPrecedence child > parentPrecedence = renderedKeikiText child
-  | renderedKeikiPrecedence child < parentPrecedence = parenthesized
+  | (.precedence) child > parentPrecedence = (.text) child
+  | (.precedence) child < parentPrecedence = parenthesized
   | otherwise = case associativity of
       RenderLeft
-        | side == RenderLeftOperand -> renderedKeikiText child
+        | side == RenderLeftOperand -> (.text) child
       RenderRight
-        | side == RenderRightOperand -> renderedKeikiText child
+        | side == RenderRightOperand -> (.text) child
       _ -> parenthesized
   where
-    parenthesized = "(" <> renderedKeikiText child <> ")"
+    parenthesized = "(" <> (.text) child <> ")"
 
 renderKeikiPredicate :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> Text
 renderKeikiPredicate importPlan aliases aggregate transition =
-  renderedKeikiText . renderPredicate
+  (.text) . renderPredicate
   where
-    renderPredicate expression = case typedScalarNode expression of
+    renderPredicate expression = case (.node) expression of
       TypedEqual left right -> comparison ".==" left right
       TypedNotEqual left right -> comparison "./=" left right
       TypedCompare operator left right -> comparison (renderComparisonOperator operator) left right
@@ -7125,7 +7149,7 @@ renderComparisonOperator = \case
   OpGe -> ".>="
 
 renderComparisonTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
-renderComparisonTerm importPlan aliases aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
+renderComparisonTerm importPlan aliases aggregate transition expression = case ((.valueType) expression, (.node) expression) of
   (AggregateNominal nominal, TypedRoot provenance)
     | nominalComparisonProjection nominal ->
         renderedAtom (projectionAliasFor aliases (NominalProjectionAlias nominal provenance))
@@ -7136,15 +7160,15 @@ renderComparisonTerm importPlan aliases aggregate transition expression = case (
   _ -> renderKeikiTerm importPlan aliases aggregate transition expression
 
 nominalComparisonProjection :: ResolvedNominalType -> Bool
-nominalComparisonProjection nominal = case resolvedNominalRepresentation nominal of
+nominalComparisonProjection nominal = case (.representation) nominal of
   IdRepresentation {} -> True
   EnumRepresentation {} -> True
-  ScalarRepresentation {} -> case resolvedNominalOwnership nominal of
+  ScalarRepresentation {} -> case (.ownership) nominal of
     ConsumerNominal {} -> True
     GeneratedNominal -> False
 
 enumWireFor :: ResolvedNominalType -> Name -> Text
-enumWireFor nominal constructor = case resolvedNominalRepresentation nominal of
+enumWireFor nominal constructor = case (.representation) nominal of
   EnumRepresentation constructors -> fromMaybe (error "validated enum literal lost its wire spelling") (lookup constructor (NE.toList constructors))
   _ -> error "validated enum literal lost its enum representation"
 
@@ -7158,39 +7182,39 @@ renderNominalProjectionTerm importPlan aggregate transition nominal provenance =
       <> " (#"
       <> registerName
       <> " :: K.Index "
-      <> aName aggregate
+      <> (.name) aggregate
       <> "Regs "
       <> renderDomainType importPlan aggregate ownerType
       <> ")"
-  ScalarCommandRoot fieldName ownerType ->
+  ScalarCommandRoot name ownerType ->
     "K.inpProj "
       <> projectionQualifier
       <> "."
       <> witness
       <> " inCtor"
-      <> tCommand transition
+      <> (.command) transition
       <> " (#"
-      <> commandFieldSelector aggregate (tCommand transition) fieldName
+      <> commandFieldSelector aggregate ((.command) transition) name
       <> " :: K.Index ("
       <> commandFieldsType transition
       <> ") "
       <> renderDomainType importPlan aggregate ownerType
       <> ")"
   where
-    projectionQualifier = case resolvedNominalOwnership nominal of
+    projectionQualifier = case (.ownership) nominal of
       GeneratedNominal -> "GeneratedNominals"
       ConsumerNominal {} -> "NominalProjections"
-    witness = case resolvedNominalRepresentation nominal of
-      ScalarRepresentation {} -> lowerFirst (resolvedNominalName nominal) <> "Witness"
+    witness = case (.representation) nominal of
+      ScalarRepresentation {} -> lowerFirst ((.name) nominal) <> "Witness"
       IdRepresentation {} -> nominalEqualityWitnessName nominal
       EnumRepresentation {} -> nominalEqualityWitnessName nominal
 
 renderKeikiTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
-renderKeikiTerm importPlan aliases aggregate transition expression = case typedScalarNode expression of
-  TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate (typedScalarType expression) value)
+renderKeikiTerm importPlan aliases aggregate transition expression = case (.node) expression of
+  TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate ((.valueType) expression) value)
   TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
-  TypedRoot (ScalarCommandRoot fieldName _) ->
-    renderedAtom ("d." <> commandFieldSelector aggregate (tCommand transition) fieldName)
+  TypedRoot (ScalarCommandRoot name _) ->
+    renderedAtom ("d." <> commandFieldSelector aggregate ((.command) transition) name)
   TypedProject provenance projection ->
     renderedAtom (projectionAliasFor aliases (StructuralProjectionAlias provenance projection))
   TypedAdd _ left right -> arithmetic 6 ".+" left right
@@ -7215,10 +7239,10 @@ renderOutcomeReasonEvaluation :: HaskellImportPlan -> Agg -> Transition -> Typed
 renderOutcomeReasonEvaluation importPlan aggregate transition expression =
   evaluator
     <> " ("
-    <> renderedKeikiText rendered
+    <> (.text) rendered
     <> ") registers command"
   where
-    (evaluator, rendered) = case typedScalarNode expression of
+    (evaluator, rendered) = case (.node) expression of
       TypedEqual {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
       TypedNotEqual {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
       TypedCompare {} -> ("K.evalPred", renderOutcomePredicate importPlan aggregate transition expression)
@@ -7229,7 +7253,7 @@ renderOutcomeReasonEvaluation importPlan aggregate transition expression =
 renderOutcomePredicate :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
 renderOutcomePredicate importPlan aggregate transition = renderPredicate
   where
-    renderPredicate expression = case typedScalarNode expression of
+    renderPredicate expression = case (.node) expression of
       TypedEqual left right -> comparison ".==" left right
       TypedNotEqual left right -> comparison "./=" left right
       TypedCompare operator left right -> comparison (renderComparisonOperator operator) left right
@@ -7253,7 +7277,7 @@ renderOutcomePredicate importPlan aggregate transition = renderPredicate
       renderedInfix precedence associativity operator (renderPredicate left) (renderPredicate right)
 
 renderOutcomeComparisonTerm :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
-renderOutcomeComparisonTerm importPlan aggregate transition expression = case (typedScalarType expression, typedScalarNode expression) of
+renderOutcomeComparisonTerm importPlan aggregate transition expression = case ((.valueType) expression, (.node) expression) of
   (AggregateNominal nominal, TypedRoot provenance)
     | nominalComparisonProjection nominal ->
         renderedAtom (renderNominalProjectionTerm importPlan aggregate transition nominal provenance)
@@ -7264,15 +7288,15 @@ renderOutcomeComparisonTerm importPlan aggregate transition expression = case (t
   _ -> renderOutcomeKeikiTerm importPlan aggregate transition expression
 
 renderOutcomeKeikiTerm :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
-renderOutcomeKeikiTerm importPlan aggregate transition expression = case typedScalarNode expression of
-  TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate (typedScalarType expression) value)
+renderOutcomeKeikiTerm importPlan aggregate transition expression = case (.node) expression of
+  TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate ((.valueType) expression) value)
   TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
-  TypedRoot (ScalarCommandRoot fieldName ownerType) ->
+  TypedRoot (ScalarCommandRoot name ownerType) ->
     renderedAtom
       ( "K.inpCtor inCtor"
-          <> tCommand transition
+          <> (.command) transition
           <> " (#"
-          <> commandFieldSelector aggregate (tCommand transition) fieldName
+          <> commandFieldSelector aggregate ((.command) transition) name
           <> " :: K.Index ("
           <> commandFieldsType transition
           <> ") "
@@ -7307,17 +7331,17 @@ renderStructuralProjectionTerm importPlan aggregate transition provenance projec
       <> " (#"
       <> registerName
       <> " :: K.Index "
-      <> aName aggregate
+      <> (.name) aggregate
       <> "Regs "
       <> renderDomainType importPlan aggregate ownerType
       <> ")"
-  ScalarCommandRoot fieldName ownerType ->
+  ScalarCommandRoot name ownerType ->
     "K.inpProj StructuralProjections."
       <> witness
       <> " inCtor"
-      <> tCommand transition
+      <> (.command) transition
       <> " (#"
-      <> commandFieldSelector aggregate (tCommand transition) fieldName
+      <> commandFieldSelector aggregate ((.command) transition) name
       <> " :: K.Index ("
       <> commandFieldsType transition
       <> ") "
@@ -7327,7 +7351,7 @@ renderStructuralProjectionTerm importPlan aggregate transition provenance projec
     witness =
       fromMaybe
         (error ("resolved structural projection witness disappeared: " <> show projection))
-        (aTypeGraph aggregate >>= \graph -> projectionWitnessName graph (scalarProjectionOwner projection) (scalarProjectionPointer projection))
+        ((.typeGraph) aggregate >>= \graph -> projectionWitnessName graph ((.owner) projection) ((.pointer) projection))
 
 renderKeikiLiteral :: HaskellImportPlan -> Agg -> ResolvedAggregateType -> ScalarValue -> Text
 renderKeikiLiteral importPlan aggregate scalarType = \case
@@ -7338,18 +7362,18 @@ renderKeikiLiteral importPlan aggregate scalarType = \case
   ScalarBoolValue value -> "K.lit " <> if value then "True" else "False"
   ScalarTimeValue value -> "K.lit " <> renderRegisterInitial (InitialTime value)
   ScalarEnumValue _typeName constructor -> case scalarType of
-    AggregateNominal nominal -> case resolvedNominalOwnership nominal of
+    AggregateNominal nominal -> case (.ownership) nominal of
       GeneratedNominal -> "K.lit " <> constructor
       ConsumerNominal binding ->
         "K.lit (nominalFromRepresentation "
-          <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
+          <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding))
           <> " "
-          <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference (aContext aggregate) nominal constructor)
+          <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference ((.context) aggregate) nominal constructor)
           <> ")"
     _ -> error "validated enum literal lost its nominal type"
   ScalarIdValue typeName value -> case scalarType of
-    AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-      GeneratedNominal -> case idDomainContractFor (aLanguageContract aggregate) =<< idPrefixOf nominal of
+    AggregateNominal nominal -> case (.ownership) nominal of
+      GeneratedNominal -> case idDomainContractFor ((.languageContract) aggregate) =<< idPrefixOf nominal of
         Nothing -> "K.lit (" <> typeName <> " " <> tshow value <> ")"
         Just _ ->
           "K.lit (case parse"
@@ -7357,10 +7381,10 @@ renderKeikiLiteral importPlan aggregate scalarType = \case
             <> " "
             <> tshow value
             <> " of Right parsed -> parsed; Left _ -> error \"validated ID literal failed to parse\")"
-      ConsumerNominal binding -> case resolvedNominalRepresentation nominal of
+      ConsumerNominal binding -> case (.representation) nominal of
         IdRepresentation prefix ->
           "K.lit (nominalFromRepresentation "
-            <> renderReferenceOrDie importPlan (qualifiedValueReference (consumerNominalBinding binding))
+            <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding))
             <> " (case KindID.parseText @"
             <> tshow prefix
             <> " "
@@ -7369,17 +7393,17 @@ renderKeikiLiteral importPlan aggregate scalarType = \case
         _ -> error "validated ID literal lost its ID representation"
     _ -> error "validated ID literal lost its nominal type"
   where
-    idPrefixOf nominal = case resolvedNominalRepresentation nominal of
+    idPrefixOf nominal = case (.representation) nominal of
       IdRepresentation prefix -> Just prefix
       _ -> Nothing
 
 generatedIdSampleHaskell :: Agg -> ResolvedNominalType -> Maybe Text
 generatedIdSampleHaskell aggregate nominal = do
-  prefix <- case resolvedNominalRepresentation nominal of
+  prefix <- case (.representation) nominal of
     IdRepresentation value -> Just value
     _ -> Nothing
-  contract <- idDomainContractFor (aLanguageContract aggregate) prefix
-  let name = resolvedNominalName nominal
+  contract <- idDomainContractFor ((.languageContract) aggregate) prefix
+  let name = (.name) nominal
       sample = idDomainSampleText contract
   pure
     ( "(case parse"
@@ -7398,14 +7422,14 @@ emitGeneratedTransducer aggregate =
           <> [ExtOverloadedRecordDot | transducerUsesRecordDot aggregate]
       )
       ++ [ generatedBanner,
-           "module " <> aGenPrefix aggregate <> ".Transducer",
-           "  ( " <> lowerFirst (aName aggregate) <> "Transducer",
-           "  , " <> lowerFirst (aName aggregate) <> "FoldFingerprint",
+           "module " <> (.genPrefix) aggregate <> ".Transducer",
+           "  ( " <> lowerFirst ((.name) aggregate) <> "Transducer",
+           "  , " <> lowerFirst ((.name) aggregate) <> "FoldFingerprint",
            "  , BehaviorOwnership (..)",
-           "  , " <> lowerFirst (aName aggregate) <> "PredicateVerifications",
+           "  , " <> lowerFirst ((.name) aggregate) <> "PredicateVerifications",
            "  ) where",
            "",
-           "import " <> aGenPrefix aggregate <> ".Domain",
+           "import " <> (.genPrefix) aggregate <> ".Domain",
            "import Data.Text (Text)"
          ]
       ++ ["import Data.Time.Calendar (fromGregorian)" | expressionUsesTimeLiteral]
@@ -7413,7 +7437,7 @@ emitGeneratedTransducer aggregate =
       ++ ["import Numeric.Natural (Natural)" | expressionUsesNaturalLiteral]
       ++ generatedNominalTypeImportsWithParsers
         (aggregateCheckedService aggregate)
-        (aContext aggregate)
+        ((.context) aggregate)
         generatedExpressionNominals
         generatedLiteralNominals
       ++ structuralProjectionImport
@@ -7427,41 +7451,41 @@ emitGeneratedTransducer aggregate =
            "import Keiki.Core qualified as K",
            "import Keiki.Symbolic qualified as S"
          ]
-      ++ ["import " <> aHolePrefix aggregate <> ".Holes qualified as Holes" | transducerUsesHoles aggregate]
+      ++ ["import " <> (.holePrefix) aggregate <> ".Holes qualified as Holes" | transducerUsesHoles aggregate]
       ++ ["import Data.Text qualified as T" | anyHoleOwned aggregate]
-      ++ ["import Keiki.Builder ((=:))" | any (not . null . tWrites . snd) (transitionEntries aggregate)]
+      ++ ["import Keiki.Builder ((=:))" | any (not . null . (.writes) . snd) (transitionEntries aggregate)]
       ++ ["import Keiki.Generics (RegFieldsOf)" | not (null projectionAliases)]
       ++ ["import Keiro.Snapshot.Codec (FoldVersion (..))" | anyHoleOwned aggregate]
       ++ [ "",
-           lowerFirst (aName aggregate) <> "Transducer",
+           lowerFirst ((.name) aggregate) <> "Transducer",
            "  :: SymTransducer",
-           "       (HsPred " <> aName aggregate <> "Regs " <> aName aggregate <> "Command)",
-           "       " <> aName aggregate <> "Regs",
-           "       " <> aVertexType aggregate,
-           "       " <> aName aggregate <> "Command",
-           "       " <> aName aggregate <> "Event",
-           lowerFirst (aName aggregate) <> "Transducer =",
-           "  B.buildTransducer " <> initialVertex aggregate <> " initial" <> aName aggregate <> "Regs isTerminal do",
+           "       (HsPred " <> (.name) aggregate <> "Regs " <> (.name) aggregate <> "Command)",
+           "       " <> (.name) aggregate <> "Regs",
+           "       " <> (.vertexType) aggregate,
+           "       " <> (.name) aggregate <> "Command",
+           "       " <> (.name) aggregate <> "Event",
+           lowerFirst ((.name) aggregate) <> "Transducer =",
+           "  B.buildTransducer " <> initialVertex aggregate <> " initial" <> (.name) aggregate <> "Regs isTerminal do",
            nl (concatMap (generatedFromBlock importPlan aggregate resolvedTransitions) (groupTransitionEntriesBySource aggregate)),
            " where",
            "  isTerminal = \\case",
-           nl ["    " <> vertexCtor aggregate (stName state) <> " -> True" | state <- aStates aggregate, stTerminal state],
+           nl ["    " <> vertexCtor aggregate ((.name) state) <> " -> True" | state <- (.states) aggregate, (.terminal) state],
            "    _ -> False",
            "",
-           lowerFirst (aName aggregate) <> "FoldFingerprint :: Text",
-           lowerFirst (aName aggregate) <> "FoldFingerprint = " <> foldFingerprintExpression aggregate,
+           lowerFirst ((.name) aggregate) <> "FoldFingerprint :: Text",
+           lowerFirst ((.name) aggregate) <> "FoldFingerprint = " <> foldFingerprintExpression aggregate,
            "",
            "data BehaviorOwnership = GeneratedOwned | HoleOwned",
            "  deriving stock (Eq, Show)",
            "",
            "-- Every checked transition predicate is audited through Keiki's conservative",
            "-- symbolic verifier. Opaque Hole terms remain explicitly unverified.",
-           lowerFirst (aName aggregate) <> "PredicateVerifications :: IO [(Text, BehaviorOwnership, S.PredicateVerification)]",
-           lowerFirst (aName aggregate) <> "PredicateVerifications = sequence",
+           lowerFirst ((.name) aggregate) <> "PredicateVerifications :: IO [(Text, BehaviorOwnership, S.PredicateVerification)]",
+           lowerFirst ((.name) aggregate) <> "PredicateVerifications = sequence",
            nl (renderVerificationList aggregate),
            " where",
            "  verifyTransition label owner source edgeIndex =",
-           "    case drop edgeIndex (K.edgesOut " <> lowerFirst (aName aggregate) <> "Transducer source) of",
+           "    case drop edgeIndex (K.edgesOut " <> lowerFirst ((.name) aggregate) <> "Transducer source) of",
            "      K.Edge predicate _ _ _ _ : _ -> (\\result -> (label, owner, result)) <$> S.verifyPredicate predicate",
            "      [] -> pure (label, owner, S.UnverifiedSolverFailure \"generated transition edge missing\")"
          ]
@@ -7469,17 +7493,17 @@ emitGeneratedTransducer aggregate =
     resolvedTransitions = resolvedGeneratedTransitions aggregate
     resolvedExpressions = generatedTransitionExpressions resolvedTransitions
     projectionAliases = concatMap projectionAliasesForTransition resolvedTransitions
-    projectionTargets = map projectionAliasTarget projectionAliases
+    projectionTargets = map (.target) projectionAliases
     structuralProjectionImport =
-      [ "import " <> structuralProjectionModule (aContext aggregate) <> " qualified as StructuralProjections"
+      [ "import " <> structuralProjectionModule ((.context) aggregate) <> " qualified as StructuralProjections"
       | any isStructuralProjection projectionTargets
       ]
     generatedNominalProjectionImport =
-      [ "import " <> generatedNominalModule (aContext aggregate) <> " qualified as GeneratedNominals"
+      [ "import " <> generatedNominalModule ((.context) aggregate) <> " qualified as GeneratedNominals"
       | any isGeneratedNominalProjection projectionTargets
       ]
     consumerNominalProjectionImport =
-      [ "import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections"
+      [ "import " <> nominalProjectionModule ((.context) aggregate) <> " qualified as NominalProjections"
       | any isConsumerNominalProjection projectionTargets
       ]
     consumerImports =
@@ -7508,13 +7532,13 @@ emitGeneratedTransducer aggregate =
     expressionUsesTimeLiteral = any (anyTypedExpression isTimeLiteral) resolvedExpressions
     expressionUsesNaturalLiteral = any (anyTypedExpression isNaturalLiteral) resolvedExpressions
     expressionUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
-    expressionUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
+    expressionUsesConsumerIdLiteral = any (isIdRepresentation . (.representation)) consumerLiteralNominals
     usedOperators = nub (concatMap generatedTransitionOperators resolvedTransitions)
     keikiCoreImports = ["HsPred", "SymTransducer"] <> ["(" <> operator <> ")" | operator <- expressionOperatorOrder, operator `elem` usedOperators]
-    isTimeLiteral expression = case typedScalarNode expression of
+    isTimeLiteral expression = case (.node) expression of
       TypedLiteral ScalarTimeValue {} -> True
       _ -> False
-    isNaturalLiteral expression = case typedScalarNode expression of
+    isNaturalLiteral expression = case (.node) expression of
       TypedLiteral ScalarNaturalValue {} -> True
       _ -> False
     isIdRepresentation IdRepresentation {} = True
@@ -7528,34 +7552,34 @@ transducerUsesRecordDot aggregate =
     generatedOutputs =
       [ outputMappingFor aggregate transitionIndex emitIndex
       | (transitionIndex, transition) <- transitionEntries aggregate,
-        tImplementation transition == GeneratedImplementation,
-        emitIndex <- [1 .. length (tEmits transition)]
+        (.implementation) transition == GeneratedImplementation,
+        emitIndex <- [1 .. length ((.emits) transition)]
       ]
     generatedOutputUsesCommandField (GeneratedCommandIdentity _ fields) = not (null fields)
     generatedOutputUsesCommandField HandOwnedEventOutput {} = False
     expressionUsesCommandRoot = anyTypedExpression isCommandRoot
-    isCommandRoot expression = case typedScalarNode expression of
+    isCommandRoot expression = case (.node) expression of
       TypedRoot ScalarCommandRoot {} -> True
       _ -> False
 
 transducerImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> HaskellImportPlan
 transducerImportPlan aggregate importedTypes literalNominals =
   planImportsOrDie
-    (aGenPrefix aggregate <> ".Transducer")
-    (Set.fromList [aName aggregate <> "Regs", aName aggregate <> "Command", aName aggregate <> "Event"])
+    ((.genPrefix) aggregate <> ".Transducer")
+    (Set.fromList [(.name) aggregate <> "Regs", (.name) aggregate <> "Command", (.name) aggregate <> "Event"])
     ( Set.unions
-        [ aggregateSourceReferences (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType)
+        [ aggregateSourceReferences (aggregateConsumerHaskellSource ((.symbols) aggregate) resolvedType)
         | resolvedType <- importedTypes
         ]
         <> Set.fromList
           [ reference
           | nominal <- literalNominals,
-            ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+            ConsumerNominal binding <- [(.ownership) nominal],
             reference <-
-              qualifiedValueReference (consumerNominalBinding binding)
-                : case resolvedNominalRepresentation nominal of
+              qualifiedValueReference ((.binding) binding)
+                : case (.representation) nominal of
                   EnumRepresentation constructors ->
-                    [ nominalRepresentationConstructorReference (aContext aggregate) nominal constructor
+                    [ nominalRepresentationConstructorReference ((.context) aggregate) nominal constructor
                     | (constructor, _) <- NE.toList constructors
                     ]
                   _ -> []
@@ -7565,8 +7589,8 @@ transducerImportPlan aggregate importedTypes literalNominals =
 typedExpressionImportTypes :: TypedScalarExpr -> [ResolvedAggregateType]
 typedExpressionImportTypes expression = own <> concatMap typedExpressionImportTypes (typedExpressionChildren expression)
   where
-    own = case typedScalarNode expression of
-      TypedLiteral {} -> [typedScalarType expression]
+    own = case (.node) expression of
+      TypedLiteral {} -> [(.valueType) expression]
       TypedRoot provenance -> [scalarRootType provenance]
       TypedProject provenance _ -> [scalarRootType provenance]
       _ -> []
@@ -7581,11 +7605,11 @@ isStructuralProjection StructuralProjectionAlias {} = True
 isStructuralProjection NominalProjectionAlias {} = False
 
 isGeneratedNominalProjection :: ProjectionAliasTarget -> Bool
-isGeneratedNominalProjection (NominalProjectionAlias nominal _) = resolvedNominalOwnership nominal == GeneratedNominal
+isGeneratedNominalProjection (NominalProjectionAlias nominal _) = (.ownership) nominal == GeneratedNominal
 isGeneratedNominalProjection StructuralProjectionAlias {} = False
 
 isConsumerNominalProjection :: ProjectionAliasTarget -> Bool
-isConsumerNominalProjection (NominalProjectionAlias nominal _) = case resolvedNominalOwnership nominal of
+isConsumerNominalProjection (NominalProjectionAlias nominal _) = case (.ownership) nominal of
   ConsumerNominal {} -> True
   GeneratedNominal -> False
 isConsumerNominalProjection StructuralProjectionAlias {} = False
@@ -7595,11 +7619,11 @@ expressionOperatorOrder = [".*", ".+", ".-", ".==", "./=", ".<", ".<=", ".>", ".
 
 generatedTransitionOperators :: ResolvedGeneratedTransition -> [Text]
 generatedTransitionOperators resolved =
-  maybe [] expressionPredicateOperators (resolvedTransitionGuard resolved)
-    <> concatMap (expressionTermOperators . snd) (resolvedTransitionWrites resolved)
+  maybe [] expressionPredicateOperators ((.guard) resolved)
+    <> concatMap (expressionTermOperators . snd) ((.writes) resolved)
 
 outcomeExpressionOperators :: TypedScalarExpr -> [Text]
-outcomeExpressionOperators expression = case typedScalarNode expression of
+outcomeExpressionOperators expression = case (.node) expression of
   TypedEqual {} -> expressionPredicateOperators expression
   TypedNotEqual {} -> expressionPredicateOperators expression
   TypedCompare {} -> expressionPredicateOperators expression
@@ -7608,7 +7632,7 @@ outcomeExpressionOperators expression = case typedScalarNode expression of
   _ -> expressionTermOperators expression
 
 expressionPredicateOperators :: TypedScalarExpr -> [Text]
-expressionPredicateOperators expression = case typedScalarNode expression of
+expressionPredicateOperators expression = case (.node) expression of
   TypedEqual left right -> ".==" : expressionTermOperators left <> expressionTermOperators right
   TypedNotEqual left right -> "./=" : expressionTermOperators left <> expressionTermOperators right
   TypedCompare operator left right -> renderComparisonOperator operator : expressionTermOperators left <> expressionTermOperators right
@@ -7617,19 +7641,19 @@ expressionPredicateOperators expression = case typedScalarNode expression of
   _ -> ".==" : expressionTermOperators expression
 
 expressionTermOperators :: TypedScalarExpr -> [Text]
-expressionTermOperators expression = case typedScalarNode expression of
+expressionTermOperators expression = case (.node) expression of
   TypedAdd _ left right -> ".+" : expressionTermOperators left <> expressionTermOperators right
   TypedSubtract _ left right -> ".-" : expressionTermOperators left <> expressionTermOperators right
   TypedMultiply _ left right -> ".*" : expressionTermOperators left <> expressionTermOperators right
   _ -> concatMap expressionTermOperators (typedExpressionChildren expression)
 
 anyHoleOwned :: Agg -> Bool
-anyHoleOwned = any ((== HoleImplementation) . tImplementation) . aTransitions
+anyHoleOwned = any ((== HoleImplementation) . (.implementation)) . (.transitions)
 
 transducerUsesHoles :: Agg -> Bool
 transducerUsesHoles aggregate =
   anyHoleOwned aggregate
-    || any isHandOwned (Map.elems (aOutputMappings aggregate))
+    || any isHandOwned (Map.elems ((.outputMappings) aggregate))
   where
     isHandOwned HandOwnedEventOutput {} = True
     isHandOwned GeneratedCommandIdentity {} = False
@@ -7646,7 +7670,7 @@ renderVerificationList aggregate =
       <> " "
       <> tshow' edgeIndex
   | (listIndex, (source, edgeIndex, transitionIndex, transition)) <- zip [0 ..] entries,
-    let ownership = case tImplementation transition of
+    let ownership = case (.implementation) transition of
           GeneratedImplementation -> "GeneratedOwned"
           HoleImplementation -> "HoleOwned"
           LegacyHoleImplementation -> error "legacy transition reached version-2 verification generation"
@@ -7655,19 +7679,19 @@ renderVerificationList aggregate =
   where
     entries =
       [ (source, edgeIndex, transitionIndex, transition)
-      | (source, transitions) <- groupTransitionLayoutBySource (transitionLayout (aTransitions aggregate)),
+      | (source, transitions) <- groupTransitionLayoutBySource (transitionLayout ((.transitions) aggregate)),
         entry <- transitions,
-        let edgeIndex = layoutOutgoingIndex entry
-            transitionIndex = layoutDeclarationIndex entry
-            transition = layoutTransition entry
+        let edgeIndex = (.outgoingIndex) entry
+            transitionIndex = (.declarationIndex) entry
+            transition = (.transition) entry
       ]
 
 foldFingerprintExpression :: Agg -> Text
 foldFingerprintExpression aggregate = case holeVersions of
-  [] -> tshow (aFoldFingerprint aggregate)
+  [] -> tshow ((.foldFingerprint) aggregate)
   _ ->
     "T.intercalate \"|\" ("
-      <> tshow (aFoldFingerprint aggregate)
+      <> tshow ((.foldFingerprint) aggregate)
       <> " : [foldToken "
       <> T.intercalate ", foldToken " holeVersions
       <> "] ) where foldToken (FoldVersion token) = T.pack (show (T.length token)) <> \":\" <> token"
@@ -7675,15 +7699,15 @@ foldFingerprintExpression aggregate = case holeVersions of
     holeVersions =
       [ "Holes." <> holeFoldVersionName index transition
       | (index, transition) <- transitionEntries aggregate,
-        tImplementation transition == HoleImplementation
+        (.implementation) transition == HoleImplementation
       ]
 
 groupTransitionEntriesBySource :: Agg -> [(Text, [(Int, Transition)])]
 groupTransitionEntriesBySource aggregate =
   [ ( source,
-      [(layoutDeclarationIndex entry, layoutTransition entry) | entry <- entries]
+      [((.declarationIndex) entry, (.transition) entry) | entry <- entries]
     )
-  | (source, entries) <- groupTransitionLayoutBySource (transitionLayout (aTransitions aggregate))
+  | (source, entries) <- groupTransitionLayoutBySource (transitionLayout ((.transitions) aggregate))
   ]
 
 generatedFromBlock :: HaskellImportPlan -> Agg -> [ResolvedGeneratedTransition] -> (Text, [(Int, Transition)]) -> [Text]
@@ -7693,28 +7717,28 @@ generatedFromBlock importPlan aggregate resolvedTransitions (source, transitions
 
 generatedOnCmdBlock :: HaskellImportPlan -> Agg -> [ResolvedGeneratedTransition] -> Int -> Transition -> [Text]
 generatedOnCmdBlock importPlan aggregate resolvedTransitions index transition =
-  ["      B.onCmd inCtor" <> tCommand transition <> " $ \\" <> payloadBinder <> " -> B.do"]
+  ["      B.onCmd inCtor" <> (.command) transition <> " $ \\" <> payloadBinder <> " -> B.do"]
     ++ projectionBindingLines
-    ++ ["        B.replayOnly" | tMode transition == TmReplayOnly]
+    ++ ["        B.replayOnly" | (.mode) transition == TmReplayOnly]
     ++ generatedBehavior
     ++ outputLines
-    ++ ["        B.noEmit" | null (tEmits transition)]
-    ++ ["        B.goto " <> vertexCtor aggregate (tGoto transition)]
+    ++ ["        B.noEmit" | null ((.emits) transition)]
+    ++ ["        B.goto " <> vertexCtor aggregate ((.goto) transition)]
   where
-    generatedBehavior = case tImplementation transition of
+    generatedBehavior = case (.implementation) transition of
       GeneratedImplementation ->
-        maybe [] (renderGuardLines importPlan aliases aggregate transition) (resolvedTransitionGuard resolved)
+        maybe [] (renderGuardLines importPlan aliases aggregate transition) ((.guard) resolved)
           ++ [ "        B.slot @" <> tshow registerName <> " =: " <> renderAssignmentOperand (renderKeikiTerm importPlan aliases aggregate transition expression)
-             | (registerName, expression) <- resolvedTransitionWrites resolved
+             | (registerName, expression) <- (.writes) resolved
              ]
       HoleImplementation -> ["        Holes." <> holeFunctionName index transition <> " d"]
       LegacyHoleImplementation -> error "legacy transition reached version-2 transducer generation"
     resolved =
       fromMaybe
         (error ("resolved generated transition disappeared: " <> show index))
-        (find ((== index) . resolvedTransitionIndex) resolvedTransitions)
+        (find ((== index) . (.index)) resolvedTransitions)
     aliases
-      | tImplementation transition == GeneratedImplementation = projectionAliasesForTransition resolved
+      | (.implementation) transition == GeneratedImplementation = projectionAliasesForTransition resolved
       | otherwise = []
     projectionBindingLines = case aliases of
       [] -> []
@@ -7724,16 +7748,16 @@ generatedOnCmdBlock importPlan aggregate resolvedTransitions index transition =
     outputLines =
       concat
         [ generatedOutputLines aggregate index transition emitIndex eventName
-        | (emitIndex, eventName) <- zip [1 ..] (tEmits transition)
+        | (emitIndex, eventName) <- zip [1 ..] ((.emits) transition)
         ]
     payloadBinder
       | payloadIsUsed = "d"
       | otherwise = "_d"
-    payloadIsUsed = case tImplementation transition of
+    payloadIsUsed = case (.implementation) transition of
       GeneratedImplementation ->
-        isJust (resolvedTransitionGuard resolved)
-          || not (null (resolvedTransitionWrites resolved))
-          || any outputUsesPayload (zip [1 ..] (tEmits transition))
+        isJust ((.guard) resolved)
+          || not (null ((.writes) resolved))
+          || any outputUsesPayload (zip [1 ..] ((.emits) transition))
       HoleImplementation -> True
       LegacyHoleImplementation -> True
     outputUsesPayload (emitIndex, _) = case outputMappingFor aggregate index emitIndex of
@@ -7742,7 +7766,7 @@ generatedOnCmdBlock importPlan aggregate resolvedTransitions index transition =
 
 renderProjectionAliasBinding :: HaskellImportPlan -> Agg -> Transition -> ProjectionAlias -> Text
 renderProjectionAliasBinding importPlan aggregate transition alias =
-  projectionAliasName alias <> " = " <> case projectionAliasTarget alias of
+  (.name) alias <> " = " <> case (.target) alias of
     StructuralProjectionAlias provenance projection -> renderStructuralProjectionTerm importPlan aggregate transition provenance projection
     NominalProjectionAlias nominal provenance -> renderNominalProjectionTerm importPlan aggregate transition nominal provenance
 
@@ -7758,8 +7782,8 @@ renderGuardLines importPlan aliases aggregate transition expression =
 
 renderAssignmentOperand :: RenderedKeikiExpr -> Text
 renderAssignmentOperand expression
-  | renderedKeikiPrecedence expression <= 6 = "(" <> renderedKeikiText expression <> ")"
-  | otherwise = renderedKeikiText expression
+  | (.precedence) expression <= 6 = "(" <> (.text) expression <> ")"
+  | otherwise = (.text) expression
 
 generatedOutputLines :: Agg -> Int -> Transition -> Int -> Name -> [Text]
 generatedOutputLines aggregate transitionIndex transition emitIndex eventName =
@@ -7787,15 +7811,15 @@ generatedOutputLines aggregate transitionIndex transition emitIndex eventName =
     lead 0 = "          { "
     lead _ = "          , "
     resolvedSelector sourceCommand copiedField =
-      commandFieldSelector aggregate sourceCommand (outputSelector copiedField)
+      commandFieldSelector aggregate sourceCommand ((.outputSelector) copiedField)
 
 commandFieldSelector :: Agg -> Name -> Name -> Text
 commandFieldSelector aggregate commandName dslFieldName =
-  case [ fieldSelector identity
-       | command <- aCommands aggregate,
-         rcName command == commandName,
-         (identity, _) <- rcFields command,
-         fieldDslName identity == dslFieldName
+  case [ (.selector) identity
+       | command <- (.commands) aggregate,
+         (.name) command == commandName,
+         (identity, _) <- (.fields) command,
+         (.dslName) identity == dslFieldName
        ] of
     selector : _ -> selector
     [] -> error "validated generated command-field selector was not found"
@@ -7804,7 +7828,7 @@ outputMappingFor :: Agg -> Int -> Int -> EventOutputMapping
 outputMappingFor aggregate transitionIndex emitIndex =
   fromMaybe
     (error ("missing checked event-output mapping for transition " <> show transitionIndex <> ", emit " <> show emitIndex))
-    (Map.lookup (transitionIndex, emitIndex) (aOutputMappings aggregate))
+    (Map.lookup (transitionIndex, emitIndex) ((.outputMappings) aggregate))
 
 --------------------------------------------------------------------------------
 -- EventStream module
@@ -7815,20 +7839,20 @@ emitEventStream a =
   nl $
     renderGeneratedLanguagePragmas [ExtOverloadedLabels | outcomeUsesLabels]
       ++ [ generatedBanner,
-           "module " <> aGenPrefix a <> ".EventStream",
-           "  ( " <> lowerFirst (aName a) <> "Category",
-           "  , " <> lowerFirst (aName a) <> "CommandCategory",
-           "  , " <> lowerFirst (aName a) <> "EventStream",
-           "  , " <> lowerFirst (aName a) <> "EventStreamDef",
-           "  , " <> aName a <> "EventStream",
-           "  , " <> aName a <> "EventStreamDef"
+           "module " <> (.genPrefix) a <> ".EventStream",
+           "  ( " <> lowerFirst ((.name) a) <> "Category",
+           "  , " <> lowerFirst ((.name) a) <> "CommandCategory",
+           "  , " <> lowerFirst ((.name) a) <> "EventStream",
+           "  , " <> lowerFirst ((.name) a) <> "EventStreamDef",
+           "  , " <> (.name) a <> "EventStream",
+           "  , " <> (.name) a <> "EventStreamDef"
          ]
-      ++ ["  , " <> lowerFirst (aName a) <> "SnapshotFixture" | hasSnapshot a]
-      ++ ["  , " <> lowerFirst (aName a) <> "DomainCommandHandler" | outcomeEnabled]
+      ++ ["  , " <> lowerFirst ((.name) a) <> "SnapshotFixture" | hasSnapshot a]
+      ++ ["  , " <> lowerFirst ((.name) a) <> "DomainCommandHandler" | outcomeEnabled]
       ++ [ "  ) where",
            "",
-           "import " <> aGenPrefix a <> ".Domain",
-           "import " <> aGenPrefix a <> ".Codec (" <> lowerFirst (aName a) <> "Codec)",
+           "import " <> (.genPrefix) a <> ".Domain",
+           "import " <> (.genPrefix) a <> ".Codec (" <> lowerFirst ((.name) a) <> "Codec)",
            transducerImport a
          ]
       ++ generatedOutcomeNominalImports
@@ -7857,26 +7881,26 @@ emitEventStream a =
            "-- The validated aggregate stream category (hole-kind 5: referenced, never retyped).",
            "-- Entity streams are '<category>-<id>' via Keiro.Stream.entityStream.",
            "-- categoryUnsafe is safe here because this generated literal passed the DSL category proof.",
-           lowerFirst (aName a) <> "Category :: Stream.StreamCategory " <> aName a <> "EventStreamDef",
-           lowerFirst (aName a) <> "Category = Stream.categoryUnsafe " <> tshow categoryName,
+           lowerFirst ((.name) a) <> "Category :: Stream.StreamCategory " <> (.name) a <> "EventStreamDef",
+           lowerFirst ((.name) a) <> "Category = Stream.categoryUnsafe " <> tshow categoryName,
            "",
            "-- The same category text, typed for command envelopes such as PMCommand.",
-           lowerFirst (aName a) <> "CommandCategory :: Stream.StreamCategory " <> aName a <> "Command",
-           lowerFirst (aName a) <> "CommandCategory = Stream.categoryUnsafe " <> tshow categoryName,
+           lowerFirst ((.name) a) <> "CommandCategory :: Stream.StreamCategory " <> (.name) a <> "Command",
+           lowerFirst ((.name) a) <> "CommandCategory = Stream.categoryUnsafe " <> tshow categoryName,
            "",
-           "type " <> aName a <> "EventStreamDef =",
-           "  EventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event",
+           "type " <> (.name) a <> "EventStreamDef =",
+           "  EventStream (HsPred " <> (.name) a <> "Regs " <> (.name) a <> "Command) " <> (.name) a <> "Regs " <> (.vertexType) a <> " " <> (.name) a <> "Command " <> (.name) a <> "Event",
            "",
-           "type " <> aName a <> "EventStream =",
-           "  ValidatedEventStream (HsPred " <> aName a <> "Regs " <> aName a <> "Command) " <> aName a <> "Regs " <> aVertexType a <> " " <> aName a <> "Command " <> aName a <> "Event",
+           "type " <> (.name) a <> "EventStream =",
+           "  ValidatedEventStream (HsPred " <> (.name) a <> "Regs " <> (.name) a <> "Command) " <> (.name) a <> "Regs " <> (.vertexType) a <> " " <> (.name) a <> "Command " <> (.name) a <> "Event",
            "",
-           lowerFirst (aName a) <> "EventStreamDef :: " <> aName a <> "EventStreamDef",
-           lowerFirst (aName a) <> "EventStreamDef =",
+           lowerFirst ((.name) a) <> "EventStreamDef :: " <> (.name) a <> "EventStreamDef",
+           lowerFirst ((.name) a) <> "EventStreamDef =",
            "  EventStream",
-           "    { transducer = " <> lowerFirst (aName a) <> "Transducer,",
+           "    { transducer = " <> lowerFirst ((.name) a) <> "Transducer,",
            "      initialState = " <> initialVertex a <> ",",
-           "      initialRegisters = initial" <> aName a <> "Regs,",
-           "      eventCodec = " <> lowerFirst (aName a) <> "Codec,",
+           "      initialRegisters = initial" <> (.name) a <> "Regs,",
+           "      eventCodec = " <> lowerFirst ((.name) a) <> "Codec,",
            "      resolveStreamName = Stream.streamName,",
            "      snapshotPolicy = " <> snapshotPolicyExpr a <> ","
          ]
@@ -7885,19 +7909,19 @@ emitEventStream a =
            ""
          ]
       ++ snapshotFixtureLines a
-      ++ [ lowerFirst (aName a) <> "EventStream :: " <> aName a <> "EventStream",
-           lowerFirst (aName a) <> "EventStream =",
-           "  mkEventStreamOrThrow " <> tshow (aName a) <> " " <> lowerFirst (aName a) <> "EventStreamDef"
+      ++ [ lowerFirst ((.name) a) <> "EventStream :: " <> (.name) a <> "EventStream",
+           lowerFirst ((.name) a) <> "EventStream =",
+           "  mkEventStreamOrThrow " <> tshow ((.name) a) <> " " <> lowerFirst ((.name) a) <> "EventStreamDef"
          ]
       ++ outcomeHandlerLines importPlan a silentOutcomes
   where
-    categoryName = staticCategory ("aggregate " <> aName a) (lowerFirst (aName a))
-    outcomeEnabled = isJust (aDomainOutcomeTypes a)
+    categoryName = staticCategory ("aggregate " <> (.name) a) (lowerFirst ((.name) a))
+    outcomeEnabled = isJust ((.domainOutcomeTypes) a)
     silentOutcomes = resolvedSilentOutcomes a
-    outcomeExpressions = map resolvedSilentReason silentOutcomes
-    outcomeResultTypes = case aDomainOutcomeTypes a of
+    outcomeExpressions = map (.reason) silentOutcomes
+    outcomeResultTypes = case (.domainOutcomeTypes) a of
       Nothing -> []
-      Just outcomeTypes -> [resolvedRejectionType outcomeTypes, resolvedNoOpType outcomeTypes]
+      Just outcomeTypes -> [(.rejectionType) outcomeTypes, (.noOpType) outcomeTypes]
     outcomeImportTypes =
       nub
         ( outcomeResultTypes
@@ -7922,20 +7946,20 @@ emitEventStream a =
     generatedOutcomeNominalImports =
       generatedNominalTypeImportsWithParsers
         (aggregateCheckedService a)
-        (aContext a)
+        ((.context) a)
         generatedOutcomeNominals
         generatedLiteralNominals
     projectionTargets = nub (concatMap projectionAliasTargets outcomeExpressions)
     structuralProjectionImports =
-      [ "import " <> structuralProjectionModule (aContext a) <> " qualified as StructuralProjections"
+      [ "import " <> structuralProjectionModule ((.context) a) <> " qualified as StructuralProjections"
       | any isStructuralProjection projectionTargets
       ]
     generatedNominalProjectionImports =
-      [ "import " <> generatedNominalModule (aContext a) <> " qualified as GeneratedNominals"
+      [ "import " <> generatedNominalModule ((.context) a) <> " qualified as GeneratedNominals"
       | any isGeneratedNominalProjection projectionTargets
       ]
     consumerNominalProjectionImports =
-      [ "import " <> nominalProjectionModule (aContext a) <> " qualified as NominalProjections"
+      [ "import " <> nominalProjectionModule ((.context) a) <> " qualified as NominalProjections"
       | any isConsumerNominalProjection projectionTargets
       ]
     outcomeUsesRegisterRoot = any (anyTypedExpression usesRegisterRoot) outcomeExpressions
@@ -7949,7 +7973,7 @@ emitEventStream a =
     outcomeUsesTimeType = AggregateTime `elem` outcomeImportTypes
     outcomeUsesNaturalType = AggregateNatural `elem` outcomeImportTypes
     outcomeUsesConsumerNominalLiteral = not (null consumerLiteralNominals)
-    outcomeUsesConsumerIdLiteral = any (isIdRepresentation . resolvedNominalRepresentation) consumerLiteralNominals
+    outcomeUsesConsumerIdLiteral = any (isIdRepresentation . (.representation)) consumerLiteralNominals
     usedOperators = nub (concatMap outcomeExpressionOperators outcomeExpressions)
     keikiCoreImport
       | not outcomeEnabled = "import Keiki.Core (HsPred)"
@@ -7957,22 +7981,22 @@ emitEventStream a =
           "import Keiki.Core (EdgeRef (..), HsPred"
             <> T.concat [", (" <> operator <> ")" | operator <- expressionOperatorOrder, operator `elem` usedOperators]
             <> ")"
-    usesRegisterRoot expression = case typedScalarNode expression of
+    usesRegisterRoot expression = case (.node) expression of
       TypedRoot ScalarRegisterRoot {} -> True
       TypedProject provenance _ -> case provenance of
         ScalarRegisterRoot {} -> True
         ScalarCommandRoot {} -> False
       _ -> False
-    usesCommandRoot expression = case typedScalarNode expression of
+    usesCommandRoot expression = case (.node) expression of
       TypedRoot ScalarCommandRoot {} -> True
       TypedProject provenance _ -> case provenance of
         ScalarCommandRoot {} -> True
         ScalarRegisterRoot {} -> False
       _ -> False
-    isTextLiteral expression = case typedScalarNode expression of
+    isTextLiteral expression = case (.node) expression of
       TypedLiteral ScalarTextValue {} -> True
       _ -> False
-    isTimeLiteral expression = case typedScalarNode expression of
+    isTimeLiteral expression = case (.node) expression of
       TypedLiteral ScalarTimeValue {} -> True
       _ -> False
     isNominalProjection NominalProjectionAlias {} = True
@@ -7981,27 +8005,27 @@ emitEventStream a =
     isIdRepresentation _ = False
 
 outcomeHandlerLines :: HaskellImportPlan -> Agg -> [ResolvedSilentOutcome] -> [Text]
-outcomeHandlerLines importPlan aggregate silentOutcomes = case aDomainOutcomeTypes aggregate of
+outcomeHandlerLines importPlan aggregate silentOutcomes = case (.domainOutcomeTypes) aggregate of
   Nothing -> []
   Just outcomeTypes ->
     [ "",
       handlerName,
       "  :: DomainCommandHandler",
-      "       (HsPred " <> aName aggregate <> "Regs " <> aName aggregate <> "Command)",
-      "       " <> aName aggregate <> "Regs",
-      "       " <> aVertexType aggregate,
-      "       " <> aName aggregate <> "Command",
-      "       " <> aName aggregate <> "Event",
-      "       " <> renderDomainType importPlan aggregate (resolvedRejectionType outcomeTypes),
-      "       " <> renderDomainType importPlan aggregate (resolvedNoOpType outcomeTypes),
+      "       (HsPred " <> (.name) aggregate <> "Regs " <> (.name) aggregate <> "Command)",
+      "       " <> (.name) aggregate <> "Regs",
+      "       " <> (.vertexType) aggregate,
+      "       " <> (.name) aggregate <> "Command",
+      "       " <> (.name) aggregate <> "Event",
+      "       " <> renderDomainType importPlan aggregate ((.rejectionType) outcomeTypes),
+      "       " <> renderDomainType importPlan aggregate ((.noOpType) outcomeTypes),
       handlerName <> " =",
-      "  DomainCommandHandler " <> lowerFirst (aName aggregate) <> "EventStream " <> classifierName,
+      "  DomainCommandHandler " <> lowerFirst ((.name) aggregate) <> "EventStream " <> classifierName,
       "",
       classifierName,
-      "  :: SilentCommandContext " <> aName aggregate <> "Regs " <> aVertexType aggregate <> " " <> aName aggregate <> "Command",
+      "  :: SilentCommandContext " <> (.name) aggregate <> "Regs " <> (.vertexType) aggregate <> " " <> (.name) aggregate <> "Command",
       "  -> SilentDomainDecision",
-      "       " <> renderDomainType importPlan aggregate (resolvedRejectionType outcomeTypes),
-      "       " <> renderDomainType importPlan aggregate (resolvedNoOpType outcomeTypes),
+      "       " <> renderDomainType importPlan aggregate ((.rejectionType) outcomeTypes),
+      "       " <> renderDomainType importPlan aggregate ((.noOpType) outcomeTypes),
       classifierName <> " (SilentCommandContext _ registers command (EdgeRef edgeSource edgeIndex)) =",
       "  case edgeSource of"
     ]
@@ -8010,15 +8034,15 @@ outcomeHandlerLines importPlan aggregate silentOutcomes = case aDomainOutcomeTyp
            " where",
            "  outcomeInvariant source index =",
            "    error ("
-             <> tshow ("generated domain outcome invariant failed for aggregate " <> aName aggregate <> " edge ")
+             <> tshow ("generated domain outcome invariant failed for aggregate " <> (.name) aggregate <> " edge ")
              <> " <> show source <> \"#\" <> show index)"
          ]
   where
-    handlerName = lowerFirst (aName aggregate) <> "DomainCommandHandler"
-    classifierName = lowerFirst (aName aggregate) <> "SilentDecision"
+    handlerName = lowerFirst ((.name) aggregate) <> "DomainCommandHandler"
+    classifierName = lowerFirst ((.name) aggregate) <> "SilentDecision"
     sourceGroups =
-      [ (source, filter ((== source) . tSource . layoutTransition . resolvedSilentLayout) silentOutcomes)
-      | source <- nub (map (tSource . layoutTransition . resolvedSilentLayout) silentOutcomes)
+      [ (source, filter ((== source) . (.source) . (.transition) . (.layout)) silentOutcomes)
+      | source <- nub (map ((.source) . (.transition) . (.layout)) silentOutcomes)
       ]
     renderSourceGroup (source, outcomes) =
       [ "    " <> vertexCtor aggregate source <> " ->",
@@ -8027,37 +8051,37 @@ outcomeHandlerLines importPlan aggregate silentOutcomes = case aDomainOutcomeTyp
         ++ map renderArm outcomes
         ++ ["        _ -> outcomeInvariant edgeSource edgeIndex"]
     renderArm outcome =
-      let entry = resolvedSilentLayout outcome
-          transition = layoutTransition entry
-          constructor = case resolvedSilentKind outcome of
+      let entry = (.layout) outcome
+          transition = (.transition) entry
+          constructor = case (.kind) outcome of
             RejectedOutcome -> "SilentRejected"
             NoOpOutcome -> "SilentNoOp"
        in "        "
-            <> tshow' (layoutOutgoingIndex entry)
+            <> tshow' ((.outgoingIndex) entry)
             <> " -> "
             <> constructor
             <> " ("
-            <> renderOutcomeReasonEvaluation importPlan aggregate transition (resolvedSilentReason outcome)
+            <> renderOutcomeReasonEvaluation importPlan aggregate transition ((.reason) outcome)
             <> ")"
 
 eventStreamImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> HaskellImportPlan
 eventStreamImportPlan aggregate importedTypes literalNominals =
   planImportsOrDie
-    (aGenPrefix aggregate <> ".EventStream")
+    ((.genPrefix) aggregate <> ".EventStream")
     localDeclarations
     ( Set.unions
-        [ aggregateSourceReferences (aggregateConsumerHaskellSource (aSymbols aggregate) resolvedType)
+        [ aggregateSourceReferences (aggregateConsumerHaskellSource ((.symbols) aggregate) resolvedType)
         | resolvedType <- importedTypes
         ]
         <> Set.fromList
           [ reference
           | nominal <- literalNominals,
-            ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+            ConsumerNominal binding <- [(.ownership) nominal],
             reference <-
-              qualifiedValueReference (consumerNominalBinding binding)
-                : case resolvedNominalRepresentation nominal of
+              qualifiedValueReference ((.binding) binding)
+                : case (.representation) nominal of
                   EnumRepresentation constructors ->
-                    [ nominalRepresentationConstructorReference (aContext aggregate) nominal constructor
+                    [ nominalRepresentationConstructorReference ((.context) aggregate) nominal constructor
                     | (constructor, _) <- NE.toList constructors
                     ]
                   _ -> []
@@ -8066,61 +8090,61 @@ eventStreamImportPlan aggregate importedTypes literalNominals =
   where
     localDeclarations =
       Set.fromList
-        ( [ aVertexType aggregate,
-            aName aggregate <> "Command",
-            aName aggregate <> "Event",
-            aName aggregate <> "Regs",
-            aName aggregate <> "EventStream",
-            aName aggregate <> "EventStreamDef"
+        ( [ (.vertexType) aggregate,
+            (.name) aggregate <> "Command",
+            (.name) aggregate <> "Event",
+            (.name) aggregate <> "Regs",
+            (.name) aggregate <> "EventStream",
+            (.name) aggregate <> "EventStreamDef"
           ]
-            <> map resolvedNominalName (aGeneratedNominals aggregate)
-            <> [ resolvedNominalName nominal
+            <> map (.name) ((.generatedNominals) aggregate)
+            <> [ (.name) nominal
                | resolvedType <- importedTypes,
                  AggregateNominal nominal <- [resolvedType],
-                 GeneratedNominal <- [resolvedNominalOwnership nominal]
+                 GeneratedNominal <- [(.ownership) nominal]
                ]
         )
 
 snapshotPolicyExpr :: Agg -> Text
-snapshotPolicyExpr aggregate = case aSnapshot aggregate of
+snapshotPolicyExpr aggregate = case (.snapshot) aggregate of
   Nothing -> "Never"
-  Just snapshot -> case snapPolicy snapshot of
+  Just snapshot -> case (.policy) snapshot of
     SnapEvery interval -> "Every " <> tshow' interval
     SnapOnTerminal -> "OnTerminal"
 
 stateCodecExpr :: Agg -> Text
-stateCodecExpr aggregate = case aSnapshot aggregate of
+stateCodecExpr aggregate = case (.snapshot) aggregate of
   Nothing -> "Nothing"
   Just snapshot ->
     "Just (withFoldFingerprint "
       <> foldFingerprintValue aggregate
       <> " (defaultStateCodec "
-      <> tshow' (snapCodecVersion snapshot)
+      <> tshow' ((.codecVersion) snapshot)
       <> "))"
 
 transducerImport :: Agg -> Text
 transducerImport aggregate
   | hasVersion2Ownership aggregate =
       "import "
-        <> aGenPrefix aggregate
+        <> (.genPrefix) aggregate
         <> ".Transducer ("
-        <> (if hasSnapshot aggregate then lowerFirst (aName aggregate) <> "FoldFingerprint, " else "")
-        <> lowerFirst (aName aggregate)
+        <> (if hasSnapshot aggregate then lowerFirst ((.name) aggregate) <> "FoldFingerprint, " else "")
+        <> lowerFirst ((.name) aggregate)
         <> "Transducer)"
   | otherwise =
       "import "
-        <> aHolePrefix aggregate
+        <> (.holePrefix) aggregate
         <> ".Holes ("
-        <> lowerFirst (aName aggregate)
+        <> lowerFirst ((.name) aggregate)
         <> "Transducer)"
 
 foldFingerprintValue :: Agg -> Text
 foldFingerprintValue aggregate
-  | hasVersion2Ownership aggregate = lowerFirst (aName aggregate) <> "FoldFingerprint"
-  | otherwise = tshow (aFoldFingerprint aggregate)
+  | hasVersion2Ownership aggregate = lowerFirst ((.name) aggregate) <> "FoldFingerprint"
+  | otherwise = tshow ((.foldFingerprint) aggregate)
 
 stateCodecFieldLines :: Agg -> [Text]
-stateCodecFieldLines aggregate = case aSnapshot aggregate of
+stateCodecFieldLines aggregate = case (.snapshot) aggregate of
   Nothing -> ["      stateCodec = Nothing"]
   Just _
     | hasVersion2Ownership aggregate ->
@@ -8147,11 +8171,11 @@ stateCodecFieldLines aggregate = case aSnapshot aggregate of
         ]
 
 snapshotFixtureLines :: Agg -> [Text]
-snapshotFixtureLines aggregate = case aSnapshot aggregate of
+snapshotFixtureLines aggregate = case (.snapshot) aggregate of
   Nothing -> []
   Just snapshot ->
-    [ lowerFirst (aName aggregate) <> "SnapshotFixture :: (Int, Text)",
-      lowerFirst (aName aggregate) <> "SnapshotFixture = (" <> tshow' (snapCodecVersion snapshot) <> ", " <> tshow (snapShapeHash snapshot) <> ")",
+    [ lowerFirst ((.name) aggregate) <> "SnapshotFixture :: (Int, Text)",
+      lowerFirst ((.name) aggregate) <> "SnapshotFixture = (" <> tshow' ((.codecVersion) snapshot) <> ", " <> tshow ((.shapeHash) snapshot) <> ")",
       ""
     ]
 
@@ -8160,12 +8184,12 @@ snapshotFixtureLines aggregate = case aSnapshot aggregate of
 --------------------------------------------------------------------------------
 
 emitProjection :: Agg -> Text
-emitProjection a = case aProjection a of
+emitProjection a = case (.projection) a of
   Nothing ->
     nl
       ( renderGeneratedLanguagePragmas []
           <> [ generatedBanner,
-               "module " <> aGenPrefix a <> ".Projection () where",
+               "module " <> (.genPrefix) a <> ".Projection () where",
                "",
                "-- No projection declarations are present; this module keeps the generated manifest inventory total."
              ]
@@ -8173,13 +8197,13 @@ emitProjection a = case aProjection a of
   Just p ->
     nl
       [ generatedBanner,
-        "module " <> aGenPrefix a <> ".Projection",
-        "  ( " <> lowerFirst (projTable p) <> "Projection",
-        "  , " <> lowerFirst (projTable p) <> "StatusFor",
+        "module " <> (.genPrefix) a <> ".Projection",
+        "  ( " <> lowerFirst ((.table) p) <> "Projection",
+        "  , " <> lowerFirst ((.table) p) <> "StatusFor",
         "  ) where",
         "",
-        "import " <> aGenPrefix a <> ".Domain",
-        "import " <> aHolePrefix a <> ".Holes (apply" <> pascal (projTable p) <> ")",
+        "import " <> (.genPrefix) a <> ".Domain",
+        "import " <> (.holePrefix) a <> ".Holes (apply" <> pascal ((.table) p) <> ")",
         "import Data.Text (Text)",
         "import Keiro.Projection (InlineProjection (..))",
         "",
@@ -8187,27 +8211,27 @@ emitProjection a = case aProjection a of
         "-- from the spec's status-map. The read-model SQL that consumes it lives in",
         "-- the hand-owned Holes module (a DB-coupled hole, delegated to codd).",
         projectionTableComment a p,
-        lowerFirst (projTable p) <> "StatusFor :: " <> aName a <> "Event -> Maybe Text",
-        lowerFirst (projTable p) <> "StatusFor = \\case",
+        lowerFirst ((.table) p) <> "StatusFor :: " <> (.name) a <> "Event -> Maybe Text",
+        lowerFirst ((.table) p) <> "StatusFor = \\case",
         nl (statusArms a p),
         "",
-        lowerFirst (projTable p) <> "Projection :: InlineProjection " <> aName a <> "Event",
-        lowerFirst (projTable p) <> "Projection =",
+        lowerFirst ((.table) p) <> "Projection :: InlineProjection " <> (.name) a <> "Event",
+        lowerFirst ((.table) p) <> "Projection =",
         "  InlineProjection",
         "    { name = " <> tshow (contextNameToProjName a p),
-        "    , apply = apply" <> pascal (projTable p),
+        "    , apply = apply" <> pascal ((.table) p),
         "    }"
       ]
 
 statusArms :: Agg -> ProjectionSpec -> [Text]
 statusArms a p =
-  [ "  " <> rcName e <> " {} -> " <> statusFor e
-  | e <- aEvents a
+  [ "  " <> (.name) e <> " {} -> " <> statusFor e
+  | e <- (.events) a
   ]
     ++ ["  _ -> Nothing" | hasWildcard]
   where
-    pairs = maybe [] mapPairs (projStatusMap p)
-    statusFor e = case lookup (rcName e) pairs of
+    pairs = maybe [] (.pairs) ((.statusMap) p)
+    statusFor e = case lookup ((.name) e) pairs of
       Just value -> "Just " <> tshow value
       Nothing -> "Nothing"
     -- A wildcard is only needed if some event is uncovered; otherwise every arm
@@ -8215,27 +8239,27 @@ statusArms a p =
     hasWildcard = False
 
 contextNameToProjName :: Agg -> ProjectionSpec -> Text
-contextNameToProjName a p = contextKebab a <> "-" <> projTable p <> "-inline"
+contextNameToProjName a p = contextKebab a <> "-" <> (.table) p <> "-inline"
 
 contextKebab :: Agg -> Text
-contextKebab = kebabFromPascal . aCtxPascal
+contextKebab = kebabFromPascal . (.ctxPascal)
 
 projectionReadModel :: Agg -> Maybe ReadModelNode
 projectionReadModel aggregate = do
-  projection <- aProjection aggregate
-  find ((== projTable projection) . rmName) (aReadModels aggregate)
+  projection <- (.projection) aggregate
+  find ((== (.table) projection) . (.name)) ((.readModels) aggregate)
 
 projectionTableComment :: Agg -> ProjectionSpec -> Text
 projectionTableComment aggregate projection = case projectionReadModel aggregate of
   Nothing ->
     "-- WARNING: no readmodel node declares '"
-      <> projTable projection
+      <> (.table) projection
       <> "'; unqualified SQL depends on search_path."
   Just readModel ->
     "-- Qualified table "
       <> qualifiedTableLiteral readModel
       <> "; use "
-      <> genPrefixFor (aContext aggregate) (pascal (rmName readModel))
+      <> genPrefixFor ((.context) aggregate) (pascal ((.name) readModel))
       <> ".ReadModelTable."
       <> readModelStem readModel
       <> "QualifiedTable."
@@ -8260,13 +8284,13 @@ emitLegacyHoles a =
       "-- This is a HAND-OWNED hole module. keiro-dsl creates it once and never",
       "-- overwrites it. Fill the transducer body (and any other holes) against the",
       "-- generated signatures, then run the harness to confirm behaviour.",
-      "module " <> aHolePrefix a <> ".Holes",
-      "  ( " <> lowerFirst (aName a) <> "Transducer",
+      "module " <> (.holePrefix) a <> ".Holes",
+      "  ( " <> lowerFirst ((.name) a) <> "Transducer",
       holeProjectionExport a,
       holeUpcasterExports a,
       "  ) where",
       "",
-      "import " <> aGenPrefix a <> ".Domain",
+      "import " <> (.genPrefix) a <> ".Domain",
       "import Keiki.Builder ((=:))",
       "import qualified Keiki.Builder as B",
       "import Keiki.Core (HsPred, RegFile, SymTransducer, lit, (.==), (./=), (.||))",
@@ -8275,19 +8299,19 @@ emitLegacyHoles a =
       "",
       "-- HOLE: the transducer body. Reproduce the structure below, replacing each",
       "-- `-- HOLE` line with the keiki symbolic operators it describes.",
-      lowerFirst (aName a) <> "Transducer",
+      lowerFirst ((.name) a) <> "Transducer",
       "  :: SymTransducer",
-      "       (HsPred " <> aName a <> "Regs " <> aName a <> "Command)",
-      "       " <> aName a <> "Regs",
-      "       " <> aVertexType a,
-      "       " <> aName a <> "Command",
-      "       " <> aName a <> "Event",
-      lowerFirst (aName a) <> "Transducer =",
-      "  B.buildTransducer " <> initialVertex a <> " initial" <> aName a <> "Regs isTerminal do",
+      "       (HsPred " <> (.name) a <> "Regs " <> (.name) a <> "Command)",
+      "       " <> (.name) a <> "Regs",
+      "       " <> (.vertexType) a,
+      "       " <> (.name) a <> "Command",
+      "       " <> (.name) a <> "Event",
+      lowerFirst ((.name) a) <> "Transducer =",
+      "  B.buildTransducer " <> initialVertex a <> " initial" <> (.name) a <> "Regs isTerminal do",
       nl (concatMap (fromBlock a) (groupBySource a)),
       " where",
       "  isTerminal = \\case",
-      nl ["    " <> vertexCtor a (stName s) <> " -> True" | s <- aStates a, stTerminal s],
+      nl ["    " <> vertexCtor a ((.name) s) <> " -> True" | s <- (.states) a, (.terminal) s],
       "    _ -> False",
       holeProjectionStub a,
       holeUpcasterStubs a
@@ -8310,7 +8334,7 @@ emitVersion2Holes aggregate =
     ]
       ++ version2HoleModuleDeclaration aggregate
       ++ [ "",
-           "import " <> aGenPrefix aggregate <> ".Domain",
+           "import " <> (.genPrefix) aggregate <> ".Domain",
            "import Keiki.Builder qualified as B",
            "import Keiki.Generics (RegFieldsOf)",
            holeUpcasterImports aggregate,
@@ -8326,9 +8350,9 @@ anyZeroFieldOutput :: Agg -> Bool
 anyZeroFieldOutput aggregate =
   or
     [ isHandOwned (outputMappingFor aggregate transitionIndex emitIndex)
-        && null (rcFields (eventForName aggregate eventName))
+        && null ((.fields) (eventForName aggregate eventName))
     | (transitionIndex, transition) <- transitionEntries aggregate,
-      (emitIndex, eventName) <- zip [1 ..] (tEmits transition)
+      (emitIndex, eventName) <- zip [1 ..] ((.emits) transition)
     ]
   where
     isHandOwned HandOwnedEventOutput {} = True
@@ -8336,9 +8360,9 @@ anyZeroFieldOutput aggregate =
 
 version2HoleModuleDeclaration :: Agg -> [Text]
 version2HoleModuleDeclaration aggregate = case version2HoleExports aggregate of
-  [] -> ["module " <> aHolePrefix aggregate <> ".Holes () where"]
+  [] -> ["module " <> (.holePrefix) aggregate <> ".Holes () where"]
   firstExport : rest ->
-    [ "module " <> aHolePrefix aggregate <> ".Holes",
+    [ "module " <> (.holePrefix) aggregate <> ".Holes",
       "  ( " <> firstExport
     ]
       ++ ["  , " <> value | value <- rest]
@@ -8354,24 +8378,24 @@ version2HoleExports aggregate =
     outputExports =
       [ outputFunctionName transitionIndex transition emitIndex eventName
       | (transitionIndex, transition) <- transitionEntries aggregate,
-        (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
+        (emitIndex, eventName) <- zip [1 ..] ((.emits) transition),
         HandOwnedEventOutput {} <- [outputMappingFor aggregate transitionIndex emitIndex]
       ]
     holeExports =
       concat
         [ [holeFunctionName index transition, holeFoldVersionName index transition]
         | (index, transition) <- transitionEntries aggregate,
-          tImplementation transition == HoleImplementation
+          (.implementation) transition == HoleImplementation
         ]
-    projectionExports = case aProjection aggregate of
+    projectionExports = case (.projection) aggregate of
       Nothing -> []
-      Just projection -> ["apply" <> pascal (projTable projection)]
+      Just projection -> ["apply" <> pascal ((.table) projection)]
 
 emitOutputHooks :: Agg -> Int -> Transition -> [Text]
 emitOutputHooks aggregate transitionIndex transition =
   concat
     [ emitOutputHook aggregate transitionIndex transition emitIndex (eventForName aggregate eventName)
-    | (emitIndex, eventName) <- zip [1 ..] (tEmits transition),
+    | (emitIndex, eventName) <- zip [1 ..] ((.emits) transition),
       HandOwnedEventOutput {} <- [outputMappingFor aggregate transitionIndex emitIndex]
     ]
 
@@ -8387,48 +8411,48 @@ emitOutputHook aggregate transitionIndex transition emitIndex event =
     functionName <> " d = " <> outputValue
   ]
   where
-    functionName = outputFunctionName transitionIndex transition emitIndex (rcName event)
+    functionName = outputFunctionName transitionIndex transition emitIndex ((.name) event)
     inputFields = "(" <> commandFieldsType transition <> ")"
     outputType
-      | null (rcFields event) =
+      | null ((.fields) event) =
           "K.OutFields "
-            <> aName aggregate
+            <> (.name) aggregate
             <> "Regs "
-            <> aName aggregate
+            <> (.name) aggregate
             <> "Command "
             <> inputFields
             <> " ()"
       | otherwise =
-          rcName event
+          (.name) event
             <> "TermFields "
-            <> aName aggregate
+            <> (.name) aggregate
             <> "Regs "
-            <> aName aggregate
+            <> (.name) aggregate
             <> "Command "
             <> inputFields
     outputValue
-      | null (rcFields event) = "B.oNil"
+      | null ((.fields) event) = "B.oNil"
       | otherwise =
-          rcName event
+          (.name) event
             <> "TermFields\n"
             <> nl
               ( valueRecord
-                  [ (fieldSelector identity, outputFieldValue identity fieldType)
-                  | (identity, fieldType) <- rcFields event
+                  [ ((.selector) identity, outputFieldValue identity valueType)
+                  | (identity, valueType) <- (.fields) event
                   ]
               )
     command = commandForTransition aggregate transition
-    outputFieldValue identity fieldType
-      | Just (commandIdentity, commandType) <- find ((== fieldDslName identity) . fieldDslName . fst) (rcFields command),
-        commandType == fieldType =
-          "d." <> fieldSelector commandIdentity
-      | Just register <- find ((== fieldDslName identity) . rrName) (aRegs aggregate),
-        rrType register == fieldType =
-          "B.reg @" <> tshow (fieldDslName identity)
-      | otherwise = "error " <> tshow ("HOLE: fill output field " <> rcName event <> "." <> fieldDslName identity)
+    outputFieldValue identity valueType
+      | Just (commandIdentity, commandType) <- find ((== (.dslName) identity) . (.dslName) . fst) ((.fields) command),
+        commandType == valueType =
+          "d." <> (.selector) commandIdentity
+      | Just register <- find ((== (.dslName) identity) . (.name)) ((.regs) aggregate),
+        (.valueType) register == valueType =
+          "B.reg @" <> tshow ((.dslName) identity)
+      | otherwise = "error " <> tshow ("HOLE: fill output field " <> (.name) event <> "." <> (.dslName) identity)
     valueRecord fields =
-      [ lead fieldIndex <> fieldName <> " = " <> fieldValue
-      | (fieldIndex, (fieldName, fieldValue)) <- zip [0 :: Int ..] fields
+      [ lead fieldIndex <> name <> " = " <> fieldValue
+      | (fieldIndex, (name, fieldValue)) <- zip [0 :: Int ..] fields
       ]
         ++ ["  }"]
     lead 0 = "  { "
@@ -8436,7 +8460,7 @@ emitOutputHook aggregate transitionIndex transition emitIndex event =
 
 emitHoleImplementation :: Agg -> Int -> Transition -> [Text]
 emitHoleImplementation aggregate index transition
-  | tImplementation transition /= HoleImplementation = []
+  | (.implementation) transition /= HoleImplementation = []
   | otherwise =
       [ "",
         "-- HOLE: add the predicate and ordered register updates for this transition.",
@@ -8445,13 +8469,13 @@ emitHoleImplementation aggregate index transition
           <> " :: "
           <> payloadProjectionType aggregate transition
           <> " -> B.EdgeBuilder "
-          <> aName aggregate
+          <> (.name) aggregate
           <> "Regs "
-          <> aName aggregate
+          <> (.name) aggregate
           <> "Command "
-          <> aName aggregate
+          <> (.name) aggregate
           <> "Event "
-          <> aVertexType aggregate
+          <> (.vertexType) aggregate
           <> " ('Just ("
           <> commandFieldsType transition
           <> ")) writes writes ()",
@@ -8491,32 +8515,32 @@ holeUpcasterStubs a = case upcasterEntries a of
         ]
 
 holeProjectionExport :: Agg -> Text
-holeProjectionExport a = case aProjection a of
+holeProjectionExport a = case (.projection) a of
   Nothing -> "  -- (no projection)"
-  Just p -> "  , apply" <> pascal (projTable p)
+  Just p -> "  , apply" <> pascal ((.table) p)
 
 holeProjectionImports :: Agg -> Text
 holeProjectionImports aggregate = case projectionReadModel aggregate of
   Nothing -> ""
   Just readModel ->
     "import "
-      <> genPrefixFor (aContext aggregate) (pascal (rmName readModel))
+      <> genPrefixFor ((.context) aggregate) (pascal ((.name) readModel))
       <> ".ReadModelTable ("
       <> readModelStem readModel
       <> "QualifiedTable)"
 
 holeProjectionStub :: Agg -> Text
-holeProjectionStub a = case aProjection a of
+holeProjectionStub a = case (.projection) a of
   Nothing -> ""
   Just p ->
     nl
       ( [ "",
           "-- HOLE: the read-model SQL for the projection (a DB-coupled hole; the",
-          "-- pure event->status mapping is generated as " <> lowerFirst (projTable p) <> "StatusFor)."
+          "-- pure event->status mapping is generated as " <> lowerFirst ((.table) p) <> "StatusFor)."
         ]
           ++ projectionGuidance
-          ++ [ "apply" <> pascal (projTable p) <> " :: " <> aName a <> "Event -> recorded -> txn ()",
-               "apply" <> pascal (projTable p) <> " _event _recorded = " <> projectionTableUse <> "error \"HOLE: fill " <> projTable p <> " projection apply\""
+          ++ [ "apply" <> pascal ((.table) p) <> " :: " <> (.name) a <> "Event -> recorded -> txn ()",
+               "apply" <> pascal ((.table) p) <> " _event _recorded = " <> projectionTableUse <> "error \"HOLE: fill " <> (.table) p <> " projection apply\""
              ]
       )
     where
@@ -8527,7 +8551,7 @@ holeProjectionStub a = case aProjection a of
           [ "-- Table: " <> qualifiedTableLiteral readModel <> ". Use " <> readModelStem readModel <> "QualifiedTable; never rely on search_path.",
             "-- Declared columns:"
           ]
-            ++ map (("--   " <>) . readModelColumnDoc) (rmColumns readModel)
+            ++ map (("--   " <>) . readModelColumnDoc) ((.columns) readModel)
       projectionTableUse = case projectionReadModel a of
         Nothing -> ""
         Just readModel -> readModelStem readModel <> "QualifiedTable `seq` "
@@ -8535,14 +8559,14 @@ holeProjectionStub a = case aProjection a of
 -- Group transitions by source state, preserving order, for the B.from blocks.
 groupBySource :: Agg -> [(Text, [Transition])]
 groupBySource a =
-  [ (source, map layoutTransition entries)
+  [ (source, map (.transition) entries)
   | (source, entries) <- groupTransitionLayoutBySource (transitionLayout (transitionsOf a))
   ]
 
 -- We don't keep the original Aggregate around in Agg, so reconstruct
 -- transitions from a stored field. (Filled in resolveAgg via aTransitions.)
 transitionsOf :: Agg -> [Transition]
-transitionsOf = aTransitions
+transitionsOf = (.transitions)
 
 fromBlock :: Agg -> (Text, [Transition]) -> [Text]
 fromBlock a (src, ts) =
@@ -8552,15 +8576,15 @@ fromBlock a (src, ts) =
 
 onCmdBlock :: Agg -> Transition -> [Text]
 onCmdBlock a t =
-  [ "      B.onCmd inCtor" <> tCommand t <> " $ \\d -> B.do"
+  [ "      B.onCmd inCtor" <> (.command) t <> " $ \\d -> B.do"
   ]
     -- Plan 143: the mode is structural, not hole-owned — a replay-only
     -- transition lowers to B.replayOnly (keiki ReplayOnly edge).
-    ++ ["        B.replayOnly" | tMode t == TmReplayOnly]
-    ++ maybe [] (\g -> ["        -- HOLE guard: " <> renderGuard g]) (tGuard t)
-    ++ ["        -- HOLE write " <> r <> " := " <> renderGuard e | (r, e) <- tWrites t]
-    ++ ["        -- HOLE emit " <> ev <> " (B.emit wire" <> ev <> " ...)" | ev <- tEmits t]
-    ++ ["        B.goto " <> vertexCtor a (tGoto t)]
+    ++ ["        B.replayOnly" | (.mode) t == TmReplayOnly]
+    ++ maybe [] (\g -> ["        -- HOLE guard: " <> renderGuard g]) ((.guard) t)
+    ++ ["        -- HOLE write " <> r <> " := " <> renderGuard e | (r, e) <- (.writes) t]
+    ++ ["        -- HOLE emit " <> ev <> " (B.emit wire" <> ev <> " ...)" | ev <- (.emits) t]
+    ++ ["        B.goto " <> vertexCtor a ((.goto) t)]
 
 --------------------------------------------------------------------------------
 -- Field categories and shared helpers
@@ -8577,10 +8601,10 @@ data FieldCat
 fieldCat :: Agg -> ResolvedAggregateType -> FieldCat
 fieldCat a ty
   | AggregateNominal nominal <- ty,
-    IdRepresentation {} <- resolvedNominalRepresentation nominal =
+    IdRepresentation {} <- (.representation) nominal =
       IdCat
   | AggregateNominal nominal <- ty,
-    EnumRepresentation {} <- resolvedNominalRepresentation nominal =
+    EnumRepresentation {} <- (.representation) nominal =
       EnumCat
   | Just (ResolvedStructural declaration shape) <- mappedDeclFor a ty = MappedStructuralCat declaration shape
   | Just (ResolvedOpaque declaration) <- mappedDeclFor a ty = MappedOpaqueCat declaration
@@ -8589,17 +8613,17 @@ fieldCat a ty
 -- | The first constructor of a declared enum, used to build sample values.
 firstEnumCtor :: Agg -> Text -> Maybe Text
 firstEnumCtor a ty =
-  case [c | e <- aEnums a, enumName e == ty, (c, _) <- take 1 (enumCtors e)] of
+  case [c | e <- (.enums) a, (.name) e == ty, (c, _) <- take 1 ((.ctors) e)] of
     (c : _) -> Just c
     [] -> Nothing
 
 vertexCtor :: Agg -> Text -> Text
-vertexCtor a s = aName a <> s
+vertexCtor a s = (.name) a <> s
 
 initialVertex :: Agg -> Text
-initialVertex a = case aStates a of
-  (s : _) -> vertexCtor a (stName s)
-  [] -> aName a <> "Init"
+initialVertex a = case (.states) a of
+  (s : _) -> vertexCtor a ((.name) s)
+  [] -> (.name) a <> "Init"
 
 generatedBanner :: Text
 generatedBanner = "-- @generated by keiro-dsl; do not edit. Regenerated from the .keiro spec."
@@ -8612,7 +8636,7 @@ generatedBannerFor languageContract sourceOrigin =
   "-- @generated by keiro-dsl "
     <> T.pack (showVersion Package.version)
     <> " (language keiro-dsl "
-    <> languageVersionText (effectiveContractLanguageVersion languageContract)
+    <> languageVersionText ((.contractLanguageVersion) languageContract)
     <> ") from "
     <> stableBannerOrigin sourceOrigin
     <> "; do not edit."
@@ -8632,8 +8656,8 @@ stableBannerOrigin sourceOrigin =
     _ -> withoutMemberPath
   where
     withoutMemberPath = case T.breakOn ": " sourceOrigin of
-      (memberPath, attributedOrigin)
-        | ".keiro" `T.isSuffixOf` memberPath,
+      (path, attributedOrigin)
+        | ".keiro" `T.isSuffixOf` path,
           not (T.null attributedOrigin) ->
             T.drop 2 attributedOrigin
       _ -> sourceOrigin
@@ -8657,14 +8681,19 @@ isGeneratedBannerLine line =
 -- the standard stamp prepended, so every planned Generated file is covered.
 stampGeneratedModule :: EffectiveLanguageContract -> ScaffoldModule -> ScaffoldModule
 stampGeneratedModule languageContract moduleValue
-  | kind moduleValue == HoleStub = moduleValue
-  | otherwise = moduleValue {moduleText = stampedText}
+  | modernized.kind == HoleStub = modernized
+  | otherwise = ScaffoldModule modernized.path stampedText modernized.kind modernized.origin
   where
-    banner = generatedBannerFor languageContract (origin moduleValue)
-    sourceLines = T.splitOn "\n" (moduleText moduleValue)
+    modernized = modernizeScaffoldModule moduleValue
+    banner = generatedBannerFor languageContract modernized.origin
+    sourceLines = T.splitOn "\n" modernized.text
     stampedText = case replaceFirstGeneratedBanner banner sourceLines of
-      Nothing -> banner <> "\n" <> moduleText moduleValue
+      Nothing -> banner <> "\n" <> modernized.text
       Just linesWithStamp -> T.intercalate "\n" linesWithStamp
+
+modernizeScaffoldModule :: ScaffoldModule -> ScaffoldModule
+modernizeScaffoldModule (ScaffoldModule path source kind origin) =
+  ScaffoldModule path (modernizeGeneratedHaskellSource source) kind origin
 
 stampGeneratedModules :: EffectiveLanguageContract -> [ScaffoldModule] -> [ScaffoldModule]
 stampGeneratedModules languageContract = map (stampGeneratedModule languageContract)
@@ -8701,62 +8730,62 @@ scaffoldRefusalsWithSymbols symbols spec =
     <> concatMap contractRefusals contracts
     <> concatMap publisherRefusals publishers
   where
-    aggregates = [aggregate | NAggregate aggregate <- specNodes spec]
-    contracts = [contract | NContract contract <- specNodes spec]
-    publishers = [publisher | NPublisher publisher <- specNodes spec]
+    aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    contracts = [contract | NContract contract <- (.nodes) spec]
+    publishers = [publisher | NPublisher publisher <- (.nodes) spec]
     aggregateRefusals aggregate =
-      [ "AggregateEmpty: aggregate '" <> aggName aggregate <> "' must declare at least one command, event, and transition"
-      | null (aggCommands aggregate) || null (aggEvents aggregate) || null (aggTransitions aggregate)
+      [ "AggregateEmpty: aggregate '" <> (.name) aggregate <> "' must declare at least one command, event, and transition"
+      | null ((.commands) aggregate) || null ((.events) aggregate) || null ((.transitions) aggregate)
       ]
-        <> concatMap (registerRefusals aggregate) (aggRegs aggregate)
-        <> concatMap (fieldRefusals aggregate CommandFieldUse) (concatMap cmdFields (aggCommands aggregate))
-        <> concatMap (fieldRefusals aggregate EventFieldUse) [field | event <- aggEvents aggregate, EventFields fields <- [evBody event], field <- fields]
+        <> concatMap (registerRefusals aggregate) ((.regs) aggregate)
+        <> concatMap (fieldRefusals aggregate CommandFieldUse) (concatMap (.fields) ((.commands) aggregate))
+        <> concatMap (fieldRefusals aggregate EventFieldUse) [field | event <- (.events) aggregate, EventFields fields <- [(.body) event], field <- fields]
     fieldRefusals aggregate useSite field = case inferAggregateFieldType symbols aggregate useSite field of
       Right _ -> []
       Left _ ->
         [ "FieldTypeUnrepresentable: aggregate '"
-            <> aggName aggregate
+            <> (.name) aggregate
             <> "' field '"
-            <> aggregateFieldName field
+            <> (.name) field
             <> "' has unsupported explicit type '"
-            <> maybe "(inferred)" typeExprCanonicalName (aggregateFieldType field)
+            <> maybe "(inferred)" typeExprCanonicalName ((.valueType) field)
             <> "'"
         ]
     registerRefusals aggregate register =
-      case resolveAggregateType symbols (regLoc register) RegisterUse (regType register) of
+      case resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register) of
         Left _ ->
           [ "RegTypeUnsupported: aggregate '"
-              <> aggName aggregate
+              <> (.name) aggregate
               <> "' register '"
-              <> regName register
+              <> (.name) register
               <> "' has unsupported type '"
-              <> typeExprCanonicalName (regType register)
+              <> typeExprCanonicalName ((.valueType) register)
               <> "'"
           ]
-        Right resolved -> case resolveRegisterInitial symbols (regLoc register) resolved (regInitial register) of
+        Right resolved -> case resolveRegisterInitial symbols ((.loc) register) resolved ((.initial) register) of
           Right _ -> []
           Left _ -> [initialRefusal aggregate register resolved]
     initialRefusal aggregate register resolved = case resolved of
       AggregateText -> label "RegTextInitialNotQuoted" "must use a quoted Text initial"
       AggregateNominal nominal
-        | EnumRepresentation {} <- resolvedNominalRepresentation nominal ->
-            label "RegInitialNotEnumCtor" ("must start at the declaration-owned initial for enum '" <> resolvedNominalName nominal <> "'")
+        | EnumRepresentation {} <- (.representation) nominal ->
+            label "RegInitialNotEnumCtor" ("must start at the declaration-owned initial for enum '" <> (.name) nominal <> "'")
       AggregateMapped {} -> label "MappedRegisterInitialMissing" "requires the mapped declaration's initial symbol"
       _ -> label "RegInitialInvalidLiteral" ("has an invalid " <> aggregateCanonicalName resolved <> " initial")
       where
-        label codeName detail = codeName <> ": aggregate '" <> aggName aggregate <> "' register '" <> regName register <> "' " <> detail
+        label codeName detail = codeName <> ": aggregate '" <> (.name) aggregate <> "' register '" <> (.name) register <> "' " <> detail
     contractRefusals contract =
-      [ "ContractEmpty: contract '" <> ctrName contract <> "' must declare at least one event"
-      | null (ctrEvents contract)
+      [ "ContractEmpty: contract '" <> (.name) contract <> "' must declare at least one event"
+      | null ((.events) contract)
       ]
     publisherRefusals publisher =
-      let backoff = pubBackoff publisher
-          label message = message <> ": publisher '" <> pubName publisher <> "'"
-       in case boKind backoff of
+      let backoff = (.backoff) publisher
+          label message = message <> ": publisher '" <> (.name) publisher <> "'"
+       in case (.kind) backoff of
             "constant" -> []
-            "exponential" -> case (boMax backoff, boMultiplier backoff) of
+            "exponential" -> case ((.max) backoff, (.multiplier) backoff) of
               (Just maximumWindow, Just multiplierText) ->
-                case (windowSeconds (boWindow backoff), windowSeconds maximumWindow, readMaybe (T.unpack multiplierText) :: Maybe Double) of
+                case (windowSeconds ((.window) backoff), windowSeconds maximumWindow, readMaybe (T.unpack multiplierText) :: Maybe Double) of
                   (Right initialSeconds, Right maximumSeconds, Just multiplier)
                     | initialSeconds > 0 && maximumSeconds >= initialSeconds && multiplier >= 1 -> []
                   _ -> [label "BackoffInvalidExponential"]
@@ -8814,16 +8843,16 @@ generatedCase :: HaskellName.NameSourceKind -> Bool -> Text -> Text
 generatedCase source upper name =
   case HaskellName.deriveHaskellName source site of
     Right derived
-      | upper -> HaskellName.renderUpperCamelName (HaskellName.upperCamel derived)
-      | otherwise -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+      | upper -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
+      | otherwise -> HaskellName.renderLowerCamelName ((.lowerCamel) derived)
     Left _ -> name
   where
     site =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.GeneratedHelperSite,
-          HaskellName.siteLogicalName = name,
-          HaskellName.siteOwner = "scaffold-renderer",
-          HaskellName.siteLine = 0
+        { HaskellName.kind = HaskellName.GeneratedHelperSite,
+          HaskellName.logicalName = name,
+          HaskellName.owner = "scaffold-renderer",
+          HaskellName.line = 0
         }
 
 kebabFromPascal :: Text -> Text

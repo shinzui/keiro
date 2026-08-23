@@ -39,45 +39,45 @@ import Keiro.Dsl.SidecarNames (contextLedgerFileName)
 import System.FilePath (isAbsolute, splitDirectories)
 
 data ScaffoldRecord = ScaffoldRecord
-  { recSpecPath :: !Text,
-    recModuleRoot :: !Text,
-    recLayout :: !Text,
-    recSourceLanguage :: !SourceLanguage,
-    recLanguageContract :: !EffectiveLanguageContract,
-    recNamingEdition :: !GeneratedHaskellNamingEdition,
-    recModuleRoles :: ![ScaffoldModuleRoleRow],
-    recFiles :: ![(ModuleKind, FilePath)],
-    recMappings :: ![MappingIdentity],
-    recIdDomains :: ![Text],
-    recNominalEqualities :: ![Text],
-    recBindingObligations :: ![BindingHole],
-    recBehaviorRequirements :: ![BehaviorRecordRow],
-    recProjectionCatalogFacts :: ![Text],
-    recQueryContractBaseline :: !Bool,
-    recQueryContracts :: ![QueryContractIdentity],
-    recRouterSelections :: ![RouterSelectionSnapshot],
-    recSemanticImpact :: !(Maybe SemanticImpactSnapshot)
+  { specPath :: !Text,
+    moduleRoot :: !Text,
+    layout :: !Text,
+    sourceLanguage :: !SourceLanguage,
+    languageContract :: !EffectiveLanguageContract,
+    namingEdition :: !GeneratedHaskellNamingEdition,
+    moduleRoles :: ![ScaffoldModuleRoleRow],
+    files :: ![(ModuleKind, FilePath)],
+    mappings :: ![MappingIdentity],
+    idDomains :: ![Text],
+    nominalEqualities :: ![Text],
+    bindingObligations :: ![BindingHole],
+    behaviorRequirements :: ![BehaviorRecordRow],
+    projectionCatalogFacts :: ![Text],
+    queryContractBaseline :: !Bool,
+    queryContracts :: ![QueryContractIdentity],
+    routerSelections :: ![RouterSelectionSnapshot],
+    semanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
   deriving stock (Eq, Show)
 
 data ScaffoldModuleRoleRow = ScaffoldModuleRoleRow
-  { srrRole :: !ModuleRole,
-    srrKind :: !ModuleKind,
-    srrPath :: !FilePath
+  { role :: !ModuleRole,
+    kind :: !ModuleKind,
+    path :: !FilePath
   }
   deriving stock (Eq, Show)
 
 instance Aeson.ToJSON ScaffoldModuleRoleRow where
   toJSON row =
     Aeson.object
-      [ "ownerKind" .= roleOwnerKind role,
-        "ownerName" .= roleOwnerName role,
-        "family" .= roleFamily role,
-        "kind" .= (case srrKind row of Generated -> "generated" :: Text; HoleStub -> "hole"),
-        "path" .= T.pack (srrPath row)
+      [ "ownerKind" .= (.ownerKind) role,
+        "ownerName" .= (.ownerName) role,
+        "family" .= (.family) role,
+        "kind" .= (case (.kind) row of Generated -> "generated" :: Text; HoleStub -> "hole"),
+        "path" .= T.pack ((.path) row)
       ]
     where
-      role = srrRole row
+      role = (.role) row
 
 instance Aeson.FromJSON ScaffoldModuleRoleRow where
   parseJSON = Aeson.withObject "ScaffoldModuleRoleRow" $ \fields -> do
@@ -92,36 +92,36 @@ instance Aeson.FromJSON ScaffoldModuleRoleRow where
     rowPath <- fields .: "path"
     pure
       ScaffoldModuleRoleRow
-        { srrRole = ModuleRole ownerKind ownerName family,
-          srrKind = rowKind,
-          srrPath = T.unpack (rowPath :: Text)
+        { role = ModuleRole ownerKind ownerName family,
+          kind = rowKind,
+          path = T.unpack (rowPath :: Text)
         }
 
 renderRecord :: ScaffoldRecord -> Text
 renderRecord record =
   T.unlines $
     [ "keiro-dsl scaffold record v1",
-      "spec: " <> recSpecPath record,
+      "spec: " <> (.specPath) record,
       "module-root: " <> rootLabel,
-      "layout: " <> recLayout record,
-      "source-language " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recSourceLanguage record))),
-      "semantic-contract " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode (recLanguageContract record))),
-      "naming-edition " <> renderGeneratedHaskellNamingEdition (recNamingEdition record)
+      "layout: " <> (.layout) record,
+      "source-language " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode ((.sourceLanguage) record))),
+      "semantic-contract " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode ((.languageContract) record))),
+      "naming-edition " <> renderGeneratedHaskellNamingEdition ((.namingEdition) record)
     ]
-      <> map ("module-role " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recModuleRoles record))
-      <> map renderFile (recFiles record)
-      <> map renderMapping (recMappings record)
-      <> map ("id-domain " <>) (recIdDomains record)
-      <> map ("nominal-equality " <>) (recNominalEqualities record)
-      <> map renderBindingObligation (recBindingObligations record)
-      <> map renderBehaviorRequirement (recBehaviorRequirements record)
-      <> map ("projection-catalog-fact " <>) (recProjectionCatalogFacts record)
-      <> ["query-contract-baseline v1" | recQueryContractBaseline record]
-      <> map ("query-contract " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recQueryContracts record))
-      <> map ("router-selection " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) (recRouterSelections record))
-      <> ["semantic-impact " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode snapshot)) | Just snapshot <- [recSemanticImpact record]]
+      <> map ("module-role " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) ((.moduleRoles) record))
+      <> map renderFile ((.files) record)
+      <> map renderMapping ((.mappings) record)
+      <> map ("id-domain " <>) ((.idDomains) record)
+      <> map ("nominal-equality " <>) ((.nominalEqualities) record)
+      <> map renderBindingObligation ((.bindingObligations) record)
+      <> map renderBehaviorRequirement ((.behaviorRequirements) record)
+      <> map ("projection-catalog-fact " <>) ((.projectionCatalogFacts) record)
+      <> ["query-contract-baseline v1" | (.queryContractBaseline) record]
+      <> map ("query-contract " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) ((.queryContracts) record))
+      <> map ("router-selection " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) ((.routerSelections) record))
+      <> ["semantic-impact " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode snapshot)) | Just snapshot <- [(.semanticImpact) record]]
   where
-    rootLabel = if T.null (recModuleRoot record) then "(none)" else recModuleRoot record
+    rootLabel = if T.null ((.moduleRoot) record) then "(none)" else (.moduleRoot) record
     renderFile (Generated, path) = "generated " <> T.pack path
     renderFile (HoleStub, path) = "hole " <> T.pack path
     renderMapping mapping =
@@ -158,29 +158,29 @@ parseRecord contents = case T.lines contents of
         queryContracts <- traverse parseQueryContract (filter ("query-contract " `T.isPrefixOf`) rows)
         routerSelections <- traverse parseRouterSelection (filter ("router-selection " `T.isPrefixOf`) rows)
         semanticImpact <- parseSemanticImpact rows
-        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map selectionRouter routerSelections)
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map (.router) routerSelections)
           then Nothing
           else
             pure
               ScaffoldRecord
-                { recSpecPath = specPath,
-                  recModuleRoot = if rootLabel == "(none)" then "" else rootLabel,
-                  recLayout = layout,
-                  recSourceLanguage = sourceLanguage,
-                  recLanguageContract = languageContract,
-                  recNamingEdition = namingEdition,
-                  recModuleRoles = moduleRoles,
-                  recFiles = files,
-                  recMappings = mappings,
-                  recIdDomains = idDomains,
-                  recNominalEqualities = nominalEqualities,
-                  recBindingObligations = bindingEntries,
-                  recBehaviorRequirements = behaviorEntries,
-                  recProjectionCatalogFacts = catalogFacts,
-                  recQueryContractBaseline = queryContractBaseline,
-                  recQueryContracts = queryContracts,
-                  recRouterSelections = routerSelections,
-                  recSemanticImpact = semanticImpact
+                { specPath = specPath,
+                  moduleRoot = if rootLabel == "(none)" then "" else rootLabel,
+                  layout = layout,
+                  sourceLanguage = sourceLanguage,
+                  languageContract = languageContract,
+                  namingEdition = namingEdition,
+                  moduleRoles = moduleRoles,
+                  files = files,
+                  mappings = mappings,
+                  idDomains = idDomains,
+                  nominalEqualities = nominalEqualities,
+                  bindingObligations = bindingEntries,
+                  behaviorRequirements = behaviorEntries,
+                  projectionCatalogFacts = catalogFacts,
+                  queryContractBaseline = queryContractBaseline,
+                  queryContracts = queryContracts,
+                  routerSelections = routerSelections,
+                  semanticImpact = semanticImpact
                 }
   _ -> Nothing
   where
@@ -222,13 +222,20 @@ parseRecord contents = case T.lines contents of
         payload <- T.stripPrefix "semantic-impact " row
         Just <$> Aeson.decodeStrict' (Text.encodeUtf8 payload)
       _ -> Nothing
+    parseModuleRole :: Text -> Maybe ScaffoldModuleRoleRow
     parseModuleRole row = do
       payload <- T.stripPrefix "module-role " row
       decoded <- Aeson.decodeStrict' (Text.encodeUtf8 payload)
       checkedRole decoded
+    checkedRole :: ScaffoldModuleRoleRow -> Maybe ScaffoldModuleRoleRow
     checkedRole roleRow = do
-      path <- checkedPath (T.pack (srrPath roleRow))
-      pure roleRow {srrPath = path}
+      path <- checkedPath (T.pack ((.path) roleRow))
+      pure
+        ScaffoldModuleRoleRow
+          { role = (.role) roleRow,
+            kind = (.kind) roleRow,
+            path = path
+          }
     checkedPath pathText =
       let path = T.unpack pathText
        in if null path || isAbsolute path || ".." `elem` splitDirectories path
@@ -252,21 +259,21 @@ parseRecord contents = case T.lines contents of
       [row] -> T.stripPrefix "naming-edition " row >>= parseGeneratedHaskellNamingEdition
       _ -> Nothing
     hasDuplicateMappingNames mappings =
-      let names = map mappingSpecName mappings
+      let names = map (.specName) mappings
        in length names /= length (nub names)
     hasDuplicates values = length values /= length (nub values)
     hasDuplicateBindingObligations obligations =
       let keys = map bindingKey obligations
        in length keys /= length (nub keys)
     bindingKey hole =
-      ( holeMappedName hole,
-        holeModule hole,
-        holeSymbol hole,
-        holeKind hole,
-        holePath hole
+      ( (.mappedName) hole,
+        (.moduleName) hole,
+        (.symbol) hole,
+        (.kind) hole,
+        (.path) hole
       )
     hasDuplicateBehaviorRequirements requirements =
-      let keys = map behaviorRecordKey requirements
+      let keys = map (.key) requirements
        in length keys /= length (nub keys)
 
 recordFileName :: Text -> FilePath
@@ -286,109 +293,109 @@ projectionCatalogFactsForService service =
   projectionCatalogFactsWith (checkedSpec service) (checkedProjectionSupplies service)
 
 projectionCatalogFactsWith :: Spec -> ProjectionSupplyAnalysis -> [Text]
-projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (specNodes spec) <> map supplyFact supplies)
+projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts ((.nodes) spec) <> map supplyFact supplies)
   where
-    supplies = resolvedProjectionSupplies supplyAnalysis
-    owners = [owner | NProjectionOwner owner <- specNodes spec]
+    supplies = (.resolvedProjectionSupplies) supplyAnalysis
+    owners = [owner | NProjectionOwner owner <- (.nodes) spec]
     nodeFacts (NProjectionTarget target) =
-      [T.intercalate "|" ["target", ptName target, ptSchema target, ptTable target, resetText (ptReset target), T.intercalate "," (ptDependsOn target), lineText (ptLoc target)]]
+      [T.intercalate "|" ["target", (.name) target, (.schema) target, (.table) target, resetText ((.reset) target), T.intercalate "," ((.dependsOn) target), lineText ((.loc) target)]]
     nodeFacts (NRebuildGroup groupNode) =
-      [T.intercalate "|" ["group", rgName groupNode, T.intercalate "," (sort (rgTargets groupNode)), T.intercalate "," (rgOrder groupNode), lineText (rgLoc groupNode)]]
+      [T.intercalate "|" ["group", (.name) groupNode, T.intercalate "," (sort ((.targets) groupNode)), T.intercalate "," ((.order) groupNode), lineText ((.loc) groupNode)]]
     nodeFacts (NProjectionRevision revision) =
       [ T.intercalate
           "|"
           [ "revision",
-            prvName revision,
-            prvGroup revision,
-            T.intercalate ";" (map revisionTargetText (prvTargets revision)),
-            lineText (prvLoc revision)
+            (.name) revision,
+            (.group) revision,
+            T.intercalate ";" (map revisionTargetText ((.targets) revision)),
+            lineText ((.loc) revision)
           ]
       ]
     nodeFacts (NExternalRead externalRead) =
       [ T.intercalate
           "|"
           [ "external-read",
-            erName externalRead,
-            T.pack (show (erVersion externalRead)),
-            erQueryModel externalRead,
-            erResultSchema externalRead <> "." <> erResultType externalRead,
+            (.name) externalRead,
+            T.pack (show ((.version) externalRead)),
+            (.queryModel) externalRead,
+            (.resultSchema) externalRead <> "." <> (.resultType) externalRead,
             externalReadShape externalRead,
-            T.intercalate "," (sort (erCompatibleRevisions externalRead)),
-            T.pack (show (erSurfaceGeneration externalRead)),
-            lineText (erLoc externalRead)
+            T.intercalate "," (sort ((.compatibleRevisions) externalRead)),
+            T.pack (show ((.surfaceGeneration) externalRead)),
+            lineText ((.loc) externalRead)
           ]
       ]
     nodeFacts (NProjectionOwner owner) =
       [ T.intercalate
           "|"
           [ "owner",
-            poName owner,
-            T.intercalate "," (map sourceText (poSources owner)),
-            poGroup owner,
-            T.intercalate "," (sort (poTargets owner)),
-            T.pack (show (poOrder owner)),
-            maybe "" id (poSubscription owner),
-            maybe "" id (poDedup owner),
-            T.intercalate "," (map checkpointOnMissingText (poCheckpointOnMissing owner)),
-            replayText (poReplay owner),
-            lineText (poLoc owner)
+            (.name) owner,
+            T.intercalate "," (map sourceText ((.sources) owner)),
+            (.group) owner,
+            T.intercalate "," (sort ((.targets) owner)),
+            T.pack (show ((.order) owner)),
+            maybe "" id ((.subscription) owner),
+            maybe "" id ((.dedup) owner),
+            T.intercalate "," (map checkpointOnMissingText ((.checkpointOnMissing) owner)),
+            replayText ((.replay) owner),
+            lineText ((.loc) owner)
           ],
         T.intercalate
           "|"
           [ "delivery",
-            poName owner,
-            deliveryText (poDelivery owner),
-            lineText (poLoc owner)
+            (.name) owner,
+            deliveryText ((.delivery) owner),
+            lineText ((.loc) owner)
           ]
       ]
     nodeFacts (NReadModel readModel)
-      | Just groupName <- rmGroup readModel =
+      | Just groupName <- (.group) readModel =
           [ T.intercalate
               "|"
               [ "query",
-                rmName readModel,
+                (.name) readModel,
                 groupName,
-                T.intercalate "," (sort (rmObservedTargets readModel)),
+                T.intercalate "," (sort ((.observedTargets) readModel)),
                 fromMaybe "" (effectiveBacking readModel),
-                lineText (rmLoc readModel)
+                lineText ((.loc) readModel)
               ],
             T.intercalate
               "|"
               [ "freshness",
-                rmName readModel,
-                freshnessText (rmFreshness readModel),
-                lineText (rmLoc readModel)
+                (.name) readModel,
+                freshnessText ((.freshness) readModel),
+                lineText ((.loc) readModel)
               ],
             T.intercalate
               "|"
               [ "cursor",
-                rmName readModel,
+                (.name) readModel,
                 fromMaybe "none" (resolvedCursor readModel),
-                lineText (rmLoc readModel)
+                lineText ((.loc) readModel)
               ]
           ]
     nodeFacts _ = []
-    externalReadShape externalRead = case [rmShape readModel | NReadModel readModel <- specNodes spec, rmName readModel == erQueryModel externalRead] of
+    externalReadShape externalRead = case [(.shape) readModel | NReadModel readModel <- (.nodes) spec, (.name) readModel == (.queryModel) externalRead] of
       shape : _ -> shape
       [] -> "missing-query"
     revisionTargetText target =
       T.intercalate
         ","
-        [ prtTarget target,
-          prtSchemaVersion target,
-          prtProvisioner target,
-          T.pack (show (prtProvisionerVersion target)),
-          prtExpectedShape target,
-          prtValidator target,
-          T.pack (show (prtValidatorVersion target)),
-          T.intercalate ":" (map promotionText (prtPromotionObjects target))
+        [ (.target) target,
+          (.schemaVersion) target,
+          (.provisioner) target,
+          T.pack (show ((.provisionerVersion) target)),
+          (.expectedShape) target,
+          (.validator) target,
+          T.pack (show ((.validatorVersion) target)),
+          T.intercalate ":" (map promotionText ((.promotionObjects) target))
         ]
     promotionText promotionObject =
       T.intercalate
         ">"
-        [ promotionKindText (rpoKind promotionObject),
-          rpoGenerationName promotionObject,
-          rpoCanonicalName promotionObject
+        [ promotionKindText ((.kind) promotionObject),
+          (.generationName) promotionObject,
+          (.canonicalName) promotionObject
         ]
     promotionKindText PromotionIndexNode = "index"
     promotionKindText PromotionConstraintNode = "constraint"
@@ -397,16 +404,16 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
       T.intercalate
         "|"
         [ "supply",
-          supplyQueryModel supply,
-          supplyProjectionOwner supply,
-          supplyRebuildGroup supply,
-          T.intercalate "," (NE.toList (supplyObservedTargets supply)),
-          lineText (supplyQueryLoc supply),
-          lineText (supplyOwnerLoc supply)
+          (.queryModel) supply,
+          (.projectionOwner) supply,
+          (.rebuildGroup) supply,
+          T.intercalate "," (NE.toList ((.observedTargets) supply)),
+          lineText ((.queryLoc) supply),
+          lineText ((.ownerLoc) supply)
         ]
-    effectiveBacking readModel = case rmBackingTarget readModel of
+    effectiveBacking readModel = case (.backingTarget) readModel of
       Just targetName -> Just targetName
-      Nothing -> case sort (rmObservedTargets readModel) of
+      Nothing -> case sort ((.observedTargets) readModel) of
         [targetName] -> Just targetName
         _ -> Nothing
     resetText TargetClear = "clear"
@@ -420,18 +427,18 @@ projectionCatalogFactsWith spec supplyAnalysis = sort (concatMap nodeFacts (spec
     freshnessText (FreshnessWaitForHead RmEntireLog) = "wait-for-head:entire-log"
     freshnessText (FreshnessWaitForHead (RmCategory categoryName)) = "wait-for-head:category:" <> categoryName
     resolvedCursor readModel = do
-      ownerName <- case [ supplyProjectionOwner supply
+      ownerName <- case [ (.projectionOwner) supply
                         | supply <- supplies,
-                          supplyQueryModel supply == rmName readModel
+                          (.queryModel) supply == (.name) readModel
                         ] of
         [name] -> Just name
         _ -> Nothing
-      owner <- case [candidate | candidate <- owners, poName candidate == ownerName] of
+      owner <- case [candidate | candidate <- owners, (.name) candidate == ownerName] of
         [candidate] -> Just candidate
         _ -> Nothing
-      case poDelivery owner of
+      case (.delivery) owner of
         DeliveryInline -> Nothing
-        DeliverySubscription -> poSubscription owner
+        DeliverySubscription -> (.subscription) owner
     checkpointOnMissingText CheckpointFromBeginning = "from-beginning"
     checkpointOnMissingText CheckpointFromCurrentHead = "from-current-head"
     checkpointOnMissingText CheckpointFail = "fail"

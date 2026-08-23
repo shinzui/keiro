@@ -89,10 +89,10 @@ harnessForWithGoldens goldens ctx spec =
 harnessForCheckedWithGoldens :: [GoldenPayload] -> Context -> CheckedService -> Aggregate -> [ScaffoldModule]
 harnessForCheckedWithGoldens goldens ctx service agg =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" (aGenPrefix a) <> "/Harness.hs"),
-        moduleText = emitHarness relevantGoldens a,
+      { path = T.unpack (T.replace "." "/" ((.genPrefix) a) <> "/Harness.hs"),
+        text = emitHarness relevantGoldens a,
         kind = Generated,
-        origin = "aggregate " <> aggName agg <> locSuffix (aggLoc agg)
+        origin = "aggregate " <> (.name) agg <> locSuffix ((.loc) agg)
       }
   ]
   where
@@ -101,8 +101,8 @@ harnessForCheckedWithGoldens goldens ctx service agg =
     relevantGoldens =
       [ golden
       | golden <- goldens,
-        goldenContext golden == specContext spec,
-        goldenAggregate golden == aggName agg
+        (.context) golden == (.context) spec,
+        (.aggregate) golden == (.name) agg
       ]
 
 -- | Emit a self-contained, firewall-clean facts harness for a process manager,
@@ -116,14 +116,14 @@ harnessForCheckedWithGoldens goldens ctx service agg =
 harnessProcess :: Context -> ProcessNode -> [ScaffoldModule]
 harnessProcess ctx p =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs"),
-        moduleText = emitProcessHarness genPrefix p,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs"),
+        text = emitProcessHarness genPrefix p,
         kind = Generated,
-        origin = "process " <> procId p <> locSuffix (procLoc p)
+        origin = "process " <> (.id) p <> locSuffix ((.loc) p)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (procId p)
+    genPrefix = genPrefixFor ctx ((.id) p)
 
 -- | Emit runtime-free facts for a router's identity, resolution, dispatch,
 -- and worker-policy decisions. A hand-written conformance driver owns the
@@ -131,30 +131,30 @@ harnessProcess ctx p =
 harnessRouter :: Context -> RouterNode -> [ScaffoldModule]
 harnessRouter ctx router =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/RouterHarness.hs"),
-        moduleText = emitRouterHarness genPrefix router,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/RouterHarness.hs"),
+        text = emitRouterHarness genPrefix router,
         kind = Generated,
-        origin = "router " <> rtId router <> locSuffix (rtLoc router)
+        origin = "router " <> (.id) router <> locSuffix ((.loc) router)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (rtId router)
+    genPrefix = genPrefixFor ctx ((.id) router)
 
 -- | Add checked declarative-selection evidence without changing any legacy
 -- custom-router harness bytes.
 harnessRouterForService :: Context -> CheckedService -> RouterNode -> [ScaffoldModule]
-harnessRouterForService ctx service router = case rvSource (rtResolve router) of
+harnessRouterForService ctx service router = case (.source) ((.resolve) router) of
   ResolveDeclarative {} ->
     [ ScaffoldModule
-        { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/RouterHarness.hs"),
-          moduleText = emitRouterHarnessWithFacts genPrefix (routerHarnessFactValuesForService service router),
+        { path = T.unpack (T.replace "." "/" genPrefix <> "/RouterHarness.hs"),
+          text = emitRouterHarnessWithFacts genPrefix (routerHarnessFactValuesForService service router),
           kind = Generated,
-          origin = "router " <> rtId router <> locSuffix (rtLoc router)
+          origin = "router " <> (.id) router <> locSuffix ((.loc) router)
         }
     ]
   _ -> harnessRouter ctx router
   where
-    genPrefix = genPrefixFor ctx (rtId router)
+    genPrefix = genPrefixFor ctx ((.id) router)
 
 emitRouterHarness :: Text -> RouterNode -> Text
 emitRouterHarness genPrefix router = emitRouterHarnessWithFacts genPrefix (routerHarnessFactValues router)
@@ -172,39 +172,39 @@ emitRouterHarnessWithFacts genPrefix facts =
 
 routerHarnessFactValues :: RouterNode -> [(Text, Text)]
 routerHarnessFactValues router =
-  [ ("routerName", rtName router),
-    ("keyField", corrField (rtKey router)),
+  [ ("routerName", (.name) router),
+    ("keyField", (.field) ((.key) router)),
     ("resolveSource", resolveSource),
-    ("resolveRow", T.intercalate "," (rvRow (rtResolve router))),
-    ("dispatchCommand", rdCommand dispatch),
+    ("resolveRow", T.intercalate "," ((.row) ((.resolve) router))),
+    ("dispatchCommand", (.command) dispatch),
     ("dispatchIdInputs", "(name, key, sourceEventId, targetStreamName, occurrence)"),
-    ("onDuplicate", showDisp (onDuplicate disposition)),
-    ("onFailed", showDisp (onFailed disposition)),
-    ("rejectedPolicy", showPolicy (rtRejected router)),
-    ("poisonPolicy", showPolicy (rtPoison router))
+    ("onDuplicate", showDisp ((.onDuplicate) disposition)),
+    ("onFailed", showDisp ((.onFailed) disposition)),
+    ("rejectedPolicy", showPolicy ((.rejected) router)),
+    ("poisonPolicy", showPolicy ((.poison) router))
   ]
   where
-    dispatch = rtDispatch router
-    disposition = rdDisposition dispatch
-    resolveSource = case rvSource (rtResolve router) of
+    dispatch = (.dispatch) router
+    disposition = (.disposition) dispatch
+    resolveSource = case (.source) ((.resolve) router) of
       ResolveReadModel name -> "read-model " <> name
       ResolveHole -> "hole"
-      ResolveDeclarative selection -> "declarative " <> rsIdentity selection
+      ResolveDeclarative selection -> "declarative " <> (.identity) selection
 
 routerHarnessFactValuesForService :: CheckedService -> RouterNode -> [(Text, Text)]
-routerHarnessFactValuesForService service router = case rvSource (rtResolve router) of
+routerHarnessFactValuesForService service router = case (.source) ((.resolve) router) of
   ResolveDeclarative {} ->
     routerHarnessFactValues router
       <> [ ("resolverOwnership", "generated-declarative"),
-           ("queryIdentity", checkedQueryName (checkedQuery selection)),
-           ("selectionIdentity", checkedIdentity selection),
-           ("selectionVersion", T.pack (show (checkedVersion selection))),
-           ("selectionFingerprint", checkedFingerprint selection),
-           ("maxRecipients", T.pack (show (checkedLimit selection))),
+           ("queryIdentity", (.name) ((.query) selection)),
+           ("selectionIdentity", (.identity) selection),
+           ("selectionVersion", T.pack (show ((.version) selection))),
+           ("selectionFingerprint", (.fingerprint) selection),
+           ("maxRecipients", T.pack (show ((.limit) selection))),
            ("selectionOrder", "target-stream"),
            ("selectionDedupe", "target-stream"),
-           ("emptyPolicy", checkedEmptyPolicyText (checkedEmptyPolicy selection)),
-           ("failurePolicy", checkedFailurePolicyText (checkedFailurePolicy selection)),
+           ("emptyPolicy", checkedEmptyPolicyText ((.emptyPolicy) selection)),
+           ("failurePolicy", checkedFailurePolicyText ((.failurePolicy) selection)),
            ("redeliveryPolicy", "stable-union"),
            ("partialPolicy", "retain-successes")
          ]
@@ -234,14 +234,14 @@ harnessReadModel ctx spec = harnessReadModelForService ctx (legacyCheckedService
 harnessReadModelForService :: Context -> CheckedService -> ReadModelNode -> [ScaffoldModule]
 harnessReadModelForService ctx service readModel =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/ReadModelHarness.hs"),
-        moduleText = emitReadModelHarness genPrefix ctx (checkedSpec service) (checkedProjectionSupplies service) readModel,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/ReadModelHarness.hs"),
+        text = emitReadModelHarness genPrefix ctx (checkedSpec service) (checkedProjectionSupplies service) readModel,
         kind = Generated,
-        origin = "readmodel " <> rmName readModel <> locSuffix (rmLoc readModel)
+        origin = "readmodel " <> (.name) readModel <> locSuffix ((.loc) readModel)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (pascal (rmName readModel))
+    genPrefix = genPrefixFor ctx (pascal ((.name) readModel))
 
 emitReadModelHarness :: Text -> Context -> Spec -> ProjectionSupplyAnalysis -> ReadModelNode -> Text
 emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
@@ -280,13 +280,13 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
            "  pure (null failures)"
          ]
   where
-    stem = lowerFirst (pascal (rmName readModel))
+    stem = lowerFirst (pascal ((.name) readModel))
     readModelName = stem <> "ReadModel"
     asyncProjectionName = stem <> "AsyncProjection"
     readModelImports = readModelName : [asyncProjectionName | emitsLegacyAsync]
     moduleExports = ["readModelFacts", "readModelFactResults", "runReadModelFacts"] <> ["catalogFactsAgainst" | catalogManaged]
-    expectedRegistry = registryNameFor (contextName ctx) readModel
-    ownerDerived = rmSupply readModel == OwnerDerivedSupply
+    expectedRegistry = registryNameFor ((.name) ctx) readModel
+    ownerDerived = (.supply) readModel == OwnerDerivedSupply
     expectedSubscription = case legacyReadModelSubscription readModel of
       Just name -> name
       Nothing -> expectedRegistry <> "-sub"
@@ -296,7 +296,7 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
     asyncFactRow = case legacyReadModelFeed readModel of
       Just RmSubscription -> "  , (\"asyncProjectionName\", " <> tshow expectedAsync <> ", T.unpack " <> asyncProjectionName <> ".name)"
       _ -> "  , (\"asyncProjectionName\", \"none\", \"none\") -- Definitionally inert: inline feeds have no AsyncProjection value."
-    catalogManaged = rmGroup readModel /= Nothing
+    catalogManaged = (.group) readModel /= Nothing
     emitsLegacyAsync = not ownerDerived && not catalogManaged && legacyReadModelFeed readModel == Just RmSubscription
     runtimeImports
       | ownerDerived = "ReadModel (..), readModelCursorAuthority, readModelDefaultFreshness"
@@ -304,12 +304,12 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
     baseFactRows
       | ownerDerived =
           [ "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
-            "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
+            "  , (\"shapeHash\", " <> tshow ((.shape) readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
           ]
       | otherwise =
           [ "  [ (\"registryName\", " <> tshow expectedRegistry <> ", T.unpack " <> readModelName <> ".name)",
             "  , (\"subscriptionName\", " <> tshow expectedSubscription <> ", T.unpack " <> readModelName <> ".subscriptionName)",
-            "  , (\"shapeHash\", " <> tshow (rmShape readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
+            "  , (\"shapeHash\", " <> tshow ((.shape) readModel) <> ", T.unpack " <> readModelName <> ".shapeHash)"
           ]
     policyFactRows
       | ownerDerived =
@@ -337,48 +337,48 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
       | otherwise = []
     supply =
       find
-        ((== rmName readModel) . supplyQueryModel)
-        (resolvedProjectionSupplies supplyAnalysis)
+        ((== (.name) readModel) . (.queryModel))
+        ((.resolvedProjectionSupplies) supplyAnalysis)
     resolvedOwner = do
       resolved <- supply
       find
-        ((== supplyProjectionOwner resolved) . poName)
-        [owner | NProjectionOwner owner <- specNodes spec]
+        ((== (.projectionOwner) resolved) . (.name))
+        [owner | NProjectionOwner owner <- (.nodes) spec]
     expectedCursor = case resolvedOwner of
       Just owner
-        | poDelivery owner == DeliverySubscription,
-          Just subscription <- poSubscription owner ->
+        | (.delivery) owner == DeliverySubscription,
+          Just subscription <- (.subscription) owner ->
             "DurableQueryCursor " <> T.pack (show subscription)
       _ -> "NoQueryCursor"
-    expectedFreshness = case rmFreshness readModel of
+    expectedFreshness = case (.freshness) readModel of
       FreshnessImmediate -> "Immediate"
       FreshnessWaitForHead RmEntireLog -> "WaitForHead EntireVisibleLog"
       FreshnessWaitForHead (RmCategory categoryName) -> "WaitForHead (CategoryVisibleHead " <> T.pack (show categoryName) <> ")"
     feedingOwners =
       sortOn
-        poOrder
+        (.order)
         [ owner
         | Just resolved <- [supply],
-          NProjectionOwner owner <- specNodes spec,
-          poName owner == supplyProjectionOwner resolved,
-          poDelivery owner == DeliverySubscription
+          NProjectionOwner owner <- (.nodes) spec,
+          (.name) owner == (.projectionOwner) resolved,
+          (.delivery) owner == DeliverySubscription
         ]
     expectedCatalogRegistration =
       T.intercalate
         "|"
         [ expectedRegistry,
-          T.pack (show (rmVersion readModel)),
-          rmShape readModel,
-          fromMaybe "" (rmGroup readModel)
+          T.pack (show ((.version) readModel)),
+          (.shape) readModel,
+          fromMaybe "" ((.group) readModel)
         ]
     expectedCatalogSupply = case supply of
       Nothing -> "missing"
       Just resolved ->
         T.intercalate
           "|"
-          [ supplyProjectionOwner resolved,
-            supplyRebuildGroup resolved,
-            T.intercalate "," (NE.toList (supplyObservedTargets resolved))
+          [ (.projectionOwner) resolved,
+            (.rebuildGroup) resolved,
+            T.intercalate "," (NE.toList ((.observedTargets) resolved))
           ]
     catalogHelpers
       | not catalogManaged = []
@@ -421,31 +421,31 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
       [ "  [ (\"catalogRegistration\", "
           <> tshow expectedCatalogRegistration
           <> ", renderRegistration [entry | entry <- registrations, Catalog.queryModelIdText entry.queryModelId == "
-          <> tshow (rmName readModel)
+          <> tshow ((.name) readModel)
           <> "])",
         "  , (\"querySupply\", "
           <> tshow expectedCatalogSupply
           <> ", renderSupply [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "
-          <> tshow (rmName readModel)
+          <> tshow ((.name) readModel)
           <> "])",
         "  , (\"projectionDelivery\", "
           <> tshow expectedDelivery
           <> ", renderDelivery [entry | entry <- supplies, Catalog.queryModelIdText entry.resolvedQueryModelId == "
-          <> tshow (rmName readModel)
+          <> tshow ((.name) readModel)
           <> "])"
       ]
         <> [ "  , (\"asyncRegistration:"
-               <> poName owner
+               <> (.name) owner
                <> "\", "
-               <> tshow (T.intercalate "|" [fromMaybe "" (poSubscription owner), fromMaybe "" (poDedup owner)])
+               <> tshow (T.intercalate "|" [fromMaybe "" ((.subscription) owner), fromMaybe "" ((.dedup) owner)])
                <> ", renderAsync [entry | entry <- asyncRegistrations, Catalog.projectionIdText entry.projectionId == "
-               <> tshow (poName owner)
+               <> tshow ((.name) owner)
                <> "])"
            | owner <- feedingOwners
            ]
         <> ["  ]"]
     expectedDelivery = case resolvedOwner of
-      Just owner -> case poDelivery owner of
+      Just owner -> case (.delivery) owner of
         DeliveryInline -> "inline"
         DeliverySubscription -> "subscription"
       Nothing -> "missing"
@@ -476,25 +476,25 @@ emitProcessHarness genPrefix p =
 
 processHarnessFactValues :: ProcessNode -> [(Text, Text)]
 processHarnessFactValues p =
-  [ ("fireAtField", faField (tmFireAt timer)),
-    ("timerIdPrefix", idePrefix (tmId timer)),
-    ("firedEventIdPrefix", idePrefix (fireFiredEventId timer')),
+  [ ("fireAtField", (.field) ((.fireAt) timer)),
+    ("timerIdPrefix", (.prefix) ((.id) timer)),
+    ("firedEventIdPrefix", (.prefix) ((.firedEventId) timer')),
     ("dispatchIdUserField", "none"),
-    ("onReject", showFireOutcome (onReject fd)),
-    ("onAmbiguous", showFireOutcome (onAmbiguous fd)),
-    ("onFailed", showDisp (onFailed (firstDispDisposition p))),
-    ("rejectedPolicy", showPolicy (procRejected p)),
-    ("poisonPolicy", showPolicy (procPoison p)),
-    ("maxAttempts", tInt (tmMaxAttempts timer))
+    ("onReject", showFireOutcome ((.onReject) fd)),
+    ("onAmbiguous", showFireOutcome ((.onAmbiguous) fd)),
+    ("onFailed", showDisp ((.onFailed) (firstDispDisposition p))),
+    ("rejectedPolicy", showPolicy ((.rejected) p)),
+    ("poisonPolicy", showPolicy ((.poison) p)),
+    ("maxAttempts", tInt ((.maxAttempts) timer))
   ]
   where
-    timer = procTimer p
-    timer' = tmFire timer
-    fd = fireDisposition timer'
+    timer = (.timer) p
+    timer' = (.fire) timer
+    fd = (.disposition) timer'
 
 firstDispDisposition :: ProcessNode -> DispatchDisposition
-firstDispDisposition p = case hDispatch (procHandle p) of
-  (d : _) -> dispDisposition d
+firstDispDisposition p = case (.dispatch) ((.handle) p) of
+  (d : _) -> (.disposition) d
   [] -> DispatchDisposition DAckOk DAckOk DRetry
 
 showFireOutcome :: FireOutcome -> Text
@@ -523,20 +523,20 @@ showPolicy PolSkip = "skip"
 harnessWorkflow :: Context -> WorkflowNode -> [ScaffoldModule]
 harnessWorkflow ctx w =
   [ ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowFacts.hs"),
-        moduleText = emitWorkflowFacts genPrefix w,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowFacts.hs"),
+        text = emitWorkflowFacts genPrefix w,
         kind = Generated,
-        origin = "workflow " <> wfId w <> locSuffix (workflowNodeLoc w)
+        origin = "workflow " <> (.id) w <> locSuffix (workflowNodeLoc w)
       },
     ScaffoldModule
-      { modulePath = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowRuntime.hs"),
-        moduleText = emitWorkflowRuntime genPrefix w,
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/WorkflowRuntime.hs"),
+        text = emitWorkflowRuntime genPrefix w,
         kind = Generated,
-        origin = "workflow " <> wfId w <> locSuffix (workflowNodeLoc w)
+        origin = "workflow " <> (.id) w <> locSuffix (workflowNodeLoc w)
       }
   ]
   where
-    genPrefix = genPrefixFor ctx (wfId w)
+    genPrefix = genPrefixFor ctx ((.id) w)
 
 locSuffix :: Loc -> Text
 locSuffix loc = case unLoc loc of
@@ -565,23 +565,23 @@ emitWorkflowFacts genPrefix w =
       "workflowFacts :: WorkflowFacts",
       "workflowFacts =",
       "  WorkflowFacts",
-      "    { workflowFactName = " <> hs (wfStable w),
-      "    , workflowFactIdVia = " <> hs (wfIdVia w),
-      "    , workflowFactIdField = " <> hs (maybe "input" id (wfIdField w)),
-      "    , workflowFactBody = " <> stringList (map bodyTag (wfBody w)),
-      "    , workflowFactAwaitLabels = " <> stringList (workflowAwaitLabels (wfBody w)),
-      "    , workflowFactPatchIds = " <> stringList (workflowPatchIds (wfBody w)),
+      "    { workflowFactName = " <> hs ((.stable) w),
+      "    , workflowFactIdVia = " <> hs ((.idVia) w),
+      "    , workflowFactIdField = " <> hs (maybe "input" id ((.idField) w)),
+      "    , workflowFactBody = " <> stringList (map bodyTag ((.body) w)),
+      "    , workflowFactAwaitLabels = " <> stringList (workflowAwaitLabels ((.body) w)),
+      "    , workflowFactPatchIds = " <> stringList (workflowPatchIds ((.body) w)),
       "    }",
       "",
       "-- | Base-library projection used by the service-level conformance facade.",
       "workflowFactValues :: [(String, String)]",
       "workflowFactValues =",
-      "  [ (\"name\", workflowFactName workflowFacts)",
-      "  , (\"idVia\", workflowFactIdVia workflowFacts)",
-      "  , (\"idField\", workflowFactIdField workflowFacts)",
-      "  , (\"body\", show (workflowFactBody workflowFacts))",
-      "  , (\"awaits\", show (workflowFactAwaitLabels workflowFacts))",
-      "  , (\"patches\", show (workflowFactPatchIds workflowFacts))",
+      "  [ (\"name\", workflowFacts.workflowFactName)",
+      "  , (\"idVia\", workflowFacts.workflowFactIdVia)",
+      "  , (\"idField\", workflowFacts.workflowFactIdField)",
+      "  , (\"body\", show workflowFacts.workflowFactBody)",
+      "  , (\"awaits\", show workflowFacts.workflowFactAwaitLabels)",
+      "  , (\"patches\", show workflowFacts.workflowFactPatchIds)",
       "  ]"
     ]
   where
@@ -596,12 +596,12 @@ emitWorkflowFacts genPrefix w =
 
 workflowHarnessFactValues :: WorkflowNode -> [(Text, Text)]
 workflowHarnessFactValues workflow =
-  [ ("name", wfStable workflow),
-    ("idVia", wfIdVia workflow),
-    ("idField", maybe "input" id (wfIdField workflow)),
-    ("body", T.pack (show (map (T.unpack . bodyTag) (wfBody workflow)))),
-    ("awaits", T.pack (show (map T.unpack (workflowAwaitLabels (wfBody workflow))))),
-    ("patches", T.pack (show (map T.unpack (workflowPatchIds (wfBody workflow)))))
+  [ ("name", (.stable) workflow),
+    ("idVia", (.idVia) workflow),
+    ("idField", maybe "input" id ((.idField) workflow)),
+    ("body", T.pack (show (map (T.unpack . bodyTag) ((.body) workflow)))),
+    ("awaits", T.pack (show (map T.unpack (workflowAwaitLabels ((.body) workflow))))),
+    ("patches", T.pack (show (map T.unpack (workflowPatchIds ((.body) workflow)))))
   ]
   where
     bodyTag (WfStep label _ _) = "step:" <> label
@@ -648,7 +648,7 @@ emitWorkflowRuntime genPrefix w =
            "import Kiroku.Store.Effect (Store)",
            "",
            "workflowName :: WorkflowName",
-           "workflowName = WorkflowName " <> tshow (wfStable w),
+           "workflowName = WorkflowName " <> tshow ((.stable) w),
            "",
            "-- | A declared await label. The constructor stays private so consumers",
            "-- can allocate only labels that exist in the source workflow.",
@@ -663,10 +663,10 @@ emitWorkflowRuntime genPrefix w =
          ]
       ++ concatMap emitBinding awaitBindings
       ++ [ "awaitLabels :: [Text]",
-           "awaitLabels = [" <> T.intercalate ", " (map tshow (workflowAwaitLabels (wfBody w))) <> "]",
+           "awaitLabels = [" <> T.intercalate ", " (map tshow (workflowAwaitLabels ((.body) w))) <> "]",
            "",
            "declaredPatches :: Set PatchId",
-           "declaredPatches = Set.fromList [" <> T.intercalate ", " ["PatchId " <> tshow patchId | patchId <- workflowPatchIds (wfBody w)] <> "]",
+           "declaredPatches = Set.fromList [" <> T.intercalate ", " ["PatchId " <> tshow patchId | patchId <- workflowPatchIds ((.body) w)] <> "]",
            "",
            "-- The journal keys the runtime records patch decisions under.",
            "declaredPatchStepNames :: [Text]",
@@ -679,7 +679,7 @@ emitWorkflowRuntime genPrefix w =
   where
     awaitBindings =
       [ (workflowAwaitBindingName w label loc, label)
-      | (label, loc) <- workflowAwaits (wfBody w)
+      | (label, loc) <- workflowAwaits ((.body) w)
       ]
     emitBinding (bindingName, label) =
       [ bindingName <> " :: AwaitBinding",
@@ -695,10 +695,10 @@ workflowAwaitBindingName workflow label loc =
   where
     site =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.GeneratedValueSite,
-          HaskellName.siteLogicalName = label,
-          HaskellName.siteOwner = "workflow:" <> wfId workflow <> ":await:" <> label,
-          HaskellName.siteLine = unLoc loc
+        { HaskellName.kind = HaskellName.GeneratedValueSite,
+          HaskellName.logicalName = label,
+          HaskellName.owner = "workflow:" <> (.id) workflow <> ":await:" <> label,
+          HaskellName.line = unLoc loc
         }
 
 workflowAwaits :: [WfBodyItem] -> [(Name, Loc)]
@@ -724,9 +724,9 @@ workflowPatchIds = concatMap go
 emitHarness :: [GoldenPayload] -> Agg -> Text
 emitHarness goldens a =
   nl $
-    renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null replayTransitions) && not (null (aRegs a))]
+    renderGeneratedLanguagePragmas [ExtOverloadedLabels | not (null replayTransitions) && not (null ((.regs) a))]
       ++ [ generatedBanner,
-           "module " <> aGenPrefix a <> ".Harness (harnessAssertions) where",
+           "module " <> (.genPrefix) a <> ".Harness (harnessAssertions) where",
            ""
          ]
       ++ harnessImports
@@ -739,17 +739,17 @@ emitHarness goldens a =
            "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))"
          ]
       ++ clockFreeRows
-      ++ [ "  , (\"golden round-trip: " <> rcName e <> "\", roundTrips sampleEvent" <> rcName e <> ")"
-         | e <- aEvents a
+      ++ [ "  , (\"golden round-trip: " <> (.name) e <> "\", roundTrips sampleEvent" <> (.name) e <> ")"
+         | e <- (.events) a
          ]
-      ++ [ "  , (\"accepts " <> tCommand t <> " from " <> initialVertex a <> "\", accept" <> tCommand t <> ")"
-         | t <- map layoutTransition (initialLiveTransitionEntries a)
+      ++ [ "  , (\"accepts " <> (.command) t <> " from " <> initialVertex a <> "\", accept" <> (.command) t <> ")"
+         | t <- map (.transition) (initialLiveTransitionEntries a)
          ]
       ++ [ "  ]"
          ]
       ++ ["  ++ mappedConformanceAssertions" | hasMappedHarness a]
       ++ ["  ++ nominalConformanceAssertions" | hasNominalHarness a]
-      ++ [ "  ++ forwardReplay" <> tCommand t
+      ++ [ "  ++ forwardReplay" <> (.command) t
          | t <- replayTransitions
          ]
       ++ ( if null upcastEvents
@@ -764,34 +764,34 @@ emitHarness goldens a =
            "roundTrips e = parse" <> nm <> "Event (eventType " <> lowerFirst nm <> "Codec e) (encode" <> nm <> "Event e) == Right e"
          ]
       ++ harnessSampleDeclarations a
-      ++ concatMap (sampleEventDecl a) (aEvents a)
-      ++ concatMap (acceptDecl a . layoutTransition) (initialLiveTransitionEntries a)
+      ++ concatMap (sampleEventDecl a) ((.events) a)
+      ++ concatMap (acceptDecl a . (.transition)) (initialLiveTransitionEntries a)
       ++ concatMap (forwardReplayDecl a) replayTransitions
       ++ concatMap (upcastDecl goldens a) upcastEvents
       ++ mappedHarnessDeclarations a
       ++ nominalHarnessDeclarations a
   where
-    nm = aName a
+    nm = (.name) a
     clockFreeRows =
       if specIsClockFree a
         then ["  -- clock-free: spec samples no wall clock (verified at scaffold time)"]
         else ["  , (\"clock-free: spec samples no wall clock\", False)"]
-    upcastEvents = [e | e <- aEvents a, rcUpcastFrom e /= Nothing]
+    upcastEvents = [e | e <- (.events) a, (.upcastFrom) e /= Nothing]
     replayTransitions =
       [ t
       | entry <- initialLiveTransitionEntries a,
-        let t = layoutTransition entry,
-        not (null (tEmits t))
+        let t = (.transition) entry,
+        not (null ((.emits) t))
       ]
     coreImports =
       ["applyEventsEither" | not (null replayTransitions)]
         ++ ["defaultValidationOptions", "step", "validateTransducer"]
         ++ ["fieldWitnessAgrees" | not (null (nominalScalarHarnessTypes a)) || not (null (enforcedConsumerNominalIdHarnessTypes a))]
-        ++ ["(!)" | not (null replayTransitions) && not (null (aRegs a))]
+        ++ ["(!)" | not (null replayTransitions) && not (null ((.regs) a))]
     upcastAssertions =
-      [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> rcName e <> ")"
+      [ "(" <> tshow (upcastLabel e m) <> ", upcasts" <> (.name) e <> ")"
       | e <- upcastEvents,
-        Just m <- [rcUpcastFrom e]
+        Just m <- [(.upcastFrom) e]
       ]
     codecValueImport = ", " <> lowerFirst nm <> "Codec"
     codecDecodeRawImport =
@@ -807,13 +807,13 @@ emitHarness goldens a =
         else []
     harnessImports =
       unique $
-        [ "import " <> aGenPrefix a <> ".Domain",
-          "import " <> aGenPrefix a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> mappedCodecHarnessExports a <> ")",
+        [ "import " <> (.genPrefix) a <> ".Domain",
+          "import " <> (.genPrefix) a <> ".Codec (encode" <> nm <> "Event, parse" <> nm <> "Event" <> codecValueImport <> mappedCodecHarnessExports a <> ")",
           transducerImport a,
           "import Keiki.Core (" <> T.intercalate ", " coreImports <> ")",
           codecDecodeRawImport
         ]
-          ++ generatedNominalTypeImportsForService (aggregateCheckedService a) (aContext a) (generatedNominalHarnessTypes a)
+          ++ generatedNominalTypeImportsForService (aggregateCheckedService a) ((.context) a) (generatedNominalHarnessTypes a)
           ++ mappedHarnessImports a
           ++ nominalHarnessImports a
           ++ aggregateHarnessImports a
@@ -822,52 +822,52 @@ emitHarness goldens a =
 
     upcastLabel event source =
       case goldenFor goldens event of
-        Just _ -> "golden " <> rcName event <> ".v" <> tInt source <> " decodes"
+        Just _ -> "golden " <> (.name) event <> ".v" <> tInt source <> " decodes"
         Nothing ->
           "upcast "
-            <> rcName event
+            <> (.name) event
             <> " chain wired (current-shape stand-in; add a golden payload)"
 
 transducerImport :: Agg -> Text
 transducerImport aggregate
   | usesGeneratedTransducer aggregate =
       "import "
-        <> aGenPrefix aggregate
+        <> (.genPrefix) aggregate
         <> ".Transducer ("
-        <> lowerFirst (aName aggregate)
+        <> lowerFirst ((.name) aggregate)
         <> "Transducer)"
   | otherwise =
       "import "
-        <> aHolePrefix aggregate
+        <> (.holePrefix) aggregate
         <> ".Holes ("
-        <> lowerFirst (aName aggregate)
+        <> lowerFirst ((.name) aggregate)
         <> "Transducer)"
 
 usesGeneratedTransducer :: Agg -> Bool
-usesGeneratedTransducer = any ((/= LegacyHoleImplementation) . tImplementation) . aTransitions
+usesGeneratedTransducer = any ((/= LegacyHoleImplementation) . (.implementation)) . (.transitions)
 
 -- | Decode a genuine embedded old payload when available. Without a golden,
 -- retain the weaker current-shape wiring assertion and label it honestly.
 upcastDecl :: [GoldenPayload] -> Agg -> ResolvedCtor -> [Text]
-upcastDecl goldens a e = case rcUpcastFrom e of
+upcastDecl goldens a e = case (.upcastFrom) e of
   Nothing -> []
   Just m -> case goldenFor goldens e of
     Just golden ->
       [ "",
-        "upcasts" <> rcName e <> " :: Bool",
-        "upcasts" <> rcName e <> " =",
-        "  case eitherDecodeStrict (encodeUtf8 " <> tshow (goldenJson golden) <> ") of",
+        "upcasts" <> (.name) e <> " :: Bool",
+        "upcasts" <> (.name) e <> " =",
+        "  case eitherDecodeStrict (encodeUtf8 " <> tshow ((.json) golden) <> ") of",
         "    Left _ -> False",
         "    Right payload ->",
         "      either (const False) (const True)",
-        "        (decodeRaw " <> lowerFirst (aName a) <> "Codec (EventType " <> tshow (rcName e) <> ") " <> tInt m <> " payload)"
+        "        (decodeRaw " <> lowerFirst ((.name) a) <> "Codec (EventType " <> tshow ((.name) e) <> ") " <> tInt m <> " payload)"
       ]
     Nothing ->
       [ "",
-        "upcasts" <> rcName e <> " :: Bool",
-        "upcasts" <> rcName e <> " =",
+        "upcasts" <> (.name) e <> " :: Bool",
+        "upcasts" <> (.name) e <> " =",
         "  either (const False) (const True)",
-        "    (decodeRaw " <> lowerFirst (aName a) <> "Codec (EventType " <> tshow (rcName e) <> ") " <> tInt m <> " (encode" <> aName a <> "Event sampleEvent" <> rcName e <> "))"
+        "    (decodeRaw " <> lowerFirst ((.name) a) <> "Codec (EventType " <> tshow ((.name) e) <> ") " <> tInt m <> " (encode" <> (.name) a <> "Event sampleEvent" <> (.name) e <> "))"
       ]
 
 hasGolden :: [GoldenPayload] -> ResolvedCtor -> Bool
@@ -877,9 +877,9 @@ hasGolden goldens event = case goldenFor goldens event of
 
 goldenFor :: [GoldenPayload] -> ResolvedCtor -> Maybe GoldenPayload
 goldenFor goldens event = do
-  source <- rcUpcastFrom event
+  source <- (.upcastFrom) event
   find
-    (\golden -> goldenEvent golden == rcName event && goldenVersion golden == source)
+    (\golden -> (.event) golden == (.name) event && (.version) golden == source)
     goldens
 
 tInt :: Int -> Text
@@ -893,11 +893,11 @@ nl :: [Text] -> Text
 nl = T.intercalate "\n"
 
 specIsClockFree :: Agg -> Bool
-specIsClockFree a = not (any transitionSamplesClock (aTransitions a))
+specIsClockFree a = not (any transitionSamplesClock ((.transitions) a))
   where
     clockAtoms = ["now", "currentTime", "wallClock", "today", "utcNow"]
     transitionSamplesClock t =
-      let exprs = maybe [] pure (tGuard t) ++ map snd (tWrites t)
+      let exprs = maybe [] pure ((.guard) t) ++ map snd ((.writes) t)
        in any (\e -> any (`elem` clockAtoms) (exprNames e)) exprs
 
 exprNames :: Expr -> [Text]
@@ -914,11 +914,11 @@ exprNames (EAtom (AName n)) = [n]
 exprNames (EAtom (ABool _)) = []
 
 initialLiveTransitionEntries :: Agg -> [TransitionLayoutEntry]
-initialLiveTransitionEntries a = case map stName (aStates a) of
+initialLiveTransitionEntries a = case map (.name) ((.states) a) of
   (s0 : _) ->
     [ entry
-    | entry <- transitionLayoutForSource s0 (transitionLayout (aTransitions a)),
-      tMode (layoutTransition entry) == TmLive
+    | entry <- transitionLayoutForSource s0 (transitionLayout ((.transitions) a)),
+      (.mode) ((.transition) entry) == TmLive
     ]
   [] -> []
 
@@ -928,8 +928,8 @@ initialLiveTransitionEntries a = case map stName (aStates a) of
 sampleEventDecl :: Agg -> ResolvedCtor -> [Text]
 sampleEventDecl a e =
   [ "",
-    "sampleEvent" <> rcName e <> " :: " <> aName a <> "Event",
-    "sampleEvent" <> rcName e <> " = " <> ctorExpr a e
+    "sampleEvent" <> (.name) e <> " :: " <> (.name) a <> "Event",
+    "sampleEvent" <> (.name) e <> " = " <> ctorExpr a e
   ]
 
 harnessSampleDeclarations :: Agg -> [Text]
@@ -939,13 +939,13 @@ harnessSampleDeclarations aggregate =
     generatedIds =
       [ nominal
       | nominal <- generatedNominalHarnessTypes aggregate,
-        IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
-        idDomainContractFor (aLanguageContract aggregate) prefix /= Nothing
+        IdRepresentation prefix <- [(.representation) nominal],
+        idDomainContractFor ((.languageContract) aggregate) prefix /= Nothing
       ]
-    generatedIdDeclaration nominal = case resolvedNominalRepresentation nominal of
-      IdRepresentation prefix -> case idDomainContractFor (aLanguageContract aggregate) prefix of
+    generatedIdDeclaration nominal = case (.representation) nominal of
+      IdRepresentation prefix -> case idDomainContractFor ((.languageContract) aggregate) prefix of
         Just contract ->
-          let typeName = resolvedNominalName nominal
+          let typeName = (.name) nominal
               constantName = generatedIdSampleName nominal
            in [ "",
                 constantName <> " :: " <> typeName,
@@ -967,14 +967,14 @@ harnessSampleDeclarations aggregate =
 acceptDecl :: Agg -> Transition -> [Text]
 acceptDecl a t =
   [ "",
-    "accept" <> tCommand t <> " :: Bool",
-    "accept" <> tCommand t <> " =",
-    "  case step " <> lowerFirst (aName a) <> "Transducer (" <> initialVertex a <> ", initial" <> aName a <> "Regs) " <> cmdSample <> " of",
-    "    Just (v, _, _) -> v == " <> vertexCtor a (tGoto t),
+    "accept" <> (.command) t <> " :: Bool",
+    "accept" <> (.command) t <> " =",
+    "  case step " <> lowerFirst ((.name) a) <> "Transducer (" <> initialVertex a <> ", initial" <> (.name) a <> "Regs) " <> cmdSample <> " of",
+    "    Just (v, _, _) -> v == " <> vertexCtor a ((.goto) t),
     "    Nothing -> False"
   ]
   where
-    cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
+    cmdSample = case [c | c <- (.commands) a, (.name) c == (.command) t] of
       (c : _) -> "(" <> commandCtorExpr a t c <> ")"
       [] -> "(error \"no command\")"
 
@@ -996,32 +996,32 @@ forwardReplayDecl a t =
     "            Right (replayVertex, " <> replayRegsName <> ") ->",
     "              [ (prefix <> \"final vertex\", replayVertex == forwardVertex)"
   ]
-    ++ [ "              , (prefix <> \"register " <> rrName reg <> "\", (replayRegs ! #" <> rrName reg <> ") == (forwardRegs ! #" <> rrName reg <> "))"
-       | reg <- aRegs a
+    ++ [ "              , (prefix <> \"register " <> (.name) reg <> "\", (replayRegs ! #" <> (.name) reg <> ") == (forwardRegs ! #" <> (.name) reg <> "))"
+       | reg <- (.regs) a
        ]
     ++ [ "              ]",
          "  where",
-         "    prefix = \"forward/replay equality: " <> tCommand t <> " from " <> initial <> " -- \""
+         "    prefix = \"forward/replay equality: " <> (.command) t <> " from " <> initial <> " -- \""
        ]
   where
-    nm = aName a
-    helperName = "forwardReplay" <> tCommand t
+    nm = (.name) a
+    helperName = "forwardReplay" <> (.command) t
     transducer = lowerFirst nm <> "Transducer"
     codec = lowerFirst nm <> "Codec"
     initial = initialVertex a
     initialRegs = "initial" <> nm <> "Regs"
-    forwardRegsName = if null (aRegs a) then "_forwardRegs" else "forwardRegs"
-    replayRegsName = if null (aRegs a) then "_replayRegs" else "replayRegs"
-    cmdSample = case [c | c <- aCommands a, rcName c == tCommand t] of
+    forwardRegsName = if null ((.regs) a) then "_forwardRegs" else "forwardRegs"
+    replayRegsName = if null ((.regs) a) then "_replayRegs" else "replayRegs"
+    cmdSample = case [c | c <- (.commands) a, (.name) c == (.command) t] of
       (c : _) -> "(" <> commandCtorExpr a t c <> ")"
       [] -> "(error \"no command\")"
 
 -- | @(<Ctor> (<Ctor>Data v1 v2 …))@ with positional sample field values.
 ctorExpr :: Agg -> ResolvedCtor -> Text
 ctorExpr a rc =
-  rcName rc <> " (" <> rcName rc <> "Data" <> args <> ")"
+  (.name) rc <> " (" <> (.name) rc <> "Data" <> args <> ")"
   where
-    args = T.concat [" " <> sampleValue a (fieldDslName identity) ty | (identity, ty) <- rcFields rc]
+    args = T.concat [" " <> sampleValue a ((.dslName) identity) ty | (identity, ty) <- (.fields) rc]
 
 -- | A transition command sample prefers the initial value of a same-named,
 -- same-typed register only when the guard explicitly equates those two paths.
@@ -1029,34 +1029,34 @@ ctorExpr a rc =
 -- not accidentally inherit a forbidden @Free@ register initial value.
 commandCtorExpr :: Agg -> Transition -> ResolvedCtor -> Text
 commandCtorExpr a transition rc =
-  rcName rc <> " (" <> rcName rc <> "Data" <> args <> ")"
+  (.name) rc <> " (" <> (.name) rc <> "Data" <> args <> ")"
   where
-    args = T.concat [" " <> commandSampleValue a transition (fieldDslName identity) ty | (identity, ty) <- rcFields rc]
+    args = T.concat [" " <> commandSampleValue a transition ((.dslName) identity) ty | (identity, ty) <- (.fields) rc]
 
 commandSampleValue :: Agg -> Transition -> Text -> ResolvedAggregateType -> Text
-commandSampleValue aggregate transition fieldName fieldType = case fieldType of
+commandSampleValue aggregate transition name valueType = case valueType of
   AggregateNominal _
-    | guardEquatesCommandAndRegister transition fieldName -> case find matchesRegister (aRegs aggregate) of
+    | guardEquatesCommandAndRegister transition name -> case find matchesRegister ((.regs) aggregate) of
         Just register -> regInitialValueForHarness aggregate register
         Nothing -> fallback
   _ -> fallback
   where
-    fallback = sampleValue aggregate fieldName fieldType
-    matchesRegister register = rrName register == fieldName && rrType register == fieldType
-    regInitialValueForHarness owner register = case rrInitial register of
+    fallback = sampleValue aggregate name valueType
+    matchesRegister register = (.name) register == name && (.valueType) register == valueType
+    regInitialValueForHarness owner register = case (.initial) register of
       InitialNominal _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
       InitialMapped _ value -> renderHarnessReference owner (harnessQualifiedValueReference value)
-      _ -> case rrType register of
-        AggregateNominal nominal -> case resolvedNominalOwnership nominal of
-          ConsumerNominal {} -> renderRegisterInitial (rrInitial register)
+      _ -> case (.valueType) register of
+        AggregateNominal nominal -> case (.ownership) nominal of
+          ConsumerNominal {} -> renderRegisterInitial ((.initial) register)
           GeneratedNominal ->
             fromMaybe
-              (renderRegisterInitial (rrInitial register))
+              (renderRegisterInitial ((.initial) register))
               (generatedIdSampleName nominal <$ generatedIdSampleHaskell owner nominal)
-        _ -> renderRegisterInitial (rrInitial register)
+        _ -> renderRegisterInitial ((.initial) register)
 
 guardEquatesCommandAndRegister :: Transition -> Text -> Bool
-guardEquatesCommandAndRegister transition fieldName = maybe False containsEquality (tGuard transition)
+guardEquatesCommandAndRegister transition name = maybe False containsEquality ((.guard) transition)
   where
     containsEquality = \case
       EOr left right -> containsEquality left || containsEquality right
@@ -1064,46 +1064,46 @@ guardEquatesCommandAndRegister transition fieldName = maybe False containsEquali
       ECmp OpEq left right -> matchingPaths left right || matchingPaths right left
       _ -> False
     matchingPaths (EPath _ CommandRoot [commandField]) (EPath _ RegisterRoot [registerField]) =
-      commandField == fieldName && registerField == fieldName
+      commandField == name && registerField == name
     matchingPaths _ _ = False
 
 sampleValue :: Agg -> Text -> ResolvedAggregateType -> Text
-sampleValue a fieldName ty = case ty of
+sampleValue a name ty = case ty of
   AggregateNominal nominal
-    | GeneratedNominal <- resolvedNominalOwnership nominal,
+    | GeneratedNominal <- (.ownership) nominal,
       Just _ <- generatedIdSampleHaskell a nominal ->
         generatedIdSampleName nominal
   AggregateNominal nominal
-    | ConsumerNominal binding <- resolvedNominalOwnership nominal ->
+    | ConsumerNominal binding <- (.ownership) nominal ->
         "(nominalFixtureDomain (NonEmpty.head (nominalFixtureCases "
-          <> renderHarnessReference a (harnessQualifiedValueReference (consumerNominalFixtures binding))
+          <> renderHarnessReference a (harnessQualifiedValueReference ((.fixtures) binding))
           <> ")))"
   AggregateTime -> harnessTimeSampleName a
   _ -> fallback
   where
     fallback = case fieldCat a ty of
-      IdCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
-      EnumCat -> aggregateSampleHaskell (aSymbols a) fieldName ty
-      MappedStructuralCat declaration _ -> fixtureSample a (sdFixtures declaration)
-      MappedOpaqueCat declaration -> fixtureSample a (odFixtures declaration)
+      IdCat -> aggregateSampleHaskell ((.symbols) a) name ty
+      EnumCat -> aggregateSampleHaskell ((.symbols) a) name ty
+      MappedStructuralCat declaration _ -> fixtureSample a ((.fixtures) declaration)
+      MappedOpaqueCat declaration -> fixtureSample a ((.fixtures) declaration)
       OtherCat -> case ty of
         AggregateVertex vertexType
-          | vertexType == aVertexType a -> initialVertex a
-        _ -> aggregateSampleHaskell (aSymbols a) fieldName ty
+          | vertexType == (.vertexType) a -> initialVertex a
+        _ -> aggregateSampleHaskell ((.symbols) a) name ty
 
 generatedIdSampleName :: ResolvedNominalType -> Text
-generatedIdSampleName nominal = "sample" <> resolvedNominalName nominal
+generatedIdSampleName nominal = "sample" <> (.name) nominal
 
 harnessUsesTime :: Agg -> Bool
 harnessUsesTime aggregate =
-  any ((== AggregateTime) . snd) (concatMap rcFields (aCommands aggregate <> aEvents aggregate))
+  any ((== AggregateTime) . snd) (concatMap (.fields) ((.commands) aggregate <> (.events) aggregate))
 
 harnessTimeSampleName :: Agg -> Text
 harnessTimeSampleName aggregate
-  | any isObservedAtTime (concatMap rcFields (aCommands aggregate <> aEvents aggregate)) = "sampleObservedAt"
+  | any isObservedAtTime (concatMap (.fields) ((.commands) aggregate <> (.events) aggregate)) = "sampleObservedAt"
   | otherwise = "sampleTime"
   where
-    isObservedAtTime (identity, resolvedType) = fieldDslName identity == "observedAt" && resolvedType == AggregateTime
+    isObservedAtTime (identity, resolvedType) = (.dslName) identity == "observedAt" && resolvedType == AggregateTime
 
 aggregateHarnessImports :: Agg -> [Text]
 aggregateHarnessImports aggregate
@@ -1124,7 +1124,7 @@ nominalHarnessImports aggregate
                then []
                else ["import Data.KindID qualified as KindID", "import Data.Text qualified as T", "import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)"]
            )
-        <> ["import " <> nominalProjectionModule (aContext aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds)]
+        <> ["import " <> nominalProjectionModule ((.context) aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds)]
   where
     nominals = consumerNominalHarnessTypes aggregate
     enforcedIds = enforcedConsumerNominalIdHarnessTypes aggregate
@@ -1135,30 +1135,30 @@ hasNominalHarness = not . null . consumerNominalHarnessTypes
 consumerNominalHarnessTypes :: Agg -> [ResolvedNominalType]
 consumerNominalHarnessTypes aggregate =
   Map.elems . Map.fromList $
-    [ (resolvedNominalName nominal, nominal)
-    | resolvedType <- map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)) <> map rrType (aRegs aggregate),
+    [ ((.name) nominal, nominal)
+    | resolvedType <- map snd (concatMap (.fields) ((.commands) aggregate <> (.events) aggregate)) <> map (.valueType) ((.regs) aggregate),
       AggregateNominal nominal <- [resolvedType],
-      ConsumerNominal {} <- [resolvedNominalOwnership nominal]
+      ConsumerNominal {} <- [(.ownership) nominal]
     ]
 
 generatedNominalHarnessTypes :: Agg -> [ResolvedNominalType]
 generatedNominalHarnessTypes aggregate =
   generatedNominalsInTypes
-    (map snd (concatMap rcFields (aCommands aggregate <> aEvents aggregate)))
+    (map snd (concatMap (.fields) ((.commands) aggregate <> (.events) aggregate)))
 
 nominalScalarHarnessTypes :: Agg -> [ResolvedNominalType]
 nominalScalarHarnessTypes aggregate =
   [ nominal
   | nominal <- consumerNominalHarnessTypes aggregate,
-    ScalarRepresentation {} <- [resolvedNominalRepresentation nominal]
+    ScalarRepresentation {} <- [(.representation) nominal]
   ]
 
 enforcedConsumerNominalIdHarnessTypes :: Agg -> [ResolvedNominalType]
 enforcedConsumerNominalIdHarnessTypes aggregate =
   [ nominal
   | nominal <- consumerNominalHarnessTypes aggregate,
-    IdRepresentation prefix <- [resolvedNominalRepresentation nominal],
-    idDomainContractFor (aLanguageContract aggregate) prefix /= Nothing
+    IdRepresentation prefix <- [(.representation) nominal],
+    idDomainContractFor ((.languageContract) aggregate) prefix /= Nothing
   ]
 
 nominalHarnessDeclarations :: Agg -> [Text]
@@ -1173,7 +1173,7 @@ nominalHarnessDeclarations aggregate
   where
     nominals = consumerNominalHarnessTypes aggregate
     assertions = concatMap assertionsFor nominals
-    assertionsFor nominal = case resolvedNominalOwnership nominal of
+    assertionsFor nominal = case (.ownership) nominal of
       GeneratedNominal -> []
       ConsumerNominal binding ->
         [ ( "nominal domain law: " <> name,
@@ -1191,17 +1191,17 @@ nominalHarnessDeclarations aggregate
                    <> ") (nominalFixtureDomain fixture)) "
                    <> fixtures
                )
-             | ScalarRepresentation {} <- [resolvedNominalRepresentation nominal]
+             | ScalarRepresentation {} <- [(.representation) nominal]
              ]
           <> idDomainAssertions name bindingName fixtures nominal
         where
-          name = resolvedNominalName nominal
-          bindingName = renderHarnessReference aggregate (harnessQualifiedValueReference (consumerNominalBinding binding))
-          fixtureName = renderHarnessReference aggregate (harnessQualifiedValueReference (consumerNominalFixtures binding))
+          name = (.name) nominal
+          bindingName = renderHarnessReference aggregate (harnessQualifiedValueReference ((.binding) binding))
+          fixtureName = renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) binding))
           fixtures = "(NonEmpty.toList (nominalFixtureCases " <> fixtureName <> "))"
-    idDomainAssertions name bindingName fixtures nominal = case resolvedNominalRepresentation nominal of
+    idDomainAssertions name bindingName fixtures nominal = case (.representation) nominal of
       IdRepresentation prefix
-        | Just contract <- idDomainContractFor (aLanguageContract aggregate) prefix ->
+        | Just contract <- idDomainContractFor ((.languageContract) aggregate) prefix ->
             let firstSample = idDomainSampleText contract
                 samples = [firstSample, T.dropEnd 1 firstSample <> "r"]
                 wrongPrefix = "wrong_" <> T.drop (T.length prefix + 1) firstSample
@@ -1275,7 +1275,7 @@ mappedHarnessImports aggregate
 mappedCodecHarnessExports :: Agg -> Text
 mappedCodecHarnessExports aggregate =
   T.concat
-    [ ", encode" <> sdName declaration <> "Mapped, decode" <> sdName declaration <> "Mapped"
+    [ ", encode" <> (.name) declaration <> "Mapped, decode" <> (.name) declaration <> "Mapped"
     | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate
     ]
 
@@ -1295,13 +1295,13 @@ harnessImportPlan aggregate =
     id
     ( planHaskellImports
         ImportEnvironment
-          { targetModule = aGenPrefix aggregate <> ".Harness",
+          { targetModule = (.genPrefix) aggregate <> ".Harness",
             localNames =
               Set.fromList
-                [ aName aggregate <> "Command",
-                  aName aggregate <> "Event",
-                  aName aggregate <> "Regs",
-                  aVertexType aggregate
+                [ (.name) aggregate <> "Command",
+                  (.name) aggregate <> "Event",
+                  (.name) aggregate <> "Regs",
+                  (.vertexType) aggregate
                 ],
             reservedQualifiers = harnessReservedQualifiers
           }
@@ -1312,13 +1312,13 @@ harnessImportPlan aggregate =
       Set.fromList
         [ reference
         | nominal <- consumerNominalHarnessTypes aggregate,
-          ConsumerNominal binding <- [resolvedNominalOwnership nominal],
+          ConsumerNominal binding <- [(.ownership) nominal],
           reference <-
             map
               harnessQualifiedValueReference
-              ( consumerNominalBinding binding
-                  : consumerNominalFixtures binding
-                  : maybeToListHarness (consumerNominalInitial binding)
+              ( (.binding) binding
+                  : (.fixtures) binding
+                  : maybeToListHarness ((.initial) binding)
               )
         ]
     mappedReferences =
@@ -1329,11 +1329,11 @@ harnessImportPlan aggregate =
             ResolvedStructural structural _ ->
               map
                 harnessQualifiedValueReference
-                (sdFixtures structural : maybeToListHarness (sdInitial structural))
+                ((.fixtures) structural : maybeToListHarness ((.initial) structural))
             ResolvedOpaque opaque ->
               map
                 harnessQualifiedValueReference
-                (odFixtures opaque : maybeToListHarness (odInitial opaque))
+                ((.fixtures) opaque : maybeToListHarness ((.initial) opaque))
         ]
     references = consumerNominalReferences <> mappedReferences
 
@@ -1374,20 +1374,20 @@ hasMappedConformanceAssertions aggregate =
   not (null (mappedEventFields aggregate)) || not (null (structuralWireDeclarations aggregate))
 
 mappedHarnessDeclarationsResolved :: Agg -> [ResolvedMappedDecl]
-mappedHarnessDeclarationsResolved aggregate = case aTypeGraph aggregate of
+mappedHarnessDeclarationsResolved aggregate = case (.typeGraph) aggregate of
   Nothing -> []
   Just graph ->
     [ declaration
-    | key <- aggregateMappedClosure (semanticImpact graph) (aName aggregate),
-      Just declaration <- [Map.lookup key (tgDeclarations graph)]
+    | key <- aggregateMappedClosure (semanticImpact graph) ((.name) aggregate),
+      Just declaration <- [Map.lookup key ((.declarations) graph)]
     ]
 
 mappedEventFields :: Agg -> [(ResolvedCtor, Text, ResolvedAggregateType, ResolvedMappedDecl)]
 mappedEventFields aggregate =
-  [ (event, fieldDslName identity, fieldType, declaration)
-  | event <- aEvents aggregate,
-    (identity, fieldType) <- rcFields event,
-    declaration <- maybeToListHarness (mappedDeclaration aggregate fieldType)
+  [ (event, (.dslName) identity, valueType, declaration)
+  | event <- (.events) aggregate,
+    (identity, valueType) <- (.fields) event,
+    declaration <- maybeToListHarness (mappedDeclaration aggregate valueType)
   ]
 
 structuralWireDeclarations :: Agg -> [(StructuralDecl, ResolvedMappedShape)]
@@ -1412,8 +1412,8 @@ mappedHarnessDeclarations aggregate
     structuralWire = structuralWireDeclarations aggregate
     eventFields = mappedEventFields aggregate
     assertionLists =
-      [ mappedEventAssertionName event fieldName <> "Assertions"
-      | (event, fieldName, _, _) <- eventFields
+      [ mappedEventAssertionName event name <> "Assertions"
+      | (event, name, _, _) <- eventFields
       ]
         <> ["structuralWirePolicyAssertions" | not (null structuralWire)]
 
@@ -1422,25 +1422,25 @@ mappedDeclaration aggregate resolvedType = do
   key <- case resolvedType of
     AggregateMapped mappedKey -> Just mappedKey
     _ -> Nothing
-  graph <- aTypeGraph aggregate
-  Map.lookup key (tgDeclarations graph)
+  graph <- (.typeGraph) aggregate
+  Map.lookup key ((.declarations) graph)
 
 mappedEventAssertionDecl :: Agg -> (ResolvedCtor, Text, ResolvedAggregateType, ResolvedMappedDecl) -> [Text]
-mappedEventAssertionDecl aggregate (event, fieldName, _fieldType, declaration) =
+mappedEventAssertionDecl aggregate (event, name, _fieldType, declaration) =
   [ "",
     valueName <> "Assertions :: [(String, Bool)]",
     valueName <> "Assertions =",
-    "  [ (\"mapped codec round-trip: " <> rcName event <> "/" <> fieldName <> "/\" <> T.unpack label, roundTrips " <> eventExpression <> ")",
+    "  [ (\"mapped codec round-trip: " <> (.name) event <> "/" <> name <> "/\" <> T.unpack label, roundTrips " <> eventExpression <> ")",
     "  | (label, mappedValue) <- NonEmpty.toList (fixtureCases " <> fixtures <> ")",
     "  ]"
   ]
   where
-    valueName = mappedEventAssertionName event fieldName
+    valueName = mappedEventAssertionName event name
     fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (mappedFixtures declaration))
-    eventExpression = ctorExprWithOverride aggregate event fieldName "mappedValue"
+    eventExpression = ctorExprWithOverride aggregate event name "mappedValue"
 
 mappedEventAssertionName :: ResolvedCtor -> Text -> Text
-mappedEventAssertionName event fieldName = lowerFirst (rcName event) <> pascal fieldName
+mappedEventAssertionName event name = lowerFirst ((.name) event) <> pascal name
 
 wirePolicyAssertionDecls :: Agg -> [(StructuralDecl, ResolvedMappedShape)] -> [Text]
 wirePolicyAssertionDecls _aggregate [] = []
@@ -1457,28 +1457,28 @@ wirePolicyAssertionDecls aggregate declarations =
 wirePolicyAssertions :: Agg -> (StructuralDecl, ResolvedMappedShape) -> [Text]
 wirePolicyAssertions aggregate (declaration, shape) = case shape of
   RRecord _ unknownFields fields ->
-    concatMap (recordMissingAssertions aggregate declaration) [field | field <- fields, rwfPresence field == POptional]
+    concatMap (recordMissingAssertions aggregate declaration) [field | field <- fields, (.presence) field == POptional]
       <> [unknownFieldAssertion aggregate declaration unknownFields]
   REnum entries -> map (enumArmAssertion aggregate declaration) entries <> [enumUnknownAssertion declaration]
   RUnion encoding arms ->
     map (unionArmAssertion aggregate declaration encoding) arms
-      <> [unknownFieldAssertion aggregate declaration (ueUnknownFields encoding)]
+      <> [unknownFieldAssertion aggregate declaration ((.unknownFields) encoding)]
 
 wirePoliciesUseIsLeft :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
 wirePoliciesUseIsLeft = any $ \(_, shape) -> case shape of
   RRecord _ unknownFields fields ->
     unknownFields == RejectUnknown
-      || any (\field -> rwfPresence field == POptional && not (isOptionalType (rwfType field))) fields
+      || any (\field -> (.presence) field == POptional && not (isOptionalType ((.valueType) field))) fields
   REnum {} -> True
-  RUnion encoding _ -> ueUnknownFields encoding == RejectUnknown
+  RUnion encoding _ -> (.unknownFields) encoding == RejectUnknown
 
 wirePoliciesUseIsRight :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
 wirePoliciesUseIsRight = any $ \(_, shape) -> case shape of
   RRecord _ unknownFields fields ->
     unknownFields == IgnoreUnknown
-      || any (\field -> rwfPresence field == POptional && isOptionalType (rwfType field)) fields
+      || any (\field -> (.presence) field == POptional && isOptionalType ((.valueType) field)) fields
   REnum {} -> False
-  RUnion encoding _ -> ueUnknownFields encoding == IgnoreUnknown
+  RUnion encoding _ -> (.unknownFields) encoding == IgnoreUnknown
 
 isOptionalType :: ResolvedTypeExpr -> Bool
 isOptionalType ROptional {} = True
@@ -1489,15 +1489,15 @@ recordMissingAssertions aggregate declaration field =
   [ "(\"wire policy missing default: "
       <> canonical
       <> "/"
-      <> rwfKey field
+      <> (.key) field
       <> "\", case "
       <> decoder
       <> " (deleteObjectField "
-      <> tshow (rwfKey field)
+      <> tshow ((.key) field)
       <> " ("
       <> encodedSample
       <> ")) of Left _ -> False; Right decoded -> objectField "
-      <> tshow (rwfKey field)
+      <> tshow ((.key) field)
       <> " ("
       <> encoder
       <> " decoded) == Just ("
@@ -1506,39 +1506,39 @@ recordMissingAssertions aggregate declaration field =
     "(\"wire policy explicit null: "
       <> canonical
       <> "/"
-      <> rwfKey field
+      <> (.key) field
       <> "\", "
       <> nullExpectation
       <> " ("
       <> decoder
       <> " (insertObjectField "
-      <> tshow (rwfKey field)
+      <> tshow ((.key) field)
       <> " Aeson.Null ("
       <> encodedSample
       <> "))))"
   ]
   where
-    canonical = unCanonicalTypeId (sdCanonical declaration)
-    encoder = "encode" <> sdName declaration <> "Mapped"
-    decoder = "decode" <> sdName declaration <> "Mapped"
-    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
+    canonical = unCanonicalTypeId ((.canonical) declaration)
+    encoder = "encode" <> (.name) declaration <> "Mapped"
+    decoder = "decode" <> (.name) declaration <> "Mapped"
+    fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) declaration))
     encodedSample = encoder <> " (snd (NonEmpty.head (fixtureCases " <> fixtures <> ")))"
-    nullExpectation = case rwfType field of
+    nullExpectation = case (.valueType) field of
       ROptional _ -> "isRight"
       _ -> "isLeft"
 
 missingExpectedValue :: Agg -> ResolvedWireField -> Text
-missingExpectedValue aggregate field = case rwfOnMissing field of
+missingExpectedValue aggregate field = case (.onMissing) field of
   Just OmNull -> "Aeson.Null"
   Just (OmText value) -> "Aeson.String " <> tshow value
   Just (OmInt value) -> "Aeson.toJSON (" <> T.pack (show value) <> " :: Int)"
   Just (OmBool value) -> if value then "Aeson.Bool True" else "Aeson.Bool False"
   Just OmEmptyList -> "Aeson.toJSON ([] :: [Aeson.Value])"
   Just OmEmptyMap -> "Aeson.Object mempty"
-  Just (OmCtor constructor) -> case (aTypeGraph aggregate, rwfType field) of
-    (Just graph, RRef key) -> case Map.lookup key (tgDeclarations graph) of
-      Just (ResolvedStructural _ (REnum entries)) -> case find ((== constructor) . weCtor) entries of
-        Just entry -> "Aeson.String " <> tshow (weTag entry)
+  Just (OmCtor constructor) -> case ((.typeGraph) aggregate, (.valueType) field) of
+    (Just graph, RRef key) -> case Map.lookup key ((.declarations) graph) of
+      Just (ResolvedStructural _ (REnum entries)) -> case find ((== constructor) . (.ctor)) entries of
+        Just entry -> "Aeson.String " <> tshow ((.tag) entry)
         Nothing -> "error \"missing enum default constructor\""
       _ -> "error \"non-enum constructor default\""
     _ -> "error \"non-reference constructor default\""
@@ -1547,15 +1547,15 @@ missingExpectedValue aggregate field = case rwfOnMissing field of
 unknownFieldAssertion :: Agg -> StructuralDecl -> UnknownFields -> Text
 unknownFieldAssertion aggregate declaration policy =
   "(\"wire policy unknown fields: "
-    <> unCanonicalTypeId (sdCanonical declaration)
+    <> unCanonicalTypeId ((.canonical) declaration)
     <> "\", all (\\(_, value) -> "
     <> expectation
     <> " (decode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped (insertObjectField \"__keiro_unknown\" (Aeson.Bool True) (encode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped value)))) (NonEmpty.toList (fixtureCases "
-    <> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
+    <> renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) declaration))
     <> ")))"
   where
     expectation = case policy of
@@ -1565,47 +1565,47 @@ unknownFieldAssertion aggregate declaration policy =
 enumArmAssertion :: Agg -> StructuralDecl -> WireEnum -> Text
 enumArmAssertion aggregate declaration entry =
   "(\"wire enum arm: "
-    <> unCanonicalTypeId (sdCanonical declaration)
+    <> unCanonicalTypeId ((.canonical) declaration)
     <> "/"
-    <> weTag entry
+    <> (.tag) entry
     <> "\", any (\\(_, value) -> encode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped value == Aeson.String "
-    <> tshow (weTag entry)
+    <> tshow ((.tag) entry)
     <> " && decode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped (Aeson.String "
-    <> tshow (weTag entry)
+    <> tshow ((.tag) entry)
     <> ") == Right value) (NonEmpty.toList (fixtureCases "
-    <> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
+    <> renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) declaration))
     <> ")))"
 
 enumUnknownAssertion :: StructuralDecl -> Text
 enumUnknownAssertion declaration =
   "(\"wire enum unknown tag: "
-    <> unCanonicalTypeId (sdCanonical declaration)
+    <> unCanonicalTypeId ((.canonical) declaration)
     <> "\", isLeft (decode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped (Aeson.String \"__keiro_unknown\")))"
 
 unionArmAssertion :: Agg -> StructuralDecl -> UnionEncoding -> ResolvedWireArm -> Text
 unionArmAssertion aggregate declaration encoding arm =
   "(\"wire union arm: "
-    <> unCanonicalTypeId (sdCanonical declaration)
+    <> unCanonicalTypeId ((.canonical) declaration)
     <> "/"
-    <> rwaTag arm
+    <> (.tag) arm
     <> "\", any (\\(_, value) -> objectField "
-    <> tshow (ueTagField encoding)
+    <> tshow ((.tagField) encoding)
     <> " (encode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped value) == Just (Aeson.String "
-    <> tshow (rwaTag arm)
+    <> tshow ((.tag) arm)
     <> ") && decode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped (encode"
-    <> sdName declaration
+    <> (.name) declaration
     <> "Mapped value) == Right value) (NonEmpty.toList (fixtureCases "
-    <> renderHarnessReference aggregate (harnessQualifiedValueReference (sdFixtures declaration))
+    <> renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) declaration))
     <> ")))"
 
 wirePolicyHelpers :: [(StructuralDecl, ResolvedMappedShape)] -> [Text]
@@ -1637,23 +1637,23 @@ wirePolicyHelpers declarations =
   where
     usesDelete = any hasOptionalRecordField declarations
     usesObjectField = usesDelete || any isUnion declarations
-    hasOptionalRecordField (_, RRecord _ _ fields) = any ((== POptional) . rwfPresence) fields
+    hasOptionalRecordField (_, RRecord _ _ fields) = any ((== POptional) . (.presence)) fields
     hasOptionalRecordField _ = False
     isUnion (_, RUnion {}) = True
     isUnion _ = False
 
 mappedFixtures :: ResolvedMappedDecl -> QualifiedValueName
-mappedFixtures (ResolvedStructural declaration _) = sdFixtures declaration
-mappedFixtures (ResolvedOpaque declaration) = odFixtures declaration
+mappedFixtures (ResolvedStructural declaration _) = (.fixtures) declaration
+mappedFixtures (ResolvedOpaque declaration) = (.fixtures) declaration
 
 ctorExprWithOverride :: Agg -> ResolvedCtor -> Text -> Text -> Text
 ctorExprWithOverride aggregate constructor target replacement =
-  "(" <> rcName constructor <> " (" <> rcName constructor <> "Data" <> arguments <> "))"
+  "(" <> (.name) constructor <> " (" <> (.name) constructor <> "Data" <> arguments <> "))"
   where
     arguments =
       T.concat
-        [ " " <> if fieldDslName identity == target then replacement else sampleValue aggregate (fieldDslName identity) fieldType
-        | (identity, fieldType) <- rcFields constructor
+        [ " " <> if (.dslName) identity == target then replacement else sampleValue aggregate ((.dslName) identity) valueType
+        | (identity, valueType) <- (.fields) constructor
         ]
 
 maybeToListHarness :: Maybe value -> [value]

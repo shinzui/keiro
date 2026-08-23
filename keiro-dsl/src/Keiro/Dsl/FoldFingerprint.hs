@@ -24,7 +24,7 @@ import Keiro.Dsl.Expression
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (NominalEqualityV2), runtimeProfileHasCapability)
 import Keiro.Dsl.NominalType
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveRuntimeProfile, runtimeSemanticsFingerprintSegments)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec, checkedTypeGraph, runtimeSemanticsFingerprintSegments)
 import Keiro.Dsl.TypeGraph
 
 -- | A checked service can retain language provenance before semantic
@@ -72,14 +72,14 @@ aggregateFoldSurfaceForService service aggregate = do
   graph <- mapLeft (FoldTypeGraphResolutionFailed . showText) (checkedTypeGraph service)
   let symbols = aggregateSymbolsFromGraph graph spec
   nominalRegistry <- mapLeft (FoldNominalResolutionFailed . showText) (resolveNominalTypes spec)
-  registerSegments <- traverse (registerSegment symbols) (aggRegs aggregate)
+  registerSegments <- traverse (registerSegment symbols) ((.regs) aggregate)
   equalityUses <- nominalEqualityUses graph service aggregate
-  transitionSegments <- traverse (transitionSegment graph spec aggregate) (aggTransitions aggregate)
+  transitionSegments <- traverse (transitionSegment graph spec aggregate) ((.transitions) aggregate)
   pure
     ( T.intercalate
         "\n"
         ( runtimeSemanticsFingerprintSegments (checkedLanguageContract service)
-            ++ map stateSegment (aggStates aggregate)
+            ++ map stateSegment ((.states) aggregate)
             ++ registerSegments
             ++ mappedRegisterSegments graph
             ++ nominalSegments nominalRegistry
@@ -92,20 +92,20 @@ aggregateFoldSurfaceForService service aggregate = do
     spec = checkedSpec service
     referencedRules =
       [ rule
-      | rule <- specRules spec,
-        ruleName rule `Set.member` referencedRuleNames spec aggregate
+      | rule <- (.rules) spec,
+        (.name) rule `Set.member` referencedRuleNames spec aggregate
       ]
     mappedRegisterSegments graph =
       [ mappedRegisterSegment graph declaration
-      | register <- aggRegs aggregate,
-        TRef typeName <- [regType register],
-        Just declaration <- [Map.lookup (MappedKey typeName) (tgDeclarations graph)]
+      | register <- (.regs) aggregate,
+        TRef typeName <- [(.valueType) register],
+        Just declaration <- [Map.lookup (MappedKey typeName) ((.declarations) graph)]
       ]
     nominalSegments registry =
       [ nominalUseSegment useSite nominal binding
       | (useSite, typeName) <- nominalUseNames aggregate,
         Just nominal <- [lookupNominalType typeName registry],
-        ConsumerNominal binding <- [resolvedNominalOwnership nominal]
+        ConsumerNominal binding <- [(.ownership) nominal]
       ]
 
 -- | Equality representation belongs in the fold identity only when a guard
@@ -114,26 +114,26 @@ aggregateFoldSurfaceForService service aggregate = do
 -- retain the old fold fingerprint.
 nominalEqualityUses :: TypeGraph -> CheckedService -> Aggregate -> Either FoldSurfaceError (Set Text)
 nominalEqualityUses graph service aggregate =
-  if runtimeProfileHasCapability (effectiveRuntimeProfile (checkedLanguageContract service)) NominalEqualityV2
-    then fmap (Set.fromList . concat) (traverse transitionIdentities (aggTransitions aggregate))
+  if runtimeProfileHasCapability ((.runtimeProfile) (checkedLanguageContract service)) NominalEqualityV2
+    then fmap (Set.fromList . concat) (traverse transitionIdentities ((.transitions) aggregate))
     else
       Right
         ( Set.fromList
             [ identity
-            | transition <- aggTransitions aggregate,
-              guardSyntax <- maybeToList (tGuard transition),
+            | transition <- (.transitions) aggregate,
+              guardSyntax <- maybeToList ((.guard) transition),
               Right guardExpression <- [resolveGuardExpr (expressionEnvironmentFromGraph graph spec aggregate transition) guardSyntax],
               identity <- equalityIdentities (checkedLanguageContract service) guardExpression
             ]
         )
   where
     spec = checkedSpec service
-    transitionIdentities transition = case tGuard transition of
+    transitionIdentities transition = case (.guard) transition of
       Nothing -> Right []
       Just guardSyntax -> do
         guardExpression <-
           mapLeft
-            (FoldGuardResolutionFailed (aggName aggregate) (tCommand transition) . showText)
+            (FoldGuardResolutionFailed ((.name) aggregate) ((.command) transition) . showText)
             (resolveGuardExpr (expressionEnvironmentFromGraph graph spec aggregate transition) guardSyntax)
         pure (equalityIdentities (checkedLanguageContract service) guardExpression)
 
@@ -141,14 +141,14 @@ equalityIdentities :: EffectiveLanguageContract -> TypedScalarExpr -> [Text]
 equalityIdentities languageContract expression =
   current <> children
   where
-    current = case typedScalarNode expression of
+    current = case (.node) expression of
       TypedEqual left _ -> equalityIdentity left
       TypedNotEqual left _ -> equalityIdentity left
       _ -> []
-    equalityIdentity operand = case typedScalarType operand of
+    equalityIdentity operand = case (.valueType) operand of
       AggregateNominal nominal -> maybeToList (nominalEqualityIdentityForService languageContract nominal)
       _ -> []
-    children = case typedScalarNode expression of
+    children = case (.node) expression of
       TypedLiteral {} -> []
       TypedRoot {} -> []
       TypedProject {} -> []
@@ -164,31 +164,31 @@ equalityIdentities languageContract expression =
 
 nominalUseNames :: Aggregate -> [(Text, Name)]
 nominalUseNames aggregate =
-  [ ("register:" <> regName register, typeName)
-  | register <- aggRegs aggregate,
-    TRef typeName <- [regType register]
+  [ ("register:" <> (.name) register, typeName)
+  | register <- (.regs) aggregate,
+    TRef typeName <- [(.valueType) register]
   ]
-    <> [ ("event:" <> evName event <> "." <> aggregateFieldName field, typeName)
-       | event <- aggEvents aggregate,
+    <> [ ("event:" <> (.name) event <> "." <> (.name) field, typeName)
+       | event <- (.events) aggregate,
          field <- eventFields event,
-         TRef typeName <- maybe [] pure (aggregateFieldType field)
+         TRef typeName <- maybe [] pure ((.valueType) field)
        ]
   where
-    eventFields event = case evBody event of
+    eventFields event = case (.body) event of
       EventFields fields -> fields
-      EventFromCommand commandName -> concat [cmdFields command | command <- aggCommands aggregate, cmdName command == commandName]
+      EventFromCommand commandName -> concat [(.fields) command | command <- (.commands) aggregate, (.name) command == commandName]
 
 nominalUseSegment :: Text -> ResolvedNominalType -> ConsumerNominalBinding -> Text
 nominalUseSegment useSite nominal binding =
   T.intercalate
     "|"
     [ "nominal-use:" <> useSite,
-      "name=" <> resolvedNominalName nominal,
-      "representation=" <> nominalRepresentationSegment (resolvedNominalRepresentation nominal),
-      "canonical=" <> unCanonicalTypeId (consumerNominalCanonical binding),
-      "binding=" <> unQualifiedValueName (consumerNominalBinding binding),
-      "binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding),
-      "initial=" <> maybe "(none)" unQualifiedValueName (consumerNominalInitial binding)
+      "name=" <> (.name) nominal,
+      "representation=" <> nominalRepresentationSegment ((.representation) nominal),
+      "canonical=" <> unCanonicalTypeId ((.canonical) binding),
+      "binding=" <> unQualifiedValueName ((.binding) binding),
+      "binding-version=" <> unBindingVersion ((.bindingVersion) binding),
+      "initial=" <> maybe "(none)" unQualifiedValueName ((.initial) binding)
     ]
 
 nominalRepresentationSegment :: NominalRepresentation -> Text
@@ -206,80 +206,80 @@ mappedRegisterSegment :: TypeGraph -> ResolvedMappedDecl -> Text
 mappedRegisterSegment graph (ResolvedStructural declaration _) =
   T.intercalate
     "|"
-    [ "mapped-register:" <> sdName declaration,
-      "wire=" <> wireFingerprint graph (sdName declaration),
-      "canonical=" <> unCanonicalTypeId (sdCanonical declaration),
-      "binding=" <> unQualifiedValueName (sdBinding declaration),
-      "binding-version=" <> unBindingVersion (sdBindingVersion declaration),
-      "initial=" <> maybe "(missing)" unQualifiedValueName (sdInitial declaration)
+    [ "mapped-register:" <> (.name) declaration,
+      "wire=" <> wireFingerprint graph ((.name) declaration),
+      "canonical=" <> unCanonicalTypeId ((.canonical) declaration),
+      "binding=" <> unQualifiedValueName ((.binding) declaration),
+      "binding-version=" <> unBindingVersion ((.bindingVersion) declaration),
+      "initial=" <> maybe "(missing)" unQualifiedValueName ((.initial) declaration)
     ]
 mappedRegisterSegment _ (ResolvedOpaque declaration) =
   T.intercalate
     "|"
-    [ "mapped-register:" <> odName declaration,
-      "codec=" <> unCodecIdentity (odCodecIdentity declaration),
-      "codec-version=" <> unCodecVersion (odCodecVersion declaration),
-      "initial=" <> maybe "(missing)" unQualifiedValueName (odInitial declaration)
+    [ "mapped-register:" <> (.name) declaration,
+      "codec=" <> unCodecIdentity ((.codecIdentity) declaration),
+      "codec-version=" <> unCodecVersion ((.codecVersion) declaration),
+      "initial=" <> maybe "(missing)" unQualifiedValueName ((.initial) declaration)
     ]
 
 stateSegment :: StateDecl -> Text
 stateSegment state =
   "state:"
-    <> stName state
+    <> (.name) state
     <> "|terminal="
-    <> if stTerminal state then "true" else "false"
+    <> if (.terminal) state then "true" else "false"
 
 registerSegment :: AggregateSymbols -> RegDecl -> Either FoldSurfaceError Text
 registerSegment symbols register = do
   resolvedType <-
     mapLeft
-      (FoldRegisterTypeResolutionFailed (regName register) . showText)
-      (resolveAggregateType symbols (regLoc register) RegisterUse (regType register))
+      (FoldRegisterTypeResolutionFailed ((.name) register) . showText)
+      (resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register))
   resolvedInitial <-
     mapLeft
-      (FoldRegisterInitialResolutionFailed (regName register) . showText)
-      (resolveRegisterInitial symbols (regLoc register) resolvedType (regInitial register))
+      (FoldRegisterInitialResolutionFailed ((.name) register) . showText)
+      (resolveRegisterInitial symbols ((.loc) register) resolvedType ((.initial) register))
   pure
     ( "reg:"
-        <> regName register
+        <> (.name) register
         <> ":"
-        <> typeExprCanonicalName (regType register)
+        <> typeExprCanonicalName ((.valueType) register)
         <> "="
         <> registerInitialCanonicalName resolvedInitial
     )
 
 transitionSegment :: TypeGraph -> Spec -> Aggregate -> Transition -> Either FoldSurfaceError Text
 transitionSegment graph spec aggregate transition = do
-  outputOwnershipSegment <- case tImplementation transition of
+  outputOwnershipSegment <- case (.implementation) transition of
     LegacyHoleImplementation -> Right []
     GeneratedImplementation -> fmap (pure . ("outputs=" <>) . T.intercalate ",") outputSegments
     HoleImplementation -> fmap (pure . ("outputs=" <>) . T.intercalate ",") outputSegments
   pure
     ( T.intercalate
         "|"
-        ( [ "transition:" <> renderMode (tMode transition),
-            tSource transition,
-            tCommand transition
+        ( [ "transition:" <> renderMode ((.mode) transition),
+            (.source) transition,
+            (.command) transition
           ]
             ++ implementationSegment
-            ++ [ "guard=" <> maybe "" canonicalExpr (tGuard transition),
-                 "writes=" <> T.intercalate ";" (map renderWrite (tWrites transition)),
-                 "emits=" <> T.intercalate "," (tEmits transition)
+            ++ [ "guard=" <> maybe "" canonicalExpr ((.guard) transition),
+                 "writes=" <> T.intercalate ";" (map renderWrite ((.writes) transition)),
+                 "emits=" <> T.intercalate "," ((.emits) transition)
                ]
             ++ outputOwnershipSegment
-            ++ ["goto=" <> tGoto transition]
+            ++ ["goto=" <> (.goto) transition]
         )
     )
   where
     renderWrite (registerName, expression) = registerName <> ":=" <> canonicalExpr expression
-    outputSegments = traverse (uncurry outputSegment) (zip [1 ..] (tEmits transition))
+    outputSegments = traverse (uncurry outputSegment) (zip [1 ..] ((.emits) transition))
     outputSegment emitIndex eventName = do
       mapping <-
         mapLeft
-          (FoldEventOutputResolutionFailed (aggName aggregate) (tCommand transition) eventName . showText)
+          (FoldEventOutputResolutionFailed ((.name) aggregate) ((.command) transition) eventName . showText)
           (eventOutputMappingFromGraph graph spec aggregate transition emitIndex eventName)
       pure (eventName <> "=" <> eventOutputCanonical mapping)
-    implementationSegment = case tImplementation transition of
+    implementationSegment = case (.implementation) transition of
       LegacyHoleImplementation -> []
       GeneratedImplementation -> ["implementation=generated"]
       HoleImplementation -> ["implementation=hole"]
@@ -292,10 +292,10 @@ ruleSegment :: RuleDecl -> Text
 ruleSegment rule =
   T.intercalate
     "|"
-    [ "rule:" <> ruleName rule,
-      ruleDomain rule,
-      ruleCodomain rule,
-      "cases=" <> T.intercalate ";" (map renderCase (ruleCases rule))
+    [ "rule:" <> (.name) rule,
+      (.domain) rule,
+      (.codomain) rule,
+      "cases=" <> T.intercalate ";" (map renderCase ((.cases) rule))
     ]
   where
     renderCase (constructorName, expression) = constructorName <> "=>" <> canonicalExpr expression
@@ -303,20 +303,20 @@ ruleSegment rule =
 referencedRuleNames :: Spec -> Aggregate -> Set Name
 referencedRuleNames spec aggregate = close directNames
   where
-    rules = specRules spec
+    rules = (.rules) spec
     directNames =
       Set.unions
         [ exprNames expression
-        | transition <- aggTransitions aggregate,
-          expression <- maybeToList (tGuard transition) ++ map snd (tWrites transition)
+        | transition <- (.transitions) aggregate,
+          expression <- maybeToList ((.guard) transition) ++ map snd ((.writes) transition)
         ]
     close names =
       let expanded =
             Set.unions
               ( names
-                  : [ Set.unions (map (exprNames . snd) (ruleCases rule))
+                  : [ Set.unions (map (exprNames . snd) ((.cases) rule))
                     | name <- Set.toList names,
-                      Just rule <- [find ((== name) . ruleName) rules]
+                      Just rule <- [find ((== name) . (.name)) rules]
                     ]
               )
        in if expanded == names then names else close expanded

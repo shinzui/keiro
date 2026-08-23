@@ -29,6 +29,63 @@ INLINE_FIELD = re.compile(r"\{\s*([a-z][A-Za-z0-9_]*)\s*::\s*([^}]+)\}")
 MODULE = re.compile(r"^module\s+([A-Z][A-Za-z0-9_.]*)", re.MULTILINE)
 CAMEL_PREFIX = re.compile(r"^([a-z][a-z0-9]*)([A-Z].*)$")
 LANGUAGE = re.compile(r"^\{-# LANGUAGE ([A-Za-z0-9_]+) #-\}$", re.MULTILINE)
+RESERVED_TARGETS = {"module": "moduleName", "type": "valueType"}
+OWNER_PREFIXES = {
+    "AdoptedRow": "ad",
+    "Aggregate": "agg",
+    "BackoffSpec": "bo",
+    "ChangeContext": "changeContext",
+    "Command": "cmd",
+    "ContractNode": "ctr",
+    "CoordinationImpact": "coordination",
+    "CorrelateDecl": "corr",
+    "DecodeSpec": "dec",
+    "DispatchNode": "disp",
+    "EmitNode": "em",
+    "Event": "ev",
+    "IdExpr": "ide",
+    "InputDecl": "in",
+    "IntakeNode": "ink",
+    "Mapping": "map",
+    "OperationNode": "op",
+    "Paired": "pr",
+    "ProcessNode": "proc",
+    "ProjectionRevisionNode": "prv",
+    "ProjectionSpec": "proj",
+    "PromotionObjectNode": "rpo",
+    "PublisherNode": "pub",
+    "ReadModelNode": "rm",
+    "ResolveDecl": "rv",
+    "RevisionTargetNode": "prt",
+    "RouterNode": "rt",
+    "ScaffoldModuleRoleRow": "srr",
+    "ScaffoldRecord": "rec",
+    "SnapshotSpec": "snap",
+    "StateDecl": "st",
+    "TimerNode": "tm",
+    "WorkflowNode": "wf",
+    "WorkqueueNode": "wq",
+    "WorkspaceManifest": "wmf",
+    "WorkspaceModuleRow": "wrm",
+    "WorkspaceSourceLanguageRow": "wrsl",
+    "WqDispRow": "wqd",
+    "WqField": "wqf",
+}
+EXPLICIT_TARGETS = {
+    ("Context", "contextName"): "name",
+    ("ScaffoldModule", "modulePath"): "path",
+    ("ScaffoldModule", "moduleText"): "text",
+}
+PACKAGE_HISTORY_ROW = re.compile(
+    r"^\| `(?P<path>[^:]+):\d+` \| `(?P<owner>[^`]+)` \| (?:data|newtype) \| (?:yes|no) \| "
+    r"`(?P<current>[^`]+)` \| `(?P<target>[^`]+)` \|",
+    re.MULTILINE,
+)
+GENERATED_HISTORY_ROW = re.compile(
+    r"^\| `(?P<path>[^:]+):\d+` \| `(?P<owner>[^`]+)` \| (?:data|newtype) \| "
+    r"`(?P<current>[^`]+)` \| `(?P<target>[^`]+)` \|",
+    re.MULTILINE,
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -200,8 +257,31 @@ def target_names(fields: list[RecordField]) -> dict[tuple[str, str, str], str]:
             if shared_prefix and field.name.lower().startswith(shared_prefix) and not explicit_unwrapper:
                 suffix = field.name[len(shared_prefix) :]
                 target = suffix[0].lower() + suffix[1:]
+            owner_prefix = OWNER_PREFIXES.get(owner)
+            if target == field.name and owner_prefix and field.name.startswith(owner_prefix) and len(field.name) > len(owner_prefix):
+                suffix = field.name[len(owner_prefix) :]
+                target = suffix[0].lower() + suffix[1:]
+            target = EXPLICIT_TARGETS.get((owner, field.name), target)
+            target = RESERVED_TARGETS.get(target, target)
             targets[(path, owner, field.name)] = target
     return targets
+
+
+def historical_names(path: Path, row_pattern: re.Pattern[str]) -> dict[tuple[str, str, str], str]:
+    """Retain the released spelling while deriving all live facts from source.
+
+    The migration documents are the checked historical authority. Once source
+    has adopted the target labels, recomputing both columns from source would
+    erase the PVP migration map. Keying the retained spelling by the stable
+    source path, owner, and live target lets line numbers, types, exports, and
+    deriving clauses continue to drift-check against the current tree.
+    """
+    if not path.exists():
+        return {}
+    return {
+        (match.group("path"), match.group("owner"), match.group("target")): match.group("current")
+        for match in row_pattern.finditer(path.read_text())
+    }
 
 
 def observation(field: RecordField, text: str) -> str:
@@ -215,7 +295,7 @@ def observation(field: RecordField, text: str) -> str:
     return ", ".join(observations) if observations else "Haskell API and runtime semantics"
 
 
-def package_document(fields: list[RecordField]) -> str:
+def package_document(fields: list[RecordField], history: dict[tuple[str, str, str], str]) -> str:
     targets = target_names(fields)
     files = {field.path: (ROOT / field.path).read_text() for field in fields}
     record_count = len({(field.path, field.owner) for field in fields})
@@ -225,8 +305,9 @@ def package_document(fields: list[RecordField]) -> str:
         "# keiro-dsl record-field migration for 0.15",
         "",
         "This checked inventory is the package-authored record migration contract for ExecPlan 177.",
-        "It is generated from every tracked Haskell source compiled through the `shared` Cabal",
-        "stanza. The target column removes a shared owner prefix; unchanged rows are intentional.",
+        "It validates every tracked Haskell source compiled through the `shared` Cabal stanza.",
+        "The current column preserves the released 0.14 spelling; the target column and all other",
+        "facts are derived from the live 0.15 source. Unchanged rows are intentional.",
         "Product reads become record-dot projections, while single-field newtype unwrappers remain",
         "explicit positional functions. JSON keys, rendered text, fingerprints, CLI bytes, strictness,",
         "constructor/field order, and deriving behavior are frozen unless a row says otherwise.",
@@ -239,6 +320,7 @@ def package_document(fields: list[RecordField]) -> str:
     ]
     for field in fields:
         target = targets[(field.path, field.owner, field.name)]
+        current = history.get((field.path, field.owner, target), field.name)
         if field.kind == "newtype" and field.name.startswith("un"):
             replacement = f"explicit `{field.name}` positional function"
         else:
@@ -251,7 +333,7 @@ def package_document(fields: list[RecordField]) -> str:
                     f"`{field.owner}`",
                     field.kind,
                     "yes" if field.public else "no",
-                    f"`{field.name}`",
+                    f"`{current}`",
                     f"`{target}`",
                     f"`{field.type_text.replace('|', '&#124;')}`",
                     replacement,
@@ -265,7 +347,12 @@ def package_document(fields: list[RecordField]) -> str:
     return "\n".join(lines)
 
 
-def generated_document(generated_fields: list[RecordField], all_generated: list[Path], hand_owned: list[Path]) -> str:
+def generated_document(
+    generated_fields: list[RecordField],
+    all_generated: list[Path],
+    hand_owned: list[Path],
+    history: dict[tuple[str, str, str], str],
+) -> str:
     targets = target_names(generated_fields)
     generated_text = {str(path.relative_to(ROOT)): path.read_text() for path in all_generated}
     field_names = sorted({field.name for field in generated_fields}, key=lambda name: (-len(name), name))
@@ -291,8 +378,10 @@ def generated_document(generated_fields: list[RecordField], all_generated: list[
         "",
         "This checked inventory defines the generated-Haskell presentation-edition break for",
         "ExecPlan 177. It covers every tracked overwriteable `Generated` module, every generated",
-        "record field, every lexical use of those field labels in generated or hand-owned conformance",
-        "sources, and every local record-default pragma. Lexical occurrence rows intentionally",
+        "record field, every lexical use of the live v2 labels in generated or hand-owned conformance",
+        "sources, and every local record-default pragma. Declaration rows preserve the released v1",
+        "spelling while deriving their target and structural facts from current v2 output. Occurrence",
+        "rows intentionally",
         "over-approximate selector use so no consumer occurrence is silently omitted during review.",
         "",
         f"Inventory: {len(all_generated)} generated modules, "
@@ -311,9 +400,10 @@ def generated_document(generated_fields: list[RecordField], all_generated: list[
     ]
     for field in generated_fields:
         target = targets[(field.path, field.owner, field.name)]
+        current = history.get((field.path, field.owner, target), field.name)
         access = f"explicit `{field.name}` positional function" if field.kind == "newtype" and field.name.startswith("un") else f"`(.{target})` or constructor pattern"
         lines.append(
-            f"| `{field.path}:{field.line}` | `{field.owner}` | {field.kind} | `{field.name}` | `{target}` | `{field.type_text.replace('|', '&#124;')}` | {access} |"
+            f"| `{field.path}:{field.line}` | `{field.owner}` | {field.kind} | `{current}` | `{target}` | `{field.type_text.replace('|', '&#124;')}` | {access} |"
         )
     lines.extend(("", "## Field-label occurrences", "", "| Location | Label | v2 remediation | Ownership |", "| --- | --- | --- | --- |"))
     target_by_name: dict[str, set[str]] = {}
@@ -363,10 +453,13 @@ def main() -> None:
         if "/Generated/" not in str(path)
     )
 
-    write_or_check(PACKAGE_MANIFEST, package_document(package), arguments.check)
+    package_history = historical_names(PACKAGE_MANIFEST, PACKAGE_HISTORY_ROW)
+    generated_history = historical_names(GENERATED_MANIFEST, GENERATED_HISTORY_ROW)
+
+    write_or_check(PACKAGE_MANIFEST, package_document(package, package_history), arguments.check)
     write_or_check(
         GENERATED_MANIFEST,
-        generated_document(generated, generated_files, conformance_files),
+        generated_document(generated, generated_files, conformance_files, generated_history),
         arguments.check,
     )
 

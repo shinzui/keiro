@@ -42,7 +42,7 @@ canonicalTransition =
 canonicalDomainOutcomeTypes :: Maybe DomainOutcomeTypes -> Text
 canonicalDomainOutcomeTypes Nothing = ""
 canonicalDomainOutcomeTypes (Just declaration) =
-  "rejection=" <> rejectionType declaration <> "|no-op=" <> noOpType declaration
+  "rejection=" <> (.rejectionType) declaration <> "|no-op=" <> (.noOpType) declaration
 
 -- | Deterministic command-behavior identity for one transition outcome. It is
 -- excluded from persisted fold identity because it labels a selected edge
@@ -101,18 +101,18 @@ utf8Bytes character
 docTransition :: Transition -> Doc ann
 docTransition transition =
   vsep $
-    [modePrefix <> pretty (tSource transition) <+> "--" <+> pretty (tCommand transition) <+> "-->"]
+    [modePrefix <> pretty ((.source) transition) <+> "--" <+> pretty ((.command) transition) <+> "-->"]
       ++ map (indent 2) clauses
   where
-    modePrefix = case tMode transition of
+    modePrefix = case (.mode) transition of
       TmLive -> mempty
       TmReplayOnly -> "replay-only "
     clauses =
-      ["implementation hole" | tImplementation transition == HoleImplementation]
-        ++ maybe [] (\guardExpression -> ["guard" <+> docExpr 0 guardExpression]) (tGuard transition)
-        ++ map (\(registerName, expression) -> "write" <+> pretty registerName <+> ":=" <+> docExpr 0 expression) (tWrites transition)
-        ++ map (\eventName -> "emit" <+> pretty eventName) (tEmits transition)
-        ++ ["goto" <+> pretty (tGoto transition)]
+      ["implementation hole" | (.implementation) transition == HoleImplementation]
+        ++ maybe [] (\guardExpression -> ["guard" <+> docExpr 0 guardExpression]) ((.guard) transition)
+        ++ map (\(registerName, expression) -> "write" <+> pretty registerName <+> ":=" <+> docExpr 0 expression) ((.writes) transition)
+        ++ map (\eventName -> "emit" <+> pretty eventName) ((.emits) transition)
+        ++ ["goto" <+> pretty ((.goto) transition)]
 
 -- | @showsPrec@-style frozen expression encoding. Precedence levels are
 -- @||@ = 1, @&&@ = 2, comparisons = 3, addition/subtraction = 4,

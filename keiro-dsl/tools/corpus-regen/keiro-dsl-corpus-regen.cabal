@@ -19,8 +19,11 @@ executable keiro-dsl-corpus-regen
   ghc-options:        -Wall -Werror=missing-fields
   default-language:   GHC2024
   default-extensions:
+    DuplicateRecordFields
     ImportQualifiedPost
+    NoFieldSelectors
     OverloadedLabels
+    OverloadedRecordDot
     OverloadedStrings
 
   build-depends:

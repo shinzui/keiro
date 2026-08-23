@@ -5,6 +5,7 @@
 -- queue and read-model emitters add their own surface authority around it.
 module Keiro.Dsl.ConsumerTypePlan
   ( HaskellTypeOccurrence (..),
+    unHaskellTypeOccurrence,
     ImportRequirement (..),
     ConsumerTypePlan (..),
     ConsumerTypePlanError (..),
@@ -26,6 +27,9 @@ newtype HaskellTypeOccurrence = HaskellTypeOccurrence
   { unHaskellTypeOccurrence :: Text
   }
   deriving stock (Eq, Ord, Show)
+
+unHaskellTypeOccurrence :: HaskellTypeOccurrence -> Text
+unHaskellTypeOccurrence (HaskellTypeOccurrence value) = value
 
 -- | One deterministic import needed to render the planned type. Consumer
 -- package provenance is retained so later Cabal planning does not need to
@@ -70,16 +74,16 @@ planConsumerType graph expression = do
       ROptional value -> application "Maybe" [ImportRequirement "base" "Data.Maybe" "Maybe"] <$> plan value
       RList value -> listType <$> plan value
       RMap value -> mapType <$> plan value
-      RRef key -> case Map.lookup key (tgDeclarations graph) of
+      RRef key -> case Map.lookup key ((.declarations) graph) of
         Nothing -> Left (ConsumerTypePlanUnknownDeclaration key)
         Just declaration ->
           let source = mappedSource declaration
            in Right
                 RenderedType
-                  { rendered = hsType source,
+                  { rendered = (.valueType) source,
                     precedence = AtomicType,
-                    requirements = Set.singleton (ImportRequirement (hsPackage source) (hsModule source) (hsType source)),
-                    mappedDependencies = Set.insert key (Map.findWithDefault Set.empty key (tgReachability graph))
+                    requirements = Set.singleton (ImportRequirement ((.package) source) ((.moduleName) source) ((.valueType) source)),
+                    mappedDependencies = Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph))
                   }
 
     atom rendered requiredImports =
@@ -92,33 +96,29 @@ planConsumerType graph expression = do
           }
 
     application constructor requiredImports value =
-      value
-        { rendered = constructor <> " " <> argument value,
-          precedence = ApplicationType,
-          requirements = Set.fromList requiredImports <> requirements value
-        }
+      replaceRenderedType
+        (constructor <> " " <> argument value)
+        ApplicationType
+        (Set.fromList requiredImports <> value.requirements)
+        value
 
-    listType value =
-      value
-        { rendered = "[" <> rendered value <> "]",
-          precedence = AtomicType
-        }
+    listType value = replaceRenderedType ("[" <> value.rendered <> "]") AtomicType value.requirements value
 
     mapType value =
-      value
-        { rendered = "Map Text " <> argument value,
-          precedence = ApplicationType,
-          requirements =
-            Set.fromList
-              [ ImportRequirement "containers" "Data.Map.Strict" "Map",
-                ImportRequirement "text" "Data.Text" "Text"
-              ]
-              <> requirements value
-        }
+      replaceRenderedType
+        ("Map Text " <> argument value)
+        ApplicationType
+        ( Set.fromList
+            [ ImportRequirement "containers" "Data.Map.Strict" "Map",
+              ImportRequirement "text" "Data.Text" "Text"
+            ]
+            <> value.requirements
+        )
+        value
 
-    argument value = case precedence value of
-      AtomicType -> rendered value
-      ApplicationType -> "(" <> rendered value <> ")"
+    argument value = case (.precedence) value of
+      AtomicType -> (.rendered) value
+      ApplicationType -> "(" <> (.rendered) value <> ")"
 
 data TypePrecedence = AtomicType | ApplicationType
 
@@ -130,14 +130,14 @@ data RenderedType = RenderedType
   }
 
 mappedSource :: ResolvedMappedDecl -> HaskellSource
-mappedSource (ResolvedStructural declaration _) = sdHaskell declaration
-mappedSource (ResolvedOpaque declaration) = odHaskell declaration
+mappedSource (ResolvedStructural declaration _) = (.haskell) declaration
+mappedSource (ResolvedOpaque declaration) = (.haskell) declaration
 
 consumerTypeReferences :: ConsumerTypePlan -> Set HaskellReference
 consumerTypeReferences planned =
   Set.fromList
     [ HaskellReference moduleName occurrence TypeNamespace PreferUnqualified
-    | ImportRequirement {package, moduleName, occurrence} <- imports planned,
+    | ImportRequirement {package, moduleName, occurrence} <- (.imports) planned,
       package `Set.notMember` standardPackages
     ]
   where
@@ -147,7 +147,7 @@ consumerTypeReferences planned =
 -- import plan. This is the collision-safe counterpart to 'haskellType', whose
 -- unqualified text remains useful for diagnostics and dependency reports.
 renderConsumerType :: HaskellImportPlan -> TypeGraph -> ResolvedTypeExpr -> Either ConsumerTypePlanError HaskellTypeOccurrence
-renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . rendered) . render
+renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . (.rendered)) . render
   where
     render = \case
       RText -> pure (plainAtom "Text")
@@ -161,23 +161,29 @@ renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . rendered) . 
       RList value -> listType <$> render value
       RMap value -> do
         renderedValue <- render value
-        pure
-          renderedValue
-            { rendered = "Map Text " <> argument renderedValue,
-              precedence = ApplicationType
-            }
-      RRef key -> case Map.lookup key (tgDeclarations graph) of
+        pure $
+          replaceRenderedType ("Map Text " <> argument renderedValue) ApplicationType renderedValue.requirements renderedValue
+      RRef key -> case Map.lookup key ((.declarations) graph) of
         Nothing -> Left (ConsumerTypePlanUnknownDeclaration key)
         Just declaration ->
           let source = mappedSource declaration
-           in atom (hsType source) (reference (hsModule source) (hsType source))
+           in atom ((.valueType) source) (reference ((.moduleName) source) ((.valueType) source))
 
     atom _ ref = plainAtom <$> plannedReference ref
     plainAtom value = RenderedType value AtomicType Set.empty Set.empty
-    application constructor value = value {rendered = constructor <> " " <> argument value, precedence = ApplicationType}
-    listType value = value {rendered = "[" <> rendered value <> "]", precedence = AtomicType}
-    argument value = case precedence value of
-      AtomicType -> rendered value
-      ApplicationType -> "(" <> rendered value <> ")"
+    application constructor value = replaceRenderedType (constructor <> " " <> argument value) ApplicationType value.requirements value
+    listType value = replaceRenderedType ("[" <> value.rendered <> "]") AtomicType value.requirements value
+    argument value = case (.precedence) value of
+      AtomicType -> (.rendered) value
+      ApplicationType -> "(" <> (.rendered) value <> ")"
     reference moduleName occurrence = HaskellReference moduleName occurrence TypeNamespace PreferUnqualified
     plannedReference = either (Left . ConsumerTypePlanImportError) Right . renderPlannedReference importPlan
+
+replaceRenderedType :: Text -> TypePrecedence -> Set ImportRequirement -> RenderedType -> RenderedType
+replaceRenderedType rendered precedence requirements value =
+  RenderedType
+    { rendered,
+      precedence,
+      requirements,
+      mappedDependencies = value.mappedDependencies
+    }

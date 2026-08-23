@@ -9,7 +9,7 @@ module Generated.ImportPlanningCollisions.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
-import Generated.ImportPlanningCollisions.Structural.Shape.Details qualified as ShapeDetails
+import Generated.ImportPlanningCollisions.Structural.Shape.Details (DetailsShape(label))
 import ImportPlanning.Bindings qualified as Bindings
 import ImportPlanning.Consumer.Shared.Types (Details)
 
@@ -20,7 +20,7 @@ instance FieldProjection DetailsLabelProjection where
   type FieldOwner DetailsLabelProjection = Details
   type FieldResult DetailsLabelProjection = Text
   fieldShapeId _ = "import-planning.Details.v1"
-  projectFieldValue _ owner = ShapeDetails.label (bindingToShape Bindings.detailsBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.detailsBinding owner).label
 
 detailsLabelWitness :: FieldWitness DetailsLabelProjection
 detailsLabelWitness = fieldWitness @DetailsLabelProjection

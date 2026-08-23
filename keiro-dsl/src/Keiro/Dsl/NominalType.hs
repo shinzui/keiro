@@ -16,8 +16,7 @@ module Keiro.Dsl.NominalType
     NominalOwnership (..),
     ConsumerNominalBinding (..),
     ResolvedNominalType (..),
-    NominalTypeRegistry,
-    nominalTypes,
+    NominalTypeRegistry (..),
     lookupNominalType,
     nominalEqualityContractForService,
     nominalEqualityIdentityForService,
@@ -41,7 +40,7 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (haskellKeywords)
 import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSpec, effectiveRuntimeProfile)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec)
 import Keiro.Dsl.TypeGraph
 
 data NominalScalarRepresentation
@@ -78,19 +77,19 @@ data NominalEqualityDomain
   deriving stock (Eq, Ord, Show, Generic)
 
 data CheckedNominalEquality = CheckedNominalEquality
-  { equalityKeyRepresentation :: !NominalEqualityKey,
-    equalityDomain :: !NominalEqualityDomain,
-    equalityContractVersion :: !Text
+  { keyRepresentation :: !NominalEqualityKey,
+    domain :: !NominalEqualityDomain,
+    contractVersion :: !Text
   }
   deriving stock (Eq, Ord, Show, Generic)
 
 data ConsumerNominalBinding = ConsumerNominalBinding
-  { consumerNominalHaskell :: !HaskellSource,
-    consumerNominalBinding :: !QualifiedValueName,
-    consumerNominalBindingVersion :: !BindingVersion,
-    consumerNominalCanonical :: !CanonicalTypeId,
-    consumerNominalFixtures :: !QualifiedValueName,
-    consumerNominalInitial :: !(Maybe QualifiedValueName)
+  { haskell :: !HaskellSource,
+    binding :: !QualifiedValueName,
+    bindingVersion :: !BindingVersion,
+    canonical :: !CanonicalTypeId,
+    fixtures :: !QualifiedValueName,
+    initial :: !(Maybe QualifiedValueName)
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -100,18 +99,18 @@ data NominalOwnership
   deriving stock (Eq, Ord, Show, Generic)
 
 data ResolvedNominalType = ResolvedNominalType
-  { resolvedNominalName :: !Name,
-    resolvedNominalRepresentation :: !NominalRepresentation,
-    resolvedNominalOwnership :: !NominalOwnership,
-    resolvedNominalLoc :: !Loc
+  { name :: !Name,
+    representation :: !NominalRepresentation,
+    ownership :: !NominalOwnership,
+    loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
 
 instance Ord ResolvedNominalType where
   compare left right =
     compare
-      (resolvedNominalName left, resolvedNominalRepresentation left, resolvedNominalOwnership left)
-      (resolvedNominalName right, resolvedNominalRepresentation right, resolvedNominalOwnership right)
+      ((.name) left, (.representation) left, (.ownership) left)
+      ((.name) right, (.representation) right, (.ownership) right)
 
 newtype NominalTypeRegistry = NominalTypeRegistry
   { nominalTypes :: Map Name ResolvedNominalType
@@ -119,21 +118,21 @@ newtype NominalTypeRegistry = NominalTypeRegistry
   deriving stock (Eq, Show, Generic)
 
 lookupNominalType :: Name -> NominalTypeRegistry -> Maybe ResolvedNominalType
-lookupNominalType name = Map.lookup name . nominalTypes
+lookupNominalType name = Map.lookup name . (.nominalTypes)
 
 nominalEqualityContractForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe CheckedNominalEquality
-nominalEqualityContractForService languageContract nominal = case resolvedNominalRepresentation nominal of
+nominalEqualityContractForService languageContract nominal = case (.representation) nominal of
   IdRepresentation prefix ->
     Just
       CheckedNominalEquality
-        { equalityKeyRepresentation = NominalTextEqualityKey,
-          equalityDomain =
+        { keyRepresentation = NominalTextEqualityKey,
+          domain =
             if enforcesNominalEqualityV2
               then EnforcedTypeIdV7TextDomain prefix enforcedIdDomainVersion
-              else case resolvedNominalOwnership nominal of
+              else case (.ownership) nominal of
                 GeneratedNominal -> LegacyUnrestrictedTextDomain
                 ConsumerNominal {} -> TypeIdTextDomain prefix,
-          equalityContractVersion =
+          contractVersion =
             if enforcesNominalEqualityV2
               then "keiro-dsl/nominal-equality/2"
               else nominalEqualityContractVersion
@@ -141,14 +140,14 @@ nominalEqualityContractForService languageContract nominal = case resolvedNomina
   EnumRepresentation constructors ->
     Just
       CheckedNominalEquality
-        { equalityKeyRepresentation = NominalTextEqualityKey,
-          equalityDomain = FiniteTextDomain (snd <$> constructors),
-          equalityContractVersion = nominalEqualityContractVersion
+        { keyRepresentation = NominalTextEqualityKey,
+          domain = FiniteTextDomain (snd <$> constructors),
+          contractVersion = nominalEqualityContractVersion
         }
   ScalarRepresentation {} -> Nothing
   where
     enforcesNominalEqualityV2 =
-      runtimeProfileHasCapability (effectiveRuntimeProfile languageContract) NominalEqualityV2
+      runtimeProfileHasCapability ((.runtimeProfile) languageContract) NominalEqualityV2
 
 -- | Stable, checked identity used by generated projection tags, fingerprints,
 -- scaffold history, and explain output. It includes the existing binding
@@ -158,11 +157,11 @@ nominalEqualityIdentityForService languageContract nominal = do
   equality <- nominalEqualityContractForService languageContract nominal
   pure . T.intercalate "|" $
     [ "nominal-equality",
-      "name=" <> resolvedNominalName nominal,
-      "contract=" <> equalityContractVersion equality,
-      "key=" <> renderEqualityKey (equalityKeyRepresentation equality),
-      "domain=" <> renderEqualityDomain (equalityDomain equality),
-      renderOwnership (resolvedNominalOwnership nominal)
+      "name=" <> (.name) nominal,
+      "contract=" <> (.contractVersion) equality,
+      "key=" <> renderEqualityKey ((.keyRepresentation) equality),
+      "domain=" <> renderEqualityDomain ((.domain) equality),
+      renderOwnership ((.ownership) nominal)
     ]
   where
     renderEqualityKey NominalTextEqualityKey = "Text"
@@ -176,9 +175,9 @@ nominalEqualityIdentityForService languageContract nominal = do
       T.intercalate
         ";"
         [ "owner=consumer",
-          "canonical=" <> unCanonicalTypeId (consumerNominalCanonical binding),
-          "binding=" <> unQualifiedValueName (consumerNominalBinding binding),
-          "binding-version=" <> unBindingVersion (consumerNominalBindingVersion binding)
+          "canonical=" <> unCanonicalTypeId ((.canonical) binding),
+          "binding=" <> unQualifiedValueName ((.binding) binding),
+          "binding-version=" <> unBindingVersion ((.bindingVersion) binding)
         ]
 
 nominalEqualityIdentitiesForService :: CheckedService -> [Text]
@@ -186,7 +185,7 @@ nominalEqualityIdentitiesForService service = case resolveNominalTypes spec of
   Left _ -> []
   Right registry ->
     [ identity
-    | nominal <- Map.elems (nominalTypes registry),
+    | nominal <- Map.elems ((.nominalTypes) registry),
       Just identity <- [nominalEqualityIdentityForService (checkedLanguageContract service) nominal]
     ]
   where
@@ -211,45 +210,45 @@ resolveNominalTypes :: Spec -> Either (NonEmpty NominalTypeError) NominalTypeReg
 resolveNominalTypes spec = do
   resolved <- rejectErrors declarationErrors resolvedDeclarations
   rejectMany collisionErrors
-  let registry = NominalTypeRegistry (Map.fromList [(resolvedNominalName value, value) | value <- resolved])
+  let registry = NominalTypeRegistry (Map.fromList [((.name) value, value) | value <- resolved])
   rejectMany (registerInitialErrors registry)
   pure registry
   where
     declarationResults =
-      map resolveId (specIds spec)
-        <> map resolveEnum (specEnums spec)
-        <> map resolveScalar (specNominalScalars spec)
+      map resolveId ((.ids) spec)
+        <> map resolveEnum ((.enums) spec)
+        <> map resolveScalar ((.nominalScalars) spec)
     declarationErrors = concatMap fst declarationResults
     resolvedDeclarations = [value | (_, Just value) <- declarationResults]
 
     resolveId declaration =
-      let name = idName declaration
-          loc = idLoc declaration
+      let name = (.name) declaration
+          loc = (.loc) declaration
           prefixErrors =
-            case idBinding declaration >>= const (TypeID.checkPrefix (idPrefix declaration)) of
+            case (.binding) declaration >>= const (TypeID.checkPrefix ((.prefix) declaration)) of
               Nothing -> []
-              Just err -> [NominalInvalidIdPrefix name loc (idPrefix declaration) (T.pack (show err))]
-          (bindingErrors, ownership) = resolveOwnership name loc (idBinding declaration)
+              Just err -> [NominalInvalidIdPrefix name loc ((.prefix) declaration) (T.pack (show err))]
+          (bindingErrors, ownership) = resolveOwnership name loc ((.binding) declaration)
           errors = prefixErrors <> bindingErrors
-          value = ResolvedNominalType name (IdRepresentation (idPrefix declaration)) <$> ownership <*> pure loc
+          value = ResolvedNominalType name (IdRepresentation ((.prefix) declaration)) <$> ownership <*> pure loc
        in (errors, value <* guardNoErrors errors)
 
     resolveEnum declaration =
-      let name = enumName declaration
-          loc = enumLoc declaration
-          representation = NE.nonEmpty (enumCtors declaration)
+      let name = (.name) declaration
+          loc = (.loc) declaration
+          representation = NE.nonEmpty ((.ctors) declaration)
           representationErrors = [NominalEmptyEnum name loc | representation == Nothing]
-          (bindingErrors, ownership) = resolveOwnership name loc (enumBinding declaration)
+          (bindingErrors, ownership) = resolveOwnership name loc ((.binding) declaration)
           errors = representationErrors <> bindingErrors
           value = ResolvedNominalType name <$> (EnumRepresentation <$> representation) <*> ownership <*> pure loc
        in (errors, value <* guardNoErrors errors)
 
     resolveScalar declaration =
-      let name = nominalScalarName declaration
-          loc = nominalScalarLoc declaration
-          representation = scalarRepresentation (nominalScalarRepresentation declaration)
-          representationErrors = [NominalUnsupportedScalar name loc (nominalScalarRepresentation declaration) | representation == Nothing]
-          (bindingErrors, ownership) = resolveRequiredOwnership name loc (nominalScalarBinding declaration)
+      let name = (.name) declaration
+          loc = (.loc) declaration
+          representation = scalarRepresentation ((.representation) declaration)
+          representationErrors = [NominalUnsupportedScalar name loc ((.representation) declaration) | representation == Nothing]
+          (bindingErrors, ownership) = resolveRequiredOwnership name loc ((.binding) declaration)
           errors = representationErrors <> bindingErrors
           value = ResolvedNominalType name <$> (ScalarRepresentation <$> representation) <*> ownership <*> pure loc
        in (errors, value <* guardNoErrors errors)
@@ -263,21 +262,21 @@ resolveNominalTypes spec = do
       ]
     originsByName = Map.fromListWith (<>) [(name, [(category, loc)]) | (name, category, loc) <- origins]
     origins =
-      [(idName value, "id", idLoc value) | value <- specIds spec]
-        <> [(enumName value, "enum", enumLoc value) | value <- specEnums spec]
-        <> [(nominalScalarName value, "nominal scalar", nominalScalarLoc value) | value <- specNominalScalars spec]
-        <> [(mappedName value, "mapped", mappedLoc value) | value <- specMapped spec]
-        <> [(ruleName value, "rule", ruleLoc value) | value <- specRules spec]
-        <> [(name, kind <> " node", loc) | node <- specNodes spec, let (kind, name, loc) = nodeIdentityLocal node]
+      [((.name) value, "id", (.loc) value) | value <- (.ids) spec]
+        <> [((.name) value, "enum", (.loc) value) | value <- (.enums) spec]
+        <> [((.name) value, "nominal scalar", (.loc) value) | value <- (.nominalScalars) spec]
+        <> [(mappedName value, "mapped", mappedLoc value) | value <- (.mapped) spec]
+        <> [((.name) value, "rule", (.loc) value) | value <- (.rules) spec]
+        <> [(name, kind <> " node", loc) | node <- (.nodes) spec, let (kind, name, loc) = nodeIdentityLocal node]
 
     registerInitialErrors registry =
-      [ NominalMissingRegisterInitial typeName (regLoc register) (regName register)
-      | aggregate <- [value | NAggregate value <- specNodes spec],
-        register <- aggRegs aggregate,
-        TRef typeName <- [regType register],
+      [ NominalMissingRegisterInitial typeName ((.loc) register) ((.name) register)
+      | aggregate <- [value | NAggregate value <- (.nodes) spec],
+        register <- (.regs) aggregate,
+        TRef typeName <- [(.valueType) register],
         Just resolved <- [lookupNominalType typeName registry],
-        ConsumerNominal binding <- [resolvedNominalOwnership resolved],
-        consumerNominalInitial binding == Nothing
+        ConsumerNominal binding <- [(.ownership) resolved],
+        (.initial) binding == Nothing
       ]
 
 resolveOwnership :: Name -> Loc -> Maybe NominalBindingDecl -> ([NominalTypeError], Maybe NominalOwnership)
@@ -291,22 +290,22 @@ resolveRequiredOwnership name loc binding =
     requiredErrors =
       [NominalMissingIngredient name loc label | (label, missing) <- missingFacts, missing]
     missingFacts =
-      [ ("haskell", nominalHaskell binding == Nothing),
-        ("binding", nominalBinding binding == Nothing),
-        ("binding-version", nominalBindingVersion binding == Nothing),
-        ("canonical-type", nominalCanonicalType binding == Nothing),
-        ("fixtures", nominalFixtures binding == Nothing)
+      [ ("haskell", (.haskell) binding == Nothing),
+        ("binding", (.binding) binding == Nothing),
+        ("binding-version", (.bindingVersion) binding == Nothing),
+        ("canonical-type", (.canonicalType) binding == Nothing),
+        ("fixtures", (.fixtures) binding == Nothing)
       ]
-    haskellErrors = maybe [] (validateHaskellSource name loc) (nominalHaskell binding)
-    (bindingErrors, checkedBindingName) = validateQualified name loc "binding" (nominalBinding binding)
-    (fixtureErrors, checkedFixtures) = validateQualified name loc "fixtures" (nominalFixtures binding)
-    (initialErrors, checkedInitial) = validateOptionalQualified name loc "initial" (nominalInitial binding)
-    (bindingVersionErrors, checkedBindingVersion) = validateBindingVersion name loc (nominalBindingVersion binding)
-    (canonicalErrors, checkedCanonical) = validateCanonical name loc (nominalCanonicalType binding)
+    haskellErrors = maybe [] (validateHaskellSource name loc) ((.haskell) binding)
+    (bindingErrors, checkedBindingName) = validateQualified name loc "binding" ((.binding) binding)
+    (fixtureErrors, checkedFixtures) = validateQualified name loc "fixtures" ((.fixtures) binding)
+    (initialErrors, checkedInitial) = validateOptionalQualified name loc "initial" ((.initial) binding)
+    (bindingVersionErrors, checkedBindingVersion) = validateBindingVersion name loc ((.bindingVersion) binding)
+    (canonicalErrors, checkedCanonical) = validateCanonical name loc ((.canonicalType) binding)
     errors = requiredErrors <> haskellErrors <> bindingErrors <> fixtureErrors <> initialErrors <> bindingVersionErrors <> canonicalErrors
     checkedBinding =
       ConsumerNominalBinding
-        <$> nominalHaskell binding
+        <$> (.haskell) binding
         <*> checkedBindingName
         <*> checkedBindingVersion
         <*> checkedCanonical
@@ -315,9 +314,9 @@ resolveRequiredOwnership name loc binding =
 
 validateHaskellSource :: Name -> Loc -> HaskellSource -> [NominalTypeError]
 validateHaskellSource name loc source =
-  [NominalInvalidHaskellSource name loc "package" | not (cabalPackageName (hsPackage source))]
-    <> [NominalInvalidHaskellSource name loc "module" | not (moduleNameSafe (hsModule source))]
-    <> [NominalInvalidHaskellSource name loc "type" | not (constructorSafe (hsType source))]
+  [NominalInvalidHaskellSource name loc "package" | not (cabalPackageName ((.package) source))]
+    <> [NominalInvalidHaskellSource name loc "module" | not (moduleNameSafe ((.moduleName) source))]
+    <> [NominalInvalidHaskellSource name loc "type" | not (constructorSafe ((.valueType) source))]
 
 validateQualified :: Name -> Loc -> Text -> Maybe Text -> ([NominalTypeError], Maybe QualifiedValueName)
 validateQualified _ _ _ Nothing = ([], Nothing)
@@ -373,23 +372,23 @@ mappedLoc MappedOpaque {moLoc = loc} = loc
 
 nodeIdentityLocal :: Node -> (Text, Name, Loc)
 nodeIdentityLocal = \case
-  NAggregate value -> ("aggregate", aggName value, aggLoc value)
-  NProcess value -> ("process", procId value, procLoc value)
-  NRouter value -> ("router", rtId value, rtLoc value)
-  NContract value -> ("contract", ctrName value, ctrLoc value)
-  NIntake value -> ("intake", inkName value, inkLoc value)
-  NEmit value -> ("emit", emName value, emLoc value)
-  NPublisher value -> ("publisher", pubName value, pubLoc value)
-  NWorkqueue value -> ("workqueue", wqName value, wqLoc value)
-  NPgmqDispatch value -> ("dispatch", pdName value, pdLoc value)
-  NReadModel value -> ("readmodel", rmName value, rmLoc value)
-  NProjectionTarget value -> ("target", ptName value, ptLoc value)
-  NRebuildGroup value -> ("rebuild-group", rgName value, rgLoc value)
-  NProjectionRevision value -> ("projection-revision", prvName value, prvLoc value)
-  NExternalRead value -> ("external-read", externalReadNodeIdentity value, erLoc value)
-  NProjectionOwner value -> ("projection-owner", poName value, poLoc value)
-  NWorkflow value -> ("workflow", wfId value, workflowNodeLoc value)
-  NOperation value -> ("operation", opName value, opLoc value)
+  NAggregate value -> ("aggregate", (.name) value, (.loc) value)
+  NProcess value -> ("process", (.id) value, (.loc) value)
+  NRouter value -> ("router", (.id) value, (.loc) value)
+  NContract value -> ("contract", (.name) value, (.loc) value)
+  NIntake value -> ("intake", (.name) value, (.loc) value)
+  NEmit value -> ("emit", (.name) value, (.loc) value)
+  NPublisher value -> ("publisher", (.name) value, (.loc) value)
+  NWorkqueue value -> ("workqueue", (.name) value, (.loc) value)
+  NPgmqDispatch value -> ("dispatch", (.name) value, (.loc) value)
+  NReadModel value -> ("readmodel", (.name) value, (.loc) value)
+  NProjectionTarget value -> ("target", (.name) value, (.loc) value)
+  NRebuildGroup value -> ("rebuild-group", (.name) value, (.loc) value)
+  NProjectionRevision value -> ("projection-revision", (.name) value, (.loc) value)
+  NExternalRead value -> ("external-read", externalReadNodeIdentity value, (.loc) value)
+  NProjectionOwner value -> ("projection-owner", (.name) value, (.loc) value)
+  NWorkflow value -> ("workflow", (.id) value, workflowNodeLoc value)
+  NOperation value -> ("operation", (.name) value, (.loc) value)
 
 cabalPackageName :: Text -> Bool
 cabalPackageName packageName = not (null components) && all validComponent components

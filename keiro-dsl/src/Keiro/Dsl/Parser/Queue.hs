@@ -46,21 +46,21 @@ pWorkqueue context = do
   _ <- symbol "}"
   pure
     WorkqueueNode
-      { wqName = nm,
-        wqLogical = logical,
-        wqPhysical = phys,
-        wqDlq = dlqName,
-        wqTable = tbl,
-        wqOrdering = ordering,
-        wqGroupKey = groupKey,
-        wqProvision = provision,
-        wqPayloadName = pn,
-        wqPayload = fields,
-        wqMaxRetries = mr,
-        wqDelay = dl,
-        wqDlqOn = dlqOn,
-        wqDisposition = disp,
-        wqLoc = loc
+      { name = nm,
+        logical = logical,
+        physical = phys,
+        dlq = dlqName,
+        table = tbl,
+        ordering = ordering,
+        groupKey = groupKey,
+        provision = provision,
+        payloadName = pn,
+        payload = fields,
+        maxRetries = mr,
+        delay = dl,
+        dlqOn = dlqOn,
+        disposition = disp,
+        loc = loc
       }
   where
     pOrdering = do
@@ -76,7 +76,7 @@ pWorkqueue context = do
       _ <- symbol "via"
       via <- ident
       fixture <- optional (symbol "fixture" *> stringLit)
-      pure WqGroupKey {gkField = field, gkVia = via, gkFixture = fixture}
+      pure WqGroupKey {field = field, via = via, fixture = fixture}
     pProvision = do
       _ <- symbol "provision"
       choice
@@ -101,7 +101,7 @@ pWorkqueue context = do
       -- of them. The keyword stays accepted so existing sources still parse, but
       -- it selects nothing, so it is not retained. See ExecPlan 199.
       _ <- optional (keyword "required")
-      pure WqField {wqfName = n, wqfWire = w, wqfType = ty, wqfLoc = loc}
+      pure WqField {name = n, wire = w, valueType = ty, loc = loc}
     pTypedPayload = do
       marker <- withOwnedSpan (symbol ":")
       requireLanguageFeatureAt context MappedConsumerSurfaceSyntax (spanOf marker)
@@ -119,7 +119,7 @@ pWorkqueue context = do
       o <- ident
       _ <- symbol "->"
       act <- choice [IAckOk <$ keyword "ackOk", IRetry <$> (keyword "retry" *> pWindow), IDeadLetter <$> (keyword "deadLetter" *> optional stringLit)]
-      pure WqDispRow {wqdOutcome = o, wqdAction = act, wqdLoc = loc}
+      pure WqDispRow {outcome = o, action = act, loc = loc}
 
 pPgmqDispatch :: P PgmqDispatchNode
 pPgmqDispatch = do
@@ -152,15 +152,15 @@ pPgmqDispatch = do
   _ <- symbol "}"
   pure
     PgmqDispatchNode
-      { pdName = nm,
-        pdSourceReadModel = srm,
-        pdSourceKey = sk,
-        pdFanoutBody = fb,
-        pdDedupKey = dk,
-        pdDedupReadModel = drm,
-        pdDedupReadModelField = drmf,
-        pdDedupQueue = dq,
-        pdDedupQueueField = dqf,
-        pdEnqueueTo = enq,
-        pdLoc = loc
+      { name = nm,
+        sourceReadModel = srm,
+        sourceKey = sk,
+        fanoutBody = fb,
+        dedupKey = dk,
+        dedupReadModel = drm,
+        dedupReadModelField = drmf,
+        dedupQueue = dq,
+        dedupQueueField = dqf,
+        enqueueTo = enq,
+        loc = loc
       }

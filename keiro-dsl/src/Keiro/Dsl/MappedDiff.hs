@@ -25,12 +25,12 @@ import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
 data MappedFinding = MappedFinding
-  { mfDeclaration :: !Name,
-    mfLeaf :: !Text,
-    mfCode :: !DiagnosticCode,
-    mfDetail :: !Text,
-    mfUsePaths :: ![UsePath],
-    mfOldUnknownFields :: !(Maybe UnknownFields)
+  { declaration :: !Name,
+    leaf :: !Text,
+    code :: !DiagnosticCode,
+    detail :: !Text,
+    usePaths :: ![UsePath],
+    oldUnknownFields :: !(Maybe UnknownFields)
   }
   deriving stock (Eq, Show)
 
@@ -44,8 +44,8 @@ diffMapped oldSpec newSpec = case (resolveTypeGraph oldSpec, resolveTypeGraph ne
       ++ map (addedDeclaration newGraph) added
       ++ map (removedDeclaration oldGraph) removed
     where
-      oldDeclarations = tgDeclarations oldGraph
-      newDeclarations = tgDeclarations newGraph
+      oldDeclarations = (.declarations) oldGraph
+      newDeclarations = (.declarations) newGraph
       matched =
         [ (oldDeclaration, newDeclaration)
         | (key, newDeclaration) <- Map.toList newDeclarations,
@@ -152,7 +152,7 @@ metadataDiff paths oldDeclaration newDeclaration =
       "haskell"
       MappedHaskellSourceChanged
       "consumer package, module, or type changed without changing declared wire identity; recompile every affected consumer"
-  | sdHaskell oldDeclaration /= sdHaskell newDeclaration
+  | (.haskell) oldDeclaration /= (.haskell) newDeclaration
   ]
     ++ [ finding
            paths
@@ -160,8 +160,8 @@ metadataDiff paths oldDeclaration newDeclaration =
            "binding"
            MappedBindingChanged
            "binding symbol or binding-version changed; diff cannot inspect binding behavior, so run the two-law, codec, and historical-fixture conformance suite"
-       | (sdBinding oldDeclaration, sdBindingVersion oldDeclaration)
-           /= (sdBinding newDeclaration, sdBindingVersion newDeclaration)
+       | ((.binding) oldDeclaration, (.bindingVersion) oldDeclaration)
+           /= ((.binding) newDeclaration, (.bindingVersion) newDeclaration)
        ]
     ++ [ finding
            paths
@@ -169,7 +169,7 @@ metadataDiff paths oldDeclaration newDeclaration =
            "fixtures"
            MappedFixturesChanged
            "fixture evidence symbol changed; runtime wire policy is unchanged, but the complete conformance suite must run"
-       | sdFixtures oldDeclaration /= sdFixtures newDeclaration
+       | (.fixtures) oldDeclaration /= (.fixtures) newDeclaration
        ]
     ++ [ finding
            paths
@@ -177,7 +177,7 @@ metadataDiff paths oldDeclaration newDeclaration =
            "initial"
            MappedInitialChanged
            "mapped initial symbol changed; new streams and snapshot fingerprints may change while historical event decoding does not"
-       | sdInitial oldDeclaration /= sdInitial newDeclaration
+       | (.initial) oldDeclaration /= (.initial) newDeclaration
        ]
     ++ [ finding
            paths
@@ -185,10 +185,10 @@ metadataDiff paths oldDeclaration newDeclaration =
            "canonical-type"
            MappedCanonicalTypeChanged
            "canonical type identity changed; rebuild generated projections and invalidate mapped snapshots while declared event bytes remain unchanged"
-       | sdCanonical oldDeclaration /= sdCanonical newDeclaration
+       | (.canonical) oldDeclaration /= (.canonical) newDeclaration
        ]
   where
-    name = sdName newDeclaration
+    name = (.name) newDeclaration
 
 opaqueMetadataDiff :: [UsePath] -> OpaqueDecl -> OpaqueDecl -> [MappedFinding]
 opaqueMetadataDiff paths oldDeclaration newDeclaration =
@@ -198,7 +198,7 @@ opaqueMetadataDiff paths oldDeclaration newDeclaration =
       "haskell"
       MappedHaskellSourceChanged
       "consumer package, module, or type changed without changing the opaque codec claim; recompile every affected consumer"
-  | odHaskell oldDeclaration /= odHaskell newDeclaration
+  | (.haskell) oldDeclaration /= (.haskell) newDeclaration
   ]
     ++ [ finding
            paths
@@ -206,8 +206,8 @@ opaqueMetadataDiff paths oldDeclaration newDeclaration =
            "codec"
            MappedOpaqueCodecChanged
            "opaque codec identity or version changed; Keiro cannot inspect the codec and historical payload compatibility is unproven"
-       | (odCodecIdentity oldDeclaration, odCodecVersion oldDeclaration)
-           /= (odCodecIdentity newDeclaration, odCodecVersion newDeclaration)
+       | ((.codecIdentity) oldDeclaration, (.codecVersion) oldDeclaration)
+           /= ((.codecIdentity) newDeclaration, (.codecVersion) newDeclaration)
        ]
     ++ [ finding
            paths
@@ -215,7 +215,7 @@ opaqueMetadataDiff paths oldDeclaration newDeclaration =
            "fixtures"
            MappedFixturesChanged
            "fixture evidence symbol changed; runtime codec identity is unchanged, but the complete conformance suite must run"
-       | odFixtures oldDeclaration /= odFixtures newDeclaration
+       | (.fixtures) oldDeclaration /= (.fixtures) newDeclaration
        ]
     ++ [ finding
            paths
@@ -223,10 +223,10 @@ opaqueMetadataDiff paths oldDeclaration newDeclaration =
            "initial"
            MappedInitialChanged
            "mapped initial symbol changed; new streams and snapshot fingerprints may change while historical event decoding does not"
-       | odInitial oldDeclaration /= odInitial newDeclaration
+       | (.initial) oldDeclaration /= (.initial) newDeclaration
        ]
   where
-    name = odName newDeclaration
+    name = (.name) newDeclaration
 
 diffShape :: [UsePath] -> Name -> ShapeView -> ShapeView -> [MappedFinding]
 diffShape paths declaration oldShape newShape = case (oldShape, newShape) of
@@ -278,7 +278,7 @@ diffRecord paths declaration oldUnknown oldFields newFields =
     addedFinding field =
       (findingWithUnknown paths declaration (fieldLeaf field) code detail (Just oldUnknown))
       where
-        hasDefault = isJustValue (rwfOnMissing field)
+        hasDefault = isJustValue ((.onMissing) field)
         code
           | hasDefault = MappedFieldAddedWithDefault
           | otherwise = MappedFieldAddedNoDefault
@@ -303,21 +303,21 @@ pairFields oldFields newFields = (exact <> fallback, added, removed)
     exact =
       [ (oldField, newField)
       | newField <- newFields,
-        oldField <- maybeToList (find ((== rwfHaskell newField) . rwfHaskell) oldFields)
+        oldField <- maybeToList (find ((== (.haskell) newField) . (.haskell)) oldFields)
       ]
-    matchedOld = map (rwfHaskell . fst) exact
-    matchedNew = map (rwfHaskell . snd) exact
-    unmatchedOld = [field | field <- oldFields, rwfHaskell field `notElem` matchedOld]
-    unmatchedNew = [field | field <- newFields, rwfHaskell field `notElem` matchedNew]
+    matchedOld = map ((.haskell) . fst) exact
+    matchedNew = map ((.haskell) . snd) exact
+    unmatchedOld = [field | field <- oldFields, (.haskell) field `notElem` matchedOld]
+    unmatchedNew = [field | field <- newFields, (.haskell) field `notElem` matchedNew]
     fallback =
       [ (oldField, newField)
       | newField <- unmatchedNew,
-        oldField <- maybeToList (find ((== rwfKey newField) . rwfKey) unmatchedOld)
+        oldField <- maybeToList (find ((== (.key) newField) . (.key)) unmatchedOld)
       ]
-    fallbackOld = map (rwfHaskell . fst) fallback
-    fallbackNew = map (rwfHaskell . snd) fallback
-    removed = [field | field <- unmatchedOld, rwfHaskell field `notElem` fallbackOld]
-    added = [field | field <- unmatchedNew, rwfHaskell field `notElem` fallbackNew]
+    fallbackOld = map ((.haskell) . fst) fallback
+    fallbackNew = map ((.haskell) . snd) fallback
+    removed = [field | field <- unmatchedOld, (.haskell) field `notElem` fallbackOld]
+    added = [field | field <- unmatchedNew, (.haskell) field `notElem` fallbackNew]
 
 diffField :: [UsePath] -> Name -> ResolvedWireField -> ResolvedWireField -> [MappedFinding]
 diffField paths declaration oldField newField =
@@ -327,23 +327,23 @@ diffField paths declaration oldField newField =
       leaf
       GeneratedHaskellNameChanged
       ( "generated record selector changed '"
-          <> normalizedGeneratedLower (rwfHaskell oldField)
+          <> normalizedGeneratedLower ((.haskell) oldField)
           <> "' -> '"
-          <> normalizedGeneratedLower (rwfHaskell newField)
+          <> normalizedGeneratedLower ((.haskell) newField)
           <> "' while wire key '"
-          <> rwfKey newField
+          <> (.key) newField
           <> "' remains unchanged; re-scaffold and recompile consumers"
       )
-  | rwfKey oldField == rwfKey newField,
-    normalizedGeneratedLower (rwfHaskell oldField) /= normalizedGeneratedLower (rwfHaskell newField)
+  | (.key) oldField == (.key) newField,
+    normalizedGeneratedLower ((.haskell) oldField) /= normalizedGeneratedLower ((.haskell) newField)
   ]
     ++ [ finding
            paths
            declaration
            leaf
            MappedWireKeyChanged
-           ("wire key changed '" <> rwfKey oldField <> "' -> '" <> rwfKey newField <> "'; version and upcast every affected private event root")
-       | rwfKey oldField /= rwfKey newField
+           ("wire key changed '" <> (.key) oldField <> "' -> '" <> (.key) newField <> "'; version and upcast every affected private event root")
+       | (.key) oldField /= (.key) newField
        ]
     ++ [ finding
            paths
@@ -351,13 +351,13 @@ diffField paths declaration oldField newField =
            leaf
            MappedPresenceChanged
            "field presence changed between required and optional; historical decode policy changed"
-       | rwfPresence oldField /= rwfPresence newField
+       | (.presence) oldField /= (.presence) newField
        ]
     ++ defaultChanges
-    ++ diffExpr paths declaration (leaf <> ".type") (rwfType oldField) (rwfType newField)
+    ++ diffExpr paths declaration (leaf <> ".type") ((.valueType) oldField) ((.valueType) newField)
   where
     leaf = fieldLeaf newField
-    defaultChanges = case (rwfOnMissing oldField, rwfOnMissing newField) of
+    defaultChanges = case ((.onMissing) oldField, (.onMissing) newField) of
       (Just _, Nothing) ->
         [ finding
             paths
@@ -380,15 +380,15 @@ diffField paths declaration oldField newField =
 normalizedGeneratedLower :: Text -> Text
 normalizedGeneratedLower logicalName =
   case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-    Right derived -> HaskellName.renderLowerCamelName (HaskellName.lowerCamel derived)
+    Right derived -> HaskellName.renderLowerCamelName ((.lowerCamel) derived)
     Left _ -> logicalName
   where
     site =
       HaskellName.NameSite
-        { HaskellName.siteKind = HaskellName.GeneratedFieldSite,
-          HaskellName.siteLogicalName = logicalName,
-          HaskellName.siteOwner = "mapped-diff",
-          HaskellName.siteLine = 0
+        { HaskellName.kind = HaskellName.GeneratedFieldSite,
+          HaskellName.logicalName = logicalName,
+          HaskellName.owner = "mapped-diff",
+          HaskellName.line = 0
         }
 
 diffExpr :: [UsePath] -> Name -> Text -> ResolvedTypeExpr -> ResolvedTypeExpr -> [MappedFinding]
@@ -439,10 +439,10 @@ diffEnum paths declaration oldEntries newEntries =
       declaration
       (enumLeaf newEntry)
       MappedEnumSpellingChanged
-      ("enum wire spelling changed '" <> weTag oldEntry <> "' -> '" <> weTag newEntry <> "'")
+      ("enum wire spelling changed '" <> (.tag) oldEntry <> "' -> '" <> (.tag) newEntry <> "'")
   | newEntry <- newEntries,
-    oldEntry <- maybeToList (find ((== weCtor newEntry) . weCtor) oldEntries),
-    weTag oldEntry /= weTag newEntry
+    oldEntry <- maybeToList (find ((== (.ctor) newEntry) . (.ctor)) oldEntries),
+    (.tag) oldEntry /= (.tag) newEntry
   ]
     ++ [ finding
            paths
@@ -451,7 +451,7 @@ diffEnum paths declaration oldEntries newEntries =
            MappedEnumValueAdded
            "enum value added; existing history remains readable, but deploy readers before writers emit the new spelling; a future public surface exposing this closed enum would classify the addition as consumer-breaking"
        | entry <- newEntries,
-         isNothing (find ((== weCtor entry) . weCtor) oldEntries)
+         isNothing (find ((== (.ctor) entry) . (.ctor)) oldEntries)
        ]
     ++ [ finding
            paths
@@ -460,7 +460,7 @@ diffEnum paths declaration oldEntries newEntries =
            MappedEnumValueRemoved
            "enum value removed; historical payloads carrying its wire spelling no longer decode"
        | entry <- oldEntries,
-         isNothing (find ((== weCtor entry) . weCtor) newEntries)
+         isNothing (find ((== (.ctor) entry) . (.ctor)) newEntries)
        ]
 
 diffUnion :: [UsePath] -> Name -> [ResolvedWireArm] -> [ResolvedWireArm] -> [MappedFinding]
@@ -476,10 +476,10 @@ diffUnion paths declaration oldArms newArms =
           declaration
           (armLeaf newArm)
           MappedArmTagChanged
-          ("union arm tag changed '" <> rwaTag oldArm <> "' -> '" <> rwaTag newArm <> "'")
-      | rwaTag oldArm /= rwaTag newArm
+          ("union arm tag changed '" <> (.tag) oldArm <> "' -> '" <> (.tag) newArm <> "'")
+      | (.tag) oldArm /= (.tag) newArm
       ]
-        ++ case (rwaPayload oldArm, rwaPayload newArm) of
+        ++ case ((.payload) oldArm, (.payload) newArm) of
           (Nothing, Nothing) -> []
           (Just oldPayload, Just newPayload) -> diffExpr paths declaration (armLeaf newArm <> ".payload") oldPayload newPayload
           _ -> [finding paths declaration (armLeaf newArm) MappedFieldTypeChanged "union arm payload presence changed; historical tagged objects no longer share one wire shape"]
@@ -492,21 +492,21 @@ pairArms oldArms newArms = (exact <> fallback, added, removed)
     exact =
       [ (oldArm, newArm)
       | newArm <- newArms,
-        oldArm <- maybeToList (find ((== rwaCtor newArm) . rwaCtor) oldArms)
+        oldArm <- maybeToList (find ((== (.ctor) newArm) . (.ctor)) oldArms)
       ]
-    matchedOld = map (rwaCtor . fst) exact
-    matchedNew = map (rwaCtor . snd) exact
-    unmatchedOld = [arm | arm <- oldArms, rwaCtor arm `notElem` matchedOld]
-    unmatchedNew = [arm | arm <- newArms, rwaCtor arm `notElem` matchedNew]
+    matchedOld = map ((.ctor) . fst) exact
+    matchedNew = map ((.ctor) . snd) exact
+    unmatchedOld = [arm | arm <- oldArms, (.ctor) arm `notElem` matchedOld]
+    unmatchedNew = [arm | arm <- newArms, (.ctor) arm `notElem` matchedNew]
     fallback =
       [ (oldArm, newArm)
       | newArm <- unmatchedNew,
-        oldArm <- maybeToList (find ((== rwaTag newArm) . rwaTag) unmatchedOld)
+        oldArm <- maybeToList (find ((== (.tag) newArm) . (.tag)) unmatchedOld)
       ]
-    fallbackOld = map (rwaCtor . fst) fallback
-    fallbackNew = map (rwaCtor . snd) fallback
-    removed = [arm | arm <- unmatchedOld, rwaCtor arm `notElem` fallbackOld]
-    added = [arm | arm <- unmatchedNew, rwaCtor arm `notElem` fallbackNew]
+    fallbackOld = map ((.ctor) . fst) fallback
+    fallbackNew = map ((.ctor) . snd) fallback
+    removed = [arm | arm <- unmatchedOld, (.ctor) arm `notElem` fallbackOld]
+    added = [arm | arm <- unmatchedNew, (.ctor) arm `notElem` fallbackNew]
 
 addedDeclaration :: TypeGraph -> (MappedKey, ResolvedMappedDecl) -> MappedFinding
 addedDeclaration _ (key, _) =
@@ -536,18 +536,18 @@ resolvedName :: ResolvedMappedDecl -> Name
 resolvedName =
   foldMappedDecl
     MappedDeclAlgebra
-      { onStructuralDecl = \declaration _ -> sdName declaration,
-        onOpaqueDecl = odName
+      { onStructuralDecl = \declaration _ -> (.name) declaration,
+        onOpaqueDecl = (.name)
       }
 
 fieldLeaf :: ResolvedWireField -> Text
-fieldLeaf field = ".field " <> rwfHaskell field <> "[\"" <> rwfKey field <> "\"]"
+fieldLeaf field = ".field " <> (.haskell) field <> "[\"" <> (.key) field <> "\"]"
 
 armLeaf :: ResolvedWireArm -> Text
-armLeaf arm = ".arm " <> rwaCtor arm <> "[\"" <> rwaTag arm <> "\"]"
+armLeaf arm = ".arm " <> (.ctor) arm <> "[\"" <> (.tag) arm <> "\"]"
 
 enumLeaf :: WireEnum -> Text
-enumLeaf entry = ".enum " <> weCtor entry <> "[\"" <> weTag entry <> "\"]"
+enumLeaf entry = ".enum " <> (.ctor) entry <> "[\"" <> (.tag) entry <> "\"]"
 
 finding :: [UsePath] -> Name -> Text -> DiagnosticCode -> Text -> MappedFinding
 finding paths declaration leaf code detail =
@@ -556,12 +556,12 @@ finding paths declaration leaf code detail =
 findingWithUnknown :: [UsePath] -> Name -> Text -> DiagnosticCode -> Text -> Maybe UnknownFields -> MappedFinding
 findingWithUnknown paths declaration leaf code detail unknownFields =
   MappedFinding
-    { mfDeclaration = declaration,
-      mfLeaf = leaf,
-      mfCode = code,
-      mfDetail = detail,
-      mfUsePaths = paths,
-      mfOldUnknownFields = unknownFields
+    { declaration = declaration,
+      leaf = leaf,
+      code = code,
+      detail = detail,
+      usePaths = paths,
+      oldUnknownFields = unknownFields
     }
 
 isJustValue :: Maybe a -> Bool

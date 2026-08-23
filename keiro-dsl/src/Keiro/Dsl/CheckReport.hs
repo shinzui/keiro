@@ -33,56 +33,56 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Keiro.Dsl.LanguageVersion (LanguageSupport (..), LanguageVersion, SourceLanguage, declaredLanguageVersionMaybe, languageSupportText, sourceFormText)
-import Keiro.Dsl.SemanticContract (EffectiveLanguageContract, effectiveContractLanguageVersion, effectiveLanguageSupport, effectiveRuntimeSemantics)
+import Keiro.Dsl.SemanticContract (EffectiveLanguageContract (..), effectiveLanguageSupport, effectiveRuntimeSemantics)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode, Severity (..), diagnosticCodeText)
 import Keiro.Dsl.Workspace (WorkspaceDiagnostic (..), WorkspaceLocation (..), WorkspaceMember (..), WorkspaceSpec (..), workspaceDisplayPath)
 
 data CheckReportLanguage = CheckReportLanguage
-  { reportSourceForm :: !Text,
-    reportDeclaredLanguageVersion :: !(Maybe LanguageVersion),
-    reportEffectiveLanguageVersion :: !LanguageVersion,
-    reportRuntimeSemantics :: !Text,
-    reportLanguageSupport :: !LanguageSupport,
-    reportStable :: !Bool
+  { sourceForm :: !Text,
+    declaredLanguageVersion :: !(Maybe LanguageVersion),
+    effectiveLanguageVersion :: !LanguageVersion,
+    runtimeSemantics :: !Text,
+    languageSupport :: !LanguageSupport,
+    stable :: !Bool
   }
   deriving stock (Eq, Show)
 
 data CheckReportEnforcement = CheckReportEnforcement
-  { reportMinLanguage :: !(Maybe LanguageVersion),
-    reportDenyWarnings :: !Bool,
-    reportDenyCodes :: ![DiagnosticCode]
+  { minLanguage :: !(Maybe LanguageVersion),
+    denyWarnings :: !Bool,
+    denyCodes :: ![DiagnosticCode]
   }
   deriving stock (Eq, Show)
 
 data CheckReportRelated = CheckReportRelated
-  { relatedFile :: !FilePath,
-    relatedLine :: !Int,
-    relatedNote :: !Text
+  { file :: !FilePath,
+    line :: !Int,
+    note :: !Text
   }
   deriving stock (Eq, Show)
 
 data CheckReportEntry = CheckReportEntry
-  { entryCode :: !DiagnosticCode,
-    entrySeverity :: !Severity,
-    entryFile :: !FilePath,
-    entryLine :: !Int,
-    entryMessage :: !Text,
-    entryDenied :: !Bool,
-    entryRelated :: ![CheckReportRelated]
+  { code :: !DiagnosticCode,
+    severity :: !Severity,
+    file :: !FilePath,
+    line :: !Int,
+    message :: !Text,
+    denied :: !Bool,
+    related :: ![CheckReportRelated]
   }
   deriving stock (Eq, Show)
 
 data CheckReportSummary = CheckReportSummary
-  { summaryErrors :: !Int,
-    summaryWarnings :: !Int,
-    summaryDeniedWarnings :: !Int
+  { errors :: !Int,
+    warnings :: !Int,
+    deniedWarnings :: !Int
   }
   deriving stock (Eq, Show)
 
 data CheckReportMember = CheckReportMember
-  { memberPath :: !FilePath,
-    memberSourceForm :: !Text,
-    memberDeclaredLanguageVersion :: !(Maybe LanguageVersion)
+  { path :: !FilePath,
+    sourceForm :: !Text,
+    declaredLanguageVersion :: !(Maybe LanguageVersion)
   }
   deriving stock (Eq, Show)
 
@@ -90,17 +90,17 @@ data CheckReportKind = SourceReport | WorkspaceReport
   deriving stock (Eq, Show)
 
 data CheckReport = CheckReport
-  { reportKind :: !CheckReportKind,
-    reportSubject :: !FilePath,
+  { kind :: !CheckReportKind,
+    subject :: !FilePath,
     -- | 'Nothing' only for a workspace that was refused during composition:
     -- there is no composed service, so no effective language contract exists to
     -- describe. Such a report serializes @"language": null@.
-    reportLanguage :: !(Maybe CheckReportLanguage),
-    reportEnforcement :: !CheckReportEnforcement,
-    reportDiagnostics :: ![CheckReportEntry],
-    reportSummary :: !CheckReportSummary,
-    reportOk :: !Bool,
-    reportMembers :: ![CheckReportMember]
+    language :: !(Maybe CheckReportLanguage),
+    enforcement :: !CheckReportEnforcement,
+    diagnostics :: ![CheckReportEntry],
+    summary :: !CheckReportSummary,
+    ok :: !Bool,
+    members :: ![CheckReportMember]
   }
   deriving stock (Eq, Show)
 
@@ -108,8 +108,8 @@ data CheckReport = CheckReport
 -- by report entries. @--deny-warnings@ is the union with every registered code.
 effectiveDenyCodes :: CheckReportEnforcement -> Set DiagnosticCode
 effectiveDenyCodes enforcement
-  | reportDenyWarnings enforcement = Set.fromList [minBound .. maxBound]
-  | otherwise = Set.fromList (reportDenyCodes enforcement)
+  | (.denyWarnings) enforcement = Set.fromList [minBound .. maxBound]
+  | otherwise = Set.fromList ((.denyCodes) enforcement)
 
 checkReport ::
   FilePath ->
@@ -143,7 +143,7 @@ workspaceCheckReport subject workspace contract enforcement diagnostics deniedCo
     (Just (workspaceLanguageValue contract))
     enforcement
     (map (workspaceEntry subject deniedCodes) diagnostics)
-    (map memberValue (wsMembers workspace))
+    (map memberValue ((.members) workspace))
 
 -- | The report for a workspace refused during composition, before any service
 -- graph exists. Composition refusals are coded diagnostics, so they belong in
@@ -175,21 +175,21 @@ buildReport ::
   CheckReport
 buildReport kind subject language enforcement entries members =
   CheckReport
-    { reportKind = kind,
-      reportSubject = subject,
-      reportLanguage = language,
-      reportEnforcement = enforcement,
-      reportDiagnostics = entries,
-      reportSummary = summary,
-      reportOk = summaryErrors summary == 0 && summaryDeniedWarnings summary == 0,
-      reportMembers = members
+    { kind = kind,
+      subject = subject,
+      language = language,
+      enforcement = enforcement,
+      diagnostics = entries,
+      summary = summary,
+      ok = (.errors) summary == 0 && (.deniedWarnings) summary == 0,
+      members = members
     }
   where
     summary =
       CheckReportSummary
-        { summaryErrors = length [() | entry <- entries, entrySeverity entry == Error],
-          summaryWarnings = length [() | entry <- entries, entrySeverity entry == Warning],
-          summaryDeniedWarnings = length [() | entry <- entries, entryDenied entry]
+        { errors = length [() | entry <- entries, (.severity) entry == Error],
+          warnings = length [() | entry <- entries, (.severity) entry == Warning],
+          deniedWarnings = length [() | entry <- entries, (.denied) entry]
         }
 
 sourceLanguageValue :: SourceLanguage -> EffectiveLanguageContract -> CheckReportLanguage
@@ -205,12 +205,12 @@ workspaceLanguageValue = languageValue "workspace-composed" Nothing
 languageValue :: Text -> Maybe LanguageVersion -> EffectiveLanguageContract -> CheckReportLanguage
 languageValue sourceForm declared contract =
   CheckReportLanguage
-    { reportSourceForm = sourceForm,
-      reportDeclaredLanguageVersion = declared,
-      reportEffectiveLanguageVersion = effectiveContractLanguageVersion contract,
-      reportRuntimeSemantics = effectiveRuntimeSemantics contract,
-      reportLanguageSupport = support,
-      reportStable = support == Stable
+    { sourceForm = sourceForm,
+      declaredLanguageVersion = declared,
+      effectiveLanguageVersion = (.contractLanguageVersion) contract,
+      runtimeSemantics = effectiveRuntimeSemantics contract,
+      languageSupport = support,
+      stable = support == Stable
     }
   where
     support = effectiveLanguageSupport contract
@@ -218,45 +218,45 @@ languageValue sourceForm declared contract =
 memberValue :: WorkspaceMember -> CheckReportMember
 memberValue member =
   CheckReportMember
-    { memberPath = wmPath member,
-      memberSourceForm = sourceFormText (wmSourceLanguage member),
-      memberDeclaredLanguageVersion = declaredLanguageVersionMaybe (wmSourceLanguage member)
+    { path = (.path) member,
+      sourceForm = sourceFormText ((.sourceLanguage) member),
+      declaredLanguageVersion = declaredLanguageVersionMaybe ((.sourceLanguage) member)
     }
 
 sourceEntry :: FilePath -> Set DiagnosticCode -> Diagnostic -> CheckReportEntry
 sourceEntry subject deniedCodes diagnostic =
   CheckReportEntry
-    { entryCode = code diagnostic,
-      entrySeverity = severity diagnostic,
-      entryFile = subject,
-      entryLine = line diagnostic,
-      entryMessage = message diagnostic,
-      entryDenied = warningDenied deniedCodes (severity diagnostic) (code diagnostic),
-      entryRelated =
+    { code = (.code) diagnostic,
+      severity = (.severity) diagnostic,
+      file = subject,
+      line = (.line) diagnostic,
+      message = (.message) diagnostic,
+      denied = warningDenied deniedCodes ((.severity) diagnostic) ((.code) diagnostic),
+      related =
         [ CheckReportRelated subject relatedLineNumber note
-        | (relatedLineNumber, note) <- relatedLocations diagnostic
+        | (relatedLineNumber, note) <- (.relatedLocations) diagnostic
         ]
     }
 
 workspaceEntry :: FilePath -> Set DiagnosticCode -> WorkspaceDiagnostic -> CheckReportEntry
 workspaceEntry subject deniedCodes diagnostic =
   CheckReportEntry
-    { entryCode = wdCode diagnostic,
-      entrySeverity = wdSeverity diagnostic,
-      entryFile = workspaceDisplayPath subject (wlFile primary),
-      entryLine = wlLine primary,
-      entryMessage = wdMessage diagnostic,
-      entryDenied = warningDenied deniedCodes (wdSeverity diagnostic) (wdCode diagnostic),
-      entryRelated =
+    { code = (.code) diagnostic,
+      severity = (.severity) diagnostic,
+      file = workspaceDisplayPath subject ((.file) primary),
+      line = (.line) primary,
+      message = (.message) diagnostic,
+      denied = warningDenied deniedCodes ((.severity) diagnostic) ((.code) diagnostic),
+      related =
         [ CheckReportRelated
-            (workspaceDisplayPath subject (wlFile location))
-            (wlLine location)
-            (wlRole location)
-        | location <- NE.tail (wdLocations diagnostic)
+            (workspaceDisplayPath subject ((.file) location))
+            ((.line) location)
+            ((.role) location)
+        | location <- NE.tail ((.locations) diagnostic)
         ]
     }
   where
-    primary = NE.head (wdLocations diagnostic)
+    primary = NE.head ((.locations) diagnostic)
 
 warningDenied :: Set DiagnosticCode -> Severity -> DiagnosticCode -> Bool
 warningDenied deniedCodes severityValue diagnosticCode =
@@ -266,15 +266,15 @@ instance ToJSON CheckReport where
   toJSON report =
     object
       ( [ "schema" .= ("keiro-dsl/check-report/1" :: Text),
-          "kind" .= kindText (reportKind report),
-          "subject" .= reportSubject report,
-          "language" .= fmap languageJson (reportLanguage report),
-          "enforcement" .= enforcementJson (reportEnforcement report),
-          "diagnostics" .= map entryJson (reportDiagnostics report),
-          "summary" .= summaryJson (reportSummary report),
-          "ok" .= reportOk report
+          "kind" .= kindText ((.kind) report),
+          "subject" .= (.subject) report,
+          "language" .= fmap languageJson ((.language) report),
+          "enforcement" .= enforcementJson ((.enforcement) report),
+          "diagnostics" .= map entryJson ((.diagnostics) report),
+          "summary" .= summaryJson ((.summary) report),
+          "ok" .= (.ok) report
         ]
-          <> ["members" .= map memberJson (reportMembers report) | reportKind report == WorkspaceReport]
+          <> ["members" .= map memberJson ((.members) report) | (.kind) report == WorkspaceReport]
       )
 
 kindText :: CheckReportKind -> Text
@@ -284,56 +284,56 @@ kindText WorkspaceReport = "workspace"
 languageJson :: CheckReportLanguage -> Value
 languageJson language =
   object
-    [ "sourceForm" .= reportSourceForm language,
-      "declaredLanguageVersion" .= reportDeclaredLanguageVersion language,
-      "effectiveLanguageVersion" .= reportEffectiveLanguageVersion language,
-      "runtimeSemantics" .= reportRuntimeSemantics language,
-      "languageSupport" .= languageSupportText (reportLanguageSupport language),
-      "stable" .= reportStable language
+    [ "sourceForm" .= (.sourceForm) language,
+      "declaredLanguageVersion" .= (.declaredLanguageVersion) language,
+      "effectiveLanguageVersion" .= (.effectiveLanguageVersion) language,
+      "runtimeSemantics" .= (.runtimeSemantics) language,
+      "languageSupport" .= languageSupportText ((.languageSupport) language),
+      "stable" .= (.stable) language
     ]
 
 enforcementJson :: CheckReportEnforcement -> Value
 enforcementJson enforcement =
   object
-    [ "minLanguage" .= reportMinLanguage enforcement,
-      "denyWarnings" .= reportDenyWarnings enforcement,
-      "denyCodes" .= map diagnosticCodeText (Set.toAscList (Set.fromList (reportDenyCodes enforcement)))
+    [ "minLanguage" .= (.minLanguage) enforcement,
+      "denyWarnings" .= (.denyWarnings) enforcement,
+      "denyCodes" .= map diagnosticCodeText (Set.toAscList (Set.fromList ((.denyCodes) enforcement)))
     ]
 
 entryJson :: CheckReportEntry -> Value
 entryJson entry =
   object
-    [ "code" .= diagnosticCodeText (entryCode entry),
-      "severity" .= severityText (entrySeverity entry),
-      "file" .= entryFile entry,
-      "line" .= entryLine entry,
-      "message" .= entryMessage entry,
-      "denied" .= entryDenied entry,
-      "related" .= map relatedJson (entryRelated entry)
+    [ "code" .= diagnosticCodeText ((.code) entry),
+      "severity" .= severityText ((.severity) entry),
+      "file" .= (.file) entry,
+      "line" .= (.line) entry,
+      "message" .= (.message) entry,
+      "denied" .= (.denied) entry,
+      "related" .= map relatedJson ((.related) entry)
     ]
 
 relatedJson :: CheckReportRelated -> Value
 relatedJson related =
   object
-    [ "file" .= relatedFile related,
-      "line" .= relatedLine related,
-      "note" .= relatedNote related
+    [ "file" .= (.file) related,
+      "line" .= (.line) related,
+      "note" .= (.note) related
     ]
 
 summaryJson :: CheckReportSummary -> Value
 summaryJson summary =
   object
-    [ "errors" .= summaryErrors summary,
-      "warnings" .= summaryWarnings summary,
-      "deniedWarnings" .= summaryDeniedWarnings summary
+    [ "errors" .= (.errors) summary,
+      "warnings" .= (.warnings) summary,
+      "deniedWarnings" .= (.deniedWarnings) summary
     ]
 
 memberJson :: CheckReportMember -> Value
 memberJson member =
   object
-    [ "path" .= memberPath member,
-      "sourceForm" .= memberSourceForm member,
-      "declaredLanguageVersion" .= memberDeclaredLanguageVersion member
+    [ "path" .= (.path) member,
+      "sourceForm" .= (.sourceForm) member,
+      "declaredLanguageVersion" .= (.declaredLanguageVersion) member
     ]
 
 severityText :: Severity -> Text

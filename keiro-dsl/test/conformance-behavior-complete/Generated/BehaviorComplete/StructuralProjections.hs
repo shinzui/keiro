@@ -9,9 +9,9 @@ module Generated.BehaviorComplete.StructuralProjections
 import Data.Text (Text)
 import Keiro.Codec.Structural (bindingToShape)
 import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)
+import Generated.BehaviorComplete.Structural.Shape.StartPayload (StartPayloadShape(label))
 import BehaviorComplete.Bindings qualified as Bindings
 import BehaviorComplete.Domain (StartPayload)
-import Generated.BehaviorComplete.Structural.Shape.StartPayload qualified as ShapeStartPayload
 
 data StartPayloadDisplayLabelProjection
 
@@ -20,7 +20,7 @@ instance FieldProjection StartPayloadDisplayLabelProjection where
   type FieldOwner StartPayloadDisplayLabelProjection = StartPayload
   type FieldResult StartPayloadDisplayLabelProjection = Text
   fieldShapeId _ = "behavior-complete.StartPayload.v1"
-  projectFieldValue _ owner = ShapeStartPayload.label (bindingToShape Bindings.startPayloadBinding owner)
+  projectFieldValue _ owner = (bindingToShape Bindings.startPayloadBinding owner).label
 
 startPayloadDisplayLabelWitness :: FieldWitness StartPayloadDisplayLabelProjection
 startPayloadDisplayLabelWitness = fieldWitness @StartPayloadDisplayLabelProjection

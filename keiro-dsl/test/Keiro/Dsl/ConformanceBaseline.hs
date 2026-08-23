@@ -99,68 +99,68 @@ conformanceBaselineSpec :: SpecWith ()
 conformanceBaselineSpec = describe "conformance baseline" $ do
   it "uses the registered stable and authoring languages plus explicit compatibility rows" $ do
     baseline <- readBaseline
-    baselineSchema baseline `shouldBe` "keiro-dsl/conformance-baseline/2"
-    baselineStableLanguageVersion baseline
+    (.baselineSchema) baseline `shouldBe` "keiro-dsl/conformance-baseline/2"
+    (.baselineStableLanguageVersion) baseline
       `shouldBe` languageVersionNumber currentStableLanguageVersion
-    baselineAuthoringLanguageVersion baseline
+    (.baselineAuthoringLanguageVersion) baseline
       `shouldBe` languageVersionNumber currentAuthoringLanguageVersion
     paths <- fixturePaths
     observations <- forM paths $ \path -> (path,) <$> observeSource path
-    baselinePrimaryLanguageVersions baseline `shouldContain` [languageVersionNumber currentStableLanguageVersion]
-    baselinePrimaryLanguageVersions baseline `shouldContain` [languageVersionNumber currentAuthoringLanguageVersion]
-    let primaryVersions = baselinePrimaryLanguageVersions baseline
+    (.baselinePrimaryLanguageVersions) baseline `shouldContain` [languageVersionNumber currentStableLanguageVersion]
+    (.baselinePrimaryLanguageVersions) baseline `shouldContain` [languageVersionNumber currentAuthoringLanguageVersion]
+    let primaryVersions = (.baselinePrimaryLanguageVersions) baseline
         nonStablePaths =
           sort
             [ path
             | (path, observation) <- observations,
-              sourceForm observation /= "declared"
-                || maybe True (`notElem` primaryVersions) (sourceEffectiveVersion observation)
+              (.sourceForm) observation /= "declared"
+                || maybe True (`notElem` primaryVersions) ((.sourceEffectiveVersion) observation)
             ]
-        exceptionPaths = sort (map exceptionPath (baselineFixtureExceptions baseline))
+        exceptionPaths = sort (map (.exceptionPath) ((.baselineFixtureExceptions) baseline))
     (nonStablePaths \\ exceptionPaths)
       `shouldBe` ([] :: [FilePath])
     (exceptionPaths \\ nonStablePaths)
       `shouldBe` ([] :: [FilePath])
-    forM_ (baselineFixtureExceptions baseline) $ \exception -> do
-      observation <- observeSource (exceptionPath exception)
-      sourceForm observation `shouldBe` exceptionSourceForm exception
-      sourceEffectiveVersion observation `shouldBe` exceptionEffectiveVersion exception
-      exceptionRole exception
+    forM_ ((.baselineFixtureExceptions) baseline) $ \exception -> do
+      observation <- observeSource ((.exceptionPath) exception)
+      (.sourceForm) observation `shouldBe` (.exceptionSourceForm) exception
+      (.sourceEffectiveVersion) observation `shouldBe` (.exceptionEffectiveVersion) exception
+      (.exceptionRole) exception
         `shouldBe` "compatibility-proof"
-      exceptionReason exception `shouldSatisfy` (not . T.null . T.strip)
+      (.exceptionReason) exception `shouldSatisfy` (not . T.null . T.strip)
 
   it "accounts for every compiled conformance component and primary generated banner" $ do
     baseline <- readBaseline
     cabal <- readRepoText "keiro-dsl/keiro-dsl.cabal"
     let cabalComponents = conformanceComponents cabal
-        manifestComponents = sort (map suiteComponent (baselineCompiledSuites baseline))
+        manifestComponents = sort (map (.suiteComponent) ((.baselineCompiledSuites) baseline))
     (cabalComponents \\ manifestComponents)
       `shouldBe` ([] :: [Text])
     (manifestComponents \\ cabalComponents)
       `shouldBe` ([] :: [Text])
-    forM_ (baselineCompiledSuites baseline) $ \suite -> do
-      suiteRole suite
+    forM_ ((.baselineCompiledSuites) baseline) $ \suite -> do
+      (.suiteRole) suite
         `shouldSatisfy` (`elem` ["stable-primary", "published-compatibility", "compatibility-proof", "version-independent"])
       validateSuiteLanguageOwnership baseline suite
-      suiteReason suite `shouldSatisfy` (not . T.null . T.strip)
-      directory <- resolveRepoDirectory ("keiro-dsl" </> suiteDirectory suite)
+      (.suiteReason) suite `shouldSatisfy` (not . T.null . T.strip)
+      directory <- resolveRepoDirectory ("keiro-dsl" </> (.suiteDirectory) suite)
       doesDirectoryExist directory `shouldReturn` True
-      case suiteLanguageVersion suite of
+      case (.suiteLanguageVersion) suite of
         Just primaryVersion -> do
-          unless (suiteGeneration suite `elem` ["workspace", "skeletons"]) $ do
+          unless ((.suiteGeneration) suite `elem` ["workspace", "skeletons"]) $ do
             source <- requiredSuiteSource suite
             observation <- observeSource source
-            sourceForm observation `shouldBe` "declared"
-            sourceResult observation `shouldBe` "accept"
-            sourceEffectiveVersion observation `shouldBe` Just primaryVersion
+            (.sourceForm) observation `shouldBe` "declared"
+            (.sourceResult) observation `shouldBe` "accept"
+            (.sourceEffectiveVersion) observation `shouldBe` Just primaryVersion
           banners <- generatedBannerLines directory
           unless (not (null banners)) $
-            expectationFailure (T.unpack (suiteComponent suite <> " has no generated banners"))
+            expectationFailure (T.unpack ((.suiteComponent) suite <> " has no generated banners"))
           let expectedVersion = "language keiro-dsl " <> T.pack (show primaryVersion)
               primaryBanners = [(path, banner) | (path, banner) <- banners, expectedVersion `T.isInfixOf` banner]
               isVersionIndependentAuxiliary banner = "@generated by keiro-dsl codec comparison" `T.isInfixOf` banner
           unless (not (null primaryBanners)) $
-            expectationFailure (T.unpack (suiteComponent suite <> " has no " <> T.pack (show primaryVersion) <> " generated banners"))
+            expectationFailure (T.unpack ((.suiteComponent) suite <> " has no " <> T.pack (show primaryVersion) <> " generated banners"))
           forM_ banners $ \(path, banner) ->
             unless (expectedVersion `T.isInfixOf` banner || isVersionIndependentAuxiliary banner) $
               expectationFailure (T.unpack (decorate path banner <> " (expected " <> expectedVersion <> ")"))
@@ -178,7 +178,7 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
           unless (comparedActualPaths == comparedExpectedPaths) $
             expectationFailure
               ( T.unpack
-                  ( suiteComponent suite
+                  ( (.suiteComponent) suite
                       <> " generated module inventory differs\nexpected: "
                       <> T.pack (show comparedExpectedPaths)
                       <> "\n but got: "
@@ -188,23 +188,23 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
         Nothing -> pure ()
 
 validateSuiteLanguageOwnership :: ConformanceBaseline -> CompiledSuite -> IO ()
-validateSuiteLanguageOwnership baseline suite = case (suiteRole suite, suiteLanguageVersion suite) of
+validateSuiteLanguageOwnership baseline suite = case ((.suiteRole) suite, (.suiteLanguageVersion) suite) of
   ("stable-primary", Just rawVersion) -> do
-    rawVersion `shouldBe` baselineStableLanguageVersion baseline
+    rawVersion `shouldBe` (.baselineStableLanguageVersion) baseline
     definition <- requireRegisteredDefinition suite rawVersion
-    definitionSupport definition `shouldBe` Stable
-    definitionMaturity definition `shouldBe` PublishedLanguage
+    (.support) definition `shouldBe` Stable
+    (.maturity) definition `shouldBe` PublishedLanguage
   ("published-compatibility", Just rawVersion) -> do
-    rawVersion `shouldNotBe` baselineStableLanguageVersion baseline
+    rawVersion `shouldNotBe` (.baselineStableLanguageVersion) baseline
     definition <- requireRegisteredDefinition suite rawVersion
-    definitionSupport definition `shouldBe` CompatibilityOnly
-    definitionMaturity definition `shouldBe` PublishedLanguage
+    (.support) definition `shouldBe` CompatibilityOnly
+    (.maturity) definition `shouldBe` PublishedLanguage
   ("compatibility-proof", Nothing) -> pure ()
   ("version-independent", Nothing) -> pure ()
   (role, version) ->
     expectationFailure
       ( T.unpack
-          ( suiteComponent suite
+          ( (.suiteComponent) suite
               <> " has invalid language ownership for role "
               <> role
               <> ": "
@@ -219,7 +219,7 @@ requireRegisteredDefinition suite rawVersion =
     Nothing -> do
       expectationFailure
         ( T.unpack
-            ( suiteComponent suite
+            ( (.suiteComponent) suite
                 <> " owns unregistered language "
                 <> T.pack (show rawVersion)
             )
@@ -227,7 +227,7 @@ requireRegisteredDefinition suite rawVersion =
       fail "unregistered conformance language owner"
 
 expectedStableGeneratedPaths :: CompiledSuite -> IO [FilePath]
-expectedStableGeneratedPaths suite = case suiteGeneration suite of
+expectedStableGeneratedPaths suite = case (.suiteGeneration) suite of
   "source" -> do
     source <- requiredSuiteSource suite
     generatedPathsForSource source
@@ -235,10 +235,10 @@ expectedStableGeneratedPaths suite = case suiteGeneration suite of
     source <- requiredSuiteSource suite
     sourceText <- readRepoText source
     (service, sourceIndex) <- parseCheckedDocument source sourceText
-    modules <- case planIndexedServiceScaffoldWithRuntimePackage (Just (RuntimePackageName "conformance-runtime")) sourceIndex (defaultContext (specContext (checkedSpec service))) service of
+    scaffoldModules <- case planIndexedServiceScaffoldWithRuntimePackage (Just (RuntimePackageName "conformance-runtime")) sourceIndex (defaultContext ((checkedSpec service).context)) service of
       Left refusals -> expectationFailure (show refusals) >> fail "stable configured source scaffold refusal"
       Right value -> pure value
-    pure (generatedPaths modules)
+    pure (generatedPaths scaffoldModules)
   "workspace" -> do
     source <- requiredSuiteSource suite
     resolved <- resolveRepoFile ("keiro-dsl" </> source)
@@ -249,24 +249,25 @@ expectedStableGeneratedPaths suite = case suiteGeneration suite of
     plan <- case planWorkspaceScaffold "goldens" (workspaceContext workspace) workspace of
       Left refusals -> expectationFailure (show refusals) >> fail "stable workspace scaffold refusal"
       Right value -> pure value
-    pure (generatedPaths (map fst (wpModules plan)))
+    pure (generatedPaths (map fst ((.modules) plan)))
   "skeletons" -> fmap (sort . nub . concat) . forM skeletonModuleRoots $ \(skeletonKind, root) -> do
     source <- case skeletonFor skeletonKind of
       Left problem -> expectationFailure (T.unpack problem) >> fail "invalid stable skeleton"
       Right value -> pure value
     service <- parseCheckedSource ("new:" <> T.unpack skeletonKind) source
-    let scaffoldContext = (defaultContext (specContext (checkedSpec service))) {moduleRoot = root}
+    let baseContext = defaultContext (checkedSpec service).context
+        scaffoldContext = Context {name = baseContext.name, moduleRoot = root, placement = baseContext.placement}
     pure (generatedPaths (scaffoldServiceModules scaffoldContext service))
-  other -> expectationFailure (T.unpack (suiteComponent suite <> " has invalid stable generation mode " <> other)) >> fail "invalid stable generation mode"
+  other -> expectationFailure (T.unpack ((.suiteComponent) suite <> " has invalid stable generation mode " <> other)) >> fail "invalid stable generation mode"
 
 generatedPathsForSource :: FilePath -> IO [FilePath]
 generatedPathsForSource path = do
   source <- readRepoText path
   (service, sourceIndex) <- parseCheckedDocument path source
-  modules <- case planIndexedServiceScaffold sourceIndex (defaultContext (specContext (checkedSpec service))) service of
+  scaffoldModules <- case planIndexedServiceScaffold sourceIndex (defaultContext ((checkedSpec service).context)) service of
     Left refusals -> expectationFailure (show refusals) >> fail "stable source scaffold refusal"
     Right value -> pure value
-  pure (generatedPaths modules)
+  pure (generatedPaths scaffoldModules)
 
 parseCheckedSource :: FilePath -> Text -> IO CheckedService
 parseCheckedSource path source = case parseSource path source of
@@ -276,23 +277,23 @@ parseCheckedSource path source = case parseSource path source of
 parseCheckedDocument :: FilePath -> Text -> IO (CheckedService, SemanticSourceIndex)
 parseCheckedDocument path source = case parseSourceDocument path source of
   Left problem -> expectationFailure (show problem) >> fail "invalid stable source document"
-  Right ParsedSourceDocument {documentParsedSource = parsed, documentSourceIndex = sourceIndex} ->
+  Right ParsedSourceDocument {parsedSource = parsed, sourceIndex = sourceIndex} ->
     pure (checkedSource parsed, sourceIndex)
 
 generatedPaths :: [ScaffoldModule] -> [FilePath]
-generatedPaths = sort . map modulePath . filter ((== Generated) . kind)
+generatedPaths = sort . map (.path) . filter ((== Generated) . (.kind))
 
 requiredSuiteSource :: CompiledSuite -> IO FilePath
-requiredSuiteSource suite = case suiteSource suite of
-  Nothing -> expectationFailure (T.unpack (suiteComponent suite <> " has no source")) >> fail "missing stable source"
+requiredSuiteSource suite = case (.suiteSource) suite of
+  Nothing -> expectationFailure (T.unpack ((.suiteComponent) suite <> " has no source")) >> fail "missing stable source"
   Just source -> pure source
 
 workspaceContext :: WorkspaceSpec -> Context
 workspaceContext workspace =
   Context
-    { contextName = wsContext workspace,
-      moduleRoot = maybe "" id (wsModuleRoot workspace),
-      placement = maybe GeneratedPrefix id (wsLayout workspace)
+    { name = workspace.context,
+      moduleRoot = maybe "" id ((.moduleRoot) workspace),
+      placement = maybe GeneratedPrefix id ((.layout) workspace)
     }
 
 skeletonModuleRoots :: [(Text, Text)]

@@ -23,24 +23,24 @@ import Text.Megaparsec.Char (char)
 contextualDiagnostic :: FilePath -> SourceLanguage -> ContextualParseFailure -> SourceLanguageDiagnostic
 contextualDiagnostic src sourceLanguage contextual =
   SourceLanguageDiagnostic
-    { sourceLanguageErrorCode = code,
-      sourceLanguageSource = src,
-      sourceLanguageLoc = Loc line,
-      sourceLanguageToken = case code of
+    { errorCode = code,
+      source = src,
+      loc = Loc line,
+      token = case code of
         LanguageFeatureRequiresVersion -> Just (languageVersionText effectiveVersion)
         _ -> Nothing,
-      sourceLanguageDeclaredVersion = case code of
+      declaredVersion = case code of
         LanguageFeatureRequiresVersion -> Just effectiveVersion
         _ -> Nothing,
-      sourceLanguageSupportedVersions = case contextualFailureFeature contextual of
+      supportedVersions = case (.feature) contextual of
         Nothing -> supportedLanguageVersions
         Just feature -> case NE.nonEmpty (languageVersionsSupportingFeature feature) of
           Just versions -> versions
           Nothing -> supportedLanguageVersions
     }
   where
-    code = contextualFailureCode contextual
-    SourceSpan {start = SourcePoint {line}} = contextualFailureSpan contextual
+    code = (.code) contextual
+    SourceSpan {start = SourcePoint {line}} = (.span) contextual
     effectiveVersion = effectiveLanguageVersion sourceLanguage
 
 -- | Consume a preamble already validated by 'selectSourceLanguage'. This
@@ -57,8 +57,8 @@ pDeclaredPreamble = do
 -- leading whitespace and comments. Body lines are left entirely to
 -- 'pSurfaceSpec'.
 data InitialLanguageClause = InitialLanguageClause
-  { initialLanguageSpan :: !SourceSpan,
-    initialLanguageText :: !Text
+  { span :: !SourceSpan,
+    text :: !Text
   }
 
 selectSourceLanguage :: FilePath -> Text -> Either FrontendFailure SourceLanguage
@@ -80,23 +80,23 @@ selectSourceLanguage src input = do
       version <- parsePreamble languageClause
       case lookupLanguageDefinition version of
         Nothing -> Left (sourceFailure UnsupportedLanguageVersion languageClause (Just (languageVersionText version)) (Just version))
-        Just _ -> Right (DeclaredLanguage version (Loc (startLine (initialLanguageSpan languageClause))))
+        Just _ -> Right (DeclaredLanguage version (Loc (startLine ((.span) languageClause))))
   where
     sourceFailure code line tokenText declared =
       frontendFailureFromSourceDiagnostic
         SourceSelectionPhase
-        (initialLanguageSpan line)
+        ((.span) line)
         Nothing
         SourceLanguageDiagnostic
-          { sourceLanguageErrorCode = code,
-            sourceLanguageSource = src,
-            sourceLanguageLoc = Loc (startLine (initialLanguageSpan line)),
-            sourceLanguageToken = tokenText,
-            sourceLanguageDeclaredVersion = declared,
-            sourceLanguageSupportedVersions = supportedLanguageVersions
+          { errorCode = code,
+            source = src,
+            loc = Loc (startLine ((.span) line)),
+            token = tokenText,
+            declaredVersion = declared,
+            supportedVersions = supportedLanguageVersions
           }
 
-    parsePreamble line = case T.words (initialLanguageText line) of
+    parsePreamble line = case T.words ((.text) line) of
       ["language", "keiro-dsl", tokenText]
         | T.all (\c -> isAscii c && isDigit c) tokenText && not (T.null tokenText) ->
             case TR.decimal tokenText :: Either String (Natural, Text) of
@@ -117,4 +117,4 @@ pInitialLanguageClause = sc *> optional pLanguageClause
       locatedLine <- withOwnedSpan (takeWhileP (Just "language preamble") (\c -> c /= '\n' && c /= '\r'))
       let rawLine = locatedValue locatedLine
       let content = T.strip (T.takeWhile (/= '#') rawLine)
-      pure InitialLanguageClause {initialLanguageSpan = spanOf locatedLine, initialLanguageText = content}
+      pure InitialLanguageClause {span = spanOf locatedLine, text = content}

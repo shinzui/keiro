@@ -60,24 +60,24 @@ data ClaimEvidence = ClaimedFromRecord | ClaimedFromBanner
   deriving stock (Eq, Show)
 
 data ClaimedFile = ClaimedFile
-  { cfPath :: !FilePath,
-    cfEvidence :: !ClaimEvidence,
+  { path :: !FilePath,
+    evidence :: !ClaimEvidence,
     -- | The legacy record's file name, for @record@ evidence.
-    cfSource :: !(Maybe Text),
+    source :: !(Maybe Text),
     -- | The legacy record's @spec:@ field, for @record@ evidence.
-    cfSpec :: !(Maybe Text)
+    spec :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
 -- | What one adopting run found. Printed in the scaffold output and persisted
 -- beside the generated tree as the durable review artifact.
 data MigrationReport = MigrationReport
-  { mrService :: !Text,
+  { service :: !Text,
     -- | The legacy record consulted, as @(file name, its @spec:@ field)@.
-    mrLegacyRecord :: !(Maybe (FilePath, Text)),
-    mrClaimed :: ![ClaimedFile],
-    mrLikelyStale :: ![StaleModule],
-    mrUnclaimed :: ![FilePath]
+    legacyRecord :: !(Maybe (FilePath, Text)),
+    claimed :: ![ClaimedFile],
+    likelyStale :: ![StaleModule],
+    unclaimed :: ![FilePath]
   }
   deriving stock (Eq, Show)
 
@@ -94,25 +94,25 @@ adoptionReport out context service modules = do
   present <- Set.fromList <$> outputTreeFiles out
   let legacyName = maybe (contextLedgerFileName context) fst ledger
       legacy = snd <$> ledger
-      plannedGenerated = [modulePath m | m <- modules, kind m == Generated]
-      plannedAll = Set.fromList (map modulePath modules)
+      plannedGenerated = [(.path) m | m <- modules, (.kind) m == Generated]
+      plannedAll = Set.fromList (map (.path) modules)
       onDisk path = path `Set.member` present
 
-      recordedFiles = maybe [] recFiles legacy
-      recordSpec = fmap recSpecPath legacy
+      recordedFiles = maybe [] (.files) legacy
+      recordSpec = fmap (.specPath) legacy
 
       claimedFromRecord =
         [ ClaimedFile
-            { cfPath = path,
-              cfEvidence = ClaimedFromRecord,
-              cfSource = Just (T.pack legacyName),
-              cfSpec = recordSpec
+            { path = path,
+              evidence = ClaimedFromRecord,
+              source = Just (T.pack legacyName),
+              spec = recordSpec
             }
         | (Generated, path) <- recordedFiles,
           path `Set.member` plannedAll,
           onDisk path
         ]
-      recordClaimedPaths = Set.fromList (map cfPath claimedFromRecord)
+      recordClaimedPaths = Set.fromList (map (.path) claimedFromRecord)
 
   -- A banner claim reads the file, so it is filtered before the read.
   bannerCandidates <-
@@ -123,15 +123,15 @@ adoptionReport out context service modules = do
         onDisk path,
         path `Set.notMember` recordClaimedPaths
       ]
-  likelyStale <- staleAgainst out (map modulePath modules) recordedFiles
+  likelyStale <- staleAgainst out (map (.path) modules) recordedFiles
   let claimedFromBanner =
-        [ ClaimedFile {cfPath = path, cfEvidence = ClaimedFromBanner, cfSource = Nothing, cfSpec = Nothing}
+        [ ClaimedFile {path = path, evidence = ClaimedFromBanner, source = Nothing, spec = Nothing}
         | (path, True) <- bannerCandidates
         ]
       claimed = claimedFromRecord <> claimedFromBanner
 
       staleOrGenerated =
-        Set.fromList (map stalePath likelyStale) <> Set.fromList plannedGenerated
+        Set.fromList (map (.path) likelyStale) <> Set.fromList plannedGenerated
 
       -- Everything left on disk that this run neither produces nor
       -- attributes. Planned Generated paths are excluded because this run
@@ -140,11 +140,11 @@ adoptionReport out context service modules = do
 
       report =
         MigrationReport
-          { mrService = service,
-            mrLegacyRecord = (,) legacyName <$> recordSpec,
-            mrClaimed = claimed,
-            mrLikelyStale = likelyStale,
-            mrUnclaimed = unclaimed
+          { service = service,
+            legacyRecord = (,) legacyName <$> recordSpec,
+            claimed = claimed,
+            likelyStale = likelyStale,
+            unclaimed = unclaimed
           }
   pure $
     if null claimed && null likelyStale && null unclaimed && isNothing legacy
@@ -155,14 +155,14 @@ adoptionReport out context service modules = do
 adoptedRows :: MigrationReport -> [AdoptedRow]
 adoptedRows report =
   [ AdoptedRow
-      { adPath = cfPath claimed,
-        adEvidence = case cfEvidence claimed of
+      { path = (.path) claimed,
+        evidence = case (.evidence) claimed of
           ClaimedFromRecord -> "record"
           ClaimedFromBanner -> "banner",
-        adSource = cfSource claimed,
-        adSpec = cfSpec claimed
+        source = (.source) claimed,
+        spec = (.spec) claimed
       }
-  | claimed <- mrClaimed report
+  | claimed <- (.claimed) report
   ]
 
 -- | Append the supersession marker to a legacy record, once. Appending is
@@ -228,29 +228,29 @@ hasGeneratedBanner path = do
 -- written to @keiro-dsl-migration-report.workspace.\<service\>.txt@.
 renderMigrationReport :: MigrationReport -> [Text]
 renderMigrationReport report =
-  [ "migration: adopting pre-workspace scaffold output into workspace " <> mrService report
+  [ "migration: adopting pre-workspace scaffold output into workspace " <> (.service) report
   ]
     <> legacySection
     <> claimedSection
     <> staleSection
     <> unclaimedSection
     <> [ "note: keiro-dsl never deletes files. The legacy record was marked superseded, not removed.",
-         "note: the full report is kept at " <> T.pack (workspaceMigrationReportFileName (mrService report))
+         "note: the full report is kept at " <> T.pack (workspaceMigrationReportFileName ((.service) report))
        ]
   where
-    legacySection = case mrLegacyRecord report of
+    legacySection = case (.legacyRecord) report of
       Nothing -> ["  legacy record: (none for this context)"]
       Just (name, specPath) -> ["  legacy record: " <> T.pack name <> " (spec " <> specPath <> ")"]
-    claimedSection = case mrClaimed report of
+    claimedSection = case (.claimed) report of
       [] -> ["  claimed: nothing was attributable to this workspace"]
       claimed ->
         ["  claimed " <> tshow (length claimed) <> " file(s) into workspace history:"]
-          <> [ "    " <> evidenceTag (cfEvidence entry) <> "  " <> T.pack (cfPath entry)
+          <> [ "    " <> evidenceTag ((.evidence) entry) <> "  " <> T.pack ((.path) entry)
              | entry <- claimed
              ]
     evidenceTag ClaimedFromRecord = "record"
     evidenceTag ClaimedFromBanner = "banner"
-    staleSection = case mrLikelyStale report of
+    staleSection = case (.likelyStale) report of
       [] -> []
       stale ->
         [ "  likely stale: "
@@ -258,13 +258,13 @@ renderMigrationReport report =
             <> " file(s) the legacy scaffold recorded that this workspace does not produce:"
         ]
           <> map staleLine stale
-    staleLine stale = case (staleKind stale, staleGeneratedEvidence stale) of
+    staleLine stale = case ((.kind) stale, (.generatedEvidence) stale) of
       (Generated, Just ExactGeneratedBannerPresent) ->
-        "    generated " <> T.pack (stalePath stale) <> "  (exact generated banner present; verify unchanged bytes before deleting)"
+        "    generated " <> T.pack ((.path) stale) <> "  (exact generated banner present; verify unchanged bytes before deleting)"
       (Generated, _) ->
-        "    generated " <> T.pack (stalePath stale) <> "  (exact generated banner missing; preserve and review)"
-      (HoleStub, _) -> "    hole      " <> T.pack (stalePath stale) <> "  (hand-owned — preserve and review)"
-    unclaimedSection = case mrUnclaimed report of
+        "    generated " <> T.pack ((.path) stale) <> "  (exact generated banner missing; preserve and review)"
+      (HoleStub, _) -> "    hole      " <> T.pack ((.path) stale) <> "  (hand-owned — preserve and review)"
+    unclaimedSection = case (.unclaimed) report of
       [] -> []
       unclaimed ->
         [ "  unclaimed: "
