@@ -16,7 +16,10 @@ copyright:       2026 Nadeem Bitar
 category:        Development
 build-type:      Simple
 tested-with:     GHC >=9.12 && <9.13
-extra-doc-files: CHANGELOG.md
+extra-doc-files:
+  CHANGELOG.md
+  generated-haskell-edition-idiomatic-v2.md
+  record-field-migration-0.15.md
 
 common warnings
   ghc-options: -Wall -Werror=missing-fields

@@ -126,7 +126,7 @@ reviewable from the parser architecture it must preserve.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 172 | Freeze the Keiro DSL 0.7 language frontend contract | docs/plans/172-freeze-the-keiro-dsl-0-7-language-frontend-contract.md | None | None | Complete |
-| 177 | Modernize keiro-dsl records and field access | docs/plans/177-modernize-keiro-dsl-records-and-field-access.md | EP-176 | None | Not Started |
+| 177 | Modernize keiro-dsl records and field access | docs/plans/177-modernize-keiro-dsl-records-and-field-access.md | EP-176 | None | Complete |
 | 173 | Introduce located Keiro surface syntax and explicit lowering | docs/plans/173-introduce-located-keiro-surface-syntax-and-explicit-lowering.md | EP-172 | None | Complete |
 | 174 | Modularize the Keiro Megaparsec grammar by language concern | docs/plans/174-modularize-the-keiro-megaparsec-grammar-by-language-concern.md | EP-173 | None | Complete |
 | 175 | Make released Keiro syntax profiles and frontend diagnostics explicit | docs/plans/175-make-released-keiro-syntax-profiles-and-frontend-diagnostics-explicit.md | EP-174 | None | Complete |
@@ -254,12 +254,12 @@ and the milestone. This section provides an at-a-glance view of the entire initi
   full release-quality validation (2026-08-01T22:33:43Z).
 - [x] EP-177: revived and refreshed the plan against the completed frontend and 0.14.0.0 package
   surface, including preliminary compiler and inventory evidence (2026-08-23).
-- [ ] EP-177: complete the checked package/generated API manifests and package record-family
-  migration, then enable and enforce the shared record trio.
-- [ ] EP-177: deliver `idiomatic-v2` generation and explicit backup-backed adoption while
-  preserving hand-owned Hole bodies and frozen-v1 compatibility.
-- [ ] EP-177: preserve non-Haskell contracts, audit downstreams, distill ADR context, and pass
-  release-quality validation.
+- [x] EP-177: completed the checked package/generated API manifests and package record-family
+  migration, then enabled and enforced the shared record trio (2026-08-23T19:48:45Z).
+- [x] EP-177: delivered `idiomatic-v2` generation and explicit backup-backed adoption while
+  preserving hand-owned Hole bodies and frozen-v1 compatibility (2026-08-23T19:48:45Z).
+- [x] EP-177: preserved non-Haskell contracts, audited downstreams, distilled ADR context, and
+  passed release-quality validation (2026-08-23T19:48:45Z).
 
 
 ## Surprises & Discoveries
@@ -471,14 +471,19 @@ tooling, but lowering it before validation, workspace composition, generation, d
 and replay work avoided a pervasive AST migration. ADRs 4 and 16 now carry the durable
 failure-boundary and source/surface/semantic model.
 
-The MasterPlan was reopened on 2026-08-23 only for the revived post-frontend EP-177. The completed
-frontend outcomes and their test evidence remain final. Outstanding work is the independently
-PVP-breaking package/generated record migration: add `NoFieldSelectors` and
-`OverloadedRecordDot` to both advertised contracts, remove product selector functions, preserve
-explicit newtype accessors and every
-non-Haskell observation, deliver explicit `idiomatic-v2` adoption without rewriting Hole bodies,
-audit downstream usage, and complete ADR distillation and release checks. Until EP-177 finishes,
-the initiative is not fully complete even though its frontend architecture is.
+The MasterPlan reopened on 2026-08-23 only for the revived post-frontend EP-177 and is complete
+again. Package and generated records now share concise labels, `NoFieldSelectors`, and record-dot;
+twelve package newtype accessors remain explicit functions. Generated Haskell advances through an
+explicit, backup-backed `idiomatic-v2` edition without rewriting Hole bodies. The final inventories
+cover 288 package declarations with 1,412 fields and 487 generated modules with 1,459 fields. The
+Mori audit identifies six generated consumers and one direct package consumer for project-owned
+follow-up without editing those repositories.
+
+The final release-quality pass preserved every frontend and non-Haskell oracle: `cabal test all`
+passed with 712 DSL and 620 core examples at zero failures, the 39-of-39 corpus replay was current,
+and all-package build, strict selector compilation, source distribution, formatting, native flake,
+extension-policy, inventory, and 38-concept ADR checks passed. Only the shared package-family
+version bump and release remain outside this implementation initiative.
 
 Lossless formatting, editor integration, and version-aware rewrite/fleet work remain intentionally
 deferred to separately scoped initiatives. Generated Haskell remains independently governed by
@@ -525,3 +530,8 @@ deriving behavior are preserved so the breaking release isolates field naming an
 provide dot selection under `NoFieldSelectors`. Record-dot is now the ordinary read syntax and the
 117 current generated local pragmas become redundant in `idiomatic-v2`; overloaded record update
 remains out of scope.
+
+2026-08-23: Marked EP-177 and MasterPlan 28 complete after migrating the package and generated
+record APIs, delivering backup-backed `idiomatic-v2` adoption, auditing Mori dependents, distilling
+ADRs 15, 19, and 38, and passing the complete release-quality matrix. The shared version bump and
+release remain a separate release-workflow action.

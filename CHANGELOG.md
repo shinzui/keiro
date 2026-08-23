@@ -6,6 +6,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### Breaking Changes
+
+- **keiro-dsl**: package and generated product records adopt concise repeated labels
+  without selector functions. Package callers migrate to record dot or constructor
+  patterns; existing scaffold ledgers require explicit, backup-backed adoption of the
+  `idiomatic-v2` generated-Haskell edition. `.keiro` syntax, serialized identities, and
+  runtime behavior are unchanged. See the
+  [package API guide](docs/guides/migrating-keiro-dsl-record-api-0.15.md) and
+  [generated edition guide](docs/guides/adopting-keiro-dsl-idiomatic-v2.md).
+
 ### New Features
 
 - **keiro-test-support** is now published to Hackage, starting at the shared

@@ -6,6 +6,31 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## Unreleased
 
+### Breaking Changes
+
+- Package-authored product records now use concise repeated labels under
+  `DuplicateRecordFields`, `NoFieldSelectors`, and `OverloadedRecordDot`. Their
+  generated selector functions and owner-prefixed field labels are removed from the
+  public Haskell API; construction and constructor-directed matching remain supported.
+  Migrate reads to record dot using the exhaustive
+  [`record-field-migration-0.15.md`](record-field-migration-0.15.md) table. The twelve
+  intentional single-field newtype unwrappers listed there remain explicit functions.
+- Scaffolded Haskell advances from `idiomatic-v1` to `idiomatic-v2`. Generated product
+  selectors are removed or renamed to concise labels, and the Cabal fragment now
+  defaults `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedRecordDot`, and
+  `OverloadedStrings`. Existing ledgers require an explicit
+  `--apply-generated-haskell-edition` run with durable v1 backups; ordinary scaffolding
+  refuses before writes. See the
+  [adoption guide](../docs/guides/adopting-keiro-dsl-idiomatic-v2.md).
+
+### Other Changes
+
+- JSON and wire keys, canonical/rendered output, diagnostics, fingerprints, `.keiro`
+  language behavior, and runtime semantics are unchanged by the record migration.
+- The checked package and generated-edition inventories, extension-policy gate, and
+  Fourmolu parser options now enforce the record model and reject `FieldSelectors`
+  escape hatches.
+
 ## 0.14.0.0 — 2026-08-21
 
 ### Breaking Changes

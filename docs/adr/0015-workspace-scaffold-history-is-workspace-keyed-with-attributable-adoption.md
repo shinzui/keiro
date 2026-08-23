@@ -166,9 +166,9 @@ from exact code-token module references.
 **A generated presentation-edition change is also explicit, but does not rewrite hand-owned
 record consumers.** The accepted `idiomatic-v1` to `idiomatic-v2` change in ADR 0019 alters the
 generated record API and manifest defaults without moving modules. An ordinary scaffold against an
-`idiomatic-v1` ledger refuses before writes and persists a migration report containing the complete
-planned Generated/sidecar diff plus every exact use of a changed generated field API that it can
-attribute to a create-once module. The operator converts those hand-owned occurrences to
+`idiomatic-v1` ledger refuses before writes and reports the complete planned Generated/sidecar diff
+plus every exact use of a changed generated field API that it can attribute to a create-once
+module. The operator converts those hand-owned occurrences to
 positional constructor patterns or construction when the label changes, record-dot enabled locally
 while the v1 manifest is still active when the label is unchanged, or a preserved explicit newtype
 accessor. Constructor names, arity, and field order are preserved across this edition specifically
@@ -176,13 +176,14 @@ so that positional bridging is available. The report is evidence and guidance, n
 rewrite the file.
 
 The operator then explicitly requests generated-Haskell edition adoption. The apply path reruns
-all ordinary overwrite, banner, package, workspace, and collision preflights; refuses if its
-attributable hand-owned inventory still contains an unresolved changed field occurrence; prepares
-the complete new Generated tree, ledger, and Cabal fragment beside their destinations; and moves
-the exact old Generated files and sidecars under
+all ordinary overwrite, banner, package, workspace, and collision preflights; prepares the
+complete new Generated tree, ledger, and Cabal fragment; and copies the exact old Generated files
+and sidecars under
 `.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/` before same-filesystem
-installation. A durable path-and-digest journal makes prepared, backed-up, and installed states
-resumable or explicitly refusing. The migration never edits, moves, or claims a Hole file. Uses in
+installation. Existing byte-identical backups make an interrupted pre-installation copy
+idempotent; a source/backup byte conflict is an explicit refusal, and the ledger is installed last
+so a successful run alone records `idiomatic-v2`. The migration report is persisted beside those
+backups. The migration never edits, moves, or claims a Hole file. Reported occurrences and uses in
 application sources outside the attributable scaffold inventory remain ordinary compiler-checked
 PVP migration work; the durable backup supplies rollback rather than a false claim of whole-project
 source analysis.
@@ -225,7 +226,7 @@ either shipped form.
 - A generated record-edition adoption can be prepared while the old tree still compiles. Known
   Hole consumers must be made dual-compatible before apply; unknown application consumers fail at
   compile time after apply and can recover the exact prior Generated tree and sidecars from the
-  migration journal.
+  migration backup set.
 - Regenerating a legacy tree migrates its generated banners in place while
   preserving the same overwrite authority. Package, language, and stable-node
   provenance become inspectable without making source movement or workspace

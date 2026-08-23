@@ -62,16 +62,21 @@ migration.
 - [x] Milestone 1: replaced the preliminary scans with deterministic package and generated-Haskell
   migration manifests, added focused drift checks, and froze the non-selector observations that a
   rename can affect (2026-08-23T13:58:40Z).
-- [ ] Milestone 2: modernize `Grammar`, the public frontend/language boundary, naming, and semantic
-  contract records while keeping the package buildable at family boundaries.
-- [ ] Milestone 3: modernize analysis, reports, generation planning, workspaces, CLI options, tests,
-  and the remaining package-authored record families; then enable `NoFieldSelectors` in `shared`.
-- [ ] Milestone 4: introduce `idiomatic-v2`, migrate the generator and complete tracked generated
-  corpus, and enable the record trio in the generated manifest and `generated-output`.
-- [ ] Milestone 5: implement explicit backup-backed edition adoption, prove old-edition consumer
-  compatibility, and produce compiler-guided remediation for hand-owned Hole modules.
-- [ ] Milestone 6: audit registered downstream projects, publish both migration guides, distill the
-  durable policies into ADRs, and pass release-quality checks.
+- [x] Milestone 2: modernized `Grammar`, the public frontend/language boundary, naming, and semantic
+  contract records while keeping the package buildable at family boundaries
+  (2026-08-23T19:48:45Z).
+- [x] Milestone 3: modernized analysis, reports, generation planning, workspaces, CLI options,
+  tests, and the remaining package-authored record families; then enabled `NoFieldSelectors` in
+  `shared` (2026-08-23T19:48:45Z).
+- [x] Milestone 4: introduced `idiomatic-v2`, migrated the generator and complete tracked generated
+  corpus, and enabled the record trio in the generated manifest and `generated-output`
+  (2026-08-23T19:48:45Z).
+- [x] Milestone 5: implemented explicit backup-backed edition adoption, proved old-edition consumer
+  compatibility, and produced compiler-guided remediation for hand-owned Hole modules
+  (2026-08-23T19:48:45Z).
+- [x] Milestone 6: audited registered downstream projects, published both migration guides,
+  distilled the durable policies into ADRs, and passed release-quality checks
+  (2026-08-23T19:48:45Z).
 
 
 ## Surprises & Discoveries
@@ -188,6 +193,41 @@ migration.
   Impact: Preserve every released language and generated contract, but do not infer current
   downstream selector usage from that historical adoption statement; use the refreshed audit.
 
+- Observation: The completed package inventory is slightly larger than the Milestone 1 baseline,
+  while explicit generated newtype functions make the final generated declaration count smaller.
+  Evidence: The final checked package inventory contains 288 record-owning declarations, 1,412
+  fields, 1,374 strict fields, and 1,293 publicly exported fields. The final generated inventory
+  contains 487 modules, 332 record declarations, 1,459 fields, 12,217 lexical field-label
+  occurrences, 19 local default pragmas, and 122 hand-owned conformance modules.
+  Impact: The checked documents describe the shipped tree rather than freezing reconnaissance
+  counts. Explicit positional newtype functions are intentionally no longer record declarations.
+
+- Observation: Fourmolu must parse the same ambient record syntax that Cabal supplies.
+  Evidence: After the Cabal defaults gained the record trio, pre-commit formatting could not parse
+  record-dot modules until `.fourmolu.yaml` advertised `DuplicateRecordFields`,
+  `NoFieldSelectors`, and `OverloadedRecordDot`; with the mirror in place, `nix fmt -- --ci`
+  processed all 270 selected files without changes.
+  Impact: Compiler defaults and formatter parser defaults are one policy boundary and are checked
+  together.
+
+- Observation: The full cold component matrix found valid consumers that focused source scans did
+  not identify, including unchanged generated labels and a frozen historical skeleton corpus.
+  Evidence: Successive `cabal test all --keep-going` passes exposed direct reads in contract,
+  ID-domain, scalar-expression, codec-compare, process, nominal-scalar, workflow, mapped-queue,
+  projection-catalog, and skeleton components. After migrating them and refreshing the inventory,
+  the matrix passed with 712 DSL examples and 620 core examples, both at zero failures.
+  Impact: A lexical rename map is necessary but not sufficient; the complete component graph is
+  the authoritative missed-selector detector.
+
+- Observation: Coarse Mori dependents contain six generated-API consumers even though the
+  package-specific reverse-dependency query is empty.
+  Evidence: The downstream audit found generated trees in `mori://shinzui/danwa`,
+  `mori://shinzui/keiro-runtime-jitsurei`, `mori://shinzui/kotei`,
+  `mori://shinzui/shikigami`, `mori://shinzui/mori`, and `mori://shinzui/rei`; only
+  `mori://shinzui/rei` also has a direct `keiro-dsl` Cabal dependency and `Keiro.Dsl` imports.
+  Impact: Those repositories own their attributed adoption work. This plan records exact risk and
+  procedures without modifying another project.
+
 
 ## Decision Log
 
@@ -286,36 +326,60 @@ migration.
   failing focused test.
   Date: 2026-08-23
 
+- Decision: Keep emitter templates on their released semantic field vocabulary and apply the
+  `idiomatic-v2` label mapping only at the generated-Haskell presentation boundary.
+  Rationale: One token-aware boundary preserves comments, literals, wire strings, diagnostics, and
+  semantic generator logic while producing the reviewed concise Haskell API. Emitter-side reads
+  use record-dot before that mapping so the transformed source remains valid under
+  `NoFieldSelectors`.
+  Date: 2026-08-23
+
+- Decision: Leave all downstream migrations to their owning repositories.
+  Rationale: Generated history and hand-owned Hole imports require project-specific attribution
+  and review. The audit and guides provide the necessary evidence without broadening this plan's
+  write scope across six repositories.
+  Date: 2026-08-23
+
+- Decision: Do not bump only `keiro-dsl` or cut the shared release from this implementation plan.
+  Rationale: Keiro packages release under one shared PVP version and dependency order. The
+  Unreleased changelogs and provisional 0.15 guide are ready, but the version change belongs to
+  the repository release workflow rather than an isolated package edit.
+  Date: 2026-08-23
+
 
 ## Outcomes & Retrospective
 
-The plan was cancelled before production changes on 2026-08-01, then revived on 2026-08-23. The
-completed frontend delivered concise `NoFieldSelectors` records in four production modules, but
-the package-wide API remains on its historical prefixed selector surface and the shared Cabal
-stanza still lacks `NoFieldSelectors`.
+The revived plan is complete. Package-authored records now use concise repeated labels under the
+record trio, product selector functions are absent, and the twelve intentional newtype unwrappers
+remain explicit positional functions. The final checked package contract covers 288 declarations
+and 1,412 fields. No generic-lens dependency, `FieldSelectors` escape hatch, overloaded record
+update, or strictness/deriving change was introduced.
 
-The revival reconnaissance establishes the cost shape: the package manifest edit is one line
-because `DuplicateRecordFields` is already present, while the implementation spans dozens of
-record-owning modules, public selector removal, a large internal consumer rewrite, a generated-
-Haskell edition change, JSON/render/wire proofs, and a downstream audit. The generated corpus is
-large at 487 tracked modules but overwriteable; the safety-sensitive surface is direct
-`keiro-dsl` callers plus 91 hand-owned conformance/consumer modules. No production source or Cabal
-change remains from either compiler probe, and both the ordinary library and the restored
-representative generated conformance target are green. Milestone 1 then replaced approximate
-counts with checked package and generated-edition inventories and added the named focused test
-groups used at later family boundaries. Production migration, downstream migrations, final test
-totals, and ADR distillation remain pending.
+Generated Haskell now has an explicit `idiomatic-v2` presentation edition with the same record
+model. The 487-module tracked corpus is current, its checked inventory covers 332 record
+declarations and 1,459 fields, and frozen `idiomatic-v1` compatibility remains independently
+tested. Ordinary scaffold runs refuse edition drift before writes; explicit adoption copies the v1
+generated tree and sidecars to durable backups, leaves create-once Hole bytes untouched, writes a
+stable remediation report, and installs the ledger only after the generated write set succeeds.
+
+All non-Haskell contracts remained green. The complete `cabal test all` matrix passed, including
+712 `keiro-dsl` examples and 620 `keiro` examples with zero failures; `cabal build all`, the strict
+`-Werror=ambiguous-fields` DSL compile, 39-of-39 corpus replay check, package and generated
+inventory checks, extension policy, source distribution content check, `nix fmt -- --ci`, native
+`nix flake check`, and strict validation of all 38 ADR concepts also passed. The downstream audit
+identifies six generated consumers and one direct package consumer without editing their
+repositories. The only deferred action is the shared package-family version bump and release,
+which belongs to the release workflow.
 
 
 ## Context and Orientation
 
-`keiro-dsl/keiro-dsl.cabal` is currently version 0.14.0.0 and targets GHC 9.12. Its `common shared`
-stanza supplies GHC2024 plus `DuplicateRecordFields`, `ImportQualifiedPost`, `LambdaCase`,
-`OverloadedLabels`, and `OverloadedStrings`. The library, executable, primary Hspec suite, three
-focused source-sharing suites, and two benchmarks import this stanza. Generated conformance suites
-instead import `common generated-output`, which currently supplies only GHC2024 and
-`OverloadedStrings`; EP-177 deliberately changes that independent contract in sync with the
-generated manifest and presentation edition.
+`keiro-dsl/keiro-dsl.cabal` remains version 0.14.0.0 pending the shared release and targets GHC
+9.12. Its `common shared` stanza now supplies GHC2024 plus `DuplicateRecordFields`,
+`NoFieldSelectors`, `OverloadedRecordDot`, and the pre-existing package extensions. The library,
+executable, primary Hspec suite, focused source-sharing suites, and benchmarks import this stanza.
+Generated conformance suites instead import `common generated-output`, which now supplies the
+record trio plus `OverloadedStrings` in sync with the `idiomatic-v2` manifest.
 
 `DuplicateRecordFields` permits the same field label in different datatypes. `NoFieldSelectors`
 changes what a record declaration produces: record labels remain available for construction,
@@ -327,30 +391,27 @@ automatically affected.
 
 The central public record graph is `keiro-dsl/src/Keiro/Dsl/Grammar.hs`. It exports most datatypes
 with constructors and fields through `Type (..)`, and validation, generation, pretty printing,
-diffing, replay, workspaces, and the modular parser consume those fields. Other large record
-surfaces include `LanguageVersion.hs`, `TypeGraph.hs`, `Coverage.hs`, `CodecCompare.hs`,
-`Scaffold.hs`, `ScaffoldRun.hs`, `Workspace.hs`, `WorkspaceRecord.hs`, and `app/Main.hs`.
-`keiro-dsl/test/Keiro/Dsl/FrontendPublicApiProbe.hs` deliberately pins representative public
-selector signatures from the 0.7 release in addition to stable parser and renderer functions.
-This plan must preserve the function probes, move removed product selectors into the exhaustive
-migration manifest, and keep explicit newtype accessor probes compiling.
+diffing, replay, workspaces, and the modular parser consume those labels through record-dot and
+constructor patterns. Other large migrated record surfaces include `LanguageVersion.hs`,
+`TypeGraph.hs`, `Coverage.hs`, `CodecCompare.hs`, `Scaffold.hs`, `ScaffoldRun.hs`, `Workspace.hs`,
+`WorkspaceRecord.hs`, and `app/Main.hs`. `FrontendPublicApiProbe.hs` continues to pin stable parser,
+renderer, source-index, and explicit newtype accessor functions; removed product selectors live in
+the exhaustive migration inventory instead of the compile probe.
 
-Four landed frontend modules already show the target semantics. `Keiro.Dsl.Source` defines
+The landed frontend modules show the target semantics. `Keiro.Dsl.Source` defines
 `SourcePoint {offset, line, column}`, `SourceSpan {source, start, end}`, and
 `Located {span, value}` with `NoFieldSelectors`; it exposes semantic functions such as `startLine`
 and manipulates records by patterns and construction. `SourceIndex`, `Syntax`, and
-`Frontend.Internal` follow the same style. The rest of the package still generates selectors and
-often uses datatype-prefixed labels such as `idName`, `aggName`, `wfKey`, `rmName`, and
-`siteLogicalName`.
+`Frontend.Internal` follow the same style, now shared by the rest of the package.
 
 [ADR 16](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md) keeps
 `Grammar.Spec` as the normalized semantic graph, with source evidence beside rather than inside it.
 The record migration may rename Haskell labels but must not change this graph's semantic meaning,
 location-insensitive equality, or source-index join. [ADR 19](../adr/0019-generated-haskell-has-an-explicit-edition-and-local-extension-contract.md)
-owns scaffolded Haskell's extension and presentation edition; Milestones 1 and 4 must amend it for
+owns scaffolded Haskell's extension and presentation edition and now records
 `idiomatic-v2`. [ADR 15](../adr/0015-workspace-scaffold-history-is-workspace-keyed-with-attributable-adoption.md)
-owns backup-backed generated-source migration and must be extended without weakening the create-
-once boundary. [ADR 17](../adr/0017-aggregate-transitions-have-explicit-generated-or-hole-behavior-ownership.md)
+owns the implemented backup-backed generated-source migration without weakening the create-once
+boundary. [ADR 17](../adr/0017-aggregate-transitions-have-explicit-generated-or-hole-behavior-ownership.md)
 keeps Hole behavior hand-owned. [ADR 21](../adr/0021-direct-fields-have-independent-dsl-selector-and-wire-identities.md)
 keeps generated Haskell selectors independent from DSL and wire identities. [ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
 requires those identities and their external compatibility observations to remain at their current
@@ -361,8 +422,8 @@ The cross-repository record convention is
 `shinzui/haskell-jitsurei`; it prefers concise shared labels, strict fields, explicit deriving
 strategies, and `Generic`, while warning that generic-lens labels can conflict with Keiki. This
 plan adopts its naming/access model but preserves current strictness and deriving behavior to keep
-the break single-purpose. No local ADR currently defines the package-authored `keiro-dsl` record
-API. Milestone 6 records that policy and amends ADRs 15 and 19 with the proven generated-edition
+the break single-purpose. [ADR 38](../adr/0038-keiro-dsl-records-use-concise-labels-without-product-selectors.md)
+now defines the package-authored record API, while ADRs 15 and 19 carry the proven generated-edition
 and adoption contract.
 
 
@@ -654,3 +715,9 @@ and explicitly left `OverloadedRecordUpdate` out of scope.
 inventories plus focused Hspec drift gates. Replaced preliminary counts with the checked results
 and recorded the deliberate lexical over-approximation used to make generated consumer omissions
 visible.
+
+2026-08-23: Completed Milestones 2 through 6. Migrated the package and generated record APIs,
+introduced and proved backup-backed `idiomatic-v2` adoption, regenerated and cold-compiled the
+complete conformance corpus, published migration guides and the Mori downstream audit, distilled
+ADRs 15, 19, and 38, and passed the full release-quality matrix. The shared 0.15 release remains a
+separate release-workflow action.
