@@ -66,6 +66,7 @@ import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractIdentity (..), QueryContractPosition (..), queryContractIdentities)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
+import Keiro.Dsl.RecordMigration (recordMigrationSpec)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
@@ -161,6 +162,7 @@ main = hspec $ do
   frontendCompatibilitySpec
   frontendSurfaceSpec
   frontendProfilesSpec
+  recordMigrationSpec
 
   describe "mapped consumer surface" $ do
     it "parses and canonically round-trips Language 5 queue and query expressions as atomic forms" $ do
