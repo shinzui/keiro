@@ -25,6 +25,7 @@ FIELD = re.compile(
     r"^\s*(?:[|=]\s*[A-Z][A-Za-z0-9_]*(?:\s+[^{}]+)?\s*)?"
     r"[,{]?\s*([a-z][A-Za-z0-9_]*)\s*::\s*(.+?)(?:,\s*)?$"
 )
+INLINE_FIELD = re.compile(r"\{\s*([a-z][A-Za-z0-9_]*)\s*::\s*([^}]+)\}")
 MODULE = re.compile(r"^module\s+([A-Z][A-Za-z0-9_.]*)", re.MULTILINE)
 CAMEL_PREFIX = re.compile(r"^([a-z][a-z0-9]*)([A-Z].*)$")
 LANGUAGE = re.compile(r"^\{-# LANGUAGE ([A-Za-z0-9_]+) #-\}$", re.MULTILINE)
@@ -100,10 +101,24 @@ def parse_fields(path: Path) -> list[RecordField]:
         kind, owner = declaration.groups()
         end = declaration_end(lines, index)
         block = lines[index:end]
-        deriving = " ".join(
-            stripped for candidate in block if (stripped := candidate.strip()).startswith("deriving")
-        )
+        deriving = " ".join(re.findall(r"\bderiving\s+(?:stock|newtype|anyclass|via)?\s*\([^\n]+\)", "\n".join(block)))
         public = module_name in exposed_modules() and module_exports_all(text, owner)
+        inline = INLINE_FIELD.search(line)
+        if inline:
+            name, type_text = inline.groups()
+            result.append(
+                RecordField(
+                    path=str(path.relative_to(ROOT)),
+                    module=module_name,
+                    kind=kind,
+                    owner=owner,
+                    name=name,
+                    type_text=type_text.strip(),
+                    line=index + 1,
+                    public=public,
+                    deriving=deriving or "none",
+                )
+            )
         for offset, candidate in enumerate(block):
             match = FIELD.match(candidate)
             if not match:

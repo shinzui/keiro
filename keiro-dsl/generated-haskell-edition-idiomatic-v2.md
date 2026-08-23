@@ -6,7 +6,7 @@ record field, every lexical use of those field labels in generated or hand-owned
 sources, and every local record-default pragma. Lexical occurrence rows intentionally
 over-approximate selector use so no consumer occurrence is silently omitted during review.
 
-Inventory: 487 generated modules, 289 record declarations, 1416 fields, 8534 field-label occurrences, 154 local default-pragmas, and 122 hand-owned conformance modules.
+Inventory: 487 generated modules, 336 record declarations, 1463 fields, 8768 field-label occurrences, 154 local default-pragmas, and 122 hand-owned conformance modules.
 
 The `idiomatic-v2` manifest defaults are `DuplicateRecordFields`, `NoFieldSelectors`,
 `OverloadedRecordDot`, and `OverloadedStrings`. Constructor names, arity, field order, wire
@@ -19,6 +19,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -69,6 +70,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -118,6 +120,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -168,6 +171,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -207,9 +211,14 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/Domain.hs:35` | `SubscriptionActivatedData` | data | `plan` | `plan` | `!Plan` | `(.plan)` or constructor pattern |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/Domain.hs:40` | `SubscriptionCancelledData` | data | `subscriptionId` | `subscriptionId` | `!SubscriptionId` | `(.subscriptionId)` or constructor pattern |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/Domain.hs:41` | `SubscriptionCancelledData` | data | `customerId` | `customerId` | `!CustomerId` | `(.customerId)` or constructor pattern |
+| `keiro-dsl/test/conformance-contract/Generated/HospitalCapacity/Emergency/Contract.hs:31` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), triageRecordId :: !Text, family :: !Text, payloadType :: !Text, serviceRegion :: !Text, redCount :: !Int` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-contract/Generated/HospitalCapacity/Emergency/Contract.hs:34` | `TransferReservationAcceptedData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), reservationId :: !(KindID "rsv"), hospitalId :: !(KindID "hsp"), expirationDeadline :: !Text` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:27` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!Text, triageRecordId :: !Text, region :: !Text, redCount :: !Int` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:30` | `TransferReservationAcceptedData` | data | `incidentId` | `incidentId` | `!Text, reservationId :: !Text, hospitalId :: !Text, expirationDeadline :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -255,6 +264,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:38` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:51` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:52` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:53` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -289,6 +299,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -323,6 +334,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -361,8 +373,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs:31` | `RecordedValuesData` | data | `localCollision` | `localCollision` | `!Domain.CollisionLedgerCommand` | `(.localCollision)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs:32` | `RecordedValuesData` | data | `details` | `details` | `!Details` | `(.details)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/Structural/Shape/Details.hs:8` | `DetailsShape` | data | `label` | `label` | `!Text` | `(.label)` or constructor pattern |
+| `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs:25` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), region :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:27` | `InboxFailure` | data | `inboxFailureReason` | `reason` | `!Text` | `(.reason)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:28` | `InboxFailure` | data | `inboxFailureAttempt` | `attempt` | `!(Maybe Int)` | `(.attempt)` or constructor pattern |
+| `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/Emergency/Contract.hs:25` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), region :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:27` | `InboxFailure` | data | `inboxFailureReason` | `reason` | `!Text` | `(.reason)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:28` | `InboxFailure` | data | `inboxFailureAttempt` | `attempt` | `!(Maybe Int)` | `(.attempt)` or constructor pattern |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:34` | `MappedJob` | data | `job` | `job` | `!JobPayload` | `(.job)` or constructor pattern |
@@ -384,6 +398,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -420,6 +435,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -466,6 +482,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -497,6 +514,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:108` | `BehaviorConformanceReport` | data | `reportUnverified` | `unverified` | `![BehaviorKey]` | `(.unverified)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Domain.hs:15` | `ActivateSurgeData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Domain.hs:23` | `SurgeActivatedData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -541,6 +559,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -572,6 +591,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:108` | `BehaviorConformanceReport` | data | `reportUnverified` | `unverified` | `![BehaviorKey]` | `(.unverified)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/Domain.hs:15` | `ActivateSurgeData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/Domain.hs:23` | `SurgeActivatedData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -608,6 +628,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -639,6 +660,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:108` | `BehaviorConformanceReport` | data | `reportUnverified` | `unverified` | `![BehaviorKey]` | `(.unverified)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Domain.hs:15` | `ActivateSurgeData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Domain.hs:23` | `SurgeActivatedData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -683,6 +705,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -724,6 +747,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/QualificationJobs/Queue.hs:34` | `QualificationJob` | data | `maybeMetadata` | `maybeMetadata` | `!(Maybe QueueMetadata)` | `(.maybeMetadata)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/QualificationJobs/Queue.hs:35` | `QualificationJob` | data | `attempt` | `attempt` | `!Int` | `(.attempt)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/QualificationJobs/Queue.hs:36` | `QualificationJob` | data | `trace` | `trace` | `!Value` | `(.trace)` or constructor pattern |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -759,6 +783,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/Domain.hs:26` | `ShipmentRecordedData` | data | `accepted` | `accepted` | `!Bool` | `(.accepted)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Structural/Shape/QualificationPayload.hs:8` | `QualificationPayloadShape` | data | `qualificationId` | `qualificationId` | `!Text` | `(.qualificationId)` or constructor pattern |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Structural/Shape/QualificationPayload.hs:9` | `QualificationPayloadShape` | data | `note` | `note` | `!(Maybe Text)` | `(.note)` or constructor pattern |
+| `keiro-dsl/test/conformance-publisher-runtime/Generated/HospitalCapacity/Emergency/Contract.hs:29` | `TransferReservationAcceptedData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), reservationId :: !(KindID "rsv")` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-publisher-runtime/Generated/HospitalCapacity/Emergency/Contract.hs:32` | `TransferReservationRejectedData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), reason :: !Text` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-publisher-runtime/Generated/HospitalCapacity/Emergency/Contract.hs:35` | `TransferExpiredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), expiredAt :: !Text` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-publisher-runtime/Generated/HospitalCapacity/Emergency/Contract.hs:38` | `PatientAdmittedData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), admissionOutcome :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/ReservationWork/Queue.hs:28` | `ReservationWorkItem` | data | `reservationId` | `reservationId` | `!Text` | `(.reservationId)` or constructor pattern |
 | `keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/ReservationWork/Queue.hs:29` | `ReservationWorkItem` | data | `hospitalId` | `hospitalId` | `!Text` | `(.hospitalId)` or constructor pattern |
 | `keiro-dsl/test/conformance-queue/Generated/HospitalCapacity/ReservationWork/Queue.hs:30` | `ReservationWorkItem` | data | `commandId` | `commandId` | `!Text` | `(.commandId)` or constructor pattern |
@@ -770,6 +798,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -806,6 +835,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -842,6 +872,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -878,6 +909,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -914,6 +946,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -965,6 +998,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/Domain.hs:63` | `ClosedEventData` | data | `balance` | `balance` | `!Integer` | `(.balance)` or constructor pattern |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs:8` | `LimitsShape` | data | `minimum` | `minimum` | `!Integer` | `(.minimum)` or constructor pattern |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/Structural/Shape/Limits.hs:9` | `LimitsShape` | data | `ceiling` | `ceiling` | `!Natural` | `(.ceiling)` or constructor pattern |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1000,6 +1034,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/Domain.hs:30` | `AlphaPingedData` | data | `proofId` | `proofId` | `!ProofId` | `(.proofId)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/Domain.hs:31` | `AlphaPingedData` | data | `current` | `current` | `!Bool` | `(.current)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/Domain.hs:36` | `LegacyAlphaPingedData` | data | `proofId` | `proofId` | `!ProofId` | `(.proofId)` or constructor pattern |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1040,6 +1075,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowFacts.hs:11` | `WorkflowFacts` | data | `workflowFactBody` | `body` | `![String]` | `(.body)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowFacts.hs:12` | `WorkflowFacts` | data | `workflowFactAwaitLabels` | `awaitLabels` | `![String]` | `(.awaitLabels)` or constructor pattern |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowFacts.hs:13` | `WorkflowFacts` | data | `workflowFactPatchIds` | `patchIds` | `![String]` | `(.patchIds)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:34` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1074,8 +1110,12 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/Domain.hs:17` | `DoThingData` | data | `attempt` | `attempt` | `!Int` | `(.attempt)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/Domain.hs:25` | `ThingCompletedData` | data | `thingId` | `thingId` | `!ThingId` | `(.thingId)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/Domain.hs:26` | `ThingCompletedData` | data | `attempt` | `attempt` | `!Int` | `(.attempt)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelContract/Generated/MyService/MyContract/Contract.hs:25` | `ThingHappenedData` | data | `thingId` | `thingId` | `!(KindID "thing"), detail :: !Text` | `(.thingId)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelEmit/Generated/MyService/MyContract/Contract.hs:25` | `ThingAcceptedData` | data | `thingId` | `thingId` | `!(KindID "thing")` | `(.thingId)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelIntake/Generated/MyService/MyContract/Contract.hs:25` | `ThingHappenedData` | data | `thingId` | `thingId` | `!(KindID "thing")` | `(.thingId)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelIntake/Generated/MyService/ThingInbox/Inbox.hs:27` | `InboxFailure` | data | `inboxFailureReason` | `reason` | `!Text` | `(.reason)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelIntake/Generated/MyService/ThingInbox/Inbox.hs:28` | `InboxFailure` | data | `inboxFailureAttempt` | `attempt` | `!(Maybe Int)` | `(.attempt)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:33` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:46` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1108,6 +1148,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:108` | `BehaviorConformanceReport` | data | `reportUnverified` | `unverified` | `![BehaviorKey]` | `(.unverified)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/Domain.hs:15` | `ActivateSurgeData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/Domain.hs:23` | `SurgeActivatedData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:33` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:46` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1152,6 +1193,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/Domain.hs:43` | `SurgeTimerMarkedData` | data | `timerId` | `timerId` | `!Text` | `(.timerId)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelQueue/Generated/MyService/ReservationWork/Queue.hs:22` | `ReservationWorkItem` | data | `reservationId` | `reservationId` | `!Text` | `(.reservationId)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelQueue/Generated/MyService/ReservationWork/Queue.hs:23` | `ReservationWorkItem` | data | `hospitalId` | `hospitalId` | `!Text` | `(.hospitalId)` or constructor pattern |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:33` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:46` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:47` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1195,6 +1237,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1242,6 +1285,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Domain.hs:53` | `TransferReservationConfirmedData` | data | `reservationId` | `reservationId` | `!TransferReservationId` | `(.reservationId)` or constructor pattern |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Domain.hs:54` | `TransferReservationConfirmedData` | data | `hospitalId` | `hospitalId` | `!HospitalId` | `(.hospitalId)` or constructor pattern |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Domain.hs:55` | `TransferReservationConfirmedData` | data | `commandId` | `commandId` | `!CommandId` | `(.commandId)` or constructor pattern |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1293,6 +1337,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1362,6 +1407,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/BehaviorSourceMap.hs:13` | `BehaviorSourceLocation` | data | `sourceLine` | `line` | `!Int` | `(.line)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/BehaviorSourceMap.hs:14` | `BehaviorSourceLocation` | data | `sourceColumn` | `column` | `!Int` | `(.column)` or constructor pattern |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1399,6 +1445,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/Domain.hs:33` | `ProjectRegisteredData` | data | `phase` | `phase` | `!ProjectPhase` | `(.phase)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/Domain.hs:38` | `ArchivalRecordedData` | data | `projectId` | `projectId` | `!ProjectId` | `(.projectId)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/Domain.hs:39` | `ArchivalRecordedData` | data | `phase` | `phase` | `!ProjectPhase` | `(.phase)` or constructor pattern |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:35` | `BehaviorKey` | newtype | `unBehaviorKey` | `unBehaviorKey` | `Text` | explicit `unBehaviorKey` positional function |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:48` | `BehaviorRequirement` | data | `requirementKey` | `key` | `!BehaviorKey` | `(.key)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:49` | `BehaviorRequirement` | data | `requirementKind` | `kind` | `!ObligationKind` | `(.kind)` or constructor pattern |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:50` | `BehaviorRequirement` | data | `requirementEvidence` | `evidence` | `!EvidenceLevel` | `(.evidence)` or constructor pattern |
@@ -1468,6 +1515,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -1477,6 +1525,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -1551,6 +1600,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:209` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:210` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:211` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:213` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -1575,6 +1625,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:251` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -1615,7 +1666,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:384` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:389` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:391` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:393` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance/Generated/HospitalCapacity/Reservation/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -1718,6 +1772,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -1727,6 +1782,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -1765,6 +1821,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -1789,6 +1846,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -1828,7 +1886,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -1937,6 +1998,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -1946,6 +2008,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -2137,6 +2200,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:365` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:366` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:367` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:368` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:368` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:368` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:369` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -2161,6 +2225,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:407` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:408` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:408` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:408` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:408` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:408` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:408` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -2198,7 +2263,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:538` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:538` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:538` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:538` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:543` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:548` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:550` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/BehaviorContract.hs:552` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/Codec.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-behavior-complete/Generated/BehaviorComplete/Journey/Codec.hs:16` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -2369,6 +2437,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -2378,6 +2447,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -2452,6 +2522,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:209` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:210` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:211` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:212` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:212` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:212` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:213` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -2476,6 +2547,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:251` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:252` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:252` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:252` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:252` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:252` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:252` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -2514,7 +2586,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:379` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:379` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:379` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:384` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:389` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:391` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/BehaviorContract.hs:393` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-coldstart/Generated/Billing/Subscription/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -2640,6 +2715,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -2649,6 +2725,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -2687,6 +2764,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -2711,6 +2789,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -2748,7 +2827,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/Hospital/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -2926,6 +3008,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:35` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:36` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:36` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:38` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:45` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -2935,6 +3018,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:72` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:87` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:95` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:99` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:99` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:100` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:101` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -2982,6 +3066,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:178` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:179` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:180` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:181` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:181` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:181` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:182` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -3006,6 +3091,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:220` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:221` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:221` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:221` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:221` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:221` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:221` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -3043,7 +3129,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:369` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:369` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:369` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:369` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:374` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:381` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/BehaviorContract.hs:383` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-domain-outcomes/Generated/DomainOutcomes/Reservation/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -3111,6 +3200,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -3120,6 +3210,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -3158,6 +3249,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -3182,6 +3274,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -3220,7 +3313,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-id-domain-migration/Generated/IdDomainMigration/OrderBook/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -3286,6 +3382,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -3295,6 +3392,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -3333,6 +3431,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -3357,6 +3456,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -3394,7 +3494,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:329` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:329` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:329` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:334` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:339` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/BehaviorContract.hs:343` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/Codec.hs:14` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/Codec.hs:14` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -3735,6 +3838,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -3744,6 +3848,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -3773,6 +3878,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:148` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:149` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:150` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:151` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:151` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:151` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:152` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -3797,6 +3903,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:190` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:191` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:191` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:191` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:191` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:191` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:191` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -3834,7 +3941,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:317` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:317` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:317` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:317` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:322` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:327` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/BehaviorContract.hs:331` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-newsurface/Generated/TransferRouting/Hospital/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -3911,6 +4021,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -3920,6 +4031,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -3958,6 +4070,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -3982,6 +4095,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -4026,7 +4140,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-nominal-scalars/Generated/NominalScalars/NominalLedger/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -4171,6 +4288,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -4180,6 +4298,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -4209,6 +4328,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:148` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:149` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:150` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:151` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:151` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:151` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:152` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -4233,6 +4353,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:190` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -4270,7 +4391,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:322` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:327` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:331` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -4344,6 +4468,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -4353,6 +4478,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -4391,6 +4517,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -4415,6 +4542,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -4452,7 +4580,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Surge/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -4538,6 +4669,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -4547,6 +4679,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -4585,6 +4718,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -4609,6 +4743,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -4646,7 +4781,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:329` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:329` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:329` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:334` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:339` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/BehaviorContract.hs:343` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Hospital/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -4706,6 +4844,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -4715,6 +4854,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -4789,6 +4929,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:208` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:209` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:210` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:211` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:211` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:211` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:212` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -4813,6 +4954,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:250` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:251` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:251` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:251` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:251` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:251` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:251` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -4850,7 +4992,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:378` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:378` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:378` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:378` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:383` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:388` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:390` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/BehaviorContract.hs:392` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-full/Generated/SurgeDemo/Surge/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -4928,6 +5073,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -4937,6 +5083,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -4966,6 +5113,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:148` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:149` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:150` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:151` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:151` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:151` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:152` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -4990,6 +5138,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:190` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:191` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -5027,7 +5176,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:317` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:322` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:327` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/BehaviorContract.hs:331` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Hospital/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -5101,6 +5253,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -5110,6 +5263,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -5148,6 +5302,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -5172,6 +5327,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -5209,7 +5365,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -5322,6 +5481,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -5331,6 +5491,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -5369,6 +5530,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -5393,6 +5555,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -5430,7 +5593,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Orders/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -5573,6 +5739,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -5582,6 +5749,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -5620,6 +5788,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -5644,6 +5813,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -5682,7 +5852,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-projection-catalog/Generated/CatalogDemo/Shipments/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -5879,6 +6052,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -5888,6 +6062,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -5926,6 +6101,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -5950,6 +6126,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -5988,7 +6165,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-replay/Generated/ReplayDivergence/Note/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -6065,6 +6245,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -6074,6 +6255,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -6112,6 +6294,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -6136,6 +6319,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -6173,7 +6357,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:334` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:339` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/BehaviorContract.hs:343` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router/Generated/IncidentPaging/Page/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -6249,6 +6436,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -6258,6 +6446,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -6296,6 +6485,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -6320,6 +6510,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -6357,7 +6548,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:334` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:339` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/BehaviorContract.hs:343` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-full/Generated/IncidentPaging/Page/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -6433,6 +6627,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -6442,6 +6637,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -6480,6 +6676,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:160` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:161` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:162` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:163` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:164` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -6504,6 +6701,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:202` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:203` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -6541,7 +6739,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:334` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:339` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/BehaviorContract.hs:343` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-router-runtime/Generated/IncidentPaging/Page/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -6625,6 +6826,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -6634,6 +6836,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -6708,6 +6911,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:209` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:210` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:211` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:212` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:212` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:212` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:213` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -6732,6 +6936,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:251` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:252` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:252` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:252` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:252` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:252` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:252` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -6776,7 +6981,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:379` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:379` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:379` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:384` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:389` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:391` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/BehaviorContract.hs:393` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-scalar-expressions/Generated/AggregateScalarExpressions/ScalarAccount/Codec.hs:16` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -6973,6 +7181,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -6982,6 +7191,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -7038,6 +7248,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:184` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:185` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:186` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:187` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:187` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:187` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:188` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -7062,6 +7273,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:226` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:227` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:227` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:227` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:227` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:227` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:227` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -7099,7 +7311,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:354` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:354` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:354` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:354` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:359` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:364` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:366` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs:368` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Alpha/Generated/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -7165,6 +7380,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -7174,6 +7390,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -7203,6 +7420,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:148` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:149` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:150` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:151` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:151` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:151` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:152` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -7227,6 +7445,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:190` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:191` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:191` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:191` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:191` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:191` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:191` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -7264,7 +7483,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:317` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:317` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:317` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:317` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:322` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:327` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:329` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs:331` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-service-package/runtime/src/Proof/WorkspaceProof/Beta/Generated/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -7368,6 +7590,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:32` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:34` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:35` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:41` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -7377,6 +7600,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -7417,6 +7641,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:163` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:164` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:165` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:166` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:166` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:166` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:167` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -7441,6 +7666,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:205` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:206` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:206` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:206` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:206` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:206` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:206` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -7480,6 +7706,8 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:332` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:332` | `requirementLine` | record-dot `(.line)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:337` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:344` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/BehaviorContract.hs:346` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelAggregate/Generated/MyService/Thing/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -7565,6 +7793,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:30` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:31` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:33` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:34` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:37` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:40` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -7574,6 +7803,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -7614,6 +7844,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:162` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:163` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:164` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:165` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:165` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:165` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:166` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -7638,6 +7869,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:204` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:205` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:205` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:205` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:205` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:205` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:205` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -7676,6 +7908,8 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:331` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:331` | `requirementLine` | record-dot `(.line)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:336` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:343` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/BehaviorContract.hs:345` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Hospital/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -7747,6 +7981,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:30` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:31` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:33` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:34` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:37` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:40` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -7756,6 +7991,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -7816,6 +8052,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:188` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:189` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:190` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:191` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:191` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:191` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:192` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -7840,6 +8077,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:230` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:231` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:231` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:231` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:231` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:231` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:231` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -7878,6 +8116,8 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:358` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:358` | `requirementLine` | record-dot `(.line)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:363` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:368` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:370` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/BehaviorContract.hs:372` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelProcess/Generated/MyService/Surge/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -7972,6 +8212,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:30` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:31` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:31` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:33` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:34` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:37` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:40` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -7981,6 +8222,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:66` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:81` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:89` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:93` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:93` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:94` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:95` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -8021,6 +8263,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:162` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:163` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:164` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:165` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:165` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:165` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:166` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -8045,6 +8288,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:204` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:205` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:205` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:205` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:205` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:205` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:205` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -8083,6 +8327,8 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:331` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:331` | `requirementLine` | record-dot `(.line)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:336` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:341` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:343` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/BehaviorContract.hs:345` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/Codec.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-skeletons/SkelRouter/Generated/MyService/Page/Codec.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -8184,6 +8430,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -8193,6 +8440,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -8267,6 +8515,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:209` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:210` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:211` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:213` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -8291,6 +8540,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:251` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -8331,7 +8581,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:384` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:389` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:391` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:393` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-snapshot/Generated/HospitalCapacity/Reservation/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -8424,6 +8677,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -8433,6 +8687,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -8471,6 +8726,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -8495,6 +8751,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -8532,7 +8789,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Codec.hs:20` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Codec.hs:20` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -8753,6 +9013,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -8762,6 +9023,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -8836,6 +9098,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:209` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:210` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:211` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:212` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:213` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -8860,6 +9123,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:251` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:252` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -8900,7 +9164,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:384` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:389` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:391` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/BehaviorContract.hs:393` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-v2/Generated/HospitalCapacity/Reservation/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -9065,6 +9332,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -9074,6 +9342,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -9148,6 +9417,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:209` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:210` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:211` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:212` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:212` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:212` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:213` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -9172,6 +9442,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:251` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:252` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:252` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:252` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:252` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:252` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:252` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -9211,7 +9482,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:379` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:379` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:379` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:379` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:384` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:389` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:391` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/BehaviorContract.hs:393` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/Project/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
@@ -9293,6 +9567,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:32` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:33` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:33` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:35` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:39` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:42` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
@@ -9302,6 +9577,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:67` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:82` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:90` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:94` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:94` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:95` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:96` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
@@ -9340,6 +9616,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:161` | `reportMissing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:162` | `reportDuplicate` | record-dot `(.duplicate)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:163` | `reportStale` | record-dot `(.stale)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:164` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:164` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:164` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:165` | `reportVerified` | record-dot `(.verified)` or positional pattern/construction | overwriteable Generated |
@@ -9364,6 +9641,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:203` | `reportUnverified` | record-dot `(.unverified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:204` | `failureSubject` | record-dot `(.subject)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:204` | `failureDetail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:204` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:204` | `reportFailed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:204` | `failureCode` | record-dot `(.code)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:204` | `failureKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
@@ -9403,7 +9681,10 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:330` | `requirementCommandName` | record-dot `(.commandName)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:330` | `requirementSource` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:330` | `requirementKey` | record-dot `(.key)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:330` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:335` | `requirementKind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:340` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:342` | `unBehaviorKey` | record-dot `(.unBehaviorKey)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/BehaviorContract.hs:344` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs:15` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-workspace-nominals/Generated/WorkspaceNominalProof/ProjectArtifact/Codec.hs:15` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
