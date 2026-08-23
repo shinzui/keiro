@@ -52,7 +52,7 @@ main = do
              , ("generated enum and TypeID exactness laws hold", generatedNominalProjectionLaws)
              , ("generated TypeID equality is exact symbolically", conservativeIdProof)
              , ("Keiki 0.8 detailed step and replay attribute the generated edge", detailedAttributionAgreement)
-             , ("generated behavior contract reconciles its create-once pending rows", length (Behavior.reportPending behaviorReport) == 6 && null (Behavior.reportMissing behaviorReport))
+             , ("generated behavior contract reconciles its create-once pending rows", length behaviorReport.pending == 6 && null behaviorReport.missing)
              , ("Hole envelope preserves declared event and target", holeEnvelopeAgreement)
              , ("encoded replay and full replay after snapshot invalidation agree", fullReplayAgreement)
              , ("Hole fold version participates in snapshot identity", snapshotFingerprintAgreement)

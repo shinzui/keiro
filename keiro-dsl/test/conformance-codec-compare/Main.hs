@@ -15,18 +15,18 @@ main = do
     parityReport <- compareWithHistorical generatedEquivalentArtifactInfoCodec parityCorpusPath
     let differences =
             [ difference
-            | observation <- crObservations report
-            , RequiresVersionWork difference <- [classifiedVerdict observation]
+            | observation <- report.observations
+            , RequiresVersionWork difference <- [observation.verdict]
             ]
         assertions =
             [ ("comparison has explicit differences", not (null differences))
             , ("omitted key is not parity", any isArtifactHashDifference differences)
             , ("legacy union tag is not parity", any isCanonicalTagDifference differences)
-            , ("historical corpus is valid", null (crInputIssues report))
-            , ("historical and typed branch coverage is complete", null (crCoverageGaps report))
+            , ("historical corpus is valid", null report.inputIssues)
+            , ("historical and typed branch coverage is complete", null report.coverageGaps)
             , ("differences make the report fail", not (reportSucceeded report))
             , ("authority framing is mandatory", "MIGRATION EVIDENCE ONLY" `T.isInfixOf` renderCompareReport report)
-            , ("missing canonical arm is a coverage gap", any isCanonicalGap (crCoverageGaps missingArm))
+            , ("missing canonical arm is a coverage gap", any isCanonicalGap missingArm.coverageGaps)
             , ("removing the historical quirks yields parity", reportSucceeded parityReport)
             , ("parity retains authority framing", "MIGRATION EVIDENCE ONLY" `T.isInfixOf` renderCompareReport parityReport)
             ]
@@ -47,6 +47,6 @@ isCanonicalTagDifference (GeneratedDecodeRejected reason) = "unknown ArtifactLoc
 isCanonicalTagDifference _ = False
 
 isCanonicalGap :: CoverageGap -> Bool
-isCanonicalGap gap = case cgKind gap of
+isCanonicalGap gap = case gap.kind of
     UnionArm arm -> arm == "canonical"
     _ -> False

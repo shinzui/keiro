@@ -28,10 +28,10 @@ workflowFacts =
 -- | Base-library projection used by the service-level conformance facade.
 workflowFactValues :: [(String, String)]
 workflowFactValues =
-  [ ("name", name workflowFacts)
-  , ("idVia", idVia workflowFacts)
-  , ("idField", idField workflowFacts)
-  , ("body", show (body workflowFacts))
-  , ("awaits", show (awaitLabels workflowFacts))
-  , ("patches", show (patchIds workflowFacts))
+  [ ("name", workflowFacts.name)
+  , ("idVia", workflowFacts.idVia)
+  , ("idField", workflowFacts.idField)
+  , ("body", show workflowFacts.body)
+  , ("awaits", show workflowFacts.awaitLabels)
+  , ("patches", show workflowFacts.patchIds)
   ]

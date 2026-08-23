@@ -12,10 +12,10 @@ import System.Exit (exitFailure)
 expected :: WorkflowFacts
 expected =
     WorkflowFacts
-        { workflowFactName = "hospital-transfer-reservation"
-        , workflowFactIdVia = "idText"
-        , workflowFactIdField = "reservationId"
-        , workflowFactBody =
+        { name = "hospital-transfer-reservation"
+        , idVia = "idText"
+        , idField = "reservationId"
+        , body =
             [ "step:create-transfer-hold"
             , "patch:fraud-check-v2(step:fraud-check)"
             , "await:reservation-confirmation"
@@ -23,19 +23,19 @@ expected =
             , "step:summarize-reservation"
             , "continueAsNew:RolloverSeed"
             ]
-        , workflowFactAwaitLabels = ["reservation-confirmation"]
-        , workflowFactPatchIds = ["fraud-check-v2"]
+        , awaitLabels = ["reservation-confirmation"]
+        , patchIds = ["fraud-check-v2"]
         }
 
 main :: IO ()
 main = do
     let results =
-            [ ("name", workflowFactName workflowFacts == workflowFactName expected)
-            , ("idVia", workflowFactIdVia workflowFacts == workflowFactIdVia expected)
-            , ("idField", workflowFactIdField workflowFacts == workflowFactIdField expected)
-            , ("body", workflowFactBody workflowFacts == workflowFactBody expected)
-            , ("awaits", workflowFactAwaitLabels workflowFacts == workflowFactAwaitLabels expected)
-            , ("patches", workflowFactPatchIds workflowFacts == workflowFactPatchIds expected)
+            [ ("name", workflowFacts.name == expected.name)
+            , ("idVia", workflowFacts.idVia == expected.idVia)
+            , ("idField", workflowFacts.idField == expected.idField)
+            , ("body", workflowFacts.body == expected.body)
+            , ("awaits", workflowFacts.awaitLabels == expected.awaitLabels)
+            , ("patches", workflowFacts.patchIds == expected.patchIds)
             ]
     forM_ results $ \(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)
     let failed = [label | (label, ok) <- results, not ok]

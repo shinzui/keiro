@@ -73,9 +73,9 @@ main = do
           ( "contract selectors are distinct from wire keys",
             case incidentPayload of
               IncidentTransferNeedDeclared payload ->
-                family payload == "adoption"
-                  && payloadType payload == "payload-type"
-                  && serviceRegion payload == "north"
+                payload.family == "adoption"
+                  && payload.payloadType == "payload-type"
+                  && payload.serviceRegion == "north"
               _ -> False
           ),
           ( "TransferReservationAccepted round-trip",

@@ -49,23 +49,23 @@ surgeManager ::
 surgeManager =
     ProcessManager
         { name = "surge-demo"
-        , correlate = \i -> hospitalId (i :: SurgeInput)
+        , correlate = \i -> (i :: SurgeInput).hospitalId
         , eventStream = surgeEventStream
         , streamFor = entityStream surgeFlowCategory
         , targetEventStream = hospitalEventStream
         , targetProjections = const []
         , handle = \i ->
-            let checkedId = checkedHospitalId (hospitalId i)
+            let checkedId = checkedHospitalId i.hospitalId
              in
             ProcessManagerAction
                 { command = S.NoteSurgeThreshold (S.NoteSurgeThresholdData checkedId)
                 , commands =
                     [ PMCommand
-                        { target = entityStream hospitalCommandCategory (hospitalId i)
+                        { target = entityStream hospitalCommandCategory i.hospitalId
                             , command = H.ActivateSurge (H.ActivateSurgeData checkedId)
                         }
                     ]
-                , timers = [surgeFlowTimerRequest (hospitalId i) (observedAt i)]
+                , timers = [surgeFlowTimerRequest i.hospitalId i.observedAt]
                 }
         }
 

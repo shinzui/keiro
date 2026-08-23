@@ -18,6 +18,9 @@ newtype OrderId = OrderId {unOrderId :: KindID "ord"}
     deriving stock (Eq, Generic, Show)
     deriving newtype (FromJSON, ToJSON)
 
+unOrderId :: OrderId -> KindID "ord"
+unOrderId (OrderId value) = value
+
 instance CanonicalTypeName OrderId where
     canonicalTypeName _ = "nominal.OrderId.v1"
 
@@ -32,12 +35,18 @@ newtype AccountNumber = AccountNumber {unAccountNumber :: Text}
     deriving stock (Eq, Generic, Ord, Show)
     deriving newtype (FromJSON, ToJSON)
 
+unAccountNumber :: AccountNumber -> Text
+unAccountNumber (AccountNumber value) = value
+
 instance CanonicalTypeName AccountNumber where
     canonicalTypeName _ = "nominal.AccountNumber.v1"
 
 newtype RiskScore = RiskScore {unRiskScore :: Int}
     deriving stock (Eq, Generic, Ord, Show)
     deriving newtype (FromJSON, ToJSON)
+
+unRiskScore :: RiskScore -> Int
+unRiskScore (RiskScore value) = value
 
 instance CanonicalTypeName RiskScore where
     canonicalTypeName _ = "nominal.RiskScore.v1"
@@ -46,6 +55,9 @@ newtype SequenceNumber = SequenceNumber {unSequenceNumber :: Natural}
     deriving stock (Eq, Generic, Ord, Show)
     deriving newtype (FromJSON, ToJSON)
 
+unSequenceNumber :: SequenceNumber -> Natural
+unSequenceNumber (SequenceNumber value) = value
+
 instance CanonicalTypeName SequenceNumber where
     canonicalTypeName _ = "nominal.SequenceNumber.v1"
 
@@ -53,12 +65,18 @@ newtype FeatureFlag = FeatureFlag {unFeatureFlag :: Bool}
     deriving stock (Eq, Generic, Ord, Show)
     deriving newtype (FromJSON, ToJSON)
 
+unFeatureFlag :: FeatureFlag -> Bool
+unFeatureFlag (FeatureFlag value) = value
+
 instance CanonicalTypeName FeatureFlag where
     canonicalTypeName _ = "nominal.FeatureFlag.v1"
 
 newtype ObservedAt = ObservedAt {unObservedAt :: UTCTime}
     deriving stock (Eq, Generic, Ord, Show)
     deriving newtype (FromJSON, ToJSON)
+
+unObservedAt :: ObservedAt -> UTCTime
+unObservedAt (ObservedAt value) = value
 
 instance CanonicalTypeName ObservedAt where
     canonicalTypeName _ = "nominal.ObservedAt.v1"

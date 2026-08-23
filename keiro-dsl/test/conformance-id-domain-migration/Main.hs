@@ -37,7 +37,7 @@ rejects = not . accepts
 legacyReplayAccepts :: Bool
 legacyReplayAccepts =
   case parseOrderBookEvent (EventType "OrderRecorded") legacyPayload of
-    Right (OrderRecorded payload) -> orderIdText (orderId payload) == legacyInvalidText
+    Right (OrderRecorded payload) -> orderIdText payload.orderId == legacyInvalidText
     Left _ -> False
 
 newAdmissionRejects :: Bool

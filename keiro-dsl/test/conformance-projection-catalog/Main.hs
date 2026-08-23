@@ -56,7 +56,7 @@ main = do
       queryInput = QueryCriteria "qualification-query"
       queryResult :: OrderInlineQueryResult
       queryResult = Just (QualificationResult "qualified-result")
-  assert "non-unit typed query contract" (queryCriteriaText queryInput == "qualification-query" && queryResult == Just (QualificationResult "qualified-result"))
+  assert "non-unit typed query contract" (queryInput.queryCriteriaText == "qualification-query" && queryResult == Just (QualificationResult "qualified-result"))
   exerciseQualificationQueue
   let targets = Catalog.inventoryTargets projectionCatalogInventory
       groups = Catalog.inventoryGroups projectionCatalogInventory
@@ -141,7 +141,7 @@ exerciseQualificationQueue = do
         [ ("qualification queue exact payload", encoded == expected),
           ("qualification queue structural and opaque round-trip", parseQualificationJob encoded == Right payload),
           ("qualification queue required key rejects omission", isLeft missingRequired),
-          ("qualification queue present null admits Optional", (maybeMetadata <$> parseQualificationJob encoded) == Right Nothing),
+          ("qualification queue present null admits Optional", ((\job -> job.maybeMetadata) <$> parseQualificationJob encoded) == Right Nothing),
           ("qualification queue schema-v1 envelope", encodeJob qualificationJobsJobCodec payload == envelope && decodeJob qualificationJobsJobCodec envelope == Right payload),
           ("qualification queue physical identity", queuePhysical == "catalog_demo_qualification_jobs")
         ]

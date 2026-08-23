@@ -47,7 +47,7 @@ main = do
         [ ("payload bytes", encoded == expectedPayload),
           ("domain round-trip", parseMappedJob encoded == Right payload),
           ("required key rejects omission", isLeft missingRequired),
-          ("present null admits Optional", (maybeJob <$> parseMappedJob encoded) == Right Nothing),
+          ("present null admits Optional", ((\mappedJob -> mappedJob.maybeJob) <$> parseMappedJob encoded) == Right Nothing),
           ("nested reject-unknown policy", isLeft unknownNested),
           ("versioned {v,t,data} envelope", encodeJob mappedJobsJobCodec payload == envelope && decodeJob mappedJobsJobCodec envelope == Right payload),
           ("schema-v1 physical queue", queuePhysical == "mapped_jobs")

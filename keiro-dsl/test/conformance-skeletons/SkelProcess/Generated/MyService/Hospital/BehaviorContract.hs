@@ -30,8 +30,11 @@ import Data.Text qualified as T
 import Keiki.Core qualified as K (EdgeMode (..), EdgeRef (..), RegFile, ReplayAttribution (..), ReplayEventSpan (..), ReplaySuccess (..), StepFailure (..), StepSuccess (..), applyEventsDetailedEither, stepDetailedEither)
 import Keiro.Codec qualified as Codec (Codec (eventType), EventType (..))
 
-newtype BehaviorKey = BehaviorKey { unBehaviorKey :: Text }
+newtype BehaviorKey = BehaviorKey Text
   deriving stock (Eq, Ord, Show)
+
+unBehaviorKey :: BehaviorKey -> Text
+unBehaviorKey (BehaviorKey value) = value
 
 data ObligationKind = LiveTransition | RequiredRejection | ReplayTransition
   deriving stock (Eq, Ord, Show)
@@ -43,16 +46,16 @@ data GuardCoverage = GuardTotal | GuardPartial | GuardUnknown | GuardNotApplicab
   deriving stock (Eq, Ord, Show)
 
 data BehaviorRequirement = BehaviorRequirement
-  { requirementKey :: !BehaviorKey
-  , requirementKind :: !ObligationKind
-  , requirementEvidence :: !EvidenceLevel
-  , requirementGuardCoverage :: !GuardCoverage
-  , requirementSource :: !HospitalVertex
-  , requirementCommandName :: !Text
-  , requirementExpectedEdge :: !(Maybe (K.EdgeRef HospitalVertex))
-  , requirementTarget :: !(Maybe HospitalVertex)
-  , requirementEventKinds :: ![Text]
-  , requirementLine :: !Int
+  { key :: !BehaviorKey
+  , kind :: !ObligationKind
+  , evidence :: !EvidenceLevel
+  , guardCoverage :: !GuardCoverage
+  , source :: !HospitalVertex
+  , commandName :: !Text
+  , expectedEdge :: !(Maybe (K.EdgeRef HospitalVertex))
+  , target :: !(Maybe HospitalVertex)
+  , eventKinds :: ![Text]
+  , line :: !Int
   }
   deriving stock (Eq, Show)
 
@@ -68,106 +71,106 @@ data LiveExpectation
 data BehaviorWitness
   = Pending BehaviorKey
   | LiveWitness
-      { witnessKey :: BehaviorKey
-      , witnessHistory :: [HospitalEvent]
-      , witnessCommand :: HospitalCommand
-      , witnessExpected :: LiveExpectation
+      { key :: BehaviorKey
+      , history :: [HospitalEvent]
+      , command :: HospitalCommand
+      , expected :: LiveExpectation
       }
   | ReplayWitness
-      { witnessKey :: BehaviorKey
-      , witnessHistoryPrefix :: [HospitalEvent]
-      , witnessObservedChunk :: [HospitalEvent]
+      { key :: BehaviorKey
+      , historyPrefix :: [HospitalEvent]
+      , observedChunk :: [HospitalEvent]
       }
   deriving stock (Eq, Show)
 
 data BehaviorFailure = BehaviorFailure
-  { failureKey :: !BehaviorKey
-  , failureSubject :: !Text
-  , failureCode :: !Text
-  , failureDetail :: !Text
+  { key :: !BehaviorKey
+  , subject :: !Text
+  , code :: !Text
+  , detail :: !Text
   }
   deriving stock (Eq, Show)
 
 instance ToJSON BehaviorFailure where
   toJSON behaviorFailure = object
-    [ "key" .= unBehaviorKey (failureKey behaviorFailure)
-    , "subject" .= failureSubject behaviorFailure
-    , "code" .= failureCode behaviorFailure
-    , "detail" .= failureDetail behaviorFailure
+    [ "key" .= unBehaviorKey (behaviorFailure.key)
+    , "subject" .= behaviorFailure.subject
+    , "code" .= behaviorFailure.code
+    , "detail" .= behaviorFailure.detail
     ]
 
 data BehaviorConformanceReport = BehaviorConformanceReport
-  { reportRequired :: ![BehaviorKey]
-  , reportFilled :: ![BehaviorKey]
-  , reportPending :: ![BehaviorKey]
-  , reportMissing :: ![BehaviorKey]
-  , reportDuplicate :: ![BehaviorKey]
-  , reportStale :: ![BehaviorKey]
-  , reportFailed :: ![BehaviorFailure]
-  , reportVerified :: ![BehaviorKey]
-  , reportUnverified :: ![BehaviorKey]
+  { required :: ![BehaviorKey]
+  , filled :: ![BehaviorKey]
+  , pending :: ![BehaviorKey]
+  , missing :: ![BehaviorKey]
+  , duplicate :: ![BehaviorKey]
+  , stale :: ![BehaviorKey]
+  , failed :: ![BehaviorFailure]
+  , verified :: ![BehaviorKey]
+  , unverified :: ![BehaviorKey]
   }
   deriving stock (Eq, Show)
 
 instance ToJSON BehaviorConformanceReport where
   toJSON report = object
     [ "schema" .= ("keiro/behavior-conformance/1" :: Text)
-    , "required" .= keyTexts (reportRequired report)
-    , "filled" .= keyTexts (reportFilled report)
-    , "pending" .= keyTexts (reportPending report)
-    , "missing" .= keyTexts (reportMissing report)
-    , "duplicate" .= keyTexts (reportDuplicate report)
-    , "stale" .= keyTexts (reportStale report)
-    , "failed" .= reportFailed report
-    , "verified" .= keyTexts (reportVerified report)
-    , "unverified" .= keyTexts (reportUnverified report)
+    , "required" .= keyTexts (report.required)
+    , "filled" .= keyTexts (report.filled)
+    , "pending" .= keyTexts (report.pending)
+    , "missing" .= keyTexts (report.missing)
+    , "duplicate" .= keyTexts (report.duplicate)
+    , "stale" .= keyTexts (report.stale)
+    , "failed" .= report.failed
+    , "verified" .= keyTexts (report.verified)
+    , "unverified" .= keyTexts (report.unverified)
     ]
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
   [ -- HospitalSurging x ActivateSurge: required rejection (spec line 48)
     BehaviorRequirement
-      { requirementKey = BehaviorKey "behavior-v1-01e61eb25214eb69"
-      , requirementKind = RequiredRejection
-      , requirementEvidence = GeneratedAuthoritative
-      , requirementGuardCoverage = GuardNotApplicable
-      , requirementSource = HospitalSurging
-      , requirementCommandName = "ActivateSurge"
-      , requirementExpectedEdge = Nothing
-      , requirementTarget = Nothing
-      , requirementEventKinds = []
-      , requirementLine = 48
+      { key = BehaviorKey "behavior-v1-01e61eb25214eb69"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = HospitalSurging
+      , commandName = "ActivateSurge"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      , line = 48
       }
   , -- HospitalOperational x ActivateSurge: live transition (spec line 52)
     BehaviorRequirement
-      { requirementKey = BehaviorKey "behavior-v1-e093b54ae670c60c"
-      , requirementKind = LiveTransition
-      , requirementEvidence = GeneratedAuthoritative
-      , requirementGuardCoverage = GuardTotal
-      , requirementSource = HospitalOperational
-      , requirementCommandName = "ActivateSurge"
-      , requirementExpectedEdge = (Just (K.EdgeRef HospitalOperational 0))
-      , requirementTarget = Just HospitalSurging
-      , requirementEventKinds = ["SurgeActivated"]
-      , requirementLine = 52
+      { key = BehaviorKey "behavior-v1-e093b54ae670c60c"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardTotal
+      , source = HospitalOperational
+      , commandName = "ActivateSurge"
+      , expectedEdge = (Just (K.EdgeRef HospitalOperational 0))
+      , target = Just HospitalSurging
+      , eventKinds = ["SurgeActivated"]
+      , line = 52
       }
   ]
 
 behaviorCoverageReport :: [BehaviorWitness] -> BehaviorConformanceReport
 behaviorCoverageReport witnesses =
   BehaviorConformanceReport
-    { reportRequired = sortedKeys (Map.keys requiredByKey)
-    , reportFilled = sortedKeys [key | (key, [witness]) <- Map.toList witnessGroups, Map.member key requiredByKey, not (isPending witness)]
-    , reportPending = sortedKeys [key | (key, rows) <- Map.toList witnessGroups, Map.member key requiredByKey, any isPending rows]
-    , reportMissing = sortedKeys [key | key <- Map.keys requiredByKey, Map.notMember key witnessGroups]
-    , reportDuplicate = sortedKeys [key | (key, rows) <- Map.toList witnessGroups, length rows > 1]
-    , reportStale = sortedKeys [key | key <- Map.keys witnessGroups, Map.notMember key requiredByKey]
-    , reportFailed = sortOn (unBehaviorKey . failureKey) failures
-    , reportVerified = sortedKeys [requirementKey requirement | (requirement, Right ()) <- executions, proofStrength requirement]
-    , reportUnverified = sortedKeys [requirementKey requirement | (requirement, Right ()) <- executions, not (proofStrength requirement)]
+    { required = sortedKeys (Map.keys requiredByKey)
+    , filled = sortedKeys [key | (key, [witness]) <- Map.toList witnessGroups, Map.member key requiredByKey, not (isPending witness)]
+    , pending = sortedKeys [key | (key, rows) <- Map.toList witnessGroups, Map.member key requiredByKey, any isPending rows]
+    , missing = sortedKeys [key | key <- Map.keys requiredByKey, Map.notMember key witnessGroups]
+    , duplicate = sortedKeys [key | (key, rows) <- Map.toList witnessGroups, length rows > 1]
+    , stale = sortedKeys [key | key <- Map.keys witnessGroups, Map.notMember key requiredByKey]
+    , failed = sortOn (unBehaviorKey . (.key)) failures
+    , verified = sortedKeys [requirement.key | (requirement, Right ()) <- executions, proofStrength requirement]
+    , unverified = sortedKeys [requirement.key | (requirement, Right ()) <- executions, not (proofStrength requirement)]
     }
  where
-  requiredByKey = Map.fromList [(requirementKey requirement, requirement) | requirement <- behaviorRequirements]
+  requiredByKey = Map.fromList [(requirement.key, requirement) | requirement <- behaviorRequirements]
   witnessGroups = Map.fromListWith (flip (<>)) [(behaviorWitnessKey witness, [witness]) | witness <- witnesses]
   executions =
     [ (requirement, runWitness requirement witness)
@@ -182,27 +185,27 @@ behaviorConformancePassed = behaviorConformancePassedWith False
 
 behaviorConformancePassedWith :: Bool -> BehaviorConformanceReport -> Bool
 behaviorConformancePassedWith failOnUnverified report =
-  null (reportPending report)
-    && null (reportMissing report)
-    && null (reportDuplicate report)
-    && null (reportStale report)
-    && null (reportFailed report)
-    && (not failOnUnverified || null (reportUnverified report))
+  null (report.pending)
+    && null (report.missing)
+    && null (report.duplicate)
+    && null (report.stale)
+    && null (report.failed)
+    && (not failOnUnverified || null (report.unverified))
 
 renderBehaviorConformanceText :: BehaviorConformanceReport -> Text
 renderBehaviorConformanceText report = T.unlines
   [ "behavior conformance: Hospital"
   , "schema: keiro/behavior-conformance/1"
-  , countLine "required" (reportRequired report)
-  , countLine "filled" (reportFilled report)
-  , countLine "pending" (reportPending report)
-  , countLine "missing" (reportMissing report)
-  , countLine "duplicate" (reportDuplicate report)
-  , countLine "stale" (reportStale report)
-  , "failed: " <> tshow (length (reportFailed report))
-  , countLine "verified" (reportVerified report)
-  , countLine "unverified" (reportUnverified report)
-  ] <> T.unlines ["FAIL " <> unBehaviorKey (failureKey behaviorFailure) <> " " <> failureSubject behaviorFailure <> " [" <> failureCode behaviorFailure <> "] " <> failureDetail behaviorFailure | behaviorFailure <- reportFailed report]
+  , countLine "required" (report.required)
+  , countLine "filled" (report.filled)
+  , countLine "pending" (report.pending)
+  , countLine "missing" (report.missing)
+  , countLine "duplicate" (report.duplicate)
+  , countLine "stale" (report.stale)
+  , "failed: " <> tshow (length (report.failed))
+  , countLine "verified" (report.verified)
+  , countLine "unverified" (report.unverified)
+  ] <> T.unlines ["FAIL " <> unBehaviorKey (behaviorFailure.key) <> " " <> behaviorFailure.subject <> " [" <> behaviorFailure.code <> "] " <> behaviorFailure.detail | behaviorFailure <- report.failed]
 
 runWitness :: BehaviorRequirement -> BehaviorWitness -> Either BehaviorFailure ()
 runWitness requirement witness = case witness of
@@ -213,9 +216,9 @@ runWitness requirement witness = case witness of
 runLive :: BehaviorRequirement -> [HospitalEvent] -> HospitalCommand -> LiveExpectation -> Either BehaviorFailure ()
 runLive requirement history command expectation = do
   settled <- settleHistory requirement "history" history
-  ensure requirement (K.replaySuccessState settled == requirementSource requirement) "history-wrong-source" "history does not settle at the required source vertex"
-  ensure requirement (commandKind command == requirementCommandName requirement) "command-mismatch" "witness command constructor does not match the required state/command cell"
-  case requirementKind requirement of
+  ensure requirement (K.replaySuccessState settled == requirement.source) "history-wrong-source" "history does not settle at the required source vertex"
+  ensure requirement (commandKind command == requirement.commandName) "command-mismatch" "witness command constructor does not match the required state/command cell"
+  case requirement.kind of
     ReplayTransition -> failure requirement "witness-kind" "a replay-only requirement needs ReplayWitness"
     RequiredRejection -> runRejection requirement (K.replaySuccessState settled, K.replaySuccessRegs settled) command expectation
     LiveTransition -> runAcceptance requirement (K.replaySuccessState settled, K.replaySuccessRegs settled) command expectation
@@ -247,7 +250,7 @@ runAcceptance requirement seed command expectation = case expectation of
       let expected = NonEmpty.toList expectedEvents
           actual = K.stepSuccessOutputs success
       ensure requirement (actual == expected) "event-value-mismatch" ("runtime event values differ from the exact witness expectation; actual=" <> tshow actual <> " expected=" <> tshow expected)
-      ensure requirement (map eventKind actual == requirementEventKinds requirement) "event-envelope-mismatch" ("runtime event kinds differ from the declared ordered envelope; actual=" <> tshow (map eventKind actual) <> " expected=" <> tshow (requirementEventKinds requirement))
+      ensure requirement (map eventKind actual == requirement.eventKinds) "event-envelope-mismatch" ("runtime event kinds differ from the declared ordered envelope; actual=" <> tshow (map eventKind actual) <> " expected=" <> tshow (requirement.eventKinds))
       decoded <- either (failure requirement "emitted-codec-decode") Right (decodeEvents actual)
       replayed <- case K.applyEventsDetailedEither hospitalTransducer seed decoded of
         Left replayFailure -> failure requirement "emitted-replay-failed" (tshow replayFailure)
@@ -259,30 +262,30 @@ runAcceptance requirement seed command expectation = case expectation of
 checkAcceptedEnvelope :: BehaviorRequirement -> K.StepSuccess HospitalRegs HospitalVertex HospitalEvent -> Either BehaviorFailure ()
 checkAcceptedEnvelope requirement success = do
   ensure requirement (K.stepSuccessMode success == K.Live) "forward-mode" ("forward execution selected a non-live edge; actual=" <> tshow (K.stepSuccessMode success) <> " expected=" <> tshow K.Live)
-  ensure requirement (Just (K.stepSuccessEdge success) == requirementExpectedEdge requirement) "edge-attribution" ("runtime selected a different guarded sibling; actual=" <> tshow (Just (K.stepSuccessEdge success)) <> " expected=" <> tshow (requirementExpectedEdge requirement))
-  ensure requirement (Just (K.stepSuccessState success) == requirementTarget requirement) "target-mismatch" ("runtime reached a different target vertex; actual=" <> tshow (Just (K.stepSuccessState success)) <> " expected=" <> tshow (requirementTarget requirement))
+  ensure requirement (Just (K.stepSuccessEdge success) == requirement.expectedEdge) "edge-attribution" ("runtime selected a different guarded sibling; actual=" <> tshow (Just (K.stepSuccessEdge success)) <> " expected=" <> tshow (requirement.expectedEdge))
+  ensure requirement (Just (K.stepSuccessState success) == requirement.target) "target-mismatch" ("runtime reached a different target vertex; actual=" <> tshow (Just (K.stepSuccessState success)) <> " expected=" <> tshow (requirement.target))
 
 runReplay :: BehaviorRequirement -> [HospitalEvent] -> [HospitalEvent] -> Either BehaviorFailure ()
-runReplay requirement prefix chunk = case requirementKind requirement of
+runReplay requirement prefix chunk = case requirement.kind of
   ReplayTransition -> do
     settled <- settleHistory requirement "history-prefix" prefix
-    ensure requirement (K.replaySuccessState settled == requirementSource requirement) "history-wrong-source" "history prefix does not settle at the replay edge source"
+    ensure requirement (K.replaySuccessState settled == requirement.source) "history-wrong-source" "history prefix does not settle at the replay edge source"
     ensure requirement (not (null chunk)) "empty-replay-chunk" "a replay-only edge has no observable empty chunk"
     decoded <- either (failure requirement "replay-chunk-codec-decode") Right (decodeEvents chunk)
     replayed <- case K.applyEventsDetailedEither hospitalTransducer (K.replaySuccessState settled, K.replaySuccessRegs settled) decoded of
       Left replayFailure -> failure requirement "replay-chunk-failed" (tshow replayFailure)
       Right replaySuccess -> Right replaySuccess
-    ensure requirement (Just (K.replaySuccessState replayed) == requirementTarget requirement) "target-mismatch" ("replay chunk reached a different target vertex; actual=" <> tshow (Just (K.replaySuccessState replayed)) <> " expected=" <> tshow (requirementTarget requirement))
+    ensure requirement (Just (K.replaySuccessState replayed) == requirement.target) "target-mismatch" ("replay chunk reached a different target vertex; actual=" <> tshow (Just (K.replaySuccessState replayed)) <> " expected=" <> tshow (requirement.target))
     checkSingleAttribution requirement K.ReplayOnly (length decoded) (K.replaySuccessTrace replayed)
   _ -> failure requirement "witness-kind" "ReplayWitness supplied for a non-replay requirement"
 
 checkSingleAttribution :: BehaviorRequirement -> K.EdgeMode -> Int -> [K.ReplayAttribution HospitalVertex] -> Either BehaviorFailure ()
 checkSingleAttribution requirement expectedMode eventCount trace = case trace of
   [attribution] -> do
-    ensure requirement (Just (K.replayAttributionEdge attribution) == requirementExpectedEdge requirement) "replay-edge-attribution" ("replay selected a different edge; actual=" <> tshow (Just (K.replayAttributionEdge attribution)) <> " expected=" <> tshow (requirementExpectedEdge requirement))
+    ensure requirement (Just (K.replayAttributionEdge attribution) == requirement.expectedEdge) "replay-edge-attribution" ("replay selected a different edge; actual=" <> tshow (Just (K.replayAttributionEdge attribution)) <> " expected=" <> tshow (requirement.expectedEdge))
     ensure requirement (K.replayAttributionMode attribution == expectedMode) "replay-mode-attribution" ("replay selected the wrong live/replay-only phase; actual=" <> tshow (K.replayAttributionMode attribution) <> " expected=" <> tshow expectedMode)
-    ensure requirement (K.replayAttributionSource attribution == requirementSource requirement) "replay-source-attribution" ("replay attribution starts at the wrong source; actual=" <> tshow (K.replayAttributionSource attribution) <> " expected=" <> tshow (requirementSource requirement))
-    ensure requirement (Just (K.replayAttributionTarget attribution) == requirementTarget requirement) "replay-target-attribution" ("replay attribution ends at the wrong target; actual=" <> tshow (Just (K.replayAttributionTarget attribution)) <> " expected=" <> tshow (requirementTarget requirement))
+    ensure requirement (K.replayAttributionSource attribution == requirement.source) "replay-source-attribution" ("replay attribution starts at the wrong source; actual=" <> tshow (K.replayAttributionSource attribution) <> " expected=" <> tshow (requirement.source))
+    ensure requirement (Just (K.replayAttributionTarget attribution) == requirement.target) "replay-target-attribution" ("replay attribution ends at the wrong target; actual=" <> tshow (Just (K.replayAttributionTarget attribution)) <> " expected=" <> tshow (requirement.target))
     ensure requirement (K.replayAttributionSpan attribution == K.ReplayEventSpan 0 eventCount) "replay-span-attribution" ("replay attribution did not consume the exact chunk; actual=" <> tshow (K.replayAttributionSpan attribution) <> " expected=" <> tshow (K.ReplayEventSpan 0 eventCount))
   _ -> failure requirement "replay-trace-cardinality" "expected exactly one completed-edge attribution"
 
@@ -308,14 +311,14 @@ regsEqual _ _ = True
 
 proofStrength :: BehaviorRequirement -> Bool
 proofStrength requirement =
-  requirementEvidence requirement == GeneratedAuthoritative
-    && requirementGuardCoverage requirement `elem` [GuardTotal, GuardNotApplicable]
+  requirement.evidence == GeneratedAuthoritative
+    && requirement.guardCoverage `elem` [GuardTotal, GuardNotApplicable]
 
 behaviorWitnessKey :: BehaviorWitness -> BehaviorKey
 behaviorWitnessKey witness = case witness of
   Pending key -> key
-  LiveWitness { witnessKey = key } -> key
-  ReplayWitness { witnessKey = key } -> key
+  LiveWitness { key = key } -> key
+  ReplayWitness { key = key } -> key
 
 isPending :: BehaviorWitness -> Bool
 isPending Pending {} = True
@@ -327,13 +330,13 @@ failure :: BehaviorRequirement -> Text -> Text -> Either BehaviorFailure failed
 failure requirement code detail =
   Left
     ( BehaviorFailure
-        (requirementKey requirement)
-        (tshow (requirementSource requirement) <> " x " <> requirementCommandName requirement <> ": " <> kindPhrase <> " (spec line " <> tshow (requirementLine requirement) <> ")")
+        (requirement.key)
+        (tshow (requirement.source) <> " x " <> requirement.commandName <> ": " <> kindPhrase <> " (spec line " <> tshow (requirement.line) <> ")")
         code
         detail
     )
  where
-  kindPhrase = case requirementKind requirement of
+  kindPhrase = case requirement.kind of
     LiveTransition -> "live transition"
     RequiredRejection -> "required rejection"
     ReplayTransition -> "replay-only transition"
