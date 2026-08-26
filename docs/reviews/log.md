@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-08-26
+* **Addition**: REV-13 approves the keiro-dsl 0.15 package record API modernization at the pre-release commit, recording the overclaiming drift test and its repository-only dependency as follow-ups.
+* **Addition**: REV-14 requests changes to the generated Haskell edition migration: ledgers without an edition row bypass the idiomatic-v2 gate and the user reference omits the new flag and refusal.
+* **Addition**: REV-15 requests changes to the 0.15.0.0 release surface: misplaced keiro-test-support note, hard-coded bounds, Hackage-unresolvable changelog links, and the missing 0.14 to 0.15 upgrade edge.
+
 ## 2026-08-14
 * **Addition**: REV-12 approves the commit-pinned Language 5 stability gate: Language 5 is sole stable authoring, Language 4 remains published compatibility, and all exclusive and inherited conformance surfaces pass.
 * **Addition**: REV-11 approves the commit-pinned Keiro umbrella version API after the public value and package-selecting probe began deriving from Cabal-generated metadata.
