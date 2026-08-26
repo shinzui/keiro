@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate extension-policy generated-name-policy conformance-corpus-policy
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy generated-name-policy conformance-corpus-policy
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -61,6 +61,16 @@ capabilities-validate:
 [group('docs')]
 reviews-validate:
     okf validate docs/reviews --strict --profile docs/reviews/profile.dhall --profile-enforce --log-enforce
+
+# Strict OKF enforcement for user-facing documentation. Both bundles share the
+# published documentation.userDocumentation profile while retaining independent
+# DOC-N handle namespaces and change logs.
+[group('docs')]
+user-documentation-validate:
+    okf validate docs/user --strict --profile mori/user-documentation-profile.dhall --profile-enforce --log-enforce
+    okf graph docs/user
+    okf validate docs/guides --strict --profile mori/user-documentation-profile.dhall --profile-enforce --log-enforce
+    okf graph docs/guides
 
 [group('haskell')]
 haskell-build:

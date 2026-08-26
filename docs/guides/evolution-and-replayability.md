@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Evolution And Replayability
+description: Preserve replayability while evolving events, folds, snapshots, and projections.
+docId: DOC-26
+tags: [keiro, evolution, replay, guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Evolution And Replayability
 
 This guide is for a developer changing a keiro service that is **already

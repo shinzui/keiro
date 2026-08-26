@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Snapshots
+description: Reference advisory snapshots, fold versions, hydration behavior, and operations.
+docId: DOC-22
+tags: [keiro, snapshots, hydration, reference]
+generated:
+  by: human:nadeem
+  at: 2026-07-29T02:56:16Z
+---
+
 # Snapshots
 
 Snapshots speed up hydration by storing an encoded `(state, registers)` seed for

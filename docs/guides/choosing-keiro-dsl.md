@@ -1,3 +1,14 @@
+---
+type: Guide
+title: "Choosing `keiro-dsl`: Benefits, Costs, and Fit"
+description: Decide whether generated services fit a context's guarantees, workflow, and maintenance needs.
+docId: DOC-10
+tags: [keiro, dsl, adoption, decision-guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Choosing `keiro-dsl`: Benefits, Costs, and Fit
 
 `keiro-dsl` is a build-time toolchain for event-sourced Keiro services. A checked

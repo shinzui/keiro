@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Choosing A Primitive
+description: Choose among Keiro primitives by durability, ordering, latency, and operational needs.
+docId: DOC-3
+tags: [keiro, architecture, primitives, decision-guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-13T14:21:43Z
+---
+
 # Choosing A Primitive
 
 Keiro gives you several ways to make parts of a system cooperate: a single

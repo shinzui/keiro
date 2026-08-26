@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Read Models And Projections
+description: Reference projection catalogs, delivery modes, query freshness, and rebuild lifecycles.
+docId: DOC-19
+tags: [keiro, read-models, projections, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Read Models And Projections
 
 Read models are query-optimized views derived from the event log. Keiro provides

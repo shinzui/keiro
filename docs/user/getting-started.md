@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Getting Started
+description: Build a first Keiro integration from database setup through a command path.
+docId: DOC-9
+tags: [keiro, getting-started, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-07-14T04:12:12Z
+---
+
 # Getting Started
 
 This page walks through the shape of a Keiro integration. It is intentionally

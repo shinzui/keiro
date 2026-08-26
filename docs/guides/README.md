@@ -1,3 +1,14 @@
+---
+type: Navigation
+title: Keiro Guides
+description: Route readers through Keiro tutorials, adoption guides, design explanations, and operational runbooks.
+docId: DOC-1
+tags: [keiro, guides, navigation]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Keiro Guides
 
 These guides teach Keiro through `jitsurei`, a sibling Cabal package in this

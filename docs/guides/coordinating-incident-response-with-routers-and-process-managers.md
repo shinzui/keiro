@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: "Coordinating Incident Response: Routers And Process Managers Together"
+description: Combine routing and persisted coordination in an end-to-end incident response workflow.
+docId: DOC-19
+tags: [keiro, routers, process-managers, incident-response]
+generated:
+  by: human:nadeem
+  at: 2026-08-02T22:18:46Z
+---
+
 # Coordinating Incident Response: Routers And Process Managers Together
 
 Keiro has two fan-out primitives, and they are named after the two Enterprise

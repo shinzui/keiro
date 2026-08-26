@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Replayability Safety
+description: Explain the replay-safety guarantee, its limits, and the ValidatedEventStream boundary.
+docId: DOC-20
+tags: [keiro, replay, validation, event-streams]
+generated:
+  by: human:nadeem
+  at: 2026-08-05T14:40:36Z
+---
+
 # Replayability Safety
 
 Keiro is an event-sourcing runtime: before a command is applied, the aggregate's

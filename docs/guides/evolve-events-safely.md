@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Evolve Events Safely
+description: Evolve stored event schemas with versioned codecs, upcasters, and replay verification.
+docId: DOC-14
+tags: [keiro, events, evolution, codecs]
+generated:
+  by: human:nadeem
+  at: 2026-07-28T18:38:21Z
+---
+
 # Evolve Events Safely
 
 Keiro stores events as JSON payloads plus an event type tag and metadata. The

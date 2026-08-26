@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Upgrading To The Keiro Schema
+description: Upgrade an existing database to the Keiro schema while preserving migration history.
+docId: DOC-24
+tags: [keiro, migrations, upgrade, runbook]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:06:07Z
+---
+
 # Upgrading To The Keiro Schema
 
 `keiro-migrations 0.1.0.0` created Keiro's framework tables (`keiro_snapshots`,

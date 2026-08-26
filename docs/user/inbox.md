@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Idempotent Inbox
+description: Reference inbox deduplication policies and transactional handler semantics.
+docId: DOC-10
+tags: [keiro, inbox, idempotency, reference]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:06:07Z
+---
+
 # Idempotent Inbox
 
 The `Keiro.Inbox` module guarantees that a local handler runs **at most

@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Database Migrations
+description: Install, upgrade, and verify Keiro framework database migrations.
+docId: DOC-14
+tags: [keiro, migrations, database, operations]
+generated:
+  by: human:nadeem
+  at: 2026-08-17T04:23:40Z
+---
+
 # Database Migrations
 
 Keiro uses two framework-owned PostgreSQL schemas:

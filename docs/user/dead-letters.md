@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Dead Letters And Replay
+description: Inspect and replay dispatch and subscription dead letters safely and idempotently.
+docId: DOC-6
+tags: [keiro, dead-letters, replay, operations]
+generated:
+  by: human:nadeem
+  at: 2026-07-14T04:12:12Z
+---
+
 # Dead Letters And Replay
 
 Keiro distinguishes two durable failure records with different meanings.

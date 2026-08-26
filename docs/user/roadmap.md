@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Keiro Roadmap
+description: Track capability maturity, adoption milestones, and future durable-execution direction.
+docId: DOC-21
+tags: [keiro, roadmap, planning, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-09T03:41:02Z
+---
+
 # Keiro Roadmap
 
 This roadmap translates the internal plans in `docs/masterplans/`,

@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Migrating to the keiro-dsl 0.15 record API
+description: Update generated consumers and services for the keiro-dsl 0.15 record API.
+docId: DOC-27
+tags: [keiro, dsl, record-api, migration]
+generated:
+  by: human:nadeem
+  at: 2026-08-23T19:54:01Z
+---
+
 # Migrating to the keiro-dsl 0.15 record API
 
 The next PVP-breaking `keiro-dsl` release removes package-authored product

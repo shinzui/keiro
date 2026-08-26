@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Routers And Effectful Fan-Out
+description: Route one event to multiple effectful consumers with explicit failure behavior.
+docId: DOC-18
+tags: [keiro, routers, fan-out, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T17:05:11Z
+---
+
 # Routers And Effectful Fan-Out
 
 A [process manager](process-managers-and-timers.md) fans one event out to other

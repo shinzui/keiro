@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Codecs And Event Evolution
+description: Explain event tags, schema versions, upcasters, codec authority, and decode failures.
+docId: DOC-3
+tags: [keiro, codecs, events, evolution]
+generated:
+  by: human:nadeem
+  at: 2026-07-29T02:56:16Z
+---
+
 # Codecs And Event Evolution
 
 Keiro stores events as Kiroku `EventData`: an event type tag, JSON payload,

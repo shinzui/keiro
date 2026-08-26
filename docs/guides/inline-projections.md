@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Inline Projections
+description: Build transactionally consistent read models inside the command transaction.
+docId: DOC-5
+tags: [keiro, projections, read-models, inline]
+generated:
+  by: human:nadeem
+  at: 2026-08-13T14:21:43Z
+---
+
 # Inline Projections
 
 An `InlineProjection event` applies a decoded domain event in the same

@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Build The Command Side
+description: Build an aggregate command path with decisions, persistence, and optimistic concurrency.
+docId: DOC-9
+tags: [keiro, commands, aggregates, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-08-11T15:02:25Z
+---
+
 # Build The Command Side
 
 The command side starts with a typed stream, a raw `EventStream` definition, and

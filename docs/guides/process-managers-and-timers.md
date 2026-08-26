@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Process Managers And Timers
+description: Coordinate multi-step processes with persisted manager state and durable timers.
+docId: DOC-16
+tags: [keiro, process-managers, timers, guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-02T22:18:46Z
+---
+
 # Process Managers And Timers
 
 A process manager reacts to one stream and emits commands to another stream.

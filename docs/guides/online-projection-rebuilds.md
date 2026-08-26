@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Online Schema-Versioned Projection Rebuilds
+description: Rebuild and cut over schema-versioned projections without stopping reads.
+docId: DOC-8
+tags: [keiro, projections, rebuilds, runbook]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T08:55:48Z
+---
+
 # Online Schema-Versioned Projection Rebuilds
 
 Use an online rebuild when a projection group must change schema without exposing an

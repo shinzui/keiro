@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Run And Operate Jitsurei
+description: Run, inspect, recover, and verify the Jitsurei reference application.
+docId: DOC-22
+tags: [keiro, jitsurei, operations, runbook]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T07:37:58Z
+---
+
 # Run And Operate Jitsurei
 
 From the repository root, build the example package and executable:

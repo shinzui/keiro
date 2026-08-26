@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Integration Events With Kafka
+description: Publish and consume Keiro integration events through Kafka with stable envelopes.
+docId: DOC-23
+tags: [keiro, integration-events, kafka, guide]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:06:07Z
+---
+
 # Integration Events With Kafka
 
 This guide describes the canonical topology for exchanging integration

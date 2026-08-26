@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Integration Events
+description: Explain domain and integration events and the public cross-context envelope.
+docId: DOC-11
+tags: [keiro, integration-events, messaging]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:06:07Z
+---
+
 # Integration Events
 
 A **domain event** is a private fact in one event stream of one bounded

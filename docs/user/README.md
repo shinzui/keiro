@@ -1,3 +1,14 @@
+---
+type: Navigation
+title: Keiro User Guide
+description: Route readers through Keiro concepts, adoption guidance, operational documentation, and API reference.
+docId: DOC-1
+tags: [keiro, navigation, user-guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Keiro User Guide
 
 Keiro is a Haskell library for building Postgres-backed event-sourced

@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Command Cycle
+description: Explain command hydration, decisions, optimistic concurrency, retries, idempotency, and inline SQL.
+docId: DOC-4
+tags: [keiro, commands, concurrency, idempotency]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Command Cycle
 
 `Keiro.Command` is the central write-side API.

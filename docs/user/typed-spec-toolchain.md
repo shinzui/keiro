@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Keiro DSL Language 5 Reference
+description: Define the stable Language 5 grammar, toolchain, ownership, validation, and evolution workflow.
+docId: DOC-23
+tags: [keiro, dsl, language-5, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Keiro DSL Language 5 Reference
 
 `keiro-dsl` is Keiro's build-time language for describing an event-sourced

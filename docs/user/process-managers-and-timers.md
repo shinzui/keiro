@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Process Managers And Timers
+description: Explain event-sourced coordination, deterministic command IDs, and durable timer workers.
+docId: DOC-17
+tags: [keiro, process-managers, timers, coordination]
+generated:
+  by: human:nadeem
+  at: 2026-08-10T19:19:35Z
+---
+
 # Process Managers And Timers
 
 Process managers coordinate work across streams. Timers provide durable

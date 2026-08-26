@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Work Queues
+description: Build and operate a typed PGMQ worker with retries, FIFO groups, and dead letters.
+docId: DOC-20
+tags: [keiro, pgmq, work-queues, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:29:53Z
+---
+
 # Work Queues
 
 An order ships. Somewhere, a customer needs to hear about it. That work does not

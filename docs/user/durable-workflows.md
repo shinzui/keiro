@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Durable Workflows
+description: Reference named steps, durable waits, awakeables, child workflows, resume workers, and journal snapshots.
+docId: DOC-8
+tags: [keiro, workflows, durability, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T15:06:34Z
+---
+
 # Durable Workflows
 
 Durable workflows let you write a long-running, multi-step process as an ordinary

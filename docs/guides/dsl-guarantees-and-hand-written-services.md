@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: "The Guarantee Ledger: DSL and Hand-Written Services"
+description: Compare the guarantees supplied by generated and hand-written Keiro service layers.
+docId: DOC-11
+tags: [keiro, dsl, guarantees, service-design]
+generated:
+  by: human:nadeem
+  at: 2026-08-02T14:20:18Z
+---
+
 # The Guarantee Ledger: DSL and Hand-Written Services
 
 Keiro supports two authoring paths. A DSL service describes its machine in a

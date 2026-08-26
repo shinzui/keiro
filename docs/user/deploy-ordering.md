@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Deploy Ordering
+description: Choose safe rollout order for codecs, jobs, timers, integration messages, and workflows.
+docId: DOC-7
+tags: [keiro, deployment, compatibility, operations]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Deploy Ordering
 
 Events, queued jobs, timer payloads, integration messages, and workflow step

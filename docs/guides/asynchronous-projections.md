@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Asynchronous Projections
+description: Build eventually consistent read models with durable asynchronous delivery.
+docId: DOC-6
+tags: [keiro, projections, read-models, asynchronous]
+generated:
+  by: human:nadeem
+  at: 2026-08-13T14:21:43Z
+---
+
 # Asynchronous Projections
 
 An `AsyncProjection` applies a durable `RecordedEvent` after the source command

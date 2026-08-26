@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Core Concepts
+description: Introduce streams, codecs, commands, projections, process managers, and timers.
+docId: DOC-5
+tags: [keiro, concepts, event-sourcing]
+generated:
+  by: human:nadeem
+  at: 2026-07-04T05:09:27Z
+---
+
 # Core Concepts
 
 ## Event Store

@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Production Status
+description: State Keiro's production maturity, supported adoption posture, and intentionally deferred work.
+docId: DOC-18
+tags: [keiro, production, maturity, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-09T03:41:02Z
+---
+
 # Production Status
 
 Keiro v1 is production-shaped for controlled early use. It is not yet a

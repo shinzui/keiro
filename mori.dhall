@@ -503,5 +503,43 @@ in  Schema.Project::{
         , description = Some
             "Commit-pinned records of adversarial code, API, and release-blocker reviews"
         }
+      , Schema.OkfBundle::{
+        , name = "user-documentation"
+        , path = "docs/user"
+        , profile = Some "mori/user-documentation-profile.dhall"
+        , profileBinding = Some
+            ( Schema.ProfileBinding.Published
+                Schema.PinnedImport::{
+                , publisher = "shinzui/okf-profiles"
+                , publisherRef = Some Schema.MoriRef::{ namespace = "shinzui", name = "okf-profiles" }
+                , export = Some "documentation.userDocumentation"
+                , version = Some "v0.13.0"
+                , pin = Some
+                    "sha256:3be4c39d128ef8a21e39d7ae4eaef29097801b343ab5672caaf7e30186a8f91a"
+                }
+            )
+        , okfVersion = "0.2"
+        , description = Some
+            "Reader-facing Keiro concepts, references, and operational documentation"
+        }
+      , Schema.OkfBundle::{
+        , name = "guides"
+        , path = "docs/guides"
+        , profile = Some "mori/user-documentation-profile.dhall"
+        , profileBinding = Some
+            ( Schema.ProfileBinding.Published
+                Schema.PinnedImport::{
+                , publisher = "shinzui/okf-profiles"
+                , publisherRef = Some Schema.MoriRef::{ namespace = "shinzui", name = "okf-profiles" }
+                , export = Some "documentation.userDocumentation"
+                , version = Some "v0.13.0"
+                , pin = Some
+                    "sha256:3be4c39d128ef8a21e39d7ae4eaef29097801b343ab5672caaf7e30186a8f91a"
+                }
+            )
+        , okfVersion = "0.2"
+        , description = Some
+            "Task-oriented tutorials, adoption guides, explanations, and runbooks"
+        }
       ]
     }

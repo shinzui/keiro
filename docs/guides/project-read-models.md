@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Project Read Models
+description: Implement query-oriented read models from event streams with explicit delivery semantics.
+docId: DOC-15
+tags: [keiro, projections, read-models, guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Project Read Models
 
 An event stream is excellent for writes and audit history, but most product

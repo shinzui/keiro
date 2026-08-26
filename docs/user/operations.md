@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Operations
+description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
+docId: DOC-15
+tags: [keiro, operations, deployment, runbook]
+generated:
+  by: human:nadeem
+  at: 2026-08-21T16:12:10Z
+---
+
 # Operations
 
 This page collects deployment and runtime concerns for Keiro applications.

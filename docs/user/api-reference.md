@@ -1,3 +1,14 @@
+---
+type: Reference
+title: API Reference
+description: Map Keiro's public modules and their user-facing interfaces.
+docId: DOC-2
+tags: [keiro, api, modules, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # API Reference
 
 This is a user-facing map of Keiro's public modules. It is not a replacement for

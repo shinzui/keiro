@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Adopting keiro-dsl generated Haskell idiomatic-v2
+description: Adopt the idiomatic-v2 generated Haskell surface and its compatibility gates.
+docId: DOC-24
+tags: [keiro, dsl, generated-code, migration]
+generated:
+  by: human:nadeem
+  at: 2026-08-23T19:54:01Z
+---
+
 # Adopting keiro-dsl generated Haskell idiomatic-v2
 
 `idiomatic-v2` is a Haskell presentation edition for scaffold output. It gives

@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Adopting Keiro From tan-event-source
+description: Migrate a service from tan-event-source to Keiro in controlled compatibility stages.
+docId: DOC-25
+tags: [keiro, tan-event-source, adoption, migration]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:06:07Z
+---
+
 # Adopting Keiro From tan-event-source
 
 This document is for engineers evaluating the migration from

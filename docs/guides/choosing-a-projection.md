@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Choosing A Projection
+description: Choose inline, asynchronous, or rebuilt projections for a read-model workload.
+docId: DOC-4
+tags: [keiro, projections, read-models, decision-guide]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Choosing A Projection
 
 Keiro supports two projection delivery modes: inline application in the

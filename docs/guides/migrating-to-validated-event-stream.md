@@ -1,3 +1,14 @@
+---
+type: Guide
+title: "Migrating to `ValidatedEventStream`"
+description: Move aggregate hydration and folds onto Keiro's replay-safe validated stream boundary.
+docId: DOC-12
+tags: [keiro, migration, validation, event-streams]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:06:07Z
+---
+
 # Migrating to `ValidatedEventStream`
 
 This guide is for **downstream consumers of keiro** (services and apps that build

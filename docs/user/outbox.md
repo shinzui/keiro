@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Durable Outbox
+description: Reference durable outgoing integration handoff, ordering, dead letters, and publishing.
+docId: DOC-16
+tags: [keiro, outbox, integration-events, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-21T16:12:10Z
+---
+
 # Durable Outbox
 
 The `Keiro.Outbox` module gives an application a durable handoff

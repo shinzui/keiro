@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Snapshots And Hydration
+description: Add advisory snapshots to aggregate hydration while preserving event-log authority.
+docId: DOC-21
+tags: [keiro, snapshots, hydration, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-07-28T17:34:49Z
+---
+
 # Snapshots And Hydration
 
 Hydration is the work Keiro does before deciding a command: read stored events,

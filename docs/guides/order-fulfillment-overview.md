@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Order Fulfillment Overview
+description: Follow the Jitsurei order-fulfillment system from commands through projections and background work.
+docId: DOC-2
+tags: [keiro, jitsurei, order-fulfillment, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-07-24T13:29:53Z
+---
+
 # Order Fulfillment Overview
 
 `jitsurei` is a small order-fulfillment application built to demonstrate Keiro

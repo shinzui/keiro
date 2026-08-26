@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Adopting Mapped Consumer Surfaces
+description: Adopt Language 5 mapped declaration surfaces through the stable rollout gate.
+docId: DOC-12
+tags: [keiro, dsl, mappings, adoption]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Adopting Mapped Consumer Surfaces
 
 Published stable `keiro-dsl` Language 5 can carry one mapped declaration through every

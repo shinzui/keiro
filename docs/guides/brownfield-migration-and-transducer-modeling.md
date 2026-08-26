@@ -1,3 +1,14 @@
+---
+type: Guide
+title: Brownfield Migration And Transducer Modeling
+description: Introduce Keiro incrementally while modeling state transitions as explicit transducers.
+docId: DOC-13
+tags: [keiro, brownfield, migration, transducers]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Brownfield Migration And Transducer Modeling
 
 This guide is for a team moving an existing service onto Keiro when production

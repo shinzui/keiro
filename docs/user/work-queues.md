@@ -1,3 +1,14 @@
+---
+type: Reference
+title: Work Queues
+description: Reference typed PGMQ jobs, workers, retries, FIFO groups, and dead-letter operations.
+docId: DOC-25
+tags: [keiro, pgmq, work-queues, reference]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Work Queues
 
 The `keiro-pgmq` package gives an application a typed background-job queue on

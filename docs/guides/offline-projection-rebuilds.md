@@ -1,3 +1,14 @@
+---
+type: Runbook
+title: Offline Projection Rebuilds
+description: Rebuild a projection while reads are stopped or safely routed away.
+docId: DOC-7
+tags: [keiro, projections, rebuilds, runbook]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T02:24:56Z
+---
+
 # Offline Projection Rebuilds
 
 Keiro's catalog rebuild is offline for one projection group: it fences that

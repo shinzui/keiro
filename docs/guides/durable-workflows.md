@@ -1,3 +1,14 @@
+---
+type: Tutorial
+title: Durable Workflows
+description: Build a durable workflow with persisted progress, retryable effects, and resumable execution.
+docId: DOC-17
+tags: [keiro, workflows, durability, tutorial]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T17:05:11Z
+---
+
 # Durable Workflows
 
 This guide walks a **durable workflow** end to end: a named `reserve-inventory`

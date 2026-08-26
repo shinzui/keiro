@@ -1,3 +1,14 @@
+---
+type: Explanation
+title: Migration Ownership
+description: Explain framework and application migration ownership, ledgers, roles, and operator checks.
+docId: DOC-13
+tags: [keiro, migrations, ownership, postgres]
+generated:
+  by: human:nadeem
+  at: 2026-08-14T16:35:45Z
+---
+
 # Migration Ownership
 
 Keiro applications usually have three PostgreSQL schema owners:
