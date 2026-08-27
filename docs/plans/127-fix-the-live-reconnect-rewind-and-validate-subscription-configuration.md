@@ -5,9 +5,17 @@ title: "Fix the live-reconnect rewind and validate subscription configuration"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
 master_plan: "docs/masterplans/20-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review.md"
+status: transferred
+superseded_by: "mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review"
 ---
 
 # Fix the live-reconnect rewind and validate subscription configuration
+
+> **Transferred on 2026-08-27 — do not execute this plan.** Reconnect, batch-size, and checkpoint
+> target identity moved to
+> `mori://shinzui/kiroku/plans/82-repair-live-reconnect-and-validate-subscription-identity-and-batch-size`.
+> Persistent publisher-hook failure moved separately to
+> `mori://shinzui/kiroku/plans/83-contain-persistent-publisher-decode-hook-failures`.
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -28,11 +36,10 @@ After this plan: a live reconnect resumes from real progress (a test that fails 
 
 ## Progress
 
-- [ ] M1: `ConnectionLost` FSM input carries the live position; `liveExitToInput` reads `posRef`; reconnect-after-progress test added to `kiroku-store/test/Test/SubscriptionReconnect.hs` (fails against unmodified code, passes after).
-- [ ] M2: `InvalidBatchSize` typed error; `subscribe` validates `batchSize >= 1`; tests for 0 and negative.
-- [ ] M3: checkpoint bound to target via `stream_name`; migration `0009` (sentinel backfill) written and recorded in the master plan's Integration Points; `SubscriptionTargetMismatch` typed error + documented override; tests.
-- [ ] M4: `decodeHook` must-not-throw contract documented; publisher fails loudly on a throwing hook (typed event + thread crash); poison-hook test.
-- [ ] Living sections updated; ADR distillation pass done.
+- [x] (2026-08-27) Reconnect, batch-size, checkpoint identity, migration, and rebind work moved to plan 82.
+- [x] (2026-08-27) Publisher callback containment moved to independent plan 83.
+- [x] (2026-08-27) The successors replace the already-used migration number and preserve released one-shot hook recovery.
+- [x] (2026-08-27) This source plan was retired; its original milestones below remain historical design evidence only.
 
 
 ## Surprises & Discoveries
@@ -41,6 +48,12 @@ After this plan: a live reconnect resumes from real progress (a test that fails 
 
 
 ## Decision Log
+
+- Decision: Split worker/configuration correctness from store-wide publisher failure.
+  Rationale: Reconnect and checkpoint identity are per-worker state and durable-row concerns;
+  `decodeHook` runs in one shared publisher with a store-wide blast radius and a distinct terminal
+  contract.
+  Date: 2026-08-27
 
 - Decision: Fix KRS-2 by carrying the position on the error exit (`ConnectionLost` gains a `GlobalPosition` field), mirroring the `HandlerStopped` shape, rather than having the FSM's `Live` state track per-batch progress for the DB-driven paths.
   Rationale: The DB-driven live loops deliberately run to a terminal exit without feeding the FSM per batch (their internal cursor + `posRef` are the progress record); teaching the FSM about per-batch live progress would restructure the loop/driver seam for no additional safety, while the exit already has one sibling (`LiveHandlerStopped`) that reads `posRef` — symmetry is the smallest correct fix.
@@ -61,7 +74,10 @@ After this plan: a live reconnect resumes from real progress (a test that fails 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Transfer complete; implementation remains open in Kiroku plans 82 and 83. The successors retain
+the valid reconnect and validation findings, allocate migrations from the current manifest, and
+replace the July first-failure crash proposal with a bounded contract that preserves tested
+one-shot recovery.
 
 
 ## Context and Orientation
@@ -253,3 +269,6 @@ End state (all in `kiroku-store`, riding the shared 0.4.0.0 release train — se
 - Unchanged signatures: `subscribe`, `withSubscription`, `SubscriptionConfig` (validation is behavioral), `hardDeleteStream` etc. (untouched — plan 125's territory).
 
 No new package dependencies; everything uses hasql, stm, async, and the existing test hooks. keiro consumes these fixes passively via the release/pin bump recorded in plans 125/126 — no keiro code change is needed for this plan's findings (keiro's shard readers simply stop re-delivering after transient live faults).
+
+Revision note (2026-08-27): Retired this source plan, moved worker/configuration scope to canonical
+Kiroku plan 82, and moved publisher callback containment to canonical Kiroku plan 83.

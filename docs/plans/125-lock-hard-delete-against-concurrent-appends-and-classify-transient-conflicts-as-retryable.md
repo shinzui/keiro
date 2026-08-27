@@ -5,9 +5,17 @@ title: "Lock hard-delete against concurrent appends and classify transient confl
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
 master_plan: "docs/masterplans/20-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review.md"
+status: transferred
+superseded_by: "mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review"
 ---
 
 # Lock hard-delete against concurrent appends and classify transient conflicts as retryable
+
+> **Transferred on 2026-08-27 — do not execute this plan.** Its hard-delete and transient
+> transaction outcomes are verified released baseline in
+> `mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review`.
+> The remaining unique-violation work moved to
+> `mori://shinzui/kiroku/plans/86-make-append-unique-violation-classification-exact`.
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -27,14 +35,10 @@ After this plan: a hard delete opens by taking a `FOR UPDATE` row lock on the st
 
 ## Progress
 
-- [ ] M1: new spec `kiroku-store/test/Test/HardDeleteConcurrency.hs` written and wired into `test/Main.hs` and the cabal `other-modules` list; the deterministic two-connection interleaving test reproduces the orphan window and fails against unmodified code.
-- [ ] M1: racy API-level invariant test (concurrent `hardDeleteStream` vs `appendToStream` loop) and the `linkToStream`-racing-delete test written.
-- [ ] M2: `findStreamIdForUpdateStmt` added to `kiroku-store/src/Kiroku/Store/SQL.hs`; `HardDeleteStream` in `kiroku-store/src/Kiroku/Store/Effect.hs` uses it; all M1 tests pass; `hardDeleteStream` haddock documents the concurrency contract.
-- [ ] M3: `TransientConflict` constructor added to `StoreError` in `kiroku-store/src/Kiroku/Store/Error.hs`; `mapServerError` and `mapGenericUsageError` map `40001`/`40P01` to it; deterministic mapping unit tests pass.
-- [ ] M3: haddocks corrected in `kiroku-store/src/Kiroku/Store/Transaction.hs` (lines 92-93 and 104-109); the racy leak test in `kiroku-store/test/Test/Concurrency.hs` strengthened.
-- [ ] M3: `mapUniqueViolation` gains explicit `stream_events_pkey` and `ux_stream_events_stream_version` branches; same-stream deterministic-id duplicate test added.
-- [ ] M4: keiro side — `isTransientStoreError` in `keiro/src/Keiro/ProcessManager.hs` classifies `TransientConflict` as transient; regression test added to `keiro/test/Main.hs`; `kiroku-store` bounds bumped; `cabal test keiro-test` passes.
-- [ ] Living sections of this plan updated; ADR distillation pass done (hard-delete concurrency contract and the retryable-SQLSTATE taxonomy are ADR candidates per the master plan).
+- [x] (2026-08-27) Transfer audit verified hard-delete serialization as released baseline under Kiroku ADR-7.
+- [x] (2026-08-27) Transfer audit verified `TransientTransactionFailure` for `40001`/`40P01` and Keiro adoption as released baseline.
+- [x] (2026-08-27) Unimplemented unique-violation classification moved to `mori://shinzui/kiroku/plans/86-make-append-unique-violation-classification-exact`.
+- [x] (2026-08-27) This source plan was retired; its original milestones below remain historical design evidence only.
 
 
 ## Surprises & Discoveries
@@ -43,6 +47,12 @@ After this plan: a hard delete opens by taking a `FOR UPDATE` row lock on the st
 
 
 ## Decision Log
+
+- Decision: Retire this plan instead of updating its implementation recipe.
+  Rationale: Kiroku solved the two principal findings with different released contracts than the
+  July proposal. Only the exact unique-violation mapping remains, and it now has one focused
+  Kiroku-owned successor.
+  Date: 2026-08-27
 
 - Decision: Fix KRW-2 in kiroku with a new `TransientConflict` constructor rather than patching keiro's classifiers or reusing `ConnectionError`.
   Rationale: The master plan already rejected the keiro-side-only fix (the store must classify its own errors truthfully). Reusing `ConnectionError` would work for today's keiro classifier (it treats `ConnectionError` as transient) but erases the distinction between "the network/session died" and "the transaction lost a conflict race", and `ConnectionError` is documented as a legacy catch-all that new code should avoid. A typed constructor lets consumers pick different backoff for the two cases and keeps the catch-all's meaning intact.
@@ -63,7 +73,9 @@ After this plan: a hard delete opens by taking a `FOR UPDATE` row lock on the st
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Transfer complete, implementation status split. Hard-delete and transient transaction
+classification are verified baseline; unique-violation mapping remains open only in the Kiroku
+successor. Do not infer completion of the historical unchecked milestones from this transfer.
 
 
 ## Context and Orientation
@@ -293,3 +305,6 @@ At the end of the kiroku milestones, `kiroku-store` exports (module paths exact)
 - No signature changes to `Kiroku.Store.Effect.runStorePool`, `Kiroku.Store.Lifecycle.hardDeleteStream`, `Kiroku.Store.Transaction.runTransaction/runTransactionNoRetry` — haddock-only there.
 
 At the end of milestone 4, keiro has: `Keiro.ProcessManager.isTransientStoreError` total over the 0.4 `StoreError` (with `TransientConflict{} -> True`), bounds `kiroku-store >=0.4 && <0.5` everywhere, and the new pure regression specs in `keiro/test/Main.hs`. Dependencies used: `hasql` (raw connections in tests), `async` (interleavings), `kiroku-test-support` (`Kiroku.Test.Postgres.withMigratedTestDatabase`) — all already in the respective cabal files. Release artifacts: kiroku-store 0.4.0.0 on the shared release train (versions/CHANGELOG per kiroku's `chore(release):` convention); this plan does not itself cut the release unless it lands last among plans 125-128.
+
+Revision note (2026-08-27): Retired this source plan after verifying its two primary outcomes as
+released baseline; moved its remaining unique-violation scope to canonical Kiroku plan 86.

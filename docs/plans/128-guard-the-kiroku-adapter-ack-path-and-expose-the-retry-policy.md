@@ -5,9 +5,16 @@ title: "Guard the kiroku adapter ack path and expose the retry policy"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
 master_plan: "docs/masterplans/20-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review.md"
+status: transferred
+superseded_by: "mori://shinzui/kiroku/plans/84-harden-adapter-acknowledgement-liveness-and-expose-retry-policy"
 ---
 
 # Guard the kiroku adapter ack path and expose the retry policy
+
+> **Transferred on 2026-08-27 — do not execute this plan.** The authoritative successor is
+> `mori://shinzui/kiroku/plans/84-harden-adapter-acknowledgement-liveness-and-expose-retry-policy`.
+> It is based on the current Shibuya Core 0.9 finalization behavior rather than the July version
+> forecast.
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -27,11 +34,10 @@ After this plan: a throwing handler on ANY supported adapter path results in bou
 
 ## Progress
 
-- [ ] M1: stall-reproduction test written against the bare `kirokuAdapter` + `mkProcessor` + `runApp` path with a throwing handler; outcome (wedge reproduced / refuted on shibuya-core 0.8) recorded in Surprises & Discoveries with the transcript; shibuya-core's exception routing read and cited.
-- [ ] M2: ack path guarded per M1's outcome — module docs corrected, `kirokuProcessor` helper exported, guarded default decided and implemented; stall scenario now completes with retry/dead-letter.
-- [ ] M2 (watchdog): pending-ack watchdog emitting `KirokuEventAdapterAckPending` implemented (or explicitly descoped with rationale in the Decision Log).
-- [ ] M3: `retryPolicy` exposed on `KirokuAdapterConfig` and `KirokuConsumerGroupConfig`, threaded to the subscription config; interaction with `AckRetry` documented; tests: default unchanged, custom policy honored.
-- [ ] `cabal test shibuya-kiroku-adapter-test` green; living sections updated; ADR distillation pass done.
+- [x] (2026-08-27) Re-verified the standard runner and raw-source acknowledgement paths against current Shibuya Core 0.9.
+- [x] (2026-08-27) Guarded helper, pending-warning, retry-policy, documentation, and tests moved to Kiroku plan 84.
+- [x] (2026-08-27) Release/version selection moved to Kiroku plan 85 instead of retaining July forecasts.
+- [x] (2026-08-27) This source plan was retired; its original milestones below remain historical design evidence only.
 
 
 ## Surprises & Discoveries
@@ -40,6 +46,12 @@ After this plan: a throwing handler on ANY supported adapter path results in bou
 
 
 ## Decision Log
+
+- Decision: Transfer the adapter work without preserving the obsolete package/version assumptions.
+  Rationale: Current Shibuya still always finalizes standard handler exceptions, while raw source
+  consumption can structurally leave an ack pending. The Kiroku successor pins those distinct
+  behaviors and defers PVP choice to the integrated release plan.
+  Date: 2026-08-27
 
 - Decision: Milestone 1 is a reproduce-or-refute gate, not a formality; milestone 2's mechanism is chosen by its outcome.
   Rationale: Authoring-time verification found that shibuya-core 0.8.0.1 — the exact version the adapter and keiro pin (`shibuya-core >=0.8 && <0.9`) — added an "always finalize" guarantee to its supervised runner: `processOne` catches handler exceptions and substitutes `AckRetry (RetryDelay 0)`, then always calls the finalizer with bounded retry (see `shibuya-core/src/Shibuya/Internal/Runner/Supervised.hs`, the `processOne` handler `catchAny`, and `Shibuya/Internal/Runner/Finalize.hs`; the in-code comment states 0.7.1.0's combined catch DID skip finalization when the handler threw). The adapter's module doc (`shibuya-kiroku-adapter/src/Shibuya/Adapter/Kiroku.hs:106-111`) claiming the runner "records handler exceptions without finalizing the ack" therefore appears STALE for the current cohort. If M1 refutes the wedge on 0.8, the defect narrows to: (a) stale docs steering users wrong, (b) an escaped exception producing a `RetryDelay 0` hot redelivery loop instead of a paced one, and (c) consumers driving `adapter.source` without Shibuya's runner having no guarantee at all — each still worth fixing, with the watchdog covering (c).
@@ -56,7 +68,8 @@ After this plan: a throwing handler on ANY supported adapter path results in bou
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Transfer complete; implementation remains open in Kiroku plan 84 and release coordination in plan
+85. This historical body must not be used to select Shibuya bounds or adapter versions.
 
 
 ## Context and Orientation
@@ -205,3 +218,6 @@ End state, package `shibuya-kiroku-adapter` (0.5.0.0):
 Possible `kiroku-store` addition (watchdog only): `Kiroku.Store.Observability.KirokuEvent` gains `KirokuEventAdapterAckPending` — coordinate with sibling plans on the shared file, and note plan 125 owns `Error.hs`, NOT `Observability.hs`, so this is merge-order coordination only.
 
 Dependencies read but not modified: `shibuya-core` 0.8.x (`Shibuya.App.mkProcessor`/`runApp`, `Shibuya.Handler.Handler`, `Shibuya.Core.Ack.AckDecision`; source via `mori registry search shibuya-core`); `kiroku-store` subscription surface (`subscriptionAckStream`, `RetryPolicy`, dead-letter table). Test dependencies already present in `shibuya-kiroku-adapter.cabal` (hspec, async, stm, kiroku-test-support).
+
+Revision note (2026-08-27): Retired this source plan in favor of canonical Kiroku plan 84, which
+uses current Shibuya Core behavior and defers release versions to Kiroku plan 85.

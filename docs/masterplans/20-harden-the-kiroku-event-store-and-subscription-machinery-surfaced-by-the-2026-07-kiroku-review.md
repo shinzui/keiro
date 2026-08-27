@@ -4,9 +4,16 @@ slug: harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2
 title: "Harden the kiroku event store and subscription machinery surfaced by the 2026-07 kiroku review"
 kind: master-plan
 created_at: 2026-07-23T04:18:29Z
+status: transferred
+superseded_by: "mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review"
 ---
 
 # Harden the kiroku event store and subscription machinery surfaced by the 2026-07 kiroku review
+
+> **Transferred on 2026-08-27 — do not execute this plan.** The authoritative successor is
+> `mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review`
+> under Intention `intention_01m12ed0r5e61aqa9h1rfgvk4a`. This file preserves the July review and
+> original decomposition as historical evidence only.
 
 This MasterPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -35,10 +42,10 @@ ADR context: keiro's `docs/adr/` contains only 0001 (pgmq telemetry — not rele
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Lock hard-delete against concurrent appends and classify transient conflicts as retryable | docs/plans/125-lock-hard-delete-against-concurrent-appends-and-classify-transient-conflicts-as-retryable.md | None | None | Not Started |
-| 2 | Make consumer-group resize safe and persist the group size | docs/plans/126-make-consumer-group-resize-safe-and-persist-the-group-size.md | None | None | Not Started |
-| 3 | Fix the live-reconnect rewind and validate subscription configuration | docs/plans/127-fix-the-live-reconnect-rewind-and-validate-subscription-configuration.md | None | None | Not Started |
-| 4 | Guard the kiroku adapter ack path and expose the retry policy | docs/plans/128-guard-the-kiroku-adapter-ack-path-and-expose-the-retry-policy.md | None | None | Not Started |
+| 1 | Lock hard-delete against concurrent appends and classify transient conflicts as retryable | docs/plans/125-lock-hard-delete-against-concurrent-appends-and-classify-transient-conflicts-as-retryable.md | None | None | Transferred |
+| 2 | Make consumer-group resize safe and persist the group size | docs/plans/126-make-consumer-group-resize-safe-and-persist-the-group-size.md | None | None | Transferred |
+| 3 | Fix the live-reconnect rewind and validate subscription configuration | docs/plans/127-fix-the-live-reconnect-rewind-and-validate-subscription-configuration.md | None | None | Transferred |
+| 4 | Guard the kiroku adapter ack path and expose the retry policy | docs/plans/128-guard-the-kiroku-adapter-ack-path-and-expose-the-retry-policy.md | None | None | Transferred |
 
 
 ## Dependency Graph
@@ -59,13 +66,11 @@ Cross-plan decision for ADR promotion: the store's error taxonomy contract (whic
 
 ## Progress
 
-- [ ] EP-1: Hard-delete opens with `FOR UPDATE`; concurrent-append orphan test passes (window 2 now aborts or purges cleanly).
-- [ ] EP-1: 40001/40P01 classified retryable on every surface; haddocks corrected; keiro PM/router halt inversion regression-tested.
-- [ ] EP-2: `consumer_group_size` persisted and validated; supported resize procedure implemented and documented; kiroku ADR 0002 corrected.
-- [ ] EP-2: keiro shard-count change path safe; mixed-rows grow wart fixed.
-- [ ] EP-3: Live-reconnect resumes from `posRef`; reconnect-after-progress test passes.
-- [ ] EP-3: `batchSize >= 1` validated; checkpoint bound to target; `decodeHook` failures contained loudly.
-- [ ] EP-4: Adapter ack path guarded by default; `retryPolicy` exposed on both adapter configs.
+- [x] (2026-08-27) Audited current Kiroku source: ordered affected-stream guards under ADR-7 already close the hard-delete orphan race.
+- [x] (2026-08-27) Audited current Kiroku/Keiro source: `40001` and `40P01` now surface as `TransientTransactionFailure` and Keiro treats it as transient.
+- [x] (2026-08-27) Created the authoritative Kiroku MasterPlan and six self-contained children under Intention `intention_01m12ed0r5e61aqa9h1rfgvk4a`.
+- [x] (2026-08-27) Transferred the remaining consumer-group, reconnect/configuration, publisher, adapter, unique-violation, release, and downstream-adoption work to the Kiroku successors.
+- [x] (2026-08-27) Retired this parent and plans 125–128 from execution; unchecked implementation work in their historical bodies is not active status.
 
 
 ## Surprises & Discoveries
@@ -78,6 +83,14 @@ Cross-plan decision for ADR promotion: the store's error taxonomy contract (whic
 
 
 ## Decision Log
+
+- Decision: Transfer execution ownership to
+  `mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review`
+  and retain this file only as a historical source record.
+  Rationale: Kiroku owns the remaining code, schema, public contracts, tests, ADRs, package
+  releases, and most documentation. One authoritative registry prevents the July plan's obsolete
+  versions, migration number, and already-completed work from being executed again.
+  Date: 2026-08-27
 
 - Decision: Fix KRW-2 in kiroku (truthful classification), not in keiro's classifiers.
   Rationale: The store must not report transient conditions on a constructor documented as non-retryable; patching every consumer's classifier treats the symptom and misses future consumers.
@@ -94,4 +107,10 @@ Cross-plan decision for ADR promotion: the store's error taxonomy contract (whic
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The coordination move is complete; implementation is not. The authoritative Kiroku successor
+records two released baseline outcomes and decomposes the remaining work into plans 81–86. The
+one-to-many mapping is recorded on each retired child. Future progress and decisions belong only
+in the Kiroku plan set.
+
+Revision note (2026-08-27): Marked transferred before implementation and linked the authoritative
+Kiroku MasterPlan created under Intention `intention_01m12ed0r5e61aqa9h1rfgvk4a`.

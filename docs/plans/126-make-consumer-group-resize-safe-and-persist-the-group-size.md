@@ -5,9 +5,16 @@ title: "Make consumer-group resize safe and persist the group size"
 kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
 master_plan: "docs/masterplans/20-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review.md"
+status: transferred
+superseded_by: "mori://shinzui/kiroku/plans/81-make-consumer-group-topology-durable-and-resize-without-gaps"
 ---
 
 # Make consumer-group resize safe and persist the group size
+
+> **Transferred on 2026-08-27 — do not execute this plan.** Kiroku topology and resize work moved
+> to `mori://shinzui/kiroku/plans/81-make-consumer-group-topology-durable-and-resize-without-gaps`;
+> released-package and Keiro shard adoption moved to
+> `mori://shinzui/kiroku/plans/85-release-the-subscription-hardening-cohort-and-coordinate-downstream-adoption`.
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -25,12 +32,10 @@ You can see it working by running the new resize test: a size-2 group with delib
 
 ## Progress
 
-- [ ] M1: `consumer_group_size` written on every checkpoint upsert and read back on checkpoint load; `ConsumerGroupSizeMismatch` typed error refuses a mis-sized startup; legacy-adoption rule implemented; refusal test (size 2 -> 3 with skewed checkpoints) passes.
-- [ ] M2: `resizeConsumerGroup` exported from `Kiroku.Store.Subscription`; equalization test passes (post-resize size-3 run is gapless); documented SQL equivalent included in docs.
-- [ ] M3: `docs/user/consumer-groups.md` resize and hash-caveat/PG-upgrade sections rewritten; kiroku `docs/adr/0002-static-hash-partitioned-consumer-groups.md` amended.
-- [ ] M4: keiro — `ensureShards` validates before inserting (no mixed rows on refusal, advisory-lock guarded); `resizeShardCount` guarded operation added; keiro tests pass (`cabal test keiro-test`).
-- [ ] Release/pin coordination recorded (kiroku release train; keiro bound bump if this plan lands the keiro seam first).
-- [ ] Living sections updated; ADR distillation pass done (the resize contract is a named ADR candidate in the master plan).
+- [x] (2026-08-27) Kiroku topology/refusal/resize scope moved intact to plan 81.
+- [x] (2026-08-27) Keiro atomic shard-resize adoption and release coordination moved to plan 85.
+- [x] (2026-08-27) The successors incorporate current checkpoint initialization and migration-manifest state.
+- [x] (2026-08-27) This source plan was retired; its original milestones below remain historical design evidence only.
 
 
 ## Surprises & Discoveries
@@ -39,6 +44,12 @@ You can see it working by running the new resize test: a size-2 group with delib
 
 
 ## Decision Log
+
+- Decision: Split Kiroku topology implementation from release-gated Keiro adoption.
+  Rationale: Kiroku can implement and test the public transaction combinator before publication,
+  while Keiro must compile against an authoritative released artifact. Plans 81 and 85 preserve
+  that dependency explicitly.
+  Date: 2026-08-27
 
 - Decision: Refuse-then-equalize, not transparent re-bucketing safety.
   Rationale: Inherited from the master plan — transparent safety needs per-stream checkpoints, a redesign kiroku's ADR 0002 explicitly traded away. Persisting and validating the size plus a supported equalization operation closes the loss without the redesign.
@@ -59,7 +70,9 @@ You can see it working by running the new resize test: a size-2 group with delib
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Transfer complete; implementation remains open in Kiroku plans 81 and 85. The successor corrects
+the stale July release forecast and requires Keiro to compose public Kiroku and lease-table
+mutations in one transaction, with no private checkpoint SQL.
 
 
 ## Context and Orientation
@@ -287,3 +300,6 @@ End state, keiro:
 - Dependency: `kiroku-store >=0.4 && <0.5` (bound bump shared with plan 125 milestone 4 — record in whichever lands first, per master plan Integration Points).
 
 No new packages anywhere; everything uses hasql/hasql-transaction/effectful already in place.
+
+Revision note (2026-08-27): Retired this source plan and split execution between canonical Kiroku
+plan 81 (topology/resize) and plan 85 (release-gated Keiro adoption).
