@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-08-29
+* **Addition**: REV-16 approves the generated Haskell edition migration after every recorded pre-current edition became fail-closed, legacy name and edition adoption composed under both flags, and recovery gained commit-pinned coverage.
+
 ## 2026-08-26
 * **Addition**: REV-13 approves the keiro-dsl 0.15 package record API modernization at the pre-release commit, recording the overclaiming drift test and its repository-only dependency as follow-ups.
 * **Addition**: REV-14 requests changes to the generated Haskell edition migration: ledgers without an edition row bypass the idiomatic-v2 gate and the user reference omits the new flag and refusal.

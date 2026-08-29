@@ -65,7 +65,7 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
   changelogs, ADR 15, and ADR 19, and validate all bundles.
 - [x] (2026-08-29T14:32:59Z) Milestone 6: make the presentation rewriter robust to Template Haskell name quotes and
   promoted ticks, with an end-state test over the tracked corpus.
-- [ ] Final: run the full gate, regenerate the record inventories, record a follow-up review
+- [x] (2026-08-29T15:06:49Z) Final: run the full gate, regenerate the record inventories, record a follow-up review
   in `docs/reviews/`, and close the plan.
 
 
@@ -223,6 +223,28 @@ this section into docs/adr/. Keep task-local execution details here.
   passes with 2 examples and 0 failures, including every tracked Generated module
   ending in `Code`; corpus regeneration selected all 39 invocations and reported zero
   tracked changes.
+
+- Final acceptance completed on 2026-08-29. The released 0.14.0.0 cold-start probe
+  refuses a missing edition row with an unchanged tree, applies legacy sidecar renames
+  but still requires both migration flags, installs byte-identical backups and a v2
+  ledger with both flags, and reruns without changing a byte. A duplicated `spec:` row
+  refuses as unreadable with the complete tree unchanged. That probe exposed and closed
+  the sidecar-only combined-flag branch in both scaffold paths before approval.
+
+- The final implementation commit `4f13131264594b200b7fc752728bc2b458685edf`
+  passes `just verify`: 720 main DSL examples, 620 core examples, 58 PGMQ examples
+  (with two expected pending cases), 48 ops examples, 25 integration examples, and 35
+  migration examples all report zero failures. All 39 corpus invocations are unchanged;
+  record inventories, extension and generated-name policies, formatting, diagrams, and
+  strict documentation bundles pass. REV-16 records the full follow-up review with an
+  approved outcome.
+
+- Durable context from this plan is carried by ADR 15's fail-closed ledger, composed
+  backup/apply order, scanner caveat, and regenerated-report rules and ADR 19's explicit
+  every-pre-v2 presentation-edition boundary. The sidecar-only correction is already a
+  concrete instance of those decisions, so no additional ADR is warranted. The original
+  purpose is met with no known acceptance gap: the changelog promise now applies to every
+  ledger keiro-dsl has written.
 
 
 ## Context and Orientation
