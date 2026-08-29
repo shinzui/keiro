@@ -51,7 +51,7 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
 
 ## Progress
 
-- [ ] Milestone 1: gate every recorded pre-current edition in both scaffold paths, name the
+- [x] (2026-08-29T13:50:00Z) Milestone 1: gate every recorded pre-current edition in both scaffold paths, name the
   from-edition in refusals and backup roots, and refuse an unreadable ledger.
 - [ ] Milestone 2: compose sidecar, source-name, and edition migrations in one explicit run
   for legacy-v1 trees; re-run the edition preflight after sidecar renames; list source
@@ -74,7 +74,12 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Observation: The planned `LedgerRead` state constructor and `Refusal` constructor
+  cannot both be named `LedgerUnreadable` because Haskell data constructors share a
+  module-level namespace.
+  Evidence: Both types live in `Keiro.Dsl.ScaffoldRun`; declaring the two constructors
+  with the same name would produce a duplicate-constructor compile error before any
+  behavior could be tested.
 
 
 ## Decision Log
@@ -124,6 +129,13 @@ implementation. Provide concise evidence.
   frozen for release is cheaper than discovering it after.
   Date: 2026-08-26
 
+- Decision: Name the internal three-way read state `LedgerReadUnreadable`, while keeping
+  the public refusal constructor and its rendered diagnostic named `LedgerUnreadable`.
+  Rationale: The refusal is the externally observed API asserted by the plan, while the
+  read-state constructor is plumbing between filesystem reads and that refusal. Haskell
+  cannot define both constructors with the same name in `Keiro.Dsl.ScaffoldRun`.
+  Date: 2026-08-29
+
 
 ## Outcomes & Retrospective
 
@@ -132,7 +144,12 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+- Milestone 1 completed on 2026-08-29. Both scaffold paths now distinguish absent,
+  parsed, and unreadable ledgers; refuse an unreadable current ledger before writes;
+  and prepare the edition migration for every parsed edition other than the current
+  edition. Backups and diagnostics name the recorded from-edition. The focused suite
+  passes with 4 examples and 0 failures, and the generated record inventory check
+  exits successfully.
 
 
 ## Context and Orientation

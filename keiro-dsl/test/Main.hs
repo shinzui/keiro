@@ -5244,11 +5244,11 @@ main = hspec $ do
                 modules
         _ <- runAt False >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
         let recordPath = out </> recordFileName (spec.context)
-            backupRoot = out </> ".keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2"
+            backupRoot = out </> ".keiro-dsl-generated-haskell-migrations/legacy-v1-to-idiomatic-v2"
         currentRecord <-
           TIO.readFile recordPath >>= \contents ->
             maybe (expectationFailure "fresh scaffold record did not parse" >> fail "unreachable") pure (parseRecord contents)
-        let legacyRecord = scaffoldRecordWithEdition IdiomaticNamingV1 currentRecord
+        let legacyRecord = scaffoldRecordWithEdition LegacyNamingV1 currentRecord
             behaviorHole =
               head
                 [ out </> (.path) scaffoldModule
@@ -5264,18 +5264,21 @@ main = hspec $ do
         refused <- runAt False
         refused `shouldSatisfy` \case
           Left [GeneratedHaskellEditionRequired impact] ->
-            not (null ((.generatedPaths) impact))
+            (.fromEdition) impact == LegacyNamingV1
+              && not (null ((.generatedPaths) impact))
               && length ((.sidecarPaths) impact) == 2
               && any ((== "failureCode") . (.current)) ((.handOwnedUses) impact)
           _ -> False
         renderRefusals (either id (const []) refused)
-          `shouldSatisfy` any (T.isInfixOf "--apply-generated-haskell-edition")
+          `shouldSatisfy` \lines' ->
+            any (T.isInfixOf "--apply-generated-haskell-edition") lines'
+              && any (T.isInfixOf "legacy-v1 -> idiomatic-v2") lines'
         treeSnapshot out `shouldReturn` beforeRefusal
 
         _ <- runAt True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
         TIO.readFile behaviorHole `shouldReturn` legacyHole
         backupRecord <- TIO.readFile (backupRoot </> recordFileName (spec.context))
-        backupRecord `shouldSatisfy` T.isInfixOf "naming-edition idiomatic-v1"
+        backupRecord `shouldSatisfy` T.isInfixOf "naming-edition legacy-v1"
         adoptedRecord <- TIO.readFile recordPath
         adoptedRecord `shouldSatisfy` T.isInfixOf "naming-edition idiomatic-v2"
         remediation <- TIO.readFile (backupRoot </> "remediation-report.txt")
@@ -5292,19 +5295,59 @@ main = hspec $ do
         let recordPath = out </> workspaceRecordFileName ((.service) workspace)
             backupRecord =
               out
-                </> ".keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2"
+                </> ".keiro-dsl-generated-haskell-migrations/legacy-v1-to-idiomatic-v2"
                 </> workspaceRecordFileName ((.service) workspace)
         currentRecord <- TIO.readFile recordPath
-        TIO.writeFile recordPath (T.replace "naming-edition idiomatic-v2" "naming-edition idiomatic-v1" currentRecord)
+        TIO.writeFile recordPath (T.unlines (filter (not . T.isPrefixOf "naming-edition ") (T.lines currentRecord)))
         beforeRefusal <- treeSnapshot out
         refused <- executeWorkspaceScaffoldWithMigrations out False False False plan
-        refused `shouldSatisfy` \case Left [GeneratedHaskellEditionRequired impact] -> not (null ((.generatedPaths) impact)); _ -> False
+        refused `shouldSatisfy` \case
+          Left [GeneratedHaskellEditionRequired impact] ->
+            (.fromEdition) impact == LegacyNamingV1 && not (null ((.generatedPaths) impact))
+          _ -> False
         treeSnapshot out `shouldReturn` beforeRefusal
         _ <- executeWorkspaceScaffoldWithMigrations out False False True plan >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
         backedUp <- TIO.readFile backupRecord
-        backedUp `shouldSatisfy` T.isInfixOf "naming-edition idiomatic-v1"
+        backedUp `shouldSatisfy` (not . T.isInfixOf "naming-edition ")
         adopted <- TIO.readFile recordPath
         adopted `shouldSatisfy` T.isInfixOf "naming-edition idiomatic-v2"
+    it "refuses an unreadable single-spec ledger without changing the tree" $
+      withTempDirectory "keiro-dsl-unreadable-ledger" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/behavior-complete.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (spec.context)
+            sourceLanguage = (.sourceLanguage) parsed
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planTestServiceScaffold ctx service)
+        let run =
+              executeServiceScaffoldWithRuntimePackageAndMigrations
+                Nothing
+                False
+                False
+                out
+                False
+                "behavior-complete.keiro"
+                sourceLanguage
+                ctx
+                service
+                modules
+            recordPath = out </> recordFileName (spec.context)
+        _ <- run >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        TIO.appendFile recordPath "spec: duplicate.keiro\n"
+        before <- treeSnapshot out
+        run `shouldReturn` Left [LedgerUnreadable recordPath]
+        treeSnapshot out `shouldReturn` before
+    it "refuses an unreadable workspace ledger without changing the tree" $
+      withTempDirectory "keiro-dsl-workspace-unreadable-ledger" $ \out -> do
+        workspace <- shouldComposeWorkspace canonicalWorkspacePath
+        plan <- shouldPlanWorkspaceSpec workspace
+        _ <- executeWorkspaceScaffold out False plan >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        let recordPath = out </> workspaceRecordFileName ((.service) workspace)
+        TIO.appendFile recordPath "service: duplicate\n"
+        before <- treeSnapshot out
+        executeWorkspaceScaffoldWithMigrations out False False False plan
+          `shouldReturn` Left [LedgerUnreadable recordPath]
+        treeSnapshot out `shouldReturn` before
 
   describe "sidecar migration (EP-198)" $ do
     it "refuses old context names, applies lossless moves, preserves stale history, and is idempotent" $

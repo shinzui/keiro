@@ -2,6 +2,7 @@
 -- execution so every refusal is known before the first output byte is written.
 module Keiro.Dsl.ScaffoldRun
   ( Refusal (..),
+    LedgerRead (..),
     WriteDisposition (..),
     GeneratedArtifactCategory (..),
     GeneratedArtifactImpact (..),
@@ -58,6 +59,9 @@ module Keiro.Dsl.ScaffoldRun
     applyPreparedSourceMoves,
     preflightGeneratedHaskellEditionMigration,
     applyPreparedGeneratedHaskellEditionMigration,
+    generatedHaskellEditionBackupRoot,
+    readRecord,
+    ledgerToMaybe,
     constraintPlanForService,
     mappingDrift,
     behaviorDrift,
@@ -169,12 +173,19 @@ data Refusal
   | SidecarMigrationRefusal ![Text]
   | GeneratedHaskellEditionRequired !GeneratedHaskellEditionImpact
   | GeneratedHaskellEditionRefusal ![Text]
+  | LedgerUnreadable !FilePath
   | -- | Not a refusal on its own: an accompanying note that the run had already
     --       applied its sidecar renames before a later gate refused. Every other
     --       refusal says "nothing was written", which without this note is false.
     --       The renames are idempotent and forward-consistent, so re-running after
     --       fixing the refusal is correct and needs no undo.
     SidecarMovesAlreadyApplied ![SidecarMove]
+  deriving stock (Eq, Show)
+
+data LedgerRead a
+  = LedgerAbsent
+  | LedgerParsed !a
+  | LedgerReadUnreadable !FilePath
   deriving stock (Eq, Show)
 
 data GeneratedHaskellEditionUse = GeneratedHaskellEditionUse
@@ -186,7 +197,8 @@ data GeneratedHaskellEditionUse = GeneratedHaskellEditionUse
   deriving stock (Eq, Ord, Show)
 
 data GeneratedHaskellEditionImpact = GeneratedHaskellEditionImpact
-  { generatedPaths :: ![FilePath],
+  { fromEdition :: !HaskellName.GeneratedHaskellNamingEdition,
+    generatedPaths :: ![FilePath],
     sidecarPaths :: ![FilePath],
     handOwnedUses :: ![GeneratedHaskellEditionUse]
   }
@@ -819,23 +831,30 @@ collisionRefusals modules =
         (flip (<>))
         [(T.toCaseFold (T.pack ((.path) m)), [m]) | m <- modules]
 
-generatedHaskellEditionBackupRoot :: FilePath
-generatedHaskellEditionBackupRoot = ".keiro-dsl-generated-haskell-migrations" </> "idiomatic-v1-to-idiomatic-v2"
+generatedHaskellEditionBackupRoot :: HaskellName.GeneratedHaskellNamingEdition -> FilePath
+generatedHaskellEditionBackupRoot fromEdition =
+  ".keiro-dsl-generated-haskell-migrations"
+    </> ( T.unpack (HaskellName.renderGeneratedHaskellNamingEdition fromEdition)
+            <> "-to-"
+            <> T.unpack (HaskellName.renderGeneratedHaskellNamingEdition HaskellName.currentGeneratedHaskellNamingEdition)
+        )
 
 preflightGeneratedHaskellEditionMigration :: FilePath -> Maybe HaskellName.GeneratedHaskellNamingEdition -> [(ModuleKind, FilePath)] -> [FilePath] -> IO (Either [Text] (Maybe PreparedGeneratedHaskellEditionMigration))
 preflightGeneratedHaskellEditionMigration out previousEdition recordedFiles sidecars
-  | previousEdition /= Just HaskellName.IdiomaticNamingV1 = pure (Right Nothing)
+  | previousEdition == Nothing || previousEdition == Just HaskellName.currentGeneratedHaskellNamingEdition = pure (Right Nothing)
   | otherwise = do
-      let generatedPaths = sort [path | (Generated, path) <- recordedFiles]
+      let fromEdition = maybe HaskellName.LegacyNamingV1 id previousEdition
+          backupRoot = generatedHaskellEditionBackupRoot fromEdition
+          generatedPaths = sort [path | (Generated, path) <- recordedFiles]
           handOwnedPaths = sort [path | (HoleStub, path) <- recordedFiles]
           sidecarPaths = sort sidecars
           sourcePaths = generatedPaths <> sidecarPaths
       existingSources <- fmap (map fst . filter snd) (mapM existing sourcePaths)
       let labels = map fst idiomaticV2LabelMigrations
       uses <- fmap (sort . concat) (mapM (scanFile labels) handOwnedPaths)
-      let impact = GeneratedHaskellEditionImpact generatedPaths sidecarPaths uses
-          backups = [(path, generatedHaskellEditionBackupRoot </> path) | path <- existingSources]
-          reportPath = generatedHaskellEditionBackupRoot </> "remediation-report.txt"
+      let impact = GeneratedHaskellEditionImpact fromEdition generatedPaths sidecarPaths uses
+          backups = [(path, backupRoot </> path) | path <- existingSources]
+          reportPath = backupRoot </> "remediation-report.txt"
           reportText = renderGeneratedHaskellEditionRemediation impact
       conflicts <- fmap concat (mapM checkBackup backups)
       reportConflicts <- checkReport reportPath reportText
@@ -902,8 +921,8 @@ renderGeneratedHaskellEditionRemediation :: GeneratedHaskellEditionImpact -> Tex
 renderGeneratedHaskellEditionRemediation impact =
   T.unlines $
     [ "keiro-dsl generated Haskell edition migration",
-      "from: idiomatic-v1",
-      "to: idiomatic-v2",
+      "from: " <> HaskellName.renderGeneratedHaskellNamingEdition ((.fromEdition) impact),
+      "to: " <> HaskellName.renderGeneratedHaskellNamingEdition HaskellName.currentGeneratedHaskellNamingEdition,
       "generated-files: " <> tshow (length ((.generatedPaths) impact)),
       "sidecars: " <> tshow (length ((.sidecarPaths) impact)),
       "hand-owned-selector-uses: " <> tshow (length ((.handOwnedUses) impact))
@@ -963,16 +982,22 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
       Left failures -> pure (Left (map ConformancePackageRefusal failures))
       Right plannedPackage -> do
         let recordPath = out </> recordFileName ((.context) spec)
-        previousRecord <- readRecord recordPath
+        previousRead <- readRecord recordPath
+        let previousRecord = ledgerToMaybe previousRead
+            ledgerRefusals = ledgerReadRefusals previousRead
         editionPreflight <-
-          preflightGeneratedHaskellEditionMigration
-            out
-            ((.namingEdition) <$> previousRecord)
-            (maybe [] (.files) previousRecord)
-            [contextCabalFragmentFileName ((.context) spec), recordFileName ((.context) spec)]
-        case editionPreflight of
-          Left reasons -> pure (Left [GeneratedHaskellEditionRefusal reasons])
-          Right preparedEdition
+          if null ledgerRefusals
+            then
+              preflightGeneratedHaskellEditionMigration
+                out
+                ((.namingEdition) <$> previousRecord)
+                (maybe [] (.files) previousRecord)
+                [contextCabalFragmentFileName ((.context) spec), recordFileName ((.context) spec)]
+            else pure (Right Nothing)
+        case (ledgerRefusals, editionPreflight) of
+          (refusals@(_ : _), _) -> pure (Left refusals)
+          (_, Left reasons) -> pure (Left [GeneratedHaskellEditionRefusal reasons])
+          (_, Right preparedEdition)
             | Just prepared <- preparedEdition,
               not applyGeneratedHaskellEdition ->
                 pure (Left [GeneratedHaskellEditionRequired ((.impact) prepared)])
@@ -1019,10 +1044,12 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
             then pure (Left [MissingGeneratedBanner bannerless])
             else do
               let recordPath = out </> recordFileName ((.context) spec)
-              previousRecord <- readRecord recordPath
-              case planRecordedSourceMoves previousRecord modules of
-                Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
-                Right moves -> do
+              previousRead <- readRecord recordPath
+              let previousRecord = ledgerToMaybe previousRead
+              case (ledgerReadRefusals previousRead, planRecordedSourceMoves previousRecord modules) of
+                (refusals@(_ : _), _) -> pure (Left refusals)
+                (_, Left moveErrors) -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
+                (_, Right moves) -> do
                   preparedMoves <- preflightSourceMoves out moves
                   case preparedMoves of
                     Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
@@ -1401,10 +1428,23 @@ behaviorDrift current previous =
     currentKeys = Set.fromList (map (.key) current)
     previousKeys = Set.fromList (map (.key) previous)
 
-readRecord :: FilePath -> IO (Maybe ScaffoldRecord)
+readRecord :: FilePath -> IO (LedgerRead ScaffoldRecord)
 readRecord path = do
   exists <- doesFileExist path
-  if exists then parseRecord <$> TIO.readFile path else pure Nothing
+  if not exists
+    then pure LedgerAbsent
+    else do
+      parsed <- parseRecord <$> TIO.readFile path
+      pure (maybe (LedgerReadUnreadable path) LedgerParsed parsed)
+
+ledgerToMaybe :: LedgerRead a -> Maybe a
+ledgerToMaybe LedgerAbsent = Nothing
+ledgerToMaybe (LedgerParsed value) = Just value
+ledgerToMaybe (LedgerReadUnreadable _) = Nothing
+
+ledgerReadRefusals :: LedgerRead a -> [Refusal]
+ledgerReadRefusals (LedgerReadUnreadable path) = [LedgerUnreadable path]
+ledgerReadRefusals _ = []
 
 existingStale :: FilePath -> [ScaffoldModule] -> ScaffoldRecord -> IO [StaleModule]
 existingStale out modules record = staleAgainst out (map (.path) modules) ((.files) record)
@@ -1558,7 +1598,11 @@ renderRefusals = concatMap render
       ["error: sidecar migration could not be applied safely; nothing was written"]
         <> map ("  " <>) reasons
     render (GeneratedHaskellEditionRequired impact) =
-      [ "error: generated Haskell edition migration required: idiomatic-v1 -> idiomatic-v2; nothing was written",
+      [ "error: generated Haskell edition migration required: "
+          <> HaskellName.renderGeneratedHaskellNamingEdition ((.fromEdition) impact)
+          <> " -> "
+          <> HaskellName.renderGeneratedHaskellNamingEdition HaskellName.currentGeneratedHaskellNamingEdition
+          <> "; nothing was written",
         "re-run scaffold with --apply-generated-haskell-edition after reviewing this impact:",
         "  generated files: " <> tshow (length ((.generatedPaths) impact))
       ]
@@ -1570,6 +1614,10 @@ renderRefusals = concatMap render
     render (GeneratedHaskellEditionRefusal reasons) =
       ["error: generated Haskell edition migration could not be applied safely; nothing was written"]
         <> map ("  " <>) reasons
+    render (LedgerUnreadable path) =
+      [ "error: scaffold ledger " <> T.pack path <> " exists but could not be parsed; nothing was written",
+        "  restore it from version control or from the edition backup before scaffolding again"
+      ]
     render (SidecarMovesAlreadyApplied moves) =
       [ "note: this run had already applied "
           <> tshow (length moves)

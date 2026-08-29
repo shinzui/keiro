@@ -47,6 +47,7 @@ module Keiro.Dsl.WorkspaceScaffold
     executeWorkspaceScaffold,
     executeWorkspaceScaffoldWithNameMigrations,
     executeWorkspaceScaffoldWithMigrations,
+    readWorkspaceRecord,
     renderWorkspaceScaffoldReport,
   )
 where
@@ -93,6 +94,7 @@ import Keiro.Dsl.Scaffold
 import Keiro.Dsl.ScaffoldRecord (projectionCatalogFactsForService)
 import Keiro.Dsl.ScaffoldRun
   ( GeneratedArtifactImpact,
+    LedgerRead (..),
     MappingDrift (..),
     PreparedGeneratedHaskellEditionMigration (..),
     PreparedSourceMove,
@@ -108,6 +110,7 @@ import Keiro.Dsl.ScaffoldRun
     constraintPlanForService,
     generatedArtifactImpact,
     inertNodesOf,
+    ledgerToMaybe,
     mappingDrift,
     missingGeneratedBanners,
     newBindingObligations,
@@ -476,16 +479,24 @@ executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyName
 
 executeWorkspaceScaffoldWithMigrations :: FilePath -> Bool -> Bool -> Bool -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
 executeWorkspaceScaffoldWithMigrations out forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition plan = do
-  previous <- readWorkspaceRecord recordPath
+  previousRead <- readWorkspaceRecord recordPath
+  let previous = ledgerToMaybe previousRead
+      ledgerRefusals = case previousRead of
+        LedgerReadUnreadable path -> [LedgerUnreadable path]
+        _ -> []
   editionPreflight <-
-    preflightGeneratedHaskellEditionMigration
-      out
-      ((.namingEdition) <$> previous)
-      [((.kind) row, (.path) row) | row <- maybe [] (.modules) previous]
-      [workspaceManifestFileName service, workspaceRecordFileName service]
-  case editionPreflight of
-    Left reasons -> pure (Left [GeneratedHaskellEditionRefusal reasons])
-    Right preparedEdition
+    if null ledgerRefusals
+      then
+        preflightGeneratedHaskellEditionMigration
+          out
+          ((.namingEdition) <$> previous)
+          [((.kind) row, (.path) row) | row <- maybe [] (.modules) previous]
+          [workspaceManifestFileName service, workspaceRecordFileName service]
+      else pure (Right Nothing)
+  case (ledgerRefusals, editionPreflight) of
+    (refusals@(_ : _), _) -> pure (Left refusals)
+    (_, Left reasons) -> pure (Left [GeneratedHaskellEditionRefusal reasons])
+    (_, Right preparedEdition)
       | Just prepared <- preparedEdition,
         not applyGeneratedHaskellEdition ->
           pure (Left [GeneratedHaskellEditionRequired ((.impact) prepared)])
@@ -542,18 +553,22 @@ planWorkspaceSourceMoves previous current =
 
 executeWorkspaceScaffoldBase :: FilePath -> Bool -> Maybe PreparedGeneratedHaskellEditionMigration -> [SidecarMove] -> [SourceMove] -> [PreparedSourceMove] -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
 executeWorkspaceScaffoldBase out forceGeneratedOverwrite editionMigration sidecarMoves nameMoves preparedNameMoves plan = do
+  previousRead <- readWorkspaceRecord recordPath
   stranded <- goldenRootDivergence ((.goldenRoot) plan) workspace
   bannerless <- if forceGeneratedOverwrite then pure [] else missingGeneratedBanners out modules
   packagePreflight <- case (.conformancePackage) plan of
     Nothing -> pure (Right Nothing)
     Just packagePlan -> fmap (fmap Just) (preflightConformancePackage out forceGeneratedOverwrite packagePlan)
-  let packageRefusals = either (map ConformancePackageRefusal) (const []) packagePreflight
-  case stranded <> [MissingGeneratedBanner bannerless | not (null bannerless)] <> packageRefusals of
+  let previous = ledgerToMaybe previousRead
+      ledgerRefusals = case previousRead of
+        LedgerReadUnreadable path -> [LedgerUnreadable path]
+        _ -> []
+      packageRefusals = either (map ConformancePackageRefusal) (const []) packagePreflight
+  case ledgerRefusals <> stranded <> [MissingGeneratedBanner bannerless | not (null bannerless)] <> packageRefusals of
     refusals@(_ : _) -> pure (Left refusals)
     [] -> do
       applyPreparedGeneratedHaskellEditionMigration out editionMigration
       applyPreparedSourceMoves out preparedNameMoves
-      previous <- readWorkspaceRecord recordPath
       stale <- staleAgainst out (map (.path) modules) (previousFiles previous)
       queryMigrations <- queryContractMigrations out modules
       -- Adoption is a one-shot, guarded by the absence of workspace
@@ -653,10 +668,14 @@ executeWorkspaceScaffoldBase out forceGeneratedOverwrite editionMigration sideca
       Just _ -> Just (serviceConformanceModuleName ((.context) plan))
     previousFiles previous = [((.kind) row, (.path) row) | row <- maybe [] (.modules) previous]
 
-readWorkspaceRecord :: FilePath -> IO (Maybe WorkspaceRecord)
+readWorkspaceRecord :: FilePath -> IO (LedgerRead WorkspaceRecord)
 readWorkspaceRecord path = do
   exists <- doesFileExist path
-  if exists then parseWorkspaceRecord <$> TIO.readFile path else pure Nothing
+  if not exists
+    then pure LedgerAbsent
+    else do
+      parsed <- parseWorkspaceRecord <$> TIO.readFile path
+      pure (maybe (LedgerReadUnreadable path) LedgerParsed parsed)
 
 -- | The record this run writes: the plan's modules with their owners, the
 -- canonical member list, the merged graph's mappings and obligations, and any
