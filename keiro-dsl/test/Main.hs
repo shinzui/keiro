@@ -5112,20 +5112,42 @@ main = hspec $ do
                 }
             recordPath = out </> recordFileName (spec.context)
         TIO.writeFile recordPath (renderRecord legacyRecord)
+        let currentFragment = out </> contextCabalFragmentFileName (spec.context)
+            legacyRecordPath = out </> legacyContextRecordFileName (spec.context)
+            legacyFragmentPath = out </> legacyContextManifestFileName (spec.context)
+        TIO.writeFile currentFragment "legacy cabal fragment\n"
+        renameFile recordPath legacyRecordPath
+        renameFile currentFragment legacyFragmentPath
         beforeMigration <- treeSnapshot out
         refused <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing False out False "incident-paging.keiro" LegacyUnversioned ctx service modules
         refused `shouldSatisfy` \case
-          Left [NameMigrationRequired moves] ->
+          Left [SidecarMigrationRequired sidecars, GeneratedHaskellEditionRequired impact] ->
+            length sidecars == 2 && (.fromEdition) impact == LegacyNamingV1
+          _ -> False
+        renderRefusals (either id (const []) refused)
+          `shouldSatisfy` any (T.isInfixOf "needs both --apply-name-migrations and --apply-generated-haskell-edition")
+        treeSnapshot out `shouldReturn` beforeMigration
+
+        nameOnly <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing True False out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        nameOnly `shouldSatisfy` \case
+          Left [NameMigrationRequired moves, GeneratedHaskellEditionRequired impact, SidecarMovesAlreadyApplied sidecars] ->
             length moves == 2
               && all ((/= Nothing) . (.contentDigest)) moves
               && all ((/= Nothing) . (.transformedDigest)) moves
+              && (.fromEdition) impact == LegacyNamingV1
+              && length sidecars == 2
           _ -> False
-        treeSnapshot out `shouldReturn` beforeMigration
-        applied <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        applied <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing True True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
         report <- case applied of
           Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
           Right value -> pure value
         length ((.nameMoves) report) `shouldBe` 2
+        let editionBackupRoot = out </> ".keiro-dsl-generated-haskell-migrations/legacy-v1-to-idiomatic-v2"
+        doesFileExist (editionBackupRoot </> recordFileName (spec.context)) `shouldReturn` True
+        doesFileExist (editionBackupRoot </> contextCabalFragmentFileName (spec.context)) `shouldReturn` True
+        remediation <- TIO.readFile (editionBackupRoot </> "remediation-report.txt")
+        remediation `shouldSatisfy` T.isInfixOf "source-moves: 2"
+        remediation `shouldSatisfy` T.isInfixOf "Service_oncall/ReadModel.hs -> Generated/IncidentPaging/ServiceOncall/ReadModel.hs"
         let newHole = out </> "IncidentPaging/ServiceOncall/ReadModelHoles.hs"
             oldHole = out </> "IncidentPaging/Service_oncall/ReadModelHoles.hs"
             backupHole = out </> ".keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/IncidentPaging/Service_oncall/ReadModelHoles.hs"
@@ -5137,7 +5159,7 @@ main = hspec $ do
         migratedHole `shouldSatisfy` T.isInfixOf "-- Generated.IncidentPaging.Service_oncall.ReadModel remains in this comment"
         migratedHole `shouldSatisfy` T.isInfixOf "migrationLiteral = \"Generated.IncidentPaging.Service_oncall.ReadModel\""
         backupBefore <- TIO.readFile backupHole
-        rerun <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        rerun <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing True True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
         case rerun of
           Left refusals -> expectationFailure (show refusals)
           Right rerunReport -> (.nameMoves) rerunReport `shouldBe` []
@@ -5151,14 +5173,17 @@ main = hspec $ do
           bytes <- TIO.readFile newPath
           renameFile newPath preparedPath
           pure (preparedPath, bytes)
-        TIO.writeFile recordPath (renderRecord legacyRecord)
+        -- This is specifically the name-move crash state. Keep the ledger at
+        -- the current presentation edition so the independent edition-backup
+        -- conflict gate does not mask the prepared-source digest check.
+        TIO.writeFile recordPath (renderRecord (scaffoldRecordWithEdition IdiomaticNamingV2 legacyRecord))
         case preparedSnapshots of
           (firstPrepared, firstBytes) : _ -> TIO.writeFile firstPrepared (firstBytes <> "\ncorrupt")
           [] -> expectationFailure "expected prepared migration sources"
-        conflicted <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        conflicted <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing True True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
         conflicted `shouldSatisfy` \case Left [NameMigrationRefusal messages] -> any (T.isInfixOf "prepared source digest") messages; _ -> False
         forM_ preparedSnapshots (uncurry TIO.writeFile)
-        resumed <- executeServiceScaffoldWithRuntimePackageAndNameMigrations Nothing True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        resumed <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing True True out False "incident-paging.keiro" LegacyUnversioned ctx service modules
         case resumed of
           Left refusals -> expectationFailure (show refusals)
           Right resumedReport -> length ((.nameMoves) resumedReport) `shouldBe` 2
@@ -5200,15 +5225,35 @@ main = hspec $ do
                 currentRecord
             ownersBefore = Map.fromList [((.role) row, (.owner) row) | row <- selectedRows]
         TIO.writeFile recordPath (renderWorkspaceRecord legacyRecord)
+        let currentFragment = out </> workspaceManifestFileName ((.service) workspace)
+            legacyRecordPath = out </> legacyWorkspaceRecordFileName ((.service) workspace)
+            legacyFragmentPath = out </> legacyWorkspaceManifestFileName ((.service) workspace)
+        renameFile recordPath legacyRecordPath
+        renameFile currentFragment legacyFragmentPath
         beforeMigration <- treeSnapshot out
         refused <- executeWorkspaceScaffoldWithNameMigrations out False False plan
-        refused `shouldSatisfy` \case Left [NameMigrationRequired moves] -> length moves == length selectedRows; _ -> False
+        refused `shouldSatisfy` \case
+          Left [SidecarMigrationRequired sidecars, GeneratedHaskellEditionRequired impact] ->
+            length sidecars == 2 && (.fromEdition) impact == LegacyNamingV1
+          _ -> False
         treeSnapshot out `shouldReturn` beforeMigration
-        applied <- executeWorkspaceScaffoldWithNameMigrations out False True plan
+        nameOnly <- executeWorkspaceScaffoldWithMigrations out False True False plan
+        nameOnly `shouldSatisfy` \case
+          Left [NameMigrationRequired moves, GeneratedHaskellEditionRequired impact, SidecarMovesAlreadyApplied sidecars] ->
+            length moves == length selectedRows
+              && (.fromEdition) impact == LegacyNamingV1
+              && length sidecars == 2
+          _ -> False
+        applied <- executeWorkspaceScaffoldWithMigrations out False True True plan
         report <- case applied of
           Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
           Right value -> pure value
         length ((.nameMoves) report) `shouldBe` length selectedRows
+        let editionBackupRoot = out </> ".keiro-dsl-generated-haskell-migrations/legacy-v1-to-idiomatic-v2"
+        doesFileExist (editionBackupRoot </> workspaceRecordFileName ((.service) workspace)) `shouldReturn` True
+        doesFileExist (editionBackupRoot </> workspaceManifestFileName ((.service) workspace)) `shouldReturn` True
+        remediation <- TIO.readFile (editionBackupRoot </> "remediation-report.txt")
+        remediation `shouldSatisfy` T.isInfixOf ("source-moves: " <> T.pack (show (length selectedRows)))
         migratedRecord <-
           TIO.readFile recordPath >>= \contents ->
             maybe (expectationFailure "migrated workspace record did not parse" >> fail "unreachable") pure (parseWorkspaceRecord contents)

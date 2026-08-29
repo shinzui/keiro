@@ -53,7 +53,7 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
 
 - [x] (2026-08-29T13:50:00Z) Milestone 1: gate every recorded pre-current edition in both scaffold paths, name the
   from-edition in refusals and backup roots, and refuse an unreadable ledger.
-- [ ] Milestone 2: compose sidecar, source-name, and edition migrations in one explicit run
+- [x] (2026-08-29T14:07:00Z) Milestone 2: compose sidecar, source-name, and edition migrations in one explicit run
   for legacy-v1 trees; re-run the edition preflight after sidecar renames; list source
   moves in the report.
 - [ ] Milestone 3: widen the Hole scanner to the forms that break under v2, print the
@@ -150,6 +150,14 @@ this section into docs/adr/. Keep task-local execution details here.
   edition. Backups and diagnostics name the recorded from-edition. The focused suite
   passes with 4 examples and 0 failures, and the generated record inventory check
   exits successfully.
+
+- Milestone 2 completed on 2026-08-29. Single-file and workspace execution now inspect
+  legacy-named ledgers before refusing, apply sidecar renames first when authorized,
+  re-read the current ledger, and compose source moves with the edition backup when both
+  flags are present. The remediation report records planned source moves. The focused
+  name-migration and generated-edition groups each pass with 4 examples and 0 failures;
+  the realistic legacy tests cover no flags, name-only, both flags, sidecar backups,
+  source backups, the combined diagnostic, and both scaffold paths.
 
 
 ## Context and Orientation

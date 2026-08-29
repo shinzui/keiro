@@ -126,12 +126,14 @@ import Keiro.Dsl.ScaffoldRun
     renderSemanticImpactReport,
     semanticImpactForMappingDrift,
     staleAgainst,
+    withGeneratedHaskellEditionSourceMoves,
     withSidecarMovesApplied,
   )
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec)
 import Keiro.Dsl.SemanticImpact (SemanticImpactReport, SemanticImpactSnapshot)
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey, serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
+import Keiro.Dsl.SidecarNames (legacyWorkspaceRecordFileName)
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
 import Keiro.Dsl.Validate (nodeIdentity)
 import Keiro.Dsl.Workspace (WorkspaceMember (..), WorkspaceSpec (..), checkedWorkspace, declarationOwner, nodeOwner)
@@ -479,68 +481,78 @@ executeWorkspaceScaffoldWithNameMigrations out forceGeneratedOverwrite applyName
 
 executeWorkspaceScaffoldWithMigrations :: FilePath -> Bool -> Bool -> Bool -> WorkspacePlan -> IO (Either [Refusal] WorkspaceScaffoldReport)
 executeWorkspaceScaffoldWithMigrations out forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition plan = do
-  previousRead <- readWorkspaceRecord recordPath
-  let previous = ledgerToMaybe previousRead
-      ledgerRefusals = case previousRead of
-        LedgerReadUnreadable path -> [LedgerUnreadable path]
-        _ -> []
-  editionPreflight <-
-    if null ledgerRefusals
-      then
-        preflightGeneratedHaskellEditionMigration
-          out
-          ((.namingEdition) <$> previous)
-          [((.kind) row, (.path) row) | row <- maybe [] (.modules) previous]
-          [workspaceManifestFileName service, workspaceRecordFileName service]
-      else pure (Right Nothing)
-  case (ledgerRefusals, editionPreflight) of
-    (refusals@(_ : _), _) -> pure (Left refusals)
-    (_, Left reasons) -> pure (Left [GeneratedHaskellEditionRefusal reasons])
-    (_, Right preparedEdition)
-      | Just prepared <- preparedEdition,
-        not applyGeneratedHaskellEdition ->
-          pure (Left [GeneratedHaskellEditionRequired ((.impact) prepared)])
-      | otherwise -> do
-          sidecarResult <- planSidecarMigrations out (WorkspaceSidecars service) ((.conformancePackage) plan)
-          case sidecarResult of
-            Left reasons -> pure (Left [SidecarMigrationRefusal reasons])
-            Right preparedSidecars
-              | Just _ <- preparedEdition,
-                not (null preparedSidecars) ->
-                  pure (Left [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)])
-              | not (null preparedSidecars) && not applyNameMigrations ->
-                  pure (Left [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)])
-              | otherwise -> do
-                  applyPreparedSidecarMoves out preparedSidecars
-                  -- Past this point the renames are on disk, so a later
-                  -- refusal's "nothing was written" needs qualifying. Mirrors the single-spec path.
-                  let sidecarMoves = map (.sidecarMove) preparedSidecars
-                      noteApplied = withSidecarMovesApplied sidecarMoves
-                  result <- case planWorkspaceSourceMoves previous modules of
-                    Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
-                    Right moves -> do
-                      preparedMoves <- preflightSourceMoves out moves
-                      case preparedMoves of
-                        Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
-                        Right prepared
-                          | Just _ <- preparedEdition,
-                            not (null prepared) ->
-                              pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
-                          | not (null prepared) && not applyNameMigrations -> pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
-                          | otherwise ->
-                              executeWorkspaceScaffoldBase
-                                out
-                                forceGeneratedOverwrite
-                                preparedEdition
-                                sidecarMoves
-                                (map preparedSourceMove prepared)
-                                prepared
-                                plan
-                  pure (either (Left . noteApplied) Right result)
+  sidecarResult <- planSidecarMigrations out (WorkspaceSidecars service) ((.conformancePackage) plan)
+  case sidecarResult of
+    Left reasons -> pure (Left [SidecarMigrationRefusal reasons])
+    Right preparedSidecars -> do
+      previousBefore <- readMigrationRecord
+      editionBefore <- preflightEdition previousBefore
+      case editionBefore of
+        Left refusals -> pure (Left refusals)
+        Right preparedBefore
+          | not (null preparedSidecars) && not applyNameMigrations ->
+              pure . Left $
+                [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)]
+                  <> [GeneratedHaskellEditionRequired ((.impact) prepared) | Just prepared <- [preparedBefore]]
+          | otherwise -> do
+              applyPreparedSidecarMoves out preparedSidecars
+              -- Past this point the renames are on disk, so a later
+              -- refusal's "nothing was written" needs qualifying. Mirrors the single-spec path.
+              let sidecarMoves = map (.sidecarMove) preparedSidecars
+                  noteApplied = withSidecarMovesApplied sidecarMoves
+              previousAfter <- if null preparedSidecars then pure previousBefore else readWorkspaceRecord recordPath
+              editionAfter <- preflightEdition previousAfter
+              result <- case editionAfter of
+                Left refusals -> pure (Left refusals)
+                Right preparedEdition -> case planWorkspaceSourceMoves (ledgerToMaybe previousAfter) modules of
+                  Left moveErrors -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
+                  Right moves -> do
+                    preparedMoves <- preflightSourceMoves out moves
+                    case preparedMoves of
+                      Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+                      Right prepared
+                        | Just edition <- editionWithMoves,
+                          not (null prepared),
+                          not (applyNameMigrations && applyGeneratedHaskellEdition) ->
+                            pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired ((.impact) edition)])
+                        | Just edition <- editionWithMoves,
+                          not applyGeneratedHaskellEdition ->
+                            pure (Left [GeneratedHaskellEditionRequired ((.impact) edition)])
+                        | not (null prepared) && not applyNameMigrations -> pure (Left [NameMigrationRequired sourceMoves])
+                        | otherwise ->
+                            executeWorkspaceScaffoldBase
+                              out
+                              forceGeneratedOverwrite
+                              editionWithMoves
+                              sidecarMoves
+                              sourceMoves
+                              prepared
+                              plan
+                        where
+                          sourceMoves = map preparedSourceMove prepared
+                          editionWithMoves = withGeneratedHaskellEditionSourceMoves sourceMoves preparedEdition
+              pure (either (Left . noteApplied) Right result)
   where
     modules = map fst ((.modules) plan)
     service = (.service) ((.workspace) plan)
     recordPath = out </> workspaceRecordFileName service
+    legacyRecordPath = out </> legacyWorkspaceRecordFileName service
+    readMigrationRecord = do
+      current <- readWorkspaceRecord recordPath
+      case current of
+        LedgerAbsent -> readWorkspaceRecord legacyRecordPath
+        _ -> pure current
+    preflightEdition previousRead = case previousRead of
+      LedgerReadUnreadable path -> pure (Left [LedgerUnreadable path])
+      _ -> do
+        let previous = ledgerToMaybe previousRead
+        prepared <-
+          preflightGeneratedHaskellEditionMigration
+            out
+            ((.namingEdition) <$> previous)
+            [((.kind) row, (.path) row) | row <- maybe [] (.modules) previous]
+            [workspaceManifestFileName service, workspaceRecordFileName service]
+        pure (either (Left . pure . GeneratedHaskellEditionRefusal) Right prepared)
 
 planWorkspaceSourceMoves :: Maybe WorkspaceRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
 planWorkspaceSourceMoves previous current =

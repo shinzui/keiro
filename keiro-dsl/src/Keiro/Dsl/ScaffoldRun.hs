@@ -59,6 +59,7 @@ module Keiro.Dsl.ScaffoldRun
     applyPreparedSourceMoves,
     preflightGeneratedHaskellEditionMigration,
     applyPreparedGeneratedHaskellEditionMigration,
+    withGeneratedHaskellEditionSourceMoves,
     generatedHaskellEditionBackupRoot,
     readRecord,
     ledgerToMaybe,
@@ -130,7 +131,7 @@ import Keiro.Dsl.SemanticImpact
   )
 import Keiro.Dsl.ServiceHarness (DuplicateServiceFactKey (..), serviceConformanceModuleName, serviceHarnessModule)
 import Keiro.Dsl.SidecarMigration
-import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName)
+import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName, legacyContextRecordFileName)
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex (SemanticSourceIndex)
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
@@ -208,7 +209,8 @@ data PreparedGeneratedHaskellEditionMigration = PreparedGeneratedHaskellEditionM
   { impact :: !GeneratedHaskellEditionImpact,
     backups :: ![(FilePath, FilePath)],
     reportPath :: !FilePath,
-    reportText :: !Text
+    reportText :: !Text,
+    sourceMoves :: ![SourceMove]
   }
   deriving stock (Eq, Show)
 
@@ -855,12 +857,12 @@ preflightGeneratedHaskellEditionMigration out previousEdition recordedFiles side
       let impact = GeneratedHaskellEditionImpact fromEdition generatedPaths sidecarPaths uses
           backups = [(path, backupRoot </> path) | path <- existingSources]
           reportPath = backupRoot </> "remediation-report.txt"
-          reportText = renderGeneratedHaskellEditionRemediation impact
+          reportText = renderGeneratedHaskellEditionRemediation impact []
       conflicts <- fmap concat (mapM checkBackup backups)
       reportConflicts <- checkReport reportPath reportText
       pure $
         if null (conflicts <> reportConflicts)
-          then Right (Just (PreparedGeneratedHaskellEditionMigration impact backups reportPath reportText))
+          then Right (Just (PreparedGeneratedHaskellEditionMigration impact backups reportPath reportText []))
           else Left (conflicts <> reportConflicts)
   where
     relative path = out </> path
@@ -917,19 +919,32 @@ applyPreparedGeneratedHaskellEditionMigration out (Just prepared) = do
           createDirectoryIfMissing True (takeDirectory backup)
           copyFile source backup
 
-renderGeneratedHaskellEditionRemediation :: GeneratedHaskellEditionImpact -> Text
-renderGeneratedHaskellEditionRemediation impact =
+withGeneratedHaskellEditionSourceMoves :: [SourceMove] -> Maybe PreparedGeneratedHaskellEditionMigration -> Maybe PreparedGeneratedHaskellEditionMigration
+withGeneratedHaskellEditionSourceMoves moves =
+  fmap
+    ( \prepared ->
+        prepared
+          { sourceMoves = moves,
+            reportText = renderGeneratedHaskellEditionRemediation ((.impact) prepared) moves
+          }
+    )
+
+renderGeneratedHaskellEditionRemediation :: GeneratedHaskellEditionImpact -> [SourceMove] -> Text
+renderGeneratedHaskellEditionRemediation impact sourceMoves =
   T.unlines $
     [ "keiro-dsl generated Haskell edition migration",
       "from: " <> HaskellName.renderGeneratedHaskellNamingEdition ((.fromEdition) impact),
       "to: " <> HaskellName.renderGeneratedHaskellNamingEdition HaskellName.currentGeneratedHaskellNamingEdition,
       "generated-files: " <> tshow (length ((.generatedPaths) impact)),
       "sidecars: " <> tshow (length ((.sidecarPaths) impact)),
-      "hand-owned-selector-uses: " <> tshow (length ((.handOwnedUses) impact))
+      "hand-owned-selector-uses: " <> tshow (length ((.handOwnedUses) impact)),
+      "source-moves: " <> tshow (length sourceMoves)
     ]
       <> map renderUse ((.handOwnedUses) impact)
+      <> map renderSourceMove sourceMoves
   where
     renderUse use = T.pack ((.path) use) <> ":" <> tshow ((.line) use) <> ": " <> (.current) use <> " -> " <> (.replacement) use
+    renderSourceMove move = T.pack ((.oldPath) move) <> " -> " <> T.pack ((.newPath) move)
 
 selectorApplication :: Text -> Text -> Bool
 selectorApplication label = go Nothing
@@ -981,53 +996,42 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
   | otherwise = case packagePlan of
       Left failures -> pure (Left (map ConformancePackageRefusal failures))
       Right plannedPackage -> do
-        let recordPath = out </> recordFileName ((.context) spec)
-        previousRead <- readRecord recordPath
-        let previousRecord = ledgerToMaybe previousRead
-            ledgerRefusals = ledgerReadRefusals previousRead
-        editionPreflight <-
-          if null ledgerRefusals
-            then
-              preflightGeneratedHaskellEditionMigration
-                out
-                ((.namingEdition) <$> previousRecord)
-                (maybe [] (.files) previousRecord)
-                [contextCabalFragmentFileName ((.context) spec), recordFileName ((.context) spec)]
-            else pure (Right Nothing)
-        case (ledgerRefusals, editionPreflight) of
-          (refusals@(_ : _), _) -> pure (Left refusals)
-          (_, Left reasons) -> pure (Left [GeneratedHaskellEditionRefusal reasons])
-          (_, Right preparedEdition)
-            | Just prepared <- preparedEdition,
-              not applyGeneratedHaskellEdition ->
-                pure (Left [GeneratedHaskellEditionRequired ((.impact) prepared)])
-            | otherwise -> do
-                sidecarResult <- planSidecarMigrations out (ContextSidecars ((.context) spec)) plannedPackage
-                case sidecarResult of
-                  Left reasons -> pure (Left [SidecarMigrationRefusal reasons])
-                  Right preparedSidecars
-                    | Just _ <- preparedEdition,
-                      not (null preparedSidecars) ->
-                        pure (Left [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)])
-                    | not (null preparedSidecars) && not applyNameMigrations ->
-                        pure (Left [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)])
-                    | otherwise -> do
-                        applyPreparedSidecarMoves out preparedSidecars
-                        let moves = map (.sidecarMove) preparedSidecars
-                            -- Past this point the renames are on disk, so a later
-                            -- refusal's "nothing was written" needs qualifying.
-                            noteApplied = withSidecarMovesApplied moves
-                        result <- case plannedPackage of
-                          Nothing -> executeCheckedScaffold preparedEdition moves Nothing
-                          Just package -> do
-                            preparedPackage <- preflightConformancePackage out forceGeneratedOverwrite package
-                            case preparedPackage of
-                              Left failures -> pure (Left (map ConformancePackageRefusal failures))
-                              Right packageReady -> executeCheckedScaffold preparedEdition moves (Just packageReady)
-                        pure (either (Left . noteApplied) Right result)
+        sidecarResult <- planSidecarMigrations out (ContextSidecars ((.context) spec)) plannedPackage
+        case sidecarResult of
+          Left reasons -> pure (Left [SidecarMigrationRefusal reasons])
+          Right preparedSidecars -> do
+            previousBefore <- readMigrationRecord
+            editionBefore <- preflightEdition previousBefore
+            case editionBefore of
+              Left refusals -> pure (Left refusals)
+              Right preparedBefore
+                | not (null preparedSidecars) && not applyNameMigrations ->
+                    pure . Left $
+                      [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)]
+                        <> [GeneratedHaskellEditionRequired ((.impact) prepared) | Just prepared <- [preparedBefore]]
+                | otherwise -> do
+                    applyPreparedSidecarMoves out preparedSidecars
+                    let moves = map (.sidecarMove) preparedSidecars
+                        -- Past this point the renames are on disk, so a later
+                        -- refusal's "nothing was written" needs qualifying.
+                        noteApplied = withSidecarMovesApplied moves
+                    previousAfter <- if null preparedSidecars then pure previousBefore else readRecord currentRecordPath
+                    editionAfter <- preflightEdition previousAfter
+                    result <- case editionAfter of
+                      Left refusals -> pure (Left refusals)
+                      Right preparedEdition -> case plannedPackage of
+                        Nothing -> executeCheckedScaffold preparedEdition moves Nothing
+                        Just package -> do
+                          preparedPackage <- preflightConformancePackage out forceGeneratedOverwrite package
+                          case preparedPackage of
+                            Left failures -> pure (Left (map ConformancePackageRefusal failures))
+                            Right packageReady -> executeCheckedScaffold preparedEdition moves (Just packageReady)
+                    pure (either (Left . noteApplied) Right result)
   where
     spec = checkedSpec service
     modules = stampGeneratedModules (checkedLanguageContract service) plannedModules
+    currentRecordPath = out </> recordFileName ((.context) spec)
+    legacyRecordPath = out </> legacyContextRecordFileName ((.context) spec)
     facadeModule = case runtimePackage of
       Nothing -> Nothing
       Just _ -> Just (serviceConformanceModuleName ctx)
@@ -1035,6 +1039,22 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
       traverse
         (\packageName -> planConformancePackage (StandaloneConformanceService ((.name) ctx)) packageName (serviceConformanceModuleName ctx) service)
         runtimePackage
+    readMigrationRecord = do
+      current <- readRecord currentRecordPath
+      case current of
+        LedgerAbsent -> readRecord legacyRecordPath
+        _ -> pure current
+    preflightEdition previousRead = case ledgerReadRefusals previousRead of
+      refusals@(_ : _) -> pure (Left refusals)
+      [] -> do
+        let previousRecord = ledgerToMaybe previousRead
+        prepared <-
+          preflightGeneratedHaskellEditionMigration
+            out
+            ((.namingEdition) <$> previousRecord)
+            (maybe [] (.files) previousRecord)
+            [contextCabalFragmentFileName ((.context) spec), recordFileName ((.context) spec)]
+        pure (either (Left . pure . GeneratedHaskellEditionRefusal) Right prepared)
     executeCheckedScaffold editionMigration sidecarMoves preparedPackage =
       case deriveBehaviorRequirementsForService service of
         Left errors -> pure (Left [BehaviorRefusal errors])
@@ -1054,13 +1074,17 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                   case preparedMoves of
                     Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
                     Right prepared
-                      | Just _ <- editionMigration,
-                        not (null prepared) ->
-                          pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
+                      | Just edition <- editionWithMoves,
+                        not (null prepared),
+                        not (applyNameMigrations && applyGeneratedHaskellEdition) ->
+                          pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired ((.impact) edition)])
+                      | Just edition <- editionWithMoves,
+                        not applyGeneratedHaskellEdition ->
+                          pure (Left [GeneratedHaskellEditionRequired ((.impact) edition)])
                       | not (null prepared) && not applyNameMigrations ->
-                          pure (Left [NameMigrationRequired (map preparedSourceMove prepared)])
+                          pure (Left [NameMigrationRequired sourceMoves])
                       | otherwise -> do
-                          applyPreparedGeneratedHaskellEditionMigration out editionMigration
+                          applyPreparedGeneratedHaskellEditionMigration out editionWithMoves
                           applyPreparedSourceMoves out prepared
                           stale <- maybe (pure []) (existingStale out modules) previousRecord
                           queryMigrations <- queryContractMigrations out modules
@@ -1126,6 +1150,9 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                                   nameMoves = map preparedSourceMove prepared,
                                   sidecarMoves = sidecarMoves
                                 }
+                      where
+                        sourceMoves = map preparedSourceMove prepared
+                        editionWithMoves = withGeneratedHaskellEditionSourceMoves sourceMoves editionMigration
 
 planRecordedSourceMoves :: Maybe ScaffoldRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
 planRecordedSourceMoves Nothing _ = Right []
@@ -1540,8 +1567,20 @@ withSidecarMovesApplied _ [] = []
 withSidecarMovesApplied moves refusals = refusals <> [SidecarMovesAlreadyApplied moves]
 
 renderRefusals :: [Refusal] -> [Text]
-renderRefusals = concatMap render
+renderRefusals allRefusals =
+  concatMap render allRefusals
+    <> [ "this tree needs both --apply-name-migrations and --apply-generated-haskell-edition in one run"
+       | any requiresNameMigration allRefusals,
+         any requiresEditionMigration allRefusals
+       ]
   where
+    requiresNameMigration = \case
+      NameMigrationRequired _ -> True
+      SidecarMigrationRequired _ -> True
+      _ -> False
+    requiresEditionMigration = \case
+      GeneratedHaskellEditionRequired _ -> True
+      _ -> False
     render (PathCollision path origins) =
       [ "error: module path collision -- refusing to scaffold; nothing was written",
         "  " <> T.pack path
