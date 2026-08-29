@@ -1115,7 +1115,7 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                     Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
                     Right prepared
                       | Just edition <- editionWithMoves,
-                        not (null prepared),
+                        (not (null prepared) || not (null sidecarMoves)),
                         not (applyNameMigrations && applyGeneratedHaskellEdition) ->
                           pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired ((.impact) edition)])
                       | Just edition <- editionWithMoves,

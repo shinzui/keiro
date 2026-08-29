@@ -5058,6 +5058,53 @@ main = hspec $ do
           rewritten `shouldSatisfy` T.isInfixOf "-- Generated.IncidentPaging.Service_oncall.ReadModel in a comment"
           rewritten `shouldSatisfy` T.isInfixOf "literal = \"Generated.IncidentPaging.Service_oncall.ReadModel\""
           rewritten `shouldSatisfy` T.isInfixOf "{- outer {- Generated.IncidentPaging.Service_oncall.ReadModel -} comment -}"
+    it "requires both flags when a legacy ledger needs only sidecar renames" $ do
+      withTempDirectory "keiro-dsl-sidecar-only-name-migration" $ \out -> do
+        spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"
+        let service = legacyCheckedService spec
+            ctx = defaultContext (spec.context)
+        modules <- case planTestServiceScaffold ctx service of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right planned -> pure planned
+        initial <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing False False out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        case initial of
+          Left refusals -> expectationFailure (show refusals)
+          Right _ -> pure ()
+        let recordPath = out </> recordFileName (spec.context)
+            fragmentPath = out </> contextCabalFragmentFileName (spec.context)
+        currentRecord <-
+          TIO.readFile recordPath >>= \contents ->
+            maybe (expectationFailure "fresh scaffold record did not parse" >> fail "unreachable") pure (parseRecord contents)
+        TIO.writeFile recordPath (renderRecord (scaffoldRecordWithEdition LegacyNamingV1 currentRecord))
+        renameFile recordPath (out </> legacyContextRecordFileName (spec.context))
+        renameFile fragmentPath (out </> legacyContextManifestFileName (spec.context))
+        nameOnly <- executeServiceScaffoldWithRuntimePackageAndMigrations Nothing True False out False "incident-paging.keiro" LegacyUnversioned ctx service modules
+        nameOnly `shouldSatisfy` \case
+          Left [NameMigrationRequired [], GeneratedHaskellEditionRequired impact, SidecarMovesAlreadyApplied sidecars] ->
+            (.fromEdition) impact == LegacyNamingV1 && length sidecars == 2
+          _ -> False
+
+      withTempDirectory "keiro-dsl-workspace-sidecar-only-name-migration" $ \out -> do
+        workspace <- shouldComposeWorkspace canonicalWorkspacePath
+        plan <- shouldPlanWorkspaceSpec workspace
+        initial <- executeWorkspaceScaffold out False plan
+        case initial of
+          Left refusals -> expectationFailure (show refusals)
+          Right _ -> pure ()
+        let service = (.service) workspace
+            recordPath = out </> workspaceRecordFileName service
+            fragmentPath = out </> workspaceManifestFileName service
+        currentRecord <-
+          TIO.readFile recordPath >>= \contents ->
+            maybe (expectationFailure "fresh workspace record did not parse" >> fail "unreachable") pure (parseWorkspaceRecord contents)
+        TIO.writeFile recordPath (renderWorkspaceRecord (workspaceRecordWithEditionAndModules LegacyNamingV1 currentRecord.modules currentRecord))
+        renameFile recordPath (out </> legacyWorkspaceRecordFileName service)
+        renameFile fragmentPath (out </> legacyWorkspaceManifestFileName service)
+        nameOnly <- executeWorkspaceScaffoldWithMigrations out False True False plan
+        nameOnly `shouldSatisfy` \case
+          Left [NameMigrationRequired [], GeneratedHaskellEditionRequired impact, SidecarMovesAlreadyApplied sidecars] ->
+            (.fromEdition) impact == LegacyNamingV1 && length sidecars == 2
+          _ -> False
     it "refuses without mutation, then applies recoverable generated and hole moves" $
       withTempDirectory "keiro-dsl-name-migration" $ \out -> do
         spec <- specOf "test/fixtures/incident-paging/incident-paging.keiro"

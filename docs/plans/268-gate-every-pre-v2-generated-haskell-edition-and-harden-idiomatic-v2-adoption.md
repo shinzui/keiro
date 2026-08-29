@@ -97,6 +97,14 @@ implementation. Provide concise evidence.
   `modernizeGeneratedHaskellSourceWithState`; the package already generated and used
   this module internally.
 
+- Observation: The released 0.14.0.0 cold-start corpus contains both the historical
+  `Holes.hs` and current `BehaviorHoles.hs` paths. Deleting its edition row therefore
+  produces a legacy-v1 ledger with sidecar renames but no pending source moves.
+  Evidence: The first realistic scratch probe applied the two sidecar renames under
+  `--apply-name-migrations`, then printed only the edition refusal; the combined-flags
+  line was absent because the guard considered source moves but not the sidecar moves
+  already applied by that run.
+
 
 ## Decision Log
 
@@ -158,6 +166,16 @@ implementation. Provide concise evidence.
   component. Exposing the existing module gives that test the same rewriter entry point
   consumers already exercise through generation, without duplicating the lexical state
   machine or weakening the end-state assertion.
+  Date: 2026-08-29
+
+- Decision: Count sidecar renames applied by the current run as name-migration work when
+  deciding whether a legacy-v1 edition adoption requires both migration flags, even if
+  every source move is already applied.
+  Rationale: The released-corpus probe is a real recoverable legacy shape. Letting an
+  empty source-move list bypass the combined guard contradicted the one-run guidance
+  and made the acceptance transcript depend on redundant historical Hole files. The
+  same rule now covers single-file and workspace execution, with an explicit regression
+  for both.
   Date: 2026-08-29
 
 
