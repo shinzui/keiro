@@ -9,6 +9,8 @@ module Keiro.Dsl.GeneratedHaskellLanguage
     generatedHaskellDefaultExtensions,
     idiomaticV2LabelMigrations,
     modernizeGeneratedHaskellSource,
+    modernizeGeneratedHaskellSourceWithState,
+    RewriteState (..),
     renderGeneratedLanguagePragmas,
   )
 where
@@ -68,32 +70,51 @@ extensionName extension = case extension of
 -- the presentation rewrite here makes the edition boundary complete and keeps
 -- wire strings, diagnostics, and generated comments outside that boundary.
 modernizeGeneratedHaskellSource :: Text -> Text
-modernizeGeneratedHaskellSource = T.pack . go Code . T.unpack
-  where
-    go _ [] = []
-    go Code ('-' : '-' : rest) = '-' : '-' : go LineComment rest
-    go Code ('{' : '-' : rest) = '{' : '-' : go (BlockComment 1) rest
-    go Code ('"' : rest) = '"' : go StringLiteral rest
-    go Code ('\'' : rest) = '\'' : go CharacterLiteral rest
-    go Code input@(character : rest)
-      | identifierStart character =
-          let (token, remaining) = span identifierCharacter input
-              replacement = Map.findWithDefault (T.pack token) (T.pack token) idiomaticV2Labels
-           in T.unpack replacement <> go Code remaining
-      | otherwise = character : go Code rest
-    go LineComment ('\n' : rest) = '\n' : go Code rest
-    go LineComment (character : rest) = character : go LineComment rest
-    go (BlockComment depth) ('{' : '-' : rest) = '{' : '-' : go (BlockComment (depth + 1)) rest
-    go (BlockComment 1) ('-' : '}' : rest) = '-' : '}' : go Code rest
-    go (BlockComment depth) ('-' : '}' : rest) = '-' : '}' : go (BlockComment (depth - 1)) rest
-    go (BlockComment depth) (character : rest) = character : go (BlockComment depth) rest
-    go StringLiteral ('\\' : escaped : rest) = '\\' : escaped : go StringLiteral rest
-    go StringLiteral ('"' : rest) = '"' : go Code rest
-    go StringLiteral (character : rest) = character : go StringLiteral rest
-    go CharacterLiteral ('\\' : escaped : rest) = '\\' : escaped : go CharacterLiteral rest
-    go CharacterLiteral ('\'' : rest) = '\'' : go Code rest
-    go CharacterLiteral (character : rest) = character : go CharacterLiteral rest
+modernizeGeneratedHaskellSource = fst . modernizeGeneratedHaskellSourceWithState
 
+modernizeGeneratedHaskellSourceWithState :: Text -> (Text, RewriteState)
+modernizeGeneratedHaskellSourceWithState source =
+  let (output, finalState) = go Code (T.unpack source)
+   in (T.pack output, finalState)
+  where
+    go Code [] = ([], Code)
+    go LineComment [] = ([], Code)
+    go state [] = ([], state)
+    go Code input@('-' : '-' : _) =
+      let (dashes, remaining) = span (== '-') input
+          startsComment = case remaining of
+            [] -> True
+            character : _ -> not (isHaskellSymbol character)
+       in emit dashes (go (if startsComment then LineComment else Code) remaining)
+    go Code ('{' : '-' : rest) = emit "{-" (go (BlockComment 1) rest)
+    go Code ('"' : rest) = emit "\"" (go StringLiteral rest)
+    go Code ('\'' : rest)
+      | startsCharacterLiteral rest = emit "'" (go CharacterLiteral rest)
+      | otherwise = emit "'" (go Code rest)
+    go Code sourceText@(character : rest)
+      | identifierStart character =
+          let (token, remaining) = span identifierCharacter sourceText
+              replacement = Map.findWithDefault (T.pack token) (T.pack token) idiomaticV2Labels
+           in emit (T.unpack replacement) (go Code remaining)
+      | otherwise = emit [character] (go Code rest)
+    go LineComment ('\n' : rest) = emit "\n" (go Code rest)
+    go LineComment (character : rest) = emit [character] (go LineComment rest)
+    go (BlockComment depth) ('{' : '-' : rest) = emit "{-" (go (BlockComment (depth + 1)) rest)
+    go (BlockComment 1) ('-' : '}' : rest) = emit "-}" (go Code rest)
+    go (BlockComment depth) ('-' : '}' : rest) = emit "-}" (go (BlockComment (depth - 1)) rest)
+    go (BlockComment depth) (character : rest) = emit [character] (go (BlockComment depth) rest)
+    go StringLiteral ('\\' : escaped : rest) = emit ['\\', escaped] (go StringLiteral rest)
+    go StringLiteral ('"' : rest) = emit "\"" (go Code rest)
+    go StringLiteral (character : rest) = emit [character] (go StringLiteral rest)
+    go CharacterLiteral ('\\' : escaped : rest) = emit ['\\', escaped] (go CharacterLiteral rest)
+    go CharacterLiteral ('\'' : rest) = emit "'" (go Code rest)
+    go CharacterLiteral (character : rest) = emit [character] (go CharacterLiteral rest)
+
+    emit prefix (output, state) = (prefix <> output, state)
+    startsCharacterLiteral ('\\' : _) = True
+    startsCharacterLiteral (_ : '\'' : _) = True
+    startsCharacterLiteral _ = False
+    isHaskellSymbol character = character `elem` ("!#$%&*+./<=>?@\\^|-~:" :: String)
     identifierStart character = character == '_' || character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z'
     identifierCharacter character = identifierStart character || isAlphaNum character || character == '\''
 

@@ -89,6 +89,7 @@ library
     Keiro.Dsl.Expression
     Keiro.Dsl.FoldFingerprint
     Keiro.Dsl.Frontend
+    Keiro.Dsl.GeneratedHaskellLanguage
     Keiro.Dsl.Goldens
     Keiro.Dsl.Grammar
     Keiro.Dsl.Harness
@@ -135,7 +136,6 @@ library
     Keiro.Dsl.AggregateGenerationPlan
     Keiro.Dsl.FieldIdentity
     Keiro.Dsl.Frontend.Internal
-    Keiro.Dsl.GeneratedHaskellLanguage
     Keiro.Dsl.HaskellName
     Keiro.Dsl.Parser.Aggregate
     Keiro.Dsl.Parser.Coordination

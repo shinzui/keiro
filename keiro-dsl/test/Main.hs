@@ -48,6 +48,7 @@ import Keiro.Dsl.Frontend (FrontendErrorCode (..), FrontendFailure (..), Lowerin
 import Keiro.Dsl.FrontendCompatibility (frontendCompatibilitySpec)
 import Keiro.Dsl.FrontendProfiles (frontendProfilesSpec)
 import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
+import Keiro.Dsl.GeneratedHaskellLanguage (RewriteState (..), modernizeGeneratedHaskellSourceWithState)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.Grammar qualified as Grammar
@@ -5505,6 +5506,29 @@ main = hspec $ do
         (rerunCode, _, _) <- runKeiroDsl ["scaffold", fixture, "--out", out, "--apply-generated-haskell-edition"]
         rerunCode `shouldBe` ExitSuccess
         treeSnapshot out `shouldReturn` afterApply
+
+  describe "generated Haskell presentation rewrite" $ do
+    it "keeps Template Haskell quotes and promoted ticks in Code" $ do
+      modernizeGeneratedHaskellSourceWithState "x = ''Foo\ny = sourceFile r\n"
+        `shouldBe` ("x = ''Foo\ny = file r\n", Code)
+      modernizeGeneratedHaskellSourceWithState "x = '[]\ny = sourceFile r\n"
+        `shouldBe` ("x = '[]\ny = file r\n", Code)
+      modernizeGeneratedHaskellSourceWithState "x = a --> sourceFile r\n"
+        `shouldBe` ("x = a --> file r\n", Code)
+    it "finishes every tracked Generated module in Code" $ do
+      (rootCode, repositoryRootOutput, rootError) <- readProcessWithExitCode "git" ["rev-parse", "--show-toplevel"] ""
+      rootCode `shouldBe` ExitSuccess
+      rootError `shouldBe` ""
+      let repositoryRoot = takeWhile (/= '\n') repositoryRootOutput
+      (filesCode, trackedOutput, filesError) <- readProcessWithExitCode "git" ["-C", repositoryRoot, "ls-files", "keiro-dsl/test"] ""
+      filesCode `shouldBe` ExitSuccess
+      filesError `shouldBe` ""
+      let generatedPaths = [path | path <- lines trackedOutput, "/Generated/" `isInfixOf` path]
+      generatedPaths `shouldSatisfy` (not . null)
+      forM_ generatedPaths $ \path -> do
+        source <- TIO.readFile (repositoryRoot </> path)
+        let (_, finalState) = modernizeGeneratedHaskellSourceWithState source
+        unless (finalState == Code) (expectationFailure (path <> " ended in " <> show finalState))
 
   describe "sidecar migration (EP-198)" $ do
     it "refuses old context names, applies lossless moves, preserves stale history, and is idempotent" $

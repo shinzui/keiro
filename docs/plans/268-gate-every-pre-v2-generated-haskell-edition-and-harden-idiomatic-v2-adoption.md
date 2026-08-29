@@ -63,7 +63,7 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
   retry, and a CLI round trip through the built binary.
 - [x] (2026-08-29T14:21:48Z) Milestone 5: update the user reference, the adoption guide, the downstream audit, the
   changelogs, ADR 15, and ADR 19, and validate all bundles.
-- [ ] Milestone 6: make the presentation rewriter robust to Template Haskell name quotes and
+- [x] (2026-08-29T14:32:59Z) Milestone 6: make the presentation rewriter robust to Template Haskell name quotes and
   promoted ticks, with an end-state test over the tracked corpus.
 - [ ] Final: run the full gate, regenerate the record inventories, record a follow-up review
   in `docs/reviews/`, and close the plan.
@@ -88,6 +88,14 @@ implementation. Provide concise evidence.
   the old ledger. Adding a harmless pre-adoption marker to every recorded Generated
   file before the backup made the apply overwrite every file and produced one backup
   conflict per generated path when only the ledger was restored.
+
+- Observation: The presentation rewriter was a library `other-modules` module, so the
+  separate test-suite component could not import the final-state accessor required by
+  the corpus regression test.
+  Evidence: Moving `Keiro.Dsl.GeneratedHaskellLanguage` to `exposed-modules` was the
+  only Cabal inventory change needed for `keiro-dsl-test` to import
+  `modernizeGeneratedHaskellSourceWithState`; the package already generated and used
+  this module internally.
 
 
 ## Decision Log
@@ -144,6 +152,14 @@ implementation. Provide concise evidence.
   cannot define both constructors with the same name in `Keiro.Dsl.ScaffoldRun`.
   Date: 2026-08-29
 
+- Decision: Expose `Keiro.Dsl.GeneratedHaskellLanguage` from the library together with
+  `RewriteState` and `modernizeGeneratedHaskellSourceWithState`.
+  Rationale: The plan requires a black-box corpus assertion from the separate test
+  component. Exposing the existing module gives that test the same rewriter entry point
+  consumers already exercise through generation, without duplicating the lexical state
+  machine or weakening the end-state assertion.
+  Date: 2026-08-29
+
 
 ## Outcomes & Retrospective
 
@@ -181,6 +197,14 @@ this section into docs/adr/. Keep task-local execution details here.
   attributable scanner, regenerated report, and rollback boundary. The ADR bundle
   passes strict profile and log enforcement with separate ADR-15 and ADR-19 entries;
   both user-documentation bundles validate and graph successfully.
+
+- Milestone 6 completed on 2026-08-29. The presentation rewriter now distinguishes
+  character literals from Template Haskell name quotes and promoted ticks, and applies
+  Haskell's symbol-character rule before treating a dash run as a line comment. Its
+  state-observing entry point is exported for regression testing. The focused group
+  passes with 2 examples and 0 failures, including every tracked Generated module
+  ending in `Code`; corpus regeneration selected all 39 invocations and reported zero
+  tracked changes.
 
 
 ## Context and Orientation
