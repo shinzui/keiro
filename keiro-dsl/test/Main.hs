@@ -13,7 +13,7 @@ import Data.Aeson.Types (parseEither)
 import Data.Either (isLeft, isRight)
 import Data.Foldable (toList)
 import Data.KindID qualified as KindID
-import Data.List (find, partition, permutations, sort, (\\))
+import Data.List (find, isInfixOf, partition, permutations, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -73,7 +73,7 @@ import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
 import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, projectionCatalogFactsForService, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), GeneratedHaskellEditionImpact (..), GeneratedHaskellEditionUse (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndMigrations, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), GeneratedHaskellEditionImpact (..), GeneratedHaskellEditionUse (..), HoleUseForm (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndMigrations, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.SemanticImpact qualified as SemanticImpact
@@ -5303,7 +5303,18 @@ main = hspec $ do
                 ]
         TIO.writeFile recordPath (renderRecord legacyRecord)
         originalHole <- TIO.readFile behaviorHole
-        let legacyHole = originalHole <> "\neditionMigrationProbe behaviorFailure = failureCode behaviorFailure\n"
+        let legacyHole =
+              originalHole
+                <> T.unlines
+                  [ "",
+                    "editionMigrationPrefix f = failureCode f",
+                    "editionMigrationQualified f = BC.failureCode f",
+                    "editionMigrationDot f = f.failureCode",
+                    "editionMigrationField f = f {failureCode = \"x\"}",
+                    "editionMigrationOperator fs = failureCode <$> fs",
+                    "-- failureCode f",
+                    "editionMigrationCurrent f = f.code"
+                  ]
         TIO.writeFile behaviorHole legacyHole
         beforeRefusal <- treeSnapshot out
         refused <- runAt False
@@ -5312,7 +5323,14 @@ main = hspec $ do
             (.fromEdition) impact == LegacyNamingV1
               && not (null ((.generatedPaths) impact))
               && length ((.sidecarPaths) impact) == 2
-              && any ((== "failureCode") . (.current)) ((.handOwnedUses) impact)
+              && Set.fromList [((.current) use, (.form) use) | use <- (.handOwnedUses) impact]
+                == Set.fromList
+                  [ ("failureCode", PrefixApplication),
+                    ("failureCode", QualifiedApplication),
+                    ("failureCode", RecordDotRenamed),
+                    ("failureCode", RecordFieldBinding),
+                    ("failureCode", OperatorOperand)
+                  ]
           _ -> False
         renderRefusals (either id (const []) refused)
           `shouldSatisfy` \lines' ->
@@ -5327,7 +5345,16 @@ main = hspec $ do
         adoptedRecord <- TIO.readFile recordPath
         adoptedRecord `shouldSatisfy` T.isInfixOf "naming-edition idiomatic-v2"
         remediation <- TIO.readFile (backupRoot </> "remediation-report.txt")
-        remediation `shouldSatisfy` T.isInfixOf "failureCode -> record.code"
+        remediation `shouldSatisfy` T.isInfixOf "failureCode (PrefixApplication) -> record.code"
+        remediation `shouldSatisfy` T.isInfixOf "attributable uses only"
+
+        backedUpFiles <- treeSnapshot backupRoot
+        forM_ backedUpFiles $ \(path, contents) ->
+          unless (path == "remediation-report.txt") (writeFileWithParents (out </> path) contents)
+        TIO.writeFile behaviorHole originalHole
+        _ <- runAt True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        refreshedRemediation <- TIO.readFile (backupRoot </> "remediation-report.txt")
+        refreshedRemediation `shouldSatisfy` T.isInfixOf "hand-owned-selector-uses: 0"
         rerun <- runAt False
         case rerun of
           Left failures -> expectationFailure (show failures)
@@ -5393,6 +5420,91 @@ main = hspec $ do
         executeWorkspaceScaffoldWithMigrations out False False False plan
           `shouldReturn` Left [LedgerUnreadable recordPath]
         treeSnapshot out `shouldReturn` before
+    it "refuses a tampered edition backup without changing the tree" $
+      withTempDirectory "keiro-dsl-tampered-edition-backup" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/behavior-complete.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (spec.context)
+            sourceLanguage = (.sourceLanguage) parsed
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planTestServiceScaffold ctx service)
+        let runAt applyEdition =
+              executeServiceScaffoldWithRuntimePackageAndMigrations Nothing False applyEdition out False "behavior-complete.keiro" sourceLanguage ctx service modules
+            recordPath = out </> recordFileName (spec.context)
+            backupRoot = out </> ".keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2"
+        _ <- runAt False >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        currentRecord <- TIO.readFile recordPath >>= maybe (fail "fresh record did not parse") pure . parseRecord
+        TIO.writeFile recordPath (renderRecord (scaffoldRecordWithEdition IdiomaticNamingV1 currentRecord))
+        _ <- runAt True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        backedUpFiles <- treeSnapshot backupRoot
+        forM_ backedUpFiles $ \(path, contents) ->
+          unless (path == "remediation-report.txt") (writeFileWithParents (out </> path) contents)
+        let generatedBackup =
+              head [path | (path, _) <- backedUpFiles, takeExtension path == ".hs"]
+        TIO.appendFile (backupRoot </> generatedBackup) "\n-- tampered\n"
+        beforeRefusal <- treeSnapshot out
+        refused <- runAt True
+        refused `shouldSatisfy` \case
+          Left [GeneratedHaskellEditionRefusal [reason]] -> T.pack generatedBackup `T.isInfixOf` reason
+          _ -> False
+        treeSnapshot out `shouldReturn` beforeRefusal
+    it "detects an interrupted apply while the ledger is pre-current and recovers after restoring backups" $
+      withTempDirectory "keiro-dsl-interrupted-edition-apply" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/behavior-complete.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (spec.context)
+            sourceLanguage = (.sourceLanguage) parsed
+        modules <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (planTestServiceScaffold ctx service)
+        let runAt applyEdition =
+              executeServiceScaffoldWithRuntimePackageAndMigrations Nothing False applyEdition out False "behavior-complete.keiro" sourceLanguage ctx service modules
+            recordRelative = recordFileName (spec.context)
+            recordPath = out </> recordRelative
+            backupRoot = out </> ".keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2"
+        _ <- runAt False >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        currentRecord <- TIO.readFile recordPath >>= maybe (fail "fresh record did not parse") pure . parseRecord
+        TIO.writeFile recordPath (renderRecord (scaffoldRecordWithEdition IdiomaticNamingV1 currentRecord))
+        forM_ [out </> path | (Generated, path) <- (.files) currentRecord] $ \path ->
+          TIO.appendFile path "\n-- pre-adoption edition bytes\n"
+        initialRefusal <- runAt False
+        generatedCount <- case initialRefusal of
+          Left [GeneratedHaskellEditionRequired impact] -> pure (length ((.generatedPaths) impact))
+          other -> expectationFailure (show other) >> fail "unreachable"
+        _ <- runAt True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        cleanApply <- treeSnapshot out
+        -- Conflict detection is active only while the ledger records a
+        -- pre-current edition; restoring just that ledger models interruption.
+        TIO.readFile (backupRoot </> recordRelative) >>= TIO.writeFile recordPath
+        interrupted <- runAt True
+        interrupted `shouldSatisfy` \case
+          Left [GeneratedHaskellEditionRefusal reasons] ->
+            length reasons == generatedCount && all (T.isInfixOf "edition backup conflict") reasons
+          _ -> False
+        backedUpFiles <- treeSnapshot backupRoot
+        forM_ backedUpFiles $ \(path, contents) ->
+          unless (path == "remediation-report.txt") (writeFileWithParents (out </> path) contents)
+        _ <- runAt True >>= either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure
+        treeSnapshot out `shouldReturn` cleanApply
+    it "drives the built CLI through refusal, apply, and idempotent rerun" $
+      withTempDirectory "keiro-dsl-edition-cli" $ \out -> do
+        let fixture = "test/fixtures/behavior-complete.keiro"
+        (initialCode, _, _) <- runKeiroDsl ["scaffold", fixture, "--out", out]
+        initialCode `shouldBe` ExitSuccess
+        spec <- specOf fixture
+        let recordPath = out </> recordFileName (spec.context)
+        currentRecord <- TIO.readFile recordPath
+        TIO.writeFile recordPath (T.replace "naming-edition idiomatic-v2" "naming-edition idiomatic-v1" currentRecord)
+        beforeRefusal <- treeSnapshot out
+        (refusalCode, _, refusalError) <- runKeiroDsl ["scaffold", fixture, "--out", out]
+        refusalCode `shouldBe` ExitFailure 1
+        refusalError `shouldSatisfy` isInfixOf "generated Haskell edition migration required: idiomatic-v1 -> idiomatic-v2"
+        treeSnapshot out `shouldReturn` beforeRefusal
+        (applyCode, _, _) <- runKeiroDsl ["scaffold", fixture, "--out", out, "--apply-generated-haskell-edition"]
+        applyCode `shouldBe` ExitSuccess
+        afterApply <- treeSnapshot out
+        (rerunCode, _, _) <- runKeiroDsl ["scaffold", fixture, "--out", out, "--apply-generated-haskell-edition"]
+        rerunCode `shouldBe` ExitSuccess
+        treeSnapshot out `shouldReturn` afterApply
 
   describe "sidecar migration (EP-198)" $ do
     it "refuses old context names, applies lossless moves, preserves stale history, and is idempotent" $

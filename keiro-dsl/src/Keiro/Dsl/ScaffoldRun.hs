@@ -8,6 +8,7 @@ module Keiro.Dsl.ScaffoldRun
     GeneratedArtifactImpact (..),
     GeneratedHaskellEditionImpact (..),
     GeneratedHaskellEditionUse (..),
+    HoleUseForm (..),
     PreparedGeneratedHaskellEditionMigration (..),
     StaleGeneratedEvidence (..),
     StaleModule (..),
@@ -193,8 +194,17 @@ data GeneratedHaskellEditionUse = GeneratedHaskellEditionUse
   { path :: !FilePath,
     line :: !Int,
     current :: !Text,
-    replacement :: !Text
+    replacement :: !Text,
+    form :: !HoleUseForm
   }
+  deriving stock (Eq, Ord, Show)
+
+data HoleUseForm
+  = PrefixApplication
+  | QualifiedApplication
+  | RecordDotRenamed
+  | RecordFieldBinding
+  | OperatorOperand
   deriving stock (Eq, Ord, Show)
 
 data GeneratedHaskellEditionImpact = GeneratedHaskellEditionImpact
@@ -859,11 +869,10 @@ preflightGeneratedHaskellEditionMigration out previousEdition recordedFiles side
           reportPath = backupRoot </> "remediation-report.txt"
           reportText = renderGeneratedHaskellEditionRemediation impact []
       conflicts <- fmap concat (mapM checkBackup backups)
-      reportConflicts <- checkReport reportPath reportText
       pure $
-        if null (conflicts <> reportConflicts)
+        if null conflicts
           then Right (Just (PreparedGeneratedHaskellEditionMigration impact backups reportPath reportText []))
-          else Left (conflicts <> reportConflicts)
+          else Left conflicts
   where
     relative path = out </> path
     existing path = do
@@ -877,13 +886,6 @@ preflightGeneratedHaskellEditionMigration out previousEdition recordedFiles side
           sourceBytes <- BS.readFile (relative sourcePath)
           backupBytes <- BS.readFile (relative backupPath)
           pure ["edition backup conflict for " <> T.pack sourcePath <> ": " <> T.pack backupPath <> " contains different bytes" | sourceBytes /= backupBytes]
-    checkReport path expected = do
-      exists <- doesFileExist (relative path)
-      if not exists
-        then pure []
-        else do
-          actual <- TIO.readFile (relative path)
-          pure ["edition remediation report conflict: " <> T.pack path <> " contains different bytes" | actual /= expected]
     scanFile labels path = do
       exists <- doesFileExist (relative path)
       if not exists
@@ -891,14 +893,19 @@ preflightGeneratedHaskellEditionMigration out previousEdition recordedFiles side
         else do
           contents <- TIO.readFile (relative path)
           pure
-            [ GeneratedHaskellEditionUse path lineNumber label (replacementFor label)
+            [ GeneratedHaskellEditionUse path lineNumber label (replacementFor label form) form
             | (lineNumber, sourceLine) <- zip [1 ..] (T.lines contents),
               label <- labels,
-              selectorApplication label sourceLine
+              form <- holeUsesOnLine label (replacementLabel label) sourceLine
             ]
-    replacementFor label = case lookup label idiomaticV2LabelMigrations of
-      Just target -> "record." <> target <> " (or a positional constructor pattern for dual-edition code)"
-      Nothing -> "record." <> label
+    replacementLabel label = maybe label id (lookup label idiomaticV2LabelMigrations)
+    replacementFor label = \case
+      RecordFieldBinding -> replacementLabel label <> " = ..."
+      RecordDotRenamed -> "record." <> replacementLabel label
+      _ ->
+        "record."
+          <> replacementLabel label
+          <> " (or a positional constructor pattern for dual-edition code)"
 
 applyPreparedGeneratedHaskellEditionMigration :: FilePath -> Maybe PreparedGeneratedHaskellEditionMigration -> IO ()
 applyPreparedGeneratedHaskellEditionMigration _ Nothing = pure ()
@@ -906,8 +913,7 @@ applyPreparedGeneratedHaskellEditionMigration out (Just prepared) = do
   mapM_ copyBackup ((.backups) prepared)
   let reportPath = out </> (.reportPath) prepared
   createDirectoryIfMissing True (takeDirectory reportPath)
-  reportExists <- doesFileExist reportPath
-  if reportExists then pure () else TIO.writeFile reportPath ((.reportText) prepared)
+  TIO.writeFile reportPath ((.reportText) prepared)
   where
     copyBackup (sourcePath, backupPath) = do
       let source = out </> sourcePath
@@ -942,25 +948,59 @@ renderGeneratedHaskellEditionRemediation impact sourceMoves =
     ]
       <> map renderUse ((.handOwnedUses) impact)
       <> map renderSourceMove sourceMoves
+      <> [attributableUsesCaveat]
   where
-    renderUse use = T.pack ((.path) use) <> ":" <> tshow ((.line) use) <> ": " <> (.current) use <> " -> " <> (.replacement) use
+    renderUse use =
+      T.pack ((.path) use)
+        <> ":"
+        <> tshow ((.line) use)
+        <> ": "
+        <> (.current) use
+        <> " ("
+        <> T.pack (show ((.form) use))
+        <> ") -> "
+        <> (.replacement) use
     renderSourceMove move = T.pack ((.oldPath) move) <> " -> " <> T.pack ((.newPath) move)
 
-selectorApplication :: Text -> Text -> Bool
-selectorApplication label = go Nothing
+attributableUsesCaveat :: Text
+attributableUsesCaveat =
+  "attributable uses only: unchanged concise labels and files outside the recorded Hole paths are not scanned; compile errors after adoption are the authority"
+
+holeUsesOnLine :: Text -> Text -> Text -> [HoleUseForm]
+holeUsesOnLine label target sourceLine
+  | "--" `T.isPrefixOf` T.stripStart sourceLine = []
+  | otherwise = go sourceLine
   where
-    go _ remaining | T.null remaining = False
-    go previous remaining = case T.breakOn label remaining of
-      (_, suffix) | T.null suffix -> False
+    go remaining | T.null remaining = []
+    go remaining = case T.breakOn label remaining of
+      (_, suffix) | T.null suffix -> []
       (prefix, suffix) ->
-        let before = if T.null prefix then previous else Just (T.last prefix)
+        let before = snd <$> T.unsnoc prefix
             after = T.drop (T.length label) suffix
             next = T.dropWhile (== ' ') after
             leftBoundary = maybe True (not . isHaskellIdentifier) before
             rightBoundary = maybe True (not . isHaskellIdentifier) (fst <$> T.uncons after)
             application = maybe False (\character -> character == '(' || isHaskellIdentifier character) (fst <$> T.uncons next)
-         in (leftBoundary && rightBoundary && before /= Just '.' && application)
-              || go (Just (T.head suffix)) (T.drop 1 suffix)
+            qualifier = T.takeWhileEnd isHaskellIdentifier (T.dropEnd 1 prefix)
+            qualified = before == Just '.' && maybe False isUpperAscii (fst <$> T.uncons qualifier) && application
+            recordDot =
+              before == Just '.'
+                && maybe False isLowerIdentifier (snd <$> T.unsnoc (T.dropEnd 1 prefix))
+                && target /= label
+            fieldBinding = unmatchedOpeningBrace prefix && "=" `T.isPrefixOf` next
+            operatorOperand = any (`T.isPrefixOf` next) ["<$>", "<&>", "$", ".", "&", "`"]
+            prefixApplication = before /= Just '.' && application
+            found
+              | leftBoundary && rightBoundary && qualified = [QualifiedApplication]
+              | leftBoundary && rightBoundary && recordDot = [RecordDotRenamed]
+              | leftBoundary && rightBoundary && fieldBinding = [RecordFieldBinding]
+              | leftBoundary && rightBoundary && operatorOperand = [OperatorOperand]
+              | leftBoundary && rightBoundary && prefixApplication = [PrefixApplication]
+              | otherwise = []
+         in found <> go (T.drop 1 suffix)
+    unmatchedOpeningBrace prefix = T.count "{" prefix > T.count "}" prefix
+    isUpperAscii character = character >= 'A' && character <= 'Z'
+    isLowerIdentifier character = character == '_' || character >= 'a' && character <= 'z' || character >= '0' && character <= '9'
     isHaskellIdentifier character = character == '_' || character == '\'' || character >= 'A' && character <= 'Z' || character >= 'a' && character <= 'z' || character >= '0' && character <= '9'
 
 -- | Check existing generated paths, then perform the deterministic writes and
@@ -1650,6 +1690,7 @@ renderRefusals allRefusals =
         <> map (("    " <>) . T.pack) ((.sidecarPaths) impact)
         <> ["  hand-owned selector uses: " <> tshow (length ((.handOwnedUses) impact))]
         <> map renderEditionUse ((.handOwnedUses) impact)
+        <> ["  " <> attributableUsesCaveat]
     render (GeneratedHaskellEditionRefusal reasons) =
       ["error: generated Haskell edition migration could not be applied safely; nothing was written"]
         <> map ("  " <>) reasons
@@ -1701,6 +1742,9 @@ renderRefusals allRefusals =
         <> tshow ((.line) use)
         <> ": "
         <> (.current) use
+        <> " ("
+        <> T.pack (show ((.form) use))
+        <> ")"
         <> " -> "
         <> (.replacement) use
 

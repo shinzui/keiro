@@ -56,10 +56,10 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
 - [x] (2026-08-29T14:07:00Z) Milestone 2: compose sidecar, source-name, and edition migrations in one explicit run
   for legacy-v1 trees; re-run the edition preflight after sidecar renames; list source
   moves in the report.
-- [ ] Milestone 3: widen the Hole scanner to the forms that break under v2, print the
+- [x] (2026-08-29T14:24:00Z) Milestone 3: widen the Hole scanner to the forms that break under v2, print the
   attributable-only caveat in refusal and report, and regenerate the report instead of
   treating it as conflict evidence.
-- [ ] Milestone 4: add examples for backup conflict, interrupted apply, tamper, rollback and
+- [x] (2026-08-29T14:24:00Z) Milestone 4: add examples for backup conflict, interrupted apply, tamper, rollback and
   retry, and a CLI round trip through the built binary.
 - [ ] Milestone 5: update the user reference, the adoption guide, the downstream audit, the
   changelogs, ADR 15, and ADR 19, and validate all bundles.
@@ -80,6 +80,14 @@ implementation. Provide concise evidence.
   Evidence: Both types live in `Keiro.Dsl.ScaffoldRun`; declaring the two constructors
   with the same name would produce a duplicate-constructor compile error before any
   behavior could be tested.
+
+- Observation: A ledger-only downgrade of a freshly generated v2 fixture does not by
+  itself model interrupted application bytes, because the generated files and the
+  edition backups are then identical.
+  Evidence: The first interrupted-apply example returned `Right` after restoring only
+  the old ledger. Adding a harmless pre-adoption marker to every recorded Generated
+  file before the backup made the apply overwrite every file and produced one backup
+  conflict per generated path when only the ledger was restored.
 
 
 ## Decision Log
@@ -158,6 +166,14 @@ this section into docs/adr/. Keep task-local execution details here.
   name-migration and generated-edition groups each pass with 4 examples and 0 failures;
   the realistic legacy tests cover no flags, name-only, both flags, sidecar backups,
   source backups, the combined diagnostic, and both scaffold paths.
+
+- Milestones 3 and 4 completed on 2026-08-29. Hole scanning now attributes prefix,
+  qualified, renamed record-dot, record-field, and operator-operand forms, labels each
+  use, skips comment-only lines and unchanged record-dot labels, and prints the lexical
+  scanner caveat in refusals and reports. Reports are regenerated on every apply and no
+  longer participate in conflict detection. The generated-edition group passes 7
+  examples and the composed name-migration group passes 4, covering rollback-and-retry,
+  tampered backups, interrupted apply, the real CLI boundary, and both legacy paths.
 
 
 ## Context and Orientation
