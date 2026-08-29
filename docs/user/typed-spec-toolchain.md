@@ -107,11 +107,12 @@ checks. Aggregate harnesses retain only evidence tied to their checked command,
 event, and register closure, so an unrelated aggregate does not acquire consumer
 imports or generated-byte churn from another aggregate's declaration change.
 
-The generated Haskell contract is GHC2024 with `OverloadedStrings` as its one
-shared default extension. Generated modules declare specialized extensions
-locally, and only when their emitted syntax needs them. Create-once hand-owned
-modules are outside that cleanup boundary and retain the pragmas they owned when
-they were created.
+The current generated Haskell contract is GHC2024 with
+`DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedRecordDot`, and
+`OverloadedStrings` as its four shared default extensions. Generated modules
+declare other specialized extensions locally, and only when their emitted syntax
+needs them. Create-once hand-owned modules are outside that cleanup boundary and
+retain the pragmas they owned when they were created.
 
 Generated Haskell naming is a separate, versioned presentation contract. Logical
 `snake_case` or camel-case declarations pass through one ASCII word segmentation:
@@ -1998,7 +1999,7 @@ version control or a fresh disposable scaffold. A stale generated file with an
 exact banner is a deletion candidate; a missing banner or any create-once path
 must be preserved for review.
 
-The one source-moving exception is an upgrade from a recorded legacy generated-name
+The two explicit migration exceptions begin with an upgrade from a recorded legacy generated-name
 edition. Ordinary scaffolding first refuses without mutation and prints every exact
 old/new/backup path. After review, rerun with `--apply-name-migrations`. Keiro preserves
 the original bytes below
@@ -2008,6 +2009,19 @@ Cabal-fragment and ledger paths. Source and transformed digests plus same-direct
 files make an interrupted source move resumable; changed backup, prepared, or destination
 bytes refuse with conflict evidence. The flag does not authorize unrelated stale,
 module-root, or layout moves, and `--force-generated-overwrite` cannot bypass it.
+
+The second exception adopts a recorded Generated Haskell presentation edition older
+than the current `idiomatic-v2` edition. Ordinary scaffolding refuses without changing
+the module tree and prints every recorded Generated path, both current sidecars, and
+lexically attributable uses in recorded Hole paths. Review the list, migrate hand-owned
+code, and rerun with `--apply-generated-haskell-edition`. Exact old bytes are retained
+under `.keiro-dsl-generated-haskell-migrations/<from>-to-idiomatic-v2/`, and the
+remediation report states that compile errors after adoption remain authoritative. A
+`legacy-v1` tree that also has old sidecar or module names requires both
+`--apply-name-migrations` and `--apply-generated-haskell-edition` in one run; the
+edition backup is taken before source moves and the report lists those moves. Backup
+conflict detection runs while the ledger still records the older edition. An existing
+ledger that cannot be parsed refuses before either migration or ordinary generation.
 
 ### Aggregate behavior evidence
 

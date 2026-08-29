@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Workspace scaffold history is workspace-keyed with attributable adoption
-description: Workspace scaffold history is service-keyed and attributable, while generated presentation-edition changes require explicit preflighted adoption with durable backups and never rewrite create-once record consumers.
-timestamp: 2026-08-23T13:29:23Z
+description: Workspace scaffold history is service-keyed and attributable, while every recorded pre-current generated presentation edition requires explicit preflighted adoption with durable backups and never rewrites create-once record consumers.
+timestamp: 2026-08-29T14:20:27Z
 docId: ADR-15
 status: Accepted
 date: 2026-07-29
@@ -164,29 +164,38 @@ deleted or listed in the current manifest/record; create-once bodies remain byte
 from exact code-token module references.
 
 **A generated presentation-edition change is also explicit, but does not rewrite hand-owned
-record consumers.** The accepted `idiomatic-v1` to `idiomatic-v2` change in ADR 0019 alters the
-generated record API and manifest defaults without moving modules. An ordinary scaffold against an
-`idiomatic-v1` ledger refuses before writes and reports the complete planned Generated/sidecar diff
-plus every exact use of a changed generated field API that it can attribute to a create-once
-module. The operator converts those hand-owned occurrences to
+record consumers.** The accepted `idiomatic-v2` change in ADR 0019 alters the generated record API
+and manifest defaults. An ordinary scaffold against any parsed ledger whose edition differs from
+the current edition refuses before writes; a missing edition row is parsed as `legacy-v1`, while an
+absent ledger is the only ungated case. A ledger file that exists but cannot be parsed refuses as
+corrupt history rather than being treated as absent. The edition refusal reports the recorded
+Generated paths and current sidecars plus every use of a changed generated field API that the
+lexical scanner can attribute to a recorded create-once module. The operator converts those
+hand-owned occurrences to
 positional constructor patterns or construction when the label changes, record-dot enabled locally
 while the v1 manifest is still active when the label is unchanged, or a preserved explicit newtype
 accessor. Constructor names, arity, and field order are preserved across this edition specifically
-so that positional bridging is available. The report is evidence and guidance, not authority to
-rewrite the file.
+so that positional bridging is available. Qualified applications, renamed record-dot reads, record
+field bindings, operator operands, and prefix applications are tagged in the report. The list is
+deliberately attributable rather than complete; compile errors after adoption remain authoritative.
+The report is evidence and guidance, not authority to rewrite the file.
 
 The operator then explicitly requests generated-Haskell edition adoption. The apply path reruns
 all ordinary overwrite, banner, package, workspace, and collision preflights; prepares the
 complete new Generated tree, ledger, and Cabal fragment; and copies the exact old Generated files
 and sidecars under
-`.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/` before same-filesystem
-installation. Existing byte-identical backups make an interrupted pre-installation copy
-idempotent; a source/backup byte conflict is an explicit refusal, and the ledger is installed last
-so a successful run alone records `idiomatic-v2`. The migration report is persisted beside those
-backups. The migration never edits, moves, or claims a Hole file. Reported occurrences and uses in
-application sources outside the attributable scaffold inventory remain ordinary compiler-checked
-PVP migration work; the durable backup supplies rollback rather than a false claim of whole-project
-source analysis.
+`.keiro-dsl-generated-haskell-migrations/<from>-to-idiomatic-v2/` before same-filesystem
+installation. A `legacy-v1` tree that also needs old sidecar or module-name migration must pass
+`--apply-name-migrations` and `--apply-generated-haskell-edition` in the same run. Sidecars move
+first so the ledger can be re-read; the edition backup is then taken at every recorded pre-move
+path; source moves run afterward and are listed in the remediation report. Existing byte-identical
+backups make an interrupted pre-installation copy idempotent; a source/backup byte conflict is an
+explicit refusal while the ledger records the older edition, and the ledger is installed last so a
+successful run alone records `idiomatic-v2`. The remediation report is regenerated on every apply
+and is not conflict evidence. The migration never edits, moves, or claims a Hole file. Reported
+occurrences and uses in application sources outside the attributable scaffold inventory remain
+ordinary compiler-checked PVP migration work; the durable backup supplies rollback rather than a
+false claim of whole-project source analysis.
 
 **Generated provenance has two permanently recognized banner forms.** Output
 created before the 0.9 generator uses the exact historical line

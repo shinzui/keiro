@@ -18,13 +18,22 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 - Scaffolded Haskell advances from `idiomatic-v1` to `idiomatic-v2`. Generated product
   selectors are removed or renamed to concise labels, and the Cabal fragment now
   defaults `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedRecordDot`, and
-  `OverloadedStrings`. Existing ledgers require an explicit
-  `--apply-generated-haskell-edition` run with durable v1 backups; ordinary scaffolding
-  refuses before writes. See the
+  `OverloadedStrings`. Every existing pre-v2 ledger, including a historical ledger with
+  no edition row, requires an explicit `--apply-generated-haskell-edition` run with
+  durable from-edition backups; a legacy tree that also needs sidecar or module-name
+  migration requires both apply flags in one run. Ordinary scaffolding refuses before
+  writes. See the
   [adoption guide](../docs/guides/adopting-keiro-dsl-idiomatic-v2.md).
 
 ### Other Changes
 
+- Scaffold now refuses before writes when a ledger file exists but cannot be parsed,
+  instead of treating corrupt history as absent.
+- Generated-edition remediation reports attribute prefix, qualified, renamed
+  record-dot, record-field, and operator-operand uses in recorded Hole files, while
+  stating that compile errors remain authoritative outside that lexical inventory.
+- `remediation-report.txt` is regenerated on every edition apply and no longer blocks a
+  rollback, Hole edit, and retry; immutable edition backups remain the conflict evidence.
 - JSON and wire keys, canonical/rendered output, diagnostics, fingerprints, `.keiro`
   language behavior, and runtime semantics are unchanged by the record migration.
 - The checked package and generated-edition inventories, extension-policy gate, and

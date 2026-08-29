@@ -17,7 +17,8 @@ and moves `DuplicateRecordFields`, `NoFieldSelectors`, and `OverloadedRecordDot`
 the generated Cabal fragment. Constructor names, constructor arity, field order,
 wire keys, SQL names, runtime identities, and `.keiro` meaning do not change.
 
-Ordinary scaffolding never upgrades an `idiomatic-v1` ledger silently.
+Ordinary scaffolding never upgrades a recorded pre-v2 ledger silently. A ledger with
+no `naming-edition` row is `legacy-v1`, not an untracked new tree.
 
 
 ## 1. Run the ordinary scaffold command
@@ -29,9 +30,28 @@ layout, and golden arguments as the project's normal command:
 keiro-dsl scaffold path/to/service.keiro-workspace --out path/to/src
 ```
 
-An `idiomatic-v1` ledger exits non-zero before writes. The refusal lists every
+An `idiomatic-v1` or `legacy-v1` ledger exits non-zero before writes. The refusal lists every
 recorded Generated path, the Cabal fragment and ledger, and attributable old selector
 uses in create-once files.
+
+
+## Legacy-v1 trees
+
+A historical tree may use old ledger/Cabal-fragment names, old generated module names,
+and a ledger with no edition row. Review the combined refusal, then run one command with
+both flags:
+
+```console
+keiro-dsl scaffold path/to/service.keiro-workspace \
+  --out path/to/src \
+  --apply-name-migrations \
+  --apply-generated-haskell-edition
+```
+
+The sidecars move first, the ledger is read again under its current name, the edition
+backup captures every recorded file at its pre-move path, and the generated-name move
+runs afterward under its separate backup. Passing either flag alone cannot complete a
+legacy migration; the refusal names both remaining operations.
 
 
 ## 2. Migrate hand-owned code first
@@ -65,10 +85,14 @@ The command reruns collision, banner, package, workspace, and overwrite prefligh
 Before overwriting, it copies every existing Generated file and both sidecars to:
 
 ```text
-path/to/src/.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/
+path/to/src/.keiro-dsl-generated-haskell-migrations/<from>-to-idiomatic-v2/
 ```
 
-The same directory contains `remediation-report.txt`. Create-once Hole files are not
+The backed-up set is every existing ledger-recorded Generated file plus the current
+ledger and Cabal fragment. A conformance package's own files are written after the
+ledger and are not part of this backup set. The same directory contains
+`remediation-report.txt`, which is regenerated on every apply and may be left in place
+during rollback and retry. Create-once Hole files are not
 copied, moved, rewritten, or claimed. A pre-existing backup with different bytes is a
 hard refusal. Repeating a successful run is an ordinary idempotent v2 scaffold.
 
@@ -95,16 +119,23 @@ JSON, SQL, fingerprint, and runtime observations are not.
 ## Roll back
 
 Stop scaffolding and restore each backed-up relative path from
-`.keiro-dsl-generated-haskell-migrations/idiomatic-v1-to-idiomatic-v2/` to the output
+`.keiro-dsl-generated-haskell-migrations/<from>-to-idiomatic-v2/` to the output
 root, including the Cabal fragment and ledger. Restore as a complete set; do not mix a
 v1 ledger or manifest with v2 Generated modules. The restored ledger again records
 `naming-edition idiomatic-v1`, so the current tool will refuse ordinary regeneration
 until a later explicit adoption. Version-control restoration is equally valid when it
 restores the same complete set.
 
+For a `legacy-v1` migration, also remove every source-move destination listed in
+`remediation-report.txt` and restore the moved originals from
+`.keiro-dsl-name-migrations/legacy-v1-to-idiomatic-v1/`. The remediation report itself
+does not need to be restored or removed.
+
 If an apply was interrupted, rerun only after inspecting the backup. The tool either
 continues from byte-identical backup evidence or refuses a source/backup conflict;
-rollback the complete set before retrying when it refuses.
+rollback the complete set before retrying when it refuses. This conflict check runs only
+while the ledger records the older edition; once the ledger says `idiomatic-v2`, an
+ordinary rerun does not reinterpret later application edits as migration conflicts.
 
 
 ## References

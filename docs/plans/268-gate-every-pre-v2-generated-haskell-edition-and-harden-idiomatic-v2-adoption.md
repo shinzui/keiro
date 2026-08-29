@@ -56,12 +56,12 @@ explicit, backup-backed adoption" becomes true for every ledger keiro-dsl ever w
 - [x] (2026-08-29T14:07:00Z) Milestone 2: compose sidecar, source-name, and edition migrations in one explicit run
   for legacy-v1 trees; re-run the edition preflight after sidecar renames; list source
   moves in the report.
-- [x] (2026-08-29T14:24:00Z) Milestone 3: widen the Hole scanner to the forms that break under v2, print the
+- [x] (2026-08-29T14:18:00Z) Milestone 3: widen the Hole scanner to the forms that break under v2, print the
   attributable-only caveat in refusal and report, and regenerate the report instead of
   treating it as conflict evidence.
-- [x] (2026-08-29T14:24:00Z) Milestone 4: add examples for backup conflict, interrupted apply, tamper, rollback and
+- [x] (2026-08-29T14:18:00Z) Milestone 4: add examples for backup conflict, interrupted apply, tamper, rollback and
   retry, and a CLI round trip through the built binary.
-- [ ] Milestone 5: update the user reference, the adoption guide, the downstream audit, the
+- [x] (2026-08-29T14:21:48Z) Milestone 5: update the user reference, the adoption guide, the downstream audit, the
   changelogs, ADR 15, and ADR 19, and validate all bundles.
 - [ ] Milestone 6: make the presentation rewriter robust to Template Haskell name quotes and
   promoted ticks, with an end-state test over the tracked corpus.
@@ -174,6 +174,13 @@ this section into docs/adr/. Keep task-local execution details here.
   longer participate in conflict detection. The generated-edition group passes 7
   examples and the composed name-migration group passes 4, covering rollback-and-retry,
   tampered backups, interrupted apply, the real CLI boundary, and both legacy paths.
+
+- Milestone 5 completed on 2026-08-29. The user reference, adoption guide, three
+  legacy downstream-audit rows, package and root changelogs, and ADRs 15 and 19 now
+  describe the implemented gate, one-run legacy composition, unreadable-ledger refusal,
+  attributable scanner, regenerated report, and rollback boundary. The ADR bundle
+  passes strict profile and log enforcement with separate ADR-15 and ADR-19 entries;
+  both user-documentation bundles validate and graph successfully.
 
 
 ## Context and Orientation

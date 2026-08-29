@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Generated Haskell has an explicit edition and local-extension contract
-description: The generated manifest owns a versioned presentation and compilation contract; idiomatic-v2 defaults DuplicateRecordFields, NoFieldSelectors, and OverloadedRecordDot while adoption remains explicit.
-timestamp: 2026-08-23T13:29:23Z
+description: The generated manifest owns a versioned presentation and compilation contract; idiomatic-v2 defaults DuplicateRecordFields, NoFieldSelectors, and OverloadedRecordDot while every recorded pre-v2 edition requires explicit adoption.
+timestamp: 2026-08-29T14:20:27Z
 docId: ADR-19
 status: Accepted
 date: 2026-08-03
@@ -87,15 +87,19 @@ collisions are check-time errors. A final lexical declaration inventory checks e
 modules and newly created hole stubs before writes, independently of external snake-case strings
 in their bodies.
 
-Moving from `idiomatic-v1` to `idiomatic-v2` is explicit adoption, not ordinary regeneration.
-Ordinary scaffolding refuses before writes and reports generated declarations plus hand-owned
-sources that still use the v1 product-field API. The separately authorized, backup-backed
-presentation-edition migration in ADR 0015 installs only after the relevant preflights pass. It
-never rewrites a create-once Hole body. A project first converts reported Hole uses to patterns,
-positional construction, record-dot for unchanged labels, or preserved explicit newtype accessors.
-The edition preserves constructor names, arity, and field order so label-renaming consumers have a
-source form that builds before and after adoption. Unresolved uses remain compiler errors rather
-than aliases or `FieldSelectors` escape hatches.
+Moving from any recorded pre-v2 edition to `idiomatic-v2` is explicit adoption, not ordinary
+regeneration. This includes `idiomatic-v1` and historical `legacy-v1` ledgers whose missing edition
+row parses as legacy history. Ordinary scaffolding refuses before writes and reports generated
+declarations plus attributable hand-owned sources that still use the older product-field API. A
+legacy tree that also needs sidecar or module-name migration composes both migrations in one run
+that requires both apply flags; it does not pass through an intermediate ledger edition. The
+separately authorized, backup-backed presentation-edition migration in ADR 0015 installs only after
+the relevant preflights pass. It never rewrites a create-once Hole body. A project first converts
+reported Hole uses to patterns, positional construction, record-dot for unchanged labels, or
+preserved explicit newtype accessors. The lexical report is attributable rather than exhaustive,
+and compile errors remain authoritative. The edition preserves constructor names, arity, and field
+order so label-renaming consumers have a source form that builds before and after adoption.
+Unresolved uses remain compiler errors rather than aliases or `FieldSelectors` escape hatches.
 
 Semantic occurrence planning inventories the exact transition-derived top-level helpers before
 rendering. If two live transitions would emit the same value declaration, the existing generated

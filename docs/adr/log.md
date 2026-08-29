@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-08-29
+* **Update**: ADR-19: make legacy-v1 and idiomatic-v1 explicit idiomatic-v2 adoption inputs with one-run legacy composition (ExecPlan 268).
+* **Update**: ADR-15: gate every recorded pre-current generated edition, compose legacy name migration, and regenerate remediation reports (ExecPlan 268).
+
 ## 2026-08-23
 * **Update**: Accept idiomatic-v2 generated records with DuplicateRecordFields, NoFieldSelectors, and OverloadedRecordDot defaults, explicit newtype accessors, and compiler-checked access (plan 177).
 * **Update**: Extend generated-Haskell adoption with an explicit, preflighted, backup-backed idiomatic-v1-to-idiomatic-v2 migration that never rewrites Hole bodies (plan 177).
