@@ -1223,9 +1223,9 @@ composeWorkspace manifestPath manifest supplied
     manifestLocation loc role = WorkspaceLocation WorkspaceManifestFile (max 1 (unLoc loc)) role
     memberLocation ref found role =
       WorkspaceLocation (WorkspaceMemberFile ((.path) ref)) (fromMaybe 1 found) role
-    sourceIndexFailureLine SourceIndexFailure {span} =
-      fmap (\SourceSpan {start = SourcePoint {line}} -> line) span
-    sourceIndexFailureLocation indexFailure@SourceIndexFailure {span} = case span of
+    sourceIndexFailureLine SourceIndexFailure {span = failureSpan} =
+      fmap (\SourceSpan {start = SourcePoint {line}} -> line) failureSpan
+    sourceIndexFailureLocation indexFailure@SourceIndexFailure {span = failureSpan} = case failureSpan of
       Just SourceSpan {source, start = SourcePoint {line}} -> WorkspaceLocation (WorkspaceMemberFile source) line ""
       Nothing -> WorkspaceLocation WorkspaceManifestFile 1 (sourceIndexFailureText indexFailure)
     sourceIndexFailureText SourceIndexFailure {code, message} =

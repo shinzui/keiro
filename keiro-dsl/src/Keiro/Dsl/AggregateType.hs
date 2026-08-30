@@ -303,22 +303,22 @@ aggregatePackages symbols resolved = case resolved of
     mappedHaskell (ResolvedOpaque declaration) = (.haskell) declaration
 
 aggregateSampleHaskell :: AggregateSymbols -> Text -> ResolvedAggregateType -> Text
-aggregateSampleHaskell symbols name resolved = case resolved of
-  AggregateText -> tshow ("sample-" <> name)
+aggregateSampleHaskell symbols sampleName resolved = case resolved of
+  AggregateText -> tshow ("sample-" <> sampleName)
   AggregateInt -> "0"
   AggregateInteger -> "0"
   AggregateBool -> "False"
   AggregateTime -> "(UTCTime (fromGregorian 2026 1 2) (picosecondsToDiffTime 11045123456789012))"
   AggregateNatural -> "0"
   AggregateNominal nominal -> nominalSample nominal
-  AggregateVertex name -> firstConstructor name
+  AggregateVertex vertexName -> firstConstructor vertexName
   AggregateMapped key -> case Map.lookup key ((.mapped) symbols) of
     Just declaration -> "(snd (NonEmpty.head (fixtureCases " <> unQualifiedValueName (mappedFixtures declaration) <> ")))"
     Nothing -> unMappedKey key <> ".sample"
   where
-    firstConstructor name = case Map.lookup name ((.vertices) symbols) of
+    firstConstructor vertexName = case Map.lookup vertexName ((.vertices) symbols) of
       Just (constructor : _) -> constructor
-      _ -> name
+      _ -> vertexName
     nominalSample nominal = case (.ownership) nominal of
       ConsumerNominal binding ->
         "(nominalFixtureDomain (NonEmpty.head (nominalFixtureCases "

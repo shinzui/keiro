@@ -85,12 +85,12 @@ instance ToJSON MappingIdentity where
         "codecIdentity" .= codecIdentity,
         "codecVersion" .= codecVersion
       ]
-  toJSON NominalMapping {specName, nominalCategory, nominalRepresentation, canonicalType, package, moduleName, valueType, bindingSymbol, bindingVersion, fixtureSymbol, initialSymbol} =
+  toJSON NominalMapping {specName, nominalCategory = resolvedNominalCategory, nominalRepresentation, canonicalType, package, moduleName, valueType, bindingSymbol, bindingVersion, fixtureSymbol, initialSymbol} =
     object
       [ "schema" .= (1 :: Int),
         "mode" .= ("nominal" :: Text),
         "specName" .= specName,
-        "category" .= nominalCategory,
+        "category" .= resolvedNominalCategory,
         "representation" .= nominalRepresentation,
         "canonicalType" .= canonicalType,
         "package" .= package,

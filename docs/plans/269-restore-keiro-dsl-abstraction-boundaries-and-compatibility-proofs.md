@@ -87,10 +87,19 @@ test findings from the 0.14-to-HEAD review only.
   boundary source-distribution aware. The final clean archive at
   `/tmp/keiro-dsl-sdist-test.AzgSaQ/keiro-dsl-0.14.0.0.tar.gz` passed all 719 examples with zero
   failures.
-- [x] (2026-08-30T13:59:23Z) Milestone 3: separate repository inventory policy from portable package tests and add exact
-  compatibility byte oracles.
-- [ ] Milestone 4: remove the record-migration warning regressions, distill the durable boundary,
-  and pass the full validation matrix.
+- [x] (2026-08-30T13:59:23Z) Milestone 3: separate repository inventory policy from portable
+  package tests and add exact compatibility byte oracles.
+- [x] (2026-08-30T14:24:52Z) Renamed the three library bindings that shadowed record labels or
+  Prelude names. Both libraries build with `-Werror=name-shadowing`; formatting, API-boundary,
+  inventory, extension, Cabal-package, and strict ADR validation all pass.
+- [x] (2026-08-30T14:24:52Z) Updated ADR 0038 and its OKF log to state that concise labels do not
+  widen constructor authority, prepared values preserve preflight provenance, and private Cabal
+  components provide implementation observability without public exposure.
+- [x] (2026-08-30T14:24:52Z) `just verify` passed the complete repository matrix, including all
+  719 `keiro-dsl` examples and 39 conformance-corpus invocations. A final archive at
+  `/tmp/keiro-dsl-final-sdist.lQjjUf/keiro-dsl-0.14.0.0.tar.gz` also passed all 719 examples.
+- [x] (2026-08-30T14:24:52Z) Milestone 4: remove the record-migration warning regressions, distill
+  the durable boundary, and pass the full validation matrix.
 
 
 ## Surprises & Discoveries
@@ -256,7 +265,27 @@ test findings from the 0.14-to-HEAD review only.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The package again represents checked authority in its types. Prepared sidecar and generated-edition
+migrations can be inspected and applied but cannot be fabricated by callers; the other types that
+were abstract in 0.14 are abstract again with explicit supported projections. Sidecar application
+is total over the prepared value, so the previously reachable `error` branch no longer exists.
+
+The generated-Haskell lexical implementation remains directly exercised by package tests through
+one private named library and is absent from the installed public module surface. The executable
+API-boundary policy protects the repaired constructors and fails closed for future public
+`Prepared*` records.
+
+Compatibility evidence now says exactly what it proves. Repository inventories are one explicit
+`record-migration-policy` omission detector, while package tests freeze the check-report JSON,
+diff-report JSON, behavior-obligations JSON, single-file ledger, and workspace ledger as exact
+bytes. The complete fixture corpus and component-aware compile probes make those package tests pass
+from an unpacked source archive without the repository's scripts, Git index, or sibling fixture
+directories.
+
+Final validation passed: strict shadowing compilation, formatting, all three repository policies,
+`cabal check`, strict ADR validation, the complete `just verify` matrix, and a fresh 719-example
+source-distribution run. The work intentionally leaves versions, bounds, release notes, tags, and
+publishing unchanged for a later release-preparation plan.
 
 
 ## Context and Orientation
