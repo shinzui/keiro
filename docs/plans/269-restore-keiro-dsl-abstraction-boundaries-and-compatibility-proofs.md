@@ -77,7 +77,17 @@ test findings from the 0.14-to-HEAD review only.
   suites, and `git diff --check` all pass.
 - [x] (2026-08-30T12:45:35Z) Milestone 2: made the generated-Haskell language implementation
   package-private and added an executable public-boundary policy.
-- [ ] Milestone 3: separate repository inventory policy from portable package tests and add exact
+- [x] (2026-08-30T13:33:33Z) Removed the three repository-script Hspec aliases, added the honest
+  `record-migration-policy` repository gate, and replaced broad compatibility claims with five
+  separately named exact byte oracles. The focused check-report, diff-report, and record-migration
+  groups pass, as do all 719 main-suite examples and every `keiro-dsl:tests` conformance component.
+- [x] (2026-08-30T13:59:23Z) The first unpacked-sdist run proved the new byte fixtures portable but
+  exposed nine older repository-layout assumptions. Packaged the complete test corpus and made the
+  Git scan, consumer compilation probes, generic failure fixtures, and sibling-package integration
+  boundary source-distribution aware. The final clean archive at
+  `/tmp/keiro-dsl-sdist-test.AzgSaQ/keiro-dsl-0.14.0.0.tar.gz` passed all 719 examples with zero
+  failures.
+- [x] (2026-08-30T13:59:23Z) Milestone 3: separate repository inventory policy from portable package tests and add exact
   compatibility byte oracles.
 - [ ] Milestone 4: remove the record-migration warning regressions, distill the durable boundary,
   and pass the full validation matrix.
@@ -125,6 +135,40 @@ test findings from the 0.14-to-HEAD review only.
 
   ```text
   exposed-modules: Keiro.Dsl.GeneratedHaskellLanguage
+  ```
+
+- Observation: The existing check-report and diff-report text goldens carried a final newline only
+  because their previous assertions stripped trailing whitespace. The CLI and `Aeson.encode`
+  produce no final newline.
+  Evidence: the first exact check-report comparison differed only by byte 0x0a at EOF.
+
+- Observation: Cabal rejects an extensionless `test/**/*` `extra-source-files` glob as
+  non-portable, and an unpacked package has no repository `cabal.project` to enable tests.
+  Evidence: `cabal check` reported `glob-syntax-error`; the first standalone invocation required
+  `cabal test --enable-tests keiro-dsl-test` before the solver included the test component.
+
+- Observation: After packaging the fixture corpus, the first archive-only main-suite run reached
+  710 passes and nine failures. All nine were older repository assumptions: two Git/worktree
+  queries, two ad-hoc GHC package-environment probes, four sibling `keiro-core` fixture paths, and
+  one nested build whose project named sibling source packages.
+  Evidence:
+
+  ```text
+  Finished in 21.8467 seconds
+  719 examples, 9 failures
+  ```
+
+- Observation: Selecting `-package keiro-core` fixed repository compile probes but exposed every
+  installed unit with that package name in a standalone build. The second archive reduced the
+  failures to the six compile probes, all reporting ambiguous `keiro-core-0.14.0.0` modules.
+  Reading Cabal's `dist-newstyle/cache/plan.json` selects the one configured library unit in both
+  layouts: `keiro-core-0.14.0.0-inplace` in the repository and `kr-cr-0.14.0.0-ec1d0c37` in the
+  source archive.
+  Evidence:
+
+  ```text
+  Finished in 22.6571 seconds
+  719 examples, 0 failures
   ```
 
 
@@ -183,6 +227,30 @@ test findings from the 0.14-to-HEAD review only.
   beneath the importing component's home-module search path. Physical source-root separation makes
   the ownership literal, compiles the implementation once, and preserves the intended private
   package boundary.
+  Date: 2026-08-30
+
+- Decision: Freeze direct serializer bytes for the three JSON oracles, including the absence of a
+  final newline, and retain semantic decoding/assertions beside every exact comparison.
+  Rationale: This matches the established `Aeson.encodeFile` and `Aeson.encode` output instead of
+  preserving a newline introduced by text-file tooling. The ledger renderers continue to freeze
+  their intentional `Text.unlines` newline.
+  Date: 2026-08-30
+
+- Decision: Ship the complete package test corpus through extension-scoped `extra-source-files`
+  globs and make compile probes use `cabal exec --enable-tests` plus the exact configured
+  `keiro-core` unit ID from Cabal's build plan.
+  Rationale: A published package test must select the test component's exact dependency units and
+  must not depend on the repository's package environment, Git index, or sibling test directories.
+  The Git diff example now creates its own temporary repository, generic failures synthesize their
+  small consumer modules, and the generated-module scan walks the shipped test tree.
+  Date: 2026-08-30
+
+- Decision: Keep the generated service-package compilation as a repository integration proof, while
+  running its package-owned scaffold and immutable-Expectations assertions in the source
+  distribution.
+  Rationale: That final compilation intentionally targets current sibling `keiro` and `keiro-core`
+  source packages and can deadlock when nested beneath the standalone package's Cabal test. The
+  package-local behavior remains exercised without pretending sibling source belongs in the sdist.
   Date: 2026-08-30
 
 
@@ -547,7 +615,7 @@ SDIST_ROOT=$(tar -tzf "$SDIST_PATH" | sed -n '1s#/.*##p')
 test -n "$SDIST_ROOT"
 tar -xzf "$SDIST_PATH" -C "$SDIST_DIR"
 cd "$SDIST_DIR/$SDIST_ROOT"
-cabal test keiro-dsl-test
+cabal test --enable-tests keiro-dsl-test
 ```
 
 The test must pass without `record migration inventory generator is not available` and without
@@ -563,7 +631,7 @@ nix fmt
 python3 scripts/check-keiro-dsl-api-boundaries.py
 python3 scripts/generate-record-migration-manifests.py --check
 scripts/check-extension-policy.sh
-cabal check keiro-dsl
+(cd keiro-dsl && cabal check)
 okf log add docs/adr --kind Update -m "Restore the abstract constructor boundary while retaining concise keiro-dsl record labels (plan 269)."
 okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 just verify

@@ -10,6 +10,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
+import Data.ByteString qualified as BS
 import Data.Either (isLeft, isRight)
 import Data.Foldable (toList)
 import Data.KindID qualified as KindID
@@ -19,6 +20,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as LazyText
 import Data.Text.Lazy.Encoding qualified as LazyTextEncoding
@@ -68,7 +70,6 @@ import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractIdentity (..), QueryContractPosition (..), queryContractIdentities)
 import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.RecordMigration (recordMigrationSpec)
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
@@ -95,7 +96,7 @@ import Keiro.Dsl.WorkspaceRecord
 import Keiro.Dsl.WorkspaceRecord qualified as WorkspaceRecord
 import Keiro.Dsl.WorkspaceScaffold
 import Paths_keiro_dsl qualified as Package
-import System.Directory (canonicalizePath, createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly, renameFile)
+import System.Directory (canonicalizePath, createDirectory, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, getTemporaryDirectory, listDirectory, removeFile, removePathForcibly, renameFile, withCurrentDirectory)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath (takeDirectory, takeExtension, takeFileName, (</>))
@@ -167,7 +168,6 @@ main = hspec $ do
   frontendCompatibilitySpec
   frontendSurfaceSpec
   frontendProfilesSpec
-  recordMigrationSpec
 
   describe "mapped consumer surface" $ do
     it "parses and canonically round-trips Language 5 queue and query expressions as atomic forms" $ do
@@ -1183,7 +1183,7 @@ main = hspec $ do
           deniedErr `shouldContain` "check: 1 warning(s) escalated to failure (denied: WqUnloggedDurability)"
 
   describe "check report" $ do
-    it "writes the source failure report and matches the public-CLI golden" $ do
+    it "writes exact check report JSON bytes and retains semantic assertions" $ do
       withTempDirectory "keiro-dsl-check-report-floor" $ \out -> do
         let reportPath = out </> "report.json"
         (exitCode, stdoutText, _) <-
@@ -1197,10 +1197,9 @@ main = hspec $ do
             ]
         exitCode `shouldBe` ExitFailure 1
         stdoutText `shouldBe` ""
+        reportBytes <- BS.readFile reportPath
+        assertMatchesByteGolden "test/fixtures/check-report/legacy-min-language.golden.json" reportBytes
         report <- decodeJsonValue reportPath
-        goldenPath <- resolveTestPath "test/fixtures/check-report/legacy-min-language.golden.json"
-        golden <- decodeJsonValue goldenPath
-        report `shouldBe` golden
         jsonField "schema" report `shouldBe` Just (Aeson.String "keiro-dsl/check-report/1")
         jsonField "kind" report `shouldBe` Just (Aeson.String "source")
         jsonField "ok" report `shouldBe` Just (Aeson.Bool False)
@@ -1813,11 +1812,23 @@ main = hspec $ do
           scaffoldErr `shouldContain` "language contract: effective keiro-dsl"
           scaffoldErr `shouldContain` "firewall: OK"
 
-    it "notices only the working-tree contract during diff" $ do
-      (diffCode, _, diffErr) <- runKeiroDsl ["diff", "test/fixtures/language-v1.keiro", "--since", "HEAD"]
-      diffCode `shouldBe` ExitSuccess
-      T.count "language contract:" (T.pack diffErr) `shouldBe` 1
-      diffErr `shouldContain` "language contract: effective keiro-dsl 1 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
+    it "notices only the working-tree contract during diff" $
+      withTempDirectory "keiro-dsl-language-diff" $ \repository -> do
+        source <- readTestText "test/fixtures/language-v1.keiro"
+        TIO.writeFile (repository </> "language.keiro") source
+        let git arguments = readProcessWithExitCode "git" ("-C" : repository : arguments) ""
+        forM_
+          [ ["init", "--quiet"],
+            ["add", "language.keiro"],
+            ["-c", "user.name=keiro-dsl-test", "-c", "user.email=keiro-dsl-test@example.invalid", "commit", "--quiet", "-m", "test: capture language contract baseline"]
+          ]
+          $ \arguments -> do
+            (gitCode, gitOut, gitErr) <- git arguments
+            unless (gitCode == ExitSuccess) (expectationFailure (gitOut <> gitErr))
+        (diffCode, _, diffErr) <- withCurrentDirectory repository (runKeiroDsl ["diff", "language.keiro", "--since", "HEAD"])
+        diffCode `shouldBe` ExitSuccess
+        T.count "language contract:" (T.pack diffErr) `shouldBe` 1
+        diffErr `shouldContain` "language contract: effective keiro-dsl 1 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/1)"
 
     it "preserves a workspace member's source-selection code beneath outer attribution" $ do
       let manifest = "service demo\nspec domain/future.keiro\n"
@@ -2939,18 +2950,20 @@ main = hspec $ do
                 "bad = OrderId \"ord_LEGACY-NOT-TYPEID\""
               ]
           )
+        keiroCorePackageId <- activeCabalPackageId "keiro-core"
         (exitCode, standardOutput, standardError) <-
           readProcessWithExitCode
             "cabal"
             [ "exec",
+              "--enable-tests",
               "--",
               "ghc",
               "-XGHC2024",
               "-XOverloadedStrings",
               "-fno-code",
               "-fforce-recomp",
-              "-package",
-              "keiro-core",
+              "-package-id",
+              keiroCorePackageId,
               "-outputdir",
               ghcOutput,
               "-i" <> out,
@@ -3464,32 +3477,59 @@ main = hspec $ do
         normalizeGenerated committed `shouldBe` normalizeGenerated ((.text) generatedModule)
 
   describe "behavior obligations" $ do
-    it "joins every source-stable behavior origin to one exact source position" $ do
-      source <- readTestText "test/fixtures/behavior-complete.keiro"
-      document <- case parseSourceDocument "test/fixtures/behavior-complete.keiro" source of
-        Left failure -> expectationFailure (show failure) >> fail "unreachable"
-        Right value -> pure value
-      let ParsedSourceDocument {parsedSource = parsedSource, sourceIndex = sourceIndex} = document
-          spec = checkedSpec (checkedSource parsedSource)
-      requirements <- either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure (Behavior.deriveBehaviorRequirements spec)
-      entries <- either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure (BehaviorSource.planBehaviorSourceMap requirements sourceIndex)
-      map (.key) entries `shouldBe` map (.key) requirements
-      entries `shouldSatisfy` all ((== "test/fixtures/behavior-complete.keiro") . (.file))
-      entries `shouldSatisfy` all ((>= 1) . (.line))
-      entries `shouldSatisfy` all ((>= 1) . (.column))
-      let exactJson =
-            Behavior.encodeBehaviorObligationsJson
-              (Behavior.BehaviorObligationsReport "test/fixtures/behavior-complete.keiro" Nothing (BehaviorSource.attachBehaviorSourceLocations entries requirements))
-          exactText =
-            Behavior.renderBehaviorObligationsText
-              (Behavior.BehaviorObligationsReport "test/fixtures/behavior-complete.keiro" Nothing (BehaviorSource.attachBehaviorSourceLocations entries requirements))
-      exactJson `shouldSatisfy` T.isInfixOf "\"quality\":\"exact\""
-      exactJson `shouldSatisfy` T.isInfixOf "\"column\":"
-      exactJson `shouldSatisfy` T.isInfixOf "\"file\":\"test/fixtures/behavior-complete.keiro\""
-      exactText `shouldSatisfy` T.isInfixOf "test/fixtures/behavior-complete.keiro:"
-      exactText `shouldSatisfy` T.isInfixOf "[location-quality=exact]"
-      [(.origin) requirement | requirement <- requirements, (.kind) requirement == Behavior.RequiredRejection]
-        `shouldSatisfy` all (\case Behavior.RejectionRequirementOrigin "Journey" _ -> True; _ -> False)
+    describe "record migration byte contracts" $ do
+      it "joins every source-stable behavior origin to one exact source position and freezes behavior-obligations JSON bytes" $ do
+        source <- readTestText "test/fixtures/behavior-complete.keiro"
+        document <- case parseSourceDocument "test/fixtures/behavior-complete.keiro" source of
+          Left failure -> expectationFailure (show failure) >> fail "unreachable"
+          Right value -> pure value
+        let ParsedSourceDocument {parsedSource = parsedSource, sourceIndex = sourceIndex} = document
+            spec = checkedSpec (checkedSource parsedSource)
+        requirements <- either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure (Behavior.deriveBehaviorRequirements spec)
+        entries <- either (\errors -> expectationFailure (show errors) >> fail "unreachable") pure (BehaviorSource.planBehaviorSourceMap requirements sourceIndex)
+        map (.key) entries `shouldBe` map (.key) requirements
+        entries `shouldSatisfy` all ((== "test/fixtures/behavior-complete.keiro") . (.file))
+        entries `shouldSatisfy` all ((>= 1) . (.line))
+        entries `shouldSatisfy` all ((>= 1) . (.column))
+        let exactRequirements = BehaviorSource.attachBehaviorSourceLocations entries requirements
+            exactJson =
+              Behavior.encodeBehaviorObligationsJson
+                (Behavior.BehaviorObligationsReport "test/fixtures/behavior-complete.keiro" Nothing exactRequirements)
+            exactText =
+              Behavior.renderBehaviorObligationsText
+                (Behavior.BehaviorObligationsReport "test/fixtures/behavior-complete.keiro" Nothing exactRequirements)
+            exactBytes = TextEncoding.encodeUtf8 exactJson
+        assertMatchesByteGolden "test/fixtures/record-migration/behavior-obligations.exact.json.golden" exactBytes
+        case Aeson.eitherDecodeStrict' exactBytes of
+          Left failure -> expectationFailure ("behavior-obligations JSON did not decode: " <> failure)
+          Right value -> do
+            jsonField "schema" value `shouldBe` Just (Aeson.String "keiro-dsl/behavior-obligations/1")
+            case jsonField "requirements" value of
+              Just (Aeson.Array encodedRequirements) -> length encodedRequirements `shouldBe` length requirements
+              other -> expectationFailure ("expected behavior requirements array, got " <> show other)
+        exactJson `shouldSatisfy` T.isInfixOf "\"quality\":\"exact\""
+        exactJson `shouldSatisfy` T.isInfixOf "\"column\":"
+        exactJson `shouldSatisfy` T.isInfixOf "\"file\":\"test/fixtures/behavior-complete.keiro\""
+        exactText `shouldSatisfy` T.isInfixOf "test/fixtures/behavior-complete.keiro:"
+        exactText `shouldSatisfy` T.isInfixOf "[location-quality=exact]"
+        [(.origin) requirement | requirement <- requirements, (.kind) requirement == Behavior.RequiredRejection]
+          `shouldSatisfy` all (\case Behavior.RejectionRequirementOrigin "Journey" _ -> True; _ -> False)
+
+      it "freezes representative single-file scaffold ledger bytes and parses the golden" $ do
+        (singleRecord, _) <- representativeRecordMigrationContracts
+        let rendered = renderRecord singleRecord
+            renderedBytes = TextEncoding.encodeUtf8 rendered
+        assertMatchesByteGolden "test/fixtures/record-migration/single-file-scaffold-record.ledger.golden" renderedBytes
+        golden <- readTestText "test/fixtures/record-migration/single-file-scaffold-record.ledger.golden"
+        parseRecord golden `shouldBe` Just singleRecord
+
+      it "freezes representative workspace scaffold ledger bytes and parses the golden" $ do
+        (_, workspaceRecord) <- representativeRecordMigrationContracts
+        let rendered = renderWorkspaceRecord workspaceRecord
+            renderedBytes = TextEncoding.encodeUtf8 rendered
+        assertMatchesByteGolden "test/fixtures/record-migration/workspace-scaffold-record.ledger.golden" renderedBytes
+        golden <- readTestText "test/fixtures/record-migration/workspace-scaffold-record.ledger.golden"
+        parseWorkspaceRecord golden `shouldBe` Just workspaceRecord
 
     it "refuses line-only, missing, and duplicate behavior source anchors before writes" $
       withTempDirectory "keiro-dsl-source-anchor-refusal" $ \out -> do
@@ -5563,17 +5603,10 @@ main = hspec $ do
       modernizeGeneratedHaskellSourceWithState "x = a --> sourceFile r\n"
         `shouldBe` ("x = a --> file r\n", Code)
     it "finishes every tracked Generated module in Code" $ do
-      (rootCode, repositoryRootOutput, rootError) <- readProcessWithExitCode "git" ["rev-parse", "--show-toplevel"] ""
-      rootCode `shouldBe` ExitSuccess
-      rootError `shouldBe` ""
-      let repositoryRoot = takeWhile (/= '\n') repositoryRootOutput
-      (filesCode, trackedOutput, filesError) <- readProcessWithExitCode "git" ["-C", repositoryRoot, "ls-files", "keiro-dsl/test"] ""
-      filesCode `shouldBe` ExitSuccess
-      filesError `shouldBe` ""
-      let generatedPaths = [path | path <- lines trackedOutput, "/Generated/" `isInfixOf` path]
-      generatedPaths `shouldSatisfy` (not . null)
-      forM_ generatedPaths $ \path -> do
-        source <- TIO.readFile (repositoryRoot </> path)
+      testTree <- treeSnapshot "test"
+      let generatedSources = [(path, source) | (path, source) <- testTree, "/Generated/" `isInfixOf` ("/" <> path)]
+      generatedSources `shouldSatisfy` (not . null)
+      forM_ generatedSources $ \(path, source) -> do
         let (_, finalState) = modernizeGeneratedHaskellSourceWithState source
         unless (finalState == Code) (expectationFailure (path <> " ended in " <> show finalState))
 
@@ -7906,7 +7939,7 @@ main = hspec $ do
       [(.code) k | Breaking k <- changed] `shouldContain` [ContractFieldChanged]
       added <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldadd.keiro"
       [(.code) k | Breaking k <- added] `shouldContain` [ContractFieldChanged]
-    it "goldens language-3 to language-4 contract TypeID admission and rollout" $ do
+    it "freezes the contract TypeID diff report byte contract and rollout" $ do
       let source versionNumber prefix =
             T.unlines
               [ "language keiro-dsl " <> T.pack (show versionNumber),
@@ -7932,7 +7965,7 @@ main = hspec $ do
           jsonGolden = LazyText.toStrict (LazyTextEncoding.decodeUtf8 (Aeson.encode (diffReport defaultGate changes)))
           findings = [kind | Breaking kind <- changes, (.code) kind == ContractTypeIdDomainChanged]
       assertMatchesGolden "test/fixtures/contract-typeid-domain.diff.golden" textGolden
-      assertMatchesGolden "test/fixtures/contract-typeid-domain.diff.json.golden" jsonGolden
+      assertMatchesByteGolden "test/fixtures/contract-typeid-domain.diff.json.golden" (TextEncoding.encodeUtf8 jsonGolden)
       case findings of
         [finding] -> do
           verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
@@ -8331,26 +8364,31 @@ main = hspec $ do
       withTempDirectory "keiro-dsl-binding-compiles" $ \out -> do
         spec <- specOf "test/fixtures/structural-conformance.keiro"
         let ctx = defaultContext (spec.context)
-            bindingSource = out </> "Conformance/Structural/Bindings.hs"
             ghcOutput = out </> ".ghc"
+            domainSource = out </> "Conformance/Structural/Domain.hs"
         _ <- executePlannedScaffold out "structural-conformance.keiro" ctx spec
+        readTestText "test/conformance-structural/Conformance/Structural/Domain.hs"
+          >>= writeFileWithParents domainSource
         createDirectoryIfMissing True ghcOutput
+        keiroCorePackageId <- activeCabalPackageId "keiro-core"
         (exitCode, standardOutput, standardError) <-
           readProcessWithExitCode
             "cabal"
             [ "exec",
+              "--enable-tests",
               "--",
               "ghc",
               "-XGHC2024",
               "-XOverloadedStrings",
               "-fno-code",
               "-fforce-recomp",
+              "-package-id",
+              keiroCorePackageId,
               "-outputdir",
               ghcOutput,
               "-i" <> out,
               "-itest/conformance-structural",
-              "-i../keiro-core/src",
-              bindingSource
+              out </> "Conformance/Structural/Bindings.hs"
             ]
             ""
         unless (exitCode == ExitSuccess) $
@@ -9456,31 +9494,40 @@ main = hspec $ do
             projectPath = base </> "mutation.project"
             buildDirectory = base </> "dist-newstyle"
             packageRoot = out </> "keiro-dsl-conformance.workspace.workspace-proof"
-        TIO.writeFile
-          projectPath
-          ( T.unlines
-              [ "packages:",
-                "  " <> T.pack (repositoryRoot </> "keiro"),
-                "  " <> T.pack (repositoryRoot </> "keiro-core"),
-                "  " <> T.pack (copied </> "runtime"),
-                "  " <> T.pack packageRoot,
-                "",
-                "allow-newer:",
-                "  haxl:time"
-              ]
-          )
-        (testCode, testOut, testErr) <-
-          readProcessWithExitCode
-            "cabal"
-            [ "test",
-              "--project-file=" <> projectPath,
-              "--builddir=" <> buildDirectory,
-              "keiro-workspace-proof-conformance"
+        localSourcePackages <-
+          filterM
+            doesDirectoryExist
+            [ repositoryRoot </> "keiro",
+              repositoryRoot </> "keiro-core"
             ]
-            ""
-        testCode `shouldNotBe` ExitSuccess
-        (testOut <> testErr)
-          `shouldSatisfy` isInfixOfString "FAIL  workflow/WorkspaceProofWorkflow/name expected=\"workspace-proof-workflow\" actual=\"workspace-proof-workflow-v2\""
+        -- Compiling this generated package is a repository integration proof:
+        -- it deliberately builds against the sibling keiro and keiro-core
+        -- source packages. The package-owned scaffold and immutable-
+        -- Expectations assertions above remain active in an unpacked sdist.
+        unless (null localSourcePackages) $ do
+          let packageRoots = localSourcePackages <> [copied </> "runtime", packageRoot]
+          TIO.writeFile
+            projectPath
+            ( T.unlines $
+                ["packages:"]
+                  <> map (("  " <>) . T.pack) packageRoots
+                  <> [ "",
+                       "allow-newer:",
+                       "  haxl:time"
+                     ]
+            )
+          (testCode, testOut, testErr) <-
+            readProcessWithExitCode
+              "cabal"
+              [ "test",
+                "--project-file=" <> projectPath,
+                "--builddir=" <> buildDirectory,
+                "keiro-workspace-proof-conformance"
+              ]
+              ""
+          testCode `shouldNotBe` ExitSuccess
+          (testOut <> testErr)
+            `shouldSatisfy` isInfixOfString "FAIL  workflow/WorkspaceProofWorkflow/name expected=\"workspace-proof-workflow\" actual=\"workspace-proof-workflow-v2\""
 
   describe "new <kind> skeletons (M5)" $ do
     forM_ skeletonKinds $ \skeletonKind ->
@@ -12021,28 +12068,92 @@ mapWorkspaceSpec transform workspace =
     workspace
 
 expectGenericCompileFailure :: FilePath -> String -> Expectation
-expectGenericCompileFailure fixture expectedDiagnostic = do
-  let fixtureDir = "../keiro-core/test/compile-fail" </> fixture
-      fixtureSource = fixtureDir </> "Fixture.hs"
-  (exitCode, standardOutput, standardError) <-
-    readProcessWithExitCode
-      "cabal"
-      [ "exec",
-        "--",
-        "ghc",
-        "-XGHC2024",
-        "-fno-code",
-        "-fforce-recomp",
-        "-i../keiro-core/src",
-        "-i" <> fixtureDir,
-        fixtureSource
-      ]
-      ""
-  exitCode `shouldSatisfy` (/= ExitSuccess)
-  let compilerOutput = standardOutput <> standardError
-  compilerOutput `shouldContain` expectedDiagnostic
-  compilerOutput `shouldContain` "Run keiro-dsl scaffold and fill the binding by hand at this error location in the scaffolded module."
-  compilerOutput `shouldContain` fixtureSource
+expectGenericCompileFailure fixture expectedDiagnostic =
+  withTempDirectory ("keiro-dsl-generic-" <> fixture) $ \fixtureDir -> do
+    let fixtureSource = fixtureDir </> "Fixture.hs"
+        domainSource = fixtureDir </> "Domain.hs"
+        shapeSource = fixtureDir </> "Shape.hs"
+        recordModule moduleName fields =
+          T.unlines
+            [ "{-# LANGUAGE DeriveGeneric #-}",
+              "module " <> moduleName <> " (Item (..)) where",
+              "import Data.Text (Text)",
+              "import GHC.Generics (Generic)",
+              "data Item = Exact {" <> fields <> "}",
+              "  deriving stock (Generic)"
+            ]
+        (domainFields, shapeFields) = case fixture of
+          "renamed-field" -> ("contentHash :: Text", "contentDigest :: Text")
+          "reordered-field" -> ("first :: Text, second :: Int", "second :: Int, first :: Text")
+          "arity-mismatch" -> ("first :: Text", "first :: Text, second :: Int")
+          "incompatible-type" -> ("content :: Text", "content :: Int")
+          other -> error ("unknown generic compile-fail fixture: " <> other)
+    TIO.writeFile domainSource (recordModule "Domain" domainFields)
+    TIO.writeFile shapeSource (recordModule "Shape" shapeFields)
+    TIO.writeFile
+      fixtureSource
+      ( T.unlines
+          [ "module Fixture where",
+            "import Domain qualified",
+            "import Keiro.Codec.Structural (StructuralBinding)",
+            "import Keiro.Codec.Structural.Generic (genericStructuralBinding)",
+            "import Shape qualified",
+            "binding :: StructuralBinding Domain.Item Shape.Item",
+            "binding = genericStructuralBinding"
+          ]
+      )
+    keiroCorePackageId <- activeCabalPackageId "keiro-core"
+    (exitCode, standardOutput, standardError) <-
+      readProcessWithExitCode
+        "cabal"
+        [ "exec",
+          "--enable-tests",
+          "--",
+          "ghc",
+          "-XGHC2024",
+          "-fno-code",
+          "-fforce-recomp",
+          "-package-id",
+          keiroCorePackageId,
+          "-i" <> fixtureDir,
+          fixtureSource
+        ]
+        ""
+    exitCode `shouldSatisfy` (/= ExitSuccess)
+    let compilerOutput = standardOutput <> standardError
+    compilerOutput `shouldContain` expectedDiagnostic
+    compilerOutput `shouldContain` "Run keiro-dsl scaffold and fill the binding by hand at this error location in the scaffolded module."
+    compilerOutput `shouldContain` takeFileName fixtureSource
+
+activeCabalPackageId :: String -> IO String
+activeCabalPackageId packageName = do
+  planPaths <- filterM doesFileExist ["dist-newstyle/cache/plan.json", "../dist-newstyle/cache/plan.json"]
+  planPath <- case planPaths of
+    candidate : _ -> pure candidate
+    [] -> expectationFailure "could not find Cabal's dist-newstyle/cache/plan.json" >> fail "unreachable"
+  decodedPlan <- Aeson.eitherDecodeFileStrict' planPath :: IO (Either String Value)
+  let packageIds = case decodedPlan of
+        Right (Aeson.Object plan) -> case KeyMap.lookup "install-plan" plan of
+          Just (Aeson.Array entries) ->
+            [ T.unpack packageId
+            | Aeson.Object entry <- toList entries,
+              KeyMap.lookup "pkg-name" entry == Just (Aeson.String (T.pack packageName)),
+              KeyMap.lookup "component-name" entry == Just (Aeson.String "lib"),
+              Just (Aeson.String packageId) <- [KeyMap.lookup "id" entry]
+            ]
+          _ -> []
+        _ -> []
+  case packageIds of
+    [packageId] -> pure packageId
+    resolvedPackageIds ->
+      expectationFailure
+        ( "could not resolve one active Cabal package ID for "
+            <> packageName
+            <> ": "
+            <> show resolvedPackageIds
+            <> either (\decodeError -> " (plan decode failed: " <> decodeError <> ")") (const "") decodedPlan
+        )
+        >> fail "unreachable"
 
 moveArtifactBindingIntoGenerated :: MappedDecl -> MappedDecl
 moveArtifactBindingIntoGenerated declaration@MappedStructural {msName = "ArtifactInfo"} =
@@ -12189,6 +12300,77 @@ sampleWorkspaceRecord workspace =
         ],
       semanticImpact = Just (semanticImpactSnapshotForSpec ((.mergedSpec) workspace))
     }
+
+-- | Representative byte contracts for the two line-oriented scaffold ledgers.
+-- The behavior rows and semantic snapshot come from one checked source fixture;
+-- the query row is deliberately explicit so the golden scopes that serialized
+-- contract even though the behavior fixture itself has no read model.
+representativeRecordMigrationContracts :: IO (ScaffoldRecord, WorkspaceRecord)
+representativeRecordMigrationContracts = do
+  parsed <- parsedSourceOf "test/fixtures/behavior-complete.keiro"
+  let service = checkedSource parsed
+      spec = checkedSpec service
+      sourceLanguageForm = (.sourceLanguage) parsed
+      queryIdentity =
+        QueryContractIdentity
+          { readModel = "BehaviorSummary",
+            position = QueryInputConsumer,
+            typeExpression = "RequestId",
+            mappedDependencies = ["RequestId"]
+          }
+  requirements <-
+    either
+      (\errors -> expectationFailure (show errors) >> fail "unreachable")
+      pure
+      (Behavior.deriveBehaviorRequirements spec)
+  let behaviorRows = Behavior.behaviorRecordRows requirements
+      impact = Just (semanticImpactSnapshotForSpec spec)
+      singleRecord =
+        ScaffoldRecord
+          { specPath = "behavior-complete.keiro",
+            moduleRoot = "",
+            layout = "prefixed",
+            sourceLanguage = sourceLanguageForm,
+            languageContract = checkedLanguageContract service,
+            namingEdition = IdiomaticNamingV2,
+            moduleRoles = [],
+            files = [],
+            mappings = [],
+            idDomains = [],
+            nominalEqualities = [],
+            bindingObligations = [],
+            behaviorRequirements = behaviorRows,
+            projectionCatalogFacts = [],
+            queryContractBaseline = True,
+            queryContracts = [queryIdentity],
+            routerSelections = [],
+            semanticImpact = impact
+          }
+      workspaceRecord =
+        WorkspaceRecord
+          { service = "behavior-contract-fixture",
+            manifest = "service.keiro-workspace",
+            context = spec.context,
+            moduleRoot = "",
+            layout = "prefixed",
+            members = ["behavior-complete.keiro"],
+            sourceLanguages = [WorkspaceSourceLanguageRow "behavior-complete.keiro" sourceLanguageForm],
+            languageContract = checkedLanguageContract service,
+            namingEdition = IdiomaticNamingV1,
+            modules = [],
+            mappings = [],
+            idDomains = [],
+            nominalEqualities = [],
+            bindingObligations = [],
+            requirements = behaviorRows,
+            projectionCatalogFacts = [],
+            queryContractBaseline = True,
+            queryContracts = [queryIdentity],
+            routerSelections = [],
+            adopted = [],
+            semanticImpact = impact
+          }
+  pure (singleRecord, workspaceRecord)
 
 semanticImpactSnapshotForSpec :: Spec -> SemanticImpactSnapshot
 semanticImpactSnapshotForSpec = semanticImpactSnapshot . semanticImpactForSpec
@@ -12750,6 +12932,15 @@ assertMatchesGolden path actual = do
     else do
       golden <- TIO.readFile resolved
       T.stripEnd actual `shouldBe` T.stripEnd golden
+
+-- | Assert an exact serialized contract, including its final-newline policy.
+assertMatchesByteGolden :: FilePath -> BS.ByteString -> IO ()
+assertMatchesByteGolden path actual = do
+  resolved <- resolveTestPath path
+  update <- lookupEnv "KEIRO_DSL_UPDATE_GOLDENS"
+  if update == Just "1"
+    then BS.writeFile resolved actual
+    else BS.readFile resolved >>= (`shouldBe` actual)
 
 -- | Locate a repo file regardless of the test process's current directory.
 resolveTestPath :: FilePath -> IO FilePath

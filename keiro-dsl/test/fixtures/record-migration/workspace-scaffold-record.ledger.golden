@@ -1,0 +1,32 @@
+keiro-dsl workspace scaffold record v1
+service: behavior-contract-fixture
+manifest: service.keiro-workspace
+context: behavior-complete
+module-root: (none)
+layout: prefixed
+naming-edition idiomatic-v1
+member behavior-complete.keiro
+source-language {"declaredLanguageVersion":4,"effectiveLanguageVersion":4,"path":"behavior-complete.keiro","sourceForm":"declared"}
+semantic-contract {"languageSupport":"compatibility-only","languageVersion":4,"runtimeSemantics":"keiro-dsl/runtime-semantics/3"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-0128e858fee6f2b3","kind":"replay-transition","outputs":[{"command":"LegacyStart","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-08a2bda57424a16e","kind":"replay-transition","outputs":[{"command":"Start","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-2e1fd6b9580e1a3d","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-2f3ebf37a55781db","kind":"live-transition","outputs":[{"command":"Decide","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-43b8fc7fa48595dd","kind":"required-rejection","outputs":[],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-68e75665b789892c","kind":"live-transition","outputs":[{"command":"Retire","ownership":"generated-command-identity"},{"command":"Retire","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-76005937ded24bec","kind":"required-rejection","outputs":[],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-7ea811586a738ee5","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-83b0a46823e1a788","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-8f79f2e40d8b3bd5","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-926739ffb27d20e7","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"LegacyStart","evidence":"generated-authoritative","key":"behavior-v1-9c61af3593764622","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-ba7053f86d15e1b0","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-be8b08a049ab4d8b","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Journey","command":"Start","evidence":"generated-authoritative","key":"behavior-v1-d2fc3eca5c449e84","kind":"live-transition","outputs":[{"command":"Start","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Journey","command":"Decide","evidence":"generated-authoritative","key":"behavior-v1-db1a553baa3eda84","kind":"live-transition","outputs":[{"command":"Decide","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-ea258e9c47d66aac","kind":"live-transition","outputs":[],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-f0fbe3a3ba0b40e8","kind":"replay-transition","outputs":[{"command":"Retire","ownership":"generated-command-identity"},{"command":"Retire","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Journey","command":"Retire","evidence":"generated-authoritative","key":"behavior-v1-f9cae2bf4c0d0562","kind":"required-rejection","outputs":[],"source":"Closed"}
+query-contract-baseline v1
+query-contract {"mappedDependencies":["RequestId"],"position":"input","readModel":"BehaviorSummary","typeExpression":"RequestId"}
+semantic-impact {"declarations":[{"consequences":[{"consumer":"Journey","kind":"consumer-build"},{"aggregate":"Journey","kind":"private-event-history"}],"consumerEvidence":[{"consumer":"Journey","operation":null,"path":"Journey command Start .details : StartPayload","surface":"aggregate-command"},{"consumer":"Journey","operation":null,"path":"Journey event Started .details : StartPayload","surface":"private-event-payload"}],"consumers":["Journey"],"declaration":"StartPayload","identity":"structural\u001fkeiro-dsl:BehaviorComplete.Domain:StartPayload\u001fBehaviorComplete.Bindings.startPayloadBinding\u001f1\u001fbehavior-complete.StartPayload.v1\u001fBehaviorComplete.Bindings.startPayloadCases\u001f\u001fff996bf9b1385f2b\u001frecord:StartPayload:label=display_label,note=optional_note"}],"mappedSurfaceEvidenceVersion":1,"serviceInventory":["StartPayload"]}

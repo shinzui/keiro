@@ -291,7 +291,7 @@ def historical_names(path: Path, row_pattern: re.Pattern[str]) -> dict[tuple[str
 def observation(field: RecordField, text: str) -> str:
     observations = []
     if re.search(r"\b(ToJSON|FromJSON|toJSON|parseJSON)\b|\.(?:=|:)", text):
-        observations.append("JSON/wire bytes")
+        observations.append("serialized/wire review risk")
     if re.search(r"\b(render|pretty|fingerprint|canonical|ledger|report)\b", text, re.IGNORECASE):
         observations.append("rendered/canonical output")
     if field.path.endswith("app/Main.hs"):
@@ -313,13 +313,14 @@ def package_document(fields: list[RecordField], history: dict[tuple[str, str, st
         "The current column preserves the released 0.14 spelling; the target column and all other",
         "facts are derived from the live 0.15 source. Unchanged rows are intentional.",
         "Product reads become record-dot projections, while single-field newtype unwrappers remain",
-        "explicit positional functions. JSON keys, rendered text, fingerprints, CLI bytes, strictness,",
-        "constructor/field order, and deriving behavior are frozen unless a row says otherwise.",
+        "explicit positional functions. The review-risk column is an omission detector: it flags",
+        "serialized, rendered, CLI, and runtime surfaces for review but does not prove byte",
+        "compatibility. Exact byte claims live in named package-test goldens.",
         "",
         f"Inventory: {record_count} record-owning declarations, {len(fields)} fields, "
         f"{strict_count} strict fields, and {public_count} fields exported through a public `Type (..)`.",
         "",
-        "| Location | Owner | Kind | Public | Current | Target | Type/strictness | Selection replacement | Frozen observation | Deriving |",
+        "| Location | Owner | Kind | Public | Current | Target | Type/strictness | Selection replacement | Review risk / observable surface | Deriving |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for field in fields:

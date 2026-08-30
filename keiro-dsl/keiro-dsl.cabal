@@ -1,25 +1,40 @@
-cabal-version:   3.0
-name:            keiro-dsl
-version:         0.14.0.0
-synopsis:        Typed specification toolchain for keiro services
+cabal-version:      3.0
+name:               keiro-dsl
+version:            0.14.0.0
+synopsis:           Typed specification toolchain for keiro services
 description:
   keiro-dsl is the toolchain over a typed `.keiro` specification of a keiro
   service: a parser + checker + scaffolder + harness emitter. It emits the
   symbol-free deterministic layer plus typed holes, never a keiki symbolic
   operator (the firewall invariant).
 
-license:         BSD-3-Clause
-license-file:    LICENSE
-author:          Nadeem Bitar
-maintainer:      nadeem@gmail.com
-copyright:       2026 Nadeem Bitar
-category:        Development
-build-type:      Simple
-tested-with:     GHC >=9.12 && <9.13
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Nadeem Bitar
+maintainer:         nadeem@gmail.com
+copyright:          2026 Nadeem Bitar
+category:           Development
+build-type:         Simple
+tested-with:        GHC >=9.12 && <9.13
 extra-doc-files:
   CHANGELOG.md
   generated-haskell-edition-idiomatic-v2.md
   record-field-migration-0.15.md
+
+-- The main package test is intentionally runnable from an unpacked source
+-- distribution. Include its fixtures, compatibility manifests, mutation
+-- scripts, and committed conformance corpus instead of relying on the
+-- repository checkout surrounding this package.
+extra-source-files:
+  test/**/*.cabal
+  test/**/*.golden
+  test/**/*.hs
+  test/**/*.json
+  test/**/*.keiro
+  test/**/*.keiro-workspace
+  test/**/*.md
+  test/**/*.sh
+  test/**/*.txt
 
 common warnings
   ghc-options: -Wall -Werror=missing-fields
@@ -206,12 +221,12 @@ test-suite keiro-dsl-test
     Keiro.Dsl.FrontendProfiles
     Keiro.Dsl.FrontendPublicApiProbe
     Keiro.Dsl.FrontendSurface
-    Keiro.Dsl.RecordMigration
     Paths_keiro_dsl
 
   build-depends:
     , aeson                                          >=2.2       && <2.3
     , base                                           >=4.21      && <5
+    , bytestring                                     >=0.12      && <0.13
     , containers                                     >=0.6       && <0.8
     , directory                                      >=1.3       && <1.4
     , filepath                                       >=1.4       && <1.6

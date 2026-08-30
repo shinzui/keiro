@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy dsl-api-boundaries generated-name-policy conformance-corpus-policy
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -30,6 +30,13 @@ extension-policy:
 [group('meta')]
 dsl-api-boundaries:
     python3 scripts/check-keiro-dsl-api-boundaries.py
+
+# Repository-only migration inventories and omission detectors. This policy
+# identifies serialized surfaces for review; exact byte contracts live in the
+# package test goldens.
+[group('meta')]
+record-migration-policy:
+    python3 scripts/generate-record-migration-manifests.py --check
 
 [group('meta')]
 generated-name-policy:
