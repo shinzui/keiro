@@ -113,7 +113,11 @@ def git_files(pattern: str) -> list[Path]:
 
 
 def package_files() -> list[Path]:
-    files = git_files("keiro-dsl/src/**/*.hs") + git_files("keiro-dsl/app/**/*.hs")
+    files = (
+        git_files("keiro-dsl/src/**/*.hs")
+        + git_files("keiro-dsl/internal/**/*.hs")
+        + git_files("keiro-dsl/app/**/*.hs")
+    )
     test_roots = (
         ROOT / "keiro-dsl/test",
         ROOT / "keiro-dsl/test/import-planning",

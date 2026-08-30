@@ -64,8 +64,19 @@ test findings from the 0.14-to-HEAD review only.
   and made prepared sidecar application total. The two focused migration suites and refreshed
   inventory policy pass; `git diff --check` is clean, and the full-suite evidence is the prior
   717 behavioral passes plus the now-green inventory alias.
-- [ ] Milestone 2: make the generated-Haskell language implementation package-private and add
-  an executable public-boundary policy.
+- [x] (2026-08-30T12:38:21Z) Added the Milestone 2 private Cabal component and executable API
+  boundary policy with accepted/rejected self-tests. The first component build proved that a
+  module under the main library's `hs-source-dirs: src` remains a GHC home-module candidate even
+  when Cabal also exposes it from a same-package dependency.
+- [x] (2026-08-30T12:38:21Z) Moved `Keiro.Dsl.GeneratedHaskellLanguage` to the private
+  component's dedicated source root, updated the API and inventory policies for that ownership,
+  and reran the component build matrix successfully.
+- [x] (2026-08-30T12:45:35Z) Finished Milestone 2 validation after repository formatting. The
+  policy self-test, real-tree policy, `just dsl-api-boundaries`, inventory freshness check, exact
+  component build, one-occurrence Cabal inspection, focused generated-language and migration
+  suites, and `git diff --check` all pass.
+- [x] (2026-08-30T12:45:35Z) Milestone 2: made the generated-Haskell language implementation
+  package-private and added an executable public-boundary policy.
 - [ ] Milestone 3: separate repository inventory policy from portable package tests and add exact
   compatibility byte oracles.
 - [ ] Milestone 4: remove the record-migration warning regressions, distill the durable boundary,
@@ -92,6 +103,28 @@ test findings from the 0.14-to-HEAD review only.
   Finished in 214.7096 seconds
   720 examples, 3 failures
   stale record migration manifest: keiro-dsl/record-field-migration-0.15.md
+  ```
+
+- Observation: A named private sublibrary cannot exclusively own a module while that module's
+  source file remains under the main library's source root. GHC discovers it as a home module,
+  compiles main-unit references, and the executable cannot link those references against the
+  private unit.
+  Evidence:
+
+  ```text
+  warning: [-Wmissing-home-modules]
+  These modules are needed for compilation but not listed in your .cabal file's other-modules:
+      Keiro.Dsl.GeneratedHaskellLanguage
+  Undefined symbols ... keiro-dsl-0.14.0.0-inplace_Keiro.Dsl.GeneratedHaskellLanguage
+  ```
+
+- Observation: The repository Cabal formatter canonicalizes a one-module `exposed-modules` field
+  onto the field's own line, so validation must count the module occurrence rather than require a
+  multiline indentation shape.
+  Evidence:
+
+  ```text
+  exposed-modules: Keiro.Dsl.GeneratedHaskellLanguage
   ```
 
 
@@ -142,6 +175,14 @@ test findings from the 0.14-to-HEAD review only.
   the boundary refactor were the same stale-manifest condition. Moving this generated output
   forward keeps the milestone commit green without changing the intended inventory contents or
   the later repository-policy separation.
+  Date: 2026-08-30
+
+- Decision: Give `generated-haskell-language-internal` a dedicated `keiro-dsl/internal` source
+  root and move `Keiro.Dsl.GeneratedHaskellLanguage` there.
+  Rationale: Cabal dependency metadata alone does not prevent GHC from discovering a source file
+  beneath the importing component's home-module search path. Physical source-root separation makes
+  the ownership literal, compiles the implementation once, and preserves the intended private
+  package boundary.
   Date: 2026-08-30
 
 
@@ -201,8 +242,9 @@ Three pre-existing semantic types also lost opacity:
   surface claims. Version 0.14 exported the type abstractly plus `changeContextRoot` and
   `changeContextPaths`.
 
-`keiro-dsl/src/Keiro/Dsl/GeneratedHaskellLanguage.hs` was an `other-modules` implementation
-module at 0.14. ExecPlan 268 moved it into the main library's `exposed-modules` only so
+`keiro-dsl/internal/Keiro/Dsl/GeneratedHaskellLanguage.hs` contains the implementation that was an
+`other-modules` module under `keiro-dsl/src/` at 0.14. ExecPlan 268 moved it into the main
+library's `exposed-modules` only so
 `keiro-dsl/test/Main.hs`, a separate Cabal component, could inspect the final `RewriteState` of
 the lexical presentation rewriter. That exposes the whole one-off migration table and state
 machine to external consumers. The module depends only on `base`, `containers`, and `text`, so it
@@ -301,9 +343,10 @@ library and test suite but absent from the installed main-library API, and a fas
 detects a recurrence of every constructor-boundary regression from the review.
 
 In `keiro-dsl/keiro-dsl.cabal`, add a named sublibrary such as
-`library generated-haskell-language-internal`. Import the existing `warnings` and `shared` common
-stanzas, set `visibility: private` explicitly, use `hs-source-dirs: src`, and list
-`Keiro.Dsl.GeneratedHaskellLanguage` as its exposed module. Give the sublibrary only `base`,
+`library generated-haskell-language-internal`. Move the implementation to
+`keiro-dsl/internal/Keiro/Dsl/GeneratedHaskellLanguage.hs`, import the existing `warnings` and
+`shared` common stanzas, set `visibility: private` explicitly, use `hs-source-dirs: internal`, and
+list `Keiro.Dsl.GeneratedHaskellLanguage` as its exposed module. Give the sublibrary only `base`,
 `containers`, and `text`. Remove the module from the main library's `exposed-modules`; do not add
 it to the main library's `other-modules`. Add
 `keiro-dsl:generated-haskell-language-internal` to the main library and `keiro-dsl-test`
@@ -467,7 +510,7 @@ surface:
 python3 scripts/check-keiro-dsl-api-boundaries.py --self-test
 python3 scripts/check-keiro-dsl-api-boundaries.py
 cabal build keiro-dsl:lib:generated-haskell-language-internal keiro-dsl:lib:keiro-dsl keiro-dsl:test:keiro-dsl-test
-rg -n '^    Keiro\.Dsl\.GeneratedHaskellLanguage$' keiro-dsl/keiro-dsl.cabal
+rg -n 'Keiro\.Dsl\.GeneratedHaskellLanguage' keiro-dsl/keiro-dsl.cabal
 python3 scripts/generate-record-migration-manifests.py
 python3 scripts/generate-record-migration-manifests.py --check
 ```
@@ -607,8 +650,9 @@ has occurred; inspect the temporary directory retained by Hspec and retry after 
 Do not weaken a refusal or delete a backup to make a test pass.
 
 The private sublibrary has one important recovery rule: the module must be owned by exactly one
-Cabal component. If Cabal reports a duplicate or ambiguous module, remove it from the main
-library's `exposed-modules` and `other-modules` rather than copying or renaming the source. If
+Cabal component. If Cabal reports a duplicate, ambiguous, or missing home module, keep its source
+under `keiro-dsl/internal`, outside the main library's `keiro-dsl/src` root, and remove it from the
+main library's `exposed-modules` and `other-modules` rather than copying the source. If
 Cabal reports a dependency cycle, the private sublibrary has accidentally imported a main-library
 module; move that dependency out or narrow the internal module, because making the sublibrary
 public does not solve the cycle.
@@ -716,3 +760,13 @@ python3 scripts/generate-record-migration-manifests.py --check
 
 Both print a concise success line and exit 0 on the accepted tree. On failure they exit nonzero
 and name the module, type, or manifest whose boundary drifted.
+
+
+Revision note (2026-08-30): Milestone 2 now gives the private generated-language component a
+dedicated `keiro-dsl/internal` source root. The first implementation build proved that leaving the
+file under the main library's `src` root makes GHC compile it as a main-unit home module despite the
+same-package dependency, which fails at executable link time.
+
+Revision note (2026-08-30): The Milestone 2 Cabal inspection now counts the generated-language
+module occurrence without requiring a multiline field shape because the repository formatter
+canonicalizes a singleton `exposed-modules` field inline.

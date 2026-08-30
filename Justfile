@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy generated-name-policy conformance-corpus-policy
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy dsl-api-boundaries generated-name-policy conformance-corpus-policy
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -26,6 +26,10 @@ adr-validate:
 [group('meta')]
 extension-policy:
     scripts/check-extension-policy.sh
+
+[group('meta')]
+dsl-api-boundaries:
+    python3 scripts/check-keiro-dsl-api-boundaries.py
 
 [group('meta')]
 generated-name-policy:
