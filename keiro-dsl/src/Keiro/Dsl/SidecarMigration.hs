@@ -9,7 +9,8 @@ module Keiro.Dsl.SidecarMigration
   ( SidecarScope (..),
     SidecarMoveDisposition (..),
     SidecarMove (..),
-    PreparedSidecarMove (..),
+    PreparedSidecarMove,
+    preparedSidecarMove,
     planSidecarMigrations,
     applyPreparedSidecarMoves,
     renderSidecarMove,
@@ -51,11 +52,17 @@ data SidecarMove = SidecarMove
   }
   deriving stock (Eq, Show)
 
-data PreparedSidecarMove = PreparedSidecarMove
-  { sidecarMove :: !SidecarMove,
-    convertedContents :: !(Maybe Text)
-  }
+data PreparedSidecarMove
+  = PreparedSidecarRename !SidecarMove
+  | PreparedSidecarRetirement !SidecarMove !FilePath
+  | PreparedSidecarConversion !SidecarMove !FilePath !Text
   deriving stock (Eq, Show)
+
+preparedSidecarMove :: PreparedSidecarMove -> SidecarMove
+preparedSidecarMove = \case
+  PreparedSidecarRename move -> move
+  PreparedSidecarRetirement move _ -> move
+  PreparedSidecarConversion move _ _ -> move
 
 -- | Inspect the two scope-specific sidecars and the optional generated
 -- conformance package. An old-name file always produces a move: either a direct
@@ -148,16 +155,13 @@ planOrdinary out (oldRelative, newRelative) = do
         then prepareRetirement out oldRelative newRelative
         else
           pure . Right . Just $
-            PreparedSidecarMove
-              { sidecarMove =
-                  SidecarMove
-                    { oldPath = oldRelative,
-                      newPath = newRelative,
-                      backupPath = Nothing,
-                      moveDisposition = RenameSidecar
-                    },
-                convertedContents = Nothing
-              }
+            PreparedSidecarRename
+              SidecarMove
+                { oldPath = oldRelative,
+                  newPath = newRelative,
+                  backupPath = Nothing,
+                  moveDisposition = RenameSidecar
+                }
 
 planConformance :: FilePath -> FilePath -> FilePath -> IO (Either Text (Maybe PreparedSidecarMove))
 planConformance out oldRelative newRelative = do
@@ -179,16 +183,15 @@ planConformance out oldRelative newRelative = do
                 then pure (Left (T.pack oldRelative <> ": sidecar migration backup already exists at " <> T.pack backupRelative))
                 else
                   pure . Right . Just $
-                    PreparedSidecarMove
-                      { sidecarMove =
-                          SidecarMove
-                            { oldPath = oldRelative,
-                              newPath = newRelative,
-                              backupPath = Just backupRelative,
-                              moveDisposition = ConvertLegacyConformanceLedger
-                            },
-                        convertedContents = Just (preserveBanner legacyContents <> renderConformancePackageRecord record)
-                      }
+                    PreparedSidecarConversion
+                      SidecarMove
+                        { oldPath = oldRelative,
+                          newPath = newRelative,
+                          backupPath = Just backupRelative,
+                          moveDisposition = ConvertLegacyConformanceLedger
+                        }
+                      backupRelative
+                      (preserveBanner legacyContents <> renderConformancePackageRecord record)
 
 prepareRetirement :: FilePath -> FilePath -> FilePath -> IO (Either Text (Maybe PreparedSidecarMove))
 prepareRetirement out oldRelative newRelative = do
@@ -198,16 +201,14 @@ prepareRetirement out oldRelative newRelative = do
     then pure (Left (T.pack oldRelative <> ": sidecar migration backup already exists at " <> T.pack backupRelative))
     else
       pure . Right . Just $
-        PreparedSidecarMove
-          { sidecarMove =
-              SidecarMove
-                { oldPath = oldRelative,
-                  newPath = newRelative,
-                  backupPath = Just backupRelative,
-                  moveDisposition = RetireLegacySidecar
-                },
-            convertedContents = Nothing
-          }
+        PreparedSidecarRetirement
+          SidecarMove
+            { oldPath = oldRelative,
+              newPath = newRelative,
+              backupPath = Just backupRelative,
+              moveDisposition = RetireLegacySidecar
+            }
+          backupRelative
 
 sidecarBackupRelative :: FilePath -> FilePath
 sidecarBackupRelative oldRelative = sidecarBackupRootName </> "sidecar-v1" </> oldRelative
@@ -222,27 +223,22 @@ preserveBanner contents = T.unlines [line | line <- T.lines contents, isGenerate
 applyPreparedSidecarMoves :: FilePath -> [PreparedSidecarMove] -> IO ()
 applyPreparedSidecarMoves out = mapM_ applyOne
   where
-    applyOne prepared = case (.moveDisposition) move of
-      RenameSidecar -> do
+    applyOne = \case
+      PreparedSidecarRename move -> do
+        let oldPath = out </> (.oldPath) move
+            newPath = out </> (.newPath) move
         createDirectoryIfMissing True (takeDirectory newPath)
         renameFile oldPath newPath
-      RetireLegacySidecar -> retire move oldPath
-      ConvertLegacyConformanceLedger -> case (.convertedContents) prepared of
-        Nothing -> error "prepared conformance sidecar conversion lacks converted contents"
-        Just converted -> do
-          writeTextAtomic newPath converted
-          retire move oldPath
-      where
-        move = (.sidecarMove) prepared
-        oldPath = out </> (.oldPath) move
-        newPath = out </> (.newPath) move
+      PreparedSidecarRetirement move backupRelative ->
+        retire (out </> (.oldPath) move) backupRelative
+      PreparedSidecarConversion move backupRelative converted -> do
+        writeTextAtomic (out </> (.newPath) move) converted
+        retire (out </> (.oldPath) move) backupRelative
 
-    retire move oldPath = case (.backupPath) move of
-      Nothing -> error "prepared sidecar retirement lacks a backup path"
-      Just backupRelative -> do
-        let backupPath = out </> backupRelative
-        createDirectoryIfMissing True (takeDirectory backupPath)
-        renameFile oldPath backupPath
+    retire oldPath backupRelative = do
+      let backupPath = out </> backupRelative
+      createDirectoryIfMissing True (takeDirectory backupPath)
+      renameFile oldPath backupPath
 
 writeTextAtomic :: FilePath -> Text -> IO ()
 writeTextAtomic path contents = do

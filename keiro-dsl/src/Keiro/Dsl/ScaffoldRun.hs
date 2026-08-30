@@ -9,7 +9,8 @@ module Keiro.Dsl.ScaffoldRun
     GeneratedHaskellEditionImpact (..),
     GeneratedHaskellEditionUse (..),
     HoleUseForm (..),
-    PreparedGeneratedHaskellEditionMigration (..),
+    PreparedGeneratedHaskellEditionMigration,
+    preparedGeneratedHaskellEditionImpact,
     StaleGeneratedEvidence (..),
     StaleModule (..),
     MappingDrift (..),
@@ -223,6 +224,9 @@ data PreparedGeneratedHaskellEditionMigration = PreparedGeneratedHaskellEditionM
     sourceMoves :: ![SourceMove]
   }
   deriving stock (Eq, Show)
+
+preparedGeneratedHaskellEditionImpact :: PreparedGeneratedHaskellEditionMigration -> GeneratedHaskellEditionImpact
+preparedGeneratedHaskellEditionImpact = (.impact)
 
 -- | What one module write did. 'Unchanged' means an existing Generated module
 -- already had identical bytes, or is reported by the workspace write path under
@@ -1047,11 +1051,11 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
               Right preparedBefore
                 | not (null preparedSidecars) && not applyNameMigrations ->
                     pure . Left $
-                      [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)]
+                      [SidecarMigrationRequired (map preparedSidecarMove preparedSidecars)]
                         <> [GeneratedHaskellEditionRequired ((.impact) prepared) | Just prepared <- [preparedBefore]]
                 | otherwise -> do
                     applyPreparedSidecarMoves out preparedSidecars
-                    let moves = map (.sidecarMove) preparedSidecars
+                    let moves = map preparedSidecarMove preparedSidecars
                         -- Past this point the renames are on disk, so a later
                         -- refusal's "nothing was written" needs qualifying.
                         noteApplied = withSidecarMovesApplied moves

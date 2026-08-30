@@ -96,7 +96,7 @@ import Keiro.Dsl.ScaffoldRun
   ( GeneratedArtifactImpact,
     LedgerRead (..),
     MappingDrift (..),
-    PreparedGeneratedHaskellEditionMigration (..),
+    PreparedGeneratedHaskellEditionMigration,
     PreparedSourceMove,
     QueryContractMigration (..),
     Refusal (..),
@@ -118,6 +118,7 @@ import Keiro.Dsl.ScaffoldRun
     planningGatePipeline,
     preflightGeneratedHaskellEditionMigration,
     preflightSourceMoves,
+    preparedGeneratedHaskellEditionImpact,
     preparedSourceMove,
     queryContractMigrations,
     renderGeneratedArtifactImpact,
@@ -492,13 +493,13 @@ executeWorkspaceScaffoldWithMigrations out forceGeneratedOverwrite applyNameMigr
         Right preparedBefore
           | not (null preparedSidecars) && not applyNameMigrations ->
               pure . Left $
-                [SidecarMigrationRequired (map (.sidecarMove) preparedSidecars)]
-                  <> [GeneratedHaskellEditionRequired ((.impact) prepared) | Just prepared <- [preparedBefore]]
+                [SidecarMigrationRequired (map preparedSidecarMove preparedSidecars)]
+                  <> [GeneratedHaskellEditionRequired (preparedGeneratedHaskellEditionImpact prepared) | Just prepared <- [preparedBefore]]
           | otherwise -> do
               applyPreparedSidecarMoves out preparedSidecars
               -- Past this point the renames are on disk, so a later
               -- refusal's "nothing was written" needs qualifying. Mirrors the single-spec path.
-              let sidecarMoves = map (.sidecarMove) preparedSidecars
+              let sidecarMoves = map preparedSidecarMove preparedSidecars
                   noteApplied = withSidecarMovesApplied sidecarMoves
               previousAfter <- if null preparedSidecars then pure previousBefore else readWorkspaceRecord recordPath
               editionAfter <- preflightEdition previousAfter
@@ -514,10 +515,10 @@ executeWorkspaceScaffoldWithMigrations out forceGeneratedOverwrite applyNameMigr
                         | Just edition <- editionWithMoves,
                           (not (null prepared) || not (null sidecarMoves)),
                           not (applyNameMigrations && applyGeneratedHaskellEdition) ->
-                            pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired ((.impact) edition)])
+                            pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired (preparedGeneratedHaskellEditionImpact edition)])
                         | Just edition <- editionWithMoves,
                           not applyGeneratedHaskellEdition ->
-                            pure (Left [GeneratedHaskellEditionRequired ((.impact) edition)])
+                            pure (Left [GeneratedHaskellEditionRequired (preparedGeneratedHaskellEditionImpact edition)])
                         | not (null prepared) && not applyNameMigrations -> pure (Left [NameMigrationRequired sourceMoves])
                         | otherwise ->
                             executeWorkspaceScaffoldBase

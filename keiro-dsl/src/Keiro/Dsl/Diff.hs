@@ -21,7 +21,9 @@ module Keiro.Dsl.Diff
     CompatibilityVector (..),
     MappedPersistedSurface (..),
     MappedPersistedImpact (..),
-    ChangeContext (..),
+    ChangeContext,
+    changeContextRoot,
+    changeContextPaths,
     privateEventContext,
     privateEventAdditionContext,
     snapshotContext,
@@ -173,6 +175,12 @@ data ChangeContext = ChangeContext
     contextOriginalLabel :: !Label
   }
   deriving stock (Eq, Show)
+
+changeContextRoot :: ChangeContext -> Name
+changeContextRoot = (.root)
+
+changeContextPaths :: ChangeContext -> [Text]
+changeContextPaths = (.paths)
 
 data ChangeKind = ChangeKind
   { node :: !Name,

@@ -16,7 +16,8 @@ module Keiro.Dsl.NominalType
     NominalOwnership (..),
     ConsumerNominalBinding (..),
     ResolvedNominalType (..),
-    NominalTypeRegistry (..),
+    NominalTypeRegistry,
+    nominalTypes,
     lookupNominalType,
     nominalEqualityContractForService,
     nominalEqualityIdentityForService,
@@ -112,13 +113,14 @@ instance Ord ResolvedNominalType where
       ((.name) left, (.representation) left, (.ownership) left)
       ((.name) right, (.representation) right, (.ownership) right)
 
-newtype NominalTypeRegistry = NominalTypeRegistry
-  { nominalTypes :: Map Name ResolvedNominalType
-  }
+newtype NominalTypeRegistry = NominalTypeRegistry (Map Name ResolvedNominalType)
   deriving stock (Eq, Show, Generic)
 
+nominalTypes :: NominalTypeRegistry -> Map Name ResolvedNominalType
+nominalTypes (NominalTypeRegistry values) = values
+
 lookupNominalType :: Name -> NominalTypeRegistry -> Maybe ResolvedNominalType
-lookupNominalType name = Map.lookup name . (.nominalTypes)
+lookupNominalType name = Map.lookup name . nominalTypes
 
 nominalEqualityContractForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe CheckedNominalEquality
 nominalEqualityContractForService languageContract nominal = case (.representation) nominal of
@@ -185,7 +187,7 @@ nominalEqualityIdentitiesForService service = case resolveNominalTypes spec of
   Left _ -> []
   Right registry ->
     [ identity
-    | nominal <- Map.elems ((.nominalTypes) registry),
+    | nominal <- Map.elems (nominalTypes registry),
       Just identity <- [nominalEqualityIdentityForService (checkedLanguageContract service) nominal]
     ]
   where

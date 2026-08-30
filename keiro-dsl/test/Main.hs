@@ -3891,7 +3891,7 @@ main = hspec $ do
       registry <- case resolveNominalTypes spec of
         Left errors -> expectationFailure (show errors) >> fail "unreachable"
         Right value -> pure value
-      Map.keys ((.nominalTypes) registry)
+      Map.keys (nominalTypes registry)
         `shouldBe` ["AccountNumber", "FeatureFlag", "ObservedAt", "OrderId", "OrderStatus", "RiskScore", "SequenceNumber"]
       obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligations spec)
       length obligations `shouldBe` 21

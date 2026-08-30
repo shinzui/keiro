@@ -664,7 +664,7 @@ planNominalGenerationForService ctx service = do
   let aggregates = [resolveAggForService ctx service aggregate | NAggregate aggregate <- (.nodes) spec]
       generated =
         [ nominal
-        | nominal <- Map.elems ((.nominalTypes) registry),
+        | nominal <- Map.elems (nominalTypes registry),
           GeneratedNominal <- [(.ownership) nominal]
         ]
   pure
@@ -1728,7 +1728,7 @@ nominalRepresentationOwners ctx spec = case resolveNominalTypes spec of
   Left _ -> []
   Right registry ->
     [ (nominalRepresentationModuleValue ctx nominal constructors, [(.name) nominal])
-    | nominal <- Map.elems ((.nominalTypes) registry),
+    | nominal <- Map.elems (nominalTypes registry),
       ConsumerNominal {} <- [(.ownership) nominal],
       EnumRepresentation constructors <- [(.representation) nominal]
     ]
@@ -5813,7 +5813,7 @@ domainStaticImports :: Agg -> [Text]
 domainStaticImports aggregate =
   Set.toAscList (Set.delete timeTypeImport sourceImports <> Set.fromList timeImports)
   where
-    sourceImports = Set.unions (map (.staticImports) (domainAggregateSources aggregate))
+    sourceImports = Set.unions (map aggregateSourceStaticImports (domainAggregateSources aggregate))
     timeTypeImport = "Data.Time.Clock (UTCTime)"
     usesTimeType = AggregateTime `elem` aggregateTypes aggregate
     usesTimeLiteral = any (\register -> case (.initial) register of InitialTime {} -> True; _ -> False) ((.regs) aggregate)

@@ -157,7 +157,7 @@ consumerPlanForService service = case (checkedTypeGraph service, resolveNominalT
       declarations = Map.elems ((.declarations) graph)
       nominalBindings =
         [ (nominal, binding)
-        | nominal <- Map.elems ((.nominalTypes) nominalRegistry),
+        | nominal <- Map.elems (nominalTypes nominalRegistry),
           ConsumerNominal binding <- [(.ownership) nominal]
         ]
   _ -> ConsumerPlan [] [] []

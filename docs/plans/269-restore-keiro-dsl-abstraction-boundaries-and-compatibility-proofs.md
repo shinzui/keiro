@@ -4,6 +4,7 @@ slug: restore-keiro-dsl-abstraction-boundaries-and-compatibility-proofs
 title: "Restore keiro-dsl abstraction boundaries and compatibility proofs"
 kind: exec-plan
 created_at: 2026-08-30T11:53:37Z
+intention: intention_01m199s6p5eb5tdzyg6q7qmmqc
 ---
 
 # Restore keiro-dsl abstraction boundaries and compatibility proofs
@@ -47,8 +48,22 @@ test findings from the 0.14-to-HEAD review only.
 
 ## Progress
 
-- [ ] Milestone 1: restore opaque semantic and prepared-migration types and make prepared
-  sidecar application total.
+- [x] (2026-08-30T12:21:45Z) Created and attached intention
+  `intention_01m199s6p5eb5tdzyg6q7qmmqc`; captured a green pre-change baseline for both repository
+  policies and all three focused Hspec groups. The branch was `master`, one commit ahead of
+  `origin/master`, with no pre-existing worktree edits beyond this plan's new intention field.
+- [x] (2026-08-30T12:32:45Z) Implemented Milestone 1's opaque constructor boundaries, restored
+  the 0.14 projections, and made prepared sidecar application total. Both migration-focused Hspec
+  groups pass; a full 720-example package run reached 717 passes and only the three identical
+  migration-inventory aliases failed because the restored public-field counts made the checked-in
+  manifest stale.
+- [x] (2026-08-30T12:33:54Z) Regenerated and rechecked the migration inventories early so the
+  Milestone 1 commit remains a green repository state; this completed the originally
+  Milestone 2-owned regeneration ahead of schedule.
+- [x] (2026-08-30T12:33:54Z) Milestone 1: restored opaque semantic and prepared-migration types
+  and made prepared sidecar application total. The two focused migration suites and refreshed
+  inventory policy pass; `git diff --check` is clean, and the full-suite evidence is the prior
+  717 behavioral passes plus the now-green inventory alias.
 - [ ] Milestone 2: make the generated-Haskell language implementation package-private and add
   an executable public-boundary policy.
 - [ ] Milestone 3: separate repository inventory policy from portable package tests and add exact
@@ -59,7 +74,25 @@ test findings from the 0.14-to-HEAD review only.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Observation: The prescribed no-`sidecarMove` search also matches the unrelated plural report
+  field `.sidecarMoves`, so its stated expectation of no output is impossible without a word
+  boundary. The constructor-authority search itself is clean.
+  Evidence:
+
+  ```text
+  keiro-dsl/src/Keiro/Dsl/WorkspaceScaffold.hs:897:    sidecarMoveSection = case (.sidecarMoves) report of
+  keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs:1976:    sidecarMoveSection = case (.sidecarMoves) report of
+  ```
+
+- Observation: Every behavioral example passed after the Milestone 1 refactor; all three full-suite
+  failures were aliases of the same stale generated-inventory check, not runtime or API behavior.
+  Evidence:
+
+  ```text
+  Finished in 214.7096 seconds
+  720 examples, 3 failures
+  stale record migration manifest: keiro-dsl/record-field-migration-0.15.md
+  ```
 
 
 ## Decision Log
@@ -101,6 +134,14 @@ test findings from the 0.14-to-HEAD review only.
   downstream audit found no use of those functions in the only direct package consumer,
   `mori://shinzui/rei`. The review finding is constructor authority, not the deliberate result
   type change.
+  Date: 2026-08-30
+
+- Decision: Regenerate the migration inventories at the end of Milestone 1 rather than waiting
+  for Milestone 2.
+  Rationale: The existing package tests enforce inventory freshness, and all three failures after
+  the boundary refactor were the same stale-manifest condition. Moving this generated output
+  forward keeps the milestone commit green without changing the intended inventory contents or
+  the later repository-policy separation.
   Date: 2026-08-30
 
 

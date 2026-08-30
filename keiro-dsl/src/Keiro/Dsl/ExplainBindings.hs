@@ -147,7 +147,7 @@ bindingObligationsForService service = do
       [ obligationsFor graph declaration
       | ResolvedStructural declaration _ <- Map.elems ((.declarations) graph)
       ]
-      <> concatMap (nominalObligationsFor service) (Map.elems ((.nominalTypes) nominalRegistry))
+      <> concatMap (nominalObligationsFor service) (Map.elems (nominalTypes nominalRegistry))
   where
     spec = checkedSpec service
 

@@ -20,9 +20,10 @@ module Keiro.Dsl.AggregateType
     aggregateCapability,
     aggregateCanonicalName,
     typeExprCanonicalName,
-    AggregateHaskellSource (..),
+    AggregateHaskellSource,
     aggregateConsumerHaskellSource,
     aggregateSourceReferences,
+    aggregateSourceStaticImports,
     renderAggregateHaskellSource,
     aggregatePackages,
     aggregateSampleHaskell,
@@ -100,7 +101,7 @@ aggregateSymbolsFromGraphResult graphResult =
 aggregateSymbolsFromDeclarations :: Map MappedKey ResolvedMappedDecl -> Spec -> AggregateSymbols
 aggregateSymbolsFromDeclarations mappedDeclarations spec =
   AggregateSymbols
-    { nominals = either (const Map.empty) (.nominalTypes) (resolveNominalTypes spec),
+    { nominals = either (const Map.empty) nominalTypes (resolveNominalTypes spec),
       vertices =
         Map.fromList
           [ ((.name) aggregate <> "Vertex", map (.name) ((.states) aggregate))
@@ -277,6 +278,9 @@ aggregateConsumerHaskellSource symbols resolved = case resolved of
 
 aggregateSourceReferences :: AggregateHaskellSource -> Set HaskellReference
 aggregateSourceReferences source = maybe Set.empty Set.singleton ((.reference) source)
+
+aggregateSourceStaticImports :: AggregateHaskellSource -> Set Text
+aggregateSourceStaticImports = (.staticImports)
 
 renderAggregateHaskellSource :: HaskellImportPlan -> AggregateHaskellSource -> Either HaskellImportError Text
 renderAggregateHaskellSource plan source = case ((.builtin) source, (.reference) source) of
