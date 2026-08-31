@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            keiro-test-support
-version:         0.14.0.0
+version:         0.15.0.0
 synopsis:        Shared PostgreSQL test fixtures for Keiro test suites
 description:
   Suite-level ephemeral-PostgreSQL fixtures shared by the Keiro test
@@ -49,7 +49,7 @@ library
     , ephemeral-pg             >=0.2       && <0.3
     , hasql                    >=1.10      && <1.11
     , hasql-pool               >=1.2       && <1.5
-    , keiro-migrations         ^>=0.14.0.0
+    , keiro-migrations         ^>=0.15.0.0
     , kiroku-store             >=0.8       && <0.9
     , kiroku-store-migrations  ^>=0.4.0.0
     , pg-migrate               ^>=1.1.0.0

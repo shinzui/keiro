@@ -6,6 +6,11 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.15.0.0 — 2026-08-30
+
+No changes this release. `keiro-core` is republished at the shared version so its
+dependents' PVP-compatible bounds remain lockstep.
+
 ## 0.14.0.0 — 2026-08-21
 
 No API changes this release. `keiro-core` is republished at the shared version so

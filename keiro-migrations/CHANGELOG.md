@@ -6,6 +6,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.15.0.0 — 2026-08-30
+
+No changes this release. `keiro-migrations` is republished at the shared version
+for the lockstep package set.
+
 ## 0.14.0.0 — 2026-08-21
 
 ### New Features

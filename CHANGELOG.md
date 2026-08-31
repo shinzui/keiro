@@ -6,6 +6,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+## 0.15.0.0 — 2026-08-30
+
 ### Breaking Changes
 
 - **keiro-dsl**: package and generated product records adopt concise repeated labels
@@ -18,20 +20,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   [package API guide](docs/guides/migrating-keiro-dsl-record-api-0.15.md) and
   [generated edition guide](docs/guides/adopting-keiro-dsl-idiomatic-v2.md).
 
-### New Features
-
-- **keiro-test-support** is now published to Hackage, starting at the shared
-  version 0.14.0.0. It was previously repository-internal, which meant the
-  `keiro`, `keiro-pgmq`, `keiro-ops`, and `keiro-dsl` test-suites could not be
-  built from their Hackage tarballs at all. Its own dependencies gained PVP upper
-  bounds and it ships a `LICENSE`.
-
 ### Other Changes
 
 - **keiro**, **keiro-pgmq**, **keiro-ops**: the `keiro-test-support` dependency in
-  the test-suite and benchmark stanzas now carries the lockstep
-  `^>=0.14.0.0` bound. The `keiro-dsl` conformance suites are left unbounded, as
-  they are for every internal dependency.
+  the test-suite and benchmark stanzas now carries the lockstep bound. The
+  `keiro-dsl` conformance suites are left unbounded, as they are for every
+  internal dependency.
+- **Repository**: `keiro-upgrade` gains the 0.14.0.0 → 0.15.0.0 migration edge
+  for record-selector removal and explicit `idiomatic-v2` generated-Haskell
+  adoption. It entails no upstream edge because the Kiroku, Keiki, and Shibuya
+  cohorts are unchanged.
 
 ## 0.14.0.0 — 2026-08-21
 
@@ -48,6 +46,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- **keiro-test-support** is now published to Hackage, starting at the shared
+  version 0.14.0.0. It was previously repository-internal, which meant the
+  `keiro`, `keiro-pgmq`, `keiro-ops`, and `keiro-dsl` test-suites could not be
+  built from their Hackage tarballs at all. Its own dependencies gained PVP upper
+  bounds and it ships a `LICENSE`.
 - **keiro**, **keiro-migrations**, **keiro-ops**: add bounded terminal outbox
   rejection. Publishers return a validated stable code and optional detail; Keiro
   persists one conditional `rejected` transition, releases ordered successors,

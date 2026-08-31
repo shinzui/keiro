@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## Unreleased
 
+## 0.15.0.0 — 2026-08-30
+
 ### Breaking Changes
 
 - Package-authored product records now use concise repeated labels under
@@ -13,7 +15,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   generated selector functions and owner-prefixed field labels are removed from the
   public Haskell API; construction and constructor-directed matching remain supported.
   Migrate reads to record dot using the exhaustive
-  [`record-field-migration-0.15.md`](record-field-migration-0.15.md) table. The twelve
+  [`record-field-migration-0.15.md`](src/record-field-migration-0.15.md) table. The twelve
   intentional single-field newtype unwrappers listed there remain explicit functions.
 - Scaffolded Haskell advances from `idiomatic-v1` to `idiomatic-v2`. Generated product
   selectors are removed or renamed to concise labels, and the Cabal fragment now
@@ -23,7 +25,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   durable from-edition backups; a legacy tree that also needs sidecar or module-name
   migration requires both apply flags in one run. Ordinary scaffolding refuses before
   writes. See the
-  [adoption guide](../docs/guides/adopting-keiro-dsl-idiomatic-v2.md).
+  [adoption guide](https://github.com/shinzui/keiro/blob/master/docs/guides/adopting-keiro-dsl-idiomatic-v2.md).
 
 ### Other Changes
 

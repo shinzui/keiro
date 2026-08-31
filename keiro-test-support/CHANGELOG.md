@@ -6,6 +6,11 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## Unreleased
 
+## 0.15.0.0 — 2026-08-30
+
+No changes this release. `keiro-test-support` is republished at the shared version
+so its `keiro-migrations` dependency remains lockstep.
+
 ## 0.14.0.0 — 2026-08-21
 
 First published release. `keiro-test-support` existed in the repository from the

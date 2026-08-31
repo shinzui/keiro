@@ -1,6 +1,6 @@
 # Keiro release cohort map
 
-Which upstream releases each Keiro version pairs with. Keiro's six published
+Which upstream releases each Keiro version pairs with. Keiro's seven published
 packages share one version and are released together, so a row describes the
 whole set.
 
@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.15.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.14.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.13.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.12.0.0 | `>=0.7 && <0.8` | `^>=0.3.2.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
