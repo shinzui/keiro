@@ -180,6 +180,7 @@ test-suite keiro-test
     PreCanonicalRecoverySpec
     PreimageSpec
     ProjectionReplaySpec
+    ReadModelFenceSpec
     ReadModelSpec
     VersionedRebuildSpec
     VersionedTargetPostgresSpec

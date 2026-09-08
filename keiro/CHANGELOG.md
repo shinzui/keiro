@@ -6,6 +6,14 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+- Fix native read-model queries racing rebuilds between metadata validation and
+  SQL execution. Hold ordered group and model registry locks through query SQL,
+  with fresh validation after waits and group-binding changes.
+- Add `ReadModelRequirement`, `readModelRequirement` and
+  `runReadModelTransaction` for compound SQL observing multiple models. New
+  `ReadModelGroupUnavailable` and `ReadModelRegistrationChanged` error cases
+  distinguish group refusal and a binding changed during lock acquisition.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Breaking Changes

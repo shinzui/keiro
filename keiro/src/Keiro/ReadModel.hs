@@ -52,6 +52,9 @@ module Keiro.ReadModel
 
     -- * Querying
     runQuery,
+    ReadModelRequirement,
+    readModelRequirement,
+    runReadModelTransaction,
     runQueryWithFreshness,
     runQueryWith,
     waitFor,
@@ -69,6 +72,8 @@ module Keiro.ReadModel
 where
 
 import Control.Concurrent (threadDelay)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
 import Data.Time.Clock (diffUTCTime)
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
@@ -373,6 +378,8 @@ data ReadModelError
     ReadModelMissingCursor !Text !QueryFreshness
   | -- | A truthful position wait omitted its required target: model name.
     ReadModelMissingPosition !Text
+  | ReadModelGroupUnavailable !Text !Text
+  | ReadModelRegistrationChanged !Text
   deriving stock (Generic, Eq, Show)
 
 -- | Query a read model using its default freshness. The compatibility record
@@ -431,7 +438,41 @@ runValidatedQuery readModel input waitAction = do
       waitResult <- waitAction
       case waitResult of
         Left err -> pure (Left err)
-        Right () -> Right <$> runTransaction ((readModel ^. #query) input)
+        Right () -> runReadModelTransaction (readModelRequirement readModel NonEmpty.:| []) ((readModel ^. #query) input)
+
+-- | The schema identity required by a SQL query. Construct this from every
+-- model the query observes, including models in other rebuild groups.
+data ReadModelRequirement = ReadModelRequirement !Text !Int !Text
+  deriving stock (Eq, Show, Generic)
+
+readModelRequirement :: ReadModel q r -> ReadModelRequirement
+readModelRequirement model = ReadModelRequirement (model ^. #name) (model ^. #version) (model ^. #shapeHash)
+
+-- | Validate all observed model identities and hold their group/registry locks
+-- through one SQL transaction. This boundary does not poll for freshness or
+-- inspect SQL: callers must include every model they read. Ordinary 'runQuery'
+-- uses it after any freshness wait. Group locks precede model locks, both in
+-- deterministic order, so compound reads compose with catalog lifecycle work.
+runReadModelTransaction ::
+  (Store :> es) =>
+  NonEmpty.NonEmpty ReadModelRequirement ->
+  Tx.Transaction a ->
+  Eff es (Either ReadModelError a)
+runReadModelTransaction requirements action = runTransaction $ do
+  locked <- lockReadModelsTx (fmap (\(ReadModelRequirement name _ _) -> name) requirements)
+  case locked of
+    Left (ReadModelLockMissing name) -> pure (Left (ReadModelUnregistered name))
+    Left (ReadModelLockGroupUnavailable group status) -> pure (Left (ReadModelGroupUnavailable group status))
+    Left (ReadModelLockRegistrationChanged name) -> pure (Left (ReadModelRegistrationChanged name))
+    Right rows -> do
+      let metadata = Map.fromList [(row ^. #name, row) | row <- rows]
+          checks = for_ requirements $ \requirement@(ReadModelRequirement name _ _) ->
+            case Map.lookup name metadata of
+              Nothing -> Left (ReadModelUnregistered name)
+              Just row -> validateRequiredMetadata requirement row
+      case checks of
+        Left err -> pure (Left err)
+        Right () -> Right <$> action
 
 -- | Block until the model's durable cursor has advanced to @targetPosition@,
 -- polling at 'pollMicros' intervals. Returns @Right ()@ once caught up, or
@@ -499,25 +540,16 @@ ensureReadModel readModel = do
     Nothing -> Left (ReadModelUnregistered (readModel ^. #name))
 
 validateMetadata :: ReadModel q r -> ReadModelMetadata -> Either ReadModelError ()
-validateMetadata readModel metadata
-  | metadata ^. #version /= readModel ^. #version =
-      stale
-  | metadata ^. #shapeHash /= readModel ^. #shapeHash =
-      stale
-  | metadata ^. #status /= Live =
-      Left (ReadModelNotLive (readModel ^. #name) (metadata ^. #status))
-  | otherwise =
-      Right ()
+validateMetadata readModel = validateRequiredMetadata (readModelRequirement readModel)
+
+validateRequiredMetadata :: ReadModelRequirement -> ReadModelMetadata -> Either ReadModelError ()
+validateRequiredMetadata (ReadModelRequirement name version shapeHash) metadata
+  | metadata ^. #version /= version = stale
+  | metadata ^. #shapeHash /= shapeHash = stale
+  | metadata ^. #status /= Live = Left (ReadModelNotLive name (metadata ^. #status))
+  | otherwise = Right ()
   where
-    stale =
-      Left
-        ( ReadModelStaleSchema
-            (readModel ^. #name)
-            (readModel ^. #version)
-            (metadata ^. #version)
-            (readModel ^. #shapeHash)
-            (metadata ^. #shapeHash)
-        )
+    stale = Left (ReadModelStaleSchema name version (metadata ^. #version) shapeHash (metadata ^. #shapeHash))
 
 waitForFreshness ::
   (IOE :> es, Store :> es) =>

@@ -7,8 +7,9 @@
 -- 'markLive', 'markAbandoned') drive the rebuild workflow in
 -- "Keiro.ReadModel.Rebuild".
 --
--- All operations run as single-statement 'Hasql.Transaction.Transaction's
--- against the @keiro_read_models@ table; an unrecognized stored status decodes
+-- Simple operations use single-statement transactions; 'lockReadModelsTx'
+-- composes discovery and ordered locks for a caller's query transaction.
+-- An unrecognized stored status decodes
 -- to 'UnknownStatus' so callers see the raw database value instead of a silent
 -- fallback.
 module Keiro.ReadModel.Schema
@@ -19,6 +20,8 @@ module Keiro.ReadModel.Schema
     -- * Registration and lookup
     registerReadModel,
     lookupReadModel,
+    ReadModelLockError (..),
+    lockReadModelsTx,
 
     -- * Status transitions
     markRebuilding,
@@ -29,6 +32,10 @@ module Keiro.ReadModel.Schema
 where
 
 import Contravariant.Extras (contrazip4, contrazip5)
+import Data.List qualified as List
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -90,6 +97,68 @@ lookupReadModel :: (Store :> es) => Text -> Eff es (Maybe ReadModelMetadata)
 lookupReadModel name =
   runTransaction
     $ Tx.statement name lookupReadModelStmt
+
+-- | Refusals while acquiring an atomic read boundary. A moved registration
+-- must be retried against its new group rather than running under the old lock.
+data ReadModelLockError
+  = ReadModelLockMissing !Text
+  | ReadModelLockGroupUnavailable !Text !Text
+  | ReadModelLockRegistrationChanged !Text
+  deriving stock (Eq, Show, Generic)
+
+-- | Lock owning groups, then registry rows, in deterministic order. The caller
+-- must validate the returned schema identities and run its SQL in this same
+-- transaction. All observed model names must be supplied; SQL is opaque to Keiro.
+lockReadModelsTx :: NonEmpty.NonEmpty Text -> Tx.Transaction (Either ReadModelLockError [ReadModelMetadata])
+lockReadModelsTx requested = do
+  discovered <- Tx.statement names lookupReadModelsStmt
+  case missing discovered of
+    Just name -> pure (Left (ReadModelLockMissing name))
+    Nothing -> do
+      let groups = List.sort . Set.toList . Set.fromList $ fmap (^. #rebuildGroupId) discovered
+      lockedGroups <- Tx.statement groups lockReadGroupsStmt
+      lockedModels <- Tx.statement names lockReadModelsStmt
+      pure $ do
+        case missing lockedModels of
+          Just name -> Left (ReadModelLockMissing name)
+          Nothing -> Right ()
+        let oldGroups = Map.fromList [(row ^. #name, row ^. #rebuildGroupId) | row <- discovered]
+        for_ lockedModels $ \row ->
+          unless (Map.lookup (row ^. #name) oldGroups == Just (row ^. #rebuildGroupId))
+            $ Left (ReadModelLockRegistrationChanged (row ^. #name))
+        let available = Map.fromList [(group, (status, allowed)) | (group, status, allowed) <- lockedGroups]
+        for_ groups $ \group ->
+          case Map.lookup group available of
+            Just (status, True) | status `Prelude.elem` ["live", "serving-versioned", "rebuilding-versioned", "cutover-versioned", "failed-versioned"] -> Right ()
+            Just (status, _) -> Left (ReadModelLockGroupUnavailable group status)
+            Nothing -> Left (ReadModelLockGroupUnavailable group "unregistered")
+        Right lockedModels
+  where
+    names = List.sort . Set.toList . Set.fromList $ NonEmpty.toList requested
+    missing rows =
+      let found = Set.fromList (fmap (^. #name) rows)
+       in List.find (\name -> Prelude.not (Set.member name found)) names
+
+lookupReadModelsStmt :: Statement [Text] [ReadModelMetadata]
+lookupReadModelsStmt =
+  preparable
+    "SELECT name, version, shape_hash, rebuild_group_id, last_built_at, status FROM keiro.keiro_read_models WHERE name = ANY($1) ORDER BY name"
+    (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+    (D.rowList readModelMetadataDecoder)
+
+lockReadModelsStmt :: Statement [Text] [ReadModelMetadata]
+lockReadModelsStmt =
+  preparable
+    "SELECT name, version, shape_hash, rebuild_group_id, last_built_at, status FROM keiro.keiro_read_models WHERE name = ANY($1) ORDER BY name FOR SHARE"
+    (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+    (D.rowList readModelMetadataDecoder)
+
+lockReadGroupsStmt :: Statement [Text] [(Text, Text, Bool)]
+lockReadGroupsStmt =
+  preparable
+    "SELECT group_id, status, reads_allowed FROM keiro.keiro_projection_rebuild_groups WHERE group_id = ANY($1) ORDER BY group_id FOR SHARE"
+    (E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+    (D.rowList ((,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.bool)))
 
 -- | Upsert the registry row to 'Rebuilding' at the given schema identity.
 -- Marks the model as being repopulated so queries stop serving it until

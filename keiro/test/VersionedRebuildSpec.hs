@@ -54,7 +54,7 @@ import Keiro.Projection (CatalogAsyncApplyOutcome (..), applyAsyncProjectionFrom
 import Keiro.Projection.Catalog
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
-import Keiro.ReadModel (ReadModel (..))
+import Keiro.ReadModel (ReadModel (..), runQuery)
 import Keiro.ReadModel.External (reconcileExternalReadContracts)
 import Keiro.ReadModel.Rebuild
 import Keiro.Test.Postgres (Fixture, withFreshDatabase, withFreshStore)
@@ -81,6 +81,7 @@ import Kiroku.Store.Types
     StreamName (..),
     StreamVersion (..),
   )
+import ReadModelFenceSpec qualified as QueryFence
 import Test.Hspec
 
 spec :: Fixture -> Spec
@@ -335,6 +336,30 @@ spec fixture = do
         for_ (handle ^. #candidateGenerations) $ \generation ->
           rowCount store (generation ^. #physicalTable)
             `shouldReturn` if generation ^. #targetId == counterTargetId then 1 else 2
+
+      it "native read-model query fence also serializes versioned promotion" $ \store -> do
+        setupBridge store
+        (catalog, physicalTargets) <- validatedBridge
+        registerBridge store catalog
+        runScript store "INSERT INTO app.counter (id,total) VALUES (1,11)"
+        runStatement store ("catalog-async-subscription", 0) upsertSubscriptionCursorStmt
+        let request = versionedRequest "versioned-native-query" physicalTargets
+            counted =
+              ((counterBinding ^. #readModel) :: ReadModel Text ())
+                { query = \_ -> Tx.statement () (preparable "SELECT count(*) FROM app.counter" E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))
+                }
+            held = (counted :: ReadModel Text Int64) {query = \input -> QueryFence.latch >> (counted ^. #query) input}
+        _ <- expectStore store (beginVersionedRebuild catalog request) >>= requireRight
+        QueryFence.withLatch store $ \release ->
+          QueryFence.withTask (expectStore store (runQuery Nothing held "")) $ \joinReader -> do
+            reader <- QueryFence.backend store "native-query-reader" "advisory"
+            QueryFence.withTask (driveVersionedToPromotion store catalog (request ^. #rebuildRunId) 10) $ \joinPromoter -> do
+              QueryFence.awaitBlocked store reader
+              release
+              joinReader `shouldReturn` Right 1
+              promoted <- joinPromoter
+              promoted ^. #phase `shouldBe` VersionedPromoted
+        expectStore store (runQuery Nothing counted "") `shouldReturn` Right 0
 
       it "captures a durable final head and atomically promotes every target" $ \store -> do
         setupBridge store

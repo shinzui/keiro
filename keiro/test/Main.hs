@@ -395,6 +395,7 @@ import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
 import ProjectionReplaySpec qualified
+import ReadModelFenceSpec qualified
 import ReadModelSpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
@@ -423,6 +424,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   PreCanonicalRecoverySpec.spec fixture
   ProjectionReplaySpec.spec fixture
   ReadModelSpec.spec
+  ReadModelFenceSpec.spec fixture
 
   describe "catalog-fenced inline projections" $ around (withFreshResourceStore fixture) $ do
     it "rolls back the event append and target write while its group rebuilds" $ \(_storeHandle, StoreRunner runStore) -> do
