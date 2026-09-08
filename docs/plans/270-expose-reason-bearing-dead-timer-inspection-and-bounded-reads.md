@@ -25,13 +25,14 @@ This implements the read contract in [IR-35](docs/improvement-requests/expose-re
 - [x] (2026-09-08T02:29:14Z) Implemented inspection and bounded listing; focused timer tests passed all 19 examples, including the six new inspection/filter/pagination/authorization cases.
 - [x] (2026-09-08T02:29:14Z) Consumer authorization fixture passed; user documentation and ADR-28 strict validation passed. `nix fmt`, `nix flake check`, and all seven `cabal check` commands passed.
 - [x] (2026-09-08T02:32:22Z) Full `keiro-test` suite passed: 626 examples, zero failures. Capability and improvement-request validation passed (existing recommended-review warnings only). All seven source distributions generated.
-- [ ] Complete workspace/operator verification and Haddock, then record final evidence.
+- [x] (2026-09-08T02:55Z) `just corpus-regen` passed with no generated changes. Within `nix develop -c just verify`, `cabal build all`, Keiro, PGMQ, operator, all 43 DSL suites, Jitsurei tests, diagrams, and policy checks passed.
+- [x] (2026-09-08T03:05:59Z) `nix develop -c just verify` exited 0; its final migration suite passed 35 examples with zero failures. Isolated Haddock generation passed and the public `Keiro.Timer` page contains both new reads, the inspection/page types, and the invalid-size error. Final `nix fmt` and `nix flake check` passed.
 - [ ] Coordinate release with IR-36 and record tagged Hackage/docs evidence.
 - [ ] Record downstream released-bound adoption and passing Kioku fixture.
 
 ## Surprises & Discoveries
 
-Concurrent Cabal policy and Haddock jobs reconfigured shared workspace packages and produced incompatible instances of the same `aeson-2.2.5.1` types during compilation. This is a build orchestration failure, not yet evidence of a source defect. The first generated-name policy and Haddock attempts failed; serialize the remaining workspace gate and retry documentation afterward. Do not count those failed attempts as validation evidence.
+Concurrent Cabal policy and Haddock jobs reconfigured shared workspace packages and produced incompatible instances of the same `aeson-2.2.5.1` types during compilation. The serialized workspace gate subsequently compiled and passed the affected DSL tests without source changes, confirming build interference. The first generated-name policy and shared-directory Haddock attempts failed and are not validation evidence. The Haddock retry used `--builddir=/tmp/keiro270-haddock-build`, which isolated its configuration and artifacts from the migration test build and passed. The cold migration test compilation was lengthy but completed successfully; all 35 migration examples then passed.
 The first focused test run rebuilt dependencies and confirmed the intended compile failure for the absent public inspection operation. The new SQL mode encoder requires an explicit `Data.Int (Int32)` import because `Keiro.Prelude` exports `Int64` only.
 
 IR-36 remains proposed with no guarded dead-timer mutation in the working tree. The coordinated release therefore cannot yet satisfy its joint scope; local read implementation must not mark IR-35 delivered or present a source overlay as released adoption.
@@ -50,9 +51,10 @@ Decision (2026-09-08): Plan creation does not close IR-35. Implementation and co
 
 ## Outcomes & Retrospective
 
+Final local validation (2026-09-08T03:05:59Z): the full `nix develop -c just verify` gate exited 0, covering workspace compilation, the runnable examples, Keiro/PGMQ/operator suites, all 43 DSL suites, Jitsurei tests, diagrams, documentation and source policies, corpus consistency, and 35 migration examples. `nix fmt`, `nix flake check` on aarch64-darwin, all seven package checks and source distributions, and isolated Haddock generation passed. Corpus regeneration produced no tracked changes. Documentation and ADR changes are committed in `627b1243`; this final record completes local validation, not the release/adoption requirements.
 The local read contract is implemented in commit `c486404c`: additive public inspection, literal reason and owner filtering, hard page-size validation, and observational UUID pagination. Six new PostgreSQL cases plus existing timer tests pass (19 selected); the complete Keiro suite passes 626 examples. Read-only behavior is checked by comparing every stored column before and after reads and polling the ordinary worker. The consumer fixture follows two empty rendered pages (unauthorized then malformed), renders original work with its complete reason, and observes revoked permission on the next request.
 
-ADR-28 now preserves the durable boundary: Keiro owns inspection and page semantics, while applications own decoding, authorization, and later execution guards. Shared release and actual downstream adoption remain pending because the separate IR-36 transition is not implemented. No version, dependency bound, migration, or release artifact has been published; the plan and IR-35 remain open.
+ADR-28 now preserves the durable boundary: Keiro owns inspection and page semantics, while applications own decoding, authorization, and later execution guards. Shared release and actual downstream adoption remain pending because the separate IR-36 transition is not implemented. No version or dependency bound changed, no migration was added, and no release artifact was published; the plan and IR-35 remain open.
 
 ## Context and Orientation
 
@@ -144,6 +146,22 @@ Intention: intention_01m1zchqgtenp9a759tcv0vtkw
 
 ## Validation and Acceptance
 
+Recorded implementation validation on 2026-09-08 used the following commands from the Keiro repository root. The focused run passed 19 examples; the separate full Keiro run passed 626 examples; the full verification gate exited 0 and includes the workspace build and operator suite. The first shared-directory Haddock and generated-name policy attempts failed from concurrent Cabal configuration interference; the gate and isolated documentation retry below are the successful evidence.
+
+```bash
+nix develop -c cabal test keiro-test --test-options='--match Keiro.Timer' --test-show-details=direct
+nix develop -c cabal test keiro-test --test-show-details=direct
+nix fmt
+nix develop -c just corpus-regen
+nix develop -c just verify
+nix flake check
+nix develop -c zsh -c 'for package in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops; do (cd "$package" && cabal check) || exit; done'
+nix develop -c cabal sdist keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops
+nix develop -c cabal haddock --builddir=/tmp/keiro270-haddock-build --haddock-for-hackage --haddock-hyperlink-source --haddock-quickjump keiro
+okf validate docs/improvement-requests --strict --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
+```
+
+The package checks reported no errors or warnings. Improvement-request validation passed with existing missing recommended-review warnings. The generated `Keiro.Timer` Haddock page was checked for the public operations, types, and error. Neither these local source distributions nor the documentation tarball was uploaded. Actual downstream validation against a released bound was not run; the local authorization fixture does not substitute for it.
 A scheduled row reads with `lastError = Nothing`; a dead-letter operation with empty text reads `Just ""`; a populated reason reads byte-for-byte equivalent text without trimming, annotation, or category extraction. A legacy dead row with NULL remains distinguishable from all of these. The nested row equals the legacy lookup and retains payload, owner, correlation, due time, status, attempts, and fired event ID.
 
 Given two deferred rows for manager A, one for manager B, an ordinary dead letter, and rows in all other states, manager A plus the literal deferred prefix returns exactly its two eligible dead rows. Page size one traverses them in UUID order without duplicates on unchanged data, and the final page has no continuation. ReasonAbsent selects only NULL dead reasons; exact empty selects only empty ones. Invalid page sizes return the specified error. Parameter text containing quotes, percent, underscore, and backslash cannot change SQL meaning.
@@ -208,3 +226,5 @@ findDeadTimers ::
 Keep `TimerRow`, `lookupTimer`, `findStuckTimers`, and all worker signatures unchanged. Use the existing Hasql parameter/decoder composition and store transactions. Source and encoder guidance were located via `mori://hasql/hasql`; public decoder exports include `rowMaybe`, `rowList`, `nullable`, and `text`. No new library, dependency bound, database role, HTTP endpoint, memory-space schema, or AI execution capability is introduced.
 
 Revision (2026-09-08): Began implementation, recorded the red compilation test and explicit release/adoption dependencies.
+
+Revision (2026-09-08T03:05:59Z): Completed the local API, PostgreSQL acceptance fixtures, documentation and ADR distillation, package checks, source distributions, isolated Haddock proof, and full verification gate. Recorded successful validation separately from the recovered shared-build interference. Kept coordinated IR-36 publication and actual released-bound downstream adoption unchecked, as required by this plan.
