@@ -4,13 +4,12 @@ All notable changes to the `keiro` library are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## Unreleased
+## [Unreleased]
 
-### New Features
+## 0.16.0.0 — 2026-09-07
 
-- Add guarded Dead timer claims with exact owner/reason checks, total attempt
-  ceilings, and opaque expiring ownership. Complete, renew, park, cancel, or
-  recover directly to Dead while retaining original work and retry history.
+### Breaking Changes
+
 - Ordinary worker passes recover expired foreground claims even when ordinary
   requeueing is disabled. ID-only timer mutations refuse guarded claims.
   Existing rows and callback signatures remain source-compatible.
@@ -18,6 +17,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   writers before enabling resume. Mixed-version writers are unsafe. Disable
   resume and drain/recover claims before rollback. External effects remain
   at-least-once and require consumer-owned idempotency.
+
+### New Features
+
+- Add guarded Dead timer claims with exact owner/reason checks, total attempt
+  ceilings, and opaque expiring ownership. Complete, renew, park, cancel, or
+  recover directly to Dead while retaining original work and retry history.
 
 - Add `Keiro.Timer.lookupTimerInspection` with full nullable stored reasons and
   `findDeadTimers` with exact owner/literal reason filters, 1–100 row bounds,

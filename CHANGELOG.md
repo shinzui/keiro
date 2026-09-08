@@ -4,13 +4,12 @@ All notable changes to the Keiro package set are recorded here. The format
 follows [Keep a Changelog](https://keepachangelog.com/), and the published
 packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## Unreleased
+## [Unreleased]
 
-### New Features
+## 0.16.0.0 — 2026-09-07
 
-- Add atomic guarded Dead timer resume with exact owner/reason guards, explicit
-  total attempt ceilings, opaque expiring ownership, renewal, completion, parking,
-  cancellation, and recovery directly to Dead. Preserve original work and reasons.
+### Breaking Changes
+
 - Timer workers recover expired foreground claims independently of ordinary
   requeue settings. ID-only mutations refuse guarded claims. Existing row and
   callback signatures are unchanged; external execution remains at-least-once.
@@ -18,10 +17,22 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   deploy all upgraded writers, then enable resume. Mixed-version writers are unsafe.
   Disable resume and drain/recover guarded claims before rolling back writers.
 
+### New Features
+
+- Add atomic guarded Dead timer resume with exact owner/reason guards, explicit
+  total attempt ceilings, opaque expiring ownership, renewal, completion, parking,
+  cancellation, and recovery directly to Dead. Preserve original work and reasons.
+
 - Add `Keiro.Timer.lookupTimerInspection` with full nullable stored reasons and
   `findDeadTimers` with exact owner/literal reason filters, 1–100 row bounds,
   and exclusive UUID pagination. Existing timer rows and worker APIs remain
   compatible; callers own payload authorization before rendering.
+
+### Other Changes
+
+- Add the 0.15.0.0 → 0.16.0.0 upgrade blueprint edge for migration 0032 and
+  coordinated timer writer rollout. The upstream dependency cohort is unchanged.
+- Record release facts from observed tags through repository automation.
 
 ## 0.15.0.0 — 2026-08-30
 

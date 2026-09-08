@@ -4,7 +4,15 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## Unreleased
+## [Unreleased]
+
+## 0.16.0.0 — 2026-09-07
+
+### Breaking Changes
+
+- Stop/drain old timer writers before applying and enable foreground resume only
+  after all writers are upgraded. Before rollback, disable resume and drain or
+  recover guarded claims; old writers lack ownership exclusion predicates.
 
 ### New Features
 
@@ -12,9 +20,6 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
   deadlines, with a constraint requiring paired fields only on Firing rows.
   Existing timers retain all metadata and retry history. The native schema
   snapshot, manifest, and checksum lock include the new migration.
-- Stop/drain old timer writers before applying and enable foreground resume only
-  after all writers are upgraded. Before rollback, disable resume and drain or
-  recover guarded claims; old writers lack ownership exclusion predicates.
 
 ## 0.15.0.0 — 2026-08-30
 

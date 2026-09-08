@@ -4,7 +4,13 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 [Keep a Changelog](https://keepachangelog.com/), and the package follows the
 [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
-## Unreleased
+## [Unreleased]
+
+## 0.16.0.0 — 2026-09-07
+
+### Other Changes
+
+- No user-facing changes; release in lockstep with the Keiro 0.16.0.0 package set.
 
 ## 0.15.0.0 — 2026-08-30
 
