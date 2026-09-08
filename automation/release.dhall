@@ -1,43 +1,45 @@
 -- Turn an observed release tag into the one immutable Project release fact mori
 -- keeps for shinzui/keiro.
 --
--- The same shape shinzui/shikumi and shinzui/baikai use. Keiro cuts one tag per
--- package -- seven at 0.15.0.0 -- so it needs the scripts/record-release.sh
--- wrapper for the same reason they do: mori's ref globs understand `*` and `**`
--- and nothing else, so no pattern can say "keiro- followed by a version and no
--- further package segment". shinzui/okf uses the unwrapped form from `mori help
--- registry-releases` only because it cuts a single tag per release.
+-- Keiro cuts one tag per package -- seven at 0.16.0.0 -- and only the umbrella
+-- `keiro-<version>` tag carries the project's release. `refRegexes` states that
+-- directly: a whole-input POSIX extended regex, so `keiro-0.16.0.0` matches and
+-- `keiro-core-0.16.0.0` does not. Before mori grew that field this was
+-- inexpressible here -- ref globs understand `*` and `**` and nothing else --
+-- and the narrowing lived in scripts/record-release.sh, which fired on all
+-- seven tags and exited quietly on six. The selector now fires exactly once per
+-- release and the script no longer guards.
 --
--- The version recorded is the tag text minus the `keiro-` prefix -- `0.15.0.0`,
--- not `keiro-0.15.0.0` -- which is what the 0.1.0.0-0.15.0.0 backfill already
+-- The version recorded is the tag text minus the `keiro-` prefix -- `0.16.0.0`,
+-- not `keiro-0.16.0.0` -- which is what the 0.1.0.0-0.15.0.0 backfill already
 -- put on this project's stream. Mori stores versions as opaque single-line
 -- strings and never parses or compares them, so nothing enforces that
--- agreement; it is a convention this repo has to keep on purpose.
+-- agreement; it is a convention this repo has to keep on purpose. Regex capture
+-- groups create no template variables, so `{{ref.name}}` is still the whole
+-- tag and the strip stays in the script.
 --
 -- Registered as its own named automation (`--name release`) rather than merged
--- into the existing mori.automation.dhall: a directory is one automation split
--- across files and every file must agree on `queued`, `execution`, `consent`
--- and `signalBounds`. This rule shells out and wants `queued = True`, while the
--- default automation's KeiroDslSurfaceChanged signal must not sit behind a
--- recording in that queue.
+-- into automation/keiro-dsl-changed-notification.dhall: a directory is one
+-- automation split across files and every file must agree on `queued`,
+-- `execution`, `consent` and `signalBounds`. This rule shells out and wants
+-- `queued = True`, while that config's KeiroDslSurfaceChanged signal must not
+-- sit behind a recording in the same queue.
 --
--- Pinned to mori-schema 9899d45 rather than the 1f70781 that
--- mori.automation.dhall carries: `Automation.queued` does not exist in 1f70781.
--- Not the newer 92dd706 either -- that adds `SignalAction.cascade`, which this
--- file has no use for.
+-- Pinned to mori-schema 7904371, the commit that adds `RefSelector.refRegexes`
+-- (and `ChangesetSelector.pathRegexes`). This is the commit the current mori
+-- binary embeds, so the import resolves without touching the network.
 let Schema =
-      https://raw.githubusercontent.com/shinzui/mori-schema/9899d4544790da7120e8150c73e56cb53fe35191/package.dhall
-        sha256:4024df757a0178e37fb0b5f04d7deb284dc3ee9bfea89a6610b793338101e284
+      https://raw.githubusercontent.com/shinzui/mori-schema/7904371c3ee1f592b427167e213cb1baa835de2c/package.dhall
+        sha256:4b3730d985a19575278e3f155d98d5a60992e5f51b4f9223d390ef13e513e3c4
 
 in  Schema.Automation::{
     , events =
       [ Schema.EventSelector.RefSelector Schema.RefSelector::{
         , name = "keiro-release-tag"
         ,
-          -- Every release tag in the repo, not only the umbrella one; see the
-          -- header. scripts/record-release.sh exits quietly on the six sibling
-          -- package tags.
-          refPatterns = [ "keiro-*" ]
+          -- Whole-input match. `[.]` for the literal dot: a Dhall
+          -- double-quoted string would otherwise need the backslash doubled.
+          refRegexes = [ "keiro-[0-9]+([.][0-9]+)*" ]
         , kinds = [ "tag" ]
         }
       ]
@@ -65,11 +67,14 @@ in  Schema.Automation::{
         }
       ]
     ,
-      -- A release cut pushes seven tags in the same second, so this automation
-      -- is triggered seven times at once. Recording a version twice is already
-      -- safe -- the first committed release time and source win -- but
-      -- serializing keeps the seven invocations from racing each other into the
-      -- same Project stream.
+      -- A release cut now triggers this once, not seven times, so the original
+      -- reason for queueing is gone. It is kept for the replay case:
+      -- `mori automate reset-checkpoint --to-root` re-observes every umbrella
+      -- tag in the repo's history at once, and serializing keeps those
+      -- invocations from racing each other into the same Project stream.
+      -- Re-recording a version is already safe -- the first committed release
+      -- time and source win -- so this is about avoiding contention, not
+      -- correctness.
       queued = True
     , execution = Schema.ExecutionPolicy::{ allowLocal = True }
     }
