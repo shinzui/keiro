@@ -21,12 +21,22 @@ This implements the read contract in [IR-35](docs/improvement-requests/expose-re
 
 ## Progress
 
+- [x] (2026-09-08T02:26Z) Confirmed schema compatibility, public facade, Hasql codecs through Mori, and ADR boundaries. Inspection tests failed to compile against the old API as expected (`lookupTimerInspection` not in scope).
+- [x] (2026-09-08T02:29:14Z) Implemented inspection and bounded listing; focused timer tests passed all 19 examples, including the six new inspection/filter/pagination/authorization cases.
+- [x] (2026-09-08T02:29:14Z) Consumer authorization fixture passed; user documentation and ADR-28 strict validation passed. `nix fmt`, `nix flake check`, and all seven `cabal check` commands passed.
+- [ ] Complete full-suite/workspace/operator checks and record final documentation/package evidence.
+- [ ] Coordinate release with IR-36 and record tagged Hackage/docs evidence.
+- [ ] Record downstream released-bound adoption and passing Kioku fixture.
 
 ## Surprises & Discoveries
 
+The first focused test run rebuilt dependencies and confirmed the intended compile failure for the absent public inspection operation. The new SQL mode encoder requires an explicit `Data.Int (Int32)` import because `Keiro.Prelude` exports `Int64` only.
+
+IR-36 remains proposed with no guarded dead-timer mutation in the working tree. The coordinated release therefore cannot yet satisfy its joint scope; local read implementation must not mark IR-35 delivered or present a source overlay as released adoption.
 
 ## Decision Log
 
+Decision (2026-09-08): Implement both additive read operations in one source change and validate inspection, listing, and consumer fixtures together; the red compile test independently proves the old API lacks inspection. No dependency bounds, versions, or migrations change. Hackage/tag verification still finds 0.15.0.0 at `de574cdcb0add3fefbb0fdd96d820258d15f8997`. Keep the coordinated release and downstream released-bound fixture pending until IR-36 is ready.
 Decision (2026-09-08): Validate IR-35 as actionable. At repository commit `7ffd251983be1439f113c3529e6087d48e5ed6ac`, `deadLetterTimerStmt` persists `last_error`, but `TimerRow`, `lookupTimerStmt`, and `timerRowDecoder` omit it; `findStuckTimersStmt` selects only firing rows. Existing schema already supports the requested information. The request's underlying defect is confirmed independently of its historical source revision.
 
 Decision (2026-09-08): Add `TimerInspection` containing the unchanged `TimerRow` plus `Maybe Text` reason. This preserves constructor, record, generic representation, lookup, and worker compatibility. SQL NULL, empty text, and populated text remain distinct. No new migration or dependency bound is planned.
@@ -191,3 +201,5 @@ findDeadTimers ::
 ```
 
 Keep `TimerRow`, `lookupTimer`, `findStuckTimers`, and all worker signatures unchanged. Use the existing Hasql parameter/decoder composition and store transactions. Source and encoder guidance were located via `mori://hasql/hasql`; public decoder exports include `rowMaybe`, `rowList`, `nullable`, and `text`. No new library, dependency bound, database role, HTTP endpoint, memory-space schema, or AI execution capability is introduced.
+
+Revision (2026-09-08): Began implementation, recorded the red compilation test and explicit release/adoption dependencies.

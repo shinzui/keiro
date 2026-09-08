@@ -15,6 +15,17 @@ module Keiro.Timer.Schema
     TimerStatus (..),
     TimerRow (..),
 
+    -- * Read-only inspection
+    TimerInspection (..),
+    TimerReasonFilter (..),
+    DeadTimerFilter (..),
+    anyDeadTimer,
+    DeadTimerPageRequest (..),
+    DeadTimerReadError (..),
+    DeadTimerPage (..),
+    lookupTimerInspection,
+    findDeadTimers,
+
     -- * Storage
     scheduleTimerTx,
     scheduleTimerOnceTx,
@@ -37,7 +48,8 @@ module Keiro.Timer.Schema
   )
 where
 
-import Contravariant.Extras (contrazip2, contrazip6)
+import Contravariant.Extras (contrazip2, contrazip5, contrazip6)
+import Data.Int (Int32)
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
 import Effectful (Eff, (:>))
@@ -84,6 +96,97 @@ data TimerRow = TimerRow
     firedEventId :: !(Maybe EventId)
   }
   deriving stock (Generic, Eq, Show)
+
+-- | Original timer metadata and the full stored reason. NULL and empty text
+-- remain distinct. Reading does not claim work or authorize its disclosure.
+data TimerInspection = TimerInspection
+  { timer :: !TimerRow,
+    lastError :: !(Maybe Text)
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Case-sensitive literal reason matching. An empty prefix matches every
+-- non-NULL reason; percent, underscore, and backslash are ordinary characters.
+data TimerReasonFilter
+  = AnyTimerReason
+  | ReasonAbsent
+  | ReasonExact !Text
+  | ReasonPrefix !Text
+  deriving stock (Generic, Eq, Show)
+
+-- | Dead rows matching both the optional exact owner and the reason predicate.
+-- The owner label is not an application authorization credential.
+data DeadTimerFilter = DeadTimerFilter
+  { processManagerName :: !(Maybe Text),
+    reason :: !TimerReasonFilter
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Select all dead timers.
+anyDeadTimer :: DeadTimerFilter
+anyDeadTimer = DeadTimerFilter Nothing AnyTimerReason
+
+-- | Request 1 through 100 rows, strictly after an optional UUID cursor.
+-- Restart without a cursor when changing filters.
+data DeadTimerPageRequest = DeadTimerPageRequest
+  { pageSize :: !Int,
+    afterTimerId :: !(Maybe TimerId)
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Invalid sizes are rejected before database access, without clamping.
+data DeadTimerReadError = InvalidDeadTimerPageSize !Int
+  deriving stock (Generic, Eq, Show)
+
+-- | Ascending UUID order, not chronological order. Continuation exists only
+-- when another matching row was observed. Requests see current eligibility,
+-- not a shared snapshot: newly eligible IDs behind the cursor are not revisited.
+data DeadTimerPage = DeadTimerPage
+  { timers :: ![TimerInspection],
+    nextAfterTimerId :: !(Maybe TimerId)
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Inspect any lifecycle state without mutations or row-claim locks.
+lookupTimerInspection :: (Store :> es) => TimerId -> Eff es (Maybe TimerInspection)
+lookupTimerInspection timerId =
+  runTransaction $ Tx.statement (timerIdToUuid timerId) lookupTimerInspectionStmt
+
+-- | Observe a bounded page of dead timers. Limits bound returned rows, not
+-- database search cost. Callers must decode and authorize before rendering,
+-- following storage continuation even if authorization removes an entire page.
+findDeadTimers ::
+  (Store :> es) =>
+  DeadTimerFilter ->
+  DeadTimerPageRequest ->
+  Eff es (Either DeadTimerReadError DeadTimerPage)
+findDeadTimers deadFilter request
+  | size < 1 || size > 100 = pure (Left (InvalidDeadTimerPageSize size))
+  | otherwise = do
+      rows <-
+        runTransaction $
+          Tx.statement
+            ( deadFilter ^. #processManagerName,
+              mode,
+              reasonText,
+              timerIdToUuid <$> request ^. #afterTimerId,
+              fromIntegral size + 1
+            )
+            findDeadTimersStmt
+      let selected = take size rows
+          continuation = case drop size rows of
+            [] -> Nothing
+            _ -> case reverse selected of
+              lastRow : _ -> Just (lastRow ^. #timer . #timerId)
+              [] -> Nothing
+      pure (Right (DeadTimerPage selected continuation))
+  where
+    size = request ^. #pageSize
+    (mode, reasonText) = case deadFilter ^. #reason of
+      AnyTimerReason -> (0, Nothing)
+      ReasonAbsent -> (1, Nothing)
+      ReasonExact value -> (2, Just value)
+      ReasonPrefix value -> (3, Just value)
 
 -- | Criteria selecting timers stranded in 'Firing'. A row is "stuck" when its
 -- 'status' is @firing@ and it matches every set bound: 'minAge' (it has been
@@ -221,7 +324,7 @@ cancelTimer timerId =
 
 -- | Move a timer from @Scheduled@ or @Firing@ to the terminal @Dead@ state,
 -- recording @reason@ in @last_error@ so an operator can see why it was abandoned
--- (@SELECT * FROM keiro_timers WHERE status = 'dead'@). Terminal rows are left
+-- through 'lookupTimerInspection' or 'findDeadTimers'. Terminal rows are left
 -- untouched. Idempotent. Returns 'True' when a row changed.
 deadLetterTimer :: (Store :> es) => TimerId -> Text -> Eff es Bool
 deadLetterTimer timerId reason =
@@ -311,6 +414,50 @@ lookupTimerStmt =
     """
     (E.param (E.nonNullable E.uuid))
     (D.rowMaybe timerRowDecoder)
+
+lookupTimerInspectionStmt :: Statement UUID (Maybe TimerInspection)
+lookupTimerInspectionStmt =
+  preparable
+    """
+    SELECT timer_id, process_manager_name, correlation_id, fire_at,
+      payload, status, attempts, fired_event_id, last_error
+    FROM keiro.keiro_timers
+    WHERE timer_id = $1
+    """
+    (E.param (E.nonNullable E.uuid))
+    (D.rowMaybe timerInspectionDecoder)
+
+findDeadTimersStmt :: Statement (Maybe Text, Int32, Maybe Text, Maybe UUID, Int64) [TimerInspection]
+findDeadTimersStmt =
+  preparable
+    """
+    SELECT timer_id, process_manager_name, correlation_id, fire_at,
+      payload, status, attempts, fired_event_id, last_error
+    FROM keiro.keiro_timers
+    WHERE status = 'dead'
+      AND ($1::text IS NULL OR process_manager_name COLLATE "C" = $1)
+      AND (CASE $2::integer
+        WHEN 0 THEN TRUE
+        WHEN 1 THEN last_error IS NULL
+        WHEN 2 THEN last_error COLLATE "C" = $3::text
+        WHEN 3 THEN left(last_error, char_length($3::text)) COLLATE "C" = $3::text
+        ELSE FALSE END)
+      AND ($4::uuid IS NULL OR timer_id > $4)
+    ORDER BY timer_id ASC
+    LIMIT $5::bigint
+    """
+    ( contrazip5
+        (E.param (E.nullable E.text))
+        (E.param (E.nonNullable E.int4))
+        (E.param (E.nullable E.text))
+        (E.param (E.nullable E.uuid))
+        (E.param (E.nonNullable E.int8))
+    )
+    (D.rowList timerInspectionDecoder)
+
+timerInspectionDecoder :: D.Row TimerInspection
+timerInspectionDecoder =
+  TimerInspection <$> timerRowDecoder <*> D.column (D.nullable D.text)
 
 markTimerFiredStmt :: Statement (UUID, UUID) Bool
 markTimerFiredStmt =

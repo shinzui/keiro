@@ -11,6 +11,7 @@ import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
 import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (ErrorCall, Exception, SomeException, displayException, evaluate, finally, throwIO, try)
+import Control.Monad (forM, forM_)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -22,6 +23,7 @@ import Data.Int (Int32)
 import Data.List (isInfixOf)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
+import Data.Maybe (catMaybes)
 import Data.Monoid (mempty)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -223,6 +225,7 @@ import Keiro.Test.Postgres
     withMigratedSuite,
   )
 import Keiro.Timer
+import Keiro.Timer qualified as Timer
 import Keiro.Wake
   ( WakeReason (..),
     WakeSignal (..),
@@ -5508,6 +5511,180 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` ([DomainPMCommandDuplicate legacyId], 1)
 
   describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
+    it "inspects absent timers and preserves legacy metadata through every lifecycle" $ \storeHandle -> do
+      let tid = counterTimerRequest ^. #timerId
+          inspect reason = do
+            Right old <- Store.runStoreIO storeHandle $ lookupTimer tid
+            Right observed <- Store.runStoreIO storeHandle $ lookupTimerInspection tid
+            fmap (^. #timer) observed `shouldBe` old
+            fmap (^. #lastError) observed `shouldBe` Just reason
+      Store.runStoreIO storeHandle (lookupTimerInspection tid) `shouldReturn` Right Nothing
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx counterTimerRequest
+      inspect Nothing
+      Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      inspect Nothing
+      Right True <- Store.runStoreIO storeHandle $ markTimerFired tid (EventId sampleUuid2)
+      inspect Nothing
+      Right (Just observed) <- Store.runStoreIO storeHandle $ lookupTimerInspection tid
+      observed ^. #timer . #firedEventId `shouldBe` Just (EventId sampleUuid2)
+      observed ^. #timer . #attempts `shouldBe` 1
+
+    it "preserves empty, populated, and Unicode dead reasons verbatim" $ \storeHandle -> do
+      forM_ (zip [1 ..] ["", " retry exhausted ", "延期: café 日本語 🌱"]) $ \(n, reason) -> do
+        let request = counterTimerRequest & #timerId .~ TimerId (UUID.fromWords 0 0 0 n)
+        Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx request
+        Right True <- Store.runStoreIO storeHandle $ deadLetterTimer (request ^. #timerId) reason
+        Right old <- Store.runStoreIO storeHandle $ lookupTimer (request ^. #timerId)
+        Right (Just observed) <- Store.runStoreIO storeHandle $ lookupTimerInspection (request ^. #timerId)
+        Just (observed ^. #timer) `shouldBe` old
+        observed ^. #lastError `shouldBe` Just reason
+
+    it "filters dead timers by exact owner and literal reason, preserving NULL" $ \storeHandle -> do
+      let fixtures =
+            [ (1, "A", Just "deferred: one"),
+              (2, "A", Just "deferred: 二"),
+              (3, "B", Just "deferred: three"),
+              (4, "A", Just "ordinary"),
+              (5, "A", Nothing),
+              (6, "A", Just ""),
+              (7, "A", Just "a%_\\'雪 tail"),
+              (8, "A", Just "aXX雪 tail"),
+              (9, "a", Just "Deferred: one")
+            ]
+          tid n = TimerId (UUID.fromWords 0 0 0 n)
+          check owner reason expected = do
+            Right (Right page) <-
+              Store.runStoreIO storeHandle $
+                findDeadTimers (DeadTimerFilter owner reason) (DeadTimerPageRequest 100 Nothing)
+            fmap (^. #timer . #timerId) (page ^. #timers) `shouldBe` fmap tid expected
+            page ^. #nextAfterTimerId `shouldBe` Nothing
+      forM_ fixtures $ \(n, owner, reason) -> do
+        let request = counterTimerRequest & #timerId .~ tid n & #processManagerName .~ owner
+        Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx request
+        Right True <- Store.runStoreIO storeHandle $ deadLetterTimer (tid n) (fromMaybe "legacy" reason)
+        when (isNothing reason) $ do
+          Right () <-
+            Store.runStoreIO storeHandle $
+              Store.runTransaction $
+                Tx.statement (UUID.fromWords 0 0 0 n) legacyDeadTimerReasonStmt
+          Right (Just inspection) <- Store.runStoreIO storeHandle $ lookupTimerInspection (tid n)
+          inspection ^. #lastError `shouldBe` Nothing
+      -- Include every non-dead lifecycle in the same manager/reason search space.
+      forM_ [10 .. 13] $ \n -> do
+        Right () <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              scheduleTimerTx (counterTimerRequest & #timerId .~ tid n & #processManagerName .~ "A")
+        pure ()
+      Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      Right True <- Store.runStoreIO storeHandle $ markTimerFired (tid 10) (EventId sampleUuid2)
+      Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      Right True <- Store.runStoreIO storeHandle $ cancelTimer (tid 12)
+      Right (Just cancelled) <- Store.runStoreIO storeHandle $ lookupTimerInspection (tid 12)
+      cancelled ^. #timer . #status `shouldBe` Timer.Cancelled
+      check Nothing AnyTimerReason [1 .. 9]
+      check (Just "A") (ReasonPrefix "deferred:") [1, 2]
+      check Nothing (ReasonPrefix "deferred:") [1, 2, 3]
+      check (Just "a") AnyTimerReason [9]
+      check Nothing ReasonAbsent [5]
+      check Nothing (ReasonExact "") [6]
+      check Nothing (ReasonPrefix "") [1, 2, 3, 4, 6, 7, 8, 9]
+      check Nothing (ReasonExact "deferred: 二") [2]
+      check Nothing (ReasonPrefix "a%_\\'雪") [7]
+      check Nothing (ReasonExact "a%_\\'雪 tail") [7]
+      check Nothing (ReasonExact "DEFERRED: one") []
+      check (Just "A' OR TRUE --") AnyTimerReason []
+
+    it "bounds pages, traverses UUID order, and leaves every stored column unchanged" $ \storeHandle -> do
+      forM_ [1 .. 101] $ \n -> do
+        let request = plainTimerRequest n
+        Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx request
+        Right True <- Store.runStoreIO storeHandle $ deadLetterTimer (request ^. #timerId) "deferred"
+        pure ()
+      let snapshot = Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+          readPage size cursor = Store.runStoreIO storeHandle $ findDeadTimers anyDeadTimer (DeadTimerPageRequest size cursor)
+      storedBefore <- snapshot
+      forM_ [-1, 0, 101, maxBound] $ \size ->
+        readPage size Nothing `shouldReturn` Right (Left (InvalidDeadTimerPageSize size))
+      Right (Right first) <- readPage 100 Nothing
+      length (first ^. #timers) `shouldBe` 100
+      first ^. #nextAfterTimerId `shouldBe` Just (plainTimerRequest 100 ^. #timerId)
+      readPage 100 Nothing `shouldReturn` Right (Right first)
+      Right (Right finalPage) <- readPage 100 (first ^. #nextAfterTimerId)
+      fmap (^. #timer . #timerId) (finalPage ^. #timers) `shouldBe` [plainTimerRequest 101 ^. #timerId]
+      finalPage ^. #nextAfterTimerId `shouldBe` Nothing
+      readPage 1 (Just (plainTimerRequest 101 ^. #timerId)) `shouldReturn` Right (Right (DeadTimerPage [] Nothing))
+      let walk cursor = do
+            Right (Right page) <- readPage 1 cursor
+            let ids = fmap (^. #timer . #timerId) (page ^. #timers)
+            case page ^. #nextAfterTimerId of
+              Nothing -> pure ids
+              next -> (ids <>) <$> walk next
+      walk Nothing `shouldReturn` fmap ((^. #timerId) . plainTimerRequest) [1 .. 101]
+      Right (Just _) <- Store.runStoreIO storeHandle $ lookupTimerInspection (plainTimerRequest 1 ^. #timerId)
+      snapshot `shouldReturn` storedBefore
+      Store.runStoreIO storeHandle (runTimerWorker Nothing dueTimerTime (\_ -> pure (Just (EventId sampleUuid2))))
+        `shouldReturn` Right Nothing
+      snapshot `shouldReturn` storedBefore
+
+    it "continues after a deleted cursor and observes new eligibility only above it" $ \storeHandle -> do
+      let add n = do
+            Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx (plainTimerRequest n)
+            Right True <- Store.runStoreIO storeHandle $ deadLetterTimer (plainTimerRequest n ^. #timerId) "deferred"
+            pure ()
+          readPage cursor = Store.runStoreIO storeHandle $ findDeadTimers anyDeadTimer (DeadTimerPageRequest 1 cursor)
+      mapM_ add [20, 40, 60]
+      Right (Right first) <- readPage Nothing
+      first ^. #nextAfterTimerId `shouldBe` Just (plainTimerRequest 20 ^. #timerId)
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction $
+            Tx.sql
+              "DELETE FROM keiro.keiro_timers WHERE correlation_id = 'drain-20'; UPDATE keiro.keiro_timers SET status = 'cancelled' WHERE correlation_id = 'drain-40'"
+      mapM_ add [10, 30]
+      Right (Right second) <- readPage (first ^. #nextAfterTimerId)
+      fmap (^. #timer . #timerId) (second ^. #timers) `shouldBe` [plainTimerRequest 30 ^. #timerId]
+      Right (Right third) <- readPage (second ^. #nextAfterTimerId)
+      fmap (^. #timer . #timerId) (third ^. #timers) `shouldBe` [plainTimerRequest 60 ^. #timerId]
+      third ^. #nextAfterTimerId `shouldBe` Nothing
+
+    it "renders authorized original work beyond empty pages and rechecks revoked permissions" $ \storeHandle -> do
+      let reason = "kioku:deferred:interactive-unavailable feature=summary details=保持"
+          deadFilter = DeadTimerFilter (Just "drain-pm") (ReasonPrefix "kioku:deferred:interactive-unavailable feature=")
+          entries =
+            [ (1, object ["space" Aeson..= ("hidden" :: Text), "work" Aeson..= ("secret" :: Text)]),
+              (2, object ["invalid" Aeson..= ("never render" :: Text)]),
+              (3, object ["space" Aeson..= ("allowed" :: Text), "work" Aeson..= ("original work" :: Text)]),
+              (4, object ["space" Aeson..= ("allowed" :: Text), "work" Aeson..= ("revoked work" :: Text)])
+            ]
+      forM_ entries $ \(n, payload) -> do
+        Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx (plainTimerRequest n & #payload .~ payload)
+        Right True <- Store.runStoreIO storeHandle $ deadLetterTimer (plainTimerRequest n ^. #timerId) reason
+        pure ()
+      permissions <- newIORef (Set.singleton ("allowed" :: Text))
+      let renderPage cursor = do
+            Right (Right page) <- Store.runStoreIO storeHandle $ findDeadTimers deadFilter (DeadTimerPageRequest 1 cursor)
+            fresh <- readIORef permissions
+            rendered <- fmap catMaybes $ forM (page ^. #timers) $ \listed -> do
+              Right inspected <- Store.runStoreIO storeHandle $ lookupTimerInspection (listed ^. #timer . #timerId)
+              pure $ do
+                inspection <- inspected
+                (space, work) <-
+                  either (const Nothing) Just $
+                    parseEither (withObject "work" (\o -> (,) <$> o .: "space" <*> o .: "work")) (inspection ^. #timer . #payload)
+                if Set.member space fresh then Just (work :: Text, inspection ^. #lastError) else Nothing
+            pure (rendered, page ^. #nextAfterTimerId)
+      (hidden, next1) <- renderPage Nothing
+      hidden `shouldBe` []
+      next1 `shouldSatisfy` isJust
+      (malformed, next2) <- renderPage next1
+      malformed `shouldBe` []
+      next2 `shouldSatisfy` isJust
+      (allowed, next3) <- renderPage next2
+      allowed `shouldBe` [("original work", Just reason)]
+      writeIORef permissions Set.empty
+      renderPage next3 `shouldReturn` ([], Nothing)
+
     it "validates worker options before startup" $ \_storeHandle -> do
       shouldBeRight_ (mkTimerWorkerOptions defaultTimerWorkerOptions)
       mkTimerWorkerOptions (defaultTimerWorkerOptions & #maxAttempts ?~ (-1))
@@ -16462,3 +16639,18 @@ workflowOwnedChildCountStmt =
         (E.param (E.nonNullable E.text))
     )
     (D.singleRow (D.column (D.nonNullable D.int8)))
+
+-- Test-only legacy fixture and complete persistence snapshot, including timestamps.
+legacyDeadTimerReasonStmt :: Statement UUID ()
+legacyDeadTimerReasonStmt =
+  preparable
+    "UPDATE keiro.keiro_timers SET last_error = NULL WHERE timer_id = $1"
+    (E.param (E.nonNullable E.uuid))
+    D.noResult
+
+timerReadSnapshotStmt :: Statement () [Value]
+timerReadSnapshotStmt =
+  preparable
+    "SELECT to_jsonb(t) FROM keiro.keiro_timers t ORDER BY timer_id"
+    E.noParams
+    (D.rowList (D.column (D.nonNullable D.jsonb)))

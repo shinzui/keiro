@@ -19,6 +19,17 @@ module Keiro.Timer
     TimerRow (..),
     TimerStatus (..),
 
+    -- * Read-only inspection
+    TimerInspection (..),
+    TimerReasonFilter (..),
+    DeadTimerFilter (..),
+    anyDeadTimer,
+    DeadTimerPageRequest (..),
+    DeadTimerReadError (..),
+    DeadTimerPage (..),
+    lookupTimerInspection,
+    findDeadTimers,
+
     -- * Storage
     scheduleTimerTx,
     scheduleTimerOnceTx,
