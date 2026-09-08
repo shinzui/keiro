@@ -27,6 +27,12 @@
         withHls = true;
         extraNativeBuildInputs =
           [
+            # Automation reactions run as `nix develop --command`, and the
+            # daemon's own PATH does not carry ~/.nix-profile/bin. Without git
+            # here, scripts/record-release.sh dies on `git for-each-ref` with
+            # "tool 'git' not found" -- which is how the 0.16.0.0 release fact
+            # went unrecorded. The shell must supply its own git.
+            pkgs.git
             pkgs.rdkafka
             pkgs.jq
             pkgs.just
