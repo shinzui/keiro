@@ -50,11 +50,16 @@ in  Schema.Automation::{
             , command = "./scripts/record-release.sh"
             , args = [ "{{ref.name}}" ]
             ,
-              -- One `mori registry release record` against a local Postgres.
-              -- Without an explicit value this would inherit the 600-second
-              -- default and hold the FIFO group for ten minutes on a hung
-              -- database.
-              timeout = Some +60
+              -- Not the 600-second default, which would hold the FIFO group for
+              -- ten minutes on a hung database -- but not the 60 seconds
+              -- shinzui/shikumi uses either. Every RunCommand is executed as
+              -- `nix develop --command`, and that entry, not the single
+              -- `mori registry release record` against a local Postgres,
+              -- dominates: observed successful runs here take 5-15s, and a
+              -- backlog of ref observations timed out six reactions at 60s
+              -- while the nix eval cache was cold and contended. 300s is still
+              -- a bound worth having and stops costing correctness.
+              timeout = Some +300
             }
           ]
         }
