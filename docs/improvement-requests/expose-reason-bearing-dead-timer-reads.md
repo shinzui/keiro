@@ -1,0 +1,72 @@
+---
+type: Improvement Request
+title: Expose reason-bearing dead timer reads
+description: >-
+  Expose recorded dead-letter reasons and filtered dead timer listings through the public
+  timer API so consumers can inspect deferred work without querying Keiro-owned tables.
+timestamp: 2026-09-08T02:04:44Z
+requestId: IR-35
+status: proposed
+origin: mori://shinzui/kioku
+---
+
+# Improvement Request: Expose Reason-Bearing Dead Timer Reads
+
+## Status
+
+Proposed. Blocks authorized deferred-work listing and the preflight for resume in
+`mori://shinzui/kioku/plans/41-configure-all-kioku-ai-features-through-baikai-and-honor-host-execution-policy`.
+The companion atomic-resume request is
+`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-36`.
+
+## Context
+
+Kioku parks background AI work with `deadLetterTimer` when its host permits interactive
+execution but the background worker has no interactive session. A stable reason identifies
+this deferred work, which must remain distinguishable from malformed payloads, authorization
+refusals, and ordinary exhausted retries. Repeated worker polls leave it parked.
+
+In `keiro/src/Keiro/Timer/Schema.hs` at commit
+`c3c935c65d641c91867ab2d779ffe9559ba9abfc`, `deadLetterTimer` stores `last_error`, but
+`TimerRow` and `lookupTimer` omit it. `findStuckTimers` selects only `Firing` rows; no public
+operation lists dead timers. Plan 41 recorded the same gap against released Keiro 0.15.0.0,
+verified against Hackage metadata and upstream tags on 2026-09-08. This request chooses no
+new dependency bound; implementation must recheck the released baseline before adoption.
+
+[IR-29](expose-process-manager-inspection-reads.md) requests pending-timer inspection for a
+runtime UI. This request adds the specific dead-state and stored-reason contract needed for
+consumer recovery; it does not require HTTP endpoints.
+
+## Requested Change
+
+1. Provide a supported public read of a timer's stored `last_error`, using an extended row
+   or a dedicated inspection type. Preserve the distinction between a missing reason and an
+   empty reason. Include timer ID, process-manager name, correlation ID, original payload,
+   state, and attempt count so consumers can validate ownership and explain the work.
+2. Provide read-only dead-timer listing with process-manager and reason filters. Document
+   exact versus prefix matching; support identifying a stable reason category while keeping
+   the full stored reason available for the companion compare-and-set operation. Bound result
+   sizes and give deterministic ordering/pagination semantics.
+3. Keep these operations in the public `Keiro.Timer` surface. Consumers must not need
+   private SQL, internal decoders, or an application-specific Keiro schema extension.
+4. Document that the caller owns application authorization. Kioku filters decoded memory
+   spaces against fresh access permissions before displaying entries; Keiro must not invent
+   memory-space identity or authorize AI execution.
+
+## Acceptance
+
+1. Public API tests round-trip absent and populated reasons and all original timer metadata.
+2. Mixed fixtures include ordinary dead letters, deferred timers from multiple process
+   managers, and scheduled/firing/fired/cancelled rows. Filters return only the intended dead
+   rows; bounded pages have deterministic ordering and documented behavior under changes.
+3. Reads do not claim timers, increment attempts, clear reasons, or change timestamps/state.
+4. Existing lookup callers remain supported or receive explicit source-compatibility guidance.
+5. A downstream Kioku fixture can identify and render deferred work through public APIs,
+   while omitting unauthorized spaces. No direct reads of Keiro-owned tables are needed.
+
+## Requested Deliverables
+
+Public types and operations, PostgreSQL integration tests, API/compatibility documentation,
+and a tagged Hackage release of `mori://shinzui/keiro/packages/keiro` that consumers can adopt.
+If a migration is necessary, add a new migration rather than changing an applied one. Keep
+this request proposed until implementation and release evidence are recorded.

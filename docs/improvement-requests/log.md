@@ -1,5 +1,13 @@
 # Bundle Update Log
 
+## 2026-09-08
+* **Addition**: IR-35 requests public reason-bearing dead timer reads and filtered listings;
+IR-36 requests atomic guarded dead-to-firing claims with concurrency, attempt-accounting,
+and crash-recovery guarantees. Both originate from
+`mori://shinzui/kioku/plans/41-configure-all-kioku-ai-features-through-baikai-and-honor-host-execution-policy`
+and require a released public API before Kioku can complete authorized deferred listing/resume
+and Rei foreground acceptance.
+
 ## 2026-08-21
 * **Review**: Approve IR-33 with a narrowed scope after validating Plans 265 and 266 against Keiro
 master at ad0c04da and Mori's committed domain sources. The 39 findings have one cause:
