@@ -24,12 +24,14 @@ This implements the read contract in [IR-35](docs/improvement-requests/expose-re
 - [x] (2026-09-08T02:26Z) Confirmed schema compatibility, public facade, Hasql codecs through Mori, and ADR boundaries. Inspection tests failed to compile against the old API as expected (`lookupTimerInspection` not in scope).
 - [x] (2026-09-08T02:29:14Z) Implemented inspection and bounded listing; focused timer tests passed all 19 examples, including the six new inspection/filter/pagination/authorization cases.
 - [x] (2026-09-08T02:29:14Z) Consumer authorization fixture passed; user documentation and ADR-28 strict validation passed. `nix fmt`, `nix flake check`, and all seven `cabal check` commands passed.
-- [ ] Complete full-suite/workspace/operator checks and record final documentation/package evidence.
+- [x] (2026-09-08T02:32:22Z) Full `keiro-test` suite passed: 626 examples, zero failures. Capability and improvement-request validation passed (existing recommended-review warnings only). All seven source distributions generated.
+- [ ] Complete workspace/operator verification and Haddock, then record final evidence.
 - [ ] Coordinate release with IR-36 and record tagged Hackage/docs evidence.
 - [ ] Record downstream released-bound adoption and passing Kioku fixture.
 
 ## Surprises & Discoveries
 
+Concurrent Cabal policy and Haddock jobs reconfigured shared workspace packages and produced incompatible instances of the same `aeson-2.2.5.1` types during compilation. This is a build orchestration failure, not yet evidence of a source defect. The first generated-name policy and Haddock attempts failed; serialize the remaining workspace gate and retry documentation afterward. Do not count those failed attempts as validation evidence.
 The first focused test run rebuilt dependencies and confirmed the intended compile failure for the absent public inspection operation. The new SQL mode encoder requires an explicit `Data.Int (Int32)` import because `Keiro.Prelude` exports `Int64` only.
 
 IR-36 remains proposed with no guarded dead-timer mutation in the working tree. The coordinated release therefore cannot yet satisfy its joint scope; local read implementation must not mark IR-35 delivered or present a source overlay as released adoption.
@@ -48,6 +50,9 @@ Decision (2026-09-08): Plan creation does not close IR-35. Implementation and co
 
 ## Outcomes & Retrospective
 
+The local read contract is implemented in commit `c486404c`: additive public inspection, literal reason and owner filtering, hard page-size validation, and observational UUID pagination. Six new PostgreSQL cases plus existing timer tests pass (19 selected); the complete Keiro suite passes 626 examples. Read-only behavior is checked by comparing every stored column before and after reads and polling the ordinary worker. The consumer fixture follows two empty rendered pages (unauthorized then malformed), renders original work with its complete reason, and observes revoked permission on the next request.
+
+ADR-28 now preserves the durable boundary: Keiro owns inspection and page semantics, while applications own decoding, authorization, and later execution guards. Shared release and actual downstream adoption remain pending because the separate IR-36 transition is not implemented. No version, dependency bound, migration, or release artifact has been published; the plan and IR-35 remain open.
 
 ## Context and Orientation
 

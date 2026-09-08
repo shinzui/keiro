@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-08
+* **Update**: Define timer inspection ownership, observational pagination, and application authorization boundaries.
+
 ## 2026-08-30
 * **Update**: Restore the abstract constructor boundary while retaining concise keiro-dsl record labels (plan 269).
 

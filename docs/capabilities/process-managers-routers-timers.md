@@ -92,3 +92,20 @@ import Keiro.Timer
 - Rejected dispatches are recorded and replayed by a separate capability
   ([CAP-11](dead-letter-tooling.md)); this record covers issuing dispatch, not
   its dead-letter lifecycle.
+
+## Unreleased timer inspection
+
+`Keiro.Timer.lookupTimerInspection` preserves original work and nullable stored
+reasons without changing the existing `TimerRow` interface. `findDeadTimers`
+combines exact owner and literal exact/prefix/absent reason filtering with a
+1–100 row page bound and exclusive ascending UUID continuation. Neither read
+claims work or authorizes disclosure. Applications decode payloads and check
+fresh permissions before rendering, continuing past authorization-empty pages.
+Pagination observes current eligibility rather than a multi-request snapshot;
+the returned-row cap does not guarantee bounded database search cost.
+
+The `Keiro.Timer` PostgreSQL tests in `keiro/test/Main.hs` pass all 19 selected
+examples, including reason preservation, literal matching, changing eligibility,
+complete stored-column immutability, and caller authorization with revocation.
+This addition is implemented locally; publication and downstream released-version
+adoption remain tracked by [ExecPlan 270](../plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md).

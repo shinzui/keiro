@@ -2,6 +2,7 @@
 type: Explanation
 title: Process Managers And Timers
 description: Explain event-sourced coordination, deterministic command IDs, and durable timer workers.
+timestamp: 2026-09-08T02:26:00Z
 docId: DOC-17
 tags: [keiro, process-managers, timers, coordination]
 generated:
@@ -304,3 +305,67 @@ If the firing function returns `Nothing`, the row remains in `Firing`. Recover s
 with the supported timer recovery API (`findStuckTimers`, `requeueStuckTimer`,
 `cancelTimer`, `deadLetterTimer`); see the [stuck-row recovery runbook](operations.md) in
 Operations.
+
+## Inspecting Parked Timers
+
+The public `Keiro.Timer` module exposes additive reads (currently unreleased):
+
+```haskell
+lookupTimerInspection ::
+  (Store :> es) => TimerId -> Eff es (Maybe TimerInspection)
+
+findDeadTimers ::
+  (Store :> es) => DeadTimerFilter -> DeadTimerPageRequest ->
+  Eff es (Either DeadTimerReadError DeadTimerPage)
+```
+
+`TimerInspection` contains `timer :: TimerRow` and `lastError :: Maybe Text`.
+The nested row retains the original ID, owner, correlation, due time, payload,
+status, attempts, and fired event ID. Lookup supports every lifecycle state and
+returns `Nothing` for a missing ID. NULL reasons are `Nothing`; empty reasons
+are `Just ""`; all other text is preserved in full without parsing or trimming.
+Existing `TimerRow`, `lookupTimer`, worker and recovery signatures are unchanged.
+No migration is required.
+
+`DeadTimerFilter` combines an optional exact `processManagerName` with a
+`reason :: TimerReasonFilter`. `anyDeadTimer` selects every dead row. Reason
+modes are `AnyTimerReason`, `ReasonAbsent`, `ReasonExact Text`, and
+`ReasonPrefix Text`. Text matching is case-sensitive and literal, using
+PostgreSQL's deterministic `C` collation. Percent, underscore, quotes and
+backslash have no wildcard or SQL meaning. Empty prefix matches every non-NULL
+reason, including empty text; only `ReasonAbsent` specifically selects NULL.
+
+```haskell
+findDeadTimers
+  (DeadTimerFilter (Just "my-manager") (ReasonPrefix "deferred:"))
+  (DeadTimerPageRequest 25 Nothing)
+```
+
+`DeadTimerPageRequest` has `pageSize :: Int` and
+`afterTimerId :: Maybe TimerId`. Sizes outside 1 through 100 return
+`Left (InvalidDeadTimerPageSize requestedSize)` before database access, without
+clamping. Database failures use the same outer store error behavior as lookup.
+`DeadTimerPage` contains `timers :: [TimerInspection]` and
+`nextAfterTimerId :: Maybe TimerId`. Pass that continuation into the next
+request with the same filters. Restart without a cursor after changing filters.
+
+Pages use ascending database UUID order, not due-time order. The cursor is
+exclusive and still works if its row disappears. At most one extra matching row
+is fetched to determine whether continuation exists; an empty or exhausted page
+has no continuation. The result bound does not bound database search cost or
+promise an indexed reason search. Pages observe current eligibility independently:
+newly eligible IDs above the cursor may appear, while IDs at or below it are not
+revisited. Restart to discover those earlier entries; traversal is not a snapshot.
+
+These operations only observe storage. They do not claim work, increment attempts,
+clear reasons, change timestamps, or authorize execution. Dead rows remain outside
+the due-worker queue. The application owns payload decoding, reason categories,
+and fresh permission checks before rendering. Skip malformed payloads without
+revealing their contents. Continue using the storage cursor even when permission
+filtering empties an entire page, and recheck permissions on subsequent requests.
+An owner filter is an ownership label, not a permission credential.
+
+Preserve the full reason for any later guarded recovery preflight. A successful
+read reserves nothing: the separate guarded-resume work in
+[IR-36](../improvement-requests/support-atomic-guarded-dead-timer-resume.md) must
+revalidate its own state, owner, and reason guards before execution.

@@ -6,6 +6,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## Unreleased
 
+### New Features
+
+- Add `Keiro.Timer.lookupTimerInspection` with full nullable stored reasons and
+  `findDeadTimers` with exact owner/literal reason filters, 1–100 row bounds,
+  and exclusive UUID pagination. Existing timer rows and worker APIs remain
+  compatible; callers own payload authorization before rendering.
+
 ## 0.15.0.0 — 2026-08-30
 
 ### Breaking Changes

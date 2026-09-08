@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-08
+* **Update**: CAP-7: record locally validated unreleased timer inspection, literal filters, bounded pages, and application authorization.
+
 ## 2026-08-21
 * **Update**: Extend the transactional outbox with bounded terminal rejection, ordered-successor release, committed summaries, and explicit at-least-once pre-finalization recovery (plan 165).
 

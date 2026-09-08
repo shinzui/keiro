@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-08
+* **Update**: IR-35: record plan 270 public API and 19 passing timer cases; retain proposed status pending coordinated release and downstream adoption.
 * **Addition**: IR-35 requests public reason-bearing dead timer reads and filtered listings;
 IR-36 requests atomic guarded dead-to-firing claims with concurrency, attempt-accounting,
 and crash-recovery guarantees. Both originate from

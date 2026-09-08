@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-08-13T17:46:56Z
+timestamp: 2026-09-08T02:26:00Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -102,6 +102,17 @@ validated catalog. Destruction follows the ordinary preview/`--force` pattern an
 library rechecks relation identity and dependencies under its final lock. A command
 never substitutes inferred DDL or private Kiroku SQL for a missing owner API.
 
+
+Timer reason inspection and bounded dead-state listing belong to `Keiro.Timer`.
+`TimerInspection` preserves `TimerRow` compatibility while returning the full
+nullable stored reason. Listings combine exact owner and literal reason filters,
+return at most 100 rows, and continue exclusively in database UUID order. A page
+is an observation of current eligibility, not a snapshot across requests or an
+execution claim. The row limit does not promise bounded search cost. Application
+adapters own payload decoding and fresh authorization before rendering, including
+following storage continuation past pages emptied by authorization. Neither the
+owner label nor an observed reason grants permission. Later guarded mutations
+must independently revalidate their guards; the read API does not reserve work.
 
 ## Consequences
 
