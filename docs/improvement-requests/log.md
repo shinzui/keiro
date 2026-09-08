@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-09-08
+* **Completed**: IR-35 and IR-36 are delivered in Keiro 0.16.0.0. Verified Hackage and upstream
+package tags, Kioku public-API recovery/CLI/migration acceptance, and the corrected Rei
+background-deferral and foreground-resume regression. Consumer package release/deployment
+remains separate from the completed Keiro capabilities.
 * **Implementation**: Record IR-36 guarded timer resume implementation; release and downstream acceptance remain pending.
 * **Update**: IR-35: record plan 270 public API and 19 passing timer cases; retain proposed status pending coordinated release and downstream adoption.
 * **Addition**: IR-35 requests public reason-bearing dead timer reads and filtered listings;

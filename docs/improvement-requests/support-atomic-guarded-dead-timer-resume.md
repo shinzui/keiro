@@ -4,20 +4,35 @@ title: Support atomic guarded dead timer resume
 description: >-
   Let an authorized consumer claim one dead timer by ID and expected reason atomically,
   preserving its identity and retry history while excluding competing resume attempts.
-timestamp: 2026-09-08T04:06:43Z
+timestamp: 2026-09-08T14:25:26Z
 requestId: IR-36
-status: proposed
+status: completed
 origin: mori://shinzui/kioku
+reviews:
+  - kind: model
+    reviewer: codex
+    reviewed_at: "2026-09-08T14:25:26Z"
+    document_timestamp: "2026-09-08T14:25:26Z"
+    scope: completion-evidence
+    outcome: approved
+    provider: openai
+    model: unspecified
+    effort: unspecified
+    context: >-
+      Consumer implementation-author review of released APIs, Hackage metadata,
+      upstream release tags, Kioku recovery/CLI/migration tests, and corrected
+      Rei host acceptance. Source validation is distinguished from deployment.
 ---
 
 # Improvement Request: Support Atomic Guarded Dead Timer Resume
 
 ## Status
 
-Proposed. Blocks foreground deferred-work resume and final host acceptance in
+Completed in released `mori://shinzui/keiro/packages/keiro` 0.16.0.0. Hackage lists the
+release; upstream `keiro-0.16.0.0` resolves to
+`2da45585b901271d4ac19af4acf3de790c394540`. The consumer acceptance is recorded in
 `mori://shinzui/kioku/plans/41-configure-all-kioku-ai-features-through-baikai-and-honor-host-execution-policy`.
-Companion reads are requested by
-`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-35`.
+
 
 ## Context
 
@@ -101,3 +116,19 @@ A public-facade fixture covers preflight revocation/unavailability, one callback
 for a contested claim, crash recovery, and preserved original work identity.
 Validation results are maintained in the plan. Release and actual downstream
 adoption are still incomplete; this request remains proposed until those gates pass.
+
+## Completion evidence (2026-09-08)
+
+Guarded claims, token-checked renewal/finalization, and expired-claim recovery shipped through `Keiro.Timer` in 0.16.0.0.
+Kioku commit `6862915` in `mori://shinzui/kioku` adopts the public API without application
+SQL against Keiro's timer table. Its final 20 timer tests cover authorized paginated listing,
+refused/disabled/unavailable preflights without attempt consumption, concurrent foreground
+interactive execution with one winner, cancellation parking, expired-claim recovery, and
+stale-token completion refusal. Its 58 CLI tests include a subprocess listing/refusal/resume
+flow; all 24 composed-migration tests pass with Keiro migration 0032.
+
+The corrected reporting-host fixture in commit `8446ca18` of `mori://shinzui/rei` passed in
+the 40-test durable selection with local Kioku source and released Keiro dependencies. It
+asserts a real deferred reason, authorized listing, and foreground completion of the original
+timer once. This is downstream source acceptance; the forthcoming Kioku package release and
+live-host deployment remain consumer release work, not missing Keiro API functionality.
