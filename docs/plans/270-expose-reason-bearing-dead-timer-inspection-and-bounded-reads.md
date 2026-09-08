@@ -35,7 +35,7 @@ This implements the read contract in [IR-35](docs/improvement-requests/expose-re
 Concurrent Cabal policy and Haddock jobs reconfigured shared workspace packages and produced incompatible instances of the same `aeson-2.2.5.1` types during compilation. The serialized workspace gate subsequently compiled and passed the affected DSL tests without source changes, confirming build interference. The first generated-name policy and shared-directory Haddock attempts failed and are not validation evidence. The Haddock retry used `--builddir=/tmp/keiro270-haddock-build`, which isolated its configuration and artifacts from the migration test build and passed. The cold migration test compilation was lengthy but completed successfully; all 35 migration examples then passed.
 The first focused test run rebuilt dependencies and confirmed the intended compile failure for the absent public inspection operation. The new SQL mode encoder requires an explicit `Data.Int (Int32)` import because `Keiro.Prelude` exports `Int64` only.
 
-IR-36 remains proposed with no guarded dead-timer mutation in the working tree. The coordinated release therefore cannot yet satisfy its joint scope; local read implementation must not mark IR-35 delivered or present a source overlay as released adoption.
+IR-36 remains proposed. Plan 272 now implements guarded dead-timer mutation in `c351fceb`, with its final workspace gate in progress. The coordinated publication and downstream released-bound fixture remain open; local implementation must not mark IR-35 delivered or present a source overlay as released adoption.
 
 ## Decision Log
 
@@ -54,7 +54,7 @@ Decision (2026-09-08): Plan creation does not close IR-35. Implementation and co
 Final local validation (2026-09-08T03:05:59Z): the full `nix develop -c just verify` gate exited 0, covering workspace compilation, the runnable examples, Keiro/PGMQ/operator suites, all 43 DSL suites, Jitsurei tests, diagrams, documentation and source policies, corpus consistency, and 35 migration examples. `nix fmt`, `nix flake check` on aarch64-darwin, all seven package checks and source distributions, and isolated Haddock generation passed. Corpus regeneration produced no tracked changes. Documentation and ADR changes are committed in `627b1243`; this final record completes local validation, not the release/adoption requirements.
 The local read contract is implemented in commit `c486404c`: additive public inspection, literal reason and owner filtering, hard page-size validation, and observational UUID pagination. Six new PostgreSQL cases plus existing timer tests pass (19 selected); the complete Keiro suite passes 626 examples. Read-only behavior is checked by comparing every stored column before and after reads and polling the ordinary worker. The consumer fixture follows two empty rendered pages (unauthorized then malformed), renders original work with its complete reason, and observes revoked permission on the next request.
 
-ADR-28 now preserves the durable boundary: Keiro owns inspection and page semantics, while applications own decoding, authorization, and later execution guards. Shared release and actual downstream adoption remain pending because the separate IR-36 transition is not implemented. No version or dependency bound changed, no migration was added, and no release artifact was published; the plan and IR-35 remain open.
+ADR-28 now preserves the durable boundary: Keiro owns inspection and page semantics, while applications own decoding, authorization, and later execution guards. Shared release and actual downstream adoption remain pending. The separate IR-36 transition is now implemented by plan 272, with final workspace verification in progress. No version or dependency bound changed, no migration was added, and no release artifact was published; the plan and IR-35 remain open.
 
 ## Context and Orientation
 
@@ -228,3 +228,5 @@ Keep `TimerRow`, `lookupTimer`, `findStuckTimers`, and all worker signatures unc
 Revision (2026-09-08): Began implementation, recorded the red compilation test and explicit release/adoption dependencies.
 
 Revision (2026-09-08T03:05:59Z): Completed the local API, PostgreSQL acceptance fixtures, documentation and ADR distillation, package checks, source distributions, isolated Haddock proof, and full verification gate. Recorded successful validation separately from the recovered shared-build interference. Kept coordinated IR-36 publication and actual released-bound downstream adoption unchecked, as required by this plan.
+
+Revision (2026-09-08 UTC): Coordinate with plan 272 implementation in `c351fceb`; guarded transitions now exist locally, while shared publication and downstream released-bound acceptance remain unchecked.

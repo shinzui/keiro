@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Foreground timer resume uses expiring token ownership
 description: Guarded dead timer claims fence storage transitions with expiring tokens and recover directly to Dead while consumers own authorization and external effects.
-timestamp: 2026-09-08T04:06:43Z
+timestamp: 2026-09-08T04:14:39Z
 docId: ADR-39
 status: Accepted
 date: 2026-09-08
@@ -28,7 +28,8 @@ The public handle retains the original row and a claim-time deadline snapshot.
 
 Every claim and handle mutation acquires the row lock before checking eligibility
 and database `clock_timestamp()`. Separate SQL statements in the same ReadCommitted
-transaction give a waiting loser a fresh view of the committed winner. Completion,
+transaction give a waiting loser a fresh view of the committed winner. An absent
+lock lookup returns immediately so a concurrent insert cannot bypass the lock. Completion,
 renewal, parking, and cancellation require the current unexpired token. Validated
 lease seconds fit positive PostgreSQL integer seconds; no unchecked interval
 conversion or caller clock governs ownership. Renewal preserves the token; its

@@ -19,7 +19,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 A foreground consumer will be able to resume one deliberately parked timer without replacing its identity or exposing it to the ordinary due-work poller. It will inspect the timer, authorize its original payload, establish session availability, and atomically claim only the expected owner and exact stored reason. Two competing consumers will receive one successful claim and one no-claim result. Expired or superseded claims will be unable to finalize later work.
 
-This addresses the valid request [IR-36](docs/improvement-requests/support-atomic-guarded-dead-timer-resume.md). The companion public inspection API from [plan 270](docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md) is already implemented locally. Demonstrate the new behavior through PostgreSQL races and a consumer fixture before coordinating their release. This document plans implementation; no runtime changes or release have been performed by creating it.
+This addresses the valid request [IR-36](docs/improvement-requests/support-atomic-guarded-dead-timer-resume.md). The companion public inspection API from [plan 270](docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md) is already implemented locally. Demonstrate the new behavior through PostgreSQL races and a consumer fixture before coordinating their release. Runtime implementation is committed in `c351fceb`; final workspace verification is in progress. Publication and downstream adoption remain pending.
 
 
 ## Progress
@@ -30,6 +30,7 @@ This addresses the valid request [IR-36](docs/improvement-requests/support-atomi
 - [x] (2026-09-08T04:06Z) Implemented token lifecycle, expiry recovery, and worker integration; 25 focused timer examples passed with zero failures. Added the expired-completion race for the final focused/full rerun.
 - [x] (2026-09-08T04:08Z) Implemented public consumer fixture and lifecycle/rollout documentation; allocated ADR-39 with OKF and passed strict profile/log enforcement. IR-36 records implementation with publication/adoption pending.
 - [x] (2026-09-08T04:10Z) Expanded focused rerun passed: 36 migration examples and 25 timer examples, including expired completion/recovery. Migration authoring check, final formatting, and aarch64-darwin flake checks passed.
+- [x] (2026-09-08T04:14:39Z) Corrected absent-row lock handling; the focused timer suite again passed all 25 examples.
 - [ ] Milestone 3 remaining: full workspace verification and source distributions.
 - [ ] Milestone 4: Coordinate publication with plan 270 and verify released downstream adoption.
 
@@ -41,6 +42,8 @@ Discovery (2026-09-08 UTC): `withFreshStores2` opens two separate cloned databas
 
 
 The enlarged migration suite exhausted GHC's simplifier budget while repeatedly specializing the cold polymorphic `failure` helper (`SPEC failure @DefinitionError @_`). Marking that assertion-only helper NOINLINE allowed the normal optimized build and native snapshot generation to pass; no compiler flag or dependency workaround was introduced.
+
+Review (2026-09-08 UTC): The first full gate was deliberately interrupted after identifying a missing-row insertion race in the lock helper. An absent lock lookup now returns immediately instead of allowing a later insert to reach the guarded UPDATE without the prior lock. The current full-gate run includes the correction; the interrupted run is not completion evidence.
 
 ## Decision Log
 
@@ -57,6 +60,8 @@ Decision (2026-09-08 UTC): Keep application permissions, reason classification, 
 
 
 Decision (2026-09-08 UTC): Use two statements in each ReadCommitted ownership transaction: row locking first, then guarded mutation and database time. Recovery locks candidate IDs in UUID order and rechecks only those locked IDs. Validate lease seconds in the positive Int32 range (1–2147483647), which PostgreSQL can safely convert to seconds without overflow.
+
+Decision (2026-09-08 UTC): Propose shared PVP 0.16.0.0 for the coordinated reads/claims release because independent foreground recovery and the no-old-writers deployment boundary are intentional behavioral changes. Hackage preferred metadata and upstream tags still identify 0.15.0.0 (`de574cdcb0add3fefbb0fdd96d820258d15f8997`) as latest. No versions or bounds have been edited: the release skill requires confirmation of the proposed bump before those edits and approval of staged release changes before publication. Prepared review notes and the exact version/bound patch locally. The release must include a 0.15-to-0.16 upgrade blueprint edge describing drain/migrate/upgrade/enable ordering and rollback, without upstream entailments.
 
 ## Outcomes & Retrospective
 
@@ -75,7 +80,7 @@ A timer is one row in `keiro.keiro_timers`. Scheduled means eligible for the due
 
 `keiro/test/Main.hs` has the `Keiro.Timer` examples, `counterTimerRequest`, and `dueTimerTime`. `keiro-test-support/src/Keiro/Test/Postgres.hs` provides migrated ephemeral PostgreSQL databases and `withFreshDatabase`. Open two independent `Store.withStore` pools against its single connection string for real concurrent claims. `withFreshStores2` instead creates separate databases and must not be used for these races. Test-only SQL may create an expired lease or compare private columns; consumer-facing fixtures must use the public facade.
 
-Native SQL migrations live in `keiro-migrations/migrations/`, whose `manifest` currently ends at `0031.sql`. `keiro-migrations/migrations.native.lock` records ordered SHA-256 hashes. `keiro-migrations/test/Main.hs` verifies membership, hashes, and the PostgreSQL 18 expected schema. `docs/user/migrations.md` explains the authoring command and snapshot regeneration. Never change an applied migration or the frozen legacy Codd history.
+Native SQL migrations live in `keiro-migrations/migrations/`, whose `manifest` ended at `0031.sql` before this implementation and now includes generated `0032.sql`. `keiro-migrations/migrations.native.lock` records ordered SHA-256 hashes. `keiro-migrations/test/Main.hs` verifies membership, hashes, and the PostgreSQL 18 expected schema. `docs/user/migrations.md` explains the authoring command and snapshot regeneration. Never change an applied migration or the frozen legacy Codd history.
 
 [ADR-7](docs/adr/0007-workflow-sleep-timers-are-generation-owned-lifecycle-state.md) makes sleep timers belong to the workflow generation that armed them. Preserve their payloads, insert-only scheduling, journal append behavior, and garbage collection. [ADR-9](docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md) requires migration ledger, native manifest/hash, and live-schema gates independently. [ADR-28](docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md) requires consumers to use schema-owner APIs and leaves application authorization in the consumer. No existing ADR supplies foreground timer claim fencing, meaning rejection of writes from an obsolete owner. Record that durable decision during implementation. Before editing ADRs run `mori show --full`, inspect the declared `docs/adr/profile.dhall`, and follow its metadata and log contract.
 
@@ -258,7 +263,7 @@ cancelTimerResume ::
 recoverExpiredTimerResumes :: (Store :> es) => Eff es Int
 ```
 
-The returned lease deadline is the claim-time snapshot; renewal success preserves the same token and the database holds the updated deadline. Document that callers schedule renewals by their requested interval and must not use the snapshot as current lease truth. Configuration errors remain values; database failures use the existing Store error channel. `maxAttempts = 0` is valid and always refuses a claim; negative values are invalid. Lease seconds must be positive and encoded with a checked representation that cannot overflow during conversion to a PostgreSQL interval.
+The returned lease deadline is the claim-time snapshot; renewal success preserves the same token and the database holds the updated deadline. Document that callers schedule renewals by their requested interval and must not use the snapshot as current lease truth. Configuration errors remain values; database failures use the existing Store error channel. `maxAttempts = 0` is valid and always refuses a claim; negative values are invalid. Lease seconds must be in 1–2147483647 and encoded with a checked representation that cannot overflow during conversion to a PostgreSQL interval.
 
 Ordinary timer APIs keep their signatures and token-free behavior. Their mutable operations explicitly exclude active guarded claims. No Kioku-specific reason parsing, permission schema, UI, or AI execution engine belongs in these interfaces.
 

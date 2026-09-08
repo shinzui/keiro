@@ -248,22 +248,26 @@ claimDeadTimer request
       Right
         <$> runTransaction
           ( do
-              lockTimerResumeTx (request ^. #timerId)
-              Tx.statement
-                ( timerIdToUuid (request ^. #timerId),
-                  request ^. #processManagerName,
-                  request ^. #expectedReason,
-                  fromIntegral (request ^. #maxAttempts),
-                  token,
-                  fromIntegral (request ^. #leaseSeconds)
-                )
-                claimDeadTimerStmt
+              locked <- lockTimerResumeTx (request ^. #timerId)
+              if not locked
+                then pure Nothing
+                else
+                  Tx.statement
+                    ( timerIdToUuid (request ^. #timerId),
+                      request ^. #processManagerName,
+                      request ^. #expectedReason,
+                      fromIntegral (request ^. #maxAttempts),
+                      token,
+                      fromIntegral (request ^. #leaseSeconds)
+                    )
+                    claimDeadTimerStmt
           )
 
 -- Lock in a separate statement: subsequent predicates and clock_timestamp()
--- observe the committed winner after a ReadCommitted lock wait.
-lockTimerResumeTx :: TimerId -> Tx.Transaction ()
-lockTimerResumeTx tid = void $ Tx.statement (timerIdToUuid tid) lockTimerResumeStmt
+-- observe the committed winner after a ReadCommitted lock wait. A missing row
+-- must return immediately: a later insert must not bypass the initial lock.
+lockTimerResumeTx :: TimerId -> Tx.Transaction Bool
+lockTimerResumeTx tid = isJust <$> Tx.statement (timerIdToUuid tid) lockTimerResumeStmt
 
 lockTimerResumeStmt :: Statement UUID (Maybe UUID)
 lockTimerResumeStmt =
@@ -320,8 +324,11 @@ cancelTimerResume claim = mutateTimerResume claim "cancelled" Nothing Nothing
 
 mutateTimerResume :: (Store :> es) => TimerResumeClaim -> Text -> Maybe UUID -> Maybe Int32 -> Eff es Bool
 mutateTimerResume (TimerResumeClaim row token _) target event seconds = runTransaction $ do
-  lockTimerResumeTx (row ^. #timerId)
-  Tx.statement (timerIdToUuid (row ^. #timerId), token, target, event, seconds) mutateTimerResumeStmt
+  locked <- lockTimerResumeTx (row ^. #timerId)
+  if not locked
+    then pure False
+    else
+      Tx.statement (timerIdToUuid (row ^. #timerId), token, target, event, seconds) mutateTimerResumeStmt
 
 mutateTimerResumeStmt :: Statement (UUID, UUID, Text, Maybe UUID, Maybe Int32) Bool
 mutateTimerResumeStmt =
