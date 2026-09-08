@@ -217,6 +217,7 @@ import Keiro.Subscription.Shard.Worker
 import Keiro.Telemetry qualified as Telemetry
 import Keiro.Test.Postgres
   ( StoreRunner (..),
+    withFreshDatabase,
     withFreshResourceStore,
     withFreshResourceStoreWith,
     withFreshStore,
@@ -5510,7 +5511,214 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       (results, Vector.length targetEvents)
         `shouldBe` ([DomainPMCommandDuplicate legacyId], 1)
 
+  describe "Keiro.Timer foreground consumer"
+    $ around
+      ( \action ->
+          withFreshDatabase fixture $ \connection ->
+            Store.withStore (Store.defaultConnectionSettings connection) $ \firstStore ->
+              Store.withStore (Store.defaultConnectionSettings connection) $ \secondStore ->
+                action (firstStore, secondStore)
+      )
+    $ do
+      it "preflights original work and invokes one callback for competing authorized resumes" $ \(firstStore, secondStore) -> do
+        let original = counterTimerRequest & #payload .~ object ["memorySpace" Aeson..= ("space-a" :: Text)]
+            tid = original ^. #timerId
+            owner = original ^. #processManagerName
+            reason = "deferred: interactive session required"
+        callbacks <- newIORef (0 :: Int)
+        let foreground store allowed available = do
+              Right _ <- Store.runStoreIO store recoverExpiredTimerResumes
+              Right inspected <- Store.runStoreIO store $ lookupTimerInspection tid
+              case inspected of
+                Just inspection
+                  | inspection ^. #lastError == Just reason,
+                    inspection ^. #timer . #payload == object ["memorySpace" Aeson..= ("space-a" :: Text)],
+                    allowed,
+                    available -> do
+                      Right (Right claimed) <- Store.runStoreIO store $ claimDeadTimer (DeadTimerClaimRequest tid owner reason 3 60)
+                      forM_ claimed $ \_ -> atomicModifyIORef' callbacks (\n -> (n + 1, ()))
+                      pure claimed
+                _ -> pure Nothing
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction $ scheduleTimerTx original
+        Right True <- Store.runStoreIO firstStore $ deadLetterTimer tid reason
+        Right before <- Store.runStoreIO firstStore $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+        -- Revocation after listing and repeated unavailable-session preflights.
+        Right (Right _) <- Store.runStoreIO firstStore $ findDeadTimers (DeadTimerFilter (Just owner) (ReasonExact reason)) (DeadTimerPageRequest 10 Nothing)
+        denied <- foreground firstStore False True
+        isNothing denied `shouldBe` True
+        forM_ [1 .. 3 :: Int] $ \_ -> do
+          unavailable <- foreground firstStore True False
+          isNothing unavailable `shouldBe` True
+        Store.runStoreIO firstStore (Store.runTransaction (Tx.statement () timerReadSnapshotStmt)) `shouldReturn` Right before
+        (a, b) <- timerRaceIO (foreground firstStore True True) (foreground secondStore True True)
+        length (catMaybes [a, b]) `shouldBe` 1
+        readIORef callbacks `shouldReturn` 1
+        -- Crash, deterministic expiry, and recovery keep interactive work parked.
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction expireTimerResumesTx
+        Store.runStoreIO secondStore recoverExpiredTimerResumes `shouldReturn` Right 1
+        Store.runStoreIO firstStore (runTimerWorker Nothing dueTimerTime (\_ -> error "interactive work dispatched in background")) `shouldReturn` Right Nothing
+        unavailable <- foreground firstStore True False
+        isNothing unavailable `shouldBe` True
+        Just next <- foreground secondStore True True
+        resumeClaimTimer next ^. #timerId `shouldBe` tid
+        resumeClaimTimer next ^. #attempts `shouldBe` 2
+        -- A transient post-claim failure consumes the attempt and retains reason.
+        Store.runStoreIO secondStore (parkTimerResume next) `shouldReturn` Right True
+        Right (Just parked) <- Store.runStoreIO firstStore $ lookupTimerInspection tid
+        parked ^. #lastError `shouldBe` Just reason
+        parked ^. #timer . #attempts `shouldBe` 2
+        -- Malformed work and ordinary dead letters are application refusals.
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction $ Tx.sql "UPDATE keiro.keiro_timers SET payload = '{}'::jsonb"
+        malformed <- foreground firstStore True True
+        isNothing malformed `shouldBe` True
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction $ Tx.sql "UPDATE keiro.keiro_timers SET last_error = 'ordinary dead letter'"
+        ordinary <- foreground firstStore True True
+        isNothing ordinary `shouldBe` True
+        readIORef callbacks `shouldReturn` 2
+
+      it "orders renewal and completion against recovery on independent stores" $ \(firstStore, secondStore) -> do
+        let tid = counterTimerRequest ^. #timerId
+            request = DeadTimerClaimRequest tid (counterTimerRequest ^. #processManagerName) "deferred" 3 60
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction $ scheduleTimerTx counterTimerRequest
+        Right True <- Store.runStoreIO firstStore $ deadLetterTimer tid "deferred"
+        Right (Right (Just claim)) <- Store.runStoreIO firstStore $ claimDeadTimer request
+        (renewed, recovered) <-
+          timerRaceIO
+            (Store.runStoreIO firstStore $ renewTimerResume claim 60)
+            (Store.runStoreIO secondStore recoverExpiredTimerResumes)
+        renewed `shouldBe` Right (Right True)
+        recovered `shouldBe` Right 0
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction expireTimerResumesTx
+        (expiredRenewal, expiredRecovery) <-
+          timerRaceIO
+            (Store.runStoreIO firstStore $ renewTimerResume claim 60)
+            (Store.runStoreIO secondStore recoverExpiredTimerResumes)
+        expiredRenewal `shouldBe` Right (Right False)
+        expiredRecovery `shouldBe` Right 1
+        Right (Right (Just replacement)) <- Store.runStoreIO firstStore $ claimDeadTimer request
+        Right before <- Store.runStoreIO firstStore $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+        forM_ [parkTimerResume claim, cancelTimerResume claim, completeTimerResume claim (EventId sampleUuid2)] $ \operation ->
+          Store.runStoreIO firstStore operation `shouldReturn` Right False
+        Store.runStoreIO firstStore (Store.runTransaction (Tx.statement () timerReadSnapshotStmt)) `shouldReturn` Right before
+        Right () <- Store.runStoreIO firstStore $ Store.runTransaction expireTimerResumesTx
+        (expiredCompletion, completionRecovery) <-
+          timerRaceIO
+            (Store.runStoreIO firstStore $ completeTimerResume replacement (EventId sampleUuid2))
+            (Store.runStoreIO secondStore recoverExpiredTimerResumes)
+        expiredCompletion `shouldBe` Right False
+        completionRecovery `shouldBe` Right 1
+        Right (Right (Just finalClaim)) <- Store.runStoreIO firstStore $ claimDeadTimer request
+        (completed, noRecovery) <-
+          timerRaceIO
+            (Store.runStoreIO firstStore $ completeTimerResume finalClaim (EventId sampleUuid2))
+            (Store.runStoreIO secondStore recoverExpiredTimerResumes)
+        completed `shouldBe` Right True
+        noRecovery `shouldBe` Right 0
+
   describe "Keiro.Timer" $ around (withFreshStore fixture) $ do
+    it "guards dead resume ownership and retains attempts when parked" $ \storeHandle -> do
+      let tid = counterTimerRequest ^. #timerId
+          request = DeadTimerClaimRequest tid (counterTimerRequest ^. #processManagerName) "deferred" 2 60
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx counterTimerRequest
+      Right True <- Store.runStoreIO storeHandle $ deadLetterTimer tid "deferred"
+      Right (Right (Just claim)) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+      resumeClaimTimer claim ^. #attempts `shouldBe` 1
+      Store.runStoreIO storeHandle (claimDueTimer dueTimerTime) `shouldReturn` Right Nothing
+      Store.runStoreIO storeHandle (markTimerFired tid (EventId sampleUuid2)) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (cancelTimer tid) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (deadLetterTimer tid "wrong") `shouldReturn` Right False
+      Store.runStoreIO storeHandle (requeueStuckTimer tid) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (requeueStuckTimers 0 dueTimerTime) `shouldReturn` Right 0
+      Store.runStoreIO storeHandle (renewTimerResume claim 60) `shouldReturn` Right (Right True)
+      Store.runStoreIO storeHandle (parkTimerResume claim) `shouldReturn` Right True
+      Right (Right (Just replacement)) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+      resumeClaimTimer replacement ^. #attempts `shouldBe` 2
+      Store.runStoreIO storeHandle (completeTimerResume claim (EventId sampleUuid2)) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (parkTimerResume claim) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (cancelTimerResume claim) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (renewTimerResume claim 60) `shouldReturn` Right (Right False)
+      Store.runStoreIO storeHandle (parkTimerResume replacement) `shouldReturn` Right True
+      Right (Right refused) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+      isNothing refused `shouldBe` True
+      Right (Just observed) <- Store.runStoreIO storeHandle $ lookupTimerInspection tid
+      observed ^. #lastError `shouldBe` Just "deferred"
+      observed ^. #timer . #attempts `shouldBe` 2
+
+    it "refuses every ineligible claim without changing any persisted column" $ \storeHandle -> do
+      let tid = counterTimerRequest ^. #timerId
+          request = DeadTimerClaimRequest tid (counterTimerRequest ^. #processManagerName) "deferred" 1 60
+          snapshot = Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+          refused req = do
+            before <- snapshot
+            Right (Right result) <- Store.runStoreIO storeHandle $ claimDeadTimer req
+            isNothing result `shouldBe` True
+            snapshot `shouldReturn` before
+      refused request
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx counterTimerRequest
+      refused request
+      Right (Just _) <- Store.runStoreIO storeHandle $ claimDueTimer dueTimerTime
+      refused request
+      Right True <- Store.runStoreIO storeHandle $ deadLetterTimer tid "deferred"
+      refused (request & #processManagerName .~ "COUNTER")
+      refused (request & #expectedReason .~ "Deferred")
+      refused (request & #maxAttempts .~ 0)
+      refused request -- ordinary claim already consumed the ceiling
+      before <- snapshot
+      Right (Left badMax) <- Store.runStoreIO storeHandle $ claimDeadTimer (request & #maxAttempts .~ (-1))
+      badMax `shouldBe` InvalidTimerResumeMaxAttempts (-1)
+      forM_ [0, -1, maxBound] $ \seconds -> do
+        Right (Left badLease) <- Store.runStoreIO storeHandle $ claimDeadTimer (request & #leaseSeconds .~ seconds)
+        badLease `shouldBe` InvalidTimerResumeLeaseSeconds seconds
+      snapshot `shouldReturn` before
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.statement (case tid of TimerId uuid -> uuid) legacyDeadTimerReasonStmt
+      refused (request & #maxAttempts .~ 2)
+
+    it "claims literal empty and Unicode reasons and preserves original work" $ \storeHandle -> do
+      forM_ (zip [1 ..] ["", "延期: café 日本語 🌱", "a%_\\'雪"]) $ \(n, reason) -> do
+        let original = counterTimerRequest & #timerId .~ TimerId (UUID.fromWords 0 0 0 n)
+            tid = original ^. #timerId
+            request = DeadTimerClaimRequest tid (original ^. #processManagerName) reason 1 60
+        Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx original
+        Right True <- Store.runStoreIO storeHandle $ deadLetterTimer tid reason
+        Right (Just before) <- Store.runStoreIO storeHandle $ lookupTimer tid
+        Right (Right (Just claim)) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+        resumeClaimTimer claim `shouldBe` (before & #status .~ Firing & #attempts .~ 1)
+        Right (Right repeated) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+        isNothing repeated `shouldBe` True
+        Store.runStoreIO storeHandle (completeTimerResume claim (EventId sampleUuid2)) `shouldReturn` Right True
+        Right (Just inspection) <- Store.runStoreIO storeHandle $ lookupTimerInspection tid
+        inspection ^. #lastError `shouldBe` Just reason
+        inspection ^. #timer . #firedEventId `shouldBe` Just (EventId sampleUuid2)
+        Right (Right terminal) <- Store.runStoreIO storeHandle $ claimDeadTimer (request & #maxAttempts .~ 2)
+        isNothing terminal `shouldBe` True
+
+    it "expires without revival and re-parks independently of ordinary recovery" $ \storeHandle -> do
+      let tid = counterTimerRequest ^. #timerId
+          request = DeadTimerClaimRequest tid (counterTimerRequest ^. #processManagerName) "deferred" 3 60
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ scheduleTimerTx counterTimerRequest
+      Right True <- Store.runStoreIO storeHandle $ deadLetterTimer tid "deferred"
+      Right (Right (Just old)) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction expireTimerResumesTx
+      Right before <- Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+      Store.runStoreIO storeHandle (renewTimerResume old 60) `shouldReturn` Right (Right False)
+      Store.runStoreIO storeHandle (completeTimerResume old (EventId sampleUuid2)) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (parkTimerResume old) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (cancelTimerResume old) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () timerReadSnapshotStmt)) `shouldReturn` Right before
+      let options = defaultTimerWorkerOptions & #requeueStuckAfter .~ Nothing
+      Store.runStoreIO storeHandle (runTimerWorkerWith Nothing options dueTimerTime (\_ -> error "foreground work reached background")) `shouldReturn` Right Nothing
+      Store.runStoreIO storeHandle recoverExpiredTimerResumes `shouldReturn` Right 0
+      Right (Just parked) <- Store.runStoreIO storeHandle $ lookupTimerInspection tid
+      parked ^. #timer . #status `shouldBe` Dead
+      parked ^. #timer . #attempts `shouldBe` 1
+      parked ^. #lastError `shouldBe` Just "deferred"
+      Right (Right (Just replacement)) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+      Store.runStoreIO storeHandle (completeTimerResume old (EventId sampleUuid2)) `shouldReturn` Right False
+      Store.runStoreIO storeHandle (renewTimerResume old 60) `shouldReturn` Right (Right False)
+      Store.runStoreIO storeHandle (cancelTimerResume replacement) `shouldReturn` Right True
+      Right (Right cancelled) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+      isNothing cancelled `shouldBe` True
+
     it "inspects absent timers and preserves legacy metadata through every lifecycle" $ \storeHandle -> do
       let tid = counterTimerRequest ^. #timerId
           inspect reason = do
@@ -16654,3 +16862,23 @@ timerReadSnapshotStmt =
     "SELECT to_jsonb(t) FROM keiro.keiro_timers t ORDER BY timer_id"
     E.noParams
     (D.rowList (D.column (D.nonNullable D.jsonb)))
+
+-- Test-only deterministic expiry; foreground consumer code uses public APIs.
+expireTimerResumesTx :: Tx.Transaction ()
+expireTimerResumesTx = Tx.sql "UPDATE keiro.keiro_timers SET resume_lease_until = clock_timestamp() - interval '1 second' WHERE resume_claim_token IS NOT NULL"
+
+-- Both independent connections begin only after the common barrier opens.
+-- Exceptions are transported to the test thread instead of stranding its wait.
+timerRaceIO :: IO a -> IO b -> IO (a, b)
+timerRaceIO first second = do
+  start <- newEmptyMVar
+  a <- newEmptyMVar
+  b <- newEmptyMVar
+  let capture :: IO x -> IO (Either SomeException x)
+      capture = try
+  _ <- forkIO $ capture (readMVar start >> first) >>= putMVar a
+  _ <- forkIO $ capture (readMVar start >> second) >>= putMVar b
+  putMVar start ()
+  ar <- takeMVar a >>= either throwIO pure
+  br <- takeMVar b >>= either throwIO pure
+  pure (ar, br)

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-08
+* **Decision**: Add ADR-39: expiring foreground timer ownership, recovery to Dead, and consumer rollout boundary.
 * **Update**: Define timer inspection ownership, observational pagination, and application authorization boundaries.
 
 ## 2026-08-30

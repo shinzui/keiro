@@ -6,6 +6,16 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## Unreleased
 
+### New Features
+
+- Migration `0032.sql` adds nullable foreground timer ownership tokens and lease
+  deadlines, with a constraint requiring paired fields only on Firing rows.
+  Existing timers retain all metadata and retry history. The native schema
+  snapshot, manifest, and checksum lock include the new migration.
+- Stop/drain old timer writers before applying and enable foreground resume only
+  after all writers are upgraded. Before rollback, disable resume and drain or
+  recover guarded claims; old writers lack ownership exclusion predicates.
+
 ## 0.15.0.0 — 2026-08-30
 
 No changes this release. `keiro-migrations` is republished at the shared version

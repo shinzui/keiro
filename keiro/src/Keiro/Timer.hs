@@ -9,6 +9,14 @@
 -- timer left @Firing@ by a crash becomes claimable again after the worker's
 -- configured stale-claim timeout, giving at-least-once firing.
 --
+-- Guarded foreground resumes use 'claimDeadTimer' after consumer authorization
+-- and session preflight. Renew during work, then complete, park, or cancel with
+-- the opaque handle. Expired claims recover directly to Dead, retaining reason
+-- and attempts; even workers with ordinary recovery disabled perform this sweep.
+-- ID-only mutations refuse guarded claims. External work remains at-least-once;
+-- callers own cancellation and durable result deduplication. Upgrade every timer
+-- writer before enabling resume; old binaries do not enforce the token guards.
+--
 -- The wire types live in "Keiro.Timer.Types" and the SQL storage in
 -- "Keiro.Timer.Schema"; both are re-exported here so most callers need only
 -- import @Keiro.Timer@.
@@ -29,6 +37,19 @@ module Keiro.Timer
     DeadTimerPage (..),
     lookupTimerInspection,
     findDeadTimers,
+
+    -- * Guarded foreground resume
+    DeadTimerClaimRequest (..),
+    TimerResumeError (..),
+    TimerResumeClaim,
+    resumeClaimTimer,
+    resumeClaimLeaseUntil,
+    claimDeadTimer,
+    renewTimerResume,
+    completeTimerResume,
+    parkTimerResume,
+    cancelTimerResume,
+    recoverExpiredTimerResumes,
 
     -- * Storage
     scheduleTimerTx,
@@ -87,7 +108,7 @@ data TimerWorkerOptions = TimerWorkerOptions
     --     @updated_at@ is at least @ttl@ old back to 'Scheduled'. A fire action that
     --     runs longer than this timeout may be fired again; timer handlers must be
     --     idempotent under keiro's at-least-once timer contract. @Nothing@ disables
-    --     automatic requeue for callers that run their own recovery.
+    --     automatic ordinary requeue. Expired foreground recovery always runs.
     requeueStuckAfter :: !(Maybe NominalDiffTime)
   }
   deriving stock (Generic, Eq, Show)
@@ -153,6 +174,7 @@ timerPassPreamble ::
   UTCTime ->
   Eff es ()
 timerPassPreamble metrics options now = do
+  void recoverExpiredTimerResumes
   for_ (options ^. #requeueStuckAfter) $ \ttl -> do
     requeued <- requeueStuckTimers ttl now
     recordTimerRequeued metrics (fromIntegral requeued)

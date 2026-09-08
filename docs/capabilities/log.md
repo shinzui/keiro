@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-08
+* **Update**: Document CAP-7 unreleased guarded foreground timer resume and rollout boundary.
 * **Update**: CAP-7: record locally validated unreleased timer inspection, literal filters, bounded pages, and application authorization.
 
 ## 2026-08-21

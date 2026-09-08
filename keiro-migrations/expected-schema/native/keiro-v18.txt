@@ -261,6 +261,8 @@ column	keiro_timers.fired_event_id	uuid
 column	keiro_timers.last_error	text
 column	keiro_timers.payload	jsonb not null
 column	keiro_timers.process_manager_name	text not null
+column	keiro_timers.resume_claim_token	uuid
+column	keiro_timers.resume_lease_until	timestamp with time zone
 column	keiro_timers.status	text not null default 'scheduled'::text
 column	keiro_timers.timer_id	uuid not null
 column	keiro_timers.updated_at	timestamp with time zone not null default now()
@@ -560,6 +562,7 @@ constraint	keiro_timers.keiro_timers_fire_at_not_null	NOT NULL fire_at
 constraint	keiro_timers.keiro_timers_payload_not_null	NOT NULL payload
 constraint	keiro_timers.keiro_timers_pkey	PRIMARY KEY (timer_id)
 constraint	keiro_timers.keiro_timers_process_manager_name_not_null	NOT NULL process_manager_name
+constraint	keiro_timers.keiro_timers_resume_ownership	CHECK ((((resume_claim_token IS NULL) AND (resume_lease_until IS NULL)) OR ((resume_claim_token IS NOT NULL) AND (resume_lease_until IS NOT NULL) AND (status = 'firing'::text))))
 constraint	keiro_timers.keiro_timers_status_not_null	NOT NULL status
 constraint	keiro_timers.keiro_timers_timer_id_not_null	NOT NULL timer_id
 constraint	keiro_timers.keiro_timers_updated_at_not_null	NOT NULL updated_at

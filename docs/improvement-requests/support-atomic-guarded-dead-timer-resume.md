@@ -4,7 +4,7 @@ title: Support atomic guarded dead timer resume
 description: >-
   Let an authorized consumer claim one dead timer by ID and expected reason atomically,
   preserving its identity and retry history while excluding competing resume attempts.
-timestamp: 2026-09-08T02:04:44Z
+timestamp: 2026-09-08T04:06:43Z
 requestId: IR-36
 status: proposed
 origin: mori://shinzui/kioku
@@ -85,3 +85,19 @@ ownership semantics, and a tagged Hackage release of `mori://shinzui/keiro/packa
 Coordinate the release with IR-35 so Kioku can adopt both capabilities. Add a new migration
 only if needed; never edit an applied migration. Record source compatibility and downstream
 adoption evidence before marking this request complete.
+
+## Implementation evidence (2026-09-08)
+
+[ExecPlan 272](../plans/272-support-atomic-guarded-dead-timer-resume.md) implements
+`claimDeadTimer`, opaque lease ownership, renewal/completion/parking/cancellation,
+and expiry recovery directly to Dead. Migration 0032 preserves old timer rows and
+requires paired ownership fields only on Firing rows. All legacy ID-only mutations
+exclude guarded claims. [ADR-39](../adr/0039-foreground-timer-resume-uses-expiring-token-ownership.md)
+records the storage/consumer and deployment boundaries.
+
+The PostgreSQL suite exercises exact guard refusals, retry history, expiry,
+replacement-token rejection, and two independent stores against one database.
+A public-facade fixture covers preflight revocation/unavailability, one callback
+for a contested claim, crash recovery, and preserved original work identity.
+Validation results are maintained in the plan. Release and actual downstream
+adoption are still incomplete; this request remains proposed until those gates pass.

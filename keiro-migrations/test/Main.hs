@@ -54,7 +54,7 @@ import Test.Hspec
 main :: IO ()
 main = hspec $ do
   describe "native Keiro migration definition" $ do
-    it "tracks thirty-one native files in manifest order" $ do
+    it "tracks thirty-two native files in manifest order" $ do
       directory <- findMigrationsDirectory
       manifest <- Text.lines <$> Text.IO.readFile (directory </> "manifest")
       manifest `shouldBe` Text.pack <$> nativeMigrationFiles
@@ -67,7 +67,7 @@ main = hspec $ do
         bytes <- ByteString.readFile (directory </> nativeName)
         lookup legacyName lockEntries `shouldBe` Just (checksumText bytes)
 
-    it "builds component keiro with dependency kiroku and thirty-one migrations" $ do
+    it "builds component keiro with dependency kiroku and thirty-two migrations" $ do
       plan <- requirePlan
       let PlanDescription components = planDescription plan
       case toList components of
@@ -80,7 +80,7 @@ main = hspec $ do
             componentNameText keiroName `shouldBe` "keiro"
             dependencyName <- requireRight (componentName "kiroku")
             keiroDependencies `shouldBe` Set.singleton dependencyName
-            length keiroEntries `shouldBe` 31
+            length keiroEntries `shouldBe` 32
         actual -> expectationFailure ("unexpected plan description: " <> show actual)
       validateHistoryMappingTargets plan frameworkCoddHistoryMappings `shouldBe` Right ()
 
@@ -169,7 +169,7 @@ main = hspec $ do
         [("9999-fixture.sql", "-- Never set search_path in a migration.\nSELECT 1;")]
         `shouldBe` []
 
-    it "passes all 31 embedded native bodies" $ do
+    it "passes all 32 embedded native bodies" $ do
       lintViolations config (toList embeddedMigrationEntries) `shouldBe` []
 
   describe "startup handshake" $ do
@@ -183,7 +183,7 @@ main = hspec $ do
             plan
             >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` planMigrationIds plan
-        length (Keiro.pendingMigrations handshake) `shouldBe` 42
+        length (Keiro.pendingMigrations handshake) `shouldBe` 43
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -209,7 +209,7 @@ main = hspec $ do
         handshake <-
           missingMigrations defaultRunOptions provider plan >>= requireRight
         Keiro.pendingMigrations handshake `shouldBe` drop 11 (planMigrationIds plan)
-        length (Keiro.pendingMigrations handshake) `shouldBe` 31
+        length (Keiro.pendingMigrations handshake) `shouldBe` 32
         Keiro.ledgerIssues handshake `shouldBe` []
         handshakePassed handshake `shouldBe` False
 
@@ -292,12 +292,12 @@ main = hspec $ do
         assertSchema connection
         let provider = providerFor connection
         rerun <- runMigrationPlanWith defaultRunOptions provider plan >>= requireRight
-        reportOutcomes rerun `shouldBe` replicate 42 AlreadyApplied
+        reportOutcomes rerun `shouldBe` replicate 43 AlreadyApplied
         verified <- verifyMigrationPlanWith defaultRunOptions provider plan >>= requireRight
         case verified of
           VerificationReport verificationIssues applied pending unknown -> do
             verificationIssues `shouldBe` []
-            length applied `shouldBe` 42
+            length applied `shouldBe` 43
             pending `shouldBe` []
             unknown `shouldBe` []
       either (expectationFailure . show) pure result
@@ -346,7 +346,7 @@ main = hspec $ do
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
             (runMigrationPlan defaultRunOptions settings plan >>= requireRight)
         sort [reportOutcomes first, reportOutcomes second]
-          `shouldBe` sort [replicate 42 AppliedNow, replicate 42 AlreadyApplied]
+          `shouldBe` sort [replicate 43 AppliedNow, replicate 43 AlreadyApplied]
 
     it "upgrades singleton read-model rows into deterministic rebuild groups" $ do
       fullPlan <- requirePlan
@@ -365,7 +365,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script legacyReadModelFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 32 (reportOutcomes report) `shouldBe` replicate 10 AppliedNow
+        Prelude.drop 32 (reportOutcomes report) `shouldBe` replicate 11 AppliedNow
         withConnection settings $ \connection -> do
           rows <- useSession connection (Session.statement () legacyGroupUpgradeStatement)
           rows
@@ -391,7 +391,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script preCanonicalRebuildFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 34 (reportOutcomes report) `shouldBe` replicate 8 AppliedNow
+        Prelude.drop 34 (reportOutcomes report) `shouldBe` replicate 9 AppliedNow
         withConnection settings $ \connection -> do
           rows <- useSession connection (Session.statement () preCanonicalRebuildShapeStatement)
           rows
@@ -416,7 +416,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script preStatusContractFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 36 (reportOutcomes report) `shouldBe` replicate 6 AppliedNow
+        Prelude.drop 36 (reportOutcomes report) `shouldBe` replicate 7 AppliedNow
         withConnection settings $ \connection -> do
           facts <- useSession connection (Session.statement () preStatusContractFactsStatement)
           facts `shouldBe` ("unmanaged", 0, "unmanaged", True, True)
@@ -439,7 +439,7 @@ main = hspec $ do
           withConnection settings $ \connection ->
             useSession connection (Session.statement () guardFunctionOidStatement)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 40 (reportOutcomes report) `shouldBe` replicate 2 AppliedNow
+        Prelude.drop 40 (reportOutcomes report) `shouldBe` replicate 3 AppliedNow
         withConnection settings $ \connection -> do
           (afterOid, epochFenced, publicRevoked) <-
             useSession connection (Session.statement () upgradedGuardFactsStatement)
@@ -464,7 +464,7 @@ main = hspec $ do
         withConnection settings $ \connection ->
           useSession connection (Session.script preRejectionOutboxFixtureSql)
         report <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
-        Prelude.drop 41 (reportOutcomes report) `shouldBe` [AppliedNow]
+        Prelude.drop 41 (reportOutcomes report) `shouldBe` replicate 2 AppliedNow
         withConnection settings $ \connection -> do
           useSession connection (Session.script validRejectionAuditSql)
           missingAudit <- Connection.use connection (Session.script missingRejectionAuditSql)
@@ -475,6 +475,46 @@ main = hspec $ do
           oversizedDetail `shouldSatisfy` isLeft
           auditOnSent <- Connection.use connection (Session.script rejectionAuditOnSentSql)
           auditOnSent `shouldSatisfy` isLeft
+
+    it "0032 preserves old timer rows and enforces paired firing ownership" $ do
+      fullPlan <- requirePlan
+      kiroku <- requireRight Kiroku.kirokuMigrations
+      priorKeiro <-
+        requireRight
+          ( migrationComponentFromEmbeddedSql
+              "keiro"
+              (Set.singleton "kiroku")
+              (NonEmpty.fromList (take 31 (toList embeddedMigrationEntries)))
+          )
+      priorPlan <- requireRight (frameworkMigrationPlan kiroku priorKeiro)
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+        _ <- runMigrationPlan defaultRunOptions settings priorPlan >>= requireRight
+        withConnection settings $ \connection ->
+          useSession
+            connection
+            ( Session.script
+                "INSERT INTO keiro.keiro_timers (timer_id, process_manager_name, correlation_id, fire_at, payload, status, attempts, last_error) SELECT ('00000000-0000-0000-0000-00000000000' || n)::uuid, 'owner', 'original', now(), '{\"work\":1}', s, 7, 'deferred' FROM (VALUES (1, 'scheduled'), (2, 'firing'), (3, 'dead')) AS states(n,s)"
+            )
+        _ <- runMigrationPlan defaultRunOptions settings fullPlan >>= requireRight
+        withConnection settings $ \connection -> do
+          count <-
+            useSession
+              connection
+              ( Session.statement
+                  ()
+                  ( Statement.preparable
+                      "SELECT count(*) FROM keiro.keiro_timers WHERE resume_claim_token IS NULL AND resume_lease_until IS NULL AND attempts = 7 AND last_error = 'deferred' AND payload = '{\"work\":1}'::jsonb AND correlation_id = 'original'"
+                      Encoders.noParams
+                      (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.int8)))
+                  )
+              )
+          count `shouldBe` 3
+          missingLease <- Connection.use connection (Session.script "UPDATE keiro.keiro_timers SET resume_claim_token = '00000000-0000-0000-0000-000000000001'")
+          missingLease `shouldSatisfy` isLeft
+          wrongState <- Connection.use connection (Session.script "UPDATE keiro.keiro_timers SET resume_claim_token = '00000000-0000-0000-0000-000000000001', resume_lease_until = now() WHERE status = 'dead'")
+          wrongState `shouldSatisfy` isLeft
+          useSession connection (Session.script "UPDATE keiro.keiro_timers SET resume_claim_token = '00000000-0000-0000-0000-000000000001', resume_lease_until = now() WHERE status = 'firing'")
 
     it "enforces replay source, adapter, and verification membership constraints" $ do
       plan <- requirePlan
@@ -637,7 +677,7 @@ main = hspec $ do
           `shouldBe` replicate 7 AlreadyApplied
             <> replicate 4 AppliedNow
             <> replicate 16 AlreadyApplied
-            <> replicate 15 AppliedNow
+            <> replicate 16 AppliedNow
 
         verifiedAfterUp <-
           verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
@@ -1074,12 +1114,12 @@ importFixture sourceSchema = do
       `shouldBe` replicate 7 AlreadyApplied
         <> replicate 4 AppliedNow
         <> replicate 16 AlreadyApplied
-        <> replicate 15 AppliedNow
+        <> replicate 16 AppliedNow
     verifiedAfterCanaries <- verifyMigrationPlan defaultRunOptions settings plan >>= requireRight
     case verifiedAfterCanaries of
       VerificationReport verificationIssues _ _ _ -> verificationIssues `shouldBe` []
     rerun <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
-    reportOutcomes rerun `shouldBe` replicate 42 AlreadyApplied
+    reportOutcomes rerun `shouldBe` replicate 43 AlreadyApplied
     second <-
       importCoddHistory defaultImportOptions config provider plan frameworkCoddHistoryMappings
         >>= requireRight
@@ -1089,7 +1129,7 @@ importFixture sourceSchema = do
       sourceRows <- useSession connection (Session.statement () (sourceRowCountStatement sourceSchema))
       sourceRows `shouldBe` 23
       facts <- useSession connection (Session.statement () importFactsStatement)
-      facts `shouldBe` (42, 23, True)
+      facts `shouldBe` (43, 23, True)
 
 postCoddImportPendingIssues :: IO [VerificationIssue]
 postCoddImportPendingIssues =
@@ -1117,7 +1157,8 @@ postCoddImportPendingIssues =
         ("keiro", "0028"),
         ("keiro", "0029"),
         ("keiro", "0030"),
-        ("keiro", "0031")
+        ("keiro", "0031"),
+        ("keiro", "0032")
       ]
 
 assertPoisonedLedger :: Settings.Settings -> Expectation
@@ -1161,7 +1202,8 @@ nativeMigrationFiles =
     "0028.sql",
     "0029.sql",
     "0030.sql",
-    "0031.sql"
+    "0031.sql",
+    "0032.sql"
   ]
 
 findMigrationsDirectory :: IO FilePath
@@ -1291,6 +1333,8 @@ planMigrationIds plan =
 requireRight :: (Show error) => Either error value -> IO value
 requireRight = either failure pure
 
+-- Keep the cold assertion path out of each specialized migration example.
+{-# NOINLINE failure #-}
 failure :: (Show value) => value -> IO result
 failure value = expectationFailure (show value) >> fail (show value)
 

@@ -8,6 +8,17 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Add guarded Dead timer claims with exact owner/reason checks, total attempt
+  ceilings, and opaque expiring ownership. Complete, renew, park, cancel, or
+  recover directly to Dead while retaining original work and retry history.
+- Ordinary worker passes recover expired foreground claims even when ordinary
+  requeueing is disabled. ID-only timer mutations refuse guarded claims.
+  Existing rows and callback signatures remain source-compatible.
+- Stop/drain all old timer writers before migration 0032 and deploy upgraded
+  writers before enabling resume. Mixed-version writers are unsafe. Disable
+  resume and drain/recover claims before rollback. External effects remain
+  at-least-once and require consumer-owned idempotency.
+
 - Add `Keiro.Timer.lookupTimerInspection` with full nullable stored reasons and
   `findDeadTimers` with exact owner/literal reason filters, 1–100 row bounds,
   and exclusive UUID pagination. Existing timer rows and worker APIs remain

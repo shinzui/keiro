@@ -8,6 +8,9 @@
 -- records completion and the produced event id. Stale @Firing@ rows are requeued
 -- by 'requeueStuckTimers' so a crashed worker does not strand a timer forever.
 --
+-- ID-only completion, cancellation, dead-lettering and requeueing refuse all
+-- token-bearing foreground claims, including expired claims awaiting recovery.
+--
 -- Callers normally use the re-exports from "Keiro.Timer" rather than this
 -- module directly.
 module Keiro.Timer.Schema
@@ -25,6 +28,19 @@ module Keiro.Timer.Schema
     DeadTimerPage (..),
     lookupTimerInspection,
     findDeadTimers,
+
+    -- * Guarded foreground resume
+    DeadTimerClaimRequest (..),
+    TimerResumeError (..),
+    TimerResumeClaim,
+    resumeClaimTimer,
+    resumeClaimLeaseUntil,
+    claimDeadTimer,
+    renewTimerResume,
+    completeTimerResume,
+    parkTimerResume,
+    cancelTimerResume,
+    recoverExpiredTimerResumes,
 
     -- * Storage
     scheduleTimerTx,
@@ -52,7 +68,8 @@ import Contravariant.Extras (contrazip2, contrazip5, contrazip6)
 import Data.Int (Int32)
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
-import Effectful (Eff, (:>))
+import Data.UUID.V4 qualified as UUIDv4
+import Effectful (Eff, IOE, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -70,7 +87,7 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 --   claimable again when 'requeueStuckTimers' moves them back to 'Scheduled'.
 -- * 'Fired' — successfully fired; terminal.
 -- * 'Cancelled' — withdrawn before firing.
--- * 'Dead' — abandoned after exceeding the attempt ceiling; terminal; carries an
+-- * 'Dead' — parked or abandoned; guarded foreground resume is possible; carries an
 --   optional @last_error@ describing why it was given up on.
 data TimerStatus
   = Scheduled
@@ -187,6 +204,182 @@ findDeadTimers deadFilter request
       ReasonAbsent -> (1, Nothing)
       ReasonExact value -> (2, Just value)
       ReasonPrefix value -> (3, Just value)
+
+-- | Exact dead-row guards and an explicit total attempt ceiling. Lease seconds
+-- must be between 1 and 2147483647, avoiding interval conversion overflow.
+data DeadTimerClaimRequest = DeadTimerClaimRequest
+  { timerId :: !TimerId,
+    processManagerName :: !Text,
+    expectedReason :: !Text,
+    maxAttempts :: !Int,
+    leaseSeconds :: !Int
+  }
+  deriving stock (Generic, Eq, Show)
+
+data TimerResumeError
+  = InvalidTimerResumeMaxAttempts !Int
+  | InvalidTimerResumeLeaseSeconds !Int
+  deriving stock (Generic, Eq, Show)
+
+-- | Opaque storage ownership, not application authorization.
+data TimerResumeClaim = TimerResumeClaim !TimerRow !UUID !UTCTime
+
+-- | Original work as claimed, including the incremented attempt count.
+resumeClaimTimer :: TimerResumeClaim -> TimerRow
+resumeClaimTimer (TimerResumeClaim row _ _) = row
+
+-- | Claim-time snapshot only. Renewals retain the token and update the database;
+-- schedule renewals by the requested interval, not this old snapshot.
+resumeClaimLeaseUntil :: TimerResumeClaim -> UTCTime
+resumeClaimLeaseUntil (TimerResumeClaim _ _ deadline) = deadline
+
+validResumeLease :: Int -> Bool
+validResumeLease seconds = seconds > 0 && toInteger seconds <= toInteger (maxBound :: Int32)
+
+-- | Claim only the exact owner and non-NULL reason. Refusal consumes no attempt.
+-- Authorize and establish session availability before calling; execute outside
+-- the retried SQL transaction, only after receiving ownership.
+claimDeadTimer :: (IOE :> es, Store :> es) => DeadTimerClaimRequest -> Eff es (Either TimerResumeError (Maybe TimerResumeClaim))
+claimDeadTimer request
+  | request ^. #maxAttempts < 0 = pure (Left (InvalidTimerResumeMaxAttempts (request ^. #maxAttempts)))
+  | not (validResumeLease (request ^. #leaseSeconds)) = pure (Left (InvalidTimerResumeLeaseSeconds (request ^. #leaseSeconds)))
+  | otherwise = do
+      token <- liftIO UUIDv4.nextRandom
+      Right
+        <$> runTransaction
+          ( do
+              lockTimerResumeTx (request ^. #timerId)
+              Tx.statement
+                ( timerIdToUuid (request ^. #timerId),
+                  request ^. #processManagerName,
+                  request ^. #expectedReason,
+                  fromIntegral (request ^. #maxAttempts),
+                  token,
+                  fromIntegral (request ^. #leaseSeconds)
+                )
+                claimDeadTimerStmt
+          )
+
+-- Lock in a separate statement: subsequent predicates and clock_timestamp()
+-- observe the committed winner after a ReadCommitted lock wait.
+lockTimerResumeTx :: TimerId -> Tx.Transaction ()
+lockTimerResumeTx tid = void $ Tx.statement (timerIdToUuid tid) lockTimerResumeStmt
+
+lockTimerResumeStmt :: Statement UUID (Maybe UUID)
+lockTimerResumeStmt =
+  preparable
+    "SELECT timer_id FROM keiro.keiro_timers WHERE timer_id = $1 FOR UPDATE"
+    (E.param (E.nonNullable E.uuid))
+    (D.rowMaybe (D.column (D.nonNullable D.uuid)))
+
+claimDeadTimerStmt :: Statement (UUID, Text, Text, Int64, UUID, Int32) (Maybe TimerResumeClaim)
+claimDeadTimerStmt =
+  preparable
+    """
+    WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS now)
+    UPDATE keiro.keiro_timers kt
+    SET status = 'firing', attempts = attempts + 1,
+        resume_claim_token = $5, resume_lease_until = stamp.now + $6::integer * interval '1 second',
+        updated_at = stamp.now
+    FROM stamp
+    WHERE timer_id = $1 AND status = 'dead'
+      AND process_manager_name COLLATE "C" = $2
+      AND last_error COLLATE "C" = $3 AND attempts < $4
+    RETURNING kt.timer_id, kt.process_manager_name, kt.correlation_id, kt.fire_at,
+      kt.payload, kt.status, kt.attempts, kt.fired_event_id, kt.resume_claim_token, kt.resume_lease_until
+    """
+    ( contrazip6
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.int4))
+    )
+    (D.rowMaybe (TimerResumeClaim <$> timerRowDecoder <*> D.column (D.nonNullable D.uuid) <*> D.column (D.nonNullable D.timestamptz)))
+
+-- | Extend from database time. False means ownership was lost; an expired claim
+-- cannot be revived. Stop local work where possible on loss of ownership.
+renewTimerResume :: (Store :> es) => TimerResumeClaim -> Int -> Eff es (Either TimerResumeError Bool)
+renewTimerResume claim seconds
+  | not (validResumeLease seconds) = pure (Left (InvalidTimerResumeLeaseSeconds seconds))
+  | otherwise = Right <$> mutateTimerResume claim "firing" Nothing (Just (fromIntegral seconds))
+
+-- | Complete with the resulting event. False must not be reported as successful
+-- timer completion. External effects still need caller-owned idempotency.
+completeTimerResume :: (Store :> es) => TimerResumeClaim -> EventId -> Eff es Bool
+completeTimerResume claim event = mutateTimerResume claim "fired" (Just (eventIdToUuid event)) Nothing
+
+-- | Return to Dead with the original reason and incremented attempts retained.
+parkTimerResume :: (Store :> es) => TimerResumeClaim -> Eff es Bool
+parkTimerResume claim = mutateTimerResume claim "dead" Nothing Nothing
+
+-- | Explicit abandonment by the current owner.
+cancelTimerResume :: (Store :> es) => TimerResumeClaim -> Eff es Bool
+cancelTimerResume claim = mutateTimerResume claim "cancelled" Nothing Nothing
+
+mutateTimerResume :: (Store :> es) => TimerResumeClaim -> Text -> Maybe UUID -> Maybe Int32 -> Eff es Bool
+mutateTimerResume (TimerResumeClaim row token _) target event seconds = runTransaction $ do
+  lockTimerResumeTx (row ^. #timerId)
+  Tx.statement (timerIdToUuid (row ^. #timerId), token, target, event, seconds) mutateTimerResumeStmt
+
+mutateTimerResumeStmt :: Statement (UUID, UUID, Text, Maybe UUID, Maybe Int32) Bool
+mutateTimerResumeStmt =
+  preparable
+    """
+    WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS now)
+    UPDATE keiro.keiro_timers
+    SET status = $3,
+        fired_event_id = CASE WHEN $3 = 'fired' THEN $4 ELSE fired_event_id END,
+        resume_claim_token = CASE WHEN $5::integer IS NULL THEN NULL ELSE resume_claim_token END,
+        resume_lease_until = CASE WHEN $5::integer IS NULL THEN NULL ELSE stamp.now + $5 * interval '1 second' END,
+        updated_at = stamp.now
+    FROM stamp
+    WHERE timer_id = $1 AND resume_claim_token = $2 AND status = 'firing'
+      AND resume_lease_until > stamp.now
+    """
+    ( contrazip5
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.text))
+        (E.param (E.nullable E.uuid))
+        (E.param (E.nullable E.int4))
+    )
+    ((> 0) <$> D.rowsAffected)
+
+-- | Re-park expired foreground work directly to Dead. Foreground-only hosts
+-- must run this periodically and before discovery/resume. Ordinary worker passes
+-- also run it, independently of their ordinary stale-claim recovery option.
+recoverExpiredTimerResumes :: (Store :> es) => Eff es Int
+recoverExpiredTimerResumes = runTransaction $ do
+  -- Deterministic lock ordering, with a fresh predicate in the second statement.
+  ids <- Tx.statement () lockExpiredTimerResumesStmt
+  sum <$> traverse (\tid -> Tx.statement tid recoverExpiredTimerResumesStmt) ids
+
+lockExpiredTimerResumesStmt :: Statement () [UUID]
+lockExpiredTimerResumesStmt =
+  preparable
+    """
+    SELECT timer_id FROM keiro.keiro_timers
+    WHERE status = 'firing' AND resume_claim_token IS NOT NULL
+      AND resume_lease_until <= clock_timestamp()
+    ORDER BY timer_id FOR UPDATE
+    """
+    mempty
+    (D.rowList (D.column (D.nonNullable D.uuid)))
+
+recoverExpiredTimerResumesStmt :: Statement UUID Int
+recoverExpiredTimerResumesStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_timers
+    SET status = 'dead', resume_claim_token = NULL, resume_lease_until = NULL,
+        updated_at = clock_timestamp()
+    WHERE timer_id = $1 AND status = 'firing' AND resume_claim_token IS NOT NULL
+      AND resume_lease_until <= clock_timestamp()
+    """
+    (E.param (E.nonNullable E.uuid))
+    (fromIntegral <$> D.rowsAffected)
 
 -- | Criteria selecting timers stranded in 'Firing'. A row is "stuck" when its
 -- 'status' is @firing@ and it matches every set bound: 'minAge' (it has been
@@ -469,6 +662,7 @@ markTimerFiredStmt =
         updated_at = now()
     WHERE timer_id = $1
       AND status = 'firing'
+      AND resume_claim_token IS NULL
     """
     ( contrazip2
         (E.param (E.nonNullable E.uuid))
@@ -530,6 +724,7 @@ requeueStuckTimersStmt =
     SET status = 'scheduled',
         updated_at = now()
     WHERE status = 'firing'
+      AND resume_claim_token IS NULL
       AND updated_at <= $1
     """
     (E.param (E.nonNullable E.timestamptz))
@@ -544,6 +739,7 @@ requeueStuckTimerStmt =
         updated_at = now()
     WHERE timer_id = $1
       AND status = 'firing'
+      AND resume_claim_token IS NULL
     """
     (E.param (E.nonNullable E.uuid))
     ((> 0) <$> D.rowsAffected)
@@ -557,6 +753,7 @@ cancelTimerStmt =
         updated_at = now()
     WHERE timer_id = $1
       AND status IN ('scheduled', 'firing')
+      AND resume_claim_token IS NULL
     """
     (E.param (E.nonNullable E.uuid))
     ((> 0) <$> D.rowsAffected)
@@ -571,6 +768,7 @@ deadLetterTimerStmt =
         updated_at = now()
     WHERE timer_id = $1
       AND status IN ('scheduled', 'firing')
+      AND resume_claim_token IS NULL
     """
     ( contrazip2
         (E.param (E.nonNullable E.uuid))

@@ -109,3 +109,24 @@ examples, including reason preservation, literal matching, changing eligibility,
 complete stored-column immutability, and caller authorization with revocation.
 This addition is implemented locally; publication and downstream released-version
 adoption remain tracked by [ExecPlan 270](../plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md).
+
+## Guarded foreground resume (unreleased)
+
+`Keiro.Timer.claimDeadTimer` atomically resumes a deliberately parked timer using
+its ID, exact mandatory owner, non-NULL literal reason, total attempt ceiling, and
+positive lease duration. An opaque token fences completion, renewal, parking, and
+cancellation against expired or replaced owners. Every successful claim increments
+attempts once; refused claims and consumer preflights consume zero. Parking and
+expiry recovery retain original identity, payload, due time, reason, and history,
+and return directly to Dead without background eligibility.
+
+Foreground-only consumers run recovery periodically and before discovery. Ordinary
+worker passes also recover expired foreground claims independently of stale ordinary
+requeue options, without counting re-parks as due requeues. Legacy ID-only mutations
+exclude guarded claims. `TimerRow`, inspection, and callback signatures are unchanged.
+Consumers own decoding, reason classification, authorization, session availability,
+external cancellation, and result idempotency. This is at-least-once external
+execution, not exactly-once effects. Deploy all upgraded writers before enabling
+resume; old writers must be stopped before migration and remain stopped during
+activation. See [the consumer lifecycle](../user/process-managers-and-timers.md#resuming-deliberately-parked-work)
+and [ADR-39](../adr/0039-foreground-timer-resume-uses-expiring-token-ownership.md).

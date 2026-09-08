@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-09-08
+* **Update**: Document guarded timer resume consumer lifecycle, lease recovery, and deployment ordering.
 * **Update**: Document reason-preserving timer inspection, bounded literal filters, UUID pagination, and caller authorization.
 
 ## 2026-08-26

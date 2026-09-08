@@ -25,14 +25,22 @@ This addresses the valid request [IR-36](docs/improvement-requests/support-atomi
 ## Progress
 
 
-(No implementation steps recorded yet.)
+- [x] (2026-09-08T04:06Z) Implemented guarded claims and all five legacy mutation exclusions. Public-API tests first failed to compile against the missing API; corrected same-database race and guard/preservation tests pass. Generated migration 0032 and native snapshot (only two columns and ownership constraint).
+- [x] (2026-09-08T04:08Z) Migration authoring check and all 36 migration examples passed, including fresh install, preceding-version timer upgrade, ownership constraints, immutable checksums, and native schema verification.
+- [x] (2026-09-08T04:06Z) Implemented token lifecycle, expiry recovery, and worker integration; 25 focused timer examples passed with zero failures. Added the expired-completion race for the final focused/full rerun.
+- [x] (2026-09-08T04:08Z) Implemented public consumer fixture and lifecycle/rollout documentation; allocated ADR-39 with OKF and passed strict profile/log enforcement. IR-36 records implementation with publication/adoption pending.
+- [x] (2026-09-08T04:10Z) Expanded focused rerun passed: 36 migration examples and 25 timer examples, including expired completion/recovery. Migration authoring check, final formatting, and aarch64-darwin flake checks passed.
+- [ ] Milestone 3 remaining: full workspace verification and source distributions.
+- [ ] Milestone 4: Coordinate publication with plan 270 and verify released downstream adoption.
 
 
 ## Surprises & Discoveries
 
 
-(None yet.)
+Discovery (2026-09-08 UTC): `withFreshStores2` opens two separate cloned databases, contrary to the original plan. The first test run returned zero recovered rows from the second store. The corrected race fixture uses `withFreshDatabase` once and opens two independent `Store.withStore` pools with that same connection string. Existing cross-context tests retain their separate-database helper.
 
+
+The enlarged migration suite exhausted GHC's simplifier budget while repeatedly specializing the cold polymorphic `failure` helper (`SPEC failure @DefinitionError @_`). Marking that assertion-only helper NOINLINE allowed the normal optimized build and native snapshot generation to pass; no compiler flag or dependency workaround was introduced.
 
 ## Decision Log
 
@@ -48,10 +56,12 @@ Decision (2026-09-08 UTC): Every successful foreground claim increments the exis
 Decision (2026-09-08 UTC): Keep application permissions, reason classification, external execution cancellation, and idempotent result writes in the consumer. Storage ownership prevents stale database transitions; it cannot stop an external action already running when a lease expires. Do not describe this as exactly-once AI execution.
 
 
+Decision (2026-09-08 UTC): Use two statements in each ReadCommitted ownership transaction: row locking first, then guarded mutation and database time. Recovery locks candidate IDs in UUID order and rechecks only those locked IDs. Validate lease seconds in the positive Int32 range (1–2147483647), which PostgreSQL can safely convert to seconds without overflow.
+
 ## Outcomes & Retrospective
 
 
-(To be filled during implementation.)
+The guarded storage API, forward migration, public consumer fixture, lifecycle documentation, and ADR-39 are implemented. The focused timer suite passed 25 examples; final expanded focused and full repository checks are in progress. Publication and actual downstream adoption remain incomplete. The downstream plan still describes the foreground core/CLI fixture as unimplemented; local synthetic evidence cannot replace that gate.
 
 
 ## Context and Orientation
@@ -63,7 +73,7 @@ A timer is one row in `keiro.keiro_timers`. Scheduled means eligible for the due
 
 `TimerRow` contains ID, process-manager name (the consumer ownership label), correlation ID, original due time, payload, status, attempts, and optional fired event ID. `TimerInspection` wraps this row and its nullable stored reason. Plan 270 preserves the distinction between NULL and empty text, and matches exact owner/reason using deterministic C collation. Reuse those semantics, but require a non-null exact reason and a mandatory owner for resume. Prefix or wildcard matching is unsuitable for a mutation.
 
-`keiro/test/Main.hs` has the `Keiro.Timer` examples, `counterTimerRequest`, and `dueTimerTime`. `keiro-test-support/src/Keiro/Test/Postgres.hs` provides migrated ephemeral PostgreSQL databases and `withFreshStores2`, which gives two independent stores against one fresh database. Use it for real concurrent claims rather than serial calls on one store. Test-only SQL may create an expired lease or compare private columns; consumer-facing fixtures must use the public facade.
+`keiro/test/Main.hs` has the `Keiro.Timer` examples, `counterTimerRequest`, and `dueTimerTime`. `keiro-test-support/src/Keiro/Test/Postgres.hs` provides migrated ephemeral PostgreSQL databases and `withFreshDatabase`. Open two independent `Store.withStore` pools against its single connection string for real concurrent claims. `withFreshStores2` instead creates separate databases and must not be used for these races. Test-only SQL may create an expired lease or compare private columns; consumer-facing fixtures must use the public facade.
 
 Native SQL migrations live in `keiro-migrations/migrations/`, whose `manifest` currently ends at `0031.sql`. `keiro-migrations/migrations.native.lock` records ordered SHA-256 hashes. `keiro-migrations/test/Main.hs` verifies membership, hashes, and the PostgreSQL 18 expected schema. `docs/user/migrations.md` explains the authoring command and snapshot regeneration. Never change an applied migration or the frozen legacy Codd history.
 
@@ -251,3 +261,5 @@ recoverExpiredTimerResumes :: (Store :> es) => Eff es Int
 The returned lease deadline is the claim-time snapshot; renewal success preserves the same token and the database holds the updated deadline. Document that callers schedule renewals by their requested interval and must not use the snapshot as current lease truth. Configuration errors remain values; database failures use the existing Store error channel. `maxAttempts = 0` is valid and always refuses a claim; negative values are invalid. Lease seconds must be positive and encoded with a checked representation that cannot overflow during conversion to a PostgreSQL interval.
 
 Ordinary timer APIs keep their signatures and token-free behavior. Their mutable operations explicitly exclude active guarded claims. No Kioku-specific reason parsing, permission schema, UI, or AI execution engine belongs in these interfaces.
+
+Revision (2026-09-08 UTC): Started implementation and corrected the shared-database race fixture after inspecting its implementation and observing the initial recovery failures. Lease seconds are checked against positive Int32 seconds to avoid interval overflow.

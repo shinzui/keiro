@@ -369,3 +369,59 @@ Preserve the full reason for any later guarded recovery preflight. A successful
 read reserves nothing: the separate guarded-resume work in
 [IR-36](../improvement-requests/support-atomic-guarded-dead-timer-resume.md) must
 revalidate its own state, owner, and reason guards before execution.
+
+## Resuming deliberately parked work
+
+Use `Keiro.Timer` for foreground resume of a Dead timer. Before discovery and
+periodically on foreground-only hosts, call `recoverExpiredTimerResumes`. Inspect
+with `lookupTimerInspection` or `findDeadTimers`, decode the original payload,
+classify its reason, recheck application authorization, and establish session
+availability before claiming. Neither the owner label nor a stored reason grants
+permission. Unavailable sessions, revoked permissions, malformed work, and ordinary
+dead letters should fail this preflight without consuming attempts.
+
+`claimDeadTimer (DeadTimerClaimRequest tid owner exactReason ceiling seconds)`
+returns `Right (Just claim)` only when the row is Dead, its owner and non-NULL
+reason match exactly, and attempts are strictly below the explicit total ceiling.
+Empty text is a valid reason; NULL is not. Matching is case-sensitive and literal,
+including Unicode, percent, underscore, and backslash. Missing IDs and all guard
+refusals return the same `Right Nothing` without changing any persisted column.
+A ceiling of zero refuses every claim; negative ceilings and lease seconds outside
+1–2147483647 return configuration errors before database access.
+
+The successful claim preserves timer identity, original payload and due time,
+retains the reason, increments attempts once, and returns an opaque ownership
+handle. Execute work only after this success, outside the storage transaction.
+`resumeClaimTimer` provides the claimed row. `resumeClaimLeaseUntil` is a claim-time
+snapshot, not the current deadline after renewal. Schedule `renewTimerResume claim
+seconds` while work runs according to your requested interval. Renewal uses database
+time and cannot revive expired ownership.
+
+Complete with `completeTimerResume claim eventId`. After stopping work on transient
+failure or session loss, use `parkTimerResume claim`; it preserves the reason and
+incremented history. Explicit abandonment uses `cancelTimerResume claim`. These
+operations return False if ownership has expired or been replaced. On False,
+cancel local work where possible and do not report successful timer completion.
+Even immediate post-claim session loss has consumed an attempt. Leave work parked
+at its ceiling; any higher ceiling is an explicit caller policy decision.
+
+After a crash, expiry recovery returns guarded Firing rows directly to Dead,
+clearing ownership without changing attempts or the original reason. It never
+exposes that work to the due poller. Every ordinary worker pass also runs this
+recovery, even with `requeueStuckAfter = Nothing`; that option controls only ordinary
+token-free claims. Foreground re-parks do not increment the ordinary requeued
+metric. Existing ID-only mark-fired, cancel, dead-letter, and requeue operations
+refuse guarded claims, including expired claims awaiting recovery.
+
+The guarantee is one currently valid storage owner. A lease cannot stop an external
+call already running at expiry. Derive a stable idempotency key from the original
+work identity and deduplicate durable results in the consumer; this is at-least-once
+external execution. An ambiguous claim response requires inspection/recovery,
+not assuming ownership.
+
+Drain or stop old timer-mutating binaries, apply migrations, deploy all upgraded
+writers, then enable foreground resume. Old binaries lack the token guards, so
+mixed-version timer writers are unsafe despite the additive columns. Before
+rollback, disable resume and drain or recover all guarded claims before starting
+an older writer. Existing `TimerRow`, `TimerInspection`, worker callback, and
+ID-only API signatures remain source-compatible.
