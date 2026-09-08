@@ -19,7 +19,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 A foreground consumer will be able to resume one deliberately parked timer without replacing its identity or exposing it to the ordinary due-work poller. It will inspect the timer, authorize its original payload, establish session availability, and atomically claim only the expected owner and exact stored reason. Two competing consumers will receive one successful claim and one no-claim result. Expired or superseded claims will be unable to finalize later work.
 
-This addresses the valid request [IR-36](docs/improvement-requests/support-atomic-guarded-dead-timer-resume.md). The companion public inspection API from [plan 270](docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md) is already implemented locally. Demonstrate the new behavior through PostgreSQL races and a consumer fixture before coordinating their release. Runtime implementation is committed in `c351fceb`; final workspace verification is in progress. Publication and downstream adoption remain pending.
+This addresses the valid request [IR-36](docs/improvement-requests/support-atomic-guarded-dead-timer-resume.md). The companion public inspection API from [plan 270](docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md) is already implemented locally. Demonstrate the new behavior through PostgreSQL races and a consumer fixture before coordinating their release. Runtime implementation is committed in `c351fceb` and `6df9c5b4`; the full workspace gate has passed. Publication and downstream adoption remain pending.
 
 
 ## Progress
@@ -31,8 +31,9 @@ This addresses the valid request [IR-36](docs/improvement-requests/support-atomi
 - [x] (2026-09-08T04:08Z) Implemented public consumer fixture and lifecycle/rollout documentation; allocated ADR-39 with OKF and passed strict profile/log enforcement. IR-36 records implementation with publication/adoption pending.
 - [x] (2026-09-08T04:10Z) Expanded focused rerun passed: 36 migration examples and 25 timer examples, including expired completion/recovery. Migration authoring check, final formatting, and aarch64-darwin flake checks passed.
 - [x] (2026-09-08T04:14:39Z) Corrected absent-row lock handling; the focused timer suite again passed all 25 examples.
-- [ ] Milestone 3 remaining: full workspace verification and source distributions.
-- [ ] Milestone 4: Coordinate publication with plan 270 and verify released downstream adoption.
+- [x] (2026-09-08T04:29:39Z) Full `nix develop -c just verify` passed: workspace build, 632 Keiro examples, 58 PGMQ examples (two existing pending), 48 operator examples, all 43 DSL suites (719 main examples), 25 Jitsurei examples, documentation/policies, and 36 migration examples. All seven package checks and source distributions passed.
+- [x] (2026-09-08T04:40:19Z) Strengthened bulk-requeue guard regression passed (one targeted example, zero failures). Its cutoff is the claim deadline, so the age predicate definitely qualifies and token exclusion is exercised. Local milestones 1–3 are complete; release remains deferred.
+- [ ] Milestone 4 (deferred by user): Coordinate publication with plan 270, run release-time Haddock generation, and verify released downstream adoption.
 
 
 ## Surprises & Discoveries
@@ -61,12 +62,14 @@ Decision (2026-09-08 UTC): Keep application permissions, reason classification, 
 
 Decision (2026-09-08 UTC): Use two statements in each ReadCommitted ownership transaction: row locking first, then guarded mutation and database time. Recovery locks candidate IDs in UUID order and rechecks only those locked IDs. Validate lease seconds in the positive Int32 range (1–2147483647), which PostgreSQL can safely convert to seconds without overflow.
 
-Decision (2026-09-08 UTC): Propose shared PVP 0.16.0.0 for the coordinated reads/claims release because independent foreground recovery and the no-old-writers deployment boundary are intentional behavioral changes. Hackage preferred metadata and upstream tags still identify 0.15.0.0 (`de574cdcb0add3fefbb0fdd96d820258d15f8997`) as latest. No versions or bounds have been edited: the release skill requires confirmation of the proposed bump before those edits and approval of staged release changes before publication. Prepared review notes and the exact version/bound patch locally. The release must include a 0.15-to-0.16 upgrade blueprint edge describing drain/migrate/upgrade/enable ordering and rollback, without upstream entailments.
+Decision (2026-09-08 UTC): Propose shared PVP 0.16.0.0 for the coordinated reads/claims release because independent foreground recovery and the no-old-writers deployment boundary are intentional behavioral changes. Hackage preferred metadata and upstream tags still identify 0.15.0.0 (`de574cdcb0add3fefbb0fdd96d820258d15f8997`) as latest. No versions or bounds have been edited. The user clarified that Haddock belongs at release time, so publication preparation and release-only checks are deferred. The tentative version proposal is not an approved release. The release must include a 0.15-to-0.16 upgrade blueprint edge describing drain/migrate/upgrade/enable ordering and rollback, without upstream entailments.
+
+Decision (2026-09-08 UTC, user clarification): Finish implementation and its verification now; run Haddock when releasing. The initial default Haddock invocation unnecessarily built dependency documentation and was stopped. A cached release-mode attempt finished before the clarification could stop it, but no further documentation/publication work is part of this implementation turn. Keep milestone 4 unchecked and do not request release approval as part of local completion.
 
 ## Outcomes & Retrospective
 
 
-The guarded storage API, forward migration, public consumer fixture, lifecycle documentation, and ADR-39 are implemented. The focused timer suite passed 25 examples; final expanded focused and full repository checks are in progress. Publication and actual downstream adoption remain incomplete. The downstream plan still describes the foreground core/CLI fixture as unimplemented; local synthetic evidence cannot replace that gate.
+The guarded storage API, forward migration, public consumer fixture, lifecycle documentation, and ADR-39 are implemented. The focused timer suite passed 25 examples and the full repository gate passed; the strengthened bulk-requeue assertion also passed in a final targeted run. Local milestones 1–3 are complete. Publication and actual downstream adoption remain incomplete. The two unchanged PGMQ pending tests require a deterministic transient-poll fault injector and pg_partman, respectively. The downstream plan still describes the foreground core/CLI fixture as unimplemented; local synthetic evidence cannot replace that gate. Per user clarification, release-time Haddock and publication are deferred, with no version/bound edits or release approval requested during implementation.
 
 
 ## Context and Orientation
@@ -268,3 +271,7 @@ The returned lease deadline is the claim-time snapshot; renewal success preserve
 Ordinary timer APIs keep their signatures and token-free behavior. Their mutable operations explicitly exclude active guarded claims. No Kioku-specific reason parsing, permission schema, UI, or AI execution engine belongs in these interfaces.
 
 Revision (2026-09-08 UTC): Started implementation and corrected the shared-database race fixture after inspecting its implementation and observing the initial recovery failures. Lease seconds are checked against positive Int32 seconds to avoid interval overflow.
+
+Revision (2026-09-08 UTC): Recorded successful full implementation verification and the user-directed separation of implementation from release-time Haddock/publication work. The stronger bulk-requeue assertion uses the lease deadline rather than the historical due time so age alone cannot satisfy exclusion.
+
+Revision (2026-09-08T04:40:19Z): Completed local acceptance and recorded the final age-qualified bulk-requeue regression. Publication and downstream released-bound/host acceptance remain unchecked for release work.

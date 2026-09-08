@@ -5628,7 +5628,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Store.runStoreIO storeHandle (cancelTimer tid) `shouldReturn` Right False
       Store.runStoreIO storeHandle (deadLetterTimer tid "wrong") `shouldReturn` Right False
       Store.runStoreIO storeHandle (requeueStuckTimer tid) `shouldReturn` Right False
-      Store.runStoreIO storeHandle (requeueStuckTimers 0 dueTimerTime) `shouldReturn` Right 0
+      Store.runStoreIO storeHandle (requeueStuckTimers 0 (resumeClaimLeaseUntil claim)) `shouldReturn` Right 0
       Store.runStoreIO storeHandle (renewTimerResume claim 60) `shouldReturn` Right (Right True)
       Store.runStoreIO storeHandle (parkTimerResume claim) `shouldReturn` Right True
       Right (Right (Just replacement)) <- Store.runStoreIO storeHandle $ claimDeadTimer request
