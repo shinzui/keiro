@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Online projection rebuilds use schema-versioned target generations
 description: Keiro rebuilds schema-changing projections into application-provisioned physical generations and promotes a verified generation through a bounded atomic cutover.
-timestamp: 2026-09-08T21:11:08Z
+timestamp: 2026-08-14T06:53:09Z
 docId: ADR-34
 status: Accepted
 date: 2026-08-13
@@ -20,10 +20,9 @@ Status: Accepted
 
 Projection rebuilds are needed both to repair data produced by defective projection
 logic and to populate a read model after its schema changes. The existing offline
-protocol truncates the declared application table before replay. A metadata check before
-query SQL is insufficient: a rebuild can start between the check and the read.
-Native queries and independent SQL readers both need a transaction-level group
-fence to avoid observing an empty or partially reconstructed table.
+protocol truncates the declared application table before replay. That is safe for
+Keiro-aware callers because they observe the group fence, but an independent SQL
+reader can observe an empty or partially reconstructed table.
 
 A shadow-table rebuild avoids that visibility failure, but cloning the serving table
 cannot implement the principal schema-evolution use case. PostgreSQL
@@ -42,18 +41,6 @@ the lifecycle machinery that moves between physical instances of that schema.
 
 
 ## Decision
-
-Native `runQuery` and `runQueryWithFreshness` must hold shared group and model
-registry row locks while running SQL. Freshness waits precede lock acquisition.
-A compound query uses `runReadModelTransaction` with requirements derived from
-every model it observes. Groups are locked before models, in deterministic
-order, and schema, live/read availability and model-to-group binding are checked
-again under those locks. A changed binding is refused; no SQL executes under a
-lock for the wrong group. Registry discovery before locking is not permission
-to query. The caller remains responsible for naming all observed models because
-Keiro cannot inspect opaque SQL closures. The native query fix is unreleased;
-released 0.16.0.0 still has the separate-check race.
-
 
 A catalog physical target has a stable logical identity and one or more durable
 physical target generations. A generation records a generation identifier, the target

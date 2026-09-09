@@ -1,7 +1,6 @@
 # Bundle Update Log
 
 ## 2026-09-08
-* **Update**: ADR-34: require native query group and model locks through SQL, with explicit compound model requirements and unreleased adoption status.
 * **Update**: Clarify ADR-39 absent-row refusal before guarded mutation; prevent concurrent insertion from bypassing the initial row lock.
 * **Decision**: Add ADR-39: expiring foreground timer ownership, recovery to Dead, and consumer rollout boundary.
 * **Update**: Define timer inspection ownership, observational pagination, and application authorization boundaries.

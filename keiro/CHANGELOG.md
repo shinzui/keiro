@@ -6,28 +6,6 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
-## 0.17.0.0 — 2026-09-09
-
-### Breaking Changes
-
-- `ReadModelError` has two new cases: `ReadModelGroupUnavailable` and
-  `ReadModelRegistrationChanged`. Update exhaustive matches to preserve these
-  unavailable outcomes. Native read-model queries now hold registry locks through
-  SQL execution and revalidate after waits or changed group bindings.
-
-### New Features
-
-- Add compound `ReadModelRequirement`, `readModelRequirement` and
-  `runReadModelTransaction` APIs for observing multiple models under one fence.
-- Add `replayDeadOutbox` for one inspected exhausted delivery. The expected
-  attempt count refuses stale and concurrent operator retries. Identity, payload
-  and spent attempts remain intact; permanent rejection and successful delivery
-  remain terminal. No schema migration is required.
-
-### Bug Fixes
-
-- Prevent native queries from using stale metadata across rebuild/cutover.
-
 ## 0.16.0.0 — 2026-09-07
 
 ### Breaking Changes

@@ -176,7 +176,6 @@ import Keiro.Outbox
     publishClaimedOutbox,
     publishRejectionCode,
     publishRejectionDetail,
-    replayDeadOutbox,
     sampleOutboxBacklog,
   )
 import Keiro.Outbox.Kafka qualified as OutboxKafka
@@ -396,7 +395,6 @@ import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
 import ProjectionReplaySpec qualified
-import ReadModelFenceSpec qualified
 import ReadModelSpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
@@ -425,7 +423,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   PreCanonicalRecoverySpec.spec fixture
   ProjectionReplaySpec.spec fixture
   ReadModelSpec.spec
-  ReadModelFenceSpec.spec fixture
 
   describe "catalog-fenced inline projections" $ around (withFreshResourceStore fixture) $ do
     it "rolls back the event append and target write while its group rebuilds" $ \(_storeHandle, StoreRunner runStore) -> do
@@ -6214,77 +6211,6 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       record ^. #key `shouldBe` Nothing
 
   describe "Keiro.Outbox" $ around (withFreshStore fixture) $ do
-    it "replays one dead attempt without resetting identity or permitting stale repeats" $ \storeHandle -> do
-      let oid = OutboxId outboxUuid1
-      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
-      now <- getCurrentTime
-      Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
-      Right (Just OutboxDead) <- Store.runStoreIO storeHandle $ Store.runTransaction (markOutboxFailedTx oid "original failure" 1 60 now)
-      Right (Just before) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      forM_ [-1, 0, 2, maxBound] $ \attempts -> do
-        Right refused <- Store.runStoreIO storeHandle (replayDeadOutbox oid attempts now)
-        refused `shouldBe` False
-      Right (Just unchanged) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      unchanged `shouldBe` before
-      -- Simultaneous identical requests grant exactly one additional attempt.
-      start <- newEmptyMVar
-      results <- forM [1 .. 2 :: Int] $ \_ -> do
-        done <- newEmptyMVar
-        _ <- forkIO $ do
-          readMVar start
-          result <- try @SomeException (Store.runStoreIO storeHandle (replayDeadOutbox oid 1 now))
-          putMVar done result
-        pure done
-      putMVar start ()
-      outcomes <- traverse takeMVar results
-      let successful = [value | Right (Right value) <- outcomes]
-      length successful `shouldBe` 2
-      length (filter id successful) `shouldBe` 1
-      Right (Just replayed) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      replayed `shouldBe` (before & #status .~ OutboxFailed & #nextAttemptAt .~ (before ^. #updatedAt))
-      Right [claimed] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
-      claimed ^. #attemptCount `shouldBe` 2
-      claimed ^. #event `shouldBe` before ^. #event
-      Right (Just OutboxDead) <- Store.runStoreIO storeHandle $ Store.runTransaction (markOutboxFailedTx oid "new failure" 1 60 now)
-      -- Deliberately reuse the same clock instant. The attempt fence, rather
-      -- than a timestamp token, prevents an old request from replaying again.
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 1 now)
-      Right True <- Store.runStoreIO storeHandle (replayDeadOutbox oid 2 now)
-      Right [lastClaim] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
-      lastClaim ^. #attemptCount `shouldBe` 3
-      Right True <- Store.runStoreIO storeHandle (markOutboxSent oid now)
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 3 now)
-      pure ()
-
-    it "refuses non-dead deliveries and rolls a failed replay transaction back" $ \storeHandle -> do
-      let oid = OutboxId outboxUuid1
-      missingAt <- getCurrentTime
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 1 missingAt)
-      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction (enqueueIntegrationEventTx oid sampleIntegrationEnvelope)
-      now <- getCurrentTime
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 1 now)
-      Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 1 now)
-      Right (Just OutboxFailed) <- Store.runStoreIO storeHandle $ Store.runTransaction (markOutboxFailedTx oid "retryable" 2 0 now)
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 1 now)
-      Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
-      Right (Just OutboxDead) <- Store.runStoreIO storeHandle $ Store.runTransaction (markOutboxFailedTx oid "exhausted" 2 0 now)
-      Right (Just before) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.sql "CREATE FUNCTION keiro.fail_replay() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'replay fixture failure'; END $$; CREATE TRIGGER fail_replay AFTER UPDATE ON keiro.keiro_outbox FOR EACH ROW EXECUTE FUNCTION keiro.fail_replay()"
-      result <- Store.runStoreIO storeHandle (replayDeadOutbox oid 2 now)
-      result `shouldSatisfy` (\case Left _ -> True; Right _ -> False)
-      Right (Just after) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      after `shouldBe` before
-      Right () <- Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.sql "DROP TRIGGER fail_replay ON keiro.keiro_outbox; DROP FUNCTION keiro.fail_replay()"
-      Right True <- Store.runStoreIO storeHandle (replayDeadOutbox oid 2 now)
-      Right [_] <- Store.runStoreIO storeHandle (claimOutboxBatch PerKeyHeadOfLine 1 now)
-      rejection <- shouldBeRight (mkPublishRejection "permanent.refusal" Nothing)
-      Right True <- Store.runStoreIO storeHandle $ Store.runTransaction (markOutboxRejectedTx oid rejection now)
-      Right (Just rejected) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      Right False <- Store.runStoreIO storeHandle (replayDeadOutbox oid 3 now)
-      Right (Just retained) <- Store.runStoreIO storeHandle (lookupOutbox oid)
-      retained `shouldBe` rejected
-
     it "validates terminal publication rejection data at its public boundary" $ \_storeHandle -> do
       let validCode64 = "a" <> Text.replicate 63 "z"
           validDetail1024 = Text.replicate 1024 "x"

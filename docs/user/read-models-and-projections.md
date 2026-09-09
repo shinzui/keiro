@@ -3,7 +3,6 @@ type: Reference
 title: Read Models And Projections
 description: Reference projection catalogs, delivery modes, query freshness, and rebuild lifecycles.
 docId: DOC-19
-timestamp: 2026-09-08T21:11:08Z
 tags: [keiro, read-models, projections, reference]
 generated:
   by: human:nadeem
@@ -1046,8 +1045,8 @@ matching the old default. Use `runQueryWithFreshness` for per-call overrides.
 ## Querying
 
 ```haskell
-runQuery Nothing readModel input
-runQueryWithFreshness Nothing freshness readModel input
+runQuery readModel input
+runQueryWithFreshness freshness readModel input
 ```
 
 Register each model once when its projection starts:
@@ -1059,43 +1058,15 @@ registerReadModel
   (orderSummary ^. #shapeHash)
 ```
 
-Queries never create registry rows. After any freshness wait, Keiro locks the
-owning groups and model registry rows inside the query transaction and checks:
+Queries never create registry rows. Before running the query transaction, Keiro
+loads the registered metadata and checks:
 
 - stored version equals the read model's version;
 - stored shape hash equals the read model's shape hash;
-- model status is `Live`;
-- each owning group allows reads and is live or serving a versioned generation.
-
-The locks remain held through SQL execution. A rebuild or cutover waits for an
-in-flight query; a query that waits for an already-started rebuild revalidates
-the committed state before reading. Freshness polling holds none of these locks.
+- status is `Live`.
 
 Failures are returned as `ReadModelError`; an unknown name returns
 `ReadModelUnregistered` without changing the registry.
-
-A compound SQL query must name every read model it observes, including models
-from other groups. Keep the application SQL as one transaction:
-
-```haskell
-runReadModelTransaction
-  (readModelRequirement teamRoster :| [readModelRequirement roleAssignees])
-  membershipQuerySql
-```
-
-Import `NonEmpty(..)` from `Data.List.NonEmpty` for `:|`. Requirements are derived
-from the models' registry names, versions and shapes. Keiro locks groups first,
-then model rows, in deterministic order. It rejects a registration moved to a
-different group during lock acquisition with `ReadModelRegistrationChanged`;
-a fresh invocation can discover the new binding. `ReadModelGroupUnavailable`
-reports a group that cannot currently serve reads. No supplied SQL runs after
-a failed check. The compound boundary does not infer dependencies from SQL or
-poll freshness; callers must declare every observed model and perform any
-required freshness waits before entering it. Normal projection writes continue;
-a transaction containing several query statements still uses read-committed
-snapshots. Use one statement when a compound result must share one SQL snapshot.
-This API and the atomic native
-query fix are unreleased until included in the next supported package revision.
 
 ## Inline Projections
 
