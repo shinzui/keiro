@@ -9,6 +9,7 @@ module Keiro.Outbox.Schema
   ( enqueueOutboxTx,
     claimOutboxBatch,
     requeueStuckOutbox,
+    replayDeadOutbox,
     markOutboxSent,
     markOutboxSentBatch,
     markOutboxSentBatchTx,
@@ -179,6 +180,26 @@ requeueStuckOutbox maxAttempts olderThan now =
     dead <- Tx.statement (cutoff, fromIntegral maxAttempts, now) deadLetterStuckStmt
     requeued <- Tx.statement (cutoff, fromIntegral maxAttempts, now) requeueStuckStmt
     pure (fromIntegral requeued, fromIntegral dead)
+
+-- | Make one inspected exhausted delivery claimable again. The expected attempt
+-- count comes from 'lookupOutbox' and fences stale operator retries: every later
+-- claim increments that count, including one which fails and becomes dead again.
+-- Pending, publishing, failed, sent, rejected and missing rows are unchanged.
+--
+-- Preserve the message, source identity, payload, prior error and attempt count.
+-- This does not reset the retry budget: with the same exhausted maxAttempts,
+-- another failure returns to dead after one additional attempt. The ordinary
+-- publisher still checks recipient authority and performs claim/finalization.
+-- A replay can arrive after later revisions; consumers must deduplicate and
+-- reconcile by source revision as for any other at-least-once delivery.
+--
+-- Returns True only for the committed transition. Repeating the same request
+-- returns False, including after its new attempt becomes dead. Invalid/exhausted
+-- counter values also return False. No schema migration is needed.
+replayDeadOutbox :: (Store :> es) => OutboxId -> Int -> UTCTime -> Eff es Bool
+replayDeadOutbox outboxId expectedAttempts now =
+  runTransaction $
+    Tx.statement (unOutboxId outboxId, fromIntegral expectedAttempts, now) replayDeadStmt
 
 -- | Mark a row as successfully published. Sets @published_at@ and clears
 -- @last_error@. Returns 'False' if the row left @publishing@ before the mark,
@@ -624,6 +645,25 @@ requeueStuckStmt =
         (E.param (E.nonNullable E.timestamptz))
     )
     D.rowsAffected
+
+replayDeadStmt :: Statement (UUID, Int64, UTCTime) Bool
+replayDeadStmt =
+  preparable
+    """
+    UPDATE keiro.keiro_outbox
+    SET status = 'failed', next_attempt_at = $3, updated_at = $3
+    WHERE outbox_id = $1
+      AND status = 'dead'
+      AND attempt_count = $2
+      AND $2 > 0
+      AND $2 < 9223372036854775807
+    """
+    ( contrazip3
+        (E.param (E.nonNullable E.uuid))
+        (E.param (E.nonNullable E.int8))
+        (E.param (E.nonNullable E.timestamptz))
+    )
+    ((> 0) <$> D.rowsAffected)
 
 markSentStmt :: Statement (UUID, UTCTime) Bool
 markSentStmt =

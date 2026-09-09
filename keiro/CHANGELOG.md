@@ -6,6 +6,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+- Add `replayDeadOutbox` for one inspected exhausted delivery. An expected
+  attempt-count fence rejects stale/repeated operator requests, even after a new
+  failed attempt. Identity, payload, error and monotonic attempt counts remain
+  intact; rejected/sent and nonterminal rows cannot be replayed. Normal publisher
+  policy governs the additional attempt; no schema migration is required.
+
 - Fix native read-model queries racing rebuilds between metadata validation and
   SQL execution. Hold ordered group and model registry locks through query SQL,
   with fresh validation after waits and group-binding changes.

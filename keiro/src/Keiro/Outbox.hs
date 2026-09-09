@@ -37,6 +37,7 @@ module Keiro.Outbox
     enqueueOutboxTx,
     claimOutboxBatch,
     requeueStuckOutbox,
+    replayDeadOutbox,
     markOutboxSent,
     lookupOutbox,
     listOutbox,
