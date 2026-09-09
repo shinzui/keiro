@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-09-09
+* **Revision**: Rewrite IR-37 around native read-model query consistency across
+rebuild lifecycle transitions. Separate dead outbox recovery into IR-38. Both
+requests use Keiro API/state terminology; consumer context is provenance only.
 * **Addition**: IR-37 requests owner investigation of Koyomi's directory-read
 consistency during rebuilds and selected terminal delivery recovery. Existing
 API guidance may resolve either need. The reverted implementation is not proposed;
