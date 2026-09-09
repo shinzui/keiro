@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-09-09
+* **Addition**: IR-37 requests owner investigation of Koyomi's directory-read
+consistency during rebuilds and selected terminal delivery recovery. Existing
+API guidance may resolve either need. The reverted implementation is not proposed;
+any confirmed runtime gap requires focused correctness and performance evidence.
+
 ## 2026-09-08
 * **Completed**: IR-35 and IR-36 are delivered in Keiro 0.16.0.0. Verified Hackage and upstream
 package tags, Kioku public-API recovery/CLI/migration acceptance, and the corrected Rei
