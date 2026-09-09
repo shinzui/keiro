@@ -40,6 +40,7 @@ cannot roll them back; version control is the undo.
 | `0.13.0.0` | `0.14.0.0` | — |
 | `0.14.0.0` | `0.15.0.0` | — |
 | `0.15.0.0` | `0.16.0.0` | — |
+| `0.16.0.0` | `0.17.0.0` | — |
 
 Gaps between edges are deliberate and legal: they mean no agent intervention was
 needed in that interval. Edges are append-only — an edge stays correct for as

@@ -6,19 +6,27 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
-- Add `replayDeadOutbox` for one inspected exhausted delivery. An expected
-  attempt-count fence rejects stale/repeated operator requests, even after a new
-  failed attempt. Identity, payload, error and monotonic attempt counts remain
-  intact; rejected/sent and nonterminal rows cannot be replayed. Normal publisher
-  policy governs the additional attempt; no schema migration is required.
+## 0.17.0.0 — 2026-09-09
 
-- Fix native read-model queries racing rebuilds between metadata validation and
-  SQL execution. Hold ordered group and model registry locks through query SQL,
-  with fresh validation after waits and group-binding changes.
-- Add `ReadModelRequirement`, `readModelRequirement` and
-  `runReadModelTransaction` for compound SQL observing multiple models. New
-  `ReadModelGroupUnavailable` and `ReadModelRegistrationChanged` error cases
-  distinguish group refusal and a binding changed during lock acquisition.
+### Breaking Changes
+
+- `ReadModelError` has two new cases: `ReadModelGroupUnavailable` and
+  `ReadModelRegistrationChanged`. Update exhaustive matches to preserve these
+  unavailable outcomes. Native read-model queries now hold registry locks through
+  SQL execution and revalidate after waits or changed group bindings.
+
+### New Features
+
+- Add compound `ReadModelRequirement`, `readModelRequirement` and
+  `runReadModelTransaction` APIs for observing multiple models under one fence.
+- Add `replayDeadOutbox` for one inspected exhausted delivery. The expected
+  attempt count refuses stale and concurrent operator retries. Identity, payload
+  and spent attempts remain intact; permanent rejection and successful delivery
+  remain terminal. No schema migration is required.
+
+### Bug Fixes
+
+- Prevent native queries from using stale metadata across rebuild/cutover.
 
 ## 0.16.0.0 — 2026-09-07
 
