@@ -6,6 +6,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- Adopt the 0.6 candidate from mori://shinzui/pgmq-hs across PGMQ consumers.
+  Partitioned job provisioning explicitly retains default premake with `Nothing`.
+- Fix parser-scaling benchmark access to the current scaffold `path` and `text`
+  fields, discovered by the full release-candidate component build.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Breaking Changes

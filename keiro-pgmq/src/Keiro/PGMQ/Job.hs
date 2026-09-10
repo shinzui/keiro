@@ -615,7 +615,8 @@ queueProvisionConfigs provision job =
             job.jobQueue.physicalName
             Config.PartitionConfig
               { Config.partitionInterval = spec.partitionInterval,
-                Config.retentionInterval = spec.retentionInterval
+                Config.retentionInterval = spec.retentionInterval,
+                Config.premake = Nothing
               }
     mainConfig
       | provision.provisionFifoIndex = Config.withFifoIndex mainBase

@@ -61,10 +61,10 @@ library
     , hasql-pool            >=1.2       && <1.5
     , hs-opentelemetry-api  >=1.0       && <1.1
     , keiro-core            ^>=0.16.0.0
-    , pgmq-config           >=0.5       && <0.6
-    , pgmq-core             >=0.5       && <0.6
-    , pgmq-effectful        >=0.5       && <0.6
-    , pgmq-hasql            >=0.5       && <0.6
+    , pgmq-config           >=0.6       && <0.7
+    , pgmq-core             >=0.6       && <0.7
+    , pgmq-effectful        >=0.6       && <0.7
+    , pgmq-hasql            >=0.6       && <0.7
     , shibuya-core          ^>=0.9.0.0
     , shibuya-pgmq-adapter  ^>=0.14.0.0
     , streamly-core         >=0.3       && <0.4
@@ -91,10 +91,10 @@ test-suite keiro-pgmq-test
     , keiro-core                           ^>=0.16.0.0
     , keiro-pgmq
     , keiro-test-support                   ^>=0.16.0.0
-    , pgmq-config                          >=0.5       && <0.6
-    , pgmq-core                            >=0.5       && <0.6
-    , pgmq-effectful                       >=0.5       && <0.6
-    , pgmq-migration                       >=0.5       && <0.6
+    , pgmq-config                          >=0.6       && <0.7
+    , pgmq-core                            >=0.6       && <0.7
+    , pgmq-effectful                       >=0.6       && <0.7
+    , pgmq-migration                       >=0.6       && <0.7
     , shibuya-core                         ^>=0.9.0.0
     , shibuya-pgmq-adapter                 ^>=0.14.0.0
     , text                                 >=2.1       && <2.2
