@@ -5,9 +5,23 @@ title: "Make process-manager reactions first-class in keiro-dsl"
 kind: exec-plan
 created_at: 2026-09-10T00:48:02Z
 intention: "intention_01m24dv27ze9gak6fc30mhqrsg"
+provenance:
+  reviews:
+    - model: "gpt-6"
+      harness: "codex"
+      at: 2026-09-10T12:42:20Z
+      verdict: "changes-requested"
+      note: "Recorded retrospectively for this session: review found absent implementation, unsound batch recovery, import cycles, and inconsistent timer acceptance; runtime feasibility required before DSL implementation."
+  revisions:
+    - model: "gpt-6"
+      harness: "codex"
+      at: 2026-09-10T12:42:20Z
+      mode: "update"
+      note: "Applied review corrections, recorded validation evidence, and extracted runtime API hardening into prerequisite plan 279; provenance recorded retrospectively for this session."
 ---
 
 # Make process-manager reactions first-class in keiro-dsl
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -15,6 +29,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 
 ## Purpose / Big Picture
+
 
 After this change, an author can describe an event-driven coordination process completely in a
 `.keiro` file under the new candidate `language keiro-dsl 6`, and `keiro-dsl scaffold` emits the
@@ -25,72 +40,103 @@ advance the saga, dispatch commands to the target aggregate, schedule or cancel 
 named durable timers with typed input-derived payloads, or deliberately do nothing. A process may
 also have no timers at all. A reaction whose fan-out depends on saga state expresses that
 dependency through the saga's own transducer: the follow-up runs only when the saga accepted the
-advance command, and the recorded saga event is the authority that makes redelivery reproduce the
-same decision.
+advance command, and the recorded saga event witnesses acceptance so redelivery reproduces accepted follow-ups.
+Silent decisions have no persisted witness and can be re-evaluated after saga state changes.
 
 The behavior is visible in three new database-backed conformance packages and in
 `keiro-dsl check`. Given a Language 6 process with two input variants, the generated manager selects
-the guarded arm, appends exactly one saga event under the deterministic manager id, dispatches each
-declared command exactly once under a target-keyed deterministic id, re-arms or preserves a timer
-according to its declared scheduling mode, and answers a redelivered source event with duplicate
-results and no new writes. `keiro-dsl check` refuses a binding whose input field type differs from
+the guarded arm and appends the saga's accepted event batch with its first event under the
+deterministic manager id. Eventful target commands deduplicate under target-keyed deterministic
+ids; silent target commands have no persisted receipt. Scheduling re-arms or preserves a timer
+according to its declared mode. Redelivery of an accepted source with eventful targets returns
+duplicate results without repeating timer writes or target appends. `keiro-dsl check` refuses a binding whose input field type differs from
 the target command field, a schedule of an undeclared timer, a guard that reads saga state, two
 `on` blocks for one input, an input variant with no `on` block, an arm list without an
 `otherwise` arm, and two timers that share an identity prefix. `keiro-dsl diff` classifies reaction
 reordering, guard changes, conditional dispatch changes, timer payload and identity changes, and the
 migration of a legacy positional-identity process to the reaction form.
 
-The first milestone of this plan is a validation gate rather than product code. The request in
-`docs/improvement-requests/make-process-manager-reactions-first-class-in-keiro-dsl.md` (IR-39)
-was checked against the current parser, validator, scaffolder, runtime, and language registry while
-this plan was written; the findings are recorded in Context and Orientation and the Decision Log
-below. Milestone 0 turns the two remaining feasibility questions, the state-authority runtime path
-and the timer cancellation boundary, into runnable spikes with an explicit go/no-go decision before
-any grammar work begins.
+The runtime prerequisite is now [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md). It owns the feasibility gate, additive reaction
+API, transactional timer cancellation, dispatch identity, handwritten runtime example, and recovery
+proofs. Complete that plan before registering Language 6 here. This plan owns the DSL surface and
+its generated conformance, consuming the supported runtime API rather than implementing one.
+The source request remains
+`docs/improvement-requests/make-process-manager-reactions-first-class-in-keiro-dsl.md` (IR-39).
+Milestone labels below are retained for continuity: M0 is prerequisite acceptance and M3 is
+runtime-API integration, not a second runtime implementation.
 
 
 ## Progress
+
 
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M0: write the state-authority spike in `keiro/test/Main.hs` proving that the saga command path returns the accepted event batch with the caller-assigned deterministic id, that the recorded saga event can be re-read by that id on redelivery, and that a concurrent append makes the optimistic retry report the post-conflict decision.
-- [ ] M0: write the timer spike proving a transaction-level cancel inside the manager append transaction leaves the row unclaimable and that re-arming a fired or cancelled timer does not resurrect it.
-- [ ] M0: compute and freeze the first `deterministicReactionCommandId` vectors and confirm the registry has no active candidate language.
-- [ ] M0: record the go/no-go decision in the Decision Log and either promote or delete the spike tests.
+- [x] (2026-09-10) Validate the plan against the current tree: implementation is absent; record and correct the design defects below. This is a source review, not a passing M0 feasibility gate.
+- [ ] M0: accept the completed runtime prerequisite in [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md), recording its tests, exported API, frozen vectors, and runtime ADR before grammar implementation.
 - [ ] M1: register candidate Language 6 with the `ProcessReactionSyntax` feature and extend the frontend profile, baseline, and skeleton tests.
 - [ ] M1: add the `ProcessBody` sum to `Keiro.Dsl.Grammar` and update every consumer so Language 1 through 5 sources keep their exact AST and generated bytes.
 - [ ] M1: parse, pretty-print, and round-trip the reaction body, multiple inputs, guarded arms, `accepted`/`silent` blocks, schedule/cancel follow-ups, typed timer payloads, and the process-level timer policy.
 - [ ] M1: commit the positive fixtures `process-reactions.keiro`, `process-timers.keiro`, and `process-state-authority.keiro`.
 - [ ] M2: add `Keiro.Dsl.ProcessReaction` with the checked reaction model, typed binding resolution, guard resolution, totality rules, identity rules, and the SHA-256 reaction fingerprint.
 - [ ] M2: add the new diagnostic codes, negative fixtures, source subjects, and check-report rows.
-- [ ] M3: add `Keiro.ProcessManager.Reaction` to the runtime with the reactive manager record, once/worker runners, target-keyed dispatch identity, transactional timer cancel, and recorded-decision re-read.
-- [ ] M3: add runtime tests for duplicate delivery, partial target success then retry, timer/state rollback, timer redelivery, concurrent delivery with optimistic retry, and the frozen identity vectors.
+- [ ] M3: align the checked DSL-to-runtime mapping with the completed prerequisite API; introduce no new coordinator implementation.
 - [ ] M4: generate the executable process module, generated input type, timer payload codecs, timer fire function, typed versioned `ProcessHoles.hs`, harness facts, and ledger rows.
 - [ ] M4: add the three database-backed conformance packages, the mutation script, baseline roles, and the scaling evidence.
 - [ ] M5: add reaction and timer diff codes, process coordination impact, migration diagnostics, and diff fixtures.
-- [ ] M6: update user documentation, guides, the authoring skill, changelogs, OKF logs, ADR-40, and the IR-39 record, then run the full repository gate.
+- [ ] M6: update user documentation, guides, the authoring skill, changelogs, OKF logs, the prerequisite runtime ADR with DSL-specific decisions, and the IR-39 record, then run the full repository gate.
 
 
 ## Surprises & Discoveries
 
+
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+The 2026-09-10 validation at commit `3837e1ea` found no implementation of this plan.
+`LanguageVersion.hs:243` registers only Languages 1–5; neither proposed reaction module,
+none of the three positive fixtures, and no `process reaction spikes` test exists. IR-39
+remains `proposed`. Existing process tests can validate the substrate only.
+
+The proposed batch replay contract was unsound: `runDomainCommandWithSqlEvents` returns all
+accepted events, but `assignEventIds [managerId]` identifies only the first one. A scan for that
+id cannot reconstruct the original batch boundary. The DSL only tests whether an advance was
+accepted, so the revised runtime carries a fixed input-derived accepted follow-up list and uses
+the first recorded event solely as an acceptance witness. It must never pass a fabricated
+singleton to a callback promising the original batch.
+
+Both proposed import graphs contained cycles. A generated `Process` defining the input type
+cannot import a decoder from `ProcessHoles` when that hole imports `Process` for the input type.
+Likewise `Keiro.ProcessManager` cannot re-export `Reaction` while `Reaction` imports its command
+and result types from that module. Milestones 3 and 4 now specify acyclic module boundaries.
+
+The original timer acceptance mixed three distinct cases. A duplicate accepted saga append
+must not replay its timer SQL; re-arming is tested with a new source event and later injected
+time. An exception inside the append transaction rolls back timers and saga events, whereas a
+crash after commit preserves both. Cancellation of a scheduled row prevents subsequent claims but cannot revoke an
+already-running worker's target dispatch. The target aggregate must reject obsolete firing.
+
+`keiro_command_decision` is a telemetry attribute (`Keiro.Telemetry`, value
+`keiro.command.decision`), not a hydration counter. The scaling proof needs direct instrumentation
+of saga hydration and must allow additional attempts on optimistic conflict.
+
+The planned ADR-40 is already allocated to the inspection-UI boundary in
+`docs/adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md`.
+Allocate a fresh handle at closeout. CLI diff also compares the same path at the chosen Git
+revision, not two differently named fixtures; the corrected commands below use an isolated
+scratch repository.
 
 
 ## Decision Log
 
+
 Record every decision made while working on the plan.
 
-- Decision: Implement IR-39 as one ExecPlan with a validation gate as its first milestone
-  rather than as a MasterPlan of separate plans.
-  Rationale: Every deliverable hangs off one grammar change to the `process` node; splitting
-  the grammar, checker, generator, runtime, and diff into separate plans would force each to
-  carry a temporary compatibility shim for the others. The milestones below remain
-  independently verifiable, and the runtime milestone is additive so it can be reviewed alone.
+- Decision: Implement IR-39 through a runtime prerequisite, [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md), followed by this DSL plan.
+  Rationale: The public API and its recovery semantics must be useful and proven in handwritten
+  Haskell before generation depends on them. The two plans have a simple prerequisite relationship
+  and do not require a MasterPlan. This supersedes the original single-plan scoping decision.
   Date: 2026-09-10
 - Decision: Open candidate `language keiro-dsl 6` with exactly one new syntax feature,
   `ProcessReactionSyntax`, and reuse runtime profile `keiro-dsl/runtime-semantics/4`.
@@ -192,18 +238,47 @@ Record every decision made while working on the plan.
   improvement request.
   Date: 2026-09-10
 
+- Decision: Treat accepted saga events as an acceptance witness, not a recoverable batch API.
+  `onAccepted` is a fixed list computed from the immutable input; it cannot inspect event values.
+  Rationale: The DSL has no event-dependent bindings, and the existing deterministic id locates
+  only the first event. This keeps first delivery and replay equivalent for multi-event commands.
+  Date: 2026-09-10
+- Decision: Keep silent decisions explicitly non-durable and require M0 to demonstrate their
+  redelivery behavior before approving implementation. A silent attempt runs no accepted effects,
+  but after unrelated saga progress the same source may accept on a later delivery. Stable replay
+  of rejection/no-op is outside this design unless a separate durable receipt is introduced.
+  Rationale: The current command path writes no evidence for silent outcomes. Input purity alone
+  cannot freeze a state-dependent decision. Do not claim exactly-once command evaluation.
+  Date: 2026-09-10
+- Decision: The review updates the proposed design and leaves M0 open; it does not mark absent
+  implementation complete or allocate a durable ADR before feasibility is established.
+  Rationale: Existing runtime tests cannot prove the proposed runner or generated wiring.
+  Date: 2026-09-10
+
 
 ## Outcomes & Retrospective
+
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose. Before marking the plan complete,
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Validation outcome (2026-09-10): the feature is not implemented in this working tree and cannot
+be certified correct. The plan has been corrected for the concrete source-level defects found
+in this review. The runtime gate now belongs to [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md); this plan's M0 remains pending until that prerequisite
+has executable evidence, especially same-source races and non-durable silent decisions. No runtime, grammar, generated code, or
+ADR was changed by this review; the revised design is a proposal until its gate passes.
+Focused validation passed 10 DSL process/timer examples, 25 runtime process-manager examples,
+and the 39-entry corpus policy. The new reaction runtime has no executable validation yet.
+
+The subsequent plan split assigns runtime delivery to plan 279 under its own intention. This
+plan retains its original intention and remains pending that prerequisite. No implementation
+milestone is marked complete by extracting the work.
 
 
 ## Context and Orientation
+
 
 This repository is a Haskell multi-package Cabal project whose root contains `cabal.project` and
 the `Justfile`; every command in this plan runs from that root unless stated otherwise. The
@@ -230,6 +305,7 @@ create-once, hand-owned module the scaffolder never overwrites.
 
 
 ### The process node today
+
 
 `keiro-dsl/src/Keiro/Dsl/Grammar.hs` defines `ProcessNode` (around line 828) with exactly one
 `input :: InputDecl`, one `handle :: HandleNode`, and one mandatory `timer :: TimerNode`.
@@ -277,6 +353,7 @@ coordination drift for routers only. `keiro-dsl/src/Keiro/Dsl/ScaffoldRecord.hs`
 
 ### The runtime today
 
+
 `keiro/src/Keiro/ProcessManager.hs` defines `ProcessManager` with a pure
 `handle :: input -> ProcessManagerAction ci targetCi`, where the action holds a mandatory saga
 `command`, a list of `PMCommand` values, and a list of `TimerRequest` values. `runProcessManagerOnce`
@@ -316,6 +393,7 @@ on the other, and relies on the incident aggregate's guards to make a late timer
 
 ### Language registry and precedents
 
+
 `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs` registers Languages 1 through 5; Language 5 is the
 sole `Stable` `PublishedLanguage` and the authoring default, and there is no `CandidateLanguage`.
 `LanguageFeature` is the closed list of grammar gates and `SyntaxProfile` values are private, so the
@@ -341,7 +419,9 @@ domain outcome work provides `DomainCommandHandler`, `DomainDecision`, and the g
 
 ### Relevant ADRs
 
-The following local records were read and constrain this plan; no other ADR is relevant.
+
+The following local records constrain this plan. ADR allocation must also respect the existing
+ADR-40 inspection decision; its handle cannot be reused.
 
 [ADR-4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md) requires that
 `check` reject what one spec can prove invalid, that `diff` classify what needs two revisions, and
@@ -390,6 +470,7 @@ worker path and never mutates a token-bearing row.
 
 ### Validation findings for IR-39
 
+
 The request fits the DSL. Its three requested shapes (multiple typed inputs with guarded arms,
 optional and multiple timers, and generated executable wiring) are all closed, checkable subsets of
 what `Keiro.ProcessManager` already executes, and none requires an effectful seam inside the
@@ -401,7 +482,11 @@ Four gaps must be closed for a safe implementation and are owned by the mileston
 `accepted`-arm design routes it through the saga command path that is already hydrated, retried,
 and durable, and needs one additive runtime runner. Second, positional dispatch identity cannot
 survive conditional or reordered dispatch lists, so reaction-form processes need the target-keyed
-derivation and the legacy-to-reaction migration must be classified as breaking. Third, binding
+derivation and the legacy-to-reaction migration must be classified as breaking. Same-target
+occurrence is still positional within one target: swapping two commands to that target or changing
+a binding reuses ids for different actions. A version bump does not repair this; rollout must drain
+old source deliveries, pending timers, partial fan-out, and permitted historical replays before
+activating changed semantics. Test this limitation explicitly and never include version in the seed. Third, binding
 types are not checked today, so typed mappings are a genuine new checker responsibility. Fourth,
 one worker-wide attempt ceiling means per-timer ceilings cannot be honored, so the policy moves to
 the process level. One more finding shapes the plan: opening the candidate moves the authoring
@@ -412,13 +497,16 @@ guide in the same milestone.
 
 ## Plan of Work
 
-The work is organized as seven milestones. Milestone 0 is the validation gate the user asked for.
-Milestones 1 and 2 build the language surface and checker, Milestone 3 the runtime, Milestone 4 the
-generator and conformance, Milestone 5 the evolution surface, and Milestone 6 the documentation and
-closeout. Each milestone ends in a passing build and a committed, described state.
+
+Complete [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md) first. This plan retains seven milestone labels: M0 accepts its evidence;
+M1 and M2 build the language surface and checker; M3 confirms the mapping to the supported runtime;
+M4 adds generation and conformance; M5 adds evolution diagnostics; and M6 documents and closes the
+DSL work. Runtime feasibility, implementation, and runtime documentation are owned exclusively by
+the prerequisite. Each implementation milestone ends in a passing build and a committed state.
 
 
 ### The Language 6 process notation this plan introduces
+
 
 The complete reaction form is shown once here so every milestone refers to the same text. The
 example is the escalation process from `jitsurei/src/Jitsurei/EscalationProcess.hs`, rewritten.
@@ -477,9 +565,9 @@ process IncidentEscalation
 
 Reading it: `reactions version 1` opens the reaction body and is the marker that Language 6 gates.
 Each `input` declares one typed variant; the correlate field must exist in every variant with one
-type. Each `on` block names exactly one variant and holds either a single unconditional arm, or
+type. Each input variant name must be unique. Each `on` block names exactly one variant and holds either a single unconditional arm, or
 ordered `when` arms ending in `otherwise`, or `no-action`. An arm holds at most one `advance`,
-followed by follow-ups in source order: `dispatch` (unchanged syntax), `schedule <timer> [once]
+followed by follow-ups in source order within the timer and dispatch phases: `dispatch` (unchanged syntax), `schedule <timer> [once]
 fireAt input.<Time field> + <window> { bindings }`, and `cancel <timer>`. Follow-ups written directly
 in the arm run regardless of the saga decision because they depend only on the input. Follow-ups
 written under `accepted` run only when the saga accepted the advance with at least one event, and
@@ -491,44 +579,27 @@ schedule site because different variants carry different injected timestamps. A 
 simply has no `timers` policy and no `timer` block, and a reaction may schedule nothing.
 
 
-### Milestone 0: validation gate and feasibility spikes
+### Milestone 0: accept the hardened runtime prerequisite
 
-The goal is a documented go/no-go on the two runtime questions the planning research could not
-settle by reading code alone, plus frozen identity vectors, before any grammar changes. At the end
-of this milestone the plan's Decision Log holds the verdict and the spike tests are either promoted
-into permanent runtime coverage under Milestone 3 or deleted.
 
-Add a `describe "process reaction spikes (plan 273)"` block to `keiro/test/Main.hs` next to the
-existing `describe "Keiro.ProcessManager"` block (line 4202), reusing `counterProcessManager`,
-`withFreshResourceStore`, and the `Counter` fixtures already defined there. The first example runs
-`runDomainCommandWithSqlEvents` against the saga stream with
-`RunCommandOptions {eventIds = [managerId]}` and a `DomainCommandHandler` whose `classifySilent`
-returns `SilentNoOp ()`, asserting that the callback receives one `(event, RecordedEvent)` pair whose
-recorded id equals `managerId` and that the outcome is `DomainAccepted`. The second example appends
-once, then locates the recorded event by paging `Kiroku.Store.readStreamForward` over the saga
-stream, decodes it with `decodeRecorded`, and asserts equality with the original event; this is the
-redelivery re-read path. The third example induces a concurrent append with the
-`beforeAppend :: IO ()` hook in `RunCommandOptions`, so the first attempt hits
-`WrongExpectedVersion`, and asserts that the returned decision corresponds to the transducer edge
-selected against the post-conflict state (use a saga whose transition for the command differs by
-state, for example a first `Note` that emits and a second that is silent). The fourth example writes
-a local `cancelTimerTx :: TimerId -> Tx.Transaction Bool` over the existing `cancelTimerStmt`,
-schedules a timer, cancels it inside a manager append transaction through the
-`runCommandWithSql` callback, and asserts `claimDueTimer` returns `Nothing`; it then re-arms a fired
-timer with `scheduleTimerTx` and asserts the row stays fired. The fifth example computes
-`deterministicReactionCommandId` for the seed fields listed in the Decision Log using the router's
-`encodeField` helper (copy it locally for the spike) and prints the UUID literals for ASCII and
-non-ASCII inputs so they can be frozen in Milestone 3.
+Read the completed [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md) and its Outcomes, validation transcript, public API, and runtime ADR.
+It must demonstrate accepted-witness recovery for multi-event commands, post-conflict decisions,
+same-source concurrency, silent redelivery, partial target recovery, timer rollback versus
+post-commit persistence, frozen identities, and a handwritten consumer with no DSL dependency.
+Do not count existing legacy tests or an unimplemented plan as completion.
 
-Run the spikes with the command in Concrete Steps. Record each result in Surprises & Discoveries
-with the transcript, then write the go/no-go decision. The gate passes when all five examples hold.
-If the concurrency example cannot be induced with `beforeAppend`, fall back to two `StoreRunner`
-threads synchronized by an `MVar` barrier and record the substitution. If re-reading the recorded
-event proves too costly for long saga streams, record the decision to page backward with
-`readStreamBackward` instead; the design is unchanged either way.
+Run the prerequisite's focused reaction tests from Concrete Steps and confirm they execute a
+nonzero number of examples. Check that the separate `Keiro.ProcessManager.Reaction` module exports
+its documented API and that `Keiro.Timer` exports `cancelTimerTx`. Record the runtime ADR link and
+actual signatures here. If an implementation gap appears, resolve it in the prerequisite before
+starting grammar work; the scaffolder must not implement deduplication or transaction logic itself.
+
+Confirm `LanguageVersion.hs` still has no competing active candidate before opening Language 6.
+Language registration is owned by this plan, not by the runtime prerequisite.
 
 
 ### Milestone 1: candidate Language 6 and the reaction grammar
+
 
 The goal is that `keiro-dsl parse` accepts the notation above under `language keiro-dsl 6`, refuses
 it under Language 5 at the `reactions` marker with `LanguageFeatureRequiresVersion`, round-trips it
@@ -588,6 +659,7 @@ reports zero drift because no generated byte changed.
 
 ### Milestone 2: the checked reaction model and diagnostics
 
+
 The goal is that `keiro-dsl check` accepts the three positive fixtures and rejects each negative
 fixture with one source-local diagnostic, and that the checked model carries everything the
 generator and diff need.
@@ -605,7 +677,10 @@ fields and the declared payload type for timer payload fields, and reports
 arm's variant, every comparison to two operands of one type, ordering comparisons only on numeric,
 `Time`, or `Text` operands, and qualified literals (`Severity.Sev1`) only against a declared enum;
 a `reg.`, `cmd.`, `saga.`, or unqualified root reports `ProcessStateAccessUnsupported`. Totality
-rules report `ProcessReactionInputUnhandled` for a variant without an `on` block,
+rules also report `ProcessReactionUnknownInput` for undeclared `on` variants,
+`ProcessInputDuplicateDeclaration` for duplicate input declarations, `ProcessTimerDuplicateName`
+for duplicate timer names, and `ProcessReactionGuardNotBoolean` for non-Boolean guards. Add a
+negative fixture for each. The specified totality rules report `ProcessReactionInputUnhandled` for a variant without an `on` block,
 `ProcessReactionDuplicateInput` for two blocks naming one variant,
 `ProcessReactionOtherwiseMissing` for `when` arms without a terminal `otherwise`, and
 `ProcessReactionOtherwiseUnreachable` for an `otherwise` that is not last. Identity rules report
@@ -618,6 +693,9 @@ the spec, `ProcessScheduleUnknownTimer` and `ProcessCancelUnknownTimer` for unde
 one; `ProcessSilentArmMissing` fires when `accepted` is present without `silent no-action`. The
 existing rules for the fire disposition table, `not-mine`, `on-ambiguous`, `decode unknown-status`,
 the saga category, and the runtime-owned id fields apply unchanged to reaction timers.
+
+For saga transitions implemented by a hand-owned hole, static syntax cannot prove an accepted
+non-empty event batch. Report `ProcessAcceptedArmUnverified` for `accepted` against such a command; do not report its acceptance behavior as generated-declarative.
 
 The checked model records, per input variant, the ordered arms with their checked guard, the
 resolved advance, and follow-ups; per timer, the resolved payload shape; and a canonical rendering
@@ -638,58 +716,43 @@ keiro-dsl -- check keiro-dsl/test/fixtures/process-reactions-badmapping.keiro` e
 `ProcessBindingTypeMismatch` at the binding's line; each positive fixture prints `OK`.
 
 
-### Milestone 3: the additive reaction runtime
+### Milestone 3: bind checked reactions to the supported runtime API
 
-The goal is a runtime runner that executes a checked reaction plan with the transaction boundaries
-the module header already documents, plus the identity derivation and tests IR-39 asks for. Nothing
-in the existing `ProcessManager`, `DomainProcessManager`, or router paths changes.
 
-Create `keiro/src/Keiro/ProcessManager/Reaction.hs` and re-export its public surface from
-`Keiro.ProcessManager`. Define `ReactiveProcessManager` with the saga's `DomainCommandHandler`
-(constructed by generated code with a no-op silent classifier when the saga declares no domain
-outcomes), the target's validated event stream, `correlate`, `streamFor`, `targetProjections`, and
-`react :: input -> ReactionPlan ci co targetCi`. A plan holds an optional `advance :: Maybe ci`,
-the unconditional follow-ups, and `onAccepted :: NonEmpty co -> [FollowUp targetCi]` keyed on the
-recorded batch; a follow-up is a dispatch, a schedule (`TimerRequest` plus `ScheduleMode`), or a
-cancel (`TimerId`). `runReactiveProcessManagerOnce` derives the manager id exactly as today, probes
-the saga stream, and when absent runs `runDomainCommandWithSqlEvents` with the accepted callback
-scheduling and cancelling timers from both the unconditional and accepted follow-ups in the append
-transaction. When the append is silent it schedules the unconditional timers in a separate
-transaction and runs no accepted follow-up. When the manager id already exists, it re-reads the
-recorded event by paging the saga stream, decodes it with the saga codec, and reconstructs the
-accepted follow-ups from it. Dispatches then run one per transaction through
-`dispatchDeduplicatedCommand` under `deterministicReactionCommandId name correlationId
-sourceEventId targetStreamName occurrence`, where occurrence counts earlier dispatches to the same
-stream in declared order. A plan without an advance skips the saga append entirely. Add
-`cancelTimerTx` to `keiro/src/Keiro/Timer/Schema.hs` over `cancelTimerStmt` and export it from
-`Keiro.Timer`. Add `runReactiveProcessManagerWorkerWith` and `runReactiveProcessManagerWorker`
-using `decideForFailures` and `DispatcherProcessManager` so dead letters keep the existing shape;
-record the normalized dispatch position as `emitIndex`. The result type reports the manager result,
-per-dispatch results, timers scheduled, and timers cancelled.
+The runtime implementation and its PostgreSQL tests are delivered by [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md). This milestone
+checks that the DSL model lowers directly to that public surface; do not create another runner,
+result family, timer mutation wrapper, witness scanner, or identity derivation in `keiro-dsl`.
 
-Add tests under a new `describe "Keiro.ProcessManager.Reaction"` block: duplicate delivery yields
-`PMStateDuplicate` and `PMCommandDuplicate` with no new writes; a rejecting target for the second
-of two dispatches leaves the first durable and a retry completes only the second; a crash simulated
-by a callback exception between the saga append and a dispatch rolls back the timers with the
-append; a redelivered timer firing appends nothing new; two source events for one correlation
-delivered concurrently each fan out from their own recorded saga event under optimistic retry; a
-timer-free plan schedules nothing; a `cancel` inside the append transaction leaves the row
-unclaimable. Extend `describe "Keiro deterministic id derivation"` with the frozen
-`deterministicReactionCommandId` literals captured in Milestone 0 and the non-ASCII separation
-check. Add an `Unreleased` entry to `keiro/CHANGELOG.md`.
+A no-advance arm lowers to qualified `Reaction.NoAdvance followUps`. An advancing arm lowers to
+`Reaction.AdvanceReaction command unconditional accepted`, with both follow-up lists computed
+solely from the typed input. `accepted` means enable a fixed list when the runtime proves acceptance;
+it does not inspect the original event batch. `no-action` lowers to an empty no-advance plan.
+Schedules map to runtime `Rearm` or `Once`; cancels carry `TimerId`; dispatches carry the existing
+`PMCommand`. Keep parsed and runtime constructors qualified because both layers use reaction names.
 
-Acceptance: `cabal test keiro-test --test-options='--match "Reaction"'` passes against the
-ephemeral PostgreSQL fixture, and the frozen literal examples pass without edits to the fixture.
+Consume `ReactionStateResult`, `ReactiveProcessManagerResult`, and `ReactionError` directly when
+needed. Preserve the runtime distinctions between NotAdvanced, original typed decision, duplicate
+witness, command failure, and witness integrity failure. The generator supplies a saga
+`DomainCommandHandler` and target validated stream; it does not define another domain-outcome type.
+The runtime owns timer transaction phases, counts, target occurrence ids, recovery, and worker
+acknowledgement. The generated module only constructs the manager record and binds the decoder.
+
+Acceptance is that `cabal build keiro-dsl` passes against the prerequisite API and the prerequisite's
+focused reaction tests still pass. Milestone 4's handwritten-free action-construction tests provide
+the actual generated integration proof; this milestone makes no independent runtime claim.
 
 
 ### Milestone 4: generation, holes, harness, and conformance
+
 
 The goal is that scaffolding a Language 6 process emits a compiling, executable manager and timer
 firer with one typed hole, and that three database-backed conformance packages plus a mutation
 script prove the generated behavior.
 
 In `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` add `emitReactionProcessGen` next to `emitProcessGen` and
-dispatch on `ProcessBody`. The generated `Process.hs` exports the generated input sum type (one
+dispatch on `ProcessBody`. Generate `Input.hs` as `Generated.<C>.<P>.Input`, owning the input sum type and importing
+only shared/nominal types. `ProcessHoles.hs` imports that input module. The generated `Process.hs`
+imports both modules and re-exports the input sum type (one
 constructor per variant with an idiomatic-v2 record whose field types are lowered through the same
 renderer as aggregate command records, importing nominal types from the context's `Nominals`
 module), the process name, category, worker options, the reaction fingerprint and version, one
@@ -699,7 +762,8 @@ module), the process name, category, worker options, the reaction fingerprint an
 TimerWorkerOptions` (the process-level ceiling, never the default), and
 `<process>FireTimer :: RunCommandOptions -> TimerRow -> Eff es (Maybe EventId)`, which identifies the
 timer by recomputing each declared id from the row's correlation id, decodes the payload, builds the
-fire command, runs it with the deterministic fired-event id, and applies the disposition table.
+fire command, runs it with the deterministic fired-event id, and applies the disposition table. A timer-free process emits neither timer worker options nor
+a fire function, because it has no timer policy or payload cases.
 Guards lower to plain Haskell comparisons on generated types. The correlate function lowers
 `via idText` to the nominal's canonical text projection from `Nominals` or the identity for `Text`.
 `ProcessHoles.hs` becomes a create-once module that exports `decode<Process>Input ::
@@ -723,9 +787,11 @@ register them in `keiro-dsl/keiro-dsl.cabal`, the baseline as `candidate-primary
 through `Keiro.Test.Postgres`, and asserts the guarded arm selection for two variants, the
 `no-action` variant appending nothing while acknowledging, the timer-free process, duplicate
 delivery, and partial target success followed by retry. `conformance-process-timers` drives
-`process-timers.keiro`: two timers are scheduled from one reaction with distinct ids, the
-`schedule once` timer keeps its first deadline on redelivery while the re-arming timer moves, the
-dynamic payload field round-trips through the generated codec, `cancel` makes a row unclaimable,
+`process-timers.keiro`: two timers are scheduled from one reaction with distinct ids, a second distinct source event with a later input timestamp keeps the
+`schedule once` timer's first deadline while moving the still-scheduled re-arming timer; replay of
+either accepted source changes neither deadline, the
+dynamic payload field round-trips through the generated codec, `cancel` makes a scheduled row unclaimable, a worker that already claimed a row may still
+attempt firing and is made harmless by the target aggregate's state guard,
 each firing dispatches its fire command exactly once under the fired-event id, a redelivered firing
 is benign, and the ceiling dead-letters. `conformance-process-state-authority` drives
 `process-state-authority.keiro`: two source events for one incident delivered concurrently
@@ -736,8 +802,10 @@ it flips a guard operator, drops a dynamic payload binding, swaps a dispatched c
 a timer prefix, re-scaffolds, and expects the reactions harness or conformance to fail each time.
 Add scaling evidence with a small generator bench (`keiro-dsl/bench/process-scaling`) that measures
 generated bytes and scaffold time at 8, 32, and 128 dispatches per arm, and a runtime assertion in
-the reactions conformance that one reaction performs exactly one saga hydration regardless of
-dispatch count, observed through the `keiro_command_decision` metric.
+the reactions conformance that one uncontended advancing reaction performs one saga hydration regardless of
+dispatch count. Instrument the saga hydration boundary directly, separately from target commands;
+optimistic conflicts legitimately add hydration attempts. `keiro_command_decision` is a decision
+attribute and cannot prove a hydration count.
 
 Acceptance: `cabal test keiro-dsl:keiro-dsl-conformance-process-reactions`,
 `keiro-dsl-conformance-process-timers`, and `keiro-dsl-conformance-process-state-authority` pass;
@@ -746,6 +814,7 @@ conformance-corpus-policy` passes from a clean tree.
 
 
 ### Milestone 5: evolution diagnostics and migration
+
 
 The goal is that `keiro-dsl diff` names every reaction, timer, and identity change with the
 consequence an operator must act on, that coordination impact covers processes, and that moving a
@@ -764,59 +833,79 @@ codes. For a legacy-to-reaction pair emit `ProcessDispatchIdentityModelChanged` 
 message pointing at the drain rule in `docs/user/deploy-ordering.md`, and for reaction-to-legacy
 the same code. Extend `CoordinationImpact.hs` with process snapshots and drift beside the router
 ones, keeping the existing JSON fields and adding a `process-reaction` ledger row type; report
-custom bodies as `custom-unverified` with no invented metadata. Add diff fixtures for reordering,
+custom bodies as `custom-unverified` with no invented metadata. Add diff fixtures for reordering with and without a version bump,
 conditional dispatch changes, timer payload and identity changes, a version bump, and the
 `hospital-surge.keiro` to `hospital-surge-reactions.keiro` migration, with examples in the
 `describe "diff"` block of `keiro-dsl/test/Main.hs`. Register every new code's origin and severity.
 
-Acceptance: `cabal run -v0 keiro-dsl -- diff --since HEAD keiro-dsl/test/fixtures/process-reactions-reordered.keiro`
-(after committing the base fixture) lists `ProcessReactionArmsReordered` as ADVISORY and exits 0;
-the migration pair lists `ProcessDispatchIdentityModelChanged` as BREAKING and exits 1.
+Acceptance: the same-path scratch-repository commands in Concrete Steps compare each base
+against its changed content. The reordered fixture must also increase `reactions version` to
+produce an advisory-only exit 0; a twin without a bump must exit 1 for fingerprint drift.
+The migration pair lists `ProcessDispatchIdentityModelChanged` as BREAKING and exits 1.
 
 
 ### Milestone 6: documentation, ADR, and closeout
 
+
 The goal is that a reader can author both example shapes from the documentation alone and that the
 repository gate passes. Update `docs/user/typed-spec-toolchain.md` (the Processes and timers
-section) with the Language 6 form and every new diagnostic, `docs/user/api-reference.md` with the
-`Keiro.ProcessManager.Reaction` surface and `cancelTimerTx`, `docs/user/deploy-ordering.md` rules 4
+section) with the Language 6 form and every new diagnostic, `docs/user/api-reference.md` with generated-manager usage linked to the prerequisite's existing
+`Keiro.ProcessManager.Reaction` and `cancelTimerTx` documentation, `docs/user/deploy-ordering.md` rules 4
 and 6 with the reaction version bump and timer removal consequences,
 `docs/guides/process-managers-and-timers.md` with a generated timer-free process and the
 multi-reaction escalation process, the authoring skill files
 `.claude/skills/keiro-dsl-authoring/SKILL.md` (rule 1 now names candidate 6) and `NOTATION.md`
 (the process section), `docs/corpus/keiro-dsl-corpus.md`, and `keiro-dsl/CHANGELOG.md` under
 `Unreleased`. Record each documentation change with `okf log add` in `docs/user/log.md` and
-`docs/guides/log.md`. Create ADR-40 (`okf id next docs/adr --profile docs/adr/profile.dhall ADR`
-currently returns `ADR-40`) titled "Process reactions are input-pure, saga-authoritative, and
-target-keyed", distilling the Decision Log entries on guard purity, silent decisions, identity, and
-timer identity; add it to `docs/adr/log.md` and validate strictly. Update IR-39's `status` and add
+`docs/guides/log.md`. Extend the runtime ADR created by [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md) with DSL-specific decisions
+on input-only guards, checked acceptance ownership, coordination fingerprints, and generated holes.
+Preserve its allocated handle and validate strictly; do not create a competing runtime ADR. Read
+the local profile and update `docs/adr/log.md` whenever the record's timestamp advances. Update IR-39's `status` and add
 the completion entry to `docs/improvement-requests/log.md`. Finish with `just verify`.
 
 
 ## Concrete Steps
 
+
+Validation-only checks run on 2026-09-10 (these do not substitute for the prerequisite’s new runtime tests):
+
+```bash
+cabal test keiro-dsl:keiro-dsl-test --test-options='--match "process/timer"' --test-show-details=direct
+cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/hospital-surge-inputtype.keiro
+```
+
+The first passed with `10 examples, 0 failures`. The second exited 0 with `OK` and two
+`ProcessBenignInversion` warnings, confirming the current legacy binding-type gap.
+`just conformance-corpus-policy` also passed all 39 corpus entries, reporting
+`conformance corpus: ok` with no generated-file drift.
+
+```bash
+cabal test keiro:keiro-test --test-options='--match "Keiro.ProcessManager"' --test-show-details=direct
+just conformance-corpus-policy
+git diff --check
+```
+
+The runtime check passed against ephemeral PostgreSQL with `25 examples, 0 failures`, covering
+legacy scheduling, deduplication races, worker policies, dead letters, and snapshots. The plan's
+required sections and language-tagged fences were also checked, and `git diff --check` passed.
+These are focused substrate checks; the absent reaction suites and full `just verify` were not run.
+
 All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro` inside the Nix
 development shell (`nix develop`), which provides `cabal`, `bun`, `okf`, and `just`. An ephemeral
-PostgreSQL is started by the test fixtures themselves.
+PostgreSQL is started by the test fixtures themselves. The diff scratch repository is disposable
+and isolated from this checkout; retain it for inspecting failed comparisons or remove it manually
+after review.
 
-Milestone 0 spikes:
+Milestone 0 prerequisite acceptance (after plan 279 completes):
 
 ```bash
 cabal build keiro:tests
-cabal test keiro-test --test-options='--match "process reaction spikes"' --test-show-details=direct
+cabal test keiro:keiro-test --test-options='--match "Keiro.ProcessManager.Reaction"' --test-show-details=direct
+cabal test keiro:keiro-test --test-options='--match "Keiro deterministic id derivation"' --test-show-details=direct
 ```
 
-Expected transcript shape after the spikes are written:
-
-```text
-Keiro.ProcessManager
-  process reaction spikes (plan 273)
-    returns the accepted batch under the caller-assigned manager id [✔]
-    re-reads the recorded saga event by deterministic id [✔]
-    reports the post-conflict decision after an induced optimistic retry [✔]
-    cancels a timer inside the manager append transaction [✔]
-    prints reaction dispatch identity vectors [✔]
-```
+Expect nonzero example counts and zero failures, with the prerequisite's frozen vectors unchanged.
+The handwritten runtime example and runtime ADR must exist before checking this gate off.
 
 Milestone 1 grammar:
 
@@ -842,11 +931,11 @@ cabal test keiro-dsl:keiro-dsl-test
 The first prints `OK`; the second prints one line naming `ProcessBindingTypeMismatch` with the
 binding's line number and then `exit=1`.
 
-Milestone 3 runtime:
+Milestone 3 runtime API integration:
 
 ```bash
-cabal test keiro-test --test-options='--match "Reaction"' --test-show-details=direct
-cabal test keiro-test --test-options='--match "deterministic id derivation"'
+cabal build keiro-dsl
+cabal test keiro:keiro-test --test-options='--match "Keiro.ProcessManager.Reaction"' --test-show-details=direct
 ```
 
 Milestone 4 generation and conformance:
@@ -871,15 +960,26 @@ the spec's guards, payloads, commands, and identities`.
 Milestone 5 diff:
 
 ```bash
-cabal run -v0 keiro-dsl -- diff --since HEAD keiro-dsl/test/fixtures/process-reactions-reordered.keiro; echo "exit=$?"
-cabal run -v0 keiro-dsl -- diff --since HEAD keiro-dsl/test/fixtures/hospital-surge-reactions.keiro; echo "exit=$?"
+cabal build exe:keiro-dsl
+reaction_dsl_bin="$(cabal list-bin exe:keiro-dsl)"
+reaction_diff_dir="$(mktemp -d "${TMPDIR:-/tmp}/keiro-reaction-diff.XXXXXX")"
+git -C "$reaction_diff_dir" init -q
+cp keiro-dsl/test/fixtures/process-reactions.keiro "$reaction_diff_dir/reactions.keiro"
+cp keiro-dsl/test/fixtures/hospital-surge.keiro "$reaction_diff_dir/migration.keiro"
+git -C "$reaction_diff_dir" add reactions.keiro migration.keiro
+git -C "$reaction_diff_dir" -c user.name=Conformance -c user.email=conformance@example.invalid commit -qm 'test: establish diff baselines' -m 'ExecPlan: docs/plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md' -m 'Intention: intention_01m24dv27ze9gak6fc30mhqrsg'
+cp keiro-dsl/test/fixtures/process-reactions-reordered.keiro "$reaction_diff_dir/reactions.keiro"
+cp keiro-dsl/test/fixtures/hospital-surge-reactions.keiro "$reaction_diff_dir/migration.keiro"
+"$reaction_dsl_bin" diff --since HEAD "$reaction_diff_dir/reactions.keiro"
+# Expect exit 0: reordered fixture includes a reaction version bump.
+"$reaction_dsl_bin" diff --since HEAD "$reaction_diff_dir/migration.keiro"
+# Expect exit 1: positional-to-target-keyed migration is breaking.
 cabal test keiro-dsl:keiro-dsl-test --test-options='--match "diff"'
 ```
 
-Milestone 6 closeout:
+Milestone 6 closeout (extend the prerequisite's allocated runtime ADR):
 
 ```bash
-okf id next docs/adr --profile docs/adr/profile.dhall ADR
 okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 okf validate docs/improvement-requests --strict --profile docs/improvement-requests/profile.dhall --profile-enforce --log-enforce
 just verify
@@ -892,20 +992,23 @@ Commit after every milestone with a Conventional Commits subject and the trailer
 
 ## Validation and Acceptance
 
+
 The plan is complete when each IR-39 acceptance item can be demonstrated as follows.
 
 For item 1, `keiro-dsl/test/conformance-process-reactions/Main.hs` consumes two typed input
 variants through the generated input type, and its assertions show the guarded arm chosen for each,
 the `no-action` variant acknowledging without any saga or target append, and a process with no
-timer block compiling and running; the only hand-written module in that package is the decoder
-hole. For item 2, the timers package schedules two independently named timers from one reaction,
+timer block compiling and running; the generated behavior has only the decoder hole; the test driver and assertions are hand-written. For item 2, the timers package schedules two independently named timers from one reaction,
 proves the dynamic payload field survives the generated codec, fires both, and exercises re-arm,
 first-arm-wins, cancel, redelivery, and the ceiling. For item 3, the negative fixtures each produce
-exactly one new diagnostic code at the offending line. For item 4, the state-authority package
+the expected diagnostic code at the offending line (isolated negative fixtures avoid cascading
+errors). For item 4, the state-authority package
 runs two source events concurrently against one saga and asserts that every dispatch corresponds to
 a recorded saga event, that the induced optimistic retry produces the post-conflict decision, and
-that silent advances dispatch nothing; unsupported state access is refused by
-`ProcessStateAccessUnsupported` and documented. For item 5, the runtime tests in Milestone 3 and the
+that a silent attempt dispatches no accepted follow-ups, and that silent redelivery has the
+explicit non-durable behavior proved by plan 279 and accepted at M0. Same-source concurrency and multi-event acceptance
+witness tests are required alongside distinct-source concurrency; unsupported state access is refused by
+`ProcessStateAccessUnsupported` and documented. For item 5, the prerequisite runtime tests and this plan's
 conformance packages cover duplicate delivery, partial target success then retry, timer rollback
 with the append, and timer redelivery, and the mutation script proves that changed guards, dropped
 dynamic payload fields, wrong commands, and wrong timer or dispatch identities are caught. For item
@@ -921,14 +1024,14 @@ target, the corpus policy, strict ADR validation, and the user-documentation val
 
 ## Idempotence and Recovery
 
+
 Every step is additive and repeatable. Re-running a scaffold over a conformance directory rewrites
 only `-- @generated` modules and refuses to overwrite the create-once hole, so a filled decoder is
 never lost; if a scaffold refuses with `hole contract drift`, the recorded hole header is older than
-the current contract, and the remedy is to update the hole by hand and rerun. The spike tests in
-Milestone 0 create their own ephemeral database and can be rerun freely. If the corpus policy reports
+the current contract, and the remedy is to update the hole by hand and rerun. The prerequisite's runtime tests create their own ephemeral database and can be rerun freely. If the corpus policy reports
 drift after a generator change, run `cabal run -v0 keiro-dsl-corpus-regen -- regenerate --only
 <directory>` for the affected suite, review the diff, and commit; never hand-edit a generated file.
-If a frozen identity vector in `keiro/test/Main.hs` fails after Milestone 3, the derivation moved,
+If a frozen identity vector in `keiro/test/Main.hs` fails, the prerequisite's derivation moved,
 and the fix is in the derivation, not the fixture. Language 6 is a candidate: any grammar mistake
 found before publication is corrected in place under the same version number, per ADR-16, and no
 Language 7 is allocated for that reason. Every commit leaves the build green; if a milestone must be
@@ -936,6 +1039,7 @@ abandoned mid-way, revert to the last milestone commit rather than leaving a hal
 
 
 ## Interfaces and Dependencies
+
 
 No new external dependencies are needed; `cryptohash-sha256` (already used by
 `RouterSelection.hs`), `aeson`, `uuid`, `hasql-transaction`, and the existing Kiroku, Keiki, and
@@ -980,27 +1084,20 @@ At the end of Milestone 2, `keiro-dsl/src/Keiro/Dsl/ProcessReaction.hs` exports
 `Validate.hs` adds the diagnostic codes named in Milestone 2 to `DiagnosticCode`; `SourceIndex.hs`
 adds `ProcessReactionSubject`; `CheckReport.hs` adds the `processReactions` rows.
 
-At the end of Milestone 3, `keiro/src/Keiro/ProcessManager/Reaction.hs` exports:
-
-```haskell
-data ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp
-data ReactionPlan ci co targetCi = ReactionPlan
-  { advance :: !(Maybe ci), followUps :: ![FollowUp targetCi], onAccepted :: !(NonEmpty co -> [FollowUp targetCi]) }
-data FollowUp targetCi = FollowDispatch !(PMCommand targetCi) | FollowSchedule !ScheduleMode !TimerRequest | FollowCancel !TimerId
-data ScheduleMode = Rearm | Once
-data ReactiveProcessManagerResult managerTarget commandTarget
-deterministicReactionCommandId :: Text -> Text -> EventId -> StreamName -> Int -> EventId
-runReactiveProcessManagerOnce :: ... -> RunCommandOptions -> ReactiveProcessManager ... -> RecordedEvent -> input -> Eff es (Either CommandError (ReactiveProcessManagerResult ...))
-runReactiveProcessManagerWorkerWith :: ... -> WorkerOptions es msg -> RunCommandOptions -> ReactiveProcessManager ... -> Adapter es msg -> (msg -> Maybe (RecordedEvent, input)) -> Eff es ()
-```
-
-and `Keiro.Timer` exports `cancelTimerTx :: TimerId -> Tx.Transaction Bool`.
+Milestone 3 consumes the runtime interfaces owned by [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md):
+`ReactiveProcessManager`, `ReactionPlan` with `NoAdvance` and `AdvanceReaction`, `FollowUp`,
+`ScheduleMode`, `ReactionStateResult`, `ReactionTimerEffects`, `ReactionError`,
+`ReactiveProcessManagerResult`, `deterministicReactionCommandId`, and once/worker runners.
+`ReactionPlan ci targetCi` has no accepted-event callback. `Keiro.Timer.cancelTimerTx` is also
+supplied by the prerequisite. Its concrete signatures and handwritten example are the authority;
+do not redeclare the runtime model here or in generated code.
 
 At the end of Milestone 4, a scaffolded Language 6 process `<P>` in context `<C>` yields
-`Generated.<C>.<P>.Process` exporting the input sum type, `<p>ProcessName`, `<p>Category`,
-`<p>ProcessWorkerOptions`, `<p>TimerWorkerOptions`, `<p>ReactionVersion`, `<p>ReactionFingerprint`,
+`Generated.<C>.<P>.Input` owning the input type and
+`Generated.<C>.<P>.Process` importing the input and decoder modules and exporting the input sum type, `<p>ProcessName`, `<p>Category`,
+`<p>ProcessWorkerOptions`, `<p>ReactionVersion`, `<p>ReactionFingerprint`,
 one `<p><Timer>TimerRequest` and `<Timer>Payload` per timer, `<p>React`, `<p>ProcessManager`, and
-`<p>FireTimer`, plus the create-once `<C>.<P>.ProcessHoles` exporting `decode<P>Input ::
+`<p>FireTimer` and `<p>TimerWorkerOptions` only when timers exist, plus the create-once `<C>.<P>.ProcessHoles` exporting `decode<P>Input ::
 RecordedEvent -> Maybe <P>Input`; `Generated.<C>.<P>.ProcessHarness` keeps
 `processHarnessValues :: [(String, String)]`; and the context ledger gains one `process-reaction`
 row per process.
@@ -1012,8 +1109,23 @@ At the end of Milestone 5, `Diff.hs` emits the codes named in that milestone and
 
 ## Revision Notes
 
+
 2026-09-10: Added the Decision Log entry that fixes routers as a boundary of this plan rather
 than a deliverable, after a discussion asking whether the plan also addresses the router. No
 milestone, interface, or acceptance text changed, because the plan already left router grammar
 and runtime untouched; the entry makes that scope explicit and names the two extensions that
 would require a separate improvement request.
+
+2026-09-10: Validated the plan against the current implementation and recorded that the feature
+is absent. Corrected batch/witness recovery, generated and runtime import cycles, timer replay
+and crash semantics, hydration evidence, ADR allocation, and diff fixture instructions. Expanded
+M0 for same-source races and non-durable silent decisions; no implementation milestone is complete.
+
+2026-09-10: Extracted API hardening into [plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md) under its own intention. M0 now accepts that
+completed prerequisite, M3 maps checked DSL values to its public API, and runtime ADR/documentation
+ownership moved to the prerequisite. Grammar, checking, generation, generated conformance, and DSL
+evolution remain here. This supersedes the earlier plan to implement the runtime after grammar.
+
+2026-09-10: Recorded the review and update provenance omitted earlier in this session. The review entry captures the original changes-requested assessment; the revision entry captures the fixes and runtime-plan extraction. Original authorship remains unknown. Harness is recorded as codex; model is gpt-6, as identified by the session instructions. No implementation or acceptance status changed.
+
+2026-09-10: Corrected this session's provenance model from unknown to gpt-6 at the user's request; preserved timestamps, verdicts, and authorship attribution.
