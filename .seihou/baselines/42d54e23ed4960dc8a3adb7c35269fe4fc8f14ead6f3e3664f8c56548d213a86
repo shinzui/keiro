@@ -34,6 +34,15 @@ MasterPlans should identify cross-plan decisions that deserve ADR records: archi
 At completion, distill durable context from the MasterPlan and child ExecPlans. Review Decision Logs, Surprises & Discoveries, and Outcomes & Retrospectives, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient coordination details in the plans.
 
 
+## Provenance
+
+Every MasterPlan and every child ExecPlan should record who wrote it and who has looked at it since, using the same frontmatter contract as ExecPlans (see `agents/skills/exec-plan/PLANS.md`): an optional `provenance` key holding a single `created_by` record, an append-only `revisions` list, and an append-only `reviews` list. Entries are written by `agents/skills/exec-plan/record-provenance.ts`, never by hand, so that reviews by several models accumulate instead of overwriting one another.
+
+A MasterPlan's provenance is coordination provenance: it says which model produced the decomposition. Each child plan carries its own, which matters most when child plans are drafted in parallel by different agents — the model that drafted a child plan is the one recorded in that child's `created_by`, not the model coordinating the initiative.
+
+Provenance is optional and its absence carries no meaning. Documents created before provenance existed have no `provenance` block, and that is not a defect to repair. Never backfill a `created_by` record for work you did not do.
+
+
 ## Decomposition Principles
 
 Break the initiative into work streams by functional concern, not by file or module. Each work stream should produce a demonstrable, independently verifiable behavior. Prefer fewer well-scoped plans (two to seven) over many granular ones. If you find yourself creating more than seven child plans, introduce phases to group related plans into implementation waves.

@@ -12,6 +12,10 @@ Options:
   --title <text>          (required) Human-readable plan title.
   --intention <id>        Intention ID to record in frontmatter.
   --master-plan <path>    Path to the parent MasterPlan, recorded in frontmatter.
+  --model <id>            Model identifier of the agent creating the plan,
+                          recorded as provenance.created_by.model.
+  --harness <name>        Agent harness the model ran in (e.g. claude-code),
+                          recorded as provenance.created_by.harness.
   --dir <path>            Directory to write into. Defaults to docs/plans.
   -h, --help              Show this message.
 
@@ -33,6 +37,8 @@ const { values } = (() => {
         title: { type: "string" },
         intention: { type: "string" },
         "master-plan": { type: "string" },
+        model: { type: "string" },
+        harness: { type: "string" },
         dir: { type: "string", default: "docs/plans" },
         help: { type: "boolean", short: "h" },
       },
@@ -55,6 +61,8 @@ if (!title || !title.trim()) {
   console.error(USAGE);
   die("--title is required");
 }
+
+if (values.harness && !values.model) die("--harness requires --model");
 
 const dir = values.dir!;
 
@@ -99,6 +107,13 @@ fm.push(`kind: exec-plan`);
 fm.push(`created_at: ${createdAt}`);
 if (values.intention) fm.push(`intention: ${yamlString(values.intention)}`);
 if (values["master-plan"]) fm.push(`master_plan: ${yamlString(values["master-plan"])}`);
+if (values.model) {
+  fm.push("provenance:");
+  fm.push("  created_by:");
+  fm.push(`    model: ${yamlString(values.model)}`);
+  if (values.harness) fm.push(`    harness: ${yamlString(values.harness)}`);
+  fm.push(`    at: ${createdAt}`);
+}
 fm.push("---");
 fm.push("");
 fm.push("");

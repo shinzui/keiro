@@ -23,6 +23,19 @@ An ExecPlan is active execution memory. It must contain enough context to restar
 During implementation, update or create ADRs whenever the work changes durable project context. Honor the repository's existing ADR convention; when `docs/adr/` is a profile-governed OKF bundle, preserve or allocate its stable handle and run strict profile enforcement as specified in `ADR.md`. At completion, distill the plan: review Decision Log, Surprises & Discoveries, and Outcomes & Retrospective, then promote project-level decisions, constraints, gotchas, and architectural lessons into `docs/adr/`. Leave task-local execution notes and transient details in the plan.
 
 
+## Provenance
+
+Every ExecPlan should record who wrote it and who has looked at it since. Plans are increasingly authored, revised, and reviewed by different models, and a reader deciding how much to trust a plan needs to know whether it was written by one model and never examined, or reviewed by three that disagreed.
+
+Provenance lives in the plan's YAML frontmatter under an optional `provenance` key with three parts. `created_by` is a single record naming the model that authored the plan, written once when the plan is created. `revisions` is a list of models that changed the plan afterwards, one entry per model per working session, each naming the mode of work (`implement`, `update`, `discuss`, `other`). `reviews` is a list of models that reviewed the plan, each carrying a verdict of `approved`, `changes-requested`, or `comments`. Every entry carries the model identifier, an ISO-8601 UTC timestamp, an optional harness name, and an optional one-line note.
+
+Both lists are append-only. A model recording a review must never remove, reorder, or rewrite an entry left by another model, and a plan reviewed by several models must end up with several review entries. This is why entries are written by the skill's `record-provenance.ts` script rather than by hand: hand-editing frontmatter is how one model's record gets clobbered by the next.
+
+Provenance is optional and its absence carries no meaning. Plans created before provenance existed have no `provenance` block, plans created without a known model identifier have no `created_by`, and neither is a defect to be repaired. Never backfill a `created_by` record for work you did not do, and never treat a missing block as evidence that a human wrote the plan or that no one has reviewed it. Tooling that reads plans must tolerate the key being absent, partially populated, or carrying entries it does not recognize.
+
+Provenance records authorship, not reasoning. It never substitutes for the Decision Log, the Surprises & Discoveries section, or the revision note at the bottom of the plan: those explain what changed and why, while provenance only says who was involved and when.
+
+
 ## Non-Negotiable Requirements
 
 Every ExecPlan must be fully self-contained. Self-contained means that in its current form it contains all knowledge and instructions needed for a novice to succeed.

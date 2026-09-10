@@ -1,11 +1,12 @@
 ---
 name: exec-plan
 description: >
-  Create, implement, discuss, or update execution plans (ExecPlans) — self-contained design
-  documents that guide a coding agent or novice through delivering a working feature or system
-  change. Use when planning significant work, implementing from a plan, or recording design
-  decisions. TRIGGER when: user wants to plan a feature, follow a plan, or manage ExecPlan documents.
-argument-hint: <create|implement|discuss|update|status> [plan-name-or-path]
+  Create, implement, discuss, review, or update execution plans (ExecPlans) — self-contained
+  design documents that guide a coding agent or novice through delivering a working feature or
+  system change. Use when planning significant work, implementing from a plan, reviewing a plan
+  another model wrote, or recording design decisions. TRIGGER when: user wants to plan a feature,
+  follow a plan, review a plan, or manage ExecPlan documents.
+argument-hint: <create|implement|discuss|review|update|status> [plan-name-or-path]
 user-invocable: true
 ---
 
@@ -13,9 +14,9 @@ user-invocable: true
 
 You are managing execution plans (ExecPlans) — self-contained living documents that guide implementation of features and system changes. Before doing anything, read the full specification at [PLANS.md](PLANS.md) and follow it to the letter. For any ADR discovery, citation, creation, update, or validation, also read and follow [ADR.md](ADR.md).
 
-ExecPlans live in the `docs/plans/` directory at the repository root. Each plan is a single Markdown file named with a sequential number prefix followed by a slug derived from its title (e.g., `docs/plans/1-add-template-engine.md`). Each plan begins with a YAML frontmatter block — `id`, `slug`, `title`, `kind: exec-plan`, `created_at`, optional `intention`, optional `master_plan` — so tooling can identify it without parsing prose.
+ExecPlans live in the `docs/plans/` directory at the repository root. Each plan is a single Markdown file named with a sequential number prefix followed by a slug derived from its title (e.g., `docs/plans/1-add-template-engine.md`). Each plan begins with a YAML frontmatter block — `id`, `slug`, `title`, `kind: exec-plan`, `created_at`, optional `intention`, optional `master_plan`, optional `provenance` — so tooling can identify it without parsing prose.
 
-Create new plans with the bundled `init-plan.ts` script (see Mode: create). The script picks the next sequential number, derives the slug from the title, writes the frontmatter and skeleton, and refuses to overwrite an existing file. Do not pick numbers, write skeletons, or hand-author frontmatter by hand.
+Create new plans with the bundled `init-plan.ts` script (see Mode: create). The script picks the next sequential number, derives the slug from the title, writes the frontmatter and skeleton, and refuses to overwrite an existing file. Record every later authorship event with the bundled `record-provenance.ts` script (see Provenance). Do not pick numbers, write skeletons, or hand-author frontmatter by hand.
 
 
 ## Formatting
@@ -53,6 +54,56 @@ ExecPlan: docs/plans/3-add-health-check.md
 If a single commit spans multiple plans (rare — prefer not to), include one trailer per plan.
 
 
+## Provenance
+
+Every plan records which model wrote it and which models have touched it since. The frontmatter carries an optional `provenance` block with three parts: `created_by`, a single record written by the init script; `revisions`, an append-only list of models that changed the plan; and `reviews`, an append-only list of models that reviewed it.
+
+```yaml
+provenance:
+  created_by:
+    model: "claude-opus-5"
+    harness: "claude-code"
+    at: 2026-01-31T09:15:00Z
+  revisions:
+    - model: "claude-sonnet-5"
+      harness: "claude-code"
+      at: 2026-02-02T11:40:00Z
+      mode: "implement"
+      note: "Milestones 1 and 2 implemented"
+  reviews:
+    - model: "gpt-5"
+      at: 2026-02-03T08:05:00Z
+      verdict: "changes-requested"
+      note: "Milestone 2 acceptance is not observable"
+```
+
+Record entries with the bundled script, never by hand:
+
+```bash
+bun agents/skills/exec-plan/record-provenance.ts review \
+  --plan <plan-path> --model <your-model-id> [--harness <name>] \
+  --verdict <approved|changes-requested|comments> --note "<one line>"
+```
+
+```bash
+bun agents/skills/exec-plan/record-provenance.ts revision \
+  --plan <plan-path> --model <your-model-id> [--harness <name>] \
+  --mode <implement|update|discuss|other> --note "<one line>"
+```
+
+The rules that keep this metadata trustworthy:
+
+**Never hand-edit the `provenance` block, and never delete, reorder, or rewrite an existing entry.** The script only appends, so any number of models can review the same plan without clobbering one another's records. Running the same command twice in one day is a no-op unless you pass `--allow-duplicate`.
+
+**Identify yourself with the exact model identifier your harness reports** — for example `claude-opus-5`, `claude-sonnet-5`, `gpt-5-codex` — not a family name or a friendly label. Pass `--harness` when you know it (`claude-code`, `codex-cli`, `seihou-agent`). If no identifier is available to you, pass `--model unknown` rather than guessing.
+
+**Plans created before provenance existed have no `provenance` block.** That is expected, not a defect. Record your own entry when you touch such a plan; the script adds the block containing only your entry. Never invent a `created_by` record for work you did not do, and never assume an absent block means the plan was written by a human.
+
+**Record one revision entry per plan per session,** at the first stopping point where you write to the plan file — not once per commit or per milestone. Record one review entry per review pass.
+
+**Provenance is metadata about authorship only.** It never substitutes for the Decision Log, Surprises & Discoveries, or a revision note at the bottom of the plan.
+
+
 ## Modes of Operation
 
 Determine the mode from the first argument. If no argument is given, ask the user what they want to do.
@@ -69,10 +120,10 @@ Create a new ExecPlan. The remaining arguments describe the feature or change.
 3. Run the init script to create the file with frontmatter and skeleton:
 
     ```bash
-    bun agents/skills/exec-plan/init-plan.ts --title "<short, action-oriented title>" [--intention <id>] [--master-plan <path>]
+    bun agents/skills/exec-plan/init-plan.ts --title "<short, action-oriented title>" --model <your-model-id> [--harness <name>] [--intention <id>] [--master-plan <path>]
     ```
 
-    The script prints the created file path to stdout (e.g., `docs/plans/4-add-template-engine.md`). Pass `--intention` only when an Intention ID is active for this session; pass `--master-plan` only when this plan is a child of an existing MasterPlan, naming the parent's file path.
+    The script prints the created file path to stdout (e.g., `docs/plans/4-add-template-engine.md`). Always pass `--model` with your own model identifier so the plan records who authored it (see Provenance); add `--harness` when you know which harness you are running in. Pass `--intention` only when an Intention ID is active for this session; pass `--master-plan` only when this plan is a child of an existing MasterPlan, naming the parent's file path.
 
 4. Read the file back and flesh out each prose section in order, grounding every claim in what you found during research. The Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective sections start empty by design — only the Decision Log should be seeded now, with any initial scoping decisions you made.
 
@@ -100,6 +151,7 @@ Implement an existing ExecPlan. The argument is the plan file path (e.g., `docs/
    - Record any surprises in Surprises & Discoveries with evidence.
    - Record any decisions in the Decision Log with rationale.
    - Update or create ADRs in `docs/adr/` when the change affects durable project context.
+   - The first time you write to the plan in this session, record a provenance revision entry with `--mode implement` (see Provenance). Do this once per session, not once per stopping point.
 
 5. Resolve ambiguities autonomously. When you make a judgment call, record it in the Decision Log.
 
@@ -126,6 +178,33 @@ Discuss or review an existing ExecPlan. The argument is the plan file path.
 
 5. Append a revision note at the bottom of the plan describing what changed and why.
 
+6. If you changed the plan, record a provenance revision entry with `--mode discuss` (see Provenance). If the user asked for an assessment of the plan's quality rather than a conversation about it, use Mode: review instead so the result is recorded as a review.
+
+
+### Mode: review
+
+Review an existing ExecPlan against the specification and record the verdict. The argument is the plan file path. Use this mode when a plan written by another session — or another model — needs a second pair of eyes before implementation begins.
+
+1. Read the entire ExecPlan file, then read `PLANS.md` so you audit against the specification rather than against taste.
+
+2. Read the plan's `provenance` block first. Note which model authored it and which models have already reviewed it, and say so in your report: a plan already reviewed by three models with the same verdict needs a different kind of attention than an unreviewed one. An absent block means the provenance is unknown, not that the plan is unreviewed.
+
+3. Audit the plan and gather concrete findings. At minimum check that: it is self-contained (a novice with only this file and the working tree could implement it); every milestone is independently verifiable and states its acceptance as observable behavior; the Context and Orientation section names real files by repository-relative path and its claims match the current working tree; ADR citations follow `ADR.md` and resolve; every fenced code block carries a language tag; and the living-document sections exist and are consistent with each other.
+
+4. Verify claims against the repository rather than trusting the prose. Open the files the plan names, run the commands it says to run when they are safe and cheap, and report anything that no longer matches reality.
+
+5. Report your findings to the user, ordered most serious first, each naming the section it applies to and what would have to change.
+
+6. Record the review in the plan's frontmatter:
+
+    ```bash
+    bun agents/skills/exec-plan/record-provenance.ts review --plan <plan-path> --model <your-model-id> [--harness <name>] --verdict <approved|changes-requested|comments> --note "<one line>"
+    ```
+
+    Use `approved` when the plan is implementable as written, `changes-requested` when a finding must be fixed first, and `comments` when your findings are advisory. The `--note` is one line summarizing what you checked or what blocks approval. Your entry is appended after any existing reviews; it never replaces them.
+
+7. Do not rewrite the plan in this mode. If the user wants the findings applied, switch to Mode: update, which records its own revision entry.
+
 
 ### Mode: update
 
@@ -139,6 +218,8 @@ Revise an existing ExecPlan to reflect new information or changed requirements. 
 
 4. Append a revision note at the bottom of the plan describing what changed and why.
 
+5. Record a provenance revision entry with `--mode update` (see Provenance), noting in one line what the revision changed.
+
 
 ### Mode: status
 
@@ -147,6 +228,8 @@ Show the current state of one or all ExecPlans.
 If a plan path is given, read that plan and summarize: title, purpose, progress percentage (checked vs total items), current milestone, any blockers noted in Surprises & Discoveries.
 
 If no path is given, scan `docs/plans/` for all `.md` files and show a summary table of each plan's title and progress.
+
+Status is read-only: it never writes to a plan, and it never records a provenance entry. When summarizing a single plan, include its authoring model and the verdict of its most recent review when the `provenance` block has them.
 
 
 ## ExecPlan Skeleton

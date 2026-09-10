@@ -1,10 +1,11 @@
 ---
 name: master-plan
 description: >
-  Create and manage master plans that decompose large initiatives into multiple coordinated
-  ExecPlans with dependencies and integration points. TRIGGER when: user wants to plan a
-  large initiative, coordinate multiple exec-plans, or track multi-plan progress.
-argument-hint: <create|implement|status|update|discuss> [plan-name-or-path]
+  Create, implement, review, and manage master plans that decompose large initiatives into
+  multiple coordinated ExecPlans with dependencies and integration points. TRIGGER when: user
+  wants to plan a large initiative, coordinate multiple exec-plans, review a decomposition
+  another model produced, or track multi-plan progress.
+argument-hint: <create|implement|status|update|discuss|review> [plan-name-or-path]
 user-invocable: true
 ---
 
@@ -18,9 +19,9 @@ You are managing master plans (MasterPlans) — coordination documents that deco
 
 Follow all three to the letter.
 
-MasterPlans live in the `docs/masterplans/` directory at the repository root. Each master plan is a single Markdown file named with a sequential number prefix followed by a slug derived from its title (e.g., `docs/masterplans/1-kafka-consumer-pipeline.md`). Each plan begins with a YAML frontmatter block — `id`, `slug`, `title`, `kind: master-plan`, `created_at`, optional `intention` — so tooling can identify it without parsing prose.
+MasterPlans live in the `docs/masterplans/` directory at the repository root. Each master plan is a single Markdown file named with a sequential number prefix followed by a slug derived from its title (e.g., `docs/masterplans/1-kafka-consumer-pipeline.md`). Each plan begins with a YAML frontmatter block — `id`, `slug`, `title`, `kind: master-plan`, `created_at`, optional `intention`, optional `provenance` — so tooling can identify it without parsing prose.
 
-Create new MasterPlans with the bundled `init-masterplan.ts` script (see Mode: create). The script picks the next sequential number, derives the slug from the title, writes the frontmatter and skeleton, and refuses to overwrite an existing file. Do not pick numbers, write skeletons, or hand-author frontmatter by hand.
+Create new MasterPlans with the bundled `init-masterplan.ts` script (see Mode: create). The script picks the next sequential number, derives the slug from the title, writes the frontmatter and skeleton, and refuses to overwrite an existing file. Record every later authorship event with the exec-plan skill's `record-provenance.ts` script (see Provenance). Do not pick numbers, write skeletons, or hand-author frontmatter by hand.
 
 Child ExecPlans created by a MasterPlan live in `docs/plans/` following the standard ExecPlan naming convention. Create them with the exec-plan skill's `init-plan.ts` script, passing `--master-plan <path-to-this-masterplan>`; the script records the parent in the child's `master_plan` frontmatter field. Do not add a body reference line by hand.
 
@@ -62,6 +63,56 @@ ExecPlan: docs/plans/3-add-consumer-group.md
 ```
 
 
+## Provenance
+
+Every MasterPlan and every child ExecPlan records which model wrote it and which models have touched it since. The frontmatter carries an optional `provenance` block with three parts: `created_by`, a single record written by the init script; `revisions`, an append-only list of models that changed the plan; and `reviews`, an append-only list of models that reviewed it.
+
+```yaml
+provenance:
+  created_by:
+    model: "claude-opus-5"
+    harness: "claude-code"
+    at: 2026-01-31T09:15:00Z
+  revisions:
+    - model: "claude-sonnet-5"
+      harness: "claude-code"
+      at: 2026-02-02T11:40:00Z
+      mode: "implement"
+      note: "EP-2 completed, registry updated"
+  reviews:
+    - model: "gpt-5"
+      at: 2026-02-03T08:05:00Z
+      verdict: "changes-requested"
+      note: "EP-3 and EP-4 both define the offset store"
+```
+
+Record entries with the script installed by the exec-plan dependency, never by hand. It works on MasterPlans and ExecPlans alike — pass whichever file the entry belongs to:
+
+```bash
+bun agents/skills/exec-plan/record-provenance.ts review \
+  --plan <plan-path> --model <your-model-id> [--harness <name>] \
+  --verdict <approved|changes-requested|comments> --note "<one line>"
+```
+
+```bash
+bun agents/skills/exec-plan/record-provenance.ts revision \
+  --plan <plan-path> --model <your-model-id> [--harness <name>] \
+  --mode <implement|update|discuss|other> --note "<one line>"
+```
+
+The rules that keep this metadata trustworthy:
+
+**Never hand-edit the `provenance` block, and never delete, reorder, or rewrite an existing entry.** The script only appends, so any number of models can review the same MasterPlan without clobbering one another's records. Running the same command twice in one day is a no-op unless you pass `--allow-duplicate`.
+
+**Identify yourself with the exact model identifier your harness reports** — for example `claude-opus-5`, `claude-sonnet-5`, `gpt-5-codex` — not a family name or a friendly label. Pass `--harness` when you know it (`claude-code`, `codex-cli`, `seihou-agent`). If no identifier is available to you, pass `--model unknown` rather than guessing.
+
+**Plans created before provenance existed have no `provenance` block.** That is expected, not a defect. Record your own entry when you touch such a plan; the script adds the block containing only your entry. Never invent a `created_by` record for work you did not do.
+
+**Provenance follows the file that changed.** Implementing a child ExecPlan records a revision on that child; the coordination edits you make to the MasterPlan in the same session record one revision on the MasterPlan. Record each at most once per session.
+
+**When child plans are drafted by parallel agents, each agent records its own `created_by` through the init script.** Pass `--model` for the model that actually drafted that child plan, not the model coordinating the initiative.
+
+
 ## Modes of Operation
 
 Determine the mode from the first argument. If no argument is given, ask the user what they want to do.
@@ -82,15 +133,15 @@ Create a new MasterPlan and all its child ExecPlans. The remaining arguments des
 5. Run the init script to create the MasterPlan file with frontmatter and skeleton:
 
     ```bash
-    bun agents/skills/master-plan/init-masterplan.ts --title "<initiative title>" [--intention <id>]
+    bun agents/skills/master-plan/init-masterplan.ts --title "<initiative title>" --model <your-model-id> [--harness <name>] [--intention <id>]
     ```
 
-    The script prints the created file path to stdout. Read the file back and flesh out the prose sections (Vision & Scope, Decomposition Strategy, Dependency Graph, Integration Points). Leave the living-document sections empty for now, except the Decision Log which records the initial decomposition decisions.
+    Always pass `--model` with your own model identifier so the MasterPlan records who authored it (see Provenance); add `--harness` when you know which harness you are running in. The script prints the created file path to stdout. Read the file back and flesh out the prose sections (Vision & Scope, Decomposition Strategy, Dependency Graph, Integration Points). Leave the living-document sections empty for now, except the Decision Log which records the initial decomposition decisions.
 
 6. Create each child ExecPlan by running the exec-plan skill's init script, passing the parent path:
 
     ```bash
-    bun agents/skills/exec-plan/init-plan.ts --title "<child title>" --master-plan <path-to-this-masterplan> [--intention <id>]
+    bun agents/skills/exec-plan/init-plan.ts --title "<child title>" --master-plan <path-to-this-masterplan> --model <drafting-model-id> [--harness <name>] [--intention <id>]
     ```
 
     Then read each child file back and flesh it out per `agents/skills/exec-plan/PLANS.md`. Each child plan must:
@@ -130,6 +181,7 @@ Implement child ExecPlans under an existing MasterPlan. The first argument is th
    - Update the MasterPlan's Progress section: check off the corresponding milestones.
    - Record any cross-plan discoveries in the MasterPlan's Surprises & Discoveries section — especially anything that affects other child plans' assumptions, interfaces, or feasibility.
    - Update or create ADRs in `docs/adr/` for durable cross-plan decisions, architecture boundaries, shared interface ownership, integration constraints, or deliberate exclusions revealed by the child plan.
+   - Record provenance revision entries with `--mode implement` (see Provenance): one on the child ExecPlan for the implementation work, and one on the MasterPlan for the coordination edits. Record each at most once per session, even when several child plans are implemented back to back.
 
 6. Check for the next implementable child plan. If one exists, present it and ask the user whether to continue implementation or stop here. If the user chooses to continue, repeat from step 2. If no plans remain, fill in the MasterPlan's Outcomes & Retrospective section.
 
@@ -151,6 +203,8 @@ If a master plan path is given:
 4. Highlight dependency bottlenecks — child plans that are blocked and what they are waiting on. If multiple plans can proceed in parallel, note this.
 
 If no path is given, scan `docs/masterplans/` for all `.md` files and show a summary table of each master plan's title and aggregate progress.
+
+Status is read-only: it never writes to a plan, and it never records a provenance entry. When summarizing a single MasterPlan, include its authoring model and the verdict of its most recent review when the `provenance` block has them.
 
 
 ### Mode: update
@@ -179,6 +233,8 @@ Revise an existing MasterPlan to reflect new information, changed requirements, 
 
 6. Append a revision note at the bottom of the MasterPlan describing what changed and why.
 
+7. Record a provenance revision entry with `--mode update` on the MasterPlan (see Provenance), and one on each child ExecPlan you edited in the same pass.
+
 
 ### Mode: discuss
 
@@ -193,6 +249,35 @@ Discuss or review an existing MasterPlan. The argument is the master plan file p
 4. If a decision reached during discussion changes durable project context, update or create the relevant ADR in `docs/adr/`.
 
 5. If the discussion results in changes to the MasterPlan or any child plans, update all affected sections and documents. Per MASTERPLAN.md, revisions must be comprehensively reflected across all sections. Append a revision note at the bottom of the MasterPlan.
+
+6. If you changed any document, record a provenance revision entry with `--mode discuss` on each file you edited (see Provenance). If the user asked for an assessment of the decomposition's quality rather than a conversation about it, use Mode: review instead so the result is recorded as a review.
+
+
+### Mode: review
+
+Review an existing MasterPlan and its decomposition, then record the verdict. The argument is the master plan file path. Use this mode when an initiative planned by another session — or another model — needs a second pair of eyes before implementation begins.
+
+1. Read the entire MasterPlan file and every child ExecPlan in the Exec-Plan Registry. Read `MASTERPLAN.md` and `agents/skills/exec-plan/PLANS.md` so you audit against the specifications rather than against taste.
+
+2. Read the `provenance` block of the MasterPlan and of each child plan first. Note which model authored each document and which models have already reviewed it, and say so in your report — including any child plan that no model has reviewed. An absent block means the provenance is unknown, not that the document is unreviewed.
+
+3. Audit the coordination layer, which is what a MasterPlan exists to get right. At minimum check that: the decomposition follows the principles in MASTERPLAN.md (functional concerns, two to seven plans, balanced scope); every registry row names a child file that exists at the stated path; hard dependencies are genuinely blocking rather than a preference for ordering, and the graph has no cycles; every shared artifact touched by more than one child plan appears in Integration Points with a single owning plan; and no two child plans define the same type, table, or interface incompatibly.
+
+4. Audit each child plan for the properties the MasterPlan promises: self-containment, independent implementability once its hard dependencies are complete, observable acceptance per milestone, and ADR citations that resolve per `agents/skills/exec-plan/ADR.md`.
+
+5. Verify claims against the repository rather than trusting the prose. Open the files the plans name, and report anything that no longer matches the working tree.
+
+6. Report your findings to the user, ordered most serious first, separating findings about the decomposition from findings about individual child plans and naming the file and section each applies to.
+
+7. Record the review in frontmatter — one entry on the MasterPlan, plus one on each child plan you reviewed in depth:
+
+    ```bash
+    bun agents/skills/exec-plan/record-provenance.ts review --plan <plan-path> --model <your-model-id> [--harness <name>] --verdict <approved|changes-requested|comments> --note "<one line>"
+    ```
+
+    Use `approved` when the decomposition is ready to implement as written, `changes-requested` when a finding must be fixed first, and `comments` when your findings are advisory. Your entries are appended after any existing reviews; they never replace them.
+
+8. Do not rewrite the MasterPlan or its children in this mode. If the user wants the findings applied, switch to Mode: update, which records its own revision entries.
 
 
 ## MasterPlan Skeleton
