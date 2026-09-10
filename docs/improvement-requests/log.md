@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-09-10
+* **Addition**: IR-39 requests multiple typed and conditional process reactions,
+optional and multiple timers, and executable generated coordination behavior.
+It includes explicit state-decision authority, dispatch/timer identity evolution,
+and honest custom-hole coverage requirements.
+
 ## 2026-09-09
 * **Revision**: Rewrite IR-37 around native read-model query consistency across
 rebuild lifecycle transitions. Separate dead outbox recovery into IR-38. Both
