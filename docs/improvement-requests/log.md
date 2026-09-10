@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-10
+* **Planning**: IR-30's library half (cursor-paged workflow reads, status vocabulary, cursor contract, JSON rendering, keiro-ops adoption) is specified by plan 275; endpoint exposure stays with the IR-26 sister package.
 * **Addition**: IR-39 requests multiple typed and conditional process reactions,
 optional and multiple timers, and executable generated coordination behavior.
 It includes explicit state-decision authority, dispatch/timer identity evolution,

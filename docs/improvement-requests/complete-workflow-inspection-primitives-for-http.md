@@ -6,7 +6,7 @@ description: >-
   children, awakeables) that a browser UI needs beyond the one-shot keiro-ops wf output, in
   the owning library first, so the durable-execution screens can render and refresh
   incrementally against the keiro_workflows wake ledger.
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-09-10T02:35:50Z
 requestId: IR-30
 status: proposed
 origin: mori://shinzui/keiro-ui
@@ -22,6 +22,13 @@ Proposed by the keiro runtime UI initiative
 Companion to `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`, which serves
 whatever primitives exist; this request is about the primitives that do not exist yet in the
 shape a UI needs. Implementation is keiro's downstream work.
+
+The library half — the cursor-paged reads, the status vocabulary, the cursor contract, the
+canonical JSON rendering, and `keiro-ops` adoption — is specified by
+[plan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
+Endpoint exposure is deliberately outside that plan: it belongs to the IR-26 sister package,
+whose own plan wraps the plan 275 reads. This request remains proposed until plan 275 is
+implemented and the endpoints exist.
 
 ## Context
 

@@ -6,7 +6,7 @@ description: >-
   JSON endpoints reusing the OpsResult envelope, with mutations exposed only behind the existing
   preview/force discipline and the fail-closed schema-drift handshake, so a browser UI can reach
   the operational surface applications already embed as a CLI.
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-09-10T02:35:40Z
 requestId: IR-26
 status: proposed
 origin: mori://shinzui/keiro-ui
@@ -25,6 +25,46 @@ framework-level operational views belong to keiro. This request engages keiro's 
 no-UI stance through its companion
 `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-32`, which proposes recording the
 boundary in an ADR. Implementation is keiro's downstream work.
+
+Planned on 2026-09-10 as
+[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md); the request stays
+proposed until implementation and release evidence are recorded.
+
+## Planning
+
+[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md) (intention
+`intention_01m24fzbdrevnasj0zm1y199vw`) delivers this request as a sister package named
+`keiro-ops-http`. Its design answers each requested change directly:
+
+- The read/write split is not a list. Every HTTP request is translated into a `keiro-ops`
+  argument vector (path segments are command words and positional arguments, `snake_case`
+  query parameters are the command's long options), parsed by the same
+  `optparse-applicative` parser the CLI uses, and classified per request with `isMutation`.
+  Reads answer `GET` with the command's `jsonValue` as the whole body; mutations answer `POST`.
+  Commands added by the sibling plans for IR-29
+  ([ExecPlan 274](../plans/274-expose-process-manager-inspection-reads.md)) and IR-30
+  ([ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md))
+  become routes without any change to the transport.
+- A mutation `POST` without a body returns `{"outcome":"preview","result":…,"cli_reinvocation":…}`
+  and performs nothing; only the body `{"confirm":"execute"}` executes and returns
+  `{"outcome":"executed","result":…}`. Mutations are disabled by default and refuse with
+  HTTP 403 even when confirmed.
+- Every request, reads included, runs the schema verification on the host's connection pool
+  first and refuses with HTTP 409 `schema_drift` on disagreement; a host-level policy may allow
+  drift, in which case the drift count travels in a response header.
+- CORS is an explicit allowed-origins list, off by default; errors use the conventions'
+  `{"error":{"code","message","details"}}` envelope with a documented code vocabulary.
+- `keiro-ops` gains only additional exports (`Command`, `commandParser`, `isMutation`,
+  `runCommand`) and `keiro-migrations` a session-level `verifyExpectedSchemaSession`; neither
+  gains a web dependency, and the plan includes a build-plan check for acceptance item 5.
+
+Two consequences are recorded for reviewers. Because the transport runs commands in JSON
+output mode, the CLI's human-mode typed-name step for `stream hard-delete` and
+`pgmq dlq purge` does not apply; those commands are exactly as guarded as
+`keiro-ops … --json --force`, and the browser-side typed confirmation belongs to the UI under
+`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-7`. The plan does not write the stance ADR or
+amend `docs/why-keiro.md`; those remain IR-32's deliverable, and the plan's own ADR records
+the transport decisions and cites IR-32.
 
 ## Context
 
