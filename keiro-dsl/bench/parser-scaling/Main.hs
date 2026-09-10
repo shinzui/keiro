@@ -11,7 +11,7 @@ import Keiro.Dsl.Frontend (parseSurfaceSource, renderFrontendFailure)
 import Keiro.Dsl.Grammar (Node (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (ParsedSource (..))
 import Keiro.Dsl.Parser (parseSource, renderParseFailure)
-import Keiro.Dsl.Scaffold (ScaffoldModule, defaultContext, firewallBreaches, modulePath, moduleText, scaffoldAggregateForService)
+import Keiro.Dsl.Scaffold (ScaffoldModule (..), defaultContext, firewallBreaches, scaffoldAggregateForService)
 import Keiro.Dsl.ScaffoldRun (scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract (checkedSource)
 import Keiro.Dsl.Syntax (SurfaceSource)
@@ -100,8 +100,8 @@ preflightFixtures sourceFixtures workspaceFixtures outcomeFixtures typeGraphFixt
     let modules = generateOutcomeModulesOrFail fixture
         eventStream = outcomeEventStreamOrFail modules
         armCount = T.count " -> SilentRejected" eventStream + T.count " -> SilentNoOp" eventStream
-    _ <- evaluate (sum (map (T.length . moduleText) modules))
-    unless (armCount == fixtureSilentEdgeCount fixture) $
+    _ <- evaluate (sum (map (T.length . (.text)) modules))
+    unless (armCount == (.fixtureSilentEdgeCount) fixture) $
       error ("outcome classifier arm count mismatch for " <> outcomeLabel fixture)
     unless (firewallBreaches modules == []) $
       error ("outcome fixture breached generated symbolic firewall for " <> outcomeLabel fixture)
@@ -323,32 +323,32 @@ outcomeSpecification silentEdgeCount =
 
 checkOutcomeOrFail :: OutcomeFixture -> Int
 checkOutcomeOrFail fixture =
-  case parseSource (outcomePath fixture) (fixtureOutcomeSource fixture) of
+  case parseSource (outcomePath fixture) ((.fixtureOutcomeSource) fixture) of
     Left failure -> error (T.unpack (renderParseFailure failure))
     Right parsed -> case validateService (checkedSource parsed) of
-      [] -> fixtureSilentEdgeCount fixture
+      [] -> (.fixtureSilentEdgeCount) fixture
       diagnostics -> error ("outcome benchmark validation failed: " <> show diagnostics)
 
 generateOutcomeBytesOrFail :: OutcomeFixture -> Int
-generateOutcomeBytesOrFail = sum . map (T.length . moduleText) . generateOutcomeModulesOrFail
+generateOutcomeBytesOrFail = sum . map (T.length . (.text)) . generateOutcomeModulesOrFail
 
 generateOutcomeModulesOrFail :: OutcomeFixture -> [ScaffoldModule]
 generateOutcomeModulesOrFail fixture =
-  case parseSource (outcomePath fixture) (fixtureOutcomeSource fixture) of
+  case parseSource (outcomePath fixture) ((.fixtureOutcomeSource) fixture) of
     Left failure -> error (T.unpack (renderParseFailure failure))
-    Right parsed -> case [aggregate | NAggregate aggregate <- specNodes (parsedSpec parsed)] of
+    Right parsed -> case [aggregate | NAggregate aggregate <- (.nodes) ((.spec) parsed)] of
       [aggregate] ->
         scaffoldAggregateForService
-          (defaultContext (specContext (parsedSpec parsed)))
+          (defaultContext ((.context) ((.spec) parsed)))
           (checkedSource parsed)
           aggregate
       aggregates -> error ("outcome benchmark expected one aggregate, got " <> show (length aggregates))
 
 outcomeEventStreamOrFail :: [ScaffoldModule] -> Text
 outcomeEventStreamOrFail modules =
-  case [ moduleText scaffoldModule
+  case [ (.text) scaffoldModule
        | scaffoldModule <- modules,
-         "/EventStream.hs" `T.isSuffixOf` T.pack (modulePath scaffoldModule)
+         "/EventStream.hs" `T.isSuffixOf` T.pack ((.path) scaffoldModule)
        ] of
     [eventStream] -> eventStream
     eventStreams -> error ("outcome benchmark expected one event-stream module, got " <> show (length eventStreams))
@@ -371,17 +371,17 @@ typeGraphLabel TypeGraphFixture {fixtureMappedCount, fixtureRouterCount} =
 checkTypeGraphOrFail :: TypeGraphFixture -> Int
 checkTypeGraphOrFail fixture@TypeGraphFixture {fixtureTypeGraphParsed} =
   case validateService (checkedSource fixtureTypeGraphParsed) of
-    [] -> fixtureMappedCount fixture + fixtureRouterCount fixture
+    [] -> (.fixtureMappedCount) fixture + (.fixtureRouterCount) fixture
     diagnostics -> error ("type-graph benchmark validation failed: " <> show diagnostics)
 
 scaffoldTypeGraphBytes :: TypeGraphFixture -> Int
 scaffoldTypeGraphBytes TypeGraphFixture {fixtureTypeGraphParsed} =
-  let spec = parsedSpec fixtureTypeGraphParsed
+  let spec = (.spec) fixtureTypeGraphParsed
       service = checkedSource fixtureTypeGraphParsed
    in sum
         ( map
-            (T.length . moduleText)
-            (scaffoldServiceModules (defaultContext (specContext spec)) service)
+            (T.length . (.text))
+            (scaffoldServiceModules (defaultContext ((.context) spec)) service)
         )
 
 typeGraphSpecification :: Int -> Int -> Text
