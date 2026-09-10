@@ -6,7 +6,7 @@ description: >-
   category, hydrate current state for display through the existing snapshot-plus-fold
   machinery, and expose snapshot metadata — and only then endpoints wrapping them, so an
   operator can see what aggregates exist and what state they hold.
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-09-10T03:12:00Z
 requestId: IR-28
 status: proposed
 origin: mori://shinzui/keiro-ui
@@ -22,6 +22,10 @@ Proposed by the keiro runtime UI initiative
 Library-first by design: the read APIs are the request's substance, the endpoints (served
 under `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`) merely wrap them, per
 `mori://shinzui/keiro/okf/adrs/concepts/ADR-28`. Implementation is keiro's downstream work.
+
+Planned on 2026-09-10 as
+[ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md); the request stays
+proposed until implementation and release evidence are recorded.
 
 ## Context
 
@@ -90,3 +94,52 @@ Two boundaries scope it:
 The library reads with Haddock and tests (including the fold-equivalence property), the
 wrapping endpoints with transcripts in documentation, and the delegation links in the served
 payloads.
+
+## Planning (2026-09-10)
+
+[ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md) (intention
+`intention_01m24m6m00ev59wa81shymsktd`) delivers this request in six milestones: a preflight;
+a source-reporting hydration primitive plus a clock-consistent snapshot observation in
+`keiro`; the inspection module `Keiro.Inspection.Aggregate`; the embedded-only
+`keiro-ops aggregate` domain (`types`, `show`, `snapshot`, later `list`) mounted through a
+new `AppHooks.aggregates` hook and the `jitsurei` mounting; a release-gated listing
+milestone; and documentation with ADR distillation. Its design answers each requested change
+directly:
+
+- Item 1b (hydrate for display): state is reconstructed only through the command runner's
+  own hydration, an additive `hydrateWithSource` beside `hydrate` that also reports whether
+  the state came from a snapshot at a given version or from full replay and why, called with
+  seed verification and telemetry disabled. The application supplies the display encoding
+  explicitly in an inspector descriptor (derivable from an existing replay-audit target);
+  the snapshot codec is never an implicit display format.
+- Item 1c (snapshot metadata): snapshot health is observed against the database clock in one
+  transaction and reports version, age, events since the snapshot, and the three ADR-3
+  discriminators individually with a `compatible` / `incompatible` / `unused` verdict; the
+  standalone `keiro-ops snapshot show` gains additive `observed_at` and `age_seconds` keys.
+- Item 1a (list by category): listing wraps the prefix-filtered `listStreams` primitive that
+  kiroku plan 88 adds for `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-8`
+  (prefix `<category>-` selects exactly one category), pages by an opaque cursor minted by the
+  shared `Keiro.Inspection.Cursor` codec, and ships only against a released `kiroku-store`
+  that exports the primitive. Keiro issues no SQL against kiroku's schema and performs no
+  event scans to discover aggregates.
+- Item 2 (endpoints): the reads are exposed as read-only `keiro-ops` commands whose JSON is
+  rendered by library-owned encoders in snake_case with `items` plus an omitted-on-last-page
+  `next_cursor`; the HTTP transport itself is
+  `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`'s sister package, which
+  derives routes from the command tree, so no endpoint code is written here.
+- Item 3 (delegation): the served view carries a `history` object naming kiroku as owner
+  with the stream name and head version, and no command returns a page of events.
+
+Acceptance mapping: criterion 1 is the gated listing milestone with a two-category
+`jitsurei` test and a handler-versus-library JSON agreement test; criterion 2 is an
+exhaustive fold-equivalence enumeration against `hydrateFull` on snapshot-enabled and plain
+aggregates; criterion 3 renders `status: absent` as a success rather than an error;
+criterion 4 is met by construction (only exported owner operations, no Hasql statement in
+the inspection module) and checked by review; criterion 5 is met by the `history` reference
+and the absence of any event-page command.
+
+Boundaries recorded in the plan: a soft-deleted aggregate is reported with `deleted_at` but
+not hydrated; an unknown aggregate fails the command (HTTP 422 under plan 276's mapping)
+while a missing snapshot does not; listing the inputs an aggregate accepts next is deferred to
+the `EnabledInput` machinery plan 274 is building for process managers. This request remains
+proposed until implementation and release evidence are recorded.

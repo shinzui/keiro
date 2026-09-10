@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-10
+* **Planning**: IR-28: record ExecPlan 278 (source-reporting hydration reused for inspection, application-owned display encoding, database-clock snapshot health, listing via kiroku plan 88's prefix-filtered listStreams once released, keiro-ops aggregate commands as the IR-26 endpoint substrate); status remains proposed.
 * **Planning**: IR-27: record ExecPlan 277 (feeds as diffed re-reads over supported reads driven by Keiro.Wake with a bounded fallback, a new `findPendingTimers` library read, `timer pending list` and `projection status` keiro-ops commands as the paired poll routes through plan 276, the `/ws` protocol with sequence and trigger fields, and the killed-LISTEN degradation proof); status remains proposed.
 * **Update**: IR-26: record ExecPlan 276, which plans the `keiro-ops-http` sister package
 (mechanical read/write split over `isMutation`, preview/confirm mutations disabled by
