@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-09-08T02:26:00Z
+timestamp: 2026-09-10T03:35:00Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -141,6 +141,9 @@ must independently revalidate their guards; the read API does not reserve work.
   the event-count interpretation.
 - A future TUI or web console can reuse the command handlers and application hooks;
   it does not receive permission to bypass the library boundary.
+  [ADR 40](0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+  sanctions the browser-reachable inspection surface as a bounded exception to
+  the no-UI stance under exactly this discipline.
 - Application-provisioned schema generations do not transfer schema authorship to
   Keiro. Keiro owns orchestration evidence and safe destructive previews; the
   application remains responsible for DDL meaning and compatibility validation.

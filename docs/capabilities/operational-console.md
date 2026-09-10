@@ -77,3 +77,14 @@ main = Ops.mainWithHooks applicationHooks
   lifecycle checks, ownership checks, admission limits, or database locks.
 - The console performs bounded administrative actions. It does not supervise
   continuous projection, timer, outbox, workflow, or queue workers.
+
+## Inspection surfaces
+
+The console is the discipline behind Keiro's browser-reachable inspection
+surface.
+[ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+sanctions that surface as a bounded exception to Keiro's no-UI stance: it lives
+in sister packages, renders only `keiro-ops` commands and exported library
+reads, keeps preview-then-confirm mutations disabled by default, and never grows
+metrics or trace views, which stay with
+[OpenTelemetry instrumentation](opentelemetry-instrumentation.md).

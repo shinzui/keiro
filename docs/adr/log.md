@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-09-10
+* **Decision**: Add ADR-40: sanction bounded inspection-and-operations surfaces over supported library APIs in opt-in sister packages while metrics and traces stay in OpenTelemetry (IR-32).
+* **Update**: ADR-28: point the future-console consequence at ADR-40.
+
 ## 2026-09-08
 * **Update**: Clarify ADR-39 absent-row refusal before guarded mutation; prevent concurrent insertion from bypassing the initial row lock.
 * **Decision**: Add ADR-39: expiring foreground timer ownership, recovery to Dead, and consumer rollout boundary.

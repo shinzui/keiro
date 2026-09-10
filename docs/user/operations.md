@@ -2,6 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
+timestamp: 2026-09-10T03:35:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -54,6 +55,15 @@ worked mounting point is `jitsurei/app/Main.hs`; inspect it with:
 ```console
 cabal run jitsurei:exe:jitsurei-demo -- ops --help
 ```
+
+The CLI is also the discipline behind Keiro's browser-reachable inspection
+surface.
+[ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+sanctions that surface as a bounded exception to Keiro's no-UI stance: it
+lives in sister packages, renders only `keiro-ops` commands and exported
+library reads, keeps the preview-then-confirm gate on mutations, and never
+grows metrics or trace views, which stay in OpenTelemetry (see
+[Observability](#observability)).
 
 ### Durable subscription positions
 

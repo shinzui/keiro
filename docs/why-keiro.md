@@ -472,7 +472,18 @@ corrections note) — every transactional step.
 Because PMs and v2 workflows are built on the same kiroku streams + the
 same shibuya supervision, their spans, gauges, and histograms slot into
 the same dashboard. There is no parallel "workflow engine UI" to
-maintain.
+maintain for metrics and traces: keiro ships no dashboard, no time-series
+store, and no server process.
+
+What OpenTelemetry cannot show — an aggregate's current state, a stuck
+workflow with its lease, a process manager's journal, a previewed and
+confirmed operator action — is *state inspection and operations*, the
+business `keiro-ops` already does as a CLI.
+[ADR 40](adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+sanctions putting that discipline on a browser-reachable transport as a
+bounded, opt-in exception: sister packages only, supported library APIs
+only, preview-then-confirm mutations, and never gauges, histograms, or
+trace views of its own.
 
 ---
 

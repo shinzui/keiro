@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-10
+* **Update**: CAP-16: point the operational console at ADR-40's inspection-surface boundary (IR-32).
+
 ## 2026-09-08
 * **Update**: Document CAP-7 unreleased guarded foreground timer resume and rollout boundary.
 * **Update**: CAP-7: record locally validated unreleased timer inspection, literal filters, bounded pages, and application authorization.

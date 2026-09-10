@@ -6,9 +6,9 @@ description: >-
   exception to the "no parallel workflow engine UI" stance — state browsing and safe operator
   actions over supported APIs, while metrics and traces stay in OpenTelemetry — so accepting
   the keiro-ui endpoint requests is an explicit architectural decision rather than drift.
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-09-10T03:35:00Z
 requestId: IR-32
-status: proposed
+status: completed
 origin: mori://shinzui/keiro-ui
 ---
 
@@ -16,14 +16,19 @@ origin: mori://shinzui/keiro-ui
 
 ## Status
 
-Proposed by the keiro runtime UI initiative
-(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
-`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
-This request asks for a decision record, not code. It gates nothing mechanically, but the
-initiative treats it as the honest precondition for the rest of its keiro requests
+Completed on 2026-09-10.
+[ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+(`mori://shinzui/keiro/okf/adrs/concepts/ADR-40`) records the boundary and sanctions the
+surface, and `docs/why-keiro.md` §5.6 points at it where the stance is stated.
+
+This request was filed by the keiro runtime UI initiative
+(`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, under
+`mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`) as a
+decision record, not code. It gated nothing mechanically, but the initiative treated it as the
+honest precondition for the rest of its keiro requests
 (`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26` through
-`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-31`): they should be accepted
-against a recorded boundary, or rejected against one — not merged around an unamended stance.
+`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-31`). Those requests are now
+accepted against a recorded boundary rather than merged around an unamended stance.
 
 ## Context
 
@@ -84,3 +89,29 @@ an ambiguous silence.
 The ADR (with its bundle bookkeeping), the `docs/why-keiro.md` amendment, and — encouraged
 but keiro's choice — a pointer to the ADR from the `keiro-ops` documentation, since the CLI
 is the discipline the surface extends.
+
+## Completion evidence (2026-09-10)
+
+1. ADR 40 exists at
+   `docs/adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md`. Its
+   handle was allocated with `okf id next docs/adr --profile docs/adr/profile.dhall ADR`, the
+   bundle index was regenerated with `okf index docs/adr --write`, and the bundle passes
+   `okf validate docs/adr --strict --profile-enforce --log-enforce` at 40 concepts. The decision
+   sanctions the surface under five conditions: sister-package packaging, ADR-28 discipline on
+   the wire, preview-then-confirm mutations disabled by default, push-is-a-hint/poll-is-truth
+   feeds, and composition without duplication. Metrics and traces remain OpenTelemetry's, and
+   the ADR states that an endpoint may render a supported read's present value but never
+   retain, aggregate, chart, or alert on it.
+2. `docs/why-keiro.md` §5.6 keeps the no-UI sentence, qualifies it to metrics and traces, and
+   links ADR 40 at the point where the stance is stated. The two documents agree, and the ADR
+   names itself authoritative if they ever drift.
+3. The ADR's decision disposes of IR-26 through IR-31 explicitly: each is accepted against the
+   boundary and is implemented, or closed, under the five conditions. The library-read halves
+   of IR-28, IR-29, and IR-30 are recorded as ordinary keiro API work whose wire exposure the
+   ADR governs.
+4. Pointers from the `keiro-ops` documentation: ADR 28's future-console consequence, the
+   [operations runbook](../user/operations.md), and the
+   [operational console capability](../capabilities/operational-console.md) cite ADR 40.
+
+The sibling requests IR-26 through IR-31 were not edited by this closure. Their in-flight
+plans (274 through 278) cite ADR 40 from their own ADRs and evidence sections as they land.
