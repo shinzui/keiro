@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-10
+* **Planning**: IR-27: record ExecPlan 277 (feeds as diffed re-reads over supported reads driven by Keiro.Wake with a bounded fallback, a new `findPendingTimers` library read, `timer pending list` and `projection status` keiro-ops commands as the paired poll routes through plan 276, the `/ws` protocol with sequence and trigger fields, and the killed-LISTEN degradation proof); status remains proposed.
 * **Planning**: IR-30's library half (cursor-paged workflow reads, status vocabulary, cursor contract, JSON rendering, keiro-ops adoption) is specified by plan 275; endpoint exposure stays with the IR-26 sister package.
 * **Addition**: IR-39 requests multiple typed and conditional process reactions,
 optional and multiple timers, and executable generated coordination behavior.
