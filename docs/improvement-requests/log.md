@@ -12,6 +12,7 @@ the operations runbook, and CAP-16 point at it.
 default, whole-surface schema-drift refusal, allowlist CORS); retain proposed status
 pending implementation and release evidence.
 * **Planning**: IR-30's library half (cursor-paged workflow reads, status vocabulary, cursor contract, JSON rendering, keiro-ops adoption) is specified by plan 275; endpoint exposure stays with the IR-26 sister package.
+* **Update**: IR-29: record ExecPlan 274 (provenance metadata on manager appends, kiroku listing primitive via kiroku IR-8, keiro-ops commands as the IR-26 endpoint substrate); status remains proposed.
 * **Addition**: IR-39 requests multiple typed and conditional process reactions,
 optional and multiple timers, and executable generated coordination behavior.
 It includes explicit state-decision authority, dispatch/timer identity evolution,

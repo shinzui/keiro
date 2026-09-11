@@ -6,7 +6,7 @@ description: >-
   journal streams, list shard ownership from keiro_subscription_shards, and list a process
   manager's pending timers — then endpoints wrapping them — so an operator can see what a
   process manager last did and what it is waiting on.
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-09-10T02:35:48Z
 requestId: IR-29
 status: proposed
 origin: mori://shinzui/keiro-ui
@@ -80,3 +80,18 @@ framework semantics: the instance, its journaled state, its timers, its shard.
 The library reads with tests (including the rebuild-equivalence assertion for the instance
 view), the wrapping endpoints with documented transcripts, and the delegation links to
 kiroku's browsing surface.
+
+## Planning (2026-09-10)
+
+[ExecPlan 274](../plans/274-expose-process-manager-inspection-reads.md) sequences this
+request as a validation gate followed by reaction provenance, the instance view, pending
+timer reads, shard ownership views, instance listing, and documentation. Three scoping
+decisions are recorded there. The manager journal carries no link to the source event a
+reaction answered, so manager-state appends gain additive provenance metadata that leaves
+deterministic ids and payloads unchanged. Listing instances by type needs a kiroku-store
+primitive (`listStreamsInCategory`, item 1a of
+`mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-8`), which is added and released in
+kiroku before keiro wraps it. The endpoints of item 2 are delivered as read-only `keiro-ops`
+commands emitting the initiative's wire shapes; the HTTP transport itself is
+`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`'s sister package. This request
+remains proposed until implementation and release evidence are recorded.
