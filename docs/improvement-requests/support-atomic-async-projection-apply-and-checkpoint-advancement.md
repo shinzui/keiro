@@ -4,10 +4,11 @@ title: Support atomic async projection apply and checkpoint advancement
 description: >-
   Close the async projection crash window by applying projection SQL and advancing its Kiroku
   subscription checkpoint in one transaction when the selected adapter supports that boundary.
-timestamp: 2026-07-31T15:03:58Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-10
 status: proposed
 origin: mori://shinzui/keiro
+plan: docs/plans/271-apply-async-projections-and-advance-checkpoints-atomically.md
 reviews:
   - kind: model
     reviewer: codex
@@ -30,6 +31,11 @@ reviews:
 
 Proposed for later cross-repository work. Keiro's current supported contract remains at-least-once
 application with idempotent projection SQL and deduplication.
+
+[Plan 271](../plans/271-apply-async-projections-and-advance-checkpoints-atomically.md) evaluates
+whether to proceed. It gates any atomic mode on a concrete consumer requirement, correctness
+evidence, and measured performance, and deferring the mode counts as a valid outcome. This
+request stays proposed until that evaluation records a proceed, fencing-only, or defer decision.
 
 ## Context
 

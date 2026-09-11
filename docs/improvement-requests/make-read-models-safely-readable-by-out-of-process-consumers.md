@@ -5,17 +5,28 @@ description: >-
   Give a non-Haskell consumer reading a Keiro read model over SQL a way to observe the group
   fence, and give rebuilds a zero-downtime path, so an external reader can never mistake a
   truncated or partially replayed target for current truth.
-timestamp: 2026-08-10T20:40:00Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-22
-status: proposed
+status: completed
 origin: mori://shinzui/keiro
+plan: docs/masterplans/41-make-read-models-safely-readable-by-out-of-process-consumers.md
+completedAt: 2026-08-14T18:36:03Z
+resolution: >-
+  MasterPlan 41 delivered all four capabilities through plans 256 (versioned rebuild targets with
+  atomic cutover), 254 (documented projection status relation), 255 (fenced sanctioned SQL read
+  surface), and 257 (targeted per-stream reprojection), hardened by plan 259's adversarial
+  release-safety review. Every child plan is complete and the work shipped in Keiro 0.12.0.0.
 ---
 
 # Improvement Request: Make Read Models Safely Readable by Out-of-Process Consumers
 
 ## Status
 
-Proposed. Raised by `mori://tan/notification-render-service`, which is splitting into an
+Completed by
+[MasterPlan 41](../masterplans/41-make-read-models-safely-readable-by-out-of-process-consumers.md),
+which shipped all four capabilities in Keiro 0.12.0.0.
+
+Raised by `mori://tan/notification-render-service`, which is splitting into an
 event-sourced Keiro service and a stateless TypeScript render process that reads live published
 content from the Keiro read model over SQL. That design is documented in that repository at
 `docs/SPLIT-PULL-ALTERNATIVE.md` and decomposed by

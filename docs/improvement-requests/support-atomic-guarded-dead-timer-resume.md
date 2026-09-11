@@ -8,6 +8,7 @@ timestamp: 2026-09-08T14:25:26Z
 requestId: IR-36
 status: completed
 origin: mori://shinzui/kioku
+plan: docs/plans/272-support-atomic-guarded-dead-timer-resume.md
 reviews:
   - kind: model
     reviewer: codex

@@ -33,7 +33,7 @@ This addresses the valid request [IR-36](docs/improvement-requests/support-atomi
 - [x] (2026-09-08T04:14:39Z) Corrected absent-row lock handling; the focused timer suite again passed all 25 examples.
 - [x] (2026-09-08T04:29:39Z) Full `nix develop -c just verify` passed: workspace build, 632 Keiro examples, 58 PGMQ examples (two existing pending), 48 operator examples, all 43 DSL suites (719 main examples), 25 Jitsurei examples, documentation/policies, and 36 migration examples. All seven package checks and source distributions passed.
 - [x] (2026-09-08T04:40:19Z) Strengthened bulk-requeue guard regression passed (one targeted example, zero failures). Its cutoff is the claim deadline, so the age predicate definitely qualifies and token exclusion is exercised. Local milestones 1–3 are complete; release remains deferred.
-- [ ] Milestone 4 (deferred by user): Coordinate publication with plan 270, run release-time Haddock generation, and verify released downstream adoption.
+- [x] (2026-09-08T05:11:31Z; recorded 2026-09-11T14:34:47Z) Milestone 4: Coordinate publication with plan 270, run release-time Haddock generation, and verify released downstream adoption. Both plans shipped in 0.16.0.0 (release commit `2da45585`, tag `keiro-0.16.0.0`). Hackage documentation for all seven packages is live, and the `Keiro.Timer` page exports `claimDeadTimer`, `completeTimerResume`, `parkTimerResume`, and `cancelTimerResume`. Kioku `6862915` and Rei `8446ca18` supplied downstream acceptance against the released API, as recorded in IR-36's completion evidence.
 
 
 ## Surprises & Discoveries
@@ -70,6 +70,8 @@ Decision (2026-09-08 UTC, user clarification): Finish implementation and its ver
 
 
 The guarded storage API, forward migration, public consumer fixture, lifecycle documentation, and ADR-39 are implemented. The focused timer suite passed 25 examples and the full repository gate passed; the strengthened bulk-requeue assertion also passed in a final targeted run. Local milestones 1–3 are complete. Publication and actual downstream adoption remain incomplete. The two unchanged PGMQ pending tests require a deterministic transient-poll fault injector and pg_partman, respectively. The downstream plan still describes the foreground core/CLI fixture as unimplemented; local synthetic evidence cannot replace that gate. Per user clarification, release-time Haddock and publication are deferred, with no version/bound edits or release approval requested during implementation.
+
+Completion (recorded 2026-09-11): the deferred Milestone 4 happened with the Keiro 0.16.0.0 release (release commit `2da45585`, tag `keiro-0.16.0.0`), and Hackage documentation for all seven packages is live. Kioku's foreground core/CLI fixture (`6862915`) and Rei's reporting-host fixture (`8446ca18`) passed against the released API. IR-36 closed as completed on 2026-09-08, and this plan is complete; ADR-39 holds the durable context.
 
 
 ## Context and Orientation

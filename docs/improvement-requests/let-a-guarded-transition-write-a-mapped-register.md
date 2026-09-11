@@ -5,10 +5,11 @@ description: >-
   Give a declared transition target-typed initial and mapped-lift register expressions without
   taking the whole edge into an implementation hole, so that a mapped-value construction can be
   one side of a guarded pair without weakening guard, replay, or ownership guarantees.
-timestamp: 2026-08-21T00:00:00Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-34
-status: proposed
+status: accepted
 origin: mori://shinzui/rei
+plan: docs/plans/267-add-safe-mapped-register-construction-to-declared-transitions.md
 reviews:
   - kind: model
     reviewer: codex
@@ -31,7 +32,9 @@ reviews:
 
 ## Status
 
-**Validated and justified; still proposed for implementation.** Raised from
+**Validated, justified, and accepted; planned as
+[Plan 267](../plans/267-add-safe-mapped-register-construction-to-declared-transitions.md), not
+yet implemented.** Raised from
 `mori://shinzui/rei/plans/206-author-the-rei-service-workspace-at-keiro-dsl-language-5`,
 Milestone 7, after reproducing the problem with the published `keiro-dsl` 0.13.0.0 binary while
 declaring Rei's Intention root aggregate.

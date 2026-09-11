@@ -55,9 +55,14 @@ This section must always reflect the actual current state of the work.
   capability documentation, and wrote unreleased changelog entries. Focused suites passed with 44
   core examples, 3 operator examples, and 35 migration examples in both regeneration and plain
   modes, all with 0 failures; `cabal build all` passed.
-- [ ] Milestone 4b: obtain the release workflow's required confirmation for the proposed 0.14.0.0
-  shared-major bump and changelogs, add its consumer migration edge, run the post-release-commit
-  gates, publish/tag/verify the cohort, and only then close IR-3 and this plan.
+- [x] (2026-08-21T17:09:11Z; recorded 2026-09-11T14:34:47Z) Milestone 4b: obtain the release
+  workflow's required confirmation for the proposed 0.14.0.0 shared-major bump and changelogs, add
+  its consumer migration edge, run the post-release-commit gates, publish/tag/verify the cohort,
+  and only then close IR-3 and this plan. Release commit `0bdd4b7d` (`chore(release): 0.14.0.0`)
+  contains implementation commit `c237424a` and adds the `blueprints/keiro-upgrade` 0.13.0.0 ->
+  0.14.0.0 edge; the `keiro-0.14.0.0` tag was created at 2026-08-21T17:09:11Z. A 2026-09-11
+  recheck found all seven packages and their documentation live on Hackage at 0.14.0.0. IR-3 is
+  closed as completed.
 
 
 ## Surprises & Discoveries
@@ -210,6 +215,11 @@ The remaining outcome is deliberately external and irreversible: the repository 
 requires explicit confirmation of the 0.14.0.0 shared-major bump and reviewed changelogs before it
 may edit release metadata, commit the release, tag, push, or upload. IR-3 therefore remains proposed
 until every package and its documentation is verified live on Hackage.
+
+Completion (recorded 2026-09-11): the confirmed release shipped as Keiro 0.14.0.0 on 2026-08-21
+(release commit `0bdd4b7d`, tag `keiro-0.14.0.0`), including the 0.13.0.0 -> 0.14.0.0 upgrade
+blueprint edge. All seven packages and their documentation are live on Hackage. IR-3 is completed
+and this plan is complete; ADR-37 holds the durable context.
 
 
 ## Context and Orientation

@@ -6,10 +6,11 @@ description: >-
   JSON endpoints reusing the OpsResult envelope, with mutations exposed only behind the existing
   preview/force discipline and the fail-closed schema-drift handshake, so a browser UI can reach
   the operational surface applications already embed as a CLI.
-timestamp: 2026-09-10T02:35:40Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-26
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro-ui
+plan: docs/plans/276-serve-the-keiro-ops-surface-over-http.md
 ---
 
 # Improvement Request: Serve the keiro-ops Surface over HTTP
@@ -27,8 +28,8 @@ no-UI stance through its companion
 boundary in an ADR. Implementation is keiro's downstream work.
 
 Planned on 2026-09-10 as
-[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md); the request stays
-proposed until implementation and release evidence are recorded.
+[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md) and accepted; it
+completes once implementation and release evidence are recorded.
 
 ## Planning
 

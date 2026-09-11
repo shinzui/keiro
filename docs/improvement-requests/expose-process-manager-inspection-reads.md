@@ -6,10 +6,11 @@ description: >-
   journal streams, list shard ownership from keiro_subscription_shards, and list a process
   manager's pending timers — then endpoints wrapping them — so an operator can see what a
   process manager last did and what it is waiting on.
-timestamp: 2026-09-10T02:35:48Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-29
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro-ui
+plan: docs/plans/274-expose-process-manager-inspection-reads.md
 ---
 
 # Improvement Request: Expose Process-Manager Inspection Reads
@@ -94,4 +95,4 @@ primitive (`listStreamsInCategory`, item 1a of
 kiroku before keiro wraps it. The endpoints of item 2 are delivered as read-only `keiro-ops`
 commands emitting the initiative's wire shapes; the HTTP transport itself is
 `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`'s sister package. This request
-remains proposed until implementation and release evidence are recorded.
+is accepted and completes once implementation and release evidence are recorded.

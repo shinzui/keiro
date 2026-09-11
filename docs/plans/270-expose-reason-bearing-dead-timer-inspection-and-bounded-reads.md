@@ -27,8 +27,8 @@ This implements the read contract in [IR-35](docs/improvement-requests/expose-re
 - [x] (2026-09-08T02:32:22Z) Full `keiro-test` suite passed: 626 examples, zero failures. Capability and improvement-request validation passed (existing recommended-review warnings only). All seven source distributions generated.
 - [x] (2026-09-08T02:55Z) `just corpus-regen` passed with no generated changes. Within `nix develop -c just verify`, `cabal build all`, Keiro, PGMQ, operator, all 43 DSL suites, Jitsurei tests, diagrams, and policy checks passed.
 - [x] (2026-09-08T03:05:59Z) `nix develop -c just verify` exited 0; its final migration suite passed 35 examples with zero failures. Isolated Haddock generation passed and the public `Keiro.Timer` page contains both new reads, the inspection/page types, and the invalid-size error. Final `nix fmt` and `nix flake check` passed.
-- [ ] Coordinate release with IR-36 and record tagged Hackage/docs evidence.
-- [ ] Record downstream released-bound adoption and passing Kioku fixture.
+- [x] (2026-09-08T05:11:31Z; recorded 2026-09-11T14:34:47Z) Coordinate release with IR-36 and record tagged Hackage/docs evidence. Both requests shipped together in 0.16.0.0: release commit `2da45585`, tag `keiro-0.16.0.0`. All seven packages and their documentation are live on Hackage, and the published `Keiro.Timer` page exports `lookupTimerInspection` and `findDeadTimers`.
+- [x] (2026-09-08; recorded 2026-09-11T14:34:47Z) Record downstream released-bound adoption and passing Kioku fixture. Kioku commit `6862915` in `mori://shinzui/kioku` adopts the public API with no application SQL against Keiro's timer table; its 20 timer, 58 CLI, and 24 composed-migration tests pass. Rei commit `8446ca18` in `mori://shinzui/rei` passes the reporting-host fixture against released Keiro dependencies. Details are in IR-35's completion evidence.
 
 ## Surprises & Discoveries
 
@@ -55,6 +55,8 @@ Final local validation (2026-09-08T03:05:59Z): the full `nix develop -c just ver
 The local read contract is implemented in commit `c486404c`: additive public inspection, literal reason and owner filtering, hard page-size validation, and observational UUID pagination. Six new PostgreSQL cases plus existing timer tests pass (19 selected); the complete Keiro suite passes 626 examples. Read-only behavior is checked by comparing every stored column before and after reads and polling the ordinary worker. The consumer fixture follows two empty rendered pages (unauthorized then malformed), renders original work with its complete reason, and observes revoked permission on the next request.
 
 ADR-28 now preserves the durable boundary: Keiro owns inspection and page semantics, while applications own decoding, authorization, and later execution guards. Shared release and actual downstream adoption remain pending. The separate IR-36 transition is now implemented by plan 272, with full workspace verification passed. No version or dependency bound changed, no migration was added, and no release artifact was published; the plan and IR-35 remain open.
+
+Completion (recorded 2026-09-11): the reads shipped with plan 272's guarded resume in Keiro 0.16.0.0 (release commit `2da45585`, tag `keiro-0.16.0.0`, Hackage packages and documentation live). Kioku `6862915` and Rei `8446ca18` supplied downstream released-bound acceptance. IR-35 closed as completed on 2026-09-08, and this plan is complete. Kioku's own package release and live-host deployment are consumer release work, not open Keiro scope.
 
 ## Context and Orientation
 

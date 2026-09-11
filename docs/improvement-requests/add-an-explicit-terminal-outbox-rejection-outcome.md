@@ -4,10 +4,17 @@ title: Add an explicit terminal outbox rejection outcome
 description: >-
   Give outbox publishers a public, typed way to report an intentional terminal rejection that
   completes the item without retrying it or misreporting delivery success.
-timestamp: 2026-07-30T14:36:35Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-3
-status: proposed
+status: completed
 origin: mori://shinzui/shikigami
+plan: docs/plans/165-add-terminal-outbox-publication-rejection-outcomes.md
+completedAt: 2026-08-21T16:31:33Z
+resolution: >-
+  Plan 165 delivered PublishRejected, the OutboxRejected terminal status, conditional
+  markOutboxRejectedTx finalization, the keiro.outbox.rejected counter, migration 31, and ADR-37.
+  Implementation commit c237424a is contained in the keiro-0.14.0.0 tag, and keiro 0.14.0.0 is
+  published on Hackage with release notes naming the compatibility impact.
 reviews:
   - kind: model
     reviewer: codex
@@ -28,12 +35,11 @@ reviews:
 
 ## Status
 
-Proposed. This blocks
+Completed. [Plan 165](../plans/165-add-terminal-outbox-publication-rejection-outcomes.md)
+implemented the terminal rejection outcome, and it shipped in Keiro 0.14.0.0 (2026-08-21). This
+request had blocked
 `mori://shinzui/shikigami/plans/19-sink-delivery-truth-and-downstream-idempotency`'s final
-delivery-state implementation; handler-level
-truth work can proceed before the release exists. Implementation is now specified by
-[plan 165](../plans/165-add-terminal-outbox-publication-rejection-outcomes.md); this request remains
-proposed until that plan is implemented and released.
+delivery-state implementation; that consumer can now bind to the released API.
 
 ## Context
 

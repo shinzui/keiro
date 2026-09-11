@@ -6,10 +6,11 @@ description: >-
   category, hydrate current state for display through the existing snapshot-plus-fold
   machinery, and expose snapshot metadata — and only then endpoints wrapping them, so an
   operator can see what aggregates exist and what state they hold.
-timestamp: 2026-09-10T03:12:00Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-28
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro-ui
+plan: docs/plans/278-expose-aggregate-inspection-read-apis.md
 ---
 
 # Improvement Request: Expose Aggregate Inspection Read APIs
@@ -24,8 +25,8 @@ under `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`) merely wra
 `mori://shinzui/keiro/okf/adrs/concepts/ADR-28`. Implementation is keiro's downstream work.
 
 Planned on 2026-09-10 as
-[ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md); the request stays
-proposed until implementation and release evidence are recorded.
+[ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md) and accepted; it
+completes once implementation and release evidence are recorded.
 
 ## Context
 
@@ -141,5 +142,5 @@ and the absence of any event-page command.
 Boundaries recorded in the plan: a soft-deleted aggregate is reported with `deleted_at` but
 not hydrated; an unknown aggregate fails the command (HTTP 422 under plan 276's mapping)
 while a missing snapshot does not; listing the inputs an aggregate accepts next is deferred to
-the `EnabledInput` machinery plan 274 is building for process managers. This request remains
-proposed until implementation and release evidence are recorded.
+the `EnabledInput` machinery plan 274 is building for process managers. This request is
+accepted and completes once implementation and release evidence are recorded.

@@ -7,8 +7,11 @@ description: >-
   satisfiable region excluded by the new guard.
 timestamp: 2026-08-21T19:32:06Z
 requestId: IR-33
-status: proposed
+status: accepted
 origin: mori://shinzui/mori
+plan: docs/plans/265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md
+relatedPlans:
+  - docs/plans/266-classify-guard-unions-by-replay-body-and-validate-replay-only-remedies.md
 reviews:
   - kind: model
     reviewer: claude-code

@@ -8,6 +8,7 @@ timestamp: 2026-09-08T14:25:26Z
 requestId: IR-35
 status: completed
 origin: mori://shinzui/kioku
+plan: docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md
 reviews:
   - kind: model
     reviewer: codex

@@ -4,10 +4,13 @@ title: Return typed domain command outcomes and rejection details
 description: >-
   Preserve application-defined rejection/no-op reasons and emitted domain outcomes instead of
   reducing all unmatched business decisions to generic CommandRejected metadata.
-timestamp: 2026-07-31T15:03:55Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-7
-status: proposed
+status: in-progress
 origin: mori://shinzui/keiro
+plan: docs/plans/231-add-typed-domain-command-outcomes.md
+relatedPlans:
+  - docs/plans/232-add-typed-domain-outcomes-to-the-dsl.md
 reviews:
   - kind: model
     reviewer: codex
@@ -34,7 +37,7 @@ aggregates now have typed direct, SQL, projection, router, process-manager, and
 bounded-telemetry outcomes. [Plan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md)
 has now delivered candidate language-5 syntax, exhaustive checking, generated
 handlers, exact-reason conformance, mutation coverage, and fixed-size scaling
-fixtures. The request remains proposed rather than completed only because the
+fixtures. The request is in progress rather than completed only because the
 committed DSL generation baseline and its `bench-regression` wiring remain
 pending. Plan 231's quiet-host latency, allocation, one-dispatch residency,
 command baseline, and shared regression evidence are complete.

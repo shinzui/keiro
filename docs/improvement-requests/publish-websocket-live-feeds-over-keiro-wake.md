@@ -6,10 +6,11 @@ description: >-
   built on Keiro.Wake and speaking the cross-project protocol convention, with every feed
   paired to an authoritative polling read because NOTIFY is a best-effort hint, so a UI stays
   fresh without polling storms and without ever trusting push as truth.
-timestamp: 2026-09-10T02:48:00Z
+timestamp: 2026-09-11T14:30:01Z
 requestId: IR-27
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro-ui
+plan: docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md
 ---
 
 # Improvement Request: Publish WebSocket Live Feeds over Keiro.Wake
@@ -24,8 +25,8 @@ these feeds live beside, in the same sister package). Implementation is keiro's 
 work.
 
 Planned on 2026-09-10 as
-[ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md); the request
-stays proposed until implementation and release evidence are recorded.
+[ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md) and accepted;
+it completes once implementation and release evidence are recorded.
 
 ## Planning
 

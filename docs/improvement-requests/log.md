@@ -1,5 +1,17 @@
 # Bundle Update Log
 
+## 2026-09-11
+* **Completed**: Close IR-3: plan 165's terminal outbox rejection outcome shipped in Keiro
+0.14.0.0 (implementation commit c237424a is in the `keiro-0.14.0.0` tag; Hackage lists the
+release). Close IR-22: all five MasterPlan 41 child plans are complete and shipped in Keiro
+0.12.0.0.
+* **Update**: Reconcile request status and plan links with the plans that already exist. IR-7 is
+in-progress (plans 231 and 232; only the DSL generation baseline and its `bench-regression`
+wiring remain). IR-26..IR-30, IR-33, IR-34, and IR-39 are accepted and linked to ExecPlans 276,
+277, 278, 274, 275, 265/266, 267, and 273/279 respectively, none of which has started
+implementation. IR-10 links evaluation plan 271 and stays proposed until that plan decides
+whether to proceed. IR-35 and IR-36 gain their missing links to plans 270 and 272.
+
 ## 2026-09-10
 * **Completed**: Close IR-32: ADR-40 records the inspection-surface boundary (state browsing and
 safe operator actions over supported library APIs in opt-in sister packages; metrics and traces
