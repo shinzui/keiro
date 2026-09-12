@@ -16,6 +16,17 @@ provenance:
       at: 2026-09-10T12:42:20Z
       mode: "update"
       note: "Restored creation provenance for the plan authored in this session using its original created_at timestamp; model identifier corrected to gpt-6 from the session instructions."
+    - model: "gpt-6"
+      harness: "codex"
+      at: 2026-09-12T13:01:16Z
+      mode: "update"
+      note: "Clarified recovery and ordering contracts, bounded witness scans, specified strict dispatch accounting, and expanded concurrency/performance acceptance."
+  reviews:
+    - model: "gpt-6"
+      harness: "codex"
+      at: 2026-09-12T13:01:16Z
+      verdict: "changes-requested"
+      note: "Source review found target-race reconciliation gaps, silent timer race limits, and missing scan/allocation bounds; applied corrections in update mode, runtime feasibility remains unproven."
 ---
 
 # Harden process-manager reaction APIs before DSL generation
@@ -33,7 +44,8 @@ A Haskell application should be able to react to an event by optionally advancin
 process state, dispatching commands, and scheduling or cancelling timers through one small
 runtime API. The application should receive honest results for accepted, silent, duplicate,
 and deliberately non-advancing reactions, and should recover missing target dispatches after
-a crash without repeating timer effects that already committed with the saga.
+a crash by recognizing accepted saga receipts and skipping their timer phase. Unconditional
+timers on silent/non-advancing executions remain repeatable, including in races with acceptance.
 
 This plan hardens that runtime composition before
 [plan 273](273-make-process-manager-reactions-first-class-in-keiro-dsl.md) generates calls to
@@ -52,6 +64,7 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 ## Progress
 
 
+- [x] (2026-09-12) Review API design, recovery, performance, and maintainability against command, process-manager, timer, store, and ADR contracts; incorporate the corrections below. This is plan validation, not runtime acceptance.
 - [ ] M0: prove accepted-event witness recovery, optimistic retry, same-source races, and silent redelivery with the existing command API; record the feasibility verdict.
 - [ ] M1: add transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests.
 - [ ] M2: implement the additive reaction model and once runner, including explicit outcomes, timer accounting, witness recovery, and partial dispatch tests.
@@ -62,7 +75,26 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 ## Surprises & Discoveries
 
 
-(None yet; the source-review constraints are recorded in Context and Orientation.)
+The 2026-09-12 source review found that `dispatchDeduplicatedCommand` reconciles only
+`DuplicateEvent` failures through `confirmBenignDuplicate`. A concurrent target winner can
+instead leave the loser with `CommandRejected` or a successful zero-event result after optimistic
+retry. Reusing that helper alone does not establish the new runner's duplicate-result contract.
+M2 must add reaction-local reconciliation and explicit target-race tests.
+
+A silent command's final existence probe and its unconditional timer transaction are separate.
+Another delivery may accept between them; the silent delivery can then mutate timers after the
+accepted transaction. Neither `Once` nor a second unprotected probe serializes all timer effects.
+The plan now limits the no-repeat guarantee to executions that establish accepted status and
+recommends accepted-only effects for timers that require that guarantee.
+
+Witness paging bounds event count per page, not total recovery work or bytes per event. The
+public store API has no read-by-id operation. Capture a finite stream-version ceiling so missing
+witness recovery terminates even during continuous appends; measure history depth as well as fan-out.
+
+A strict record containing a list is not sufficient to release its elements or an enclosing
+accepted saga outcome. The worker must reduce the saga outcome before target dispatch and force
+its summary counters and failure-list spine as it progresses. Caller-supplied follow-ups and
+failure records still require memory proportional to their sizes.
 
 
 ## Decision Log
@@ -99,10 +131,36 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
   Date: 2026-09-10
 
 
+- Decision: Preserve non-durable silent behavior and state its concurrency limit explicitly.
+  Rationale: An existence probe cannot serialize an eventless decision with a concurrent accepted
+  transaction. Accepted-only timers are the supported choice for acceptance-bound effects;
+  serializing silent effects would require a separate locking or receipt design.
+  Date: 2026-09-12
+- Decision: Keep witness decoding as an explicit integrity check, with a captured finite read
+  ceiling, and add reaction-local target reconciliation without changing historical helpers.
+  Rationale: This preserves the proposed integrity contract while bounding missing-witness
+  termination and avoids changing legacy runner behavior through a shared helper.
+  Date: 2026-09-12
+- Decision: Use strict physical-target occurrence counters and reduce saga results before worker
+  dispatch; retain detailed results only for the once runner.
+  Rationale: Prevent quadratic prefix scans and accidental retention of accepted payloads without
+  introducing another public configuration family.
+  Date: 2026-09-12
+
+
 ## Outcomes & Retrospective
 
 
-(To be filled during implementation. Creating this plan does not complete any runtime milestone.)
+The 2026-09-12 review retains the additive public model and five implementation milestones,
+with required corrections to concurrency recovery, finite witness scanning, replay preconditions,
+and worker allocation. The existing author and revision provenance identify `gpt-6` / `codex`;
+there were no recorded review entries before this pass. Runtime correctness remains subject to
+M0 and the new PostgreSQL acceptance cases; no implementation milestone is complete. The baseline
+process-manager command was attempted during review but stopped at dependency solving, before any
+test ran: the available Cabal index offered `pgmq-effectful-0.5.0.0`, while workspace package
+`jitsurei` requires `>=0.6 && <0.7`. This is environment evidence, not a new dependency constraint
+or a reason to weaken existing bounds. Refresh/verify the package index and authoritative releases
+before retrying; if still unresolved, record the blocker rather than claiming runtime acceptance.
 
 
 ## Context and Orientation
@@ -125,6 +183,14 @@ row in `keiro.keiro_timers` claimed by a worker. A witness is the already-record
 whose id proves an accepted append happened. Optimistic retry means rehydrating the saga and
 selecting its command transition again when another writer changes its stream version before
 append. It is not permission to execute follow-ups from a discarded attempt.
+
+For each source event id, callers must keep decoding, correlation, `streamFor`, reaction branch,
+command payloads, timer ids, and supplied timestamps stable across retries. A pure function alone
+cannot guarantee this if its input is enriched from changing data or its configuration changes.
+Derive deadlines from recorded input time, not delivery wall-clock time. Saga streams must remain
+private to the manager and retain their acceptance witnesses for the supported replay lifetime.
+Truncation, deletion, foreign links, or identity reuse invalidate that precondition; codec decoding
+is a compatibility check, not proof that an arbitrary linked event came from this reaction.
 
 `keiro/src/Keiro/ProcessManager.hs` defines `ProcessManagerAction` with a mandatory command,
 commands, and timers. `runProcessManagerOnce` probes the deterministic manager id, schedules
@@ -207,7 +273,10 @@ the callback runs only for the successfully committed accepted attempt. Synchron
 of the same source id with an `MVar` barrier and establish the failure/silent-return shapes the
 coordinator must reconcile. Ensure the hook does not wait a second time on retry. Add a separate
 silent delivery, unrelated saga progress, and redelivery example showing that the same source can
-later accept; the first silent attempt has no durable decision.
+later accept; the first silent attempt has no durable decision. Also pause a silent delivery after its final
+negative probe, allow unrelated progress and a same-source accepted delivery to commit, then
+release the silent delivery's unconditional timer transaction. Assert the documented repeatable
+effect, not an impossible once-only guarantee. Use test-local effect interception for this barrier.
 
 Run the M0 command below and record actual observed outcomes. Promote these tests into permanent
 regression coverage. The gate passes when the existing command path provides all these semantics
@@ -254,9 +323,16 @@ This is two execution phases, not arbitrary cross-stream source ordering.
 
 For an advance, derive the current saga id and legacy probes using index minus one. A matching
 id in the intended saga stream enters duplicate recovery: page forward using a positive bounded
-page size until the exact matched event is found, decode it with the saga codec, and enable the
-fixed accepted list. Advance the cursor monotonically; stop on an empty page. Memory is bounded
-by page size, though total reads may grow with saga history. Missing or undecodable witnesses
+page size until the exact matched event is found, decode only that event with the saga codec,
+and enable the fixed accepted list. After the positive probe, capture `getStream`'s `version`
+as the finite ceiling. Start `readStreamForward` at `StreamVersion 0`; its cursor is exclusive,
+so advance to the last returned `streamVersion`, not that version plus one. Use an internal
+page size of 256, with a private smaller-size seam for tests. Stop on an empty page or when the
+captured ceiling has been reached, ignoring later appends. A vanished stream or reaching the
+ceiling without the matched event is `ReactionWitnessMissing`. Memory holds at most one page
+of event payloads, whose individual byte sizes are not capped. A witness at position H costs
+O(H) transferred events and O(ceil(H / pageSize)) page reads plus bounded probe/metadata reads; this deliberate integrity check is
+more expensive than legacy existence-only duplicate recovery. Missing or undecodable witnesses
 fail explicitly without dispatch or acknowledgement. Do not hydrate or run the saga command on
 this path, reconstruct a fictitious original batch, or re-run timer SQL that committed with the
 witness.
@@ -277,15 +353,44 @@ an accepted append.
 For no-advance, skip all saga reads and commands and run unconditional timers in their own
 transaction. Return `ReactionNotAdvanced`. This path and a genuinely silent path have no saga
 receipt; their unconditional timer operations may repeat on redelivery. A replayed no-advance
-schedule can reset a still-Scheduled deadline. Callers wanting first-arm-wins use `Once`.
+schedule can reset a still-Scheduled deadline. `Once` means insert-only while the row exists,
+including terminal rows; it is not a new timer
+generation and does not make cancellation durable for an absent id. It preserves the existing
+row's deadline and payload; `Rearm` replaces both only while Scheduled. Neither can revive a
+Firing, Fired, Cancelled, Dead, or foreground-owned row.
+
+The silent re-probe is best-effort reconciliation, not a lock: an accepted delivery can commit
+after a negative probe and before the silent timer transaction. Unconditional timers can therefore
+repeat even around a concurrent acceptance. Put timers that must belong exclusively to acceptance
+in `onAccepted`; do not claim exactly-once unconditional effects or add an unplanned receipt table.
+A genuinely silent result remains an honest observation of that invocation even if another delivery
+accepts later.
 
 Dispatch the selected target commands with `dispatchDeduplicatedCommand` and
 `runCommandWithProjections`, assigning the new target-keyed id to the first target event. Count
-same-target occurrences over the selected command list, independent of timer positions. Retain
+same-target occurrences over the selected command list, independent of timer positions. Resolve
+the physical target name once per command and use a strict `Data.Map.Strict StreamName Int` counter
+in one traversal: O(N log(D + 1)) work and O(D) counter space for N commands and D distinct targets.
+Do not count occurrences by repeatedly scanning earlier commands. Retain
 source command order and attempt every command, reporting failures in their positions, following
 the existing once-runner policy. A later failure cannot undo an earlier commit; replay deduplicates
 successful eventful targets and retries missing ones. A target that emits no events has no receipt
 and may be re-evaluated; the result must not invent an accepted event or duplicate id for it.
+For compatibility, `PMCommandAppended` can carry a `CommandResult` with zero appended events;
+its constructor name alone is not evidence of an event receipt. Document this inherited vocabulary.
+
+Wrap the existing target helper in a private reaction dispatch function. After an unmatched command,
+exhausted optimistic conflict, or zero-event success, re-probe this target's deterministic id and
+return `PMCommandDuplicate` if present; otherwise preserve the original failure or zero-event result.
+Keep existing duplicate-id mismatch and wrong-stream collision checks intact, propagate cancellation,
+and do not convert codec/validation errors to duplicates. Add deterministic concurrent target tests
+where the loser becomes unmatched and where it becomes silent. Without reconciliation, worker
+rejection policy could dead-letter an already-completed target action. Keep legacy helpers unchanged.
+
+Dispatch order is attempt order within one invocation. With attempt-every-command policy, a failed
+command can commit on replay after a later command already succeeded, including on the same target.
+Concurrent deliveries also do not establish a global order. Reactions must tolerate those histories;
+applications requiring strict committed command order need a different policy outside this plan.
 
 Add `describe "Keiro.ProcessManager.Reaction"` tests for each branch, with persisted row/event
 assertions rather than only constructor checks. Use deterministic synchronization for distinct-source
@@ -310,10 +415,18 @@ with bounded reason codes and never expose stored payloads in telemetry or dead 
 
 Share one internal execution engine between once and worker entry points, with a strict
 per-dispatch accumulator for the worker so it need not construct the full detailed result list
-or retain accepted saga values through all target dispatches. Do not copy the new runner into
+or retain accepted saga values through all target dispatches. Parameterize the private engine's
+result reduction so the worker reduces the saga outcome to a duplicate count/handled status before
+entering the target loop; returning `(fullSagaOutcome, summary)` defeats this requirement. Accumulate
+once-runner results and worker failures by cons and reverse once, not repeated list append. Worker
+memory includes O(D) occurrence counters, O(F) failure records, and the supplied follow-up list;
+it is not constant in total fan-out. Do not allocate a filtered command list and a second numbered
+copy solely for worker traversal. Do not copy the new runner into
 the worker, change historical APIs, or turn shared helpers into a general orchestration framework.
 Keep decoding as `(msg -> Maybe (RecordedEvent, input))`, matching existing workers. Assert each
-source acknowledgement is finalized exactly once; transient errors retry, deterministic failures
+normal policy decision finalizes its source acknowledgement exactly once; cancellation or a thrown
+callback/finalizer error need not finalize and must never synthesize a successful acknowledgement.
+Transient errors retry, deterministic failures
 follow the established policies, poison follows its policy, and asynchronous cancellation escapes.
 
 Add `keiro/test/ReactionExample.hs` to the test component's `other-modules`. This handwritten
@@ -330,7 +443,14 @@ and 128, instrument the fixture's saga store reads in an uncontended first deliv
 that increasing target count does not add saga hydration reads. Count target reads separately.
 Optimistic retries may add saga attempts. Do not use `keiro_command_decision` as a hydration counter;
 it is a decision attribute. Also exercise witness recovery with a page size small enough to force
-multiple pages. Record read counts and bounds without imposing a machine-specific latency gate.
+multiple pages. For history depths 256, 1024, and 4096, place witnesses near the end, count
+recovery reads and decoded events, and verify the documented linear read cost and one witness
+decode. Delete or hide a probed witness before scanning while adding newer events; recovery must
+stop at the captured ceiling. Measure first delivery and duplicate recovery separately. Include
+all-distinct and all-same-target fan-out to exercise occurrence counting, and inspect an allocation
+or heap profile with large accepted saga payloads to show the worker releases them before target
+fan-out while the once result intentionally retains them. Record read counts, allocations, and
+bounds without imposing a machine-specific latency gate.
 The M3 acceptance is a working example with tests and no dependency on `keiro-dsl`.
 
 
@@ -340,7 +460,8 @@ The M3 acceptance is a working example with tests and no dependency on `keiro-ds
 Update `docs/user/api-reference.md`, `docs/guides/process-managers-and-timers.md`,
 `docs/user/deploy-ordering.md`, `keiro/CHANGELOG.md`, and the new module's Haddock. Include the
 once/worker example, the state/result distinctions, the two transaction phases, silent and
-no-advance replay, timer cancellation limits, and declared-order dispatch. Correct the misleading
+no-advance replay, timer cancellation limits, and declared attempt order, including retry-induced
+commit reordering and stable-input requirements. Correct the misleading
 legacy action comment identified above. Runtime documentation belongs here; DSL notation and
 its diagnostics belong to plan 273.
 
@@ -370,6 +491,24 @@ identity vectors, ADR link, and any deviations. Do not start grammar changes und
 Run from `/Users/shinzui/Keikaku/bokuno/keiro` in the repository's Nix development shell. Enter it
 with `nix develop` if tools are unavailable. Tests start their own disposable PostgreSQL instances.
 No production store or external service is required.
+
+Review baseline attempted on 2026-09-12:
+
+```bash
+cabal test keiro:keiro-test --test-options='--match "Keiro.ProcessManager"' --test-show-details=direct
+```
+
+```text
+Error: [Cabal-7107]
+Could not resolve dependencies:
+rejecting: pgmq-effectful-0.5.0.0
+conflict: jitsurei => pgmq-effectful>=0.6 && <0.7
+```
+
+`just conformance-corpus-policy` hit the same dependency-solver failure. Local Markdown link
+resolution, tagged/balanced code fences, and `git diff --check` passed. No runtime tests or corpus
+acceptance checks completed. Resolve package availability without weakening workspace bounds before collecting
+M0 evidence. The new feasibility and Reaction test groups do not exist yet.
 
 M0 after adding the feasibility examples:
 
@@ -445,10 +584,16 @@ A forced optimistic conflict selects follow-ups from the successful decision onl
 deliveries of the same source recover one accepted witness even if the losing command retry is
 silent or unmatched. A truly silent first delivery runs no accepted effects; after unrelated saga
 progress, redelivery may accept. These cases must be separate tests so a passing duplicate test
-cannot conceal non-durable silent semantics.
+cannot conceal non-durable silent semantics. A same-source accepted delivery racing after a silent
+negative probe does not fence that silent delivery's unconditional timers. The dedicated barrier
+test demonstrates this limit; accepted-only timers never run on the silent branch. Concurrent target
+losers that become silent or unmatched reconcile to the exact intended-target receipt and acknowledge
+normally. Wrong-stream or mismatched-id collisions remain failures.
 
 A target failure after another target succeeds leaves the first target, saga, and timers durable.
-Replay completes missing dispatches. A failure inside timer SQL leaves neither saga nor timer
+Replay completes missing dispatches. Include two commands to the same target where the first
+fails and the second commits, then verify the first may commit later on replay; declared order
+does not promise committed order. A failure inside timer SQL leaves neither saga nor timer
 changes committed. A second distinct source with a later injected timestamp moves a Scheduled
 Rearm deadline but preserves a Once deadline; replay of an accepted source changes neither.
 Cancelled/Fired/foreground-owned timers remain protected. A cancellation cannot retract an
@@ -456,7 +601,10 @@ already-running callback, and the example's target guard makes that late attempt
 
 No-action performs no saga or target append and reports NotAdvanced. Timer-only reactions skip
 saga hydration and report their actual committed SQL operations. Worker tests establish exact
-acknowledgement count, policy outcomes, bounded error rendering, and cancellation propagation.
+acknowledgement count for normal policy outcomes, bounded error rendering, and cancellation
+propagation without a synthetic acknowledgement. Missing-witness tests terminate under ongoing
+appends; unrelated undecodable events are not decoded. Recovery read counts grow with history,
+not target count, and worker heap evidence shows accepted saga payloads are released before fan-out.
 The public example compiles without DSL imports, and the 8/32/128 dispatch cases show no additional
 saga hydration from fan-out alone. All historical runtime and generated DSL checks remain green.
 
@@ -493,6 +641,11 @@ No dependency changes are planned. Use `Keiro.Command` for saga decisions and tr
 command/result and worker primitives, `Keiro.Timer` for timer effects, and the store's public
 read APIs for witnesses. Existing UUID, bytestring, text, effect, and transaction dependencies
 suffice. Register the new exposed module and the example's test module in `keiro/keiro.cabal`.
+
+`FollowUp` is intentionally one small action vocabulary; its order is preserved separately in
+the timer and target phases. Prefer qualified imports of Reaction for names such as `Once` and
+record fields shared with other modules. Avoid adding builder classes, lenses beyond existing
+repository conventions, or an effectful callback API to compensate for unspecified semantics.
 
 The new module owns the following concrete model (shown without imports and deriving clauses):
 
@@ -578,3 +731,10 @@ import or re-export the new child module.
 2026-09-10: Restored creation provenance omitted by the older local initializer for the plan authored in this session, preserving the original creation timestamp, and recorded this metadata correction as a revision. Harness is recorded as codex; model is gpt-6, as identified by the session instructions. No implementation or acceptance status changed.
 
 2026-09-10: Corrected this session's provenance model from unknown to gpt-6 at the user's request; preserved timestamps, verdicts, and authorship attribution.
+
+2026-09-12: Validated the proposed API against the current command, process-manager, timer, and
+Mori-located store sources and ADRs 24, 25, 29, 30, and 39. Added target-race reconciliation,
+explicit silent/unconditional timer race limits, stable-input and retention preconditions, finite
+witness scan bounds and history-cost measurements, strict occurrence counting and worker reduction,
+and precise attempt-order/acknowledgement semantics. Retained the public type shape and deferred
+runtime approval to the executable feasibility gate; no runtime implementation or ADR was changed.
