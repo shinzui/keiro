@@ -21,6 +21,11 @@ provenance:
       at: 2026-09-12T13:01:16Z
       mode: "update"
       note: "Clarified recovery and ordering contracts, bounded witness scans, specified strict dispatch accounting, and expanded concurrency/performance acceptance."
+    - model: "gpt-6"
+      harness: "codex"
+      at: 2026-09-12T15:46:47Z
+      mode: "implement"
+      note: "Refreshed Hackage and verified upstream releases; M0 is blocked by workspace PGMQ 0.6 versus released adapter PGMQ 0.5 bounds."
   reviews:
     - model: "gpt-6"
       harness: "codex"
@@ -65,7 +70,9 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 
 
 - [x] (2026-09-12) Review API design, recovery, performance, and maintainability against command, process-manager, timer, store, and ADR contracts; incorporate the corrections below. This is plan validation, not runtime acceptance.
-- [ ] M0: prove accepted-event witness recovery, optimistic retry, same-source races, and silent redelivery with the existing command API; record the feasibility verdict.
+- [x] (2026-09-12 15:46Z) Refresh Hackage, retry the baseline in the Nix shell, and verify package availability against Hackage and upstream release tags. The earlier missing-package failure is replaced by the incompatible released adapter bounds recorded below.
+- [ ] M0 prerequisite: restore a solvable workspace dependency set without weakening its PGMQ bounds. Blocked: workspace PGMQ 0.6 conflicts with the released adapter's PGMQ 0.5 bounds.
+- [ ] M0: add and run accepted-event witness recovery, optimistic retry, same-source races, and silent redelivery tests with the existing command API; record the feasibility verdict. No feasibility tests have been added or run yet.
 - [ ] M1: add transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests.
 - [ ] M2: implement the additive reaction model and once runner, including explicit outcomes, timer accounting, witness recovery, and partial dispatch tests.
 - [ ] M3: add worker integration and a handwritten public-API example; prove acknowledgement, failure, and scaling behavior.
@@ -74,6 +81,20 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 
 ## Surprises & Discoveries
 
+
+The implementation preflight on 2026-09-12 refreshed Hackage successfully to index state
+`2026-09-12T15:08:53Z`. PGMQ 0.6.0.0 is now available, but the complete workspace still
+cannot solve: `keiro-pgmq/keiro-pgmq.cabal` and `jitsurei/jitsurei.cabal` require PGMQ
+`>=0.6 && <0.7`, whereas the newest released
+`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter`, version 0.14.0.0,
+requires `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` at `^>=0.5`.
+Hackage's preferred-version response and published Cabal file confirm these bounds.
+The adapter upstream's newest tag is `v0.14.0.0`, peeled commit
+`301652375ecdec01c4e1ff50902900ad3a078ea3`; the PGMQ upstream has `v0.6.0.0`,
+peeled commit `7269f4de0a6e4e6f138c849758c18c7324410ac2`.
+This is a release compatibility blocker, not merely a stale local index.
+The ambient compiler also has base 4.20, below the workspace's base 4.21 minimum;
+using `nix develop --command` resolves that toolchain issue but not the dependency conflict.
 
 The 2026-09-12 source review found that `dispatchDeduplicatedCommand` reconciles only
 `DuplicateEvent` failures through `confirmBenignDuplicate`. A concurrent target winner can
@@ -100,6 +121,12 @@ failure records still require memory proportional to their sizes.
 ## Decision Log
 
 
+- Decision: Keep the feasibility gate pending until the released dependency set can satisfy
+  the workspace's existing bounds; do not start M1 against an unvalidated composition.
+  Rationale: Refreshing the index resolves availability of PGMQ 0.6 but reveals incompatible
+  adapter bounds. Bypassing those bounds would introduce compatibility work outside this
+  plan's no-dependency-change scope and would not establish normal workspace acceptance.
+  Date: 2026-09-12
 - Decision: Extract runtime feasibility and implementation from plan 273 into this prerequisite.
   Rationale: The runtime must have an independently useful and tested contract before the DSL
   depends on it. Plan 273 retains parsing, checking, generation, fingerprints, diff, and generated
@@ -150,6 +177,15 @@ failure records still require memory proportional to their sizes.
 
 ## Outcomes & Retrospective
 
+
+Implementation preflight on 2026-09-12 is blocked before M0. The package index was refreshed
+and the supported Nix build was retried, but dependency solving fails before compilation.
+No runtime code, tests, dependency bounds, or DSL files were changed. M0 through M4 remain
+unimplemented. Resume by refreshing the index after a compatible adapter release or upstream
+package revision is available, verifying its authoritative bounds, and rerunning the baseline
+below. Any dependency adoption requiring workspace edits must be validated explicitly before
+collecting the M0 evidence. No durable runtime decision was established, so this preflight
+does not warrant an ADR or a completion handoff to plan 273.
 
 The 2026-09-12 review retains the additive public model and five implementation milestones,
 with required corrections to concurrency recovery, finite witness scanning, replay preconditions,
@@ -510,6 +546,36 @@ resolution, tagged/balanced code fences, and `git diff --check` passed. No runti
 acceptance checks completed. Resolve package availability without weakening workspace bounds before collecting
 M0 evidence. The new feasibility and Reaction test groups do not exist yet.
 
+Implementation preflight on 2026-09-12, after successful `cabal update`:
+
+```bash
+nix develop --command cabal build keiro:tests
+```
+
+```text
+Resolving dependencies...
+Error: [Cabal-7107]
+trying: pgmq-core-0.6.0.0 (dependency of pgmq-effectful)
+rejecting: shibuya-pgmq-adapter-0.14.0.0
+(conflict: pgmq-core==0.6.0.0, shibuya-pgmq-adapter => pgmq-core^>=0.5)
+```
+
+The command exits 1 before building tests. Release evidence was checked with:
+
+```bash
+curl -fsSL https://hackage.haskell.org/package/shibuya-pgmq-adapter/preferred.json
+curl -fsSL https://hackage.haskell.org/package/pgmq-effectful/preferred.json
+curl -fsSL https://hackage.haskell.org/package/shibuya-pgmq-adapter-0.14.0.0/shibuya-pgmq-adapter.cabal
+git ls-remote --tags https://github.com/shinzui/shibuya-pgmq-adapter.git
+git ls-remote --tags https://github.com/shinzui/pgmq-hs.git
+```
+
+These external endpoints verify releases of the canonical projects
+`mori://shinzui/shibuya-pgmq-adapter` and `mori://shinzui/pgmq-hs`.
+Do not use `allow-newer`, lower the workspace bounds, or omit workspace packages to claim
+this prerequisite passed. A compatible published dependency set is required before the
+normal workspace validation can establish acceptance.
+
 M0 after adding the feasibility examples:
 
 ```bash
@@ -727,6 +793,11 @@ import or re-export the new child module.
 
 
 ## Revision Notes
+
+2026-09-12: Implementation preflight refreshed Hackage and verified authoritative release
+bounds and tags. Recorded the resulting PGMQ/adapter dependency conflict and the required
+Nix toolchain, split the M0 prerequisite from its unstarted tests, and retained all runtime
+milestones as incomplete. No API contract, ADR, dependency bound, or runtime code changed.
 
 2026-09-10: Restored creation provenance omitted by the older local initializer for the plan authored in this session, preserving the original creation timestamp, and recorded this metadata correction as a revision. Harness is recorded as codex; model is gpt-6, as identified by the session instructions. No implementation or acceptance status changed.
 
