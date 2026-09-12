@@ -1,0 +1,29 @@
+---
+# process-compose.override.yaml — UNMANAGED, project-owned.
+#
+# process-compose automatically merges a sibling `process-compose.override.yaml`
+# (or .yml) over the generated `process-compose.yaml` with no extra flags: the
+# base is read first, then this file — maps merge by key, lists append, and
+# scalar fields replace. Put project-specific processes (workers, brokers,
+# one-shot jobs) HERE so seihou template upgrades never overwrite them; the
+# managed `process-compose.yaml` stays pristine and conflict-free on every
+# upgrade. This is the process-compose analogue of the flake's flake.module.nix.
+#
+# To activate: drop the `.example` suffix (`process-compose.override.yaml`) and
+# git-track the result. Docs: https://f1bonacc1.github.io/process-compose/merge/
+
+version: "0.5"
+processes:
+  # Example — a background worker gated on postgres + schema creation. The
+  # depends_on keys reference processes defined in the base process-compose.yaml
+  # (postgres, create_schema); the maps merge by key at load time.
+  #
+  # my_worker:
+  #   command: "cabal run keiro -- worker my-worker"
+  #   availability:
+  #     restart: on_failure
+  #   depends_on:
+  #     postgres:
+  #       condition: process_healthy
+  #     create_schema:
+  #       condition: process_completed_successfully

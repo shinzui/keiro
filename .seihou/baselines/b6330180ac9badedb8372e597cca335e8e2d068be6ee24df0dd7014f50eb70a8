@@ -1,0 +1,65 @@
+# flake.module.nix — your project-specific flake-parts customizations.
+#
+# Copy this file to `flake.module.nix` (next to flake.nix), then edit it:
+#
+#     cp flake.module.nix.example flake.module.nix
+#
+# flake.nix imports it automatically when present:
+#
+#     imports = [ ... ]
+#       ++ nixpkgs.lib.optional (builtins.pathExists ./flake.module.nix) ./flake.module.nix;
+#
+# seihou does NOT manage flake.module.nix: it is never regenerated or overwritten
+# by `seihou run` or by module migrations, so your changes here survive template
+# upgrades without conflict. (flake.nix and nix/*.nix ARE seihou-managed — editing
+# those means accepting a conflict the next time this module migrates.)
+#
+# This is an ordinary flake-parts module. See https://flake.parts for the full
+# module/option reference.
+{ inputs, ... }:
+{
+  perSystem = { pkgs, config, ... }: {
+    # Add project-specific dev-shell tools (conflict-free; reads the option
+    # declared in ./nix/haskell.nix):
+    #
+    #   haskellProject.extraDevPackages = [ pkgs.ghciwatch pkgs.haskellPackages.hpack ];
+
+    # Add extra package / app / check outputs:
+    #
+    #   packages.my-tool = pkgs.hello;
+    #   apps.seed = { type = "app"; program = "${pkgs.writeShellScript "seed" "..."}"; };
+
+    # Define your OWN default package build here. nix/haskell.nix emits
+    # `packages.default = callCabal2nix ...` only when nix.builtin-package is
+    # true; set that var False (e.g. when you build on the shared haskell-nix
+    # patches) and define packages.default below — otherwise the two
+    # definitions collide and flake-parts fails to evaluate:
+    #
+    #   packages.default = (pkgs.haskell.packages.ghc9124.override { ... }).my-package;
+    #
+    # With nix.haskell-nix = true, `inputs.haskell-nix` is the shared patch registry.
+    # Compose its extension ahead of your own overrides:
+    #
+    #   packages.default = (pkgs.haskell.packages.ghc9124.override {
+    #     overrides = pkgs.lib.composeExtensions
+    #       (inputs.haskell-nix.lib.haskellExtension pkgs.haskell.lib.compose pkgs)
+    #       (hself: _hsuper: { my-package = hself.callCabal2nix "my-package" ./. { }; });
+    #   }).my-package;
+
+    # Override formatter details without editing the managed nix/treefmt.nix
+    # (flake-parts merges treefmt.* options across modules):
+    #
+    #   treefmt.programs.fourmolu.package = pkgs.haskell.packages.ghc9124.fourmolu;
+
+    # Extra dev shells compose freely (use a new name to avoid clashing with the
+    # generated devShells.default):
+    #
+    #   devShells.ci = pkgs.mkShellNoCC { packages = [ pkgs.cabal-install ]; };
+  };
+
+  # To pull in a brand-new flake input you must add it to flake.nix's top-level
+  # `inputs` (a Nix requirement — inputs cannot be declared from an imported
+  # module). That is the one edit that will conflict on a future migration;
+  # resolve it with "accept new" and re-add your input line. (haskell-nix is
+  # module-owned: set nix.haskell-nix = true instead of adding it by hand.)
+}

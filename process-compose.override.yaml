@@ -1,0 +1,25 @@
+---
+# process-compose.override.yaml — UNMANAGED, project-owned.
+#
+# process-compose merges this over the generated process-compose.yaml with no
+# extra flags (maps merge by key, lists append, scalars replace), so these
+# project-specific processes survive nix-haskell-flake template upgrades without
+# touching the managed base. depends_on keys reference processes defined in the
+# base (postgres). Docs: https://f1bonacc1.github.io/process-compose/merge/
+
+version: "0.5"
+processes:
+  create_jitsurei_database:
+    command: "just create-database jitsurei"
+    availability:
+      restart: "no"
+    depends_on:
+      postgres:
+        condition: process_healthy
+  run_jitsurei_e2e:
+    command: "just jitsurei"
+    availability:
+      restart: "no"
+    depends_on:
+      postgres:
+        condition: process_healthy
