@@ -4,7 +4,20 @@ slug: correct-partitioned-retention-semantics-and-the-fifo-index
 title: "Correct partitioned retention semantics and the FIFO index"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: "intention_01m2b1p3vhe179jtr5qz6ghqks"
 master_plan: "docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md"
+provenance:
+  revisions:
+    - model: "claude-opus-5[1m]"
+      harness: "claude-code"
+      at: 2026-09-12T13:26:48Z
+      mode: "update"
+      note: "Validated that MasterPlan 17 was not migrated to the pgmq project; refreshed pgmq 0.6/migration-0007 premises and recorded read_grouped_head"
+    - model: "claude-opus-5[1m]"
+      harness: "claude-code"
+      at: 2026-09-12T14:36:53Z
+      mode: "update"
+      note: "Relocated the upstream SQL/doc scope to pgmq-hs MasterPlan 5; rewrote upstream milestones as consumption"
 ---
 
 # Correct partitioned retention semantics and the FIFO index
@@ -44,14 +57,45 @@ index-usage example prints/asserts an index scan where today the same probe seq-
 ## Progress
 
 - [ ] M1: `PartitionSpec`/`partitionedProvision`/`QueueKind` haddocks state the drop-unprocessed semantics; partitioned provisioning labeled experimental; `Keiro.PGMQ.Dlq` haddock expiry claim scoped; `mkPartitionSpec` validating constructor added with pure tests.
-- [ ] M2: pgmq-hs migration re-creates `pgmq._create_fifo_index_if_not_exists` as a btree expression index (new name, drops the old GIN); upstream index-definition test added; pgmq-hs family released; version recorded here.
+- [ ] M2: the released pgmq-hs btree FIFO index is consumed — the shipped index definition, name, and family version read out of the upstream plan and recorded here; keiro bounds raised. The index DDL is owned upstream by `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`; this plan no longer writes it.
 - [ ] M3: keiro-pgmq test-suite bound raised to the released pgmq-migration; 100k-row `EXPLAIN` example added and green; before/after plan transcripts pasted into Validation; keiro haddocks stop saying "GIN".
-- [ ] CHANGELOG entries (keiro-pgmq additive API + docs; pgmq-hs migration); ADR distillation pass done (provisioning half of the master plan's FIFO-contract ADR candidate).
+- [ ] CHANGELOG entry (keiro-pgmq additive API + docs; the pgmq-hs entry belongs to the upstream plan); ADR distillation pass done (provisioning half of the master plan's FIFO-contract ADR candidate).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Relocation (2026-09-12): PGQ-5's index DDL and PGQ-4's upstream documentation half left this plan.
+  They are now `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`
+  and `mori://shinzui/pgmq-hs/plans/21-state-the-fifo-ordering-and-partitioned-retention-contracts-truthfully`
+  under `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`.
+  M2 was rewritten as a consumption milestone; everything below that describes writing a pgmq-hs
+  migration or releasing the family from keiro is superseded by it, including the `0003`/`0004`
+  filenames and the 0.4.1.0/0.4.2.0 release targets. keiro keeps its own haddock corrections, the
+  `mkPartitionSpec` guardrail, and the `EXPLAIN` example that proves the released index helps the
+  reads keiro issues.
+
+- Migration-status validation (2026-09-12): this plan is still keiro-owned and still unimplemented.
+  `mori://shinzui/pgmq-hs/masterplans/3-harden-the-pgmq-hs-family-surfaced-by-the-2026-07-review`
+  lists the index and partition-retention findings in its own out-of-scope section and names this
+  plan as their owner. Both defects reproduce in pgmq-hs's vendored PGMQ 1.13.0
+  (`vendor/pgmq/pgmq-extension/sql/pgmq.sql`): `pgmq._create_fifo_index_if_not_exists` still executes
+  `CREATE INDEX ... USING GIN (headers)` (line 1556), and `create_partitioned` still writes
+  `retention_keep_table = false` into `part_config` for both the queue and the archive table
+  (lines 1449 and 1519), so pg_partman still drops whole partitions of unprocessed work. On the keiro
+  side at `503475fa`, the haddock still calls the GIN index the one grouped reads match against
+  (`keiro-pgmq/src/Keiro/PGMQ/Job.hs:643`) and `PartitionSpec`'s retention wording is unchanged
+  (line 565).
+- Migration-status validation (2026-09-12): M2's release premises are dead. The pgmq-hs family is
+  released at 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7` (keiro commit
+  `e4ec781b`); the native migration ledger runs through
+  `0006-preserve-partitioned-reentry-v1.13.0.sql`, so the next free migration number is `0007`.
+  `pgmq-migration/test/Main.hs` now derives its ledger expectations from `nativeMigrationNames`, so
+  appending a migration is a one-line change there.
+- Migration-status validation (2026-09-12): the partitioned surface this plan documents grew with
+  PGMQ 1.13.0 — `create_partitioned` gained `premake INTEGER DEFAULT 4` (vendored SQL line 1380) and
+  `metrics_result` gained a nullable `default_partition_length bigint` (line 867), both already
+  exposed through pgmq-hs 0.6.0.0. The truthful-retention documentation this plan writes should cover
+  premake alongside the interval/retention pair rather than describing the 1.11 three-argument shape.
 
 
 ## Decision Log
@@ -125,6 +169,17 @@ index-usage example prints/asserts an index scan where today the same probe seq-
   Date: 2026-07-23
 
 
+- Decision: PGQ-5's upstream DDL and PGQ-4's upstream documentation half are relocated; this plan
+  consumes them and keeps keiro's own halves.
+  Rationale: A jsonb GIN index that cannot serve the grouped-read predicates, and a
+  `create_partitioned` that drops unprocessed partitions without saying so, are defects in pgmq-hs's
+  SQL and documentation that reach every FIFO consumer of that library. keiro cannot ship SQL into
+  another repository's migration ledger, and duplicating the retention warning in both layers would
+  leave two places to disagree. What stays here is what only keiro can do: correct keiro's haddocks,
+  guard the configurations keiro can prove wrong at construction time, and prove with `EXPLAIN` that
+  the released index helps the specific reads keiro issues.
+  Date: 2026-09-12
+
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
@@ -134,8 +189,8 @@ index-usage example prints/asserts an index scan where today the same probe seq-
 
 This repository (`/Users/shinzui/Keikaku/bokuno/keiro`) contains `keiro-pgmq`, typed
 background jobs over PGMQ (queues as PostgreSQL tables `pgmq.q_<name>`, installed by the
-`pgmq-migration` package's SQL, not as an extension). The upstream SQL lives in the pgmq-hs
-repository at `/Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs`; its
+`pgmq-migration` package's SQL, not as an extension). The upstream SQL lives in
+`mori://shinzui/pgmq-hs` (resolve the checkout with `mori path mori://shinzui/pgmq-hs`); its
 install ledger is `pgmq-migration/migrations/` (`0001-install-v1.11.0.sql`,
 `0002-schema-management-comment.sql`, listed in `manifest`, embedded at compile time by
 `pgmq-migration/src/Pgmq/Migration/Internal/Definition.hs`). Changed SQL functions ship as
@@ -212,9 +267,9 @@ unmodified, which they will unless this plan strays from its scope.
 Sibling plans: `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
 owns the delivery-path fixes and any change to the tuning types (`JobTuning`,
 `JobOrdering`, `Job`) — this plan must not touch those types (master plan Integration
-Points). It also shares the pgmq-hs release train with this plan's M2: whichever plan
-releases first creates `migrations/0003-*.sql` and version 0.4.1.0; the second appends
-`0004-*.sql` (or extends the unreleased 0.4.1.0) — record the actual filename and version
+Points). Neither plan writes pgmq-hs SQL any more
+(relocated 2026-09-12); they share only the version bump keiro adopts, so whichever lands
+first raises keiro's `pgmq-*` bounds and the other inherits them — record the actual bound
 in Progress when known. The DLQ operator path is
 `docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md`;
 it rewrites *other* paragraphs of the same `Dlq.hs` module haddock (the visibility-window
@@ -293,93 +348,51 @@ provisioning path of record.
 Acceptance: `cabal test keiro-pgmq-test` green with the new examples; `git diff` shows no
 change to any tuning type and no behavioral change outside `mkPartitionSpec`.
 
-### Milestone 2 — an index the grouped reads can actually use (upstream)
+### Milestone 2 — consume the upstream index, not build it
 
-Scope: the pgmq-hs repository. At the end, `pgmq.create_fifo_index` (and the reconciler
-path through it) builds a btree expression index matching the grouped-read predicates, the
-old GIN is dropped on conversion, an upstream test pins the index definition, and a
-release exists for keiro to consume.
+Scope: reading what upstream shipped and pinning keiro to it. The index DDL relocated to the pgmq-hs
+repository on 2026-09-12 and is owned by
+`mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`
+under `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`;
+the matching upstream documentation belongs to
+`mori://shinzui/pgmq-hs/plans/21-state-the-fifo-ordering-and-partitioned-retention-contracts-truthfully`.
+Do not write a pgmq-hs migration from this plan.
 
-1. Determine the migration filename and version with
-   `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
-   (M4 there): first plan to release creates
-   `pgmq-migration/migrations/0003-<slug>.sql` at family version 0.4.1.0 (current: all
-   five packages 0.4.0.1); the second appends `0004-<slug>.sql` at 0.4.2.0, or both
-   changes ride one 0.4.1.0 if released together. Use slug
-   `fifo-group-btree-index` for this plan's file. Record the outcome in Progress and the
-   Decision Log.
+At the end of this milestone keiro knows exactly what the upstream index is, and its bounds require a
+version that has it.
 
-2. The migration file contains one statement:
+1. Read the upstream plan's `Validation and Acceptance` and `Decision Log` for three facts and record
+   all three in this plan's Progress: the index *definition* (leading expression and remaining keys),
+   the index *name* and what happened to the pre-existing GIN index, and the released family version.
+   Do not carry forward the numbers this plan originally guessed — `0003`/`0004` and 0.4.1.0/0.4.2.0
+   are all dead. The family shipped 0.6.0.0 on 2026-09-10, the ledger runs through
+   `0006-preserve-partitioned-reentry-v1.13.0.sql`, and keiro already declares `>=0.6 && <0.7`.
+2. Note whether upstream's evidence shows the index helping the read shapes keiro actually issues.
+   keiro's drain path calls `readGrouped`/`readGroupedRoundRobin` (`keiro-pgmq/src/Keiro/PGMQ/Job.hs:160`);
+   if the upstream plan recorded a negative result for either, M3's keiro haddock must say so instead
+   of claiming a benefit keiro does not get. A negative result is a legitimate outcome to document,
+   not a blocker.
+3. Raise the bound in `keiro-pgmq/keiro-pgmq.cabal` to the released version — the test-suite
+   `pgmq-migration` bound (line 97) at minimum, and every `pgmq-*` bound if upstream had to break.
+   Check `grep -rn 'pgmq-' --include=*.cabal .` before editing one file.
 
-   ```sql
-   CREATE OR REPLACE FUNCTION pgmq._create_fifo_index_if_not_exists(queue_name TEXT)
-   RETURNS void AS $$
-   DECLARE
-       qtable TEXT := pgmq.format_table_name(queue_name, 'q');
-       old_index_name TEXT := qtable || '_fifo_idx';
-       index_name TEXT := qtable || '_fifo_group_idx';
-   BEGIN
-       -- The pre-1.11.0-hs GIN index cannot serve the grouped reads'
-       -- ->> extraction predicates; drop it on conversion.
-       EXECUTE FORMAT('DROP INDEX IF EXISTS pgmq.%I;', old_index_name);
-       -- Btree over the exact grouping expression used by read_grouped /
-       -- read_grouped_rr, then msg_id for the per-group ORDER BY ... LIMIT
-       -- and the earlier-member probes.
-       EXECUTE FORMAT(
-           $QUERY$
-           CREATE INDEX IF NOT EXISTS %I ON pgmq.%I (
-               (COALESCE(headers->>'x-pgmq-group', '_default_fifo_group')),
-               msg_id
-           );
-           $QUERY$,
-           index_name, qtable
-       );
-   END;
-   $$ LANGUAGE plpgsql;
-   ```
+Acceptance: this plan's Progress names the shipped index definition, name, and version; `cabal build all`
+succeeds on the raised bounds. If the upstream index has not shipped, mark this milestone blocked with
+the upstream plan path and proceed with M1, whose documentation work is independent — but do not write
+M3's index-usage example against an index that does not exist yet.
 
-   Add the filename to `pgmq-migration/migrations/manifest`. No change to
-   `pgmq.create_fifo_index` or `pgmq.create_fifo_indexes_all` (they delegate, SQL lines
-   1446-1460+), and none to `pgmq-migration/src/Pgmq/Migration/SchemaContract.hs` (the
-   function signature is unchanged and the contract does not enumerate indexes — verify by
-   reading `requiredContractObjects`). The expression must be byte-identical to the
-   grouped-read SQL's `COALESCE(headers->>'x-pgmq-group', '_default_fifo_group')`;
-   PostgreSQL matches expression indexes syntactically.
+### Milestone 3 — prove the index with EXPLAIN and fix keiro's words
 
-3. Upstream tests in `pgmq-hasql/test/AdvancedOpsSpec.hs`: rewrite `testCreateFifoIndex`
-   (lines 271-289) to assert the *definition* — query
-   `SELECT indexdef FROM pg_indexes WHERE schemaname = 'pgmq' AND tablename = <qtable>`
-   and assert one row contains `_fifo_group_idx`, `btree`, and the COALESCE expression,
-   and that no `_fifo_idx` GIN row remains. Add a conversion case: create the queue,
-   manually `CREATE INDEX <qtable>_fifo_idx ... USING GIN (headers)`, call
-   `createFifoIndex`, assert the GIN is gone and the btree exists (pins the drop-and-adopt
-   path for fleets provisioned before this release).
+Scope: keiro only, on the bounds M2 already raised. At the end an example proves the
+grouped-read probe uses the released index on a 100k-row queue, and no keiro haddock claims
+"GIN" anymore.
 
-4. Run the pgmq-hs suite, then release the family and write its CHANGELOG entry (breaking
-   note for anyone who queried the old index by name):
-
-   ```bash
-   cd /Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs
-   just process-up
-   cabal test all
-   ```
-
-   Release through the same internal index the previous family upgrade used (keiro commit
-   `ef0b246` consumed it); verify the served version before pinning bounds.
-
-Acceptance: pgmq-hs `cabal test all` green including the new definition and conversion
-tests; the release exists at the recorded version.
-
-### Milestone 3 — consume the release, prove the index with EXPLAIN, fix keiro's words
-
-Scope: back in this repository. At the end the keiro suite runs on the new migration, an
-example proves the grouped-read probe uses the new index on a 100k-row queue, and no keiro
-haddock claims "GIN" anymore.
-
-1. In `keiro-pgmq/keiro-pgmq.cabal`, raise the test-suite bound `pgmq-migration` (line 95)
-   to `>= <released version> && <0.5`. Run `cabal update` (or the dev shell's reindex) and
-   the suite; the existing FIFO and index-idempotence examples (`test/Main.hs` lines
-   1101-1113, 1125-1191) must pass unchanged — they assert behavior, not index kind.
+1. Confirm the suite is running against the released migration that M2 pinned (`cabal update`
+   or the dev shell's reindex, then `cabal test keiro-pgmq-test`). The existing FIFO and
+   index-idempotence examples (`test/Main.hs` lines 1101-1113, 1125-1191) must pass unchanged
+   — they assert behavior, not index kind. If M2 is blocked because the upstream index has not
+   shipped, stop here: the evidence example below cannot be written against an index that does
+   not exist.
 
 2. Add the evidence example (live, in the FIFO section of `test/Main.hs`), using the
    suite's raw-SQL technique (`archiveCount`, lines 106-120, shows the pattern; the
@@ -416,7 +429,8 @@ haddock claims "GIN" anymore.
    against a queue provisioned with the old migration, i.e. before step 1's bound bump)
    and paste both transcripts into the Validation section below as `text` blocks — that
    before/after pair is the master plan's required "EXPLAIN-backed evidence". If the
-   after-plan does not use the index (planner surprise), that is an M2 design signal:
+   after-plan does not use the index (planner surprise), that is a finding for the upstream
+   plan (`mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`), not something to fix here:
    evaluate adding `vt` to the index (as a trailing column or a second index) per the
    Decision Log, change the migration *before* it is released — or as the next numbered
    file if already consumed — and record what the evidence showed in Surprises &
@@ -438,8 +452,8 @@ Acceptance: `cabal test keiro-pgmq-test` green including the evidence example; g
 
 ## Concrete Steps
 
-keiro commands run from `/Users/shinzui/Keikaku/bokuno/keiro`; pgmq-hs commands from
-`/Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs`.
+keiro commands run from the repository root; the few read-only pgmq-hs commands run from
+`$(mori path mori://shinzui/pgmq-hs)`.
 
 Baseline before any edit (the suite boots its own PostgreSQL; no setup needed):
 
@@ -467,16 +481,17 @@ M1: edit, then re-run the suite. Commit:
 feat(keiro-pgmq): validate PartitionSpec and document partitioned retention drop semantics
 ```
 
-M2: in pgmq-hs — add migration + manifest line, rewrite the index tests, then:
+M2: read what upstream shipped (the migration itself is not yours):
 
 ```bash
-cd /Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs
-just process-up
-cabal test all
+cd "$(mori path mori://shinzui/pgmq-hs)"
+cat pgmq-migration/migrations/manifest
+grep -n 'version:' pgmq-core/pgmq-core.cabal
+grep -rn 'indexdef' pgmq-migration/test/Main.hs
 ```
 
-Release, record the version here, commit upstream with a conventional message noting the
-index rename.
+Record the index definition, its name, the GIN disposition, and the released version in this plan's
+Progress, then raise keiro's bounds.
 
 M3: bump the bound, then:
 
@@ -540,17 +555,9 @@ The plan is done when all of the following are observable:
 M1 is documentation plus an additive pure constructor: freely re-runnable, no rollback
 concerns; the raw `PartitionSpec` constructor keeps every existing caller compiling.
 
-M2's migration is append-only and its function body is itself idempotent and convergent:
-`DROP INDEX IF EXISTS` + `CREATE INDEX IF NOT EXISTS` means re-running provisioning any
-number of times, from any mix of old-GIN/new-btree starting states, converges on exactly
-the btree index. A mistake discovered before the release is consumed anywhere: amend the
-migration file and re-run the pgmq-hs suite (it installs the ledger from scratch). After
-consumption: ship the fix as the next numbered migration; never edit the applied file.
+M2 is now reading upstream facts plus a bounds bump, so its rollback is a version-control revert. The migration's own idempotence and the old-GIN conversion behavior are upstream's to guarantee and to document — read them out of `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use` rather than restating them here; if that plan's conclusions differ from what this one assumed, the difference belongs in Surprises & Discoveries.
 
-Index conversion on live fleets is safe to interleave with running consumers: dropping the
-GIN momentarily removes an index no read uses (that is the finding), and grouped reads are
-merely slow, not wrong, until the btree exists. If the conversion must be rolled back for
-an unforeseen reason, re-creating the GIN by hand restores the exact prior state.
+Index conversion on live fleets remains safe to interleave with running consumers for the reason this plan originally recorded: an index no grouped read uses is not load-bearing, and grouped reads are merely slow, not wrong, while the index is missing. Keep that observation — it is keiro's operational context for adopting the upstream release — but the conversion mechanism is upstream's.
 
 M3's bound bump is a one-line cabal change; reverting it restores the previous migration
 set for the test suite. The evidence example is self-contained per fresh database and can
@@ -578,12 +585,12 @@ mkPartitionSpec :: Text -> Text -> Either PartitionSpecConfigError PartitionSpec
 touch `JobTuning`, `JobOrdering`, or `Job` — those belong to
 `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`.
 
-Upstream: pgmq-hs family (currently all 0.4.0.1) gains one migration re-creating
-`pgmq._create_fifo_index_if_not_exists`; no Haskell API in `pgmq-hasql`/`pgmq-effectful`/
-`pgmq-config` changes (`createFifoIndex` keeps its type; the reconciler in
-`pgmq-config/src/Pgmq/Config/Effectful.hs` lines 96-101 re-applies it unconditionally,
-which is what converts existing queues). keiro-pgmq's test-suite bound on
-`pgmq-migration` rises to the released version (`>=0.4.1 && <0.5` or `>=0.4.2 && <0.5`
-depending on the release-train outcome with plan 116 — record the final bound here).
+Upstream, consumed not produced: the btree FIFO index ships from
+`mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`. No Haskell API in `pgmq-hasql`/`pgmq-effectful`/`pgmq-config` is expected to change
+(`createFifoIndex` keeps its type, and the reconciler in `pgmq-config/src/Pgmq/Config/Effectful.hs`
+re-applies it, which is what converts existing queues) — but that plan owns the index-detection
+question, so confirm it from the released code rather than from this sentence. keiro-pgmq's bounds
+rise to the released version (the family is at 0.6.0.0 and keiro already declares `>=0.6 && <0.7`,
+so an additive release needs only the test-suite lower bound; record the final bound here).
 Deployments must apply the new migration before the index claim in the docs is true for
 them; the keiro haddock states that minimum version.

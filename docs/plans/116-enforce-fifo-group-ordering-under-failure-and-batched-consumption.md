@@ -4,7 +4,20 @@ slug: enforce-fifo-group-ordering-under-failure-and-batched-consumption
 title: "Enforce FIFO group ordering under failure and batched consumption"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: "intention_01m2b1p3vhe179jtr5qz6ghqks"
 master_plan: "docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md"
+provenance:
+  revisions:
+    - model: "claude-opus-5[1m]"
+      harness: "claude-code"
+      at: 2026-09-12T13:26:48Z
+      mode: "update"
+      note: "Validated that MasterPlan 17 was not migrated to the pgmq project; refreshed pgmq 0.6/migration-0007 premises and recorded read_grouped_head"
+    - model: "claude-opus-5[1m]"
+      harness: "claude-code"
+      at: 2026-09-12T14:36:53Z
+      mode: "update"
+      note: "Relocated the upstream SQL/doc scope to pgmq-hs MasterPlan 5; rewrote upstream milestones as consumption"
 ---
 
 # Enforce FIFO group ordering under failure and batched consumption
@@ -52,14 +65,46 @@ observing that the successors never run before the head is settled.
 - [ ] M2: `runJobOnce`/`jobProcessor` adopt the job's declared ordering; `runJobOnceWithContext`/`jobProcessorWithContext` throw `JobOrderingMismatch` on a conflicting explicit tuning; discriminating tests added.
 - [ ] M3: Drain-path FIFO failure-branch tests (retry at head, throw at head, dead-letter at head) pass.
 - [ ] M3: Worker-path FIFO failure-branch test passes; first `FifoRoundRobin` tests (drain interleave and worker within-group order) pass; delayed-group-send blocking test passes.
-- [ ] M4: pgmq-hs migration `0003` re-creates `pgmq.read_grouped` with a deterministic return order; upstream test added; pgmq-hs family released at 0.4.1.0.
-- [ ] M4: keiro-pgmq test-suite bound raised to `pgmq-migration >=0.4.1 && <0.5`; full suite green against the new migration.
+- [ ] M4: the released pgmq-hs fix for the grouped reads' return order is consumed — bounds raised in `keiro-pgmq/keiro-pgmq.cabal` to whatever version carries it, full suite green against the new migration. The SQL itself is owned upstream by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`; this plan no longer writes it.
 - [ ] CHANGELOG entries written for keiro-pgmq (breaking `Job` field) and pgmq-hs; ADR distillation pass done (FIFO delivery contract promoted per the master plan's Integration Points).
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Relocation (2026-09-12): PGQ-2's SQL fix left this plan. It is now
+  `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`
+  under `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`,
+  which also owns the migration numbering and the release. M4 was rewritten as a consumption
+  milestone; everything below that describes writing a pgmq-hs migration from keiro is superseded by
+  it, including the `0003-order-read-grouped-returning.sql` filename and the 0.4.1.0 release target
+  in the Decision Log entry of 2026-07-23.
+
+- Migration-status validation (2026-09-12): this plan is still keiro-owned and still unimplemented.
+  `mori://shinzui/pgmq-hs/masterplans/3-harden-the-pgmq-hs-family-surfaced-by-the-2026-07-review`
+  lists the FIFO ordering findings in its own out-of-scope section and names this plan as their
+  owner, and every defect this plan targets still reproduces at keiro `503475fa`: `withOrdering` is a
+  plain setter (`keiro-pgmq/src/Keiro/PGMQ/Job.hs:351`), `Job` has no ordering field, and
+  `pgmq.read_grouped`'s final `UPDATE ... RETURNING` still has no `ORDER BY` in pgmq-hs's vendored
+  PGMQ 1.13.0 (`vendor/pgmq/pgmq-extension/sql/pgmq.sql`, function at line 381).
+- Migration-status validation (2026-09-12): M4's release premises are dead. The pgmq-hs family is
+  released at 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7` (keiro commit
+  `e4ec781b`), so "released at 0.4.1.0" and the test-suite bound `>=0.4.1 && <0.5` below are both
+  superseded. The native migration ledger now runs through
+  `0006-preserve-partitioned-reentry-v1.13.0.sql`, so the filename `0003-order-read-grouped-returning.sql`
+  is taken by `0003-notify-crash-safety-and-locking.sql` and the next free number is `0007`.
+  `pgmq-migration/test/Main.hs` now derives its ledger expectations from `nativeMigrationNames`, so
+  appending a migration is a one-line change there.
+- Migration-status validation (2026-09-12): PGMQ 1.12.0 added `pgmq.read_grouped_head` (and
+  `read_grouped_head_with_poll`), exposed by pgmq-hs 0.6.0.0 as `readGroupedHead` on both `Pgmq` and
+  `Pgmq.Effectful`. It returns at most one message per group and takes each group's head as
+  `MIN(msg_id)` *regardless of visibility*, so an in-flight or failed head blocks its group inside
+  the server — a structurally stronger answer to PGQ-1 than the clamp decided below, which was taken
+  when the primitive was not reachable from Haskell. It is not free: the drain path calls
+  `readGrouped`/`readGroupedRoundRobin` directly (`keiro-pgmq/src/Keiro/PGMQ/Job.hs:160`) and could
+  adopt head reads on its own, but the worker path reads through `shibuya-pgmq-adapter`, whose
+  `FifoReadStrategy` offers only `ThroughputOptimized` and `RoundRobin` at 0.14.0.0
+  (`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Config.hs:254`). Settle this before starting M1;
+  see the master plan's 2026-09-12 Decision Log entries.
 
 
 ## Decision Log
@@ -127,6 +172,24 @@ observing that the successors never run before the head is settled.
   surface.
   Date: 2026-07-23
 
+- Decision: PGQ-2's upstream half is relocated; this plan consumes it.
+  Rationale: The defect is in pgmq-hs's vendored PGMQ SQL and affects every FIFO consumer of that
+  library, not just keiro, and keiro has no legitimate way to ship SQL into another repository's
+  migration ledger. The relocated owner is
+  `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`.
+  The 2026-07-23 decision below about how to order the `RETURNING` stands as the *recommendation*
+  carried upstream — the ordering-column rationale is still the right one — but its filename and
+  release-version specifics are void.
+  Date: 2026-09-12
+
+- Decision: The 2026-07-23 clamp decision and its companion upstream `ORDER BY` decision are held
+  open pending the `read_grouped_head` evaluation recorded in Surprises & Discoveries.
+  Rationale: The clamp's stated reason — group-abort needs shibuya cooperation keiro cannot reach —
+  is still true, but it was taken without the option of a server-side head read, which needs no
+  runner cooperation at all on the drain path. The master plan's 2026-09-12 Decision Log entry defers
+  the choice to implementation time; do not treat the clamp as settled when starting M1.
+  Date: 2026-09-12
+
 
 ## Outcomes & Retrospective
 
@@ -163,7 +226,8 @@ The defects this plan fixes, with the evidence locations re-verified on 2026-07-
 PGQ-1 (HIGH, confirmed). The `JobOrdering` haddock (Job.hs lines 295-307) promises "strict
 send order" per group unconditionally, but the guarantee only holds at `batchSize = 1`.
 The upstream SQL lives in the pgmq-hs repository at
-`/Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs/pgmq-migration/migrations/0001-install-v1.11.0.sql`:
+`mori://shinzui/pgmq-hs`, file `pgmq-migration/migrations/0001-install-v1.11.0.sql` (resolve the
+checkout with `mori path mori://shinzui/pgmq-hs`):
 `read_grouped` (lines 293-388) is documented to "return as many messages as possible from
 the same message group" (line 292), and its `available_messages` CTE takes up to the full
 batch quantity per group in a lateral `LIMIT $1` (lines 346-357) ranked by
@@ -236,10 +300,9 @@ reorder spans, and the seven captured-span examples must stay green unmodified.
 Sibling plans (do not duplicate their work): the DLQ operator path is
 `docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md`;
 provisioning and the FIFO index are
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`. Plan 118
-shares the pgmq-hs release train with this plan's M4 (see the master plan's Integration
-Points): whichever lands first establishes the new migration file and the other appends the
-next numbered file.
+`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`. Neither this plan nor
+118 writes pgmq-hs SQL any more (relocated 2026-09-12); they share only the version bump keiro
+adopts, so whichever lands first raises keiro's `pgmq-*` bounds and the other inherits them.
 
 
 ## Plan of Work
@@ -455,58 +518,47 @@ example, temporarily reverting `nextBatchSize` to `tuning.batchSize` and running
 example with a raw `JobTuning{batchSize = 8, ordering = FifoThroughput, ...}`) makes the
 retry-at-head example fail, demonstrating the tests bite.
 
-### Milestone 4 — deterministic return order for read_grouped, upstream
+### Milestone 4 — consume the upstream return-order fix
 
-Scope: the defense-in-depth fix for PGQ-2, in the pgmq-hs repository at
-`/Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs`. At the end,
-`pgmq.read_grouped` returns its rows in selection-rank order under every query plan, an
-upstream test asserts it, the pgmq-hs family is released as 0.4.1.0, and keiro-pgmq's
-test-suite depends on the new migration. Coordinate with
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`: if 118's
-release lands first, add this function change as the *next* numbered migration file in the
-same repo instead of `0003`, and skip the version bump here (state the actual version in
-Progress when known).
+Scope: keiro's side of PGQ-2 only. The SQL fix relocated to the pgmq-hs repository on 2026-09-12
+and is owned by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`
+under `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`.
+Do not write a pgmq-hs migration from this plan; if the upstream fix has not shipped yet, this
+milestone waits and milestones 1-3 stand alone.
 
-1. Create `pgmq-migration/migrations/0003-order-read-grouped-returning.sql` containing a
-   single `CREATE OR REPLACE FUNCTION pgmq.read_grouped(queue_name TEXT, vt INTEGER, qty INTEGER) ...`
-   whose body is byte-for-byte the existing body from `0001-install-v1.11.0.sql` lines
-   293-388 with exactly three changes, mirroring `read_grouped_rr`'s `selection_order`
-   pattern (lines 117-200 of the 0001 file): `selected_messages` selects
-   `msg_id, overall_rank` (not just `msg_id`); the final statement becomes a CTE
-   `updated_messages AS (UPDATE ... RETURNING m.msg_id, m.read_ct, m.enqueued_at, m.last_read_at, m.vt, m.message, m.headers, sm.overall_rank)`;
-   and the function ends with
-   `SELECT msg_id, read_ct, enqueued_at, last_read_at, vt, message, headers FROM updated_messages ORDER BY overall_rank;`.
-   Add the filename to `pgmq-migration/migrations/manifest` (the embedded ledger in
-   `pgmq-migration/src/Pgmq/Migration/Internal/Definition.hs` picks it up at compile time;
-   the schema contract in `pgmq-migration/src/Pgmq/Migration/SchemaContract.hs` needs no
-   change because the function's signature is unchanged).
-2. Add an upstream test in `pgmq-hasql/test/AdvancedOpsSpec.hs` next to `testReadGrouped`
-   (line 292): enqueue five messages into one group, `readGrouped` with `qty = 5`, assert
-   the returned `msg_id`s are strictly ascending (within one group, rank order equals
-   `msg_id` order). Run the pgmq-hs suite from the pgmq-hs repo root: `just process-up`
-   (starts the process-compose Postgres) then `cabal test all`.
-3. Bump the five pgmq-hs package versions from 0.4.0.1 to 0.4.1.0 (the family releases in
-   lockstep; keiro consumed it that way in commit `ef0b246`), write the pgmq-hs CHANGELOG
-   entries, and release through the same internal package index the previous upgrade used.
-   Verify what the index actually serves before pinning (per the mori guidance in this
-   environment: the local corpus may lag the registry).
-4. In `keiro-pgmq/keiro-pgmq.cabal`, raise the test-suite bound to
-   `pgmq-migration >=0.4.1 && <0.5` (line 95 today). The library bounds on
-   `pgmq-effectful`/`pgmq-hasql`/`pgmq-config`/`pgmq-core` stay `>=0.4 && <0.5` — the
-   Haskell API is unchanged; the behavior lives in the migration the test-suite embeds and
-   deployments apply. Then from the keiro repo root run `cabal update` (or the dev shell's
-   reindex step) and `cabal test keiro-pgmq-test`.
+At the end of this milestone, keiro depends on the released pgmq-hs version that carries the
+deterministic grouped-read order, and keiro's own suite observes it.
 
-Acceptance: pgmq-hs suite green including the new ordering test; keiro-pgmq suite green on
-the new migration with zero test edits (the migration is transparent to keiro's clamped
-batch-size-1 reads — that transparency is itself the "defense-in-depth, not load-bearing"
-property the master plan describes).
+1. Confirm what shipped. In the pgmq-hs checkout (`mori path mori://shinzui/pgmq-hs`), read
+   `pgmq-migration/migrations/manifest` and the `Outcomes & Retrospective` of the upstream plan to
+   learn the migration filename, the ordering columns it chose, and the released family version.
+   Record all three in this plan's Progress — do not assume the numbers this plan originally
+   guessed (`0003`, 0.4.1.0), both of which are dead: the family shipped 0.6.0.0 on 2026-09-10 and
+   the ledger already runs through `0006-preserve-partitioned-reentry-v1.13.0.sql`.
+2. Raise the bounds in `keiro-pgmq/keiro-pgmq.cabal`. Today the test-suite declares
+   `pgmq-migration >=0.6 && <0.7` (line 97) and the library declares `>=0.6 && <0.7` for
+   `pgmq-config`/`pgmq-core`/`pgmq-effectful`/`pgmq-hasql` (lines 64-67). An additive upstream
+   release (0.6.1.0) needs only the lower bound raised on the test suite, which is what embeds and
+   applies the ledger; a breaking upstream release needs every bound moved and coordination with
+   the other keiro consumers, so check `grep -rn 'pgmq-' --include=*.cabal .` before editing one file.
+3. Observe the order from keiro. Add or extend a `keiro-pgmq-test` example that reads a multi-message
+   FIFO group in one batch and asserts ascending `msg_id`s. Under this plan's batch-size-1 clamp that
+   read is not reachable through the public job API, so drive it through the pgmq effect directly, as
+   the existing drain-path examples do. If the clamp decision is revisited in favour of
+   `read_grouped_head` (see this plan's 2026-09-12 Decision Log entry), assert the head-read order
+   instead.
+4. Run `cabal build all` and `cabal test keiro-pgmq-test` from the keiro root, then the wider suites
+   the master plan's consumer list names.
 
+Acceptance: `keiro-pgmq.cabal` names the released version that carries the fix; the keiro suite is
+green; and the new example fails if the bounds are reverted to a version without the fix. If the
+upstream fix has not shipped when milestones 1-3 are done, mark this milestone blocked in Progress
+with the upstream plan path, and say so rather than implementing the SQL here.
 
 ## Concrete Steps
 
 All keiro commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro`; all
-pgmq-hs commands run from `/Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs`.
+the few read-only pgmq-hs commands run from `$(mori path mori://shinzui/pgmq-hs)`.
 
 Baseline before any edit (the suite starts its own PostgreSQL via keiro-test-support; no
 external database is needed):
@@ -537,15 +589,15 @@ cabal build all
 cabal test keiro-pgmq-test
 ```
 
-For M4, in the pgmq-hs repository:
+For M4, check what upstream shipped (the SQL work itself is not yours):
 
 ```bash
-cd /Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs
-just process-up
-cabal test all
+cd "$(mori path mori://shinzui/pgmq-hs)"
+cat pgmq-migration/migrations/manifest
+grep -n 'version:' pgmq-core/pgmq-core.cabal
 ```
 
-then back in keiro after the release and bound bump:
+then in keiro, after raising the bounds:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
@@ -561,7 +613,7 @@ feat(keiro-pgmq)!: carry consumption ordering on Job and enforce FIFO batch-size
 
 (the `!` belongs on the M2 commit; M1 and M3 are non-breaking `fix(keiro-pgmq)`/
 `test(keiro-pgmq)` commits; M4 upstream is its own commit in pgmq-hs plus a
-`chore(deps)` bump commit in keiro).
+`chore(deps)` bump commit in keiro; after the 2026-09-12 relocation M4 is the `chore(deps)` bump plus its observing test, with no pgmq-hs commit from this plan).
 
 
 ## Validation and Acceptance
@@ -585,9 +637,10 @@ The plan is done when all of the following are observable:
 5. The seven ADR-0001 captured-span examples (`test/Main.hs` lines 901-1060) pass
    *unmodified* — the plan's constraint is that no drain change touches span count, names,
    attributes, or the ack-after-settle rule.
-6. Upstream, the pgmq-hasql example proves `read_grouped` returns ascending `msg_id`s for a
-   single-group batch of five, and `git log` in pgmq-hs shows the 0.4.1.0 release with
-   migration `0003-order-read-grouped-returning.sql` in the manifest.
+6. The released pgmq-hs version named in Progress carries the deterministic grouped-read
+   order (verified from `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`'s
+   Outcomes and that repository's `pgmq-migration/migrations/manifest`), `keiro-pgmq.cabal`
+   requires it, and keiro's own example observes ascending `msg_id`s for a single-group batch.
 
 
 ## Idempotence and Recovery
@@ -600,15 +653,7 @@ The M2 breaking change is self-announcing: any missed `Job` construction site fa
 compile, and `cabal build all` enumerates them; there is no way to end up half-migrated at
 runtime.
 
-The upstream migration is append-only: a new file plus a manifest line, never an edit to an
-applied migration. If the migration file needs correction *before* the 0.4.1.0 release is
-consumed anywhere, amend it and re-run the pgmq-hs suite (the suite installs the ledger from
-scratch). After the release is consumed, treat the file as immutable and ship any fix as the
-next numbered migration. If M4 must be abandoned or deferred (for example, handed to
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`'s release per
-the Decision Log), milestones 1-3 stand alone: the clamp makes the unordered RETURNING
-unreachable through keiro, which is exactly the master plan's fallback posture. Record the
-handoff in this plan's Decision Log and in Progress.
+M4 is now a dependency bump plus a test, so its recovery path is a version-control revert, not a migration correction: the upstream ledger is append-only and owned by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`. If the released fix turns out wrong, report it there rather than patching pgmq SQL from keiro. If M4 must wait because upstream has not shipped, milestones 1-3 stand alone — the clamp makes the unordered RETURNING unreachable through keiro, which is exactly the master plan's fallback posture. Record the wait in this plan's Progress.
 
 
 ## Interfaces and Dependencies
@@ -641,7 +686,9 @@ Dependencies: `pgmq-effectful`/`pgmq-hasql` (the `readGrouped`/`readGroupedRound
 operations and `ReadGrouped` record the drain already uses), `shibuya-core` and
 `shibuya-pgmq-adapter` (unchanged — this plan deliberately requires no shibuya release; the
 worker path becomes safe purely because keiro never hands the adapter a FIFO config with
-`batchSize > 1`), and the pgmq-hs family at 0.4.1.0 for M4 with the keiro-pgmq test-suite
-bound `pgmq-migration >=0.4.1 && <0.5`. The keiro-dsl package participates only as a
+`batchSize > 1`), and, for M4, whichever released pgmq-hs version carries the upstream
+return-order fix (the family is at 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7`;
+read the upstream plan's Outcomes for the shipped version rather than the superseded 0.4.1.0 this plan
+originally assumed). The keiro-dsl package participates only as a
 consumer whose conformance fixtures gain the `jobOrdering` field wiring from their generated
 `QueuePolicy` modules.

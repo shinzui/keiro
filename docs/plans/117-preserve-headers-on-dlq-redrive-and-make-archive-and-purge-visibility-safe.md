@@ -4,7 +4,15 @@ slug: preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe
 title: "Preserve headers on DLQ redrive and make archive and purge visibility-safe"
 kind: exec-plan
 created_at: 2026-07-23T03:02:27Z
+intention: "intention_01m2b1p3vhe179jtr5qz6ghqks"
 master_plan: "docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md"
+provenance:
+  revisions:
+    - model: "claude-opus-5[1m]"
+      harness: "claude-code"
+      at: 2026-09-12T13:26:48Z
+      mode: "update"
+      note: "Validated that MasterPlan 17 was not migrated to the pgmq project; refreshed pgmq 0.6/migration-0007 premises and recorded read_grouped_head"
 ---
 
 # Preserve headers on DLQ redrive and make archive and purge visibility-safe
@@ -54,7 +62,18 @@ that inspects, archives, and purges back-to-back with no waiting.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Migration-status validation (2026-09-12): this plan is still keiro-owned and still unimplemented.
+  PGQ-3 and PGQ-6 are pure keiro-pgmq defects, so no pgmq-project plan ever claimed them, and both
+  reproduce at keiro `503475fa`: `redriveDlq` re-sends through a bare `Pgmq.sendMessage` with no
+  headers (`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs:177`) and `purgeDlq` is still the unconditional
+  `Eff es ()` truncation (`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs:198`). `sendMessageWithHeaders` is still
+  exported by `Pgmq.Effectful`, so M1's fix needs no upstream change.
+- Migration-status validation (2026-09-12): keiro-pgmq now builds against pgmq-hs 0.6.0.0
+  (`>=0.6 && <0.7`, keiro commit `e4ec781b`), not the 0.4.x/0.5.0.0 family this plan was written
+  against. That matters for M2's purge guard: PGMQ 1.13.0 added a nullable
+  `default_partition_length` to `metrics_result`, so the `pgmq.metrics` record this plan reads for
+  visible-vs-total counts has one more field than the plan's prose assumes. The counts themselves are
+  unchanged.
 
 
 ## Decision Log
