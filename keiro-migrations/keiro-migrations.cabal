@@ -1,19 +1,19 @@
-cabal-version:      3.0
-name:               keiro-migrations
-version:            0.16.0.0
-synopsis:           Schema migrations for keiro
+cabal-version: 3.0
+name: keiro-migrations
+version: 0.16.0.0
+synopsis: Schema migrations for keiro
 description:
   Embedded PostgreSQL schema migrations and a migration runner for the Keiro
   event-sourcing framework.
 
-license:            BSD-3-Clause
-license-file:       LICENSE
-author:             Nadeem Bitar
-maintainer:         nadeem@gmail.com
-copyright:          2026 Nadeem Bitar
-category:           Database
-build-type:         Simple
-tested-with:        GHC >=9.12 && <9.13
+license: BSD-3-Clause
+license-file: LICENSE
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+copyright: 2026 Nadeem Bitar
+category: Database
+build-type: Simple
+tested-with: ghc >=9.12 && <9.13
 extra-doc-files:
   CHANGELOG.md
   README.md
@@ -288,14 +288,14 @@ extra-source-files:
   expected-schema/v18/schemas/keiro/tables/keiro_workflows/indexes/keiro_workflows_gc_idx
   expected-schema/v18/schemas/keiro/tables/keiro_workflows/indexes/keiro_workflows_pkey
   expected-schema/v18/schemas/keiro/tables/keiro_workflows/objrep
-  migrations/*.sql
-  migrations/manifest
   migrations.lock
   migrations.native.lock
+  migrations/*.sql
+  migrations/manifest
   sql-migrations/*.sql
 
 source-repository head
-  type:     git
+  type: git
   location: https://github.com/shinzui/keiro.git
 
 flag legacy-codd-tools
@@ -303,11 +303,11 @@ flag legacy-codd-tools
     Build transitional Codd expected-schema, remediation, and ledger-fixup
     targets. The normal pg-migrate closure excludes these dependencies.
 
-  default:     False
-  manual:      True
+  default: False
+  manual: True
 
 common common
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DeriveAnyClass
     DuplicateRecordFields
@@ -317,7 +317,7 @@ common common
     OverloadedStrings
 
 library
-  import:          common
+  import: common
   exposed-modules:
     Keiro.Migrations
     Keiro.Migrations.History.Codd
@@ -327,18 +327,18 @@ library
     Keiro.Migrations.Internal.Definition
     Keiro.Migrations.Internal.EmbedFile
 
-  hs-source-dirs:  src
+  hs-source-dirs: src
   build-depends:
-    , base                     >=4.18     && <5
-    , bytestring               >=0.11     && <0.13
-    , containers               >=0.6      && <0.8
-    , hasql                    >=1.10     && <1.11
-    , kiroku-store-migrations  ^>=0.4.0.0
-    , pg-migrate               ^>=1.1.0.0
-    , pg-migrate-embed         ^>=1.1.0.0
-    , pg-migrate-import-codd   ^>=1.1.0.0
-    , template-haskell         >=2.20     && <2.24
-    , text                     >=2.0      && <2.2
+    base >=4.18 && <5,
+    bytestring >=0.11 && <0.13,
+    containers >=0.6 && <0.8,
+    hasql >=1.10 && <1.11,
+    kiroku-store-migrations ^>=0.4.0.0,
+    pg-migrate ^>=1.1.0.0,
+    pg-migrate-embed ^>=1.1.0.0,
+    pg-migrate-import-codd ^>=1.1.0.0,
+    template-haskell >=2.20 && <2.24,
+    text >=2.0 && <2.2,
 
   if flag(legacy-codd-tools)
     exposed-modules:
@@ -347,101 +347,113 @@ library
       Keiro.Migrations.New
 
     build-depends:
-      , codd         >=0.1.8  && <0.2
-      , codd-extras  >=0.1    && <0.2
-      , directory    >=1.3    && <1.4
-      , file-embed   >=0.0.15 && <0.0.17
-      , filepath     >=1.4    && <1.6
-      , time         >=1.12   && <1.15
+      codd >=0.1.8 && <0.2,
+      codd-extras >=0.1 && <0.2,
+      directory >=1.3 && <1.4,
+      file-embed >=0.0.15 && <0.0.17,
+      filepath >=1.4 && <1.6,
+      time >=1.12 && <1.15,
 
 executable keiro-migrate
-  import:         common
-  main-is:        Main.hs
+  import: common
+  main-is: Main.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , aeson                    >=2.1      && <2.3
-    , base                     >=4.18     && <5
-    , bytestring               >=0.11     && <0.13
-    , hasql                    >=1.10     && <1.11
-    , keiro-migrations
-    , kiroku-store-migrations  ^>=0.4.0.0
-    , optparse-applicative     >=0.17     && <0.20
-    , pg-migrate               ^>=1.1.0.0
-    , pg-migrate-cli           ^>=1.1.0.0
-    , pg-migrate-import-codd   ^>=1.1.0.0
-    , text                     >=2.0      && <2.2
+    aeson >=2.1 && <2.3,
+    base >=4.18 && <5,
+    bytestring >=0.11 && <0.13,
+    hasql >=1.10 && <1.11,
+    keiro-migrations,
+    kiroku-store-migrations ^>=0.4.0.0,
+    optparse-applicative >=0.17 && <0.20,
+    pg-migrate ^>=1.1.0.0,
+    pg-migrate-cli ^>=1.1.0.0,
+    pg-migrate-import-codd ^>=1.1.0.0,
+    text >=2.0 && <2.2,
 
 executable keiro-write-expected-schema
-  import:         common
-  main-is:        WriteExpectedSchema.hs
+  import: common
+  main-is: WriteExpectedSchema.hs
   hs-source-dirs: app
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
 
   if !flag(legacy-codd-tools)
     buildable: False
-
   build-depends:
-    , base
-    , codd-extras:ephemeral  >=0.1 && <0.2
-    , keiro-migrations
-    , time
+    base,
+    codd-extras:ephemeral >=0.1 && <0.2,
+    keiro-migrations,
+    time,
 
 test-suite keiro-migrations-test
-  import:         common
-  type:           exitcode-stdio-1.0
-  main-is:        Main.hs
-  other-modules:  Lint
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules: Lint
   hs-source-dirs: test
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   build-depends:
-    , async
-    , base                     >=4.18     && <5
-    , bytestring               >=0.11     && <0.13
-    , containers               >=0.6      && <0.8
-    , directory                >=1.3      && <1.4
-    , ephemeral-pg             >=0.2      && <0.3
-    , filepath                 >=1.4      && <1.6
-    , hasql                    >=1.10     && <1.11
-    , hspec                    >=2.10     && <2.12
-    , keiro-migrations
-    , kiroku-store-migrations  ^>=0.4.0.0
-    , pg-migrate               ^>=1.1.0.0
-    , pg-migrate-import-codd   ^>=1.1.0.0
-    , pg-migrate-test-support  ^>=1.1.0.0
-    , text                     >=2.0      && <2.2
+    async,
+    base >=4.18 && <5,
+    bytestring >=0.11 && <0.13,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    ephemeral-pg >=0.2 && <0.3,
+    filepath >=1.4 && <1.6,
+    hasql >=1.10 && <1.11,
+    hspec >=2.10 && <2.12,
+    keiro-migrations,
+    kiroku-store-migrations ^>=0.4.0.0,
+    pg-migrate ^>=1.1.0.0,
+    pg-migrate-import-codd ^>=1.1.0.0,
+    pg-migrate-test-support ^>=1.1.0.0,
+    text >=2.0 && <2.2,
 
 test-suite keiro-migrations-legacy-test
-  import:         common
-  type:           exitcode-stdio-1.0
-  main-is:        Main.hs
+  import: common
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
   hs-source-dirs: test-legacy
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
 
   if !flag(legacy-codd-tools)
     buildable: False
-
   build-depends:
-    , aeson
-    , async
-    , attoparsec
-    , base                     >=4.18     && <5
-    , codd
-    , codd-extras
-    , containers
-    , contravariant-extras
-    , directory
-    , ephemeral-pg             >=0.2
-    , filepath
-    , generic-lens             >=2.2      && <2.4
-    , hasql                    >=1.10     && <1.11
-    , hasql-pool               >=1.2      && <1.5
-    , hspec                    >=2.10
-    , keiro-migrations
-    , kiroku-store             >=0.8      && <0.9
-    , kiroku-store-migrations  ^>=0.4.0.0
-    , lens                     >=5.2      && <5.4
-    , temporary
-    , text                     >=2.0      && <2.2
-    , time                     >=1.12     && <1.15
-    , vector                   >=0.13     && <0.14
+    aeson,
+    async,
+    attoparsec,
+    base >=4.18 && <5,
+    codd,
+    codd-extras,
+    containers,
+    contravariant-extras,
+    directory,
+    ephemeral-pg >=0.2,
+    filepath,
+    generic-lens >=2.2 && <2.4,
+    hasql >=1.10 && <1.11,
+    hasql-pool >=1.2 && <1.5,
+    hspec >=2.10,
+    keiro-migrations,
+    kiroku-store >=0.8 && <0.9,
+    kiroku-store-migrations ^>=0.4.0.0,
+    lens >=5.2 && <5.4,
+    temporary,
+    text >=2.0 && <2.2,
+    time >=1.12 && <1.15,
+    vector >=0.13 && <0.14,

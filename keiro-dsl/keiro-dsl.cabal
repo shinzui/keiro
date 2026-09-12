@@ -1,21 +1,21 @@
-cabal-version:      3.0
-name:               keiro-dsl
-version:            0.16.0.0
-synopsis:           Typed specification toolchain for keiro services
+cabal-version: 3.0
+name: keiro-dsl
+version: 0.16.0.0
+synopsis: Typed specification toolchain for keiro services
 description:
   keiro-dsl is the toolchain over a typed `.keiro` specification of a keiro
   service: a parser + checker + scaffolder + harness emitter. It emits the
   symbol-free deterministic layer plus typed holes, never a keiki symbolic
   operator (the firewall invariant).
 
-license:            BSD-3-Clause
-license-file:       LICENSE
-author:             Nadeem Bitar
-maintainer:         nadeem@gmail.com
-copyright:          2026 Nadeem Bitar
-category:           Development
-build-type:         Simple
-tested-with:        GHC >=9.12 && <9.13
+license: BSD-3-Clause
+license-file: LICENSE
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+copyright: 2026 Nadeem Bitar
+category: Development
+build-type: Simple
+tested-with: ghc >=9.12 && <9.13
 extra-doc-files:
   CHANGELOG.md
   generated-haskell-edition-idiomatic-v2.md
@@ -37,10 +37,12 @@ extra-source-files:
   test/**/*.txt
 
 common warnings
-  ghc-options: -Wall -Werror=missing-fields
+  ghc-options:
+    -Wall
+    -Werror=missing-fields
 
 common shared
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DuplicateRecordFields
     ImportQualifiedPost
@@ -61,11 +63,11 @@ flag werror-generated
   description:
     Promote warnings in committed generated conformance output to errors
 
-  manual:      True
-  default:     False
+  manual: True
+  default: False
 
 common generated-output
-  default-language:   GHC2024
+  default-language: GHC2024
   default-extensions:
     DuplicateRecordFields
     NoFieldSelectors
@@ -77,24 +79,24 @@ common generated-output
   -- user-maintained and cannot act on Keiro's Haskell API deprecations, so keep
   -- them compilable under the generated-output -Werror gate. Candidate Language
   -- 5 emits the truthful API and does not rely on this compatibility allowance.
-  ghc-options:        -Wno-deprecations
+  ghc-options: -Wno-deprecations
 
   if flag(werror-generated)
     ghc-options: -Werror
 
 library generated-haskell-language-internal
-  import:          warnings, shared
-  visibility:      private
-  hs-source-dirs:  internal
+  import: warnings, shared
+  visibility: private
+  hs-source-dirs: internal
   exposed-modules: Keiro.Dsl.GeneratedHaskellLanguage
   build-depends:
-    , base        >=4.21 && <5
-    , containers  >=0.6  && <0.8
-    , text        >=2.1  && <2.2
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    text >=2.1 && <2.2,
 
 library
-  import:          warnings, shared
-  hs-source-dirs:  src
+  import: warnings, shared
+  hs-source-dirs: src
   autogen-modules: Paths_keiro_dsl
   exposed-modules:
     Keiro.Dsl.AggregateType
@@ -177,44 +179,44 @@ library
     Paths_keiro_dsl
 
   build-depends:
-    , aeson                                          >=2.2.1     && <2.3
-    , base                                           >=4.21      && <5
-    , bytestring                                     >=0.12      && <0.13
-    , containers                                     >=0.6       && <0.8
-    , cryptohash-sha256                              >=0.11.102  && <0.12
-    , directory                                      >=1.3       && <1.4
-    , filepath                                       >=1.4       && <1.6
-    , keiki                                          >=0.9       && <0.10
-    , keiro-core                                     ^>=0.16.0.0
-    , keiro-dsl:generated-haskell-language-internal
-    , megaparsec                                     >=9.6       && <9.9
-    , mmzk-typeid                                    >=0.7       && <0.8
-    , parser-combinators                             >=1.3       && <1.4
-    , prettyprinter                                  >=1.7       && <1.8
-    , text                                           >=2.1       && <2.2
-    , time                                           >=1.12      && <1.15
+    aeson >=2.2.1 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    cryptohash-sha256 >=0.11.102 && <0.12,
+    directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    keiki >=0.9 && <0.10,
+    keiro-core ^>=0.16.0.0,
+    keiro-dsl:generated-haskell-language-internal,
+    megaparsec >=9.6 && <9.9,
+    mmzk-typeid >=0.7 && <0.8,
+    parser-combinators >=1.3 && <1.4,
+    prettyprinter >=1.7 && <1.8,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 executable keiro-dsl
-  import:         warnings, shared
+  import: warnings, shared
   hs-source-dirs: app
-  main-is:        Main.hs
+  main-is: Main.hs
   build-depends:
-    , aeson                 >=2.2  && <2.3
-    , base                  >=4.21 && <5
-    , directory             >=1.3  && <1.4
-    , filepath              >=1.4  && <1.6
-    , keiro-dsl
-    , optparse-applicative  >=0.18 && <0.20
-    , process               >=1.6  && <1.7
-    , text                  >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    keiro-dsl,
+    optparse-applicative >=0.18 && <0.20,
+    process >=1.6 && <1.7,
+    text >=2.1 && <2.2,
 
 test-suite keiro-dsl-test
-  import:             warnings, shared
-  type:               exitcode-stdio-1.0
-  hs-source-dirs:     test
-  main-is:            Main.hs
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
   build-tool-depends: keiro-dsl:keiro-dsl
-  autogen-modules:    Paths_keiro_dsl
+  autogen-modules: Paths_keiro_dsl
   other-modules:
     Keiro.Dsl.ConformanceBaseline
     Keiro.Dsl.FrontendCompatibility
@@ -224,65 +226,71 @@ test-suite keiro-dsl-test
     Paths_keiro_dsl
 
   build-depends:
-    , aeson                                          >=2.2       && <2.3
-    , base                                           >=4.21      && <5
-    , bytestring                                     >=0.12      && <0.13
-    , containers                                     >=0.6       && <0.8
-    , directory                                      >=1.3       && <1.4
-    , filepath                                       >=1.4       && <1.6
-    , hspec                                          >=2.11
-    , keiki                                          >=0.9       && <0.10
-    , keiro-core                                     ^>=0.16.0.0
-    , keiro-dsl
-    , keiro-dsl:generated-haskell-language-internal
-    , mmzk-typeid                                    >=0.7       && <0.8
-    , process                                        >=1.6       && <1.7
-    , QuickCheck                                     >=2.14
-    , text                                           >=2.1       && <2.2
+    QuickCheck >=2.14,
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    hspec >=2.11,
+    keiki >=0.9 && <0.10,
+    keiro-core ^>=0.16.0.0,
+    keiro-dsl,
+    keiro-dsl:generated-haskell-language-internal,
+    mmzk-typeid >=0.7 && <0.8,
+    process >=1.6 && <1.7,
+    text >=2.1 && <2.2,
 
 test-suite keiro-dsl-import-planning-test
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: test/import-planning src
-  main-is:        Main.hs
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs:
+    test/import-planning
+    src
+
+  main-is: Main.hs
   other-modules:
     Keiro.Dsl.HaskellImport
     Keiro.Dsl.HaskellName
 
   build-depends:
-    , base        >=4.21 && <5
-    , containers  >=0.6  && <0.8
-    , hspec       >=2.11
-    , text        >=2.1  && <2.2
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    hspec >=2.11,
+    text >=2.1 && <2.2,
 
 test-suite keiro-dsl-haskell-name-test
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: test/haskell-name src
-  main-is:        Main.hs
-  other-modules:  Keiro.Dsl.HaskellName
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs:
+    test/haskell-name
+    src
+
+  main-is: Main.hs
+  other-modules: Keiro.Dsl.HaskellName
   build-depends:
-    , base        >=4.21 && <5
-    , containers  >=0.6  && <0.8
-    , hspec       >=2.11
-    , QuickCheck  >=2.14
-    , text        >=2.1  && <2.2
+    QuickCheck >=2.14,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    hspec >=2.11,
+    text >=2.1 && <2.2,
 
 -- Plan 199: keiro-dsl validates specs without depending on the keiro runtime
 -- package, so a few runtime vocabularies are restated in Keiro.Dsl.Validate.
 -- This suite depends on both packages and fails when a restatement drifts from
 -- the definition it mirrors.
 test-suite keiro-dsl-runtime-vocabulary-test
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
+  import: warnings, shared
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/runtime-vocabulary
-  main-is:        Main.hs
+  main-is: Main.hs
   build-depends:
-    , base          >=4.21 && <5
-    , keiro
-    , keiro-dsl
-    , shibuya-core
-    , text          >=2.1  && <2.2
+    base >=4.21 && <5,
+    keiro,
+    keiro-dsl,
+    shibuya-core,
+    text >=2.1 && <2.2,
 
 -- Conformance: proves the scaffolded Generated modules plus a hand-filled
 -- Holes.hs compile against keiki/keiro and that the filled transducer passes
@@ -290,10 +298,10 @@ test-suite keiro-dsl-runtime-vocabulary-test
 -- test/conformance/ are byte-identical to `keiro-dsl scaffold` output (pinned
 -- by the scaffold-conformance test in keiro-dsl-test).
 test-suite keiro-dsl-conformance
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
@@ -308,21 +316,21 @@ test-suite keiro-dsl-conformance
     HospitalCapacity.Reservation.Holes
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- Plan 157: compiled direct Time/Natural aggregate fields and registers,
 -- symbolic equality/ordering, codecs, snapshots, forward/replay equality,
 -- Natural JSON boundaries, canonical identity, and opaque arithmetic audit.
 test-suite keiro-dsl-conformance-aggregate-scalars
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-aggregate-scalars
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     AggregateScalars.ScalarLedger.Holes
     Generated.AggregateScalars.BehaviorSourceMap
@@ -335,21 +343,21 @@ test-suite keiro-dsl-conformance-aggregate-scalars
     Generated.AggregateScalars.ScalarLedger.Transducer
 
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , keiki  >=0.9  && <0.10
-    , keiro
-    , text   >=2.1  && <2.2
-    , time   >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 -- Plan 161: compiled authoritative version-2 scalar expressions, generated
 -- transition ownership, explicit Hole opacity/fold identity, and concrete,
 -- symbolic, codec-replay, and snapshot-invalidation agreement.
 test-suite keiro-dsl-conformance-aggregate-scalar-expressions
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-scalar-expressions
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     AggregateScalarExpressions.ScalarAccount.BehaviorHoles
     AggregateScalarExpressions.ScalarAccount.Holes
@@ -371,20 +379,20 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     ScalarExpressions.Domain
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , containers  >=0.6  && <0.8
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , keiro-dsl
-    , text        >=2.1  && <2.2
-    , time        >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-dsl,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 test-suite keiro-dsl-conformance-behavior-complete
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-behavior-complete
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     BehaviorComplete.Bindings
     BehaviorComplete.Domain
@@ -406,20 +414,20 @@ test-suite keiro-dsl-conformance-behavior-complete
     Generated.BehaviorComplete.StructuralProjections
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , containers  >=0.6  && <0.8
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , text        >=2.1  && <2.2
-    , time        >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 test-suite keiro-dsl-conformance-domain-outcomes
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-domain-outcomes
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     DomainOutcomes.Reservation.BehaviorHoles
     Generated.DomainOutcomes.BehaviorSourceMap
@@ -434,20 +442,20 @@ test-suite keiro-dsl-conformance-domain-outcomes
     Generated.DomainOutcomes.Reservation.Transducer
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , containers  >=0.6  && <0.8
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- EP-158: consumer-owned direct IDs, enums, and nominal scalar wrappers,
 -- checked KindID decoding, total bindings, projections, and snapshot caches.
 test-suite keiro-dsl-conformance-nominal-scalars
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-nominal-scalars
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.NominalScalars.BehaviorSourceMap
     Generated.NominalScalars.Nominal.Shape.OrderStatus
@@ -465,24 +473,24 @@ test-suite keiro-dsl-conformance-nominal-scalars
     NominalScalars.NominalLedger.BehaviorHoles
 
   build-depends:
-    , aeson        >=2.2  && <2.3
-    , base         >=4.21 && <5
-    , containers   >=0.6  && <0.8
-    , keiki        >=0.9  && <0.10
-    , keiro
-    , mmzk-typeid  >=0.7  && <0.8
-    , text         >=2.1  && <2.2
-    , time         >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    mmzk-typeid >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 -- EP-168 / IR-2: one workspace-level generated ID/enum authority is imported
 -- by two aggregate rings. The driver passes values between both domain modules
 -- and round-trips both generated event codecs, so duplicate nominal types fail
 -- at compile time rather than escaping a path-only scaffold assertion.
 test-suite keiro-dsl-conformance-workspace-nominals
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workspace-nominals
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.WorkspaceNominalProof.BehaviorSourceMap
     Generated.WorkspaceNominalProof.Nominals
@@ -506,21 +514,21 @@ test-suite keiro-dsl-conformance-workspace-nominals
     WorkspaceNominalProof.ProjectArtifact.BehaviorHoles
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , containers  >=0.6  && <0.8
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- Plan 150 / IR-1: compiled structural consumer bindings, declared-wire
 -- codecs, generated projection witnesses, opaque boundaries, fixture branch
 -- coverage, current payload goldens, and mapped-register replay equality.
 test-suite keiro-dsl-conformance-structural
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-structural
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Conformance.Structural.Bindings
     Conformance.Structural.Domain
@@ -542,23 +550,23 @@ test-suite keiro-dsl-conformance-structural
     StructuralConformance.ArtifactCatalog.Holes
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , containers  >=0.6  && <0.8
-    , deepseq     >=1.5  && <1.6
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , text        >=2.1  && <2.2
-    , time        >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    deepseq >=1.5 && <1.6,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural
 -- codec authority while preserving the queue schema-version-1 envelope.
 test-suite keiro-dsl-conformance-mapped-queue
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-mapped-queue
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Conformance.MappedQueue.Bindings
     Conformance.MappedQueue.Domain
@@ -571,22 +579,22 @@ test-suite keiro-dsl-conformance-mapped-queue
     Generated.MappedQueue.StructuralProjections
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , keiro-core
-    , keiro-dsl
-    , keiro-pgmq
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    text >=2.1 && <2.2,
 
 -- Plan 225: candidate language-5 read-model input/result expressions lower to
 -- generated mapped domain aliases while SQL and query bodies remain hand-owned.
 test-suite keiro-dsl-conformance-mapped-readmodel
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-mapped-readmodel
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Conformance.MappedReadModel.Bindings
     Conformance.MappedReadModel.Domain
@@ -606,22 +614,22 @@ test-suite keiro-dsl-conformance-mapped-readmodel
     MappedReadmodel.ProjectionCatalog.ProjectionCatalogHoles
 
   build-depends:
-    , base               >=4.21 && <5
-    , effectful-core
-    , hasql-transaction
-    , keiki              >=0.9  && <0.10
-    , keiro
-    , keiro-dsl
-    , kiroku-store
-    , text               >=2.1  && <2.2
+    base >=4.21 && <5,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-dsl,
+    kiroku-store,
+    text >=2.1 && <2.2,
 
 -- Plan 184: colliding consumer type occurrences, local-name conflicts, and
 -- repeated binding/shape references compile with deterministic short aliases.
 test-suite keiro-dsl-conformance-import-planning
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-import-planning
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.ImportPlanningCollisions.BehaviorSourceMap
     Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract
@@ -644,25 +652,26 @@ test-suite keiro-dsl-conformance-import-planning
     ImportPlanningCollisions.CollisionLedger.BehaviorHoles
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , containers  >=0.6  && <0.8
-    , keiki       >=0.9  && <0.10
-    , keiro
-    , text        >=2.1  && <2.2
-    , time        >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 -- Plan 152 / Experiment B: a consumer-owned historical codec and finite JSON
 -- corpus compared with the generated structural codec. The comparison module
 -- is opt-in tooling output and is not part of the production scaffold record.
 test-suite keiro-dsl-conformance-codec-compare
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs:
-    test/conformance-codec-compare test/conformance-structural
+    test/conformance-codec-compare
+    test/conformance-structural
 
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Conformance.CodecCompare.Historical
     Conformance.Structural.Bindings
@@ -676,26 +685,26 @@ test-suite keiro-dsl-conformance-codec-compare
     Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
 
   build-depends:
-    , aeson       >=2.2.1 && <2.3
-    , base        >=4.21  && <5
-    , containers  >=0.6   && <0.8
-    , deepseq     >=1.5   && <1.6
-    , directory   >=1.3   && <1.4
-    , filepath    >=1.4   && <1.6
-    , keiki       >=0.9   && <0.10
-    , keiro
-    , keiro-dsl
-    , text        >=2.1   && <2.2
+    aeson >=2.2.1 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    deepseq >=1.5 && <1.6,
+    directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-dsl,
+    text >=2.1 && <2.2,
 
 -- Plan 147 M2: a dedicated honest-wire baseline plus a dormant idempotent
 -- dishonest WireCtor used by replay-mutation-test.sh to prove that generated
 -- forward/replay register comparisons catch state divergence missed by the
 -- pre-existing validator, codec round-trip, and accept assertions.
 test-suite keiro-dsl-conformance-replay
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-replay
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.ReplayDivergence.BehaviorSourceMap
     Generated.ReplayDivergence.Note.Codec
@@ -708,17 +717,20 @@ test-suite keiro-dsl-conformance-replay
     ReplayDivergence.Note.Holes
 
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , keiki  >=0.9  && <0.10
-    , keiro
-    , text   >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 benchmark keiro-dsl-codec-bench
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
-  hs-source-dirs: bench/structural-codec test/conformance-structural
-  main-is:        Main.hs
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs:
+    bench/structural-codec
+    test/conformance-structural
+
+  main-is: Main.hs
   other-modules:
     Conformance.Structural.Bindings
     Conformance.Structural.Domain
@@ -730,37 +742,37 @@ benchmark keiro-dsl-codec-bench
     Generated.StructuralConformance.Structural.Shape.ArtifactMetadata
 
   build-depends:
-    , aeson        >=2.2  && <2.3
-    , base         >=4.21 && <5
-    , containers   >=0.6  && <0.8
-    , deepseq      >=1.5  && <1.6
-    , keiki        >=0.9  && <0.10
-    , keiro
-    , tasty-bench  >=0.5  && <0.6
-    , text         >=2.1  && <2.2
-    , time         >=1.12 && <1.15
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    deepseq >=1.5 && <1.6,
+    keiki >=0.9 && <0.10,
+    keiro,
+    tasty-bench >=0.5 && <0.6,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 benchmark keiro-dsl-parser-bench
-  import:         warnings, shared
-  type:           exitcode-stdio-1.0
+  import: warnings, shared
+  type: exitcode-stdio-1.0
   hs-source-dirs: bench/parser-scaling
-  main-is:        Main.hs
+  main-is: Main.hs
   build-depends:
-    , base         >=4.21 && <5
-    , containers   >=0.6  && <0.8
-    , deepseq      >=1.5  && <1.6
-    , keiro-dsl
-    , tasty-bench  >=0.5  && <0.6
-    , text         >=2.1  && <2.2
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    deepseq >=1.5 && <1.6,
+    keiro-dsl,
+    tasty-bench >=0.5 && <0.6,
+    text >=2.1 && <2.2,
 
 -- EP-109 M2: snapshot-enabled aggregate scaffolding compiled against the live
 -- defaultStateCodec and stream-construction guards, with the captured codec
 -- identity checked against keiki's regFileShapeHash.
 test-suite keiro-dsl-conformance-snapshot
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-snapshot
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
@@ -773,11 +785,11 @@ test-suite keiro-dsl-conformance-snapshot
     HospitalCapacity.Reservation.Holes
 
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , keiki  >=0.9  && <0.10
-    , keiro
-    , text   >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- EP-106 M6: every distinct `new <kind>` skeleton is scaffolded into this
 -- committed tree. Compiling the union proves a starter that passes `check`
@@ -791,11 +803,14 @@ test-suite keiro-dsl-conformance-snapshot
 -- warning class remains an error, and the generated modules in this suite are
 -- held to the same standard as the rest of the corpus.
 test-suite keiro-dsl-conformance-skeletons
-  import:         warnings, generated-output
-  ghc-options:    -Wno-error=unused-imports -Wno-error=unused-matches
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  ghc-options:
+    -Wno-error=unused-imports
+    -Wno-error=unused-matches
+
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-skeletons
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     SkelAggregate.Generated.MyService.Nominals
     SkelAggregate.Generated.MyService.Nominals.Internal
@@ -860,30 +875,30 @@ test-suite keiro-dsl-conformance-skeletons
     SkelWorkflow.Generated.MyService.HospitalTransferReservation.WorkflowRuntime
 
   build-depends:
-    , aeson              >=2.2  && <2.3
-    , base               >=4.21 && <5
-    , containers
-    , effectful-core
-    , hasql-transaction
-    , keiki              >=0.9  && <0.10
-    , keiro
-    , keiro-core
-    , keiro-pgmq
-    , kiroku-store
-    , mmzk-typeid        >=0.7  && <0.8
-    , shibuya-core
-    , text               >=2.1  && <2.2
-    , time
-    , uuid
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-pgmq,
+    kiroku-store,
+    mmzk-typeid >=0.7 && <0.8,
+    shibuya-core,
+    text >=2.1 && <2.2,
+    time,
+    uuid,
 
 -- EP-7 cold-start: a fresh `subscription` aggregate authored from only the skill
 -- notation, scaffolded + hand-filled, compiling against keiki/keiro with a green
 -- spec-derived harness — proof the authoring loop closes on a non-corpus spec.
 test-suite keiro-dsl-conformance-coldstart
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-coldstart
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Billing.Subscription.Holes
     Generated.Billing.BehaviorSourceMap
@@ -898,136 +913,136 @@ test-suite keiro-dsl-conformance-coldstart
     Generated.Billing.Subscription.Transducer
 
   build-depends:
-    , aeson  >=2.2  && <2.3
-    , base   >=4.21 && <5
-    , keiki  >=0.9  && <0.10
-    , keiro
-    , text   >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- Stable language-4 contract conformance: prefix-indexed KindID fields,
 -- canonical text JSON, field-path-aware rejection, and the complete generated
 -- dependency set.
 test-suite keiro-dsl-conformance-contract
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-contract
-  main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.Emergency.Contract
+  main-is: Main.hs
+  other-modules: Generated.HospitalCapacity.Emergency.Contract
   build-depends:
-    , aeson        >=2.2  && <2.3
-    , base         >=4.21 && <5
-    , keiro-core
-    , mmzk-typeid  >=0.7  && <0.8
-    , text         >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiro-core,
+    mmzk-typeid >=0.7 && <0.8,
+    text >=2.1 && <2.2,
 
 -- Language-1 compatibility proof: the historical permissive Text contract DTO
 -- still accepts pre-TypeID-v7 samples and retains its released JSON image.
 test-suite keiro-dsl-conformance-contract-v1-compat
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-contract-v1-compat
-  main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.Emergency.Contract
+  main-is: Main.hs
+  other-modules: Generated.HospitalCapacity.Emergency.Contract
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , bytestring  >=0.12 && <0.13
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    text >=2.1 && <2.2,
 
 -- EP-4 intake runtime conformance: the scaffolded Inbox disposition + dedupe
 -- policy compiled against the LIVE Keiro.Inbox.Types (InboxResult / dedupe).
 test-suite keiro-dsl-conformance-intake-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-intake-runtime
-  main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.IncidentInbox.Inbox
+  main-is: Main.hs
+  other-modules: Generated.HospitalCapacity.IncidentInbox.Inbox
   build-depends:
-    , base   >=4.21 && <5
-    , keiro
-    , text   >=2.1  && <2.2
+    base >=4.21 && <5,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- EP-4 M5 full-service conformance: a complete integration service — scaffolded
 -- inbox dedupe + a filled inbox transaction runner and outbox IntegrationProducer
 -- — compiled against the live keiro runtime (Inbox / Outbox / Kiroku.Store).
 test-suite keiro-dsl-conformance-intake-full
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-intake-full
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.IncidentInbox.Inbox
     HospitalCapacity.IncidentInbox.Integration
 
   build-depends:
-    , base               >=4.21 && <5
-    , effectful-core
-    , hasql-transaction
-    , keiro
-    , kiroku-store       >=0.8  && <0.9
-    , text               >=2.1  && <2.2
+    base >=4.21 && <5,
+    effectful-core,
+    hasql-transaction,
+    keiro,
+    kiroku-store >=0.8 && <0.9,
+    text >=2.1 && <2.2,
 
 -- EP-4 publisher runtime conformance: the scaffolded Publisher config compiled
 -- against the LIVE Keiro.Outbox.Types (OrderingPolicy / BackoffSchedule).
 test-suite keiro-dsl-conformance-publisher-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-publisher-runtime
-  main-is:        Main.hs
-  other-modules:  Generated.HospitalCapacity.HospitalPublisher.Publisher
+  main-is: Main.hs
+  other-modules: Generated.HospitalCapacity.HospitalPublisher.Publisher
   build-depends:
-    , base   >=4.21 && <5
-    , keiro
+    base >=4.21 && <5,
+    keiro,
 
 -- pgmq Job codec conformance (EP-5): the scaffolded self-contained Job payload
 -- record + field->wire codec, compiled + round-tripped.
 test-suite keiro-dsl-conformance-queue
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-queue
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.ReservationWork.Queue
     Generated.HospitalCapacity.ReservationWork.QueueCodec
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , keiro-core
-    , keiro-pgmq
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiro-core,
+    keiro-pgmq,
+    text >=2.1 && <2.2,
 
 -- EP-5 pgmq runtime conformance: the scaffolded QueuePolicy (RetryPolicy +
 -- JobOutcome disposition) compiled against the LIVE Keiro.PGMQ.Job runtime.
 test-suite keiro-dsl-conformance-queue-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-queue-runtime
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.ReservationWork.Queue
     Generated.HospitalCapacity.ReservationWork.QueueCodec
     Generated.HospitalCapacity.ReservationWork.QueuePolicy
 
   build-depends:
-    , aeson        >=2.2  && <2.3
-    , base         >=4.21 && <5
-    , bytestring   >=0.12 && <0.13
-    , keiro-core
-    , keiro-dsl
-    , keiro-pgmq
-    , pgmq-config
-    , pgmq-core
-    , text         >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    pgmq-config,
+    pgmq-core,
+    text >=2.1 && <2.2,
 
 -- EP-107 read-model runtime conformance: the scaffolded ReadModel record,
 -- registration/rebuild helpers, AsyncProjection, facts harness, and a filled
 -- qualified-table query compiled against the live Keiro.ReadModel API.
 test-suite keiro-dsl-conformance-readmodel-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-readmodel-runtime
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.TransferDecisions.ReadModel
     Generated.HospitalCapacity.TransferDecisions.ReadModelHarness
@@ -1035,29 +1050,29 @@ test-suite keiro-dsl-conformance-readmodel-runtime
     HospitalCapacity.TransferDecisions.ReadModelHoles
 
   build-depends:
-    , base               >=4.21 && <5
-    , effectful-core
-    , hasql-transaction
-    , keiro
-    , kiroku-store
-    , text               >=2.1  && <2.2
+    base >=4.21 && <5,
+    effectful-core,
+    hasql-transaction,
+    keiro,
+    kiroku-store,
+    text >=2.1 && <2.2,
 
 -- MasterPlan 32 / EP-4: language-5 catalog declarations lower into one
 -- generated runtime-owned facade with typed inline views, catalog-derived
 -- async/query registration, and a group-scoped history-runner entry point.
 test-suite keiro-dsl-conformance-projection-catalog
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-projection-catalog
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     CatalogDemo.CatalogAudit.ReadModelHoles
     CatalogDemo.MappedBindings
     CatalogDemo.MappedDomain
     CatalogDemo.OrderInline.ReadModelHoles
+    CatalogDemo.OrderTotalsLookup.ReadModelHoles
     CatalogDemo.Orders.BehaviorHoles
     CatalogDemo.Orders.Holes
-    CatalogDemo.OrderTotalsLookup.ReadModelHoles
     CatalogDemo.ProjectionCatalog.ProjectionCatalogHoles
     CatalogDemo.ShipmentLookup.ReadModelHoles
     CatalogDemo.Shipments.BehaviorHoles
@@ -1069,6 +1084,9 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.OrderInline.ReadModel
     Generated.CatalogDemo.OrderInline.ReadModelHarness
     Generated.CatalogDemo.OrderInline.ReadModelTable
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModel
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness
+    Generated.CatalogDemo.OrderTotalsLookup.ReadModelTable
     Generated.CatalogDemo.Orders.BehaviorContract
     Generated.CatalogDemo.Orders.Codec
     Generated.CatalogDemo.Orders.Domain
@@ -1076,9 +1094,6 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.Orders.Harness
     Generated.CatalogDemo.Orders.Projection
     Generated.CatalogDemo.Orders.Transducer
-    Generated.CatalogDemo.OrderTotalsLookup.ReadModel
-    Generated.CatalogDemo.OrderTotalsLookup.ReadModelHarness
-    Generated.CatalogDemo.OrderTotalsLookup.ReadModelTable
     Generated.CatalogDemo.ProjectionCatalog
     Generated.CatalogDemo.QualificationJobs.Queue
     Generated.CatalogDemo.QualificationJobs.QueueCodec
@@ -1099,27 +1114,27 @@ test-suite keiro-dsl-conformance-projection-catalog
     Generated.CatalogDemo.StructuralProjections
 
   build-depends:
-    , aeson              >=2.2  && <2.3
-    , base               >=4.21 && <5
-    , containers         >=0.6  && <0.8
-    , effectful-core
-    , hasql-transaction
-    , keiki              >=0.9  && <0.10
-    , keiro
-    , keiro-core
-    , keiro-dsl
-    , keiro-pgmq
-    , kiroku-store
-    , text               >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    kiroku-store,
+    text >=2.1 && <2.2,
 
 -- EP-5 M5 full-service conformance: a complete pgmq dispatch service — scaffolded
 -- Job codec + retry policy + a filled worker handler assembled into a live
 -- Keiro.PGMQ.Job.Job value — compiled against keiro-pgmq.
 test-suite keiro-dsl-conformance-dispatch-full
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-dispatch-full
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.ReservationWork.Queue
     Generated.HospitalCapacity.ReservationWork.QueueCodec
@@ -1127,55 +1142,59 @@ test-suite keiro-dsl-conformance-dispatch-full
     HospitalCapacity.ReservationWork.WorkqueueJob
 
   build-depends:
-    , aeson           >=2.2  && <2.3
-    , base            >=4.21 && <5
-    , effectful-core
-    , keiro-core
-    , keiro-pgmq
-    , text            >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    effectful-core,
+    keiro-core,
+    keiro-pgmq,
+    text >=2.1 && <2.2,
 
 -- Workflow facts harness (EP-6): the scaffolded self-contained WorkflowFacts
 -- module asserted against a hand-written expectation (mutation-pinnable).
 test-suite keiro-dsl-conformance-workflow
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.HospitalTransferReservation.WorkflowFacts
 
-  build-depends:  base >=4.21 && <5
+  build-depends: base >=4.21 && <5
 
 -- Workflow runtime conformance: the scaffolded WorkflowRuntime allocates its
 -- declared await through the live Keiro.Workflow effect and exercises the
 -- returned opaque id against PostgreSQL.
 test-suite keiro-dsl-conformance-workflow-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow-runtime
-  main-is:        Main.hs
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   other-modules:
     Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime
 
   build-depends:
-    , aeson               >=2.2  && <2.3
-    , base                >=4.21 && <5
-    , containers
-    , effectful-core
-    , keiro
-    , keiro-test-support
-    , kiroku-store
-    , text                >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers,
+    effectful-core,
+    keiro,
+    keiro-test-support,
+    kiroku-store,
+    text >=2.1 && <2.2,
 
 -- EP-3 M5 full-service conformance: a complete process service — the scaffolded
 -- Surge (saga) + Hospital (target) aggregates with filled transducers, plus a
 -- filled ProcessManager handle — compiled against the live keiro/keiki runtime.
 test-suite keiro-dsl-conformance-process-full
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process-full
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.SurgeDemo.BehaviorSourceMap
     Generated.SurgeDemo.Hospital.Codec
@@ -1197,44 +1216,44 @@ test-suite keiro-dsl-conformance-process-full
     SurgeDemo.SurgeFlow.Manager
 
   build-depends:
-    , aeson         >=2.2  && <2.3
-    , base          >=4.21 && <5
-    , keiki         >=0.9  && <0.10
-    , keiro
-    , shibuya-core
-    , text          >=2.1  && <2.2
-    , time          >=1.12 && <1.15
-    , uuid          >=1.3  && <1.4
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    shibuya-core,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    uuid >=1.3 && <1.4,
 
 -- EP-6 M5 full-service conformance: a complete durable workflow — scaffolded
 -- WorkflowRuntime + a filled ordered step/await body — compiled against the
 -- live Keiro.Workflow effect.
 test-suite keiro-dsl-conformance-workflow-full
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-workflow-full
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.HospitalTransferReservation.WorkflowRuntime
     HospitalCapacity.HospitalTransferReservation.WorkflowBody
 
   build-depends:
-    , aeson           >=2.2  && <2.3
-    , base            >=4.21 && <5
-    , containers
-    , effectful-core
-    , keiro
-    , kiroku-store
-    , text            >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers,
+    effectful-core,
+    keiro,
+    kiroku-store,
+    text >=2.1 && <2.2,
 
 -- EP-3 process runtime conformance: the scaffolded Process module's
 -- deterministic wiring (timer-request builder + fire disposition) compiled
 -- against the LIVE keiro runtime (Keiro.Timer / Keiro.Command), not just text.
 test-suite keiro-dsl-conformance-process-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process-runtime
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.HospitalSurge.Process
@@ -1247,44 +1266,48 @@ test-suite keiro-dsl-conformance-process-runtime
     HospitalCapacity.Surge.Holes
 
   build-depends:
-    , aeson         >=2.2  && <2.3
-    , base          >=4.21 && <5
-    , keiki         >=0.9  && <0.10
-    , keiro
-    , keiro-dsl
-    , shibuya-core
-    , text          >=2.1  && <2.2
-    , time          >=1.12 && <1.15
-    , uuid          >=1.3  && <1.4
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-dsl,
+    shibuya-core,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    uuid >=1.3 && <1.4,
 
 -- EP-108 router runtime conformance: generated policy lowering and the live
 -- target-keyed deterministic id contract.
 test-suite keiro-dsl-conformance-router-runtime
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router-runtime
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.IncidentPaging.BehaviorSourceMap
     Generated.IncidentPaging.PagingRouter.Router
     Generated.IncidentPaging.PagingRouter.RouterHarness
 
   build-depends:
-    , base          >=4.21 && <5
-    , keiro
-    , kiroku-store
-    , shibuya-core
-    , text          >=2.1  && <2.2
-    , uuid          >=1.3  && <1.4
+    base >=4.21 && <5,
+    keiro,
+    kiroku-store,
+    shibuya-core,
+    text >=2.1 && <2.2,
+    uuid >=1.3 && <1.4,
 
 -- Plan 230: the checked language-5 selection is generated, compiled against
 -- the public runtime, and exercised through a real read-model query and ledger.
 test-suite keiro-dsl-conformance-declarative-router
-  import:         generated-output
-  type:           exitcode-stdio-1.0
+  import: generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-declarative-router
-  main-is:        Main.hs
-  ghc-options:    -threaded -rtsopts -with-rtsopts=-N
+  main-is: Main.hs
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
   other-modules:
     Conformance.DeclarativeRouter.Bindings
     Conformance.DeclarativeRouter.Domain
@@ -1313,45 +1336,45 @@ test-suite keiro-dsl-conformance-declarative-router
     TransferRouting.ProjectionCatalog.ProjectionCatalogHoles
 
   build-depends:
-    , aeson               >=2.2      && <2.3
-    , base                >=4.21     && <5
-    , bytestring          >=0.11     && <0.13
-    , containers          >=0.6      && <0.8
-    , effectful-core
-    , hasql               >=1.10     && <1.11
-    , hasql-transaction   >=1.1      && <1.3
-    , keiki               >=0.9      && <0.10
-    , keiro
-    , keiro-dsl
-    , keiro-test-support
-    , kiroku-store        >=0.8      && <0.9
-    , shibuya-core        ^>=0.9.0.0
-    , text                >=2.1      && <2.2
-    , time                >=1.12     && <1.15
-    , uuid                >=1.3      && <1.4
-    , vector              >=0.13     && <0.14
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.11 && <0.13,
+    containers >=0.6 && <0.8,
+    effectful-core,
+    hasql >=1.10 && <1.11,
+    hasql-transaction >=1.1 && <1.3,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-dsl,
+    keiro-test-support,
+    kiroku-store >=0.8 && <0.9,
+    shibuya-core ^>=0.9.0.0,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+    uuid >=1.3 && <1.4,
+    vector >=0.13 && <0.14,
 
 -- EP-108 generated router-facts harness with hand-written expectations.
 test-suite keiro-dsl-conformance-router
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.IncidentPaging.BehaviorSourceMap
     Generated.IncidentPaging.PagingRouter.RouterHarness
 
   build-depends:
-    , base  >=4.21 && <5
-    , text  >=2.1  && <2.2
+    base >=4.21 && <5,
+    text >=2.1 && <2.2,
 
 -- EP-108 filled-router conformance: scaffolded Page aggregate plus a filled
 -- resolver and Router value compiled against the live API.
 test-suite keiro-dsl-conformance-router-full
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-router-full
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.IncidentPaging.BehaviorSourceMap
     Generated.IncidentPaging.Page.Codec
@@ -1365,23 +1388,23 @@ test-suite keiro-dsl-conformance-router-full
     IncidentPaging.PagingRouter.RouterValue
 
   build-depends:
-    , aeson           >=2.2  && <2.3
-    , base            >=4.21 && <5
-    , effectful-core
-    , keiki           >=0.9  && <0.10
-    , keiro
-    , shibuya-core
-    , text            >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    effectful-core,
+    keiki >=0.9 && <0.10,
+    keiro,
+    shibuya-core,
+    text >=2.1 && <2.2,
 
 -- MP-15/EP-110 M6 cold-start: a fresh agent, given only the authoring skill
 -- and feature sentence, produced this aggregate + readmodel + router service.
 -- The component compiles generated output and hand-owned fills together and
 -- runs the aggregate, readmodel, router-policy, and live Router assertions.
 test-suite keiro-dsl-conformance-newsurface
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-newsurface
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.TransferRouting.BehaviorSourceMap
     Generated.TransferRouting.Conformance
@@ -1403,15 +1426,15 @@ test-suite keiro-dsl-conformance-newsurface
     TransferRouting.HospitalTransferRouter.RouterValue
 
   build-depends:
-    , aeson              >=2.2  && <2.3
-    , base               >=4.21 && <5
-    , effectful-core
-    , hasql-transaction
-    , keiki              >=0.9  && <0.10
-    , keiro
-    , kiroku-store
-    , shibuya-core
-    , text               >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    kiroku-store,
+    shibuya-core,
+    text >=2.1 && <2.2,
 
 -- Process-manager facts harness (EP-3 M4): the self-contained, firewall-clean
 -- ProcessHarness module scaffolded from hospital-surge.keiro, compiled + run to
@@ -1419,17 +1442,17 @@ test-suite keiro-dsl-conformance-newsurface
 -- faithfully. (The runtime-coupled Process/ProcessHoles modules are emitted to
 -- disk but not in this component; their live conformance is the M5 step.)
 test-suite keiro-dsl-conformance-process
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-process
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.HospitalSurge.ProcessHarness
 
   build-depends:
-    , base  >=4.21 && <5
-    , text  >=2.1  && <2.2
+    base >=4.21 && <5,
+    text >=2.1 && <2.2,
 
 -- Conformance for the evolved (v2) Reservation aggregate: proves the scaffolded
 -- Codec schemaVersion=2 + upcasters wiring compiles and that the filled upcaster
@@ -1437,10 +1460,10 @@ test-suite keiro-dsl-conformance-process
 -- assertion). These sources are raw `keiro-dsl scaffold` output of
 -- reservation-v2.keiro plus a hand-filled Holes.hs.
 test-suite keiro-dsl-conformance-v2
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-v2
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.HospitalCapacity.BehaviorSourceMap
     Generated.HospitalCapacity.Nominals
@@ -1455,21 +1478,21 @@ test-suite keiro-dsl-conformance-v2
     HospitalCapacity.Reservation.Holes
 
   build-depends:
-    , aeson      >=2.2  && <2.3
-    , base       >=4.21 && <5
-    , directory  >=1.3  && <1.4
-    , keiki      >=0.9  && <0.10
-    , keiro
-    , text       >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    directory >=1.3 && <1.4,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
 
 -- IR-14 / EP-171 migration conformance. The generated v3 public ID surface
 -- rejects malformed current input while its explicitly internal event-replay
 -- seam preserves identical malformed text from a legacy payload.
 test-suite keiro-dsl-conformance-id-domain-migration
-  import:         warnings, generated-output
-  type:           exitcode-stdio-1.0
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
   hs-source-dirs: test/conformance-id-domain-migration
-  main-is:        Main.hs
+  main-is: Main.hs
   other-modules:
     Generated.IdDomainMigration.BehaviorSourceMap
     Generated.IdDomainMigration.Nominals
@@ -1478,8 +1501,8 @@ test-suite keiro-dsl-conformance-id-domain-migration
     Generated.IdDomainMigration.OrderBook.Domain
 
   build-depends:
-    , aeson       >=2.2  && <2.3
-    , base        >=4.21 && <5
-    , keiki       >=0.9  && <0.10
-    , keiro-core
-    , text        >=2.1  && <2.2
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro-core,
+    text >=2.1 && <2.2,
