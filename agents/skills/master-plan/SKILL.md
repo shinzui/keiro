@@ -104,7 +104,7 @@ The rules that keep this metadata trustworthy:
 
 **Never hand-edit the `provenance` block, and never delete, reorder, or rewrite an existing entry.** The script only appends, so any number of models can review the same MasterPlan without clobbering one another's records. Running the same command twice in one day is a no-op unless you pass `--allow-duplicate`.
 
-**Identify yourself with the exact model identifier your harness reports** — for example `claude-opus-5`, `claude-sonnet-5`, `gpt-5-codex` — not a family name or a friendly label. Pass `--harness` when you know it (`claude-code`, `codex-cli`, `seihou-agent`). If no identifier is available to you, pass `--model unknown` rather than guessing.
+**Resolve your exact runtime model before writing provenance.** Read and follow `agents/skills/exec-plan/PROVENANCE.md`, the shared Codex and Claude Code discovery procedure. A missing ID in your prompt is not enough to declare it unavailable. All writing scripts accept a verified `--model` or a session-file adapter; `unknown` requires `--allow-unknown` and `--unknown-reason`, which is saved in the entry. Never infer identity from configured defaults or another agent. Recheck after model switches and record each contributing model's own entry.
 
 **Plans created before provenance existed have no `provenance` block.** That is expected, not a defect. Record your own entry when you touch such a plan; the script adds the block containing only your entry. Never invent a `created_by` record for work you did not do.
 
@@ -136,7 +136,7 @@ Create a new MasterPlan and all its child ExecPlans. The remaining arguments des
     bun agents/skills/master-plan/init-masterplan.ts --title "<initiative title>" --model <your-model-id> [--harness <name>] [--intention <id>]
     ```
 
-    Always pass `--model` with your own model identifier so the MasterPlan records who authored it (see Provenance); add `--harness` when you know which harness you are running in. The script prints the created file path to stdout. Read the file back and flesh out the prose sections (Vision & Scope, Decomposition Strategy, Dependency Graph, Integration Points). Leave the living-document sections empty for now, except the Decision Log which records the initial decomposition decisions.
+    Always supply your own verified identity using `--model` or a session-file adapter (see Provenance); add `--harness` when passing an explicit model and you know the harness. The script prints the created file path to stdout. Read the file back and flesh out the prose sections (Vision & Scope, Decomposition Strategy, Dependency Graph, Integration Points). Leave the living-document sections empty for now, except the Decision Log which records the initial decomposition decisions.
 
 6. Create each child ExecPlan by running the exec-plan skill's init script, passing the parent path:
 

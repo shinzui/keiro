@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { modelHelp, modelOptions, resolveModel } from "./provenance-model.ts";
 
-const USAGE = `Usage: bun record-provenance.ts <review|revision> --plan <path> --model <id> [options]
+const USAGE = `Usage: bun record-provenance.ts <review|revision> --plan <path> <identity options> [options]
 
 Appends one provenance entry to the YAML frontmatter of an ExecPlan or MasterPlan.
 Entries are only ever appended: existing entries are never rewritten, reordered, or
@@ -15,10 +16,7 @@ Events:
 
 Options:
   --plan <path>       (required) Path to the plan markdown file.
-  --model <id>        (required) Model identifier of the agent recording the entry,
-                      exactly as the harness reports it (e.g. claude-opus-5). Pass
-                      "unknown" when no identifier is available; never guess.
-  --harness <name>    Agent harness the model ran in (e.g. claude-code).
+${modelHelp}
   --verdict <v>       review only: approved | changes-requested | comments.
                       Defaults to comments.
   --mode <m>          revision only: implement | update | discuss | other.
@@ -48,8 +46,7 @@ const { values, positionals } = (() => {
       args: process.argv.slice(2),
       options: {
         plan: { type: "string" },
-        model: { type: "string" },
-        harness: { type: "string" },
+        ...modelOptions,
         verdict: { type: "string" },
         mode: { type: "string" },
         note: { type: "string" },
@@ -89,11 +86,14 @@ if (!planPath || !planPath.trim()) {
 }
 if (!existsSync(planPath)) die(`no such file: ${planPath}`);
 
-const model = values.model;
-if (!model || !model.trim()) {
-  console.error(USAGE);
-  die("--model is required");
-}
+const identity = (() => {
+  try {
+    return resolveModel(values);
+  } catch (e) {
+    die((e as Error).message);
+  }
+})();
+const { model, harness } = identity;
 
 if (kind === "review" && values.mode) die("--mode applies to revision entries, not reviews");
 if (kind === "revision" && values.verdict) die("--verdict applies to reviews, not revision entries");
@@ -122,8 +122,7 @@ const at = (() => {
   return values.at.replace(/\.\d+Z$/, "Z");
 })();
 
-const note = values.note?.trim() ? values.note.trim() : undefined;
-const harness = values.harness?.trim() ? values.harness.trim() : undefined;
+const note = [values.note?.trim(), identity.note].filter(Boolean).join("; ") || undefined;
 const listKey = kind === "review" ? "reviews" : "revisions";
 
 function yamlString(v: string): string {

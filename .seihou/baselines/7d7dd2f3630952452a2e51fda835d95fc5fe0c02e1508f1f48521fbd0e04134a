@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { modelHelp, modelOptions, resolveModel } from "./provenance-model.ts";
 
 const USAGE = `Usage: bun init-plan.ts --title "<title>" [options]
 
@@ -12,10 +13,7 @@ Options:
   --title <text>          (required) Human-readable plan title.
   --intention <id>        Intention ID to record in frontmatter.
   --master-plan <path>    Path to the parent MasterPlan, recorded in frontmatter.
-  --model <id>            Model identifier of the agent creating the plan,
-                          recorded as provenance.created_by.model.
-  --harness <name>        Agent harness the model ran in (e.g. claude-code),
-                          recorded as provenance.created_by.harness.
+${modelHelp}
   --dir <path>            Directory to write into. Defaults to docs/plans.
   -h, --help              Show this message.
 
@@ -37,8 +35,7 @@ const { values } = (() => {
         title: { type: "string" },
         intention: { type: "string" },
         "master-plan": { type: "string" },
-        model: { type: "string" },
-        harness: { type: "string" },
+        ...modelOptions,
         dir: { type: "string", default: "docs/plans" },
         help: { type: "boolean", short: "h" },
       },
@@ -62,7 +59,13 @@ if (!title || !title.trim()) {
   die("--title is required");
 }
 
-if (values.harness && !values.model) die("--harness requires --model");
+const identity = (() => {
+  try {
+    return resolveModel(values);
+  } catch (e) {
+    die((e as Error).message);
+  }
+})();
 
 const dir = values.dir!;
 
@@ -107,13 +110,12 @@ fm.push(`kind: exec-plan`);
 fm.push(`created_at: ${createdAt}`);
 if (values.intention) fm.push(`intention: ${yamlString(values.intention)}`);
 if (values["master-plan"]) fm.push(`master_plan: ${yamlString(values["master-plan"])}`);
-if (values.model) {
-  fm.push("provenance:");
-  fm.push("  created_by:");
-  fm.push(`    model: ${yamlString(values.model)}`);
-  if (values.harness) fm.push(`    harness: ${yamlString(values.harness)}`);
-  fm.push(`    at: ${createdAt}`);
-}
+fm.push("provenance:");
+fm.push("  created_by:");
+fm.push(`    model: ${yamlString(identity.model)}`);
+if (identity.harness) fm.push(`    harness: ${yamlString(identity.harness)}`);
+fm.push(`    at: ${createdAt}`);
+if (identity.note) fm.push(`    note: ${yamlString(identity.note)}`);
 fm.push("---");
 fm.push("");
 fm.push("");

@@ -95,7 +95,7 @@ The rules that keep this metadata trustworthy:
 
 **Never hand-edit the `provenance` block, and never delete, reorder, or rewrite an existing entry.** The script only appends, so any number of models can review the same plan without clobbering one another's records. Running the same command twice in one day is a no-op unless you pass `--allow-duplicate`.
 
-**Identify yourself with the exact model identifier your harness reports** — for example `claude-opus-5`, `claude-sonnet-5`, `gpt-5-codex` — not a family name or a friendly label. Pass `--harness` when you know it (`claude-code`, `codex-cli`, `seihou-agent`). If no identifier is available to you, pass `--model unknown` rather than guessing.
+**Resolve your exact runtime model before writing provenance.** Read and follow [PROVENANCE.md](PROVENANCE.md), including current-agent metadata discovery for Codex and Claude Code. A missing ID in your prompt is not enough to declare it unavailable. All writing scripts accept a verified `--model` or a session-file adapter; `unknown` requires `--allow-unknown` and `--unknown-reason`, which is saved in the entry. Never infer identity from configured defaults or another agent. Recheck after model switches and record each contributing model's own entry.
 
 **Plans created before provenance existed have no `provenance` block.** That is expected, not a defect. Record your own entry when you touch such a plan; the script adds the block containing only your entry. Never invent a `created_by` record for work you did not do, and never assume an absent block means the plan was written by a human.
 
@@ -123,7 +123,7 @@ Create a new ExecPlan. The remaining arguments describe the feature or change.
     bun agents/skills/exec-plan/init-plan.ts --title "<short, action-oriented title>" --model <your-model-id> [--harness <name>] [--intention <id>] [--master-plan <path>]
     ```
 
-    The script prints the created file path to stdout (e.g., `docs/plans/4-add-template-engine.md`). Always pass `--model` with your own model identifier so the plan records who authored it (see Provenance); add `--harness` when you know which harness you are running in. Pass `--intention` only when an Intention ID is active for this session; pass `--master-plan` only when this plan is a child of an existing MasterPlan, naming the parent's file path.
+    The script prints the created file path to stdout (e.g., `docs/plans/4-add-template-engine.md`). Always supply your own verified identity using `--model` or a session-file adapter (see Provenance); add `--harness` when passing an explicit model and you know the harness. Pass `--intention` only when an Intention ID is active for this session; pass `--master-plan` only when this plan is a child of an existing MasterPlan, naming the parent's file path.
 
 4. Read the file back and flesh out each prose section in order, grounding every claim in what you found during research. The Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective sections start empty by design — only the Decision Log should be seeded now, with any initial scoping decisions you made.
 
