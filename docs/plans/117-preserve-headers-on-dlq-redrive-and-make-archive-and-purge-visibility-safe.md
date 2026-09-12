@@ -13,6 +13,11 @@ provenance:
       at: 2026-09-12T13:26:48Z
       mode: "update"
       note: "Validated that MasterPlan 17 was not migrated to the pgmq project; refreshed pgmq 0.6/migration-0007 premises and recorded read_grouped_head"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-12T17:28:45Z
+      mode: "update"
+      note: "Audited local downstream changes and aligned handoffs with client-only ordering, optional additive indexes, and no SQL overrides."
 ---
 
 # Preserve headers on DLQ redrive and make archive and purge visibility-safe
@@ -114,11 +119,11 @@ that inspects, archives, and purges back-to-back with no waiting.
   regardless of the visibility my inspection caused" is expressible today with an id-list
   API. The refusal guard is expressible today too: `pgmq.metrics` reports both total and
   visible row counts (`queueLength` vs `queueVisibleLength` on the existing
-  `Pgmq.queueMetrics`). This closes the trap without adding this plan to the pgmq-hs release
-  train that `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
-  and `docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md` already
-  coordinate. If a future need arises for count-based archiving of hidden rows, propose a
-  `pgmq.list_msg_ids` upstream function then.
+  `Pgmq.queueMetrics`). This closes the trap using existing APIs. Plan 116's optional
+  client ordering adoption depends on a pgmq-hasql release; plan 118's optional
+  supplemental index does not require a migration release. This plan depends on neither.
+  Any future proposal for a `pgmq.list_msg_ids` upstream function is separate work and
+  must not introduce a local override of extension-owned SQL.
   Date: 2026-07-23
 
 - Decision: `purgeDlq`'s type changes from `Eff es ()` to `Eff es PurgeDlqResult` (breaking)
@@ -560,3 +565,5 @@ or SQL-migration change is required by this plan (see the Decision Log for why),
 rides no release train and can land in any order relative to its siblings
 `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md` and
 `docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`.
+
+Revision (2026-09-12): Aligned the sibling dependency handoff with client-only ordering and optional additive indexes; DLQ behavior remains independently implementable.

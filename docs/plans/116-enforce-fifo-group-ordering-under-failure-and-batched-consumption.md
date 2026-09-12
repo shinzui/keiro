@@ -18,6 +18,16 @@ provenance:
       at: 2026-09-12T14:36:53Z
       mode: "update"
       note: "Relocated the upstream SQL/doc scope to pgmq-hs MasterPlan 5; rewrote upstream milestones as consumption"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-12T17:28:45Z
+      mode: "update"
+      note: "Audited local downstream changes and aligned handoffs with client-only ordering, optional additive indexes, and no SQL overrides."
+    - model: "claude-opus-5"
+      harness: "claude-code"
+      at: 2026-09-12T19:57:40Z
+      mode: "update"
+      note: "Decoupled 116/118 bounds: client-ordering pgmq-hasql bound vs version-free supplemental index"
 ---
 
 # Enforce FIFO group ordering under failure and batched consumption
@@ -26,6 +36,9 @@ This ExecPlan is a living document. The sections Progress, Surprises & Discoveri
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 If durable project context changes, update or create ADRs in docs/adr/ in the same change.
 
+
+
+**Current cross-repository contract (2026-09-12).** `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts` prohibits overriding extension-owned SQL on both native and extension installs. The ordering work is four outer Haskell-client ORDER BY msg_id clauses, not changed PGMQ function bodies. The index work measures an optional, separately named `q_<queue>_group_lookup_idx`; upstream GIN, helpers and presence reporting remain unchanged. No new FIFO migration or automatic GIN replacement is planned. This supersedes earlier SQL-migration/release assumptions. Existing historical migration bytes remain immutable. Keiro consumer safety and retention policy remain local responsibilities; a sorted result, batch-size clamp or head read does not guarantee successful processing without valid leases and disciplined acknowledgement/side effects.
 
 ## Purpose / Big Picture
 
@@ -51,7 +64,9 @@ that floor even against hand-built tuning records; the ordering requirement trav
 tuning that contradicts the job's declared ordering fails loudly; the previously untested
 failure branches (retry at group head, thrown handler at head, dead-letter at head) and the
 never-tested `FifoRoundRobin` strategy are pinned by regression tests on both consumer
-paths; and upstream `read_grouped` gains a deterministic return order as defense-in-depth.
+paths; and M4 observes ascending msg_id in the pgmq-hs client as defense-in-depth, without
+changing upstream read_grouped. These guarantees assume live leases and correct acknowledgement;
+neither batch-size enforcement nor client sorting independently guarantees processing success.
 You can see it working by running `cabal test keiro-pgmq-test` from the repository root and
 reading the new FIFO examples, and by writing a three-message group whose head fails and
 observing that the successors never run before the head is settled.
@@ -65,46 +80,19 @@ observing that the successors never run before the head is settled.
 - [ ] M2: `runJobOnce`/`jobProcessor` adopt the job's declared ordering; `runJobOnceWithContext`/`jobProcessorWithContext` throw `JobOrderingMismatch` on a conflicting explicit tuning; discriminating tests added.
 - [ ] M3: Drain-path FIFO failure-branch tests (retry at head, throw at head, dead-letter at head) pass.
 - [ ] M3: Worker-path FIFO failure-branch test passes; first `FifoRoundRobin` tests (drain interleave and worker within-group order) pass; delayed-group-send blocking test passes.
-- [ ] M4: the released pgmq-hs fix for the grouped reads' return order is consumed — bounds raised in `keiro-pgmq/keiro-pgmq.cabal` to whatever version carries it, full suite green against the new migration. The SQL itself is owned upstream by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`; this plan no longer writes it.
-- [ ] CHANGELOG entries written for keiro-pgmq (breaking `Job` field) and pgmq-hs; ADR distillation pass done (FIFO delivery contract promoted per the master plan's Integration Points).
+- [ ] M4: Consume the verified pgmq-hasql client-ordering release/candidate and observe ascending IDs without a new pgmq-migration requirement.
+- [ ] CHANGELOG entry written for keiro-pgmq (breaking `Job` field); pgmq-hs owns its own entry; ADR distillation pass done (FIFO delivery contract promoted per the master plan's Integration Points).
 
 
 ## Surprises & Discoveries
 
-- Relocation (2026-09-12): PGQ-2's SQL fix left this plan. It is now
-  `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`
-  under `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`,
-  which also owns the migration numbering and the release. M4 was rewritten as a consumption
-  milestone; everything below that describes writing a pgmq-hs migration from keiro is superseded by
-  it, including the `0003-order-read-grouped-returning.sql` filename and the 0.4.1.0 release target
-  in the Decision Log entry of 2026-07-23.
-
-- Migration-status validation (2026-09-12): this plan is still keiro-owned and still unimplemented.
-  `mori://shinzui/pgmq-hs/masterplans/3-harden-the-pgmq-hs-family-surfaced-by-the-2026-07-review`
-  lists the FIFO ordering findings in its own out-of-scope section and names this plan as their
-  owner, and every defect this plan targets still reproduces at keiro `503475fa`: `withOrdering` is a
-  plain setter (`keiro-pgmq/src/Keiro/PGMQ/Job.hs:351`), `Job` has no ordering field, and
-  `pgmq.read_grouped`'s final `UPDATE ... RETURNING` still has no `ORDER BY` in pgmq-hs's vendored
-  PGMQ 1.13.0 (`vendor/pgmq/pgmq-extension/sql/pgmq.sql`, function at line 381).
-- Migration-status validation (2026-09-12): M4's release premises are dead. The pgmq-hs family is
-  released at 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7` (keiro commit
-  `e4ec781b`), so "released at 0.4.1.0" and the test-suite bound `>=0.4.1 && <0.5` below are both
-  superseded. The native migration ledger now runs through
-  `0006-preserve-partitioned-reentry-v1.13.0.sql`, so the filename `0003-order-read-grouped-returning.sql`
-  is taken by `0003-notify-crash-safety-and-locking.sql` and the next free number is `0007`.
-  `pgmq-migration/test/Main.hs` now derives its ledger expectations from `nativeMigrationNames`, so
-  appending a migration is a one-line change there.
-- Migration-status validation (2026-09-12): PGMQ 1.12.0 added `pgmq.read_grouped_head` (and
-  `read_grouped_head_with_poll`), exposed by pgmq-hs 0.6.0.0 as `readGroupedHead` on both `Pgmq` and
-  `Pgmq.Effectful`. It returns at most one message per group and takes each group's head as
-  `MIN(msg_id)` *regardless of visibility*, so an in-flight or failed head blocks its group inside
-  the server — a structurally stronger answer to PGQ-1 than the clamp decided below, which was taken
-  when the primitive was not reachable from Haskell. It is not free: the drain path calls
-  `readGrouped`/`readGroupedRoundRobin` directly (`keiro-pgmq/src/Keiro/PGMQ/Job.hs:160`) and could
-  adopt head reads on its own, but the worker path reads through `shibuya-pgmq-adapter`, whose
-  `FifoReadStrategy` offers only `ThroughputOptimized` and `RoundRobin` at 0.14.0.0
-  (`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Config.hs:254`). Settle this before starting M1;
-  see the master plan's 2026-09-12 Decision Log entries.
+The 2026-09-12 cross-repository audit found the Keiro worktree clean at 14dd9036.
+Since baseline 503475fa, the affected packages changed only through Cabal formatting, not
+FIFO/index implementation. Earlier relocation notes still described a native SQL fix and are
+superseded by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`'s client-only contract. No runtime regression was executed in this audit.
+The consumer batch-size/order-mismatch gaps remain implementation work. Grouped heads are an
+available alternative, but choosing them for both paths may require adapter work and does not
+remove lease/acknowledgement obligations.
 
 
 ## Decision Log
@@ -145,20 +133,6 @@ observing that the successors never run before the head is settled.
   `runJobOnce` against a FIFO queue — into correct behavior instead of a new failure mode.
   Date: 2026-07-23
 
-- Decision: Upstream, `pgmq.read_grouped` gets a deterministic return order by carrying the
-  batch-selection rank through to a final ordered `SELECT`, mirroring `read_grouped_rr`'s
-  existing `selection_order` pattern; shipped as a new versioned migration file
-  `0003-order-read-grouped-returning.sql` in a pgmq-hs 0.4.1.0 family release, never as an
-  edit to `0001-install-v1.11.0.sql`.
-  Rationale: pgmq installs are an ordered migration ledger (embedded via
-  `pgmq-migration/src/Pgmq/Migration/Internal/Definition.hs`); editing an applied file would
-  desynchronize existing databases. Rank order (oldest group first, then send order within
-  the group) rather than global `msg_id` order keeps the two grouped-read functions
-  symmetric; within a single group the two orders are identical. With the batch-size clamp
-  in place this fix is defense-in-depth (per the master plan's Dependency Graph note), so it
-  may alternatively ride in the release cut by `docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`
-  if that plan lands first.
-  Date: 2026-07-23
 
 - Decision: Delayed sends into FIFO groups (`enqueueToGroupWithDelay`) are documented, not
   forbidden.
@@ -172,17 +146,8 @@ observing that the successors never run before the head is settled.
   surface.
   Date: 2026-07-23
 
-- Decision: PGQ-2's upstream half is relocated; this plan consumes it.
-  Rationale: The defect is in pgmq-hs's vendored PGMQ SQL and affects every FIFO consumer of that
-  library, not just keiro, and keiro has no legitimate way to ship SQL into another repository's
-  migration ledger. The relocated owner is
-  `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`.
-  The 2026-07-23 decision below about how to order the `RETURNING` stands as the *recommendation*
-  carried upstream — the ordering-column rationale is still the right one — but its filename and
-  release-version specifics are void.
-  Date: 2026-09-12
 
-- Decision: The 2026-07-23 clamp decision and its companion upstream `ORDER BY` decision are held
+- Decision: The 2026-07-23 clamp decision is held
   open pending the `read_grouped_head` evaluation recorded in Surprises & Discoveries.
   Rationale: The clamp's stated reason — group-abort needs shibuya cooperation keiro cannot reach —
   is still true, but it was taken without the option of a server-side head read, which needs no
@@ -190,6 +155,10 @@ observing that the successors never run before the head is settled.
   the choice to implementation time; do not treat the clamp as settled when starting M1.
   Date: 2026-09-12
 
+
+- Decision: Follow `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`: no extension function override; M4 consumes client query ordering only. Index work is an independent supplement, not a shared migration/release.
+  Rationale: User's no-override/additive-index constraint supersedes prior SQL rank-order recommendations.
+  Date: 2026-09-12
 
 ## Outcomes & Retrospective
 
@@ -266,7 +235,7 @@ order: pgmq-hasql decodes with `D.rowVector` in wire order, the adapter unconses
 order, the drain folds in list order; there is no `sortOn` anywhere on the path
 (grep-verified). Exploiting it needs `batchSize > 1` *and* a plan that diverges from heap
 order, which is why it is an amplifier of PGQ-1 rather than an independent bug — but it
-makes the documented order unprovable, so M4 fixes it at the source. The related
+makes the documented order unprovable, so M4 observes the client-layer correction; raw SQL remains upstream-owned. The related
 staggered-visibility hole (a group in state "member 1 visible, member 2 in-flight or
 delayed, member 3 visible" returns members 1 and 3 together, skipping 2) is likewise only
 reachable with a multi-member batch, because the guard's `min_msg_id` is computed over
@@ -300,9 +269,11 @@ reorder spans, and the seven captured-span examples must stay green unmodified.
 Sibling plans (do not duplicate their work): the DLQ operator path is
 `docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md`;
 provisioning and the FIFO index are
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`. Neither this plan nor
-118 writes pgmq-hs SQL any more (relocated 2026-09-12); they share only the version bump keiro
-adopts, so whichever lands first raises keiro's `pgmq-*` bounds and the other inherits them.
+`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`. Neither plan writes
+pgmq SQL, and under the 2026-09-12 cross-repository contract they no longer share a release either:
+this plan's M4 may raise a `pgmq-hasql` bound to pick up the client's outer `ORDER BY msg_id`, while
+118's supplemental-index work carries no migration or version dependency at all. Do not couple their
+bounds.
 
 
 ## Plan of Work
@@ -518,42 +489,31 @@ example, temporarily reverting `nextBatchSize` to `tuning.batchSize` and running
 example with a raw `JobTuning{batchSize = 8, ordering = FifoThroughput, ...}`) makes the
 retry-at-head example fail, demonstrating the tests bite.
 
-### Milestone 4 — consume the upstream return-order fix
+### Milestone 4 — consume the client result-order contract
 
-Scope: keiro's side of PGQ-2 only. The SQL fix relocated to the pgmq-hs repository on 2026-09-12
-and is owned by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`
-under `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`.
-Do not write a pgmq-hs migration from this plan; if the upstream fix has not shipped yet, this
-milestone waits and milestones 1-3 stand alone.
+Read `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order` Outcomes for the actual implemented/released client behavior. This is outer
+ORDER BY msg_id on grouped/head client calls, with upstream functions and the native ledger
+unchanged. It does not promise group contiguity or alter round-robin layering. M1-M3 do not
+wait for a SQL migration or this client defense-in-depth change.
 
-At the end of this milestone, keiro depends on the released pgmq-hs version that carries the
-deterministic grouped-read order, and keiro's own suite observes it.
+Before selecting dependency bounds, verify the released pgmq-hasql version on Hackage and its
+upstream repository tag. Raise the library pgmq-hasql lower bound that supplies the changed
+statements, keeping compatible family bounds and transitive effect/adapter resolution. Raising
+only the test-suite pgmq-migration bound cannot require a client fix and is incorrect. Do not
+choose an unverified 0.6.1.0 target. An isolated candidate project may validate local changes
+before release, but must not be committed as machine-local dependency paths or called released.
 
-1. Confirm what shipped. In the pgmq-hs checkout (`mori path mori://shinzui/pgmq-hs`), read
-   `pgmq-migration/migrations/manifest` and the `Outcomes & Retrospective` of the upstream plan to
-   learn the migration filename, the ordering columns it chose, and the released family version.
-   Record all three in this plan's Progress — do not assume the numbers this plan originally
-   guessed (`0003`, 0.4.1.0), both of which are dead: the family shipped 0.6.0.0 on 2026-09-10 and
-   the ledger already runs through `0006-preserve-partitioned-reentry-v1.13.0.sql`.
-2. Raise the bounds in `keiro-pgmq/keiro-pgmq.cabal`. Today the test-suite declares
-   `pgmq-migration >=0.6 && <0.7` (line 97) and the library declares `>=0.6 && <0.7` for
-   `pgmq-config`/`pgmq-core`/`pgmq-effectful`/`pgmq-hasql` (lines 64-67). An additive upstream
-   release (0.6.1.0) needs only the lower bound raised on the test suite, which is what embeds and
-   applies the ledger; a breaking upstream release needs every bound moved and coordination with
-   the other keiro consumers, so check `grep -rn 'pgmq-' --include=*.cabal .` before editing one file.
-3. Observe the order from keiro. Add or extend a `keiro-pgmq-test` example that reads a multi-message
-   FIFO group in one batch and asserts ascending `msg_id`s. Under this plan's batch-size-1 clamp that
-   read is not reachable through the public job API, so drive it through the pgmq effect directly, as
-   the existing drain-path examples do. If the clamp decision is revisited in favour of
-   `read_grouped_head` (see this plan's 2026-09-12 Decision Log entry), assert the head-read order
-   instead.
-4. Run `cabal build all` and `cabal test keiro-pgmq-test` from the keiro root, then the wider suites
-   the master plan's consumer list names.
+Add a direct pgmq effect/session test with interleaved groups, asserting ascending message IDs
+in the returned vector without sorting the result. Under the job batch-size clamp, a multirow
+read is intentionally not reachable through the job API; the direct client test observes the
+separate contract. Keep round-robin layering and job failure tests separate. Record actual
+stock/native fixture coverage. Do not require this assertion to fail on every older executor:
+unspecified order can happen to be sorted.
 
-Acceptance: `keiro-pgmq.cabal` names the released version that carries the fix; the keiro suite is
-green; and the new example fails if the bounds are reverted to a version without the fix. If the
-upstream fix has not shipped when milestones 1-3 are done, mark this milestone blocked in Progress
-with the upstream plan path, and say so rather than implementing the SQL here.
+Run cabal build all and cabal test keiro-pgmq-test from the Keiro root. Acceptance is verified
+client dependency selection and observed ordered vectors with no changed extension SQL,
+migration filename or server-order claim. If not yet released, keep this milestone pending
+while M1-M3 can complete; do not implement pgmq SQL locally.
 
 ## Concrete Steps
 
@@ -589,12 +549,12 @@ cabal build all
 cabal test keiro-pgmq-test
 ```
 
-For M4, check what upstream shipped (the SQL work itself is not yours):
+For M4, inspect the client implementation and its actual release evidence:
 
 ```bash
 cd "$(mori path mori://shinzui/pgmq-hs)"
-cat pgmq-migration/migrations/manifest
-grep -n 'version:' pgmq-core/pgmq-core.cabal
+rg -n 'order by msg_id' pgmq-hasql/src/Pgmq/Hasql/Statements/Message.hs
+rg -n 'version:' pgmq-hasql/pgmq-hasql.cabal
 ```
 
 then in keiro, after raising the bounds:
@@ -612,7 +572,7 @@ feat(keiro-pgmq)!: carry consumption ordering on Job and enforce FIFO batch-size
 ```
 
 (the `!` belongs on the M2 commit; M1 and M3 are non-breaking `fix(keiro-pgmq)`/
-`test(keiro-pgmq)` commits; M4 upstream is its own commit in pgmq-hs plus a
+`test(keiro-pgmq)` commits; M4 client work is owned by pgmq-hs plus a
 `chore(deps)` bump commit in keiro; after the 2026-09-12 relocation M4 is the `chore(deps)` bump plus its observing test, with no pgmq-hs commit from this plan).
 
 
@@ -637,10 +597,7 @@ The plan is done when all of the following are observable:
 5. The seven ADR-0001 captured-span examples (`test/Main.hs` lines 901-1060) pass
    *unmodified* — the plan's constraint is that no drain change touches span count, names,
    attributes, or the ack-after-settle rule.
-6. The released pgmq-hs version named in Progress carries the deterministic grouped-read
-   order (verified from `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`'s
-   Outcomes and that repository's `pgmq-migration/migrations/manifest`), `keiro-pgmq.cabal`
-   requires it, and keiro's own example observes ascending `msg_id`s for a single-group batch.
+6. The verified pgmq-hasql client release/candidate supplies outer ordering; Keiro observes ascending IDs through the client. No SQL migration or raw-function ordering claim is required.
 
 
 ## Idempotence and Recovery
@@ -653,7 +610,7 @@ The M2 breaking change is self-announcing: any missed `Job` construction site fa
 compile, and `cabal build all` enumerates them; there is no way to end up half-migrated at
 runtime.
 
-M4 is now a dependency bump plus a test, so its recovery path is a version-control revert, not a migration correction: the upstream ledger is append-only and owned by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`. If the released fix turns out wrong, report it there rather than patching pgmq SQL from keiro. If M4 must wait because upstream has not shipped, milestones 1-3 stand alone — the clamp makes the unordered RETURNING unreachable through keiro, which is exactly the master plan's fallback posture. Record the wait in this plan's Progress.
+M4 changes client dependency selection and tests only. Reverting a client bound does not roll back a database migration, and no new migration is involved. If the client fix is not released, keep M4 pending while consumer-safety work proceeds.
 
 
 ## Interfaces and Dependencies
@@ -687,8 +644,10 @@ operations and `ReadGrouped` record the drain already uses), `shibuya-core` and
 `shibuya-pgmq-adapter` (unchanged — this plan deliberately requires no shibuya release; the
 worker path becomes safe purely because keiro never hands the adapter a FIFO config with
 `batchSize > 1`), and, for M4, whichever released pgmq-hs version carries the upstream
-return-order fix (the family is at 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7`;
+client return-order fix (the checkout family baseline is 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7`;
 read the upstream plan's Outcomes for the shipped version rather than the superseded 0.4.1.0 this plan
 originally assumed). The keiro-dsl package participates only as a
 consumer whose conformance fixtures gain the `jobOrdering` field wiring from their generated
 `QueuePolicy` modules.
+
+Revision note (2026-09-12): Reconciled cross-repository guidance; removed server-migration assumptions and corrected M4 to require the client library rather than a test migration package.
