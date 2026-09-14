@@ -59,6 +59,7 @@ module Keiro.Timer.Schema
     findStuckTimers,
     requeueStuckTimers,
     requeueStuckTimer,
+    cancelTimerTx,
     cancelTimer,
     deadLetterTimer,
   )
@@ -518,9 +519,15 @@ requeueStuckTimer timerId =
 -- state so it never fires. Terminal rows (@fired@, @cancelled@, @dead@) are left
 -- untouched. Idempotent. Returns 'True' when a row changed.
 cancelTimer :: (Store :> es) => TimerId -> Eff es Bool
-cancelTimer timerId =
-  runTransaction $
-    Tx.statement (timerIdToUuid timerId) cancelTimerStmt
+cancelTimer = runTransaction . cancelTimerTx
+
+-- | Transactional form of 'cancelTimer'. It uses the same guarded SQL but lets
+-- callers compose cancellation atomically with an event append and other timer
+-- mutations. Foreground-owned rows remain protected even after their lease has
+-- expired; recovery must clear their ownership token first.
+cancelTimerTx :: TimerId -> Tx.Transaction Bool
+cancelTimerTx timerId =
+  Tx.statement (timerIdToUuid timerId) cancelTimerStmt
 
 -- | Move a timer from @Scheduled@ or @Firing@ to the terminal @Dead@ state,
 -- recording @reason@ in @last_error@ so an operator can see why it was abandoned

@@ -66,6 +66,7 @@ module Keiro.Timer
     findStuckTimers,
     requeueStuckTimers,
     requeueStuckTimer,
+    cancelTimerTx,
     cancelTimer,
     deadLetterTimer,
 

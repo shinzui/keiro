@@ -17,6 +17,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (parseEither)
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as ByteString
 import Data.Char (isDigit)
 import Data.IORef (IORef, atomicModifyIORef', modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Int (Int32)
@@ -182,6 +183,7 @@ import Keiro.Outbox.Kafka qualified as OutboxKafka
 import Keiro.Outbox.Schema (markOutboxFailedTx, markOutboxRejectedTx)
 import Keiro.Prelude
 import Keiro.ProcessManager
+import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Projection
 import Keiro.ReadModel
 import Keiro.ReadModel.Rebuild qualified as Rebuild
@@ -4350,6 +4352,93 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         putMVar releaseTimer ()
         takeMVar silentResult `shouldReturn` Right True
         timer <- runner $ lookupTimer (request ^. #timerId)
+        timer `shouldSatisfy` \case
+          Right (Just row) -> row ^. #status == Scheduled
+          _ -> False
+
+    it "cancels a timer in the same transaction as an accepted saga append" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        let target = stream "reaction-feasibility-cancel-accepted" :: Stream CounterEventStream
+            request = counterTimerRequest & #timerId .~ TimerId sampleUuid2
+        Right () <- runner $ Store.runTransaction (scheduleTimerTx request)
+        outcome <-
+          runner $
+            runDomainCommandWithSqlEvents
+              defaultRunCommandOptions
+              multiCounterDomainHandler
+              target
+              (Add 2)
+              (\_ _ -> cancelTimerTx (request ^. #timerId))
+        case outcome of
+          Right (Right (DomainCommandOutcome {decision = DomainAccepted {}}, Just True)) -> pure ()
+          other -> expectationFailure ("expected accepted append and timer cancellation, got " <> show other)
+        runner (claimDueTimer dueTimerTime) `shouldReturn` Right Nothing
+        timer <- runner $ lookupTimer (request ^. #timerId)
+        timer `shouldSatisfy` \case
+          Right (Just row) -> row ^. #status == Timer.Cancelled
+          _ -> False
+
+    it "rolls back both an accepted saga append and transactional cancellation when condemned" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        let target = stream "reaction-feasibility-cancel-rollback" :: Stream CounterEventStream
+            targetName = StreamName "reaction-feasibility-cancel-rollback"
+            request = counterTimerRequest & #timerId .~ TimerId sampleUuid2
+        Right () <- runner $ Store.runTransaction (scheduleTimerTx request)
+        outcome <-
+          runner $
+            runDomainCommandWithSqlEventsControlled
+              defaultRunCommandOptions
+              multiCounterDomainHandler
+              target
+              (Add 4)
+              ( \_ _ -> do
+                  cancelled <- cancelTimerTx (request ^. #timerId)
+                  pure (RollbackSqlTransaction cancelled)
+              )
+        outcome `shouldBe` Right (Right (DomainSqlCommandRolledBack True))
+        Right recorded <- runner $ Store.readStreamForward targetName (StreamVersion 0) 10
+        recorded `shouldBe` Vector.empty
+        timer <- runner $ lookupTimer (request ^. #timerId)
+        timer `shouldSatisfy` \case
+          Right (Just row) -> row ^. #status == Scheduled
+          _ -> False
+
+    it "keeps transactional cancellation idempotent and protects terminal and foreground-owned rows" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        let request n = counterTimerRequest & #timerId .~ TimerId (UUID.fromWords 0 0 0 n)
+            cancelledRequest = request 101
+            firedRequest = request 102
+            liveClaimRequest = request 103
+            expiredClaimRequest = request 104
+            absentRequest = request 105
+            claimRequest timerRequest leaseSeconds =
+              DeadTimerClaimRequest
+                (timerRequest ^. #timerId)
+                (timerRequest ^. #processManagerName)
+                "reaction-feasibility"
+                3
+                leaseSeconds
+            setupForeground timerRequest leaseSeconds = do
+              Right () <- runner $ Store.runTransaction (scheduleTimerTx timerRequest)
+              Right True <- runner $ deadLetterTimer (timerRequest ^. #timerId) "reaction-feasibility"
+              Right (Right _) <- runner $ claimDeadTimer (claimRequest timerRequest leaseSeconds)
+              pure ()
+        Right () <- runner $ Store.runTransaction $ do
+          scheduleTimerTx cancelledRequest
+          scheduleTimerTx firedRequest
+        runner (cancelTimer (cancelledRequest ^. #timerId)) `shouldReturn` Right True
+        runner (Store.runTransaction (cancelTimerTx (cancelledRequest ^. #timerId))) `shouldReturn` Right False
+        Right (Just _) <- runner $ claimDueTimer dueTimerTime
+        runner (markTimerFired (firedRequest ^. #timerId) (EventId sampleUuid3)) `shouldReturn` Right True
+        runner (Store.runTransaction (cancelTimerTx (firedRequest ^. #timerId))) `shouldReturn` Right False
+        setupForeground liveClaimRequest 60
+        runner (Store.runTransaction (cancelTimerTx (liveClaimRequest ^. #timerId))) `shouldReturn` Right False
+        setupForeground expiredClaimRequest 1
+        threadDelay 1_100_000
+        runner (Store.runTransaction (cancelTimerTx (expiredClaimRequest ^. #timerId))) `shouldReturn` Right False
+        runner (Store.runTransaction (cancelTimerTx (absentRequest ^. #timerId))) `shouldReturn` Right False
+        runner (Store.runTransaction (scheduleTimerOnceTx absentRequest)) `shouldReturn` Right True
+        timer <- runner $ lookupTimer (absentRequest ^. #timerId)
         timer `shouldSatisfy` \case
           Right (Just row) -> row ^. #status == Scheduled
           _ -> False
@@ -10920,6 +11009,42 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` EventId (uuidLiteral "ff20892c-6665-5e92-8c99-d1569d2ce629")
       deterministicCommandId "counter-pm" "order-1" sourceEventId (-1)
         `shouldBe` EventId (uuidLiteral "4f3aa6bc-b12c-5dae-8eb5-81f6364f41ef")
+
+    it "freezes target-keyed process-reaction ids and their byte preimage" $ do
+      let asciiId =
+            Reaction.deterministicReactionCommandId
+              "billing"
+              "order:1"
+              sourceEventId
+              (StreamName "account:42")
+              0
+          explicitPreimage =
+            "5:keiro16:process-reaction7:billing7:order:136:3f2504e0-4f89-51d3-9a0c-0305e82c330110:account:421:0"
+          independentlyHashed =
+            EventId
+              ( UUID.V5.generateNamed
+                  UUID.V5.namespaceURL
+                  (ByteString.unpack (TE.encodeUtf8 explicitPreimage))
+              )
+      asciiId `shouldBe` EventId (uuidLiteral "5a89007a-a634-58bf-8002-5ea7843155f2")
+      asciiId `shouldBe` independentlyHashed
+      Reaction.deterministicReactionCommandId
+        "\x4E2D\x6587"
+        "corr:\x0101"
+        sourceEventId
+        (StreamName "target:\x1F600")
+        0
+        `shouldBe` EventId (uuidLiteral "ca7f7bd8-2b54-508f-a542-1e24da394d95")
+
+    it "separates reaction fields, targets, occurrences, and the router family" $ do
+      let reaction manager correlation target occurrence =
+            Reaction.deterministicReactionCommandId manager correlation sourceEventId (StreamName target) occurrence
+          baseline = reaction "a:b" "c" "target" 0
+      baseline `shouldNotBe` reaction "a" "b:c" "target" 0
+      baseline `shouldNotBe` reaction "a:b" "c" "target:other" 0
+      baseline `shouldNotBe` reaction "a:b" "c" "target" 1
+      baseline
+        `shouldNotBe` deterministicRouterCommandId "a:b" "c" sourceEventId (StreamName "target") 0
 
     -- Each pair below produced one shared id under the old derivation, because
     -- U+0101 and U+0001 (and U+4E2D/U+2E2D, U+6587/U+2587) agree modulo 256.

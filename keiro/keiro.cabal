@@ -65,6 +65,7 @@ library
     Keiro.Outbox.Schema
     Keiro.Outbox.Types
     Keiro.ProcessManager
+    Keiro.ProcessManager.Reaction
     Keiro.Projection
     Keiro.Projection.Catalog
     Keiro.Projection.Catalog.Operations

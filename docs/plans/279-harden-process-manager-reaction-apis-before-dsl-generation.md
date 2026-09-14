@@ -83,7 +83,7 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 - [x] (2026-09-12 15:46Z) Refresh Hackage, retry the baseline in the Nix shell, and verify package availability against Hackage and upstream release tags. The earlier missing-package failure is replaced by the incompatible released adapter bounds recorded below.
 - [x] (2026-09-14 19:08Z) M0 prerequisite: restore a solvable workspace dependency set without weakening its PGMQ bounds. Published `shibuya-pgmq-adapter` 0.15.0.0 supports the PGMQ 0.6 family, and `nix develop --command cabal build keiro:tests` now succeeds.
 - [x] (2026-09-14 19:24Z) M0: added and passed accepted-event witness recovery, optimistic retry, same-source races, silent redelivery, and silent negative-probe timer-race tests with the existing command API. The gate ran 5 examples with 0 failures.
-- [ ] M1: add transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests.
+- [x] (2026-09-14 19:37Z) M1: added transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests. The feasibility group passed 8 examples and the deterministic identity group passed 7 examples.
 - [ ] M2: implement the additive reaction model and once runner, including explicit outcomes, timer accounting, witness recovery, and partial dispatch tests.
 - [ ] M3: add worker integration and a handwritten public-API example; prove acknowledgement, failure, and scaling behavior.
 - [ ] M4: document the runtime contract, distill its ADR, run compatibility gates, and hand the completed API to plan 273.
@@ -106,6 +106,14 @@ Separately, a silent delivery returned before any receipt existed, unrelated sag
 the same source acceptable on redelivery, and a timer transaction paused after a negative witness
 probe still committed after the accepted delivery. This is executable evidence for both the
 reconciliation path and the documented limit on unconditional silent effects.
+
+M1 confirmed that the existing cancellation SQL composes as a transaction without changing its
+guards. A condemned callback restored both the saga stream and timer row, absent cancellation
+created no tombstone, terminal rows stayed terminal, and foreground ownership blocked cancellation
+even after lease expiry. The ASCII reaction vector is
+`5a89007a-a634-58bf-8002-5ea7843155f2`; the Unicode vector is
+`ca7f7bd8-2b54-508f-a542-1e24da394d95`. An independently assembled byte preimage produced the
+same ASCII UUID.
 
 The implementation preflight on 2026-09-12 refreshed Hackage successfully to index state
 `2026-09-12T15:08:53Z`. PGMQ 0.6.0.0 is now available, but the complete workspace still
@@ -147,6 +155,12 @@ failure records still require memory proportional to their sizes.
 ## Decision Log
 
 
+- Decision: Freeze the new process-reaction identity family with target stream and same-target
+  occurrence, using no compatibility fallback to positional or router identities.
+  Rationale: Literal vectors and an independently assembled length-prefixed UTF-8 preimage now
+  establish the exact new UUIDv5 family. Target, occurrence, embedded-colon, Unicode, and router
+  family separation tests make accidental identity drift observable.
+  Date: 2026-09-14
 - Decision: Accept M0 and proceed with the additive reaction API without a new receipt schema or
   parallel saga evaluator.
   Rationale: Five PostgreSQL feasibility cases prove multi-event witness placement and decoding,
@@ -216,6 +230,11 @@ failure records still require memory proportional to their sizes.
 
 ## Outcomes & Retrospective
 
+
+M1 completed on 2026-09-14. `cancelTimerTx` is a public transactional primitive backed by the
+unchanged token-aware cancellation statement, while `cancelTimer` is now its transaction wrapper.
+`Keiro.ProcessManager.Reaction` is exposed with its frozen target-keyed identity derivation. The
+new PostgreSQL and pure identity cases pass without a migration or dependency change.
 
 M0 completed on 2026-09-14 with 5 examples and 0 failures. It established that the existing
 domain command API is sufficient for the planned composition: the first event of a multi-event
@@ -678,6 +697,26 @@ cabal test keiro:keiro-test --test-options='--match "Keiro deterministic id deri
 cabal test keiro:keiro-test --test-options='--match "Keiro.ProcessManager.Reaction"' --test-show-details=direct
 ```
 
+M1 observed on 2026-09-14:
+
+```text
+process reaction API feasibility
+  ...
+  cancels a timer in the same transaction as an accepted saga append [✔]
+  rolls back both an accepted saga append and transactional cancellation when condemned [✔]
+  keeps transactional cancellation idempotent and protects terminal and foreground-owned rows [✔]
+
+Finished in 2.4834 seconds
+8 examples, 0 failures
+
+Keiro deterministic id derivation
+  freezes target-keyed process-reaction ids and their byte preimage [✔]
+  separates reaction fields, targets, occurrences, and the router family [✔]
+
+Finished in 0.1972 seconds
+7 examples, 0 failures
+```
+
 M3 and runtime compatibility:
 
 ```bash
@@ -878,6 +917,10 @@ import or re-export the new child module.
 
 
 ## Revision Notes
+
+2026-09-14: Completed M1 by extracting and exporting `cancelTimerTx`, adding rollback and lifecycle
+coverage, exposing the initial `Keiro.ProcessManager.Reaction` module, and freezing the reaction
+UUIDv5 family with independent preimage and separation tests.
 
 2026-09-14: Completed M0 with five PostgreSQL feasibility examples. The tests freeze the existing
 command API's multi-event witness, optimistic retry, same-source reconciliation, receipt-free silent
