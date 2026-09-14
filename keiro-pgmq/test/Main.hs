@@ -57,7 +57,7 @@ import OpenTelemetry.Trace.Core qualified as OTel
 import OpenTelemetry.Trace.Id.Generator.Default (defaultIdGenerator)
 import OpenTelemetry.Util (appendOnlyBoundedCollectionValues)
 import Pgmq.Config.Types qualified as Config
-import Pgmq.Effectful (Message (..), MessageBody (..), Pgmq, QueueMetrics (..), ReadMessage (..), SendMessage (..))
+import Pgmq.Effectful (Message (..), MessageBody (..), Pgmq, ReadMessage (..), SendMessage (..))
 import Pgmq.Effectful qualified as Pgmq
 import Pgmq.Migration qualified as Migration
 import Pgmq.Types (QueueName, parseQueueName, queueNameToText)
@@ -1073,6 +1073,7 @@ spec = do
           Config.PartitionedQueue pc -> do
             pc.partitionInterval `shouldBe` "daily"
             pc.retentionInterval `shouldBe` "7 days"
+            pc.premake `shouldBe` Nothing
             mainCfg.queueName `shouldBe` job.jobQueue.physicalName
           other ->
             expectationFailure
@@ -1191,6 +1192,7 @@ spec = do
         pure (mainMetrics, dlqMetrics)
     mainMetrics.queueLength `shouldBe` 3
     mainMetrics.queueVisibleLength `shouldBe` 3
+    mainMetrics.defaultPartitionLength `shouldBe` Nothing
     dlqMetrics.queueLength `shouldBe` 0
 
   it "jobDlqMetrics reports DLQ depth after a Dead outcome" $ \connStr -> do

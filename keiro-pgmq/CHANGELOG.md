@@ -6,6 +6,16 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Require the released `pgmq-config`, `pgmq-core`, `pgmq-effectful`,
+  `pgmq-hasql`, and test-only `pgmq-migration` 0.6 family together with
+  `shibuya-pgmq-adapter ^>=0.15.0.0`. The re-exported `QueueMetrics` record now
+  includes nullable `defaultPartitionLength`, so callers that construct it or
+  match it positionally must handle the new field. Keiro's job API is otherwise
+  unchanged, and partitioned provisioning deliberately passes `premake = Nothing`
+  to retain the PGMQ server default rather than exposing explicit premake control.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Other Changes

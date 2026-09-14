@@ -222,7 +222,52 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.14.0.0"
+              , versionConstraint = Some "^>=0.15.0.0"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "shinzui/pgmq-hs:pgmq-config"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=0.6 && <0.7"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "shinzui/pgmq-hs:pgmq-core"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=0.6 && <0.7"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "shinzui/pgmq-hs:pgmq-effectful"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=0.6 && <0.7"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "shinzui/pgmq-hs:pgmq-hasql"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=0.6 && <0.7"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "shinzui/pgmq-hs:pgmq-migration"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Test
+              , versionConstraint = Some ">=0.6 && <0.7"
               }
           ]
         }
@@ -395,6 +440,11 @@ in  Schema.Project::{
       , "shinzui/keiki:keiki"
       , "shinzui/shibuya:shibuya-core"
       , "shinzui/shibuya-pgmq-adapter:shibuya-pgmq-adapter"
+      , "shinzui/pgmq-hs:pgmq-config"
+      , "shinzui/pgmq-hs:pgmq-core"
+      , "shinzui/pgmq-hs:pgmq-effectful"
+      , "shinzui/pgmq-hs:pgmq-hasql"
+      , "shinzui/pgmq-hs:pgmq-migration"
       , "hasql/hasql:hasql"
       , "hasql/hasql:hasql-pool"
       , "hasql/hasql:hasql-transaction"
@@ -431,6 +481,36 @@ in  Schema.Project::{
         , name = "shibuya-pgmq-adapter"
         , kind = Some Schema.MoriArtifactKind.Package
         , key = Some "shibuya-pgmq-adapter"
+        }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "pgmq-hs"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "pgmq-config"
+        }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "pgmq-hs"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "pgmq-core"
+        }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "pgmq-hs"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "pgmq-effectful"
+        }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "pgmq-hs"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "pgmq-hasql"
+        }
+      , Schema.MoriRef::{
+        , namespace = "shinzui"
+        , name = "pgmq-hs"
+        , kind = Some Schema.MoriArtifactKind.Package
+        , key = Some "pgmq-migration"
         }
       , Schema.MoriRef::{
         , namespace = "hasql"

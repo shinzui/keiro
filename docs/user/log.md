@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-09-14
+* **Update**: Document pgmq-hs 0.6 partition premake and default-partition metrics
+
 ## 2026-09-10
 * **Update**: Point the keiro-ops runbook at ADR-40's inspection-surface boundary (IR-32).
 

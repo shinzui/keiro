@@ -21,6 +21,11 @@ provenance:
       at: 2026-09-14T18:20:24Z
       mode: "update"
       note: "Verified adapter 0.15.0.0 and cleared the release gate"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-14T18:23:26Z
+      mode: "implement"
+      note: "Implemented dependency, regression, documentation, and validation milestones"
 ---
 
 # Complete the pgmq-hs 0.6.0.0 upgrade
@@ -59,11 +64,15 @@ the new nullable default-partition metric. A human can see the result by running
   `shibuya-pgmq-adapter` 0.15.0.0, upstream tag `v0.15.0.0` resolves to release
   commit `22f5c4da`, and the published library and test-suite bounds accept
   `pgmq-core`, `pgmq-effectful`, `pgmq-hasql`, and `pgmq-migration` 0.6.
-- [ ] Raise the Keiro adapter bounds to `^>=0.15.0.0`, reconcile `mori.dhall`,
-  and replace release-candidate wording in the root and `keiro-pgmq` changelogs.
-- [ ] Pin the adopted 0.6 behavior in `keiro-pgmq/test/Main.hs` and explain the
-  new partition and metrics fields in `docs/user/work-queues.md`, including its
-  OKF bundle log entry.
+- [x] (2026-09-14 18:30Z) Raise the Keiro adapter bounds to `^>=0.15.0.0`,
+  reconcile `mori.dhall`, and replace release-candidate wording in the root and
+  `keiro-pgmq` changelogs. A refreshed Hackage dry run resolved the published
+  adapter at 0.15.0.0 and all five PGMQ packages at 0.6.0.0.
+- [x] (2026-09-14 18:30Z) Pin the adopted 0.6 behavior in
+  `keiro-pgmq/test/Main.hs` and explain the new partition and metrics fields in
+  `docs/user/work-queues.md`, including its OKF bundle log entry. Strict OKF
+  validation passed, and `keiro-pgmq-test` passed 58 examples with only its two
+  pre-existing pending examples.
 - [ ] Prove the focused PGMQ consumers and the complete repository pass with
   only published packages, record the resolved versions and results here, and
   perform the final ADR-distillation review.
@@ -134,6 +143,18 @@ library dependencies, nor its `pgmq-migration` test dependency. Consequently
 Mori does not currently list Keiro as a dependent of `mori://shinzui/pgmq-hs`
 even though the Cabal files do.
 
+`okf log add docs/user DOC-25` emitted `concept not found: DOC-25` because the
+document is a Markdown file at the bundle root rather than a concept directory,
+but it still wrote the correctly dated bundle entry. The immediately following
+strict, profile-enforced, log-enforced validation accepted all 25 documents and
+the log, so the warning does not indicate missing durable evidence:
+
+```text
+log: warning: concept not found: DOC-25
+Wrote log.md for 2026-09-14
+OK: 25 concepts (okf_version 0.2)
+```
+
 
 ## Decision Log
 
@@ -189,13 +210,17 @@ even though the Cabal files do.
 
 ## Outcomes & Retrospective
 
-Milestone 1 is complete: the PGMQ 0.6.0.0 family and compatible adapter 0.15.0.0
-are published on Hackage with matching upstream tags. The earlier external
-release blocker is cleared. No Keiro dependency, source, metadata, changelog,
-test, or user-document edit has been attempted yet. Inspection of the tagged
-adapter diff confirms that no additional Keiro production Haskell update is
-required; implementation resumes at Milestone 2 with the planned bound,
-metadata, changelog, regression-test, and documentation work.
+Milestones 1 and 2 are complete. The PGMQ 0.6.0.0 family and compatible adapter
+0.15.0.0 are published on Hackage with matching upstream tags, Keiro's Cabal and
+Mori metadata now select them, and the changelogs and work-queue reference state
+the released behavior. Regression assertions pin `premake = Nothing` and the
+nullable default-partition metric. `dhall type`, `mori show --full`, strict user
+documentation validation, `cabal check`, the refreshed all-package dry run, and
+`keiro-pgmq-test` all pass. The focused suite ran 58 examples with zero failures
+and its two documented pre-existing pending examples. No production Haskell API
+or implementation change was needed. Milestone 3 remains: run all affected
+consumer suites and the repository-wide verification gate, record the final
+resolved plan, and distill durable ADR context.
 
 
 ## Context and Orientation
@@ -561,3 +586,11 @@ released version and commits, and cleared the stopped outcome. The 0.14.0.0 to
 0.15.0.0 tagged diff contains no Haskell source changes, so the plan requires no
 additional Keiro production-code compatibility update beyond its existing
 Milestone 2 scope.
+
+
+Revision note (2026-09-14): Completed Milestone 2 by raising the adapter bounds,
+reconciling direct PGMQ metadata, documenting the released source-visible
+behavior, and adding regression assertions. Recorded the successful refreshed
+solver, metadata/document checks, and 58-example focused-suite evidence, plus
+the non-fatal root-document warning emitted while adding the accepted DOC-25
+bundle log entry.

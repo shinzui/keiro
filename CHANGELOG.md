@@ -6,10 +6,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-- Adopt the 0.6 candidate from mori://shinzui/pgmq-hs across PGMQ consumers.
-  Partitioned job provisioning explicitly retains default premake with `Nothing`.
+- Adopt the released 0.6.0.0 family from mori://shinzui/pgmq-hs and
+  `shibuya-pgmq-adapter` 0.15.0.0 across PGMQ consumers, completing normal
+  Cabal solver support. Partitioned job provisioning explicitly retains the
+  server's default premake with `Nothing`.
 - Fix parser-scaling benchmark access to the current scaffold `path` and `text`
-  fields, discovered by the full release-candidate component build.
+  fields, discovered by the full PGMQ 0.6 component build.
 
 ## 0.16.0.0 — 2026-09-07
 

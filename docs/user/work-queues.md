@@ -361,6 +361,11 @@ and creates only what is missing, so it is safe to call at every worker startup.
 | `unloggedProvision` | an *unlogged* table: writes skip the WAL, but the table is **truncated on a database crash**. Only for transient, regenerable work. |
 | `partitionedProvision (PartitionSpec interval retention)` | storage split across child tables by time or id range, managed by `pg_partman`. Requires a `pg_partman`-enabled server. |
 
+For partitioned queues, Keiro passes `premake = Nothing` to `pgmq-config` so
+PGMQ retains the server's default number of pre-created partitions (currently
+four). Keiro does not expose explicit premake control; that newer PGMQ 1.13
+option would need a separate public feature decision.
+
 `withFifoIndexProvision` turns on the FIFO GIN index for any of them. The DLQ is
 always a plain standard queue with no FIFO index. `ensureOrderedJobQueue` is the
 convenience composition for ordered jobs (queue + DLQ + index), and
@@ -412,6 +417,13 @@ caller derives a physical name:
 These are Keiro-independent of the `keiro.*` OpenTelemetry instrument set in
 [Operations](operations.md#metric-catalogue); a work queue reports through PGMQ's
 own tables, not through `KeiroMetrics`.
+
+The re-exported `QueueMetrics` also includes
+`defaultPartitionLength :: Maybe Int64`. For a partitioned queue this is a
+PostgreSQL planner estimate of rows that have spilled into the queue and archive
+default partitions, and it can lag writes. `Nothing` means that the estimate is
+unavailable or inapplicable, including for ordinary queues; it must not be
+interpreted as a measured zero.
 
 Tracing follows one contract on both execution shapes: every delivery runs inside
 exactly one Consumer-kind span named `<jobName> process`, carrying
