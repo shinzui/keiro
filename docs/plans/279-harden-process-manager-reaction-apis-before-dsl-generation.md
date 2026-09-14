@@ -86,7 +86,7 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 - [x] (2026-09-14 19:37Z) M1: added transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests. The feasibility group passed 8 examples and the deterministic identity group passed 7 examples.
 - [x] (2026-09-14 19:49Z) M2: implemented the additive reaction model and once runner with explicit typed outcomes, atomic timer accounting, bounded witness recovery, target-local reconciliation, and partial-dispatch replay. The focused group passed 8 examples with 0 failures.
 - [x] (2026-09-14 20:14Z) M3: added reducer-driven worker integration and a public-only handwritten consumer; proved acknowledgement, failure policy, cancellation, timer firing, deep witness, and 8/32/128 same/distinct-target scaling behavior. The reaction group passed 16 examples and the broader process-manager match passed 41 examples.
-- [ ] M4: document the runtime contract, distill its ADR, run compatibility gates, and hand the completed API to plan 273.
+- [x] (2026-09-14 20:41Z) M4: documented the runtime contract and rollout boundary, accepted ADR-41, passed the full runtime/DSL/documentation/repository gates, and handed the concrete API and deviations to plan 273.
 
 
 ## Surprises & Discoveries
@@ -176,6 +176,13 @@ failure records still require memory proportional to their sizes.
 ## Decision Log
 
 
+- Decision: Accept ADR-41 as the durable reaction-runtime contract and hand the additive API to
+  plan 273 without opening Language 6 in this plan.
+  Rationale: The public once/worker surface, transaction boundaries, frozen identity family,
+  silent-effect limit, timer lifecycle, and drain requirement now have runtime tests, public
+  documentation, strict ADR validation, and a passing repository-wide gate. The language registry
+  still has no active candidate; grammar and generated conformance remain plan 273's work.
+  Date: 2026-09-14
 - Decision: Share one reducer-parameterized reaction engine between detailed once calls and workers.
   The worker reduces saga outcomes before dispatch and accumulates only strict duplicate counts and
   reversed failure records.
@@ -265,6 +272,28 @@ failure records still require memory proportional to their sizes.
 ## Outcomes & Retrospective
 
 
+M4 completed on 2026-09-14. The API reference and process-manager guide now document construction,
+once/worker use, result distinctions, saga/timer versus target transactions, silent and no-advance
+replay, timer lifecycle limits, target attempt/commit ordering, stable input requirements, and the
+identity-migration drain. The changelog records the additive surface, and the legacy action Haddock
+no longer claims cross-stream atomicity. [ADR-41](../adr/0041-process-manager-reactions-use-accepted-witnesses-and-target-keyed-recovery.md)
+accepts the runtime boundary. Affected ADR, user, and guide OKF bundles validate strictly.
+
+The full `keiro` suite passed 658 examples with zero failures. `keiro-dsl:tests` passed every
+component, including the 719-example main suite; the 39-entry corpus remained byte-current; and
+`just verify` passed its builds, end-to-end Jitsurei demos, runtime, PGMQ, ops, DSL, documentation,
+and migration gates. Plan 273 now records the concrete constructors and runner signatures, frozen
+ASCII/Unicode vectors, ADR link, handwritten consumer, and deviations. The language registry still
+has no competing active candidate, and this plan made no grammar change.
+
+Two measurement clauses closed with narrower evidence and are explicitly handed off as deviations.
+The 256/1024/4096 witness tests force 1/4/16 private pages but expose neither store read/decode
+counters nor a concurrent hidden-witness mutation. The 8/32/128 fan-out matrix holds persisted saga
+history to two events rather than instrumenting saga hydration reads. Code review establishes the
+captured finite ceiling, exact matched-event decode, and one saga execution independent of target
+traversal; plan 273's generated conformance retains its direct hydration-instrumentation obligation.
+No public contract, persistence schema, or compatibility behavior was weakened to make those claims.
+
 M3 completed on 2026-09-14. `runReactiveProcessManagerWorkerWith` and its default-options wrapper
 use the established Shibuya adapter, acknowledgement, poison, rejection, telemetry, and durable
 dead-letter vocabulary. Manager failures use emit index -1; target failures use their overall
@@ -308,13 +337,13 @@ as a blocker by the released and successfully resolved adapter 0.15.0.0 package 
 The 2026-09-12 review retains the additive public model and five implementation milestones,
 with required corrections to concurrency recovery, finite witness scanning, replay preconditions,
 and worker allocation. The existing author and revision provenance identify `gpt-6` / `codex`;
-there were no recorded review entries before this pass. Runtime correctness remains subject to
-M0 and the new PostgreSQL acceptance cases; no implementation milestone is complete. The baseline
-process-manager command was attempted during review but stopped at dependency solving, before any
-test ran: the available Cabal index offered `pgmq-effectful-0.5.0.0`, while workspace package
-`jitsurei` requires `>=0.6 && <0.7`. That was environment evidence, not a new dependency constraint
-or a reason to weaken existing bounds. Adapter 0.15.0.0 later resolved the blocker without weakening
-those bounds; the unexecuted runtime acceptance cases remain the next source of correctness evidence.
+there were no recorded review entries before that pass. At that time runtime correctness remained
+subject to M0 and the new PostgreSQL cases, and the baseline command stopped at dependency solving
+before any test ran: the available Cabal index offered `pgmq-effectful-0.5.0.0`, while workspace
+package `jitsurei` required `>=0.6 && <0.7`. That was environment evidence, not a new dependency
+constraint or a reason to weaken existing bounds. Adapter 0.15.0.0 later resolved the blocker
+without weakening those bounds; M0 through M4 and the full repository gate now supersede the
+review's pending-runtime status.
 
 
 ## Context and Orientation
@@ -864,6 +893,21 @@ ExecPlan: docs/plans/279-harden-process-manager-reaction-apis-before-dsl-generat
 Intention: intention_01m24setxxeyz93jyt4fjf00gy
 ```
 
+Observed on 2026-09-14:
+
+```text
+okf validate docs/adr ...: OK: 41 concepts
+just user-documentation-validate: user 25 concepts; guides 27 concepts
+cabal test keiro:keiro-test: 658 examples, 0 failures
+cabal test keiro-dsl:tests: every component passed; main suite 719 examples, 0 failures
+just conformance-corpus-policy: 39 of 39; conformance corpus: ok
+just verify: PASS
+git diff --check: PASS
+```
+
+The PGMQ suite retained its two pre-existing environment-specific pending examples (transient
+polling fault injection and live `pg_partman` provisioning); all 58 executable examples passed.
+
 
 ## Validation and Acceptance
 
@@ -1023,6 +1067,11 @@ import or re-export the new child module.
 
 
 ## Revision Notes
+
+2026-09-14: Completed M4 with ADR-41, public API/guide/deployment/changelog documentation, corrected
+legacy atomicity Haddock, strict OKF logs and validation, the plan-273 prerequisite handoff, and a
+passing full repository gate. Recorded the narrower witness/hydration measurement evidence as an
+explicit downstream deviation; no Language 6 grammar work started here.
 
 2026-09-14: Completed M3 with shared reducer-driven once/worker execution, established worker policy
 and bounded witness reasons, the public-only `ReactionExample`, timer-worker and cancellation checks,

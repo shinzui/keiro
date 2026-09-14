@@ -230,8 +230,10 @@ data DomainProcessManager input phi rs s ci co targetPhi targetRs targetState ta
 
 -- | What a process manager decides to do for one input event: advance its own
 -- state with 'command', dispatch zero or more target 'commands', and schedule
--- zero or more 'timers'. All three are applied atomically with crash-safe
--- idempotency by 'runProcessManagerOnce'.
+-- zero or more 'timers'. The manager-state append and timer writes share one
+-- transaction. Each target command then commits in its own transaction, so a
+-- later failure cannot roll back an earlier target append; deterministic ids
+-- make redelivery finish missing dispatches.
 data ProcessManagerAction ci targetCi = ProcessManagerAction
   { command :: !ci,
     commands :: ![PMCommand targetCi],

@@ -6,6 +6,24 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### New Features
+
+- Add `Keiro.ProcessManager.Reaction`, an additive typed process-manager API
+  with explicit no-advance and accepted-only follow-ups, atomic saga/timer
+  mutation, target-keyed dispatch identity, exact accepted-witness recovery,
+  detailed one-shot results, and strict worker integration.
+- Add `Keiro.Timer.cancelTimerTx`, the transaction-level form of guarded timer
+  cancellation, so callers can compose cancellation with an event append and
+  other timer mutations.
+
+### Other Changes
+
+- Existing process-manager APIs and positional deterministic identities remain
+  unchanged. Switching an existing manager name to the reaction runner is an
+  identity migration: drain source redelivery, partial fan-out, pending timers,
+  and permitted historical replay first. The reaction family has no automatic
+  legacy or router identity fallback.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Breaking Changes

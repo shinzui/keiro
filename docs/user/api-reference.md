@@ -592,6 +592,91 @@ memory proportional to accepted batches returned across the fan-out. Worker
 entry points instead summarize each target strictly into only duplicate/failure
 information and release handled payloads before dispatching the next target.
 
+## `Keiro.ProcessManager.Reaction`
+
+The additive reaction API makes optional saga advancement, typed domain
+outcomes, target dispatch, and timer mutation explicit without changing the
+legacy process-manager surface.
+
+Types and functions:
+
+- `ReactiveProcessManager (..)`
+- `ReactionPlan (..)`: `NoAdvance` or `AdvanceReaction`
+- `FollowUp (..)`: `FollowDispatch`, `FollowSchedule`, or `FollowCancel`
+- `ScheduleMode (..)`: `Rearm` or `Once`
+- `ReactionStateResult (..)`: `ReactionNotAdvanced`, `ReactionEvaluated`, or
+  `ReactionDuplicate`
+- `ReactionTimerEffects (..)`, `ReactionError (..)`,
+  `ReactiveProcessManagerResult (..)`
+- `runReactiveProcessManagerOnce`
+- `runReactiveProcessManagerWorkerWith`, `runReactiveProcessManagerWorker`
+- `deterministicReactionCommandId`
+
+The main entry points have these public shapes (constraints omitted here for
+readability):
+
+```haskell
+runReactiveProcessManagerOnce
+  :: RunCommandOptions
+  -> ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp
+  -> RecordedEvent
+  -> input
+  -> Eff es (Either ReactionError (ReactiveProcessManagerResult (EventStream phi rs s ci co) co rejection noOp (EventStream targetPhi targetRs targetState targetCi targetCo)))
+
+runReactiveProcessManagerWorkerWith
+  :: WorkerOptions es msg
+  -> RunCommandOptions
+  -> ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp
+  -> Adapter es msg
+  -> (msg -> Maybe (RecordedEvent, input))
+  -> Eff es ()
+
+runReactiveProcessManagerWorker
+  :: RunCommandOptions
+  -> ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp
+  -> Adapter es msg
+  -> (msg -> Maybe (RecordedEvent, input))
+  -> Eff es ()
+
+deterministicReactionCommandId
+  :: Text -> Text -> EventId -> StreamName -> Int -> EventId
+```
+
+`NoAdvance` performs no saga read or append. `AdvanceReaction` always evaluates
+its `followUps`; it adds `onAccepted` only after a non-empty accepted append or
+after exact recovery of that append's first-event witness. `ReactionEvaluated`
+retains the original typed accepted, rejected, no-op, or eventless outcome;
+`ReactionDuplicate` names the recovered witness; and
+`ReactionCommandFailed`, `ReactionWitnessMissing`, and
+`ReactionWitnessUndecodable` distinguish command failure from corrupt or
+missing recovery evidence.
+
+Saga acceptance and its timer subsequence commit in one transaction. Target
+commands run afterwards, one transaction per command. Redelivery of an accepted
+reaction validates its exact saga witness, skips timer SQL, and retries target
+fan-out. Successful target writes deduplicate by manager name, correlation id,
+source event id, physical target stream, and zero-based occurrence among
+commands to that target. Keep `react` pure and stable for a source event,
+including target order and payloads. Dispatch is attempted in declared order,
+but failures and replay can make later commands commit before earlier ones.
+
+`NoAdvance` and typed silent outcomes have no persisted receipt, so their
+unconditional timer effects may repeat on redelivery or race with another
+delivery that accepts. Put effects that must be coupled to acceptance in
+`onAccepted`. `Once` preserves any existing row, including terminal rows;
+`Rearm` changes only a still-scheduled row. Cancellation changes a scheduled or
+ordinary firing row but cannot stop a callback that already claimed it, revive
+a terminal timer, or override foreground ownership.
+
+The worker uses the same `WorkerOptions`, acknowledgement, poison, rejection,
+retry, dead-letter, and telemetry policies as the legacy process manager. It
+strictly retains only duplicate counts and failures during fan-out. The
+one-shot runner intentionally returns all detailed target results.
+
+This is a new deterministic-id family. Existing managers do not switch to it
+automatically, and it has no positional-id or router-id fallback. Follow the
+reaction cutover procedure in [Deploy Ordering](deploy-ordering.md#4-drain-process-manager-and-router-decide-changes).
+
 ## `Keiro.Router`
 
 Types and functions:
@@ -662,6 +747,7 @@ Types and functions:
 - `TimerStatus (..)`
 - `scheduleTimerTx`
 - `scheduleTimerOnceTx`
+- `cancelTimerTx`
 - `claimDueTimer`
 - `markTimerFired`
 - `countDueTimers`
@@ -677,6 +763,9 @@ Use it for durable timer storage and polling workers. `runTimerWorker` is
 `Maybe KeiroMetrics` as their first argument. The recovery group is the supported
 stuck-row runbook — see
 [Operations](operations.md#stuck-row-recovery-runbook).
+`cancelTimerTx` is the transaction-level form used when cancellation must share
+the caller's event-append transaction; it has the same lifecycle and foreground
+ownership guards as `cancelTimer`.
 
 ## `Keiro.Workflow` and the workflow module family
 

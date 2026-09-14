@@ -1,6 +1,8 @@
 # Keiro User Documentation Log
 
 ## 2026-09-14
+* **Update**: Document the drain required when adopting or changing the process-reaction dispatch identity family.
+* **Update**: Document the additive process-manager reaction API, result distinctions, phase boundaries, replay behavior, and transactional timer cancellation.
 * **Update**: Document pgmq-hs 0.6 partition premake and default-partition metrics
 
 ## 2026-09-10

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-14
+* **Decision**: Accept additive process-manager reactions with exact saga witnesses, separate target recovery, and a target-keyed deterministic identity family (plan 279).
+
 ## 2026-09-10
 * **Decision**: Add ADR-40: sanction bounded inspection-and-operations surfaces over supported library APIs in opt-in sister packages while metrics and traces stay in OpenTelemetry (IR-32).
 * **Update**: ADR-28: point the future-console consequence at ADR-40.

@@ -118,9 +118,29 @@ increase, mapped selection dependency change, or declarative/custom boundary
 crossing is an explicit advisory. Custom resolver behavior remains
 `custom-unverified`, so application-only edits still require manual review.
 
+The additive `Keiro.ProcessManager.Reaction` runner uses a distinct
+target-keyed identity family. Existing applications do not switch to it
+automatically. Treat moving a manager name from `runProcessManagerOnce` or
+`runDomainProcessManagerOnce` to `runReactiveProcessManagerOnce` as an identity
+migration: drain source deliveries, unfinished partial fan-out, pending timers,
+and every historical replay the application still permits before activating
+the new runner. The saga acceptance id remains compatible, so without that
+drain the new runner can recover an old saga witness and then append the same
+logical target action under its new target-keyed id.
+
+Within the reaction family, the identity includes the physical target stream
+and the zero-based occurrence among commands to that target. Reordering two
+same-target commands or changing their payload/meaning can therefore reuse an
+id for a different action. Apply the same drain and replay review. A reaction
+version or fingerprint may record review intent, but neither enters the runtime
+id seed. There is no version-number escape hatch and no automatic fallback to
+legacy positional or router identities.
+
 The deterministic-id behavior is implemented in
 [`Keiro.Router`](../../keiro/src/Keiro/Router.hs) and
-[`Keiro.ProcessManager`](../../keiro/src/Keiro/ProcessManager.hs).
+[`Keiro.ProcessManager`](../../keiro/src/Keiro/ProcessManager.hs), with the new
+family in
+[`Keiro.ProcessManager.Reaction`](../../keiro/src/Keiro/ProcessManager/Reaction.hs).
 
 If this rule is violated, no error is raised: benign-duplicate confirmation
 silently preserves a half-old, half-new fan-out.

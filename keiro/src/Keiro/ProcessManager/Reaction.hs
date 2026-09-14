@@ -5,6 +5,15 @@
 -- timer and target phases are deliberately separate transactions. Accepted
 -- redelivery validates the recorded saga witness, skips timer SQL, and retries
 -- target fan-out with deterministic target-keyed ids.
+--
+-- 'NoAdvance' and silent domain decisions have no durable receipt. Their
+-- unconditional timer effects may therefore run again, including around a
+-- concurrent accepted delivery; effects that must be tied to acceptance belong
+-- in @onAccepted@. Inputs to 'react', including command order and payloads, must
+-- be stable for a source event. Dispatches are attempted in declared order, but
+-- independent transactions, failures, and replay do not guarantee that commit
+-- order. Switching an existing manager to this identity family requires a
+-- drain; there is no positional-id fallback.
 module Keiro.ProcessManager.Reaction
   ( -- * Definition
     ReactiveProcessManager (..),
@@ -112,7 +121,9 @@ data ReactionPlan ci targetCi
 
 -- | One ordered reaction effect. Timer operations retain their relative order
 -- in the timer transaction and dispatches retain theirs in the later target
--- phase; the two kinds are not one cross-stream transaction.
+-- phase; the two kinds are not one cross-stream transaction. 'Once' is
+-- insert-only for the timer id, while 'Rearm' updates only a still-scheduled
+-- row. Cancellation cannot revoke a callback that has already claimed a timer.
 data FollowUp targetCi
   = FollowDispatch !(PMCommand targetCi)
   | FollowSchedule !ScheduleMode !TimerRequest

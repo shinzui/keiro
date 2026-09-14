@@ -1,5 +1,7 @@
 # Keiro Guides Log
 
-## 2026-08-26
+## 2026-09-14
+* **Update**: Add handwritten reaction once/worker guidance, transaction and replay semantics, timer limits, and identity cutover steps.
 
+## 2026-08-26
 * **Addition**: Adopt the shared user-documentation profile for the Keiro guides and assign stable document handles.
