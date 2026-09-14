@@ -10,6 +10,12 @@ provenance:
     model: "gpt-5.6-sol"
     harness: "codex-cli"
     at: 2026-09-14T17:41:10Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-14T17:54:30Z
+      mode: "implement"
+      note: "Recorded the unresolved adapter release gate"
 ---
 
 # Complete the pgmq-hs 0.6.0.0 upgrade
@@ -40,9 +46,13 @@ the new nullable default-partition metric. A human can see the result by running
 
 ## Progress
 
-- [ ] Verify that Hackage and the upstream tag registries contain the complete
-  `pgmq-hs` 0.6.0.0 family and a released `shibuya-pgmq-adapter` whose published
-  Cabal file accepts that family. Record the exact adapter version and commits.
+- [x] (2026-09-14 17:54Z) Verify that Hackage and the upstream tag registry
+  contain the complete `pgmq-hs` 0.6.0.0 family. Hackage selects 0.6.0.0 for all
+  five packages, and upstream tag `v0.6.0.0` resolves to commit `7269f4de`.
+- [ ] Wait for and verify a released `shibuya-pgmq-adapter` whose published
+  Cabal file accepts the 0.6 family. The 2026-09-14 17:54Z gate still finds
+  Hackage 0.14.0.0 and upstream tag `v0.14.0.0` at commit `30165237`, both with
+  `^>=0.5` PGMQ bounds; no compatible release exists yet.
 - [ ] Raise the Keiro adapter bounds to the compatible release, reconcile
   `mori.dhall`, and replace release-candidate wording in the root and
   `keiro-pgmq` changelogs.
@@ -65,10 +75,25 @@ described the dependency as a release candidate.
 
 The remaining problem is the adapter release. On 2026-09-14, Hackage reports
 `shibuya-pgmq-adapter` 0.14.0.0 as latest, and its published Cabal file requires
-`pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` at `^>=0.5`. The upstream main
-branch has already changed those bounds to `^>=0.6` without changing the package
-version, but the latest upstream tag remains `v0.14.0.0`. Therefore the main
-branch is compatibility evidence, not a consumable release.
+`pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` at `^>=0.5` in both the library
+and test suite. Fresh implementation-time verification corrected an earlier
+assumption about upstream: GitHub `HEAD` is commit `fee9b3a8`, whose Cabal file
+also retains `^>=0.5`, and the latest upstream tag remains `v0.14.0.0` at commit
+`30165237`. The Mori-located checkout is two commits ahead of `origin/master`;
+its local commit `2b67a65d` changes the four adapter PGMQ bounds to `^>=0.6`
+without changing the package version. That local commit is compatibility
+evidence, not a consumable release or published upstream state.
+
+The repeated release gate at 2026-09-14 17:54Z produced:
+
+```text
+pgmq-core 0.6.0.0
+pgmq-hasql 0.6.0.0
+pgmq-effectful 0.6.0.0
+pgmq-migration 0.6.0.0
+pgmq-config 0.6.0.0
+shibuya-pgmq-adapter 0.14.0.0
+```
 
 The failure is reproducible before compilation:
 
@@ -100,10 +125,10 @@ even though the Cabal files do.
   but verify its actual published version and Cabal bounds at implementation
   time. If upstream assigns another version, update this living plan before
   editing bounds.
-  Rationale: The unreleased upstream source still says 0.14.0.0, so its eventual
-  version is not authoritative. The dependency rule is deterministic: select
-  the first released adapter newer than 0.14.0.0 whose published package accepts
-  the complete PGMQ 0.6 family.
+  Rationale: The Mori-located local compatibility commit still says 0.14.0.0
+  and has not reached upstream, so its eventual version is not authoritative.
+  The dependency rule is deterministic: select the first released adapter newer
+  than 0.14.0.0 whose published package accepts the complete PGMQ 0.6 family.
   Date: 2026-09-14
 
 - Decision: Do not use `allow-newer`, a `source-repository-package`, a local
@@ -133,7 +158,12 @@ even though the Cabal files do.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Implementation is stopped at Milestone 1 because no compatible adapter release
+exists. The PGMQ 0.6.0.0 family itself is fully published, but Hackage and the
+upstream adapter repository still expose only adapter 0.14.0.0 with PGMQ 0.5
+bounds. No Keiro dependency, source, metadata, changelog, test, or user-document
+edit has been attempted. Resume by repeating the release gate; after a compatible
+upload and matching tag appear, continue with Milestone 2.
 
 
 ## Context and Orientation
@@ -192,11 +222,12 @@ metrics, and belongs to the profiled `docs/user` OKF bundle as `DOC-25`; edits
 must be logged in `docs/user/log.md` and pass strict profile validation.
 
 The compatible adapter is a separate project. Mori identifies its package as
-`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter`. Its
-unreleased source accepts PGMQ 0.6 without an adapter API or lease-handling
-change, but the released 0.14.0.0 package accepts only PGMQ 0.5. The package
-release is therefore a hard prerequisite, not work to perform in this
-repository.
+`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter`. A local
+commit in the Mori-located checkout accepts PGMQ 0.6 without an adapter API or
+lease-handling change, but neither GitHub `HEAD` nor the released 0.14.0.0
+package contains that commit; both accept only PGMQ 0.5. Publishing the local
+compatibility work upstream and releasing it is therefore a hard prerequisite,
+not work to perform in this repository.
 
 [Plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md)
 records this solver conflict as its M0 prerequisite blocker. Completion of this
@@ -484,3 +515,11 @@ the authoritative registry for released versions; GitHub upstream tags verify
 release provenance; Mori supplies canonical identities, source locations, and
 documentation. The project must not acquire a local path override, a source pin,
 or an `allow-newer` exception.
+
+
+Revision note (2026-09-14): Recorded the failed implementation-time release
+gate, split the first Progress item into completed PGMQ-family verification and
+the outstanding adapter release, and corrected the plan's earlier claim that the
+PGMQ 0.6 adapter bounds were already present upstream. Authoritative GitHub
+`HEAD` and Hackage still carry PGMQ 0.5 bounds; only the Mori-located local
+checkout contains compatibility commit `2b67a65d`.
