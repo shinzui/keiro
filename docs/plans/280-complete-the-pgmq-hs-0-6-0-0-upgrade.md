@@ -16,6 +16,11 @@ provenance:
       at: 2026-09-14T17:54:30Z
       mode: "implement"
       note: "Recorded the unresolved adapter release gate"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-14T18:20:24Z
+      mode: "update"
+      note: "Verified adapter 0.15.0.0 and cleared the release gate"
 ---
 
 # Complete the pgmq-hs 0.6.0.0 upgrade
@@ -27,13 +32,14 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-Keiro's checked-in source already uses the `pgmq-hs` 0.6 API, but a fresh Cabal
-build cannot select a released dependency set: the newest published
-`shibuya-pgmq-adapter` still excludes `pgmq-hs` 0.6. After this plan, a user can
-clone Keiro, refresh Hackage, and build and test the whole workspace without a
-source override, `allow-newer`, or a locally checked-out dependency. The resolved
-plan will contain all five `pgmq-hs` packages at 0.6.0.0 and a released adapter
-whose declared bounds accept that family.
+Keiro's checked-in source already uses the `pgmq-hs` 0.6 API. The dependency
+upgrade was initially blocked because the newest published
+`shibuya-pgmq-adapter` excluded `pgmq-hs` 0.6; adapter 0.15.0.0 now removes that
+external release blocker. After this plan, a user can clone Keiro, refresh
+Hackage, and build and test the whole workspace without a source override,
+`allow-newer`, or a locally checked-out dependency. The resolved plan will
+contain all five `pgmq-hs` packages at 0.6.0.0 and
+`shibuya-pgmq-adapter` 0.15.0.0, whose declared bounds accept that family.
 
 The change also makes the upgrade visible and honest. Keiro's package metadata
 will describe its real direct PGMQ dependencies, the changelogs and work-queue
@@ -49,13 +55,12 @@ the new nullable default-partition metric. A human can see the result by running
 - [x] (2026-09-14 17:54Z) Verify that Hackage and the upstream tag registry
   contain the complete `pgmq-hs` 0.6.0.0 family. Hackage selects 0.6.0.0 for all
   five packages, and upstream tag `v0.6.0.0` resolves to commit `7269f4de`.
-- [ ] Wait for and verify a released `shibuya-pgmq-adapter` whose published
-  Cabal file accepts the 0.6 family. The 2026-09-14 17:54Z gate still finds
-  Hackage 0.14.0.0 and upstream tag `v0.14.0.0` at commit `30165237`, both with
-  `^>=0.5` PGMQ bounds; no compatible release exists yet.
-- [ ] Raise the Keiro adapter bounds to the compatible release, reconcile
-  `mori.dhall`, and replace release-candidate wording in the root and
-  `keiro-pgmq` changelogs.
+- [x] (2026-09-14 18:17Z) Verify the compatible adapter release. Hackage selects
+  `shibuya-pgmq-adapter` 0.15.0.0, upstream tag `v0.15.0.0` resolves to release
+  commit `22f5c4da`, and the published library and test-suite bounds accept
+  `pgmq-core`, `pgmq-effectful`, `pgmq-hasql`, and `pgmq-migration` 0.6.
+- [ ] Raise the Keiro adapter bounds to `^>=0.15.0.0`, reconcile `mori.dhall`,
+  and replace release-candidate wording in the root and `keiro-pgmq` changelogs.
 - [ ] Pin the adopted 0.6 behavior in `keiro-pgmq/test/Main.hs` and explain the
   new partition and metrics fields in `docs/user/work-queues.md`, including its
   OKF bundle log entry.
@@ -73,8 +78,8 @@ Commit `e4ec781b` already changed every bounded Keiro consumer from the 0.5 fami
 to `>=0.6 && <0.7`, added `premake = Nothing` to Keiro's `PartitionConfig`, and
 described the dependency as a release candidate.
 
-The remaining problem is the adapter release. On 2026-09-14, Hackage reports
-`shibuya-pgmq-adapter` 0.14.0.0 as latest, and its published Cabal file requires
+The former problem was the adapter release. At 2026-09-14 17:54Z, Hackage reported
+`shibuya-pgmq-adapter` 0.14.0.0 as latest, and its published Cabal file required
 `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` at `^>=0.5` in both the library
 and test suite. Fresh implementation-time verification corrected an earlier
 assumption about upstream: GitHub `HEAD` is commit `fee9b3a8`, whose Cabal file
@@ -95,7 +100,25 @@ pgmq-config 0.6.0.0
 shibuya-pgmq-adapter 0.14.0.0
 ```
 
-The failure is reproducible before compilation:
+At 2026-09-14 18:17Z, a refreshed Hackage index and the live preferred-version
+endpoint selected `shibuya-pgmq-adapter` 0.15.0.0. Upstream tag `v0.15.0.0`
+resolves to commit `22f5c4da`; its annotated tag object is `4a57c030`. The
+published Cabal file matches the Mori-located tagged source and declares
+`^>=0.6` for `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` in both the library
+and test suite, plus `pgmq-migration ^>=0.6` in the test suite. The release gate
+is therefore satisfied.
+
+The adapter release does not require a Keiro production-code compatibility
+update. A tagged diff from adapter 0.14.0.0 to 0.15.0.0 contains no Haskell
+source-file changes; the adapter package change is its version and PGMQ bounds,
+and its changelog explicitly preserves the public function and record
+signatures. Keiro commit `e4ec781b` already adopted PGMQ 0.6's production-visible
+`PartitionConfig.premake` field. The remaining Haskell edit in this plan is
+regression coverage for `premake` and `QueueMetrics.defaultPartitionLength`, not
+a production API adaptation.
+
+Before adapter 0.15.0.0 was published, the failure was reproducible before
+compilation:
 
 ```text
 Resolving dependencies...
@@ -155,15 +178,24 @@ even though the Cabal files do.
   tests and documented application migration plans.
   Date: 2026-09-14
 
+- Decision: Adopt `shibuya-pgmq-adapter ^>=0.15.0.0` as the compatible adapter
+  range for this upgrade.
+  Rationale: Hackage 0.15.0.0 and upstream tag `v0.15.0.0` both resolve to the
+  release source whose declared bounds accept the complete PGMQ 0.6 family. The
+  ordinary Cabal solver can therefore consume the compatibility work after
+  Keiro raises its adapter bound, without an override or local checkout.
+  Date: 2026-09-14
+
 
 ## Outcomes & Retrospective
 
-Implementation is stopped at Milestone 1 because no compatible adapter release
-exists. The PGMQ 0.6.0.0 family itself is fully published, but Hackage and the
-upstream adapter repository still expose only adapter 0.14.0.0 with PGMQ 0.5
-bounds. No Keiro dependency, source, metadata, changelog, test, or user-document
-edit has been attempted. Resume by repeating the release gate; after a compatible
-upload and matching tag appear, continue with Milestone 2.
+Milestone 1 is complete: the PGMQ 0.6.0.0 family and compatible adapter 0.15.0.0
+are published on Hackage with matching upstream tags. The earlier external
+release blocker is cleared. No Keiro dependency, source, metadata, changelog,
+test, or user-document edit has been attempted yet. Inspection of the tagged
+adapter diff confirms that no additional Keiro production Haskell update is
+required; implementation resumes at Milestone 2 with the planned bound,
+metadata, changelog, regression-test, and documentation work.
 
 
 ## Context and Orientation
@@ -222,12 +254,11 @@ metrics, and belongs to the profiled `docs/user` OKF bundle as `DOC-25`; edits
 must be logged in `docs/user/log.md` and pass strict profile validation.
 
 The compatible adapter is a separate project. Mori identifies its package as
-`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter`. A local
-commit in the Mori-located checkout accepts PGMQ 0.6 without an adapter API or
-lease-handling change, but neither GitHub `HEAD` nor the released 0.14.0.0
-package contains that commit; both accept only PGMQ 0.5. Publishing the local
-compatibility work upstream and releasing it is therefore a hard prerequisite,
-not work to perform in this repository.
+`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter`.
+Release 0.15.0.0 publishes the PGMQ 0.6 compatibility work from commit
+`2b67a65d` at release commit `22f5c4da`. It changes no Haskell source or adapter
+API relative to 0.14.0.0, so Keiro needs the new package bound but no production
+adapter-call changes.
 
 [Plan 279](279-harden-process-manager-reaction-apis-before-dsl-generation.md)
 records this solver conflict as its M0 prerequisite blocker. Completion of this
@@ -249,22 +280,19 @@ ADR.
 
 ## Plan of Work
 
-Milestone 1 is a release gate. Refresh the Hackage index, query Hackage's
-preferred-version documents for every PGMQ package and the adapter, inspect the
-published adapter Cabal file, and verify upstream tags. The expected adapter is
-0.15.0.0, but the published package is authoritative. It must be newer than
-0.14.0.0 and must constrain `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` to a
-range containing 0.6.0.0; its test component should likewise accept
-`pgmq-migration` 0.6.0.0. If no such release exists, record the evidence in
-Progress and Surprises & Discoveries and stop without modifying dependency
-bounds. Acceptance is the existence of matching Hackage packages and upstream
-tags, not a successful build from a local checkout.
+Milestone 1 is a completed release gate. A refreshed Hackage index, Hackage's
+preferred-version documents, the published adapter Cabal file, and upstream tags
+all identify adapter 0.15.0.0. It constrains `pgmq-core`, `pgmq-effectful`, and
+`pgmq-hasql` to `^>=0.6`; its
+test component likewise accepts `pgmq-migration ^>=0.6`. Tag `v0.15.0.0`
+resolves to release commit `22f5c4da`, so matching Hackage and upstream releases
+satisfy this milestone without relying on a local checkout.
 
 Milestone 2 completes the repository representation of the upgrade. In the
 library and test-suite stanzas of `keiro-pgmq/keiro-pgmq.cabal` and the test-suite
 stanza of `jitsurei/jitsurei.cabal`, raise
 `shibuya-pgmq-adapter ^>=0.14.0.0` to the verified compatible release series,
-expected `^>=0.15.0.0`. Keep every direct PGMQ bound at `>=0.6 && <0.7`; do not
+`^>=0.15.0.0`. Keep every direct PGMQ bound at `>=0.6 && <0.7`; do not
 widen it speculatively.
 
 In the `keiro-pgmq` package record in `mori.dhall`, update the adapter constraint
@@ -332,10 +360,9 @@ git ls-remote --tags https://github.com/shinzui/shibuya-pgmq-adapter.git
 ```
 
 The five loop lines must end in `0.6.0.0`. At plan creation the adapter query
-prints `0.14.0.0`, which is the blocker. To pass Milestone 1 it should print the
-new compatible version, expected `0.15.0.0`, and the adapter tag output must
-contain the matching tag. Then inspect the package actually uploaded to Hackage,
-substituting the observed version if it differs:
+printed `0.14.0.0`; after the 2026-09-14 release it prints `0.15.0.0`, and the
+adapter tag output contains `v0.15.0.0` at release commit `22f5c4da`. Inspect the
+package actually uploaded to Hackage:
 
 ```bash
 curl -fsSL \
@@ -343,8 +370,9 @@ curl -fsSL \
   rg '^(version:|library|test-suite)|pgmq-(core|effectful|hasql|migration)'
 ```
 
-Expected dependency lines contain `^>=0.6`. A Git tag without the matching
-Hackage upload, or an upload whose Cabal file still says `^>=0.5`, does not pass.
+The dependency lines contain `^>=0.6`. A future rerun still requires both the
+Git tag and matching Hackage upload; a tag without an upload, or an upload whose
+Cabal file says `^>=0.5`, would not satisfy this gate.
 
 Apply the Milestone 2 edits with `apply_patch`. Format and validate the metadata
 and documentation:
@@ -392,9 +420,9 @@ jq -r '
 ' dist-newstyle/cache/plan.json | sort -u
 ```
 
-The version report must list the five PGMQ packages at 0.6.0.0 and the verified
-adapter version. Preserve the actual report and validation summary in Outcomes &
-Retrospective.
+The version report must list the five PGMQ packages at 0.6.0.0 and
+`shibuya-pgmq-adapter` at 0.15.0.0. Preserve the actual report and validation
+summary in Outcomes & Retrospective.
 
 Use Conventional Commits and include both active trailers on every commit made
 for this plan. A suitable implementation commit is:
@@ -506,12 +534,13 @@ defaultPartitionLength :: Maybe Int64
 
 `Keiro.PGMQ.Metrics` continues to re-export `QueueMetrics(..)` without wrapping
 or normalizing it. The compatible
-`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter` release must
-retain the adapter API used by `Keiro.PGMQ.Job` while declaring PGMQ 0.6 bounds.
+`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter` 0.15.0.0
+release retains the adapter API used by `Keiro.PGMQ.Job` while declaring PGMQ
+0.6 bounds.
 
 Final Cabal ranges are the five PGMQ packages at `>=0.6 && <0.7` and the
-adapter at the verified compatible series, expected `^>=0.15.0.0`. Hackage is
-the authoritative registry for released versions; GitHub upstream tags verify
+adapter at `^>=0.15.0.0`. Hackage is the authoritative registry for released
+versions; GitHub upstream tags verify
 release provenance; Mori supplies canonical identities, source locations, and
 documentation. The project must not acquire a local path override, a source pin,
 or an `allow-newer` exception.
@@ -523,3 +552,12 @@ the outstanding adapter release, and corrected the plan's earlier claim that the
 PGMQ 0.6 adapter bounds were already present upstream. Authoritative GitHub
 `HEAD` and Hackage still carry PGMQ 0.5 bounds; only the Mori-located local
 checkout contains compatibility commit `2b67a65d`.
+
+
+Revision note (2026-09-14): Verified the newly published
+`shibuya-pgmq-adapter` 0.15.0.0 package and matching `v0.15.0.0` tag, marked the
+release gate complete, replaced provisional adapter-version language with the
+released version and commits, and cleared the stopped outcome. The 0.14.0.0 to
+0.15.0.0 tagged diff contains no Haskell source changes, so the plan requires no
+additional Keiro production-code compatibility update beyond its existing
+Milestone 2 scope.
