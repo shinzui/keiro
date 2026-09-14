@@ -10,7 +10,7 @@ import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, con
 import Control.Concurrent (forkIO, killThread, threadDelay)
 import Control.Concurrent.MVar (MVar, modifyMVar, newEmptyMVar, newMVar, putMVar, readMVar, takeMVar, tryPutMVar)
 import Control.Concurrent.STM (atomically, putTMVar)
-import Control.Exception (ErrorCall, Exception, SomeException, displayException, evaluate, finally, throwIO, try)
+import Control.Exception (AsyncException (..), ErrorCall, Exception, SomeException, displayException, evaluate, finally, throwIO, try)
 import Control.Monad (forM, forM_)
 import Data.Aeson (object, withObject, (.:), (.:?))
 import Data.Aeson qualified as Aeson
@@ -397,6 +397,7 @@ import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
 import ProjectionReplaySpec qualified
+import ReactionExample qualified
 import ReadModelSpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
@@ -4691,30 +4692,278 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         [PMCommandFailed observed (StoreFailed _)] -> observed == targetName
         _ -> False
 
-    it "pages a deep accepted witness without reconstructing the original batch" $ \(_storeHandle, StoreRunner runner) -> do
-      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
-          correlationId = "paged-witness"
-          sagaName = StreamName "reaction-saga:paged-witness"
-          managerId = deterministicCommandId "counter-reaction" correlationId (sourceEvent ^. #eventId) (-1)
-      encoded <- traverse (shouldBeRight . encodeForAppend counterCodec . CounterAdded) [1 .. 300]
-      let withIds =
-            Prelude.zipWith
-              (\index event -> if index == (280 :: Int) then event & #eventId ?~ managerId else event)
-              [1 ..]
-              encoded
-      Right _ <- runner $ Store.appendToStream sagaName NoStream withIds
-      recovered <-
+    it "pages accepted witnesses at 256, 1024, and 4096 event history depths" $ \(_storeHandle, StoreRunner runner) ->
+      forM_ [256, 1024, 4096] $ \depth -> do
+        let sourceId = EventId (UUID.fromWords 0 0 279 (fromIntegral depth))
+            sourceEvent = recordedFromEventId sourceId (CounterAdded depth)
+            correlationId = "paged-witness-" <> Text.pack (show depth)
+            sagaName = StreamName ("reaction-saga:" <> correlationId)
+            managerId = deterministicCommandId "counter-reaction" correlationId sourceId (-1)
+        encoded <- traverse (shouldBeRight . encodeForAppend counterCodec . CounterAdded) [1 .. depth]
+        let withIds =
+              Prelude.zipWith
+                (\eventIndex event -> if eventIndex == depth - 1 then event & #eventId ?~ managerId else event)
+                [0 ..]
+                encoded
+        Right _ <- runner $ Store.appendToStream sagaName NoStream withIds
+        recovered <-
+          runner $
+            Reaction.runReactiveProcessManagerOnce
+              defaultRunCommandOptions
+              counterReactionManager
+              sourceEvent
+              (correlationId, Reaction.AdvanceReaction (Add 1) [] [])
+        recovered `shouldSatisfy` \case
+          Right (Right result) -> case result ^. #managerResult of
+            Reaction.ReactionDuplicate duplicateId -> duplicateId == managerId
+            _ -> False
+          _ -> False
+
+    it "runs the public-only handwritten reported and acknowledged example" $ \(_storeHandle, StoreRunner runner) -> do
+      let manager = ReactionExample.exampleReactionManager dueTimerTime
+          reportedSource = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          acknowledgedSource = recordedFromEventId (EventId sampleUuid2) (CounterAdded 2)
+          correlationId = "incident-279"
+      Right (Right reported) <-
         runner $
           Reaction.runReactiveProcessManagerOnce
             defaultRunCommandOptions
-            counterReactionManager
-            sourceEvent
-            (correlationId, Reaction.AdvanceReaction (Add 1) [] [])
-      recovered `shouldSatisfy` \case
-        Right (Right result) -> case result ^. #managerResult of
-          Reaction.ReactionDuplicate duplicateId -> duplicateId == managerId
-          _ -> False
+            manager
+            reportedSource
+            (ReactionExample.IncidentReported correlationId ReactionExample.Urgent)
+      reported ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 2 2 0
+      reported ^. #commandResults `shouldSatisfy` \case
+        [PMCommandAppended result] -> result ^. #eventsAppended == 1
         _ -> False
+      reminder <- runner (lookupTimer ReactionExample.exampleReminderTimerId)
+      escalation <- runner (lookupTimer ReactionExample.exampleEscalationTimerId)
+      reminder `shouldSatisfy` \case
+        Right (Just row) -> row ^. #fireAt == addUTCTime 300 dueTimerTime
+        _ -> False
+      escalation `shouldSatisfy` \case
+        Right (Just row) -> row ^. #fireAt == addUTCTime 900 dueTimerTime
+        _ -> False
+      Right (Right routine) <-
+        runner $
+          Reaction.runReactiveProcessManagerOnce
+            defaultRunCommandOptions
+            manager
+            acknowledgedSource
+            (ReactionExample.IncidentReported "routine-279" ReactionExample.Routine)
+      routine ^. #managerResult `shouldBe` Reaction.ReactionNotAdvanced
+      routine ^. #commandResults `shouldBe` []
+      Right routineSaga <- runner $ Store.getStream (StreamName "incident-reaction-saga:routine-279")
+      routineSaga `shouldBe` Nothing
+      let target = stream ("incident-reaction-target:" <> correlationId)
+      Right (Just firedReminder) <-
+        runner $
+          runTimerWorker Nothing (addUTCTime 300 dueTimerTime) $ \_ -> do
+            late <-
+              runCommand
+                defaultRunCommandOptions
+                ReactionExample.exampleTargetEventStream
+                target
+                ReactionExample.ApplyLateTimeout
+            pure $ case late of
+              Right result | result ^. #eventsAppended == 0 -> Just (EventId sampleUuid3)
+              _ -> Nothing
+      firedReminder ^. #timerId `shouldBe` ReactionExample.exampleReminderTimerId
+      Right (Right acknowledged) <-
+        runner $
+          Reaction.runReactiveProcessManagerOnce
+            defaultRunCommandOptions
+            manager
+            acknowledgedSource
+            (ReactionExample.IncidentAcknowledged correlationId)
+      acknowledged ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 2 0 1
+      runner (runTimerWorker Nothing (addUTCTime 300 dueTimerTime) (\_ -> error "fired reminder redelivered"))
+        `shouldReturn` Right Nothing
+
+    it "worker finalizes each success and duplicate exactly once" $ \(_storeHandle, StoreRunner runner) -> do
+      decisions <- newIORef []
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 2)
+          target = stream "reaction-worker-target:ok" :: Stream CounterCommand
+          plan = Reaction.AdvanceReaction (Add 2) [] [Reaction.FollowDispatch (PMCommand target (Add 2))]
+          message = (sourceEvent, ("worker-ok", plan))
+      Right () <-
+        runner $
+          Reaction.runReactiveProcessManagerWorker
+            defaultRunCommandOptions
+            counterReactionManager
+            (inMemoryAdapter decisions [message, message])
+            Just
+      readIORef decisions `shouldReturn` [AckOk, AckOk]
+      Right targetEvents <- runner $ Store.readStreamForward (StreamName "reaction-worker-target:ok") (StreamVersion 0) 10
+      Vector.length targetEvents `shouldBe` 1
+
+    it "worker applies target rejection policy with the overall dispatch index" $ \(_storeHandle, StoreRunner runner) -> do
+      decisions <- newIORef []
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          target = stream "reaction-worker-strict:rejected" :: Stream FeasibilityGateCommand
+          plan = Reaction.AdvanceReaction (Add 1) [] [Reaction.FollowDispatch (PMCommand target (TryAccept 7))]
+          message = (sourceEvent, ("worker-rejected", plan))
+          workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
+      Right () <-
+        runner $
+          Reaction.runReactiveProcessManagerWorkerWith
+            workerOptions
+            defaultRunCommandOptions
+            strictTargetReactionManager
+            (inMemoryAdapter decisions [message])
+            Just
+      readIORef decisions `shouldReturn` [AckOk]
+      Right deadLetters <- runner (listDispatchDeadLetters "strict-target-reaction")
+      deadLetters `shouldSatisfy` \case
+        [row] -> row ^. #emitIndex == 0 && row ^. #targetStreamName == StreamName "reaction-worker-strict:rejected"
+        _ -> False
+
+    it "worker handles typed silence as a successful delivery" $ \(_storeHandle, StoreRunner runner) -> do
+      silentDecisions <- newIORef []
+      let silentSource = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          silentPlan = Reaction.AdvanceReaction NoOpSilently [] []
+      Right () <-
+        runner $
+          Reaction.runReactiveProcessManagerWorker
+            defaultRunCommandOptions
+            silentReactionManager
+            (inMemoryAdapter silentDecisions [(silentSource, ("worker-silent", silentPlan))])
+            Just
+      readIORef silentDecisions `shouldReturn` [AckOk]
+
+    it "worker records manager failures at index minus one" $ \(_storeHandle, StoreRunner runner) -> do
+      managerFailureDecisions <- newIORef []
+      let failedSource = recordedFromEventId (EventId sampleUuid2) (CounterAdded 2)
+          failedPlan = Reaction.AdvanceReaction (Add 2) [] []
+          rejectingHandler =
+            DomainCommandHandler
+              { eventStream = rejectingEventStream,
+                classifySilent = \_ -> error "rejecting reaction handler selected a silent edge"
+              }
+          rejectingManager =
+            Reaction.ReactiveProcessManager
+              "counter-reaction"
+              Prelude.fst
+              rejectingHandler
+              (\correlationId -> stream ("reaction-saga:" <> correlationId))
+              counterEventStream
+              (const [])
+              Prelude.snd
+          workerOptions = defaultWorkerOptions & #rejectedCommandPolicy .~ RejectedDeadLetter
+      Right () <-
+        runner $
+          Reaction.runReactiveProcessManagerWorkerWith
+            workerOptions
+            defaultRunCommandOptions
+            rejectingManager
+            (inMemoryAdapter managerFailureDecisions [(failedSource, ("worker-manager-failure", failedPlan))])
+            Just
+      readIORef managerFailureDecisions `shouldReturn` [AckOk]
+      Right deadLetters <- runner (listDispatchDeadLetters "counter-reaction")
+      deadLetters `shouldSatisfy` \case
+        [row] -> row ^. #emitIndex == (-1) && row ^. #targetStreamName == StreamName "reaction-saga:worker-manager-failure"
+        _ -> False
+
+    it "worker uses bounded witness reasons and poison callbacks" $ \(_storeHandle, StoreRunner runner) -> do
+      witnessDecisions <- newIORef []
+      poisonDecisions <- newIORef []
+      poisoned <- newIORef []
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          correlationId = "worker-witness"
+          managerId = deterministicCommandId "counter-reaction" correlationId (sourceEvent ^. #eventId) (-1)
+          plan = Reaction.AdvanceReaction (Add 1) [] []
+      foreignEvent <- shouldBeRight (encodeForAppend feasibilityGateCodec GateOpened)
+      Right _ <- runner $ Store.appendToStream (StreamName "reaction-saga:worker-witness") NoStream [foreignEvent & #eventId ?~ managerId]
+      Right () <-
+        runner $
+          Reaction.runReactiveProcessManagerWorker
+            defaultRunCommandOptions
+            counterReactionManager
+            (inMemoryAdapter witnessDecisions [(sourceEvent, (correlationId, plan))])
+            Just
+      readIORef witnessDecisions
+        `shouldReturn` [AckHalt (HaltFatal "process-reaction-witness-undecodable")]
+      let poisonOptions =
+            defaultWorkerOptions
+              & #poisonPolicy
+              .~ PoisonDeadLetter (\env -> liftIO (modifyIORef' poisoned (<> [env ^. #payload])))
+      Right () <-
+        runner $
+          Reaction.runReactiveProcessManagerWorkerWith
+            poisonOptions
+            defaultRunCommandOptions
+            counterReactionManager
+            (inMemoryAdapter poisonDecisions ["not-a-reaction" :: Text])
+            (const Nothing)
+      readIORef poisonDecisions
+        `shouldReturn` [AckDeadLetter (InvalidPayload "process-reaction-worker-decode-failed")]
+      readIORef poisoned `shouldReturn` ["not-a-reaction"]
+
+    it "worker lets asynchronous cancellation escape without acknowledging" $ \(_storeHandle, StoreRunner runner) -> do
+      decisions <- newIORef []
+      let workerOptions =
+            defaultWorkerOptions
+              & #poisonPolicy
+              .~ PoisonSkip (\_ -> liftIO (throwIO ThreadKilled))
+      cancelled <-
+        try @AsyncException $
+          runner $
+            Reaction.runReactiveProcessManagerWorkerWith
+              workerOptions
+              defaultRunCommandOptions
+              counterReactionManager
+              (inMemoryAdapter decisions ["cancel" :: Text])
+              (const Nothing)
+      cancelled `shouldBe` Left ThreadKilled
+      readIORef decisions `shouldReturn` []
+
+    it "scales worker fan-out across 8, 32, and 128 same and distinct targets" $ \(_storeHandle, StoreRunner runner) ->
+      forM_ [8, 32, 128] $ \fanOut ->
+        forM_ [("same", True), ("distinct", False)] $ \(flavor, sameTarget) -> do
+          decisions <- newIORef []
+          let sourceId =
+                EventId
+                  ( UUID.fromWords
+                      0
+                      0
+                      (if sameTarget then 279 else 280)
+                      (fromIntegral fanOut)
+                  )
+              sourceEvent = recordedFromEventId sourceId (CounterAdded fanOut)
+              correlationId = "fanout-" <> flavor <> "-" <> Text.pack (show fanOut)
+              targetName targetIndex =
+                if sameTarget
+                  then "reaction-fanout:" <> flavor <> ":" <> Text.pack (show fanOut)
+                  else "reaction-fanout:" <> flavor <> ":" <> Text.pack (show fanOut) <> ":" <> Text.pack (show targetIndex)
+              commands =
+                [ Reaction.FollowDispatch (PMCommand (stream (targetName targetIndex)) (Add targetIndex))
+                | targetIndex <- [1 .. fanOut]
+                ]
+              plan = Reaction.AdvanceReaction (Add fanOut) [] commands
+              message = (sourceEvent, (correlationId, plan))
+          Right () <-
+            runner $
+              Reaction.runReactiveProcessManagerWorker
+                defaultRunCommandOptions
+                counterReactionManager
+                (inMemoryAdapter decisions [message])
+                Just
+          readIORef decisions `shouldReturn` [AckOk]
+          Right sagaEvents <-
+            runner $
+              Store.readStreamForward
+                (StreamName ("reaction-saga:" <> correlationId))
+                (StreamVersion 0)
+                10
+          Vector.length sagaEvents `shouldBe` 2
+          persistedCounts <-
+            if sameTarget
+              then do
+                Right events <- runner $ Store.readStreamForward (StreamName (targetName 1)) (StreamVersion 0) (fromIntegral fanOut + 1)
+                pure [Vector.length events]
+              else forM [1 .. fanOut] $ \targetIndex -> do
+                Right events <- runner $ Store.readStreamForward (StreamName (targetName targetIndex)) (StreamVersion 0) 2
+                pure (Vector.length events)
+          Prelude.sum persistedCounts `shouldBe` fanOut
 
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \(_storeHandle, StoreRunner _runner) -> do

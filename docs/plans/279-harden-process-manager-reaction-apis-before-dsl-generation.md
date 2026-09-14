@@ -85,7 +85,7 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 - [x] (2026-09-14 19:24Z) M0: added and passed accepted-event witness recovery, optimistic retry, same-source races, silent redelivery, and silent negative-probe timer-race tests with the existing command API. The gate ran 5 examples with 0 failures.
 - [x] (2026-09-14 19:37Z) M1: added transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests. The feasibility group passed 8 examples and the deterministic identity group passed 7 examples.
 - [x] (2026-09-14 19:49Z) M2: implemented the additive reaction model and once runner with explicit typed outcomes, atomic timer accounting, bounded witness recovery, target-local reconciliation, and partial-dispatch replay. The focused group passed 8 examples with 0 failures.
-- [ ] M3: add worker integration and a handwritten public-API example; prove acknowledgement, failure, and scaling behavior.
+- [x] (2026-09-14 20:14Z) M3: added reducer-driven worker integration and a public-only handwritten consumer; proved acknowledgement, failure policy, cancellation, timer firing, deep witness, and 8/32/128 same/distinct-target scaling behavior. The reaction group passed 16 examples and the broader process-manager match passed 41 examples.
 - [ ] M4: document the runtime contract, distill its ADR, run compatibility gates, and hand the completed API to plan 273.
 
 
@@ -121,6 +121,20 @@ has committed the intended target id. The wrapper preserves the original result 
 target witness is absent. A target rejection after saga/timer commit also confirmed the intended
 phase boundary: replay skipped timer SQL, retried the missing target, and deduplicated the later
 same-target command.
+
+M3 confirmed that the once and worker entry points can share one engine without retaining detailed
+results in the worker. The strict worker reducer keeps only duplicate counts and failure records;
+accepted saga values are dropped before target traversal. The 8/32/128 same- and distinct-target
+matrix completed with the saga stream fixed at two events per first delivery. An RTS observation of
+the complete six-case fan-out matrix reported 223,822,688 allocated bytes and 417,408 bytes maximum
+residency; the one-success-plus-duplicate worker case reported 46,557,056 allocated bytes and
+1,185,576 bytes maximum residency. These include PostgreSQL fixture startup and are evidence, not
+machine-specific gates.
+
+A polymorphic record update used only to construct a rejecting test manager caused the GHC 9.12.4
+test executable to exit with signal 11. Reconstructing the same value explicitly through the public
+`ReactiveProcessManager` constructor eliminated the crash; the runtime rejection path then passed.
+No library API or execution semantics depended on that update.
 
 The implementation preflight on 2026-09-12 refreshed Hackage successfully to index state
 `2026-09-12T15:08:53Z`. PGMQ 0.6.0.0 is now available, but the complete workspace still
@@ -162,6 +176,13 @@ failure records still require memory proportional to their sizes.
 ## Decision Log
 
 
+- Decision: Share one reducer-parameterized reaction engine between detailed once calls and workers.
+  The worker reduces saga outcomes before dispatch and accumulates only strict duplicate counts and
+  reversed failure records.
+  Rationale: This keeps one execution semantics while preventing accepted saga batches and successful
+  target results from being retained across large fan-out. Tests cover both same- and distinct-target
+  occurrence maps at 8, 32, and 128 commands, plus cancellation and exact-once finalization.
+  Date: 2026-09-14
 - Decision: Accept the M2 once-runner contract with bounded exact-witness recovery and a
   reaction-local target reconciliation pass around the historical deduplication helper.
   Rationale: PostgreSQL cases establish atomic saga/timer rollback, duplicate recovery without
@@ -243,6 +264,15 @@ failure records still require memory proportional to their sizes.
 
 ## Outcomes & Retrospective
 
+
+M3 completed on 2026-09-14. `runReactiveProcessManagerWorkerWith` and its default-options wrapper
+use the established Shibuya adapter, acknowledgement, poison, rejection, telemetry, and durable
+dead-letter vocabulary. Manager failures use emit index -1; target failures use their overall
+dispatch index; typed silent decisions acknowledge normally; witness failures halt with fixed bounded
+reason codes; asynchronous cancellation escapes without synthesizing an acknowledgement. The
+handwritten `ReactionExample` depends only on public modules and demonstrates reported/acknowledged
+inputs, a severity branch, two distinct timer rows, accepted-only dispatch, no-advance, and a benign
+late timer action through the existing timer worker.
 
 M2 completed on 2026-09-14 with 8 examples and 0 failures. The public additive model now exposes
 typed accepted, silent, duplicate, and non-advancing outcomes. Accepted saga events and timer SQL
@@ -764,6 +794,45 @@ cabal test keiro:keiro-test --test-show-details=direct
 All named groups must run and finish with zero failures. The broader process-manager match
 covers legacy and new groups; the full runtime suite exercises timer and router compatibility.
 
+M3 observed on 2026-09-14:
+
+```text
+Keiro.ProcessManager.Reaction
+  ...
+  runs the public-only handwritten reported and acknowledged example [✔]
+  worker finalizes each success and duplicate exactly once [✔]
+  worker applies target rejection policy with the overall dispatch index [✔]
+  worker handles typed silence as a successful delivery [✔]
+  worker records manager failures at index minus one [✔]
+  worker uses bounded witness reasons and poison callbacks [✔]
+  worker lets asynchronous cancellation escape without acknowledging [✔]
+  scales worker fan-out across 8, 32, and 128 same and distinct targets [✔]
+
+Finished in 3.2692 seconds
+16 examples, 0 failures
+
+Keiro.ProcessManager.Reaction / Keiro.ProcessManager / duplicate confirmation / snapshots
+Finished in 7.2443 seconds
+41 examples, 0 failures
+```
+
+The fan-out matrix covered 336 target commands over six first deliveries. Each saga stream had
+exactly two persisted events regardless of fan-out; target rows scaled with the requested command
+count. Witness cases placed the deterministic event at the end of histories of 256, 1024, and 4096
+events, forcing 1, 4, and 16 bounded pages at the private 256-event page size; the implementation
+decodes only the matched witness. The strict worker reducer owns O(D) target counters and O(F)
+failure records and does not build a successful-result list. RTS `-s` observations were:
+
+```text
+six-case 8/32/128 same/distinct fan-out:
+  223,822,688 bytes allocated; 417,408 bytes maximum residency
+one accepted plus one duplicate delivery:
+   46,557,056 bytes allocated; 1,185,576 bytes maximum residency
+```
+
+The measurements include disposable PostgreSQL setup and are retained only as allocation-profile
+evidence; they are not latency or heap gates.
+
 M4, including profile discovery and allocation before writing the new ADR:
 
 ```bash
@@ -954,6 +1023,11 @@ import or re-export the new child module.
 
 
 ## Revision Notes
+
+2026-09-14: Completed M3 with shared reducer-driven once/worker execution, established worker policy
+and bounded witness reasons, the public-only `ReactionExample`, timer-worker and cancellation checks,
+deep 256/1024/4096 witness histories, 8/32/128 same/distinct-target fan-out, and recorded RTS allocation
+observations.
 
 2026-09-14: Completed M2 with the additive typed reaction model and once runner, bounded exact-witness
 recovery, atomic saga/timer effects, ordered target-keyed dispatch, reaction-local race reconciliation,

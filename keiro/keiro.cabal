@@ -186,6 +186,7 @@ test-suite keiro-test
     PreCanonicalRecoverySpec
     PreimageSpec
     ProjectionReplaySpec
+    ReactionExample
     ReadModelSpec
     VersionedRebuildSpec
     VersionedTargetPostgresSpec

@@ -20,6 +20,8 @@ module Keiro.ProcessManager.Reaction
 
     -- * Running
     runReactiveProcessManagerOnce,
+    runReactiveProcessManagerWorkerWith,
+    runReactiveProcessManagerWorker,
 
     -- * Identity
     deterministicReactionCommandId,
@@ -38,30 +40,38 @@ import Data.UUID qualified as UUID
 import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
-import Effectful.Error.Static (Error)
+import Effectful.Error.Static (Error, tryError)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
 import Keiro.Codec (decodeRecorded)
 import Keiro.Command
-  ( CommandError,
+  ( CommandError (..),
     DomainCommandHandler,
     DomainCommandOutcome (..),
     DomainDecision (..),
     RunCommandOptions,
     runDomainCommandWithSqlEvents,
   )
+import Keiro.DeadLetter (DispatcherKind (..))
 import Keiro.EventStream (EventStream)
 import Keiro.EventStream.Validate (ValidatedEventStream, unvalidated)
 import Keiro.Prelude
 import Keiro.ProcessManager
-  ( PMCommand (..),
+  ( DispatchFailure (..),
+    PMCommand (..),
     PMCommandResult (..),
+    PoisonPolicy (..),
+    WorkerOptions (..),
+    ackForCommandError,
+    decideForFailures,
+    defaultWorkerOptions,
     deterministicCommandIdProbes,
     dispatchDeduplicatedCommand,
     firstExistingEventId,
   )
 import Keiro.Projection (InlineProjection, runCommandWithProjections)
 import Keiro.Stream (Stream)
+import Keiro.Telemetry (recordDispatchDuplicate, recordDispatchFailed, recordDispatchPoison)
 import Keiro.Timer
   ( TimerId,
     TimerRequest,
@@ -75,6 +85,13 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Read (getStream, readStreamForward)
 import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types (EventId (..), RecordedEvent, StreamName (..), StreamVersion (..))
+import Shibuya.Adapter (Adapter (..))
+import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..))
+import Shibuya.Core.AckHandle (AckHandle (..))
+import Shibuya.Core.Ingested (Ingested (..))
+import Shibuya.Core.Types (Attempt (..), Envelope (..))
+import Streamly.Data.Fold qualified as Fold
+import Streamly.Data.Stream qualified as Streamly
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
@@ -158,6 +175,19 @@ data ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState 
 zeroTimerEffects :: ReactionTimerEffects
 zeroTimerEffects = ReactionTimerEffects 0 0 0
 
+data EngineReducer managerTarget co rejection noOp commandTarget summary = EngineReducer
+  { beginReduction :: !(ReactionStateResult managerTarget co rejection noOp -> ReactionTimerEffects -> summary),
+    addDispatchReduction :: !(Int -> PMCommandResult commandTarget -> summary -> summary),
+    finishReduction :: !(summary -> summary)
+  }
+  deriving stock (Generic)
+
+data ReactionWorkerSummary = ReactionWorkerSummary
+  { workerDuplicates :: !Int64,
+    workerFailures :: ![DispatchFailure]
+  }
+  deriving stock (Generic, Eq, Show)
+
 -- | Run one reaction. Accepted saga events and their timer effects commit in
 -- one transaction; target commands are then attempted independently in source
 -- order. Duplicate accepted recovery validates the exact saga witness before
@@ -191,17 +221,47 @@ runReactiveProcessManagerOnce ::
         )
     )
 runReactiveProcessManagerOnce options manager sourceEvent input =
+  runReactiveProcessManagerEngine onceReducer options manager sourceEvent input
+  where
+    onceReducer =
+      EngineReducer
+        { beginReduction = \managerResult timerEffects ->
+            ReactiveProcessManagerResult managerResult [] timerEffects,
+          addDispatchReduction = \_ commandResult result ->
+            result {commandResults = commandResult : result ^. #commandResults},
+          finishReduction = \result ->
+            result {commandResults = Prelude.reverse (result ^. #commandResults)}
+        }
+
+runReactiveProcessManagerEngine ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp summary es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq co,
+    Eq targetCo
+  ) =>
+  EngineReducer
+    (EventStream phi rs s ci co)
+    co
+    rejection
+    noOp
+    (EventStream targetPhi targetRs targetState targetCi targetCo)
+    summary ->
+  RunCommandOptions ->
+  ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  RecordedEvent ->
+  input ->
+  Eff es (Either ReactionError summary)
+runReactiveProcessManagerEngine reducer options manager sourceEvent input =
   case (manager ^. #react) input of
     NoAdvance unconditional -> do
       timers <- runTimerPhase unconditional
-      commands <- dispatchReactionCommands options manager correlationId sourceId unconditional
-      pure
-        $ Right
-          ReactiveProcessManagerResult
-            { managerResult = ReactionNotAdvanced,
-              commandResults = commands,
-              timerEffects = timers
-            }
+      finish ReactionNotAdvanced timers unconditional
     AdvanceReaction sagaCommand unconditional acceptedOnly -> do
       existing <- firstExistingEventId options sagaStreamName managerProbes
       case existing of
@@ -250,14 +310,159 @@ runReactiveProcessManagerOnce options manager sourceEvent input =
         Right () -> finish (ReactionDuplicate matchedId) zeroTimerEffects selected
 
     finish state timers selected = do
-      commands <- dispatchReactionCommands options manager correlationId sourceId selected
-      pure
-        $ Right
-          ReactiveProcessManagerResult
-            { managerResult = state,
-              commandResults = commands,
-              timerEffects = timers
-            }
+      let initial = (reducer ^. #beginReduction) state timers
+      initial `Prelude.seq` do
+        reduced <-
+          dispatchReactionCommandsWith
+            (reducer ^. #addDispatchReduction)
+            initial
+            options
+            manager
+            correlationId
+            sourceId
+            selected
+        pure (Right ((reducer ^. #finishReduction) reduced))
+
+-- | Drain a Shibuya adapter with the configured poison, rejection, retry, and
+-- telemetry policies. Each normally resolved delivery is finalized exactly
+-- once. The worker reduces accepted saga payloads before target fan-out and
+-- retains only duplicate and failure accounting while dispatching.
+runReactiveProcessManagerWorkerWith ::
+  forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq co,
+    Eq targetCo
+  ) =>
+  WorkerOptions es msg ->
+  RunCommandOptions ->
+  ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runReactiveProcessManagerWorkerWith workerOptions options manager Adapter {source = adapterSource} decodeMessage =
+  Streamly.fold Fold.drain
+    $ Streamly.mapM handleIngested adapterSource
+  where
+    handleIngested :: Ingested es msg -> Eff es AckDecision
+    handleIngested Ingested {envelope = env@Envelope {payload = message}, ack = AckHandle finalizeAck} = do
+      decision <- case decodeMessage message of
+        Nothing -> decidePoison env
+        Just (recorded, input) -> decideReaction env recorded input
+      finalizeAck decision
+      pure decision
+
+    decideReaction env recorded input = do
+      let correlationId = (manager ^. #correlate) input
+          sagaStream = (manager ^. #streamFor) correlationId
+          sagaEventStream = (manager ^. #sagaHandler) ^. #eventStream
+          sagaStreamName = ((unvalidated sagaEventStream) ^. #resolveStreamName) sagaStream
+          attemptCount = envelopeAttemptCount env
+      outcome <-
+        tryError @StoreError
+          (runReactiveProcessManagerEngine workerReducer options manager recorded input)
+      case outcome of
+        Left (_, storeError) -> do
+          recordDispatchFailed (workerOptions ^. #metrics) 1
+          pure (ackForCommandError (workerOptions ^. #transientRetryDelay) (StoreFailed storeError))
+        Right (Left (ReactionCommandFailed commandError)) -> do
+          recordDispatchFailed (workerOptions ^. #metrics) 1
+          decideForFailures
+            workerOptions
+            DispatcherProcessManager
+            (manager ^. #name)
+            correlationId
+            recorded
+            attemptCount
+            [DispatchFailure (-1) sagaStreamName commandError]
+        Right (Left witnessError) -> do
+          recordDispatchFailed (workerOptions ^. #metrics) 1
+          pure (AckHalt (HaltFatal (witnessReason witnessError)))
+        Right (Right summary) -> do
+          recordDispatchDuplicate (workerOptions ^. #metrics) (summary ^. #workerDuplicates)
+          recordDispatchFailed
+            (workerOptions ^. #metrics)
+            (Prelude.fromIntegral (Prelude.length (summary ^. #workerFailures)))
+          decideForFailures
+            workerOptions
+            DispatcherProcessManager
+            (manager ^. #name)
+            correlationId
+            recorded
+            attemptCount
+            (summary ^. #workerFailures)
+
+    decidePoison env = do
+      recordDispatchPoison (workerOptions ^. #metrics) 1
+      case workerOptions ^. #poisonPolicy of
+        PoisonHalt -> pure (AckHalt (HaltFatal "process-reaction-worker-decode-failed"))
+        PoisonSkip callback -> do
+          callback env
+          pure AckOk
+        PoisonDeadLetter callback -> do
+          callback env
+          pure (AckDeadLetter (InvalidPayload "process-reaction-worker-decode-failed"))
+
+    workerReducer =
+      EngineReducer
+        { beginReduction = \state _ ->
+            ReactionWorkerSummary
+              { workerDuplicates = case state of
+                  ReactionDuplicate {} -> 1
+                  ReactionNotAdvanced -> 0
+                  ReactionEvaluated {} -> 0,
+                workerFailures = []
+              },
+          addDispatchReduction = \emitIndex result summary ->
+            case result of
+              PMCommandAppended {} -> summary
+              PMCommandDuplicate {} ->
+                summary {workerDuplicates = summary ^. #workerDuplicates Prelude.+ 1}
+              PMCommandFailed targetStreamName commandError ->
+                summary
+                  { workerFailures =
+                      DispatchFailure emitIndex targetStreamName commandError
+                        : summary ^. #workerFailures
+                  },
+          finishReduction = \summary ->
+            summary {workerFailures = Prelude.reverse (summary ^. #workerFailures)}
+        }
+
+    envelopeAttemptCount env =
+      case env ^. #attempt of
+        Nothing -> 1
+        Just (Attempt attempt) -> Prelude.fromIntegral attempt Prelude.+ 1
+
+    witnessReason = \case
+      ReactionWitnessMissing {} -> "process-reaction-witness-missing"
+      ReactionWitnessUndecodable {} -> "process-reaction-witness-undecodable"
+      ReactionCommandFailed {} -> "process-reaction-command-failed"
+
+-- | Run a reactive process-manager worker with 'defaultWorkerOptions'.
+runReactiveProcessManagerWorker ::
+  forall msg input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+  ( HasCallStack,
+    IOE :> es,
+    Store :> es,
+    Error StoreError :> es,
+    KirokuStoreResource :> es,
+    BoolAlg phi (RegFile rs, ci),
+    BoolAlg targetPhi (RegFile targetRs, targetCi),
+    Eq co,
+    Eq targetCo
+  ) =>
+  RunCommandOptions ->
+  ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
+  Adapter es msg ->
+  (msg -> Maybe (RecordedEvent, input)) ->
+  Eff es ()
+runReactiveProcessManagerWorker =
+  runReactiveProcessManagerWorkerWith defaultWorkerOptions
 
 -- | Execute just the timer subsequence in one transaction.
 runTimerPhase :: (Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
@@ -325,8 +530,8 @@ recoverWitness validated streamName witnessId = do
                     then pure (Left missing)
                     else scan expectedStreamId ceiling next
 
-dispatchReactionCommands ::
-  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp es.
+dispatchReactionCommandsWith ::
+  forall input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp summary es.
   ( HasCallStack,
     IOE :> es,
     Store :> es,
@@ -335,17 +540,19 @@ dispatchReactionCommands ::
     BoolAlg targetPhi (RegFile targetRs, targetCi),
     Eq targetCo
   ) =>
+  (Int -> PMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo) -> summary -> summary) ->
+  summary ->
   RunCommandOptions ->
   ReactiveProcessManager input phi rs s ci co targetPhi targetRs targetState targetCi targetCo rejection noOp ->
   Text ->
   EventId ->
   [FollowUp targetCi] ->
-  Eff es [PMCommandResult (EventStream targetPhi targetRs targetState targetCi targetCo)]
-dispatchReactionCommands options manager correlationId sourceId =
-  go Map.empty []
+  Eff es summary
+dispatchReactionCommandsWith reduce initial options manager correlationId sourceId =
+  go Map.empty 0 initial
   where
-    go _ results [] = pure (Prelude.reverse results)
-    go occurrences results (followUp : rest) =
+    go _ _ summary [] = pure summary
+    go occurrences dispatchIndex summary (followUp : rest) =
       case followUp of
         FollowDispatch dispatched -> do
           let targetStream = retarget (dispatched ^. #target)
@@ -360,12 +567,13 @@ dispatchReactionCommands options manager correlationId sourceId =
                   targetName
                   occurrence
           result <- dispatchOne targetStream targetName commandId dispatched
-          result `Prelude.seq` go nextOccurrences (result : results) rest
-        _ -> go occurrences results rest
+          let nextSummary = reduce dispatchIndex result summary
+          nextSummary `Prelude.seq` go nextOccurrences (dispatchIndex Prelude.+ 1) nextSummary rest
+        _ -> go occurrences dispatchIndex summary rest
 
     dispatchOne targetStream targetName commandId dispatched = do
       let targetOptions = options & #eventIds .~ [commandId]
-      initial <-
+      dispatchedInitial <-
         dispatchDeduplicatedCommand
           options
           targetName
@@ -380,11 +588,11 @@ dispatchReactionCommands options manager correlationId sourceId =
               (dispatched ^. #command)
               ((manager ^. #targetProjections) (dispatched ^. #target))
           )
-      case initial of
-        PMCommandFailed {} -> reconcile initial
+      case dispatchedInitial of
+        PMCommandFailed {} -> reconcile dispatchedInitial
         PMCommandAppended commandResult
-          | commandResult ^. #eventsAppended == 0 -> reconcile initial
-        _ -> pure initial
+          | commandResult ^. #eventsAppended == 0 -> reconcile dispatchedInitial
+        _ -> pure dispatchedInitial
       where
         reconcile preserved = do
           raced <- firstExistingEventId options targetName (commandId :| [])
