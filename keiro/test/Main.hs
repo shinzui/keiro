@@ -4199,6 +4199,161 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       -- The single give-up bumped the counter exactly once.
       lookup "keiro.projection.wait.timeouts" scalars `shouldBe` Just (IntNumber 1)
 
+  describe "process reaction API feasibility" $ do
+    it "keeps the supplied witness on the first event of an accepted multi-event batch" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        let target = stream "reaction-feasibility-multi" :: Stream CounterEventStream
+            targetName = StreamName "reaction-feasibility-multi"
+            witnessId = EventId sampleUuid
+            options = defaultRunCommandOptions & #eventIds .~ [witnessId]
+        outcome <-
+          runner $
+            runDomainCommandWithSqlEvents
+              options
+              multiCounterDomainHandler
+              target
+              (Add 7)
+              (\pairs _ -> pure (Prelude.snd <$> pairs))
+        case outcome of
+          Right (Right (DomainCommandOutcome {decision = DomainAccepted events}, Just persisted)) -> do
+            events `shouldBe` (CounterAdded 7 :| [CounterAudited 7])
+            fmap (^. #eventId) persisted `shouldSatisfy` \case
+              firstId : secondId : [] -> firstId == witnessId && secondId /= witnessId
+              _ -> False
+          other -> expectationFailure ("expected accepted feasibility batch, got " <> show other)
+        Right firstPage <- runner $ Store.readStreamForward targetName (StreamVersion 0) 1
+        case Vector.toList firstPage of
+          [witness] -> do
+            witness ^. #eventId `shouldBe` witnessId
+            decodeRecorded counterCodec witness `shouldBe` Right (CounterAdded 7)
+          other -> expectationFailure ("expected one witness event, got " <> show other)
+
+    it "runs no accepted callback from an optimistic attempt discarded by rehydration" $ \_ ->
+      withFreshResourceStore fixture $ \(storeHandle, StoreRunner runner) -> do
+        conflictInserted <- newIORef False
+        let target = stream "reaction-feasibility-conflict" :: Stream RetryDecisionEventStream
+            targetName = StreamName "reaction-feasibility-conflict"
+            insertConflict = do
+              shouldInsert <- atomicModifyIORef' conflictInserted $ \inserted -> (True, Prelude.not inserted)
+              when shouldInsert $ appendCounterEventWithId storeHandle targetName (EventId sampleUuid2) (CounterAdded 9)
+            options =
+              defaultRunCommandOptions
+                & #eventIds
+                .~ [EventId sampleUuid]
+                & #beforeAppend
+                .~ insertConflict
+                & #retryBackoffMicros
+                .~ 0
+            callback _ _ = error "discarded feasibility attempt ran its callback" :: Tx.Transaction ()
+        outcome <- runner $ runDomainCommandWithSqlEvents options retryDecisionDomainHandler target (Add 1) callback
+        case outcome of
+          Right (Right (DomainCommandOutcome {decision = DomainNoOp explanation, result}, Nothing)) -> do
+            explanation `shouldBe` "already drained"
+            result ^. #streamVersion `shouldBe` StreamVersion 1
+          other -> expectationFailure ("expected rehydrated silent feasibility decision, got " <> show other)
+
+    it "exposes one accepted and one rehydrated-silent result when the same source races" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        arrivals <- newMVar (0 :: Int)
+        release <- newEmptyMVar
+        firstResult <- newEmptyMVar
+        secondResult <- newEmptyMVar
+        let target = stream "reaction-feasibility-same-source" :: Stream RetryDecisionEventStream
+            witnessId = EventId sampleUuid
+            awaitPeer = do
+              arrived <- modifyMVar arrivals $ \count ->
+                let next = count + 1
+                 in pure (next, next)
+              when (arrived == 2) (putMVar release ())
+              readMVar release
+            options =
+              defaultRunCommandOptions
+                & #eventIds
+                .~ [witnessId]
+                & #beforeAppend
+                .~ awaitPeer
+                & #retryBackoffMicros
+                .~ 0
+            runOne destination =
+              runner
+                ( runDomainCommandWithSqlEvents
+                    options
+                    retryDecisionDomainHandler
+                    target
+                    (Add 3)
+                    (\_ _ -> pure ())
+                )
+                >>= putMVar destination
+        _ <- forkIO (runOne firstResult)
+        _ <- forkIO (runOne secondResult)
+        outcomes <- traverse takeMVar [firstResult, secondResult]
+        let accepted =
+              Prelude.length
+                [ ()
+                | Right (Right (DomainCommandOutcome {decision = DomainAccepted {}}, Just ())) <- outcomes
+                ]
+            silent =
+              Prelude.length
+                [ ()
+                | Right (Right (DomainCommandOutcome {decision = DomainNoOp "already drained"}, Nothing)) <- outcomes
+                ]
+        (accepted, silent) `shouldBe` (1, 1)
+
+    it "allows a receipt-free silent delivery to accept after unrelated saga progress" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        let target = stream "reaction-feasibility-silent-redelivery" :: Stream FeasibilityGateEventStream
+            witnessId = EventId sampleUuid
+            sourceOptions = defaultRunCommandOptions & #eventIds .~ [witnessId]
+        first <- runner $ runDomainCommand sourceOptions feasibilityGateDomainHandler target (TryAccept 5)
+        case first of
+          Right (Right DomainCommandOutcome {decision = DomainNoOp "gate closed", result}) ->
+            result ^. #eventsAppended `shouldBe` 0
+          other -> expectationFailure ("expected initial silent feasibility decision, got " <> show other)
+        Right (Right DomainCommandOutcome {decision = DomainAccepted (GateOpened :| [])}) <-
+          runner $ runDomainCommand defaultRunCommandOptions feasibilityGateDomainHandler target OpenGate
+        redelivery <- runner $ runDomainCommand sourceOptions feasibilityGateDomainHandler target (TryAccept 5)
+        case redelivery of
+          Right (Right DomainCommandOutcome {decision = DomainAccepted (GateAccepted 5 :| [])}) -> pure ()
+          other -> expectationFailure ("expected accepted silent redelivery, got " <> show other)
+
+    it "shows that a negative silent probe cannot fence a later unconditional timer transaction" $ \_ ->
+      withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runner) -> do
+        probeReady <- newEmptyMVar
+        releaseTimer <- newEmptyMVar
+        silentResult <- newEmptyMVar
+        let target = stream "reaction-feasibility-silent-timer-race" :: Stream FeasibilityGateEventStream
+            targetName = StreamName "reaction-feasibility-silent-timer-race"
+            witnessId = EventId sampleUuid
+            sourceOptions = defaultRunCommandOptions & #eventIds .~ [witnessId]
+            request =
+              counterTimerRequest
+                & #timerId
+                .~ TimerId sampleUuid2
+                & #processManagerName
+                .~ "reaction-feasibility"
+            runSilentBranch = do
+              silent <- runner $ runDomainCommand sourceOptions feasibilityGateDomainHandler target (TryAccept 9)
+              probe <- runner $ firstExistingEventId sourceOptions targetName (witnessId :| [])
+              putMVar probeReady (silent, probe)
+              takeMVar releaseTimer
+              scheduled <- runner $ Store.runTransaction (scheduleTimerOnceTx request)
+              putMVar silentResult scheduled
+        _ <- forkIO runSilentBranch
+        (initial, negativeProbe) <- takeMVar probeReady
+        case initial of
+          Right (Right DomainCommandOutcome {decision = DomainNoOp "gate closed"}) -> pure ()
+          other -> expectationFailure ("expected silent branch before probe, got " <> show other)
+        negativeProbe `shouldBe` Right Nothing
+        Right (Right _) <- runner $ runDomainCommand defaultRunCommandOptions feasibilityGateDomainHandler target OpenGate
+        Right (Right DomainCommandOutcome {decision = DomainAccepted (GateAccepted 9 :| [])}) <-
+          runner $ runDomainCommand sourceOptions feasibilityGateDomainHandler target (TryAccept 9)
+        putMVar releaseTimer ()
+        takeMVar silentResult `shouldReturn` Right True
+        timer <- runner $ lookupTimer (request ^. #timerId)
+        timer `shouldSatisfy` \case
+          Right (Just row) -> row ^. #status == Scheduled
+          _ -> False
+
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \(_storeHandle, StoreRunner _runner) -> do
       let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
@@ -14494,6 +14649,25 @@ type RetryDecisionEventStream = EventStream (HsPred '[] CounterCommand) '[] Drai
 
 type ValidatedRetryDecisionEventStream = ValidatedEventStream (HsPred '[] CounterCommand) '[] DrainState CounterCommand CounterEvent
 
+data FeasibilityGateCommand
+  = TryAccept !Int
+  | OpenGate
+  deriving stock (Generic, Eq, Show)
+
+data FeasibilityGateEvent
+  = GateOpened
+  | GateAccepted !Int
+  deriving stock (Generic, Eq, Show)
+
+data FeasibilityGateState
+  = GateClosed
+  | GateOpen
+  deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
+
+type FeasibilityGateEventStream = EventStream (HsPred '[] FeasibilityGateCommand) '[] FeasibilityGateState FeasibilityGateCommand FeasibilityGateEvent
+
+type ValidatedFeasibilityGateEventStream = ValidatedEventStream (HsPred '[] FeasibilityGateCommand) '[] FeasibilityGateState FeasibilityGateCommand FeasibilityGateEvent
+
 skipEventStream :: ValidatedSkipEventStream
 skipEventStream = mkEventStreamOrThrow "skip-command" skipEventStreamDef
 
@@ -14561,6 +14735,103 @@ retryDecisionEventStreamDef =
       resolveStreamName = Stream.streamName,
       snapshotPolicy = Never,
       stateCodec = Nothing
+    }
+
+feasibilityGateEventStream :: ValidatedFeasibilityGateEventStream
+feasibilityGateEventStream = mkEventStreamOrThrow "reaction-feasibility-gate" feasibilityGateEventStreamDef
+
+feasibilityGateEventStreamDef :: FeasibilityGateEventStream
+feasibilityGateEventStreamDef =
+  EventStream
+    { transducer = feasibilityGateTransducer,
+      initialState = GateClosed,
+      initialRegisters = RNil,
+      eventCodec = feasibilityGateCodec,
+      resolveStreamName = Stream.streamName,
+      snapshotPolicy = Never,
+      stateCodec = Nothing
+    }
+
+feasibilityGateTransducer :: SymTransducer (HsPred '[] FeasibilityGateCommand) '[] FeasibilityGateState FeasibilityGateCommand FeasibilityGateEvent
+feasibilityGateTransducer =
+  SymTransducer
+    { edgesOut = \case
+        GateClosed ->
+          [ Edge
+              { guard = matchInCtor tryAcceptCtor,
+                update = UKeep,
+                output = [],
+                target = GateClosed,
+                mode = Keiki.Live
+              },
+            Edge
+              { guard = matchInCtor openGateCtor,
+                update = UKeep,
+                output = [pack openGateCtor gateOpenedCtor oNil],
+                target = GateOpen,
+                mode = Keiki.Live
+              }
+          ]
+        GateOpen ->
+          [ Edge
+              { guard = matchInCtor tryAcceptCtor,
+                update = UKeep,
+                output = [pack tryAcceptCtor gateAcceptedCtor (inpCtor tryAcceptCtor #amount *: oNil)],
+                target = GateOpen,
+                mode = Keiki.Live
+              }
+          ],
+      initial = GateClosed,
+      initialRegs = RNil,
+      isFinal = const False
+    }
+
+tryAcceptCtor :: InCtor FeasibilityGateCommand AddFields
+tryAcceptCtor =
+  Keiki.unavailableInCtor
+    "TryAccept"
+    (\case TryAccept amount -> Just (RCons Proxy amount RNil); OpenGate -> Nothing)
+    (\case RCons _ amount RNil -> TryAccept amount)
+
+openGateCtor :: InCtor FeasibilityGateCommand '[]
+openGateCtor =
+  Keiki.unavailableInCtor
+    "OpenGate"
+    (\case OpenGate -> Just RNil; TryAccept {} -> Nothing)
+    (\RNil -> OpenGate)
+
+gateOpenedCtor :: WireCtor FeasibilityGateEvent ()
+gateOpenedCtor =
+  Keiki.unavailableWireCtor
+    "GateOpened"
+    (\case GateOpened -> Just (); GateAccepted {} -> Nothing)
+    (const GateOpened)
+
+gateAcceptedCtor :: WireCtor FeasibilityGateEvent (Int, ())
+gateAcceptedCtor =
+  Keiki.unavailableWireCtor
+    "GateAccepted"
+    (\case GateAccepted amount -> Just (amount, ()); GateOpened -> Nothing)
+    (\case (amount, ()) -> GateAccepted amount)
+
+feasibilityGateCodec :: Codec FeasibilityGateEvent
+feasibilityGateCodec =
+  Codec
+    { eventTypes = EventType "GateOpened" :| [EventType "GateAccepted"],
+      eventType = \case GateOpened -> EventType "GateOpened"; GateAccepted {} -> EventType "GateAccepted",
+      schemaVersion = 1,
+      encode = \case
+        GateOpened -> object []
+        GateAccepted amount -> object ["amount" Aeson..= amount],
+      decode = \(EventType tag) value ->
+        case tag of
+          "GateOpened" -> Right GateOpened
+          "GateAccepted" ->
+            case parseEither (withObject "GateAccepted" (.: "amount")) value of
+              Right amount -> Right (GateAccepted amount)
+              Left message -> Left (fromStringLiteral message)
+          _ -> Left ("unknown feasibility gate event type: " <> tag),
+      upcasters = []
     }
 
 coordinatorEventStream :: ValidatedCoordinatorEventStream
@@ -14702,6 +14973,16 @@ retryDecisionDomainHandler =
         case (state, Keiki.edgeIndex selectedEdge) of
           (Drained, 0) -> SilentNoOp "already drained"
           other -> error ("retryDecisionDomainHandler: unexpected selected edge " <> show other)
+    }
+
+feasibilityGateDomainHandler :: DomainCommandHandler (HsPred '[] FeasibilityGateCommand) '[] FeasibilityGateState FeasibilityGateCommand FeasibilityGateEvent Text Text
+feasibilityGateDomainHandler =
+  DomainCommandHandler
+    { eventStream = feasibilityGateEventStream,
+      classifySilent = \SilentCommandContext {state, selectedEdge} ->
+        case (state, Keiki.edgeIndex selectedEdge) of
+          (GateClosed, 0) -> SilentNoOp "gate closed"
+          other -> error ("feasibilityGateDomainHandler: unexpected selected edge " <> show other)
     }
 
 coordinatorDomainHandler :: DomainCommandHandler (HsPred '[] CoordinatorCommand) '[] CounterState CoordinatorCommand CounterEvent Text Text

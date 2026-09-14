@@ -26,6 +26,16 @@ provenance:
       at: 2026-09-12T15:46:47Z
       mode: "implement"
       note: "Refreshed Hackage and verified upstream releases; M0 is blocked by workspace PGMQ 0.6 versus released adapter PGMQ 0.5 bounds."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-14T19:08:26Z
+      mode: "update"
+      note: "Recorded successful resolution of the PGMQ 0.6 dependency prerequisite and moved the next action to M0 feasibility tests."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-14T19:24:40Z
+      mode: "implement"
+      note: "Implemented and validated the M0 command-composition feasibility gate."
   reviews:
     - model: "gpt-6"
       harness: "codex"
@@ -71,8 +81,8 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 
 - [x] (2026-09-12) Review API design, recovery, performance, and maintainability against command, process-manager, timer, store, and ADR contracts; incorporate the corrections below. This is plan validation, not runtime acceptance.
 - [x] (2026-09-12 15:46Z) Refresh Hackage, retry the baseline in the Nix shell, and verify package availability against Hackage and upstream release tags. The earlier missing-package failure is replaced by the incompatible released adapter bounds recorded below.
-- [ ] M0 prerequisite: restore a solvable workspace dependency set without weakening its PGMQ bounds. Blocked: workspace PGMQ 0.6 conflicts with the released adapter's PGMQ 0.5 bounds.
-- [ ] M0: add and run accepted-event witness recovery, optimistic retry, same-source races, and silent redelivery tests with the existing command API; record the feasibility verdict. No feasibility tests have been added or run yet.
+- [x] (2026-09-14 19:08Z) M0 prerequisite: restore a solvable workspace dependency set without weakening its PGMQ bounds. Published `shibuya-pgmq-adapter` 0.15.0.0 supports the PGMQ 0.6 family, and `nix develop --command cabal build keiro:tests` now succeeds.
+- [x] (2026-09-14 19:24Z) M0: added and passed accepted-event witness recovery, optimistic retry, same-source races, silent redelivery, and silent negative-probe timer-race tests with the existing command API. The gate ran 5 examples with 0 failures.
 - [ ] M1: add transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests.
 - [ ] M2: implement the additive reaction model and once runner, including explicit outcomes, timer accounting, witness recovery, and partial dispatch tests.
 - [ ] M3: add worker integration and a handwritten public-API example; prove acknowledgement, failure, and scaling behavior.
@@ -81,6 +91,21 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 
 ## Surprises & Discoveries
 
+
+The dependency blocker was resolved on 2026-09-14 by the completed PGMQ 0.6 upgrade across
+`mori://shinzui/pgmq-hs` and
+`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter`. Hackage publishes adapter
+0.15.0.0 with `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` bounds of `^>=0.6`; its upstream
+`v0.15.0.0` tag peels to `22f5c4dae97722727f2f2ed47d1bf2ed9603d4ed`. The supported Nix
+build selected PGMQ 0.6.0.0 and adapter 0.15.0.0 and linked `keiro-test` successfully. The
+earlier 0.14.0.0 conflict below remains as historical preflight evidence, not a current blocker.
+
+The M0 same-source barrier produced one committed `DomainAccepted` result and one rehydrated
+`DomainNoOp "already drained"` result. The accepted callback ran only for the winning append.
+Separately, a silent delivery returned before any receipt existed, unrelated saga progress made
+the same source acceptable on redelivery, and a timer transaction paused after a negative witness
+probe still committed after the accepted delivery. This is executable evidence for both the
+reconciliation path and the documented limit on unconditional silent effects.
 
 The implementation preflight on 2026-09-12 refreshed Hackage successfully to index state
 `2026-09-12T15:08:53Z`. PGMQ 0.6.0.0 is now available, but the complete workspace still
@@ -92,9 +117,10 @@ Hackage's preferred-version response and published Cabal file confirm these boun
 The adapter upstream's newest tag is `v0.14.0.0`, peeled commit
 `301652375ecdec01c4e1ff50902900ad3a078ea3`; the PGMQ upstream has `v0.6.0.0`,
 peeled commit `7269f4de0a6e4e6f138c849758c18c7324410ac2`.
-This is a release compatibility blocker, not merely a stale local index.
+At that time this was a release compatibility blocker, not merely a stale local index.
 The ambient compiler also has base 4.20, below the workspace's base 4.21 minimum;
-using `nix develop --command` resolves that toolchain issue but not the dependency conflict.
+using `nix develop --command` resolved that toolchain issue but did not resolve the dependency
+conflict until adapter 0.15.0.0 was published.
 
 The 2026-09-12 source review found that `dispatchDeduplicatedCommand` reconciles only
 `DuplicateEvent` failures through `confirmBenignDuplicate`. A concurrent target winner can
@@ -121,6 +147,19 @@ failure records still require memory proportional to their sizes.
 ## Decision Log
 
 
+- Decision: Accept M0 and proceed with the additive reaction API without a new receipt schema or
+  parallel saga evaluator.
+  Rationale: Five PostgreSQL feasibility cases prove multi-event witness placement and decoding,
+  callback exclusion for discarded optimistic attempts, same-source accepted/silent reconciliation,
+  silent-then-accepted redelivery, and the unavoidable negative-probe timer race using the existing
+  command and store boundaries.
+  Date: 2026-09-14
+- Decision: Mark the dependency prerequisite complete and resume at M0's feasibility tests.
+  Rationale: The published adapter 0.15.0.0 now declares PGMQ 0.6 bounds, the workspace keeps
+  its existing PGMQ bounds, Cabal selects the intended released versions, and the supported Nix
+  build completes. This satisfies the previously recorded gate without an `allow-newer`, lowered
+  bounds, or a workspace package omission. The runtime feasibility verdict itself remains pending.
+  Date: 2026-09-14
 - Decision: Keep the feasibility gate pending until the released dependency set can satisfy
   the workspace's existing bounds; do not start M1 against an unvalidated composition.
   Rationale: Refreshing the index resolves availability of PGMQ 0.6 but reveals incompatible
@@ -178,14 +217,24 @@ failure records still require memory proportional to their sizes.
 ## Outcomes & Retrospective
 
 
-Implementation preflight on 2026-09-12 is blocked before M0. The package index was refreshed
-and the supported Nix build was retried, but dependency solving fails before compilation.
-No runtime code, tests, dependency bounds, or DSL files were changed. M0 through M4 remain
-unimplemented. Resume by refreshing the index after a compatible adapter release or upstream
-package revision is available, verifying its authoritative bounds, and rerunning the baseline
-below. Any dependency adoption requiring workspace edits must be validated explicitly before
-collecting the M0 evidence. No durable runtime decision was established, so this preflight
-does not warrant an ADR or a completion handoff to plan 273.
+M0 completed on 2026-09-14 with 5 examples and 0 failures. It established that the existing
+domain command API is sufficient for the planned composition: the first event of a multi-event
+batch can carry the deterministic witness, only the successful optimistic attempt invokes its SQL
+callback, a same-source loser can rehydrate to a typed silent outcome, and a receipt-free silent
+delivery can later accept. It also made the silent/unconditional timer race observable, so M1 can
+proceed without claiming serialization that the store does not provide.
+
+The M0 dependency prerequisite is complete as of 2026-09-14. The published adapter 0.15.0.0
+supports PGMQ 0.6, Cabal resolves `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` 0.6.0.0 with
+that adapter, and the supported Nix build links `keiro-test`. No runtime code or feasibility
+tests were added by this plan update. M0 through M4 remain unimplemented; resume with the M0
+PostgreSQL feasibility cases rather than dependency remediation. This prerequisite resolution
+does not itself establish a durable runtime decision, warrant an ADR, or complete the handoff
+to plan 273.
+
+The 2026-09-12 implementation preflight had stopped before M0 because adapter 0.14.0.0 still
+required the PGMQ 0.5 family. That result remains useful historical evidence, but it is superseded
+as a blocker by the released and successfully resolved adapter 0.15.0.0 package set.
 
 The 2026-09-12 review retains the additive public model and five implementation milestones,
 with required corrections to concurrency recovery, finite witness scanning, replay preconditions,
@@ -194,9 +243,9 @@ there were no recorded review entries before this pass. Runtime correctness rema
 M0 and the new PostgreSQL acceptance cases; no implementation milestone is complete. The baseline
 process-manager command was attempted during review but stopped at dependency solving, before any
 test ran: the available Cabal index offered `pgmq-effectful-0.5.0.0`, while workspace package
-`jitsurei` requires `>=0.6 && <0.7`. This is environment evidence, not a new dependency constraint
-or a reason to weaken existing bounds. Refresh/verify the package index and authoritative releases
-before retrying; if still unresolved, record the blocker rather than claiming runtime acceptance.
+`jitsurei` requires `>=0.6 && <0.7`. That was environment evidence, not a new dependency constraint
+or a reason to weaken existing bounds. Adapter 0.15.0.0 later resolved the blocker without weakening
+those bounds; the unexecuted runtime acceptance cases remain the next source of correctness evidence.
 
 
 ## Context and Orientation
@@ -543,8 +592,9 @@ conflict: jitsurei => pgmq-effectful>=0.6 && <0.7
 
 `just conformance-corpus-policy` hit the same dependency-solver failure. Local Markdown link
 resolution, tagged/balanced code fences, and `git diff --check` passed. No runtime tests or corpus
-acceptance checks completed. Resolve package availability without weakening workspace bounds before collecting
-M0 evidence. The new feasibility and Reaction test groups do not exist yet.
+acceptance checks completed in that attempt. The 2026-09-14 adapter release and successful build
+below supersede this package-availability blocker. The new feasibility and Reaction test groups do
+not exist yet.
 
 Implementation preflight on 2026-09-12, after successful `cabal update`:
 
@@ -560,7 +610,7 @@ rejecting: shibuya-pgmq-adapter-0.14.0.0
 (conflict: pgmq-core==0.6.0.0, shibuya-pgmq-adapter => pgmq-core^>=0.5)
 ```
 
-The command exits 1 before building tests. Release evidence was checked with:
+The command exited 1 before building tests. Release evidence was checked with:
 
 ```bash
 curl -fsSL https://hackage.haskell.org/package/shibuya-pgmq-adapter/preferred.json
@@ -573,8 +623,27 @@ git ls-remote --tags https://github.com/shinzui/pgmq-hs.git
 These external endpoints verify releases of the canonical projects
 `mori://shinzui/shibuya-pgmq-adapter` and `mori://shinzui/pgmq-hs`.
 Do not use `allow-newer`, lower the workspace bounds, or omit workspace packages to claim
-this prerequisite passed. A compatible published dependency set is required before the
-normal workspace validation can establish acceptance.
+this prerequisite passed. This condition is now met by the published adapter 0.15.0.0 release.
+
+Dependency prerequisite verification on 2026-09-14:
+
+```bash
+nix develop --command cabal build keiro:tests
+```
+
+```text
+Build profile: -w ghc-9.12.4 -O1
+Building test suite 'keiro-test' for keiro-0.16.0.0...
+[15 of 15] Linking .../keiro-test
+```
+
+The command exited zero. `dist-newstyle/cache/plan.json` recorded `pgmq-core`,
+`pgmq-effectful`, and `pgmq-hasql` 0.6.0.0 together with `shibuya-pgmq-adapter` 0.15.0.0.
+Hackage's preferred-version responses include 0.6.0.0 for all three PGMQ libraries and adapter
+0.15.0.0; the adapter's published Cabal file declares `^>=0.6` for those libraries, and upstream
+tag `v0.15.0.0` resolves to commit
+`22f5c4dae97722727f2f2ed47d1bf2ed9603d4ed`. The dependency gate is complete; this build does not
+substitute for the unimplemented M0 feasibility test group.
 
 M0 after adding the feasibility examples:
 
@@ -586,6 +655,20 @@ cabal test keiro:keiro-test --test-options='--match "process reaction API feasib
 Expect a nonzero example count, zero failures, and explicit cases for a two-event acceptance,
 post-conflict decision, same-source race, and silent-then-accepted redelivery. A match that runs
 zero examples does not pass the gate. Record the actual transcript in this plan.
+
+Observed on 2026-09-14:
+
+```text
+process reaction API feasibility
+  keeps the supplied witness on the first event of an accepted multi-event batch [✔]
+  runs no accepted callback from an optimistic attempt discarded by rehydration [✔]
+  exposes one accepted and one rehydrated-silent result when the same source races [✔]
+  allows a receipt-free silent delivery to accept after unrelated saga progress [✔]
+  shows that a negative silent probe cannot fence a later unconditional timer transaction [✔]
+
+Finished in 0.8800 seconds
+5 examples, 0 failures
+```
 
 M1 and M2:
 
@@ -702,8 +785,10 @@ does not make target identity changes reversible without review.
 ## Interfaces and Dependencies
 
 
-No dependency changes are planned. Use `Keiro.Command` for saga decisions and transactions,
-`Keiro.Projection` for target append/projection transactions, `Keiro.ProcessManager` for existing
+This plan makes no dependency changes. Its external prerequisite is now satisfied by the released
+PGMQ 0.6.0.0 family and `shibuya-pgmq-adapter` 0.15.0.0. Use `Keiro.Command` for saga decisions
+and transactions, `Keiro.Projection` for target append/projection transactions,
+`Keiro.ProcessManager` for existing
 command/result and worker primitives, `Keiro.Timer` for timer effects, and the store's public
 read APIs for witnesses. Existing UUID, bytestring, text, effect, and transaction dependencies
 suffice. Register the new exposed module and the example's test module in `keiro/keiro.cabal`.
@@ -793,6 +878,17 @@ import or re-export the new child module.
 
 
 ## Revision Notes
+
+2026-09-14: Completed M0 with five PostgreSQL feasibility examples. The tests freeze the existing
+command API's multi-event witness, optimistic retry, same-source reconciliation, receipt-free silent
+redelivery, and negative-probe timer-race behavior, establishing the gate for M1 without adding a
+receipt schema or alternate saga evaluator.
+
+2026-09-14: Recorded completion of the PGMQ 0.6 dependency prerequisite. Verified the published
+adapter 0.15.0.0 bounds and upstream tag through Mori-located source, Hackage, and GitHub, then
+confirmed that the supported Nix build resolves the intended versions and links `keiro-test`.
+Removed the stale dependency blocker while leaving M0's feasibility tests and M1 through M4
+incomplete.
 
 2026-09-12: Implementation preflight refreshed Hackage and verified authoritative release
 bounds and tags. Recorded the resulting PGMQ/adapter dependency conflict and the required
