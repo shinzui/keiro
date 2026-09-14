@@ -73,9 +73,11 @@ the new nullable default-partition metric. A human can see the result by running
   `docs/user/work-queues.md`, including its OKF bundle log entry. Strict OKF
   validation passed, and `keiro-pgmq-test` passed 58 examples with only its two
   pre-existing pending examples.
-- [ ] Prove the focused PGMQ consumers and the complete repository pass with
-  only published packages, record the resolved versions and results here, and
-  perform the final ADR-distillation review.
+- [x] (2026-09-14 18:56Z) Prove the focused PGMQ consumers and the complete
+  repository pass with only published packages, record the resolved versions,
+  and perform the final ADR-distillation review. The consumer suites,
+  `cabal build all`, and `just verify` all passed; the final plan contains the
+  exact selected package set and concludes that no ADR change is warranted.
 
 
 ## Surprises & Discoveries
@@ -207,20 +209,52 @@ OK: 25 concepts (okf_version 0.2)
   Keiro raises its adapter bound, without an override or local checkout.
   Date: 2026-09-14
 
+- Decision: Do not create or update an ADR for this upgrade after the final
+  distillation pass.
+  Rationale: The implementation only selects released dependency versions and
+  preserves the existing PGMQ pass-through, migration ownership, operations,
+  and telemetry contracts already governed by ADRs 0001, 0009, and 0028.
+  Package selections and source-visible dependency changes belong in the plan,
+  changelogs, documentation, and regression tests; no durable architectural
+  policy changed.
+  Date: 2026-09-14
+
 
 ## Outcomes & Retrospective
 
-Milestones 1 and 2 are complete. The PGMQ 0.6.0.0 family and compatible adapter
-0.15.0.0 are published on Hackage with matching upstream tags, Keiro's Cabal and
-Mori metadata now select them, and the changelogs and work-queue reference state
-the released behavior. Regression assertions pin `premake = Nothing` and the
-nullable default-partition metric. `dhall type`, `mori show --full`, strict user
-documentation validation, `cabal check`, the refreshed all-package dry run, and
-`keiro-pgmq-test` all pass. The focused suite ran 58 examples with zero failures
-and its two documented pre-existing pending examples. No production Haskell API
-or implementation change was needed. Milestone 3 remains: run all affected
-consumer suites and the repository-wide verification gate, record the final
-resolved plan, and distill durable ADR context.
+All three milestones are complete. Hackage and matching upstream tags provide
+the complete PGMQ 0.6.0.0 family and compatible adapter 0.15.0.0. Keiro's Cabal
+and Mori metadata select that published set, and the changelogs and work-queue
+reference state the released behavior. Regression assertions pin
+`premake = Nothing` and `defaultPartitionLength = Nothing` without changing
+Keiro's production Haskell API or adding SQL.
+
+The final generated Cabal plan reports:
+
+```text
+pgmq-config 0.6.0.0
+pgmq-core 0.6.0.0
+pgmq-effectful 0.6.0.0
+pgmq-hasql 0.6.0.0
+pgmq-migration 0.6.0.0
+shibuya-pgmq-adapter 0.15.0.0
+```
+
+`dhall type`, `mori show --full`, strict user-documentation validation,
+`cabal check`, the refreshed all-package dry run, and `cabal build all` passed.
+The focused `keiro-pgmq-test` ran 58 examples with zero failures and exactly its
+two documented pre-existing pending examples. `keiro-ops-test` ran 48 examples
+with zero failures, `jitsurei-test` ran 25 with zero failures, and the complete
+`keiro-dsl:tests` target exited successfully, including its 719-example main
+suite with zero failures and every generated conformance suite. `just verify`
+then passed the core 632-example suite, those affected consumers, all 39
+generated-corpus invocations, the 36-example migration suite, and every
+repository policy and documentation gate.
+
+The ADR distillation pass found no new durable architectural decision: the
+upgrade preserves the telemetry, migration-ownership, and public-owner-API
+contracts in ADRs 0001, 0009, and 0028. Plan 279's solver prerequisite is now
+satisfiable, while its independent process-reaction work remains untouched.
 
 
 ## Context and Orientation
@@ -594,3 +628,10 @@ behavior, and adding regression assertions. Recorded the successful refreshed
 solver, metadata/document checks, and 58-example focused-suite evidence, plus
 the non-fatal root-document warning emitted while adding the accepted DOC-25
 bundle log entry.
+
+
+Revision note (2026-09-14): Completed Milestone 3 and the plan after all focused
+consumer suites, the complete DSL target, `cabal build all`, and `just verify`
+passed against the published package set. Recorded the exact resolved versions,
+final validation totals, and the ADR distillation conclusion that the upgrade
+changes no durable architectural policy.
