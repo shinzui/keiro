@@ -4443,6 +4443,279 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Right (Just row) -> row ^. #status == Scheduled
           _ -> False
 
+  describe "Keiro.ProcessManager.Reaction" $ around (withFreshResourceStore fixture) $ do
+    it "commits accepted saga timers before ordered target fan-out and recovers duplicates" $ \(_storeHandle, StoreRunner runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 5)
+          target = stream "reaction-target:accepted" :: Stream CounterCommand
+          rearmRequest = counterTimerRequest & #timerId .~ TimerId sampleUuid2 & #payload .~ object ["mode" Aeson..= ("rearm" :: Text)]
+          onceRequest = counterTimerRequest & #timerId .~ TimerId sampleUuid3 & #payload .~ object ["mode" Aeson..= ("once" :: Text)]
+          plan =
+            Reaction.AdvanceReaction
+              (Add 5)
+              [ Reaction.FollowSchedule Reaction.Rearm rearmRequest,
+                Reaction.FollowDispatch (PMCommand target (Add 5))
+              ]
+              [ Reaction.FollowSchedule Reaction.Once onceRequest,
+                Reaction.FollowDispatch (PMCommand target (Add 6))
+              ]
+          input = ("accepted", plan)
+      first <- runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager sourceEvent input
+      case first of
+        Right (Right result) -> do
+          result ^. #managerResult `shouldSatisfy` \case
+            Reaction.ReactionEvaluated DomainCommandOutcome {decision = DomainAccepted (CounterAdded 5 :| [CounterAudited 5])} -> True
+            _ -> False
+          result ^. #commandResults `shouldSatisfy` \case
+            [PMCommandAppended a, PMCommandAppended b] -> a ^. #eventsAppended == 1 && b ^. #eventsAppended == 1
+            _ -> False
+          result ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 2 1 0
+        other -> expectationFailure ("expected accepted reaction, got " <> show other)
+      beforeRearm <- runner $ lookupTimer (rearmRequest ^. #timerId)
+      beforeOnce <- runner $ lookupTimer (onceRequest ^. #timerId)
+      duplicate <- runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager sourceEvent input
+      case duplicate of
+        Right (Right result) -> do
+          result ^. #managerResult `shouldSatisfy` \case
+            Reaction.ReactionDuplicate {} -> True
+            _ -> False
+          result ^. #commandResults `shouldSatisfy` \case
+            [PMCommandDuplicate {}, PMCommandDuplicate {}] -> True
+            _ -> False
+          result ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 0 0 0
+        other -> expectationFailure ("expected duplicate reaction recovery, got " <> show other)
+      runner (lookupTimer (rearmRequest ^. #timerId)) `shouldReturn` beforeRearm
+      runner (lookupTimer (onceRequest ^. #timerId)) `shouldReturn` beforeOnce
+      Right sagaEvents <- runner $ Store.readStreamForward (StreamName "reaction-saga:accepted") (StreamVersion 0) 10
+      Right targetEvents <- runner $ Store.readStreamForward (StreamName "reaction-target:accepted") (StreamVersion 0) 10
+      Vector.length sagaEvents `shouldBe` 2
+      Vector.length targetEvents `shouldBe` 2
+
+    it "runs no-advance and silent unconditional effects without accepted-only effects" $ \(_storeHandle, StoreRunner runner) -> do
+      let noAdvanceSource = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          silentSource = recordedFromEventId (EventId sampleUuid2) (CounterAdded 2)
+          noAdvanceTimer = counterTimerRequest & #timerId .~ TimerId sampleUuid
+          silentTimer = counterTimerRequest & #timerId .~ TimerId sampleUuid2
+          acceptedOnlyTimer = counterTimerRequest & #timerId .~ TimerId sampleUuid3
+          noAdvancePlan =
+            Reaction.NoAdvance
+              [ Reaction.FollowSchedule Reaction.Once noAdvanceTimer,
+                Reaction.FollowDispatch (PMCommand (stream "reaction-target:no-advance") (Add 1))
+              ]
+          silentPlan =
+            Reaction.AdvanceReaction
+              NoOpSilently
+              [ Reaction.FollowSchedule Reaction.Once silentTimer,
+                Reaction.FollowDispatch (PMCommand (stream "reaction-target:silent") (Add 2))
+              ]
+              [ Reaction.FollowSchedule Reaction.Once acceptedOnlyTimer,
+                Reaction.FollowDispatch (PMCommand (stream "reaction-target:accepted-only") (Add 3))
+              ]
+      Right (Right noAdvance) <-
+        runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager noAdvanceSource ("no-advance", noAdvancePlan)
+      noAdvance ^. #managerResult `shouldBe` Reaction.ReactionNotAdvanced
+      noAdvance ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 1 1 0
+      Right noSaga <- runner $ Store.getStream (StreamName "reaction-saga:no-advance")
+      noSaga `shouldBe` Nothing
+      Right (Right silent) <-
+        runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions silentReactionManager silentSource ("silent", silentPlan)
+      silent ^. #managerResult `shouldSatisfy` \case
+        Reaction.ReactionEvaluated DomainCommandOutcome {decision = DomainNoOp "edge-1: already complete"} -> True
+        _ -> False
+      silent ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 1 1 0
+      runner (lookupTimer (acceptedOnlyTimer ^. #timerId)) `shouldReturn` Right Nothing
+      Right acceptedOnlyEvents <- runner $ Store.readStreamForward (StreamName "reaction-target:accepted-only") (StreamVersion 0) 10
+      acceptedOnlyEvents `shouldBe` Vector.empty
+
+    it "retries missing same-target dispatches after a later command commits" $ \(_storeHandle, StoreRunner runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          target = stream "reaction-strict-target:order" :: Stream FeasibilityGateCommand
+          committedTimer = counterTimerRequest & #timerId .~ TimerId sampleUuid2
+          plan =
+            Reaction.AdvanceReaction
+              (Add 1)
+              [ Reaction.FollowSchedule Reaction.Once committedTimer,
+                Reaction.FollowDispatch (PMCommand target (TryAccept 7)),
+                Reaction.FollowDispatch (PMCommand target OpenGate)
+              ]
+              []
+          input = ("partial", plan)
+      Right (Right first) <-
+        runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions strictTargetReactionManager sourceEvent input
+      first ^. #commandResults `shouldSatisfy` \case
+        [PMCommandFailed _ CommandRejected, PMCommandAppended {}] -> True
+        _ -> False
+      first ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 1 1 0
+      timerAfterTargetFailure <- runner (lookupTimer (committedTimer ^. #timerId))
+      timerAfterTargetFailure `shouldSatisfy` \case
+        Right (Just row) -> row ^. #status == Scheduled
+        _ -> False
+      Right (Right replayed) <-
+        runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions strictTargetReactionManager sourceEvent input
+      replayed ^. #commandResults `shouldSatisfy` \case
+        [PMCommandAppended {}, PMCommandDuplicate {}] -> True
+        _ -> False
+      replayed ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 0 0 0
+      Right events <- runner $ Store.readStreamForward (StreamName "reaction-strict-target:order") (StreamVersion 0) 10
+      traverse (decodeRecorded feasibilityGateCodec) (Vector.toList events)
+        `shouldBe` Right [GateOpened, GateAccepted 7]
+
+    it "reconciles a concurrent target loser that rehydrates to a silent result" $ \(_storeHandle, StoreRunner runner) -> do
+      arrivals <- newMVar (0 :: Int)
+      release <- newEmptyMVar
+      firstResult <- newEmptyMVar
+      secondResult <- newEmptyMVar
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 3)
+          target = stream "reaction-race-target" :: Stream CounterCommand
+          plan = Reaction.NoAdvance [Reaction.FollowDispatch (PMCommand target (Add 3))]
+          input = ("race", plan)
+          awaitPeer = do
+            arrived <- modifyMVar arrivals $ \count ->
+              let next = count + 1
+               in pure (next, next)
+            when (arrived == 2) (putMVar release ())
+            readMVar release
+          options = defaultRunCommandOptions & #beforeAppend .~ awaitPeer & #retryBackoffMicros .~ 0
+          runOne destination =
+            runner (Reaction.runReactiveProcessManagerOnce options retryTargetReactionManager sourceEvent input)
+              >>= putMVar destination
+      _ <- forkIO (runOne firstResult)
+      _ <- forkIO (runOne secondResult)
+      outcomes <- traverse takeMVar [firstResult, secondResult]
+      let results = [commandResults | Right (Right Reaction.ReactiveProcessManagerResult {commandResults}) <- outcomes]
+      Prelude.length results `shouldBe` 2
+      results `shouldSatisfy` \observed ->
+        Prelude.length [() | [PMCommandAppended {}] <- observed] == 1
+          && Prelude.length [() | [PMCommandDuplicate {}] <- observed] == 1
+
+    it "preserves timer statement order, Once payloads, and later-source Rearm updates" $ \(_storeHandle, StoreRunner runner) -> do
+      let sourceA = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          sourceB = recordedFromEventId (EventId sampleUuid2) (CounterAdded 2)
+          orderedId = TimerId sampleUuid
+          onceId = TimerId sampleUuid2
+          rearmId = TimerId sampleUuid3
+          reverseOrderId = TimerId (UUID.fromWords 0 0 0 104)
+          original id = counterTimerRequest & #timerId .~ id & #fireAt .~ dueTimerTime & #payload .~ object ["version" Aeson..= (1 :: Int)]
+          changed id = original id & #fireAt .~ addUTCTime 60 dueTimerTime & #payload .~ object ["version" Aeson..= (2 :: Int)]
+          runPlan source correlation followUps =
+            runner $
+              Reaction.runReactiveProcessManagerOnce
+                defaultRunCommandOptions
+                counterReactionManager
+                source
+                (correlation, Reaction.NoAdvance followUps)
+      Right () <- runner $ Store.runTransaction (scheduleTimerTx (original orderedId))
+      Right (Right ordered) <-
+        runPlan
+          sourceA
+          "ordered"
+          [Reaction.FollowSchedule Reaction.Rearm (changed orderedId), Reaction.FollowCancel orderedId]
+      ordered ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 2 0 1
+      orderedTimer <- runner (lookupTimer orderedId)
+      orderedTimer `shouldSatisfy` \case
+        Right (Just row) -> row ^. #status == Timer.Cancelled
+        _ -> False
+      Right () <- runner $ Store.runTransaction (scheduleTimerTx (original reverseOrderId))
+      Right (Right reverseOrdered) <-
+        runPlan
+          sourceA
+          "reverse-ordered"
+          [Reaction.FollowCancel reverseOrderId, Reaction.FollowSchedule Reaction.Rearm (changed reverseOrderId)]
+      reverseOrdered ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 2 0 1
+      reverseTimer <- runner (lookupTimer reverseOrderId)
+      reverseTimer `shouldSatisfy` \case
+        Right (Just row) -> row ^. #status == Timer.Cancelled && row ^. #payload == object ["version" Aeson..= (1 :: Int)]
+        _ -> False
+      Right (Right _) <- runPlan sourceA "once-a" [Reaction.FollowSchedule Reaction.Once (original onceId)]
+      Right (Right _) <- runPlan sourceB "once-b" [Reaction.FollowSchedule Reaction.Once (changed onceId)]
+      onceTimer <- runner (lookupTimer onceId)
+      onceTimer `shouldSatisfy` \case
+        Right (Just row) -> row ^. #fireAt == dueTimerTime && row ^. #payload == object ["version" Aeson..= (1 :: Int)]
+        _ -> False
+      Right (Right _) <- runPlan sourceA "rearm-a" [Reaction.FollowSchedule Reaction.Rearm (original rearmId)]
+      Right (Right _) <- runPlan sourceB "rearm-b" [Reaction.FollowSchedule Reaction.Rearm (changed rearmId)]
+      rearmedTimer <- runner (lookupTimer rearmId)
+      rearmedTimer `shouldSatisfy` \case
+        Right (Just row) -> row ^. #fireAt == addUTCTime 60 dueTimerTime && row ^. #payload == object ["version" Aeson..= (2 :: Int)]
+        _ -> False
+
+    it "rolls back saga and earlier timer writes when later timer SQL fails" $ \(_storeHandle, StoreRunner runner) -> do
+      Right () <- runner $ Store.runTransaction (Tx.sql reactionTimerFailureTriggerSql)
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 4)
+          firstTimer = counterTimerRequest & #timerId .~ TimerId sampleUuid2 & #processManagerName .~ "reaction-ok"
+          failingTimer = counterTimerRequest & #timerId .~ TimerId sampleUuid3 & #processManagerName .~ "reaction-fail"
+          plan =
+            Reaction.AdvanceReaction
+              (Add 4)
+              [ Reaction.FollowSchedule Reaction.Rearm firstTimer,
+                Reaction.FollowSchedule Reaction.Rearm failingTimer
+              ]
+              []
+      outcome <-
+        runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager sourceEvent ("timer-failure", plan)
+      outcome `shouldSatisfy` \case
+        Right (Left (Reaction.ReactionCommandFailed (StoreFailed _))) -> True
+        _ -> False
+      Right sagaEvents <- runner $ Store.readStreamForward (StreamName "reaction-saga:timer-failure") (StreamVersion 0) 10
+      sagaEvents `shouldBe` Vector.empty
+      runner (lookupTimer (firstTimer ^. #timerId)) `shouldReturn` Right Nothing
+      runner (lookupTimer (failingTimer ^. #timerId)) `shouldReturn` Right Nothing
+
+    it "rejects undecodable, foreign-stream, and wrong-target identity collisions" $ \(storeHandle, StoreRunner runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          correlationId = "collision"
+          managerId = deterministicCommandId "counter-reaction" correlationId (sourceEvent ^. #eventId) (-1)
+          sagaName = StreamName "reaction-saga:collision"
+          simplePlan = Reaction.AdvanceReaction (Add 1) [] []
+      foreignEvent <- shouldBeRight (encodeForAppend feasibilityGateCodec GateOpened)
+      Right _ <- runner $ Store.appendToStream sagaName NoStream [foreignEvent & #eventId ?~ managerId]
+      undecodable <- runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager sourceEvent (correlationId, simplePlan)
+      undecodable `shouldBe` Right (Left (Reaction.ReactionWitnessUndecodable sagaName managerId))
+
+      let otherSource = recordedFromEventId (EventId sampleUuid2) (CounterAdded 2)
+          otherCorrelation = "wrong-stream"
+          wrongManagerId = deterministicCommandId "counter-reaction" otherCorrelation (otherSource ^. #eventId) (-1)
+      appendCounterEventWithId storeHandle (StreamName "other-saga") wrongManagerId (CounterAdded 2)
+      wrongStream <- runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager otherSource (otherCorrelation, simplePlan)
+      wrongStream `shouldSatisfy` \case
+        Right (Left (Reaction.ReactionCommandFailed (StoreFailed _))) -> True
+        _ -> False
+
+      let targetSource = recordedFromEventId (EventId sampleUuid3) (CounterAdded 3)
+          targetName = StreamName "reaction-target:collision"
+          targetId = Reaction.deterministicReactionCommandId "counter-reaction" "target-collision" (targetSource ^. #eventId) targetName 0
+          targetPlan = Reaction.NoAdvance [Reaction.FollowDispatch (PMCommand (stream "reaction-target:collision") (Add 3))]
+      appendCounterEventWithId storeHandle (StreamName "other-target") targetId (CounterAdded 3)
+      Right (Right targetCollision) <-
+        runner $ Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions counterReactionManager targetSource ("target-collision", targetPlan)
+      targetCollision ^. #commandResults `shouldSatisfy` \case
+        [PMCommandFailed observed (StoreFailed _)] -> observed == targetName
+        _ -> False
+
+    it "pages a deep accepted witness without reconstructing the original batch" $ \(_storeHandle, StoreRunner runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          correlationId = "paged-witness"
+          sagaName = StreamName "reaction-saga:paged-witness"
+          managerId = deterministicCommandId "counter-reaction" correlationId (sourceEvent ^. #eventId) (-1)
+      encoded <- traverse (shouldBeRight . encodeForAppend counterCodec . CounterAdded) [1 .. 300]
+      let withIds =
+            Prelude.zipWith
+              (\index event -> if index == (280 :: Int) then event & #eventId ?~ managerId else event)
+              [1 ..]
+              encoded
+      Right _ <- runner $ Store.appendToStream sagaName NoStream withIds
+      recovered <-
+        runner $
+          Reaction.runReactiveProcessManagerOnce
+            defaultRunCommandOptions
+            counterReactionManager
+            sourceEvent
+            (correlationId, Reaction.AdvanceReaction (Add 1) [] [])
+      recovered `shouldSatisfy` \case
+        Right (Right result) -> case result ^. #managerResult of
+          Reaction.ReactionDuplicate duplicateId -> duplicateId == managerId
+          _ -> False
+        _ -> False
+
   describe "Keiro.ProcessManager" $ around (withFreshResourceStore fixture) $ do
     it "advances manager state, emits a deterministic target command once, and schedules a timer" $ \(_storeHandle, StoreRunner _runner) -> do
       let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 9)
@@ -15110,6 +15383,43 @@ feasibilityGateDomainHandler =
           other -> error ("feasibilityGateDomainHandler: unexpected selected edge " <> show other)
     }
 
+strictFeasibilityGateEventStream :: ValidatedFeasibilityGateEventStream
+strictFeasibilityGateEventStream =
+  mkEventStreamOrThrow
+    "reaction-strict-target"
+    feasibilityGateEventStreamDef {transducer = strictFeasibilityGateTransducer}
+
+strictFeasibilityGateTransducer :: SymTransducer (HsPred '[] FeasibilityGateCommand) '[] FeasibilityGateState FeasibilityGateCommand FeasibilityGateEvent
+strictFeasibilityGateTransducer =
+  feasibilityGateTransducer
+    { edgesOut = \case
+        GateClosed ->
+          [ Edge
+              { guard = matchInCtor openGateCtor,
+                update = UKeep,
+                output = [pack openGateCtor gateOpenedCtor oNil],
+                target = GateOpen,
+                mode = Keiki.Live
+              }
+          ]
+        GateOpen ->
+          [ Edge
+              { guard = matchInCtor tryAcceptCtor,
+                update = UKeep,
+                output = [pack tryAcceptCtor gateAcceptedCtor (inpCtor tryAcceptCtor #amount *: oNil)],
+                target = GateOpen,
+                mode = Keiki.Live
+              },
+            Edge
+              { guard = matchInCtor openGateCtor,
+                update = UKeep,
+                output = [],
+                target = GateOpen,
+                mode = Keiki.Live
+              }
+          ]
+    }
+
 coordinatorDomainHandler :: DomainCommandHandler (HsPred '[] CoordinatorCommand) '[] CounterState CoordinatorCommand CounterEvent Text Text
 coordinatorDomainHandler =
   DomainCommandHandler
@@ -15477,6 +15787,112 @@ counterProcessManager =
             }
     }
 
+type CounterReactionInput = (Text, Reaction.ReactionPlan CounterCommand CounterCommand)
+
+counterReactionManager ::
+  Reaction.ReactiveProcessManager
+    CounterReactionInput
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    Text
+    Text
+counterReactionManager =
+  Reaction.ReactiveProcessManager
+    "counter-reaction"
+    Prelude.fst
+    multiCounterDomainHandler
+    (\correlationId -> stream ("reaction-saga:" <> correlationId))
+    counterEventStream
+    (const [])
+    Prelude.snd
+
+type SilentReactionInput = (Text, Reaction.ReactionPlan SilentChoiceCommand CounterCommand)
+
+silentReactionManager ::
+  Reaction.ReactiveProcessManager
+    SilentReactionInput
+    (HsPred '[] SilentChoiceCommand)
+    '[]
+    CounterState
+    SilentChoiceCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    Text
+    Text
+silentReactionManager =
+  Reaction.ReactiveProcessManager
+    "silent-reaction"
+    Prelude.fst
+    silentChoiceDomainHandler
+    (\correlationId -> stream ("reaction-silent-saga:" <> correlationId))
+    counterEventStream
+    (const [])
+    Prelude.snd
+
+retryTargetReactionManager ::
+  Reaction.ReactiveProcessManager
+    CounterReactionInput
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] CounterCommand)
+    '[]
+    DrainState
+    CounterCommand
+    CounterEvent
+    Text
+    Text
+retryTargetReactionManager =
+  Reaction.ReactiveProcessManager
+    "retry-target-reaction"
+    Prelude.fst
+    multiCounterDomainHandler
+    (\correlationId -> stream ("reaction-retry-saga:" <> correlationId))
+    retryDecisionEventStream
+    (const [])
+    Prelude.snd
+
+type StrictTargetReactionInput = (Text, Reaction.ReactionPlan CounterCommand FeasibilityGateCommand)
+
+strictTargetReactionManager ::
+  Reaction.ReactiveProcessManager
+    StrictTargetReactionInput
+    (HsPred '[] CounterCommand)
+    '[]
+    CounterState
+    CounterCommand
+    CounterEvent
+    (HsPred '[] FeasibilityGateCommand)
+    '[]
+    FeasibilityGateState
+    FeasibilityGateCommand
+    FeasibilityGateEvent
+    Text
+    Text
+strictTargetReactionManager =
+  Reaction.ReactiveProcessManager
+    "strict-target-reaction"
+    Prelude.fst
+    multiCounterDomainHandler
+    (\correlationId -> stream ("reaction-strict-saga:" <> correlationId))
+    strictFeasibilityGateEventStream
+    (const [])
+    Prelude.snd
+
 unicodeCounterProcessManager ::
   ProcessManager
     CounterEvent
@@ -15670,6 +16086,23 @@ counterTimerRequest =
 
 dueTimerTime :: UTCTime
 dueTimerTime = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
+
+reactionTimerFailureTriggerSql :: ByteString
+reactionTimerFailureTriggerSql =
+  """
+  CREATE OR REPLACE FUNCTION keiro.fail_reaction_timer()
+  RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    IF NEW.process_manager_name = 'reaction-fail' THEN
+      RAISE EXCEPTION 'injected reaction timer failure';
+    END IF;
+    RETURN NEW;
+  END;
+  $$;
+  CREATE TRIGGER fail_reaction_timer
+    BEFORE INSERT OR UPDATE ON keiro.keiro_timers
+    FOR EACH ROW EXECUTE FUNCTION keiro.fail_reaction_timer();
+  """
 
 -- | An ordinary (non-sleep) process-manager timer, already due, distinguished
 -- only by index. Used to build a drainable backlog.

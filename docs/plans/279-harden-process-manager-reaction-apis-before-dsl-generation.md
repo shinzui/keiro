@@ -84,7 +84,7 @@ plan explicitly rather than hiding new persistence behind a DSL convenience.
 - [x] (2026-09-14 19:08Z) M0 prerequisite: restore a solvable workspace dependency set without weakening its PGMQ bounds. Published `shibuya-pgmq-adapter` 0.15.0.0 supports the PGMQ 0.6 family, and `nix develop --command cabal build keiro:tests` now succeeds.
 - [x] (2026-09-14 19:24Z) M0: added and passed accepted-event witness recovery, optimistic retry, same-source races, silent redelivery, and silent negative-probe timer-race tests with the existing command API. The gate ran 5 examples with 0 failures.
 - [x] (2026-09-14 19:37Z) M1: added transactional cancellation and the frozen target-keyed reaction identity with PostgreSQL and literal-vector tests. The feasibility group passed 8 examples and the deterministic identity group passed 7 examples.
-- [ ] M2: implement the additive reaction model and once runner, including explicit outcomes, timer accounting, witness recovery, and partial dispatch tests.
+- [x] (2026-09-14 19:49Z) M2: implemented the additive reaction model and once runner with explicit typed outcomes, atomic timer accounting, bounded witness recovery, target-local reconciliation, and partial-dispatch replay. The focused group passed 8 examples with 0 failures.
 - [ ] M3: add worker integration and a handwritten public-API example; prove acknowledgement, failure, and scaling behavior.
 - [ ] M4: document the runtime contract, distill its ADR, run compatibility gates, and hand the completed API to plan 273.
 
@@ -114,6 +114,13 @@ even after lease expiry. The ASCII reaction vector is
 `5a89007a-a634-58bf-8002-5ea7843155f2`; the Unicode vector is
 `ca7f7bd8-2b54-508f-a542-1e24da394d95`. An independently assembled byte preimage produced the
 same ASCII UUID.
+
+M2 showed that the existing deduplication helper needs one reaction-local post-dispatch probe:
+an optimistic loser can rehydrate to a rejection or zero-event success after another invocation
+has committed the intended target id. The wrapper preserves the original result when that exact
+target witness is absent. A target rejection after saga/timer commit also confirmed the intended
+phase boundary: replay skipped timer SQL, retried the missing target, and deduplicated the later
+same-target command.
 
 The implementation preflight on 2026-09-12 refreshed Hackage successfully to index state
 `2026-09-12T15:08:53Z`. PGMQ 0.6.0.0 is now available, but the complete workspace still
@@ -155,6 +162,12 @@ failure records still require memory proportional to their sizes.
 ## Decision Log
 
 
+- Decision: Accept the M2 once-runner contract with bounded exact-witness recovery and a
+  reaction-local target reconciliation pass around the historical deduplication helper.
+  Rationale: PostgreSQL cases establish atomic saga/timer rollback, duplicate recovery without
+  repeating timers, target failure isolation and replay, concurrent silent-loser reconciliation,
+  wrong-stream collision rejection, timer ordering, and paging beyond one 256-event page.
+  Date: 2026-09-14
 - Decision: Freeze the new process-reaction identity family with target stream and same-target
   occurrence, using no compatibility fallback to positional or router identities.
   Rationale: Literal vectors and an independently assembled length-prefixed UTF-8 preimage now
@@ -231,6 +244,14 @@ failure records still require memory proportional to their sizes.
 ## Outcomes & Retrospective
 
 
+M2 completed on 2026-09-14 with 8 examples and 0 failures. The public additive model now exposes
+typed accepted, silent, duplicate, and non-advancing outcomes. Accepted saga events and timer SQL
+share one transaction; target commands remain ordered, separately committed work with deterministic
+target-keyed ids and exact-target race reconciliation. Duplicate saga recovery validates and decodes
+the recorded witness in bounded pages and reports zero fresh timer statements. The tests also prove
+partial same-target replay, timer statement ordering, Once/Rearm payload behavior, and rollback on
+timer SQL failure.
+
 M1 completed on 2026-09-14. `cancelTimerTx` is a public transactional primitive backed by the
 unchanged token-aware cancellation statement, while `cancelTimer` is now its transaction wrapper.
 `Keiro.ProcessManager.Reaction` is exposed with its frozen target-keyed identity derivation. The
@@ -245,11 +266,10 @@ proceed without claiming serialization that the store does not provide.
 
 The M0 dependency prerequisite is complete as of 2026-09-14. The published adapter 0.15.0.0
 supports PGMQ 0.6, Cabal resolves `pgmq-core`, `pgmq-effectful`, and `pgmq-hasql` 0.6.0.0 with
-that adapter, and the supported Nix build links `keiro-test`. No runtime code or feasibility
-tests were added by this plan update. M0 through M4 remain unimplemented; resume with the M0
-PostgreSQL feasibility cases rather than dependency remediation. This prerequisite resolution
-does not itself establish a durable runtime decision, warrant an ADR, or complete the handoff
-to plan 273.
+that adapter, and the supported Nix build links `keiro-test`. At prerequisite completion no runtime
+code or feasibility tests had yet been added; that historical state is superseded by completed M0
+through M2. The dependency resolution alone did not establish a durable runtime decision or complete
+the handoff to plan 273.
 
 The 2026-09-12 implementation preflight had stopped before M0 because adapter 0.14.0.0 still
 required the PGMQ 0.5 family. That result remains useful historical evidence, but it is superseded
@@ -717,6 +737,23 @@ Finished in 0.1972 seconds
 7 examples, 0 failures
 ```
 
+M2 observed on 2026-09-14:
+
+```text
+Keiro.ProcessManager.Reaction
+  commits accepted saga timers before ordered target fan-out and recovers duplicates [✔]
+  runs no-advance and silent unconditional effects without accepted-only effects [✔]
+  retries missing same-target dispatches after a later command commits [✔]
+  reconciles a concurrent target loser that rehydrates to a silent result [✔]
+  preserves timer statement order, Once payloads, and later-source Rearm updates [✔]
+  rolls back saga and earlier timer writes when later timer SQL fails [✔]
+  rejects undecodable, foreign-stream, and wrong-target identity collisions [✔]
+  pages a deep accepted witness without reconstructing the original batch [✔]
+
+Finished in 1.3287 seconds
+8 examples, 0 failures
+```
+
 M3 and runtime compatibility:
 
 ```bash
@@ -917,6 +954,11 @@ import or re-export the new child module.
 
 
 ## Revision Notes
+
+2026-09-14: Completed M2 with the additive typed reaction model and once runner, bounded exact-witness
+recovery, atomic saga/timer effects, ordered target-keyed dispatch, reaction-local race reconciliation,
+and PostgreSQL coverage for duplicate, partial, collision, timer-ordering, rollback, and deep-history
+paths.
 
 2026-09-14: Completed M1 by extracting and exporting `cancelTimerTx`, adding rollback and lifecycle
 coverage, exposing the initial `Keiro.ProcessManager.Reaction` module, and freezing the reaction
