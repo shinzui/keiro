@@ -1,0 +1,15 @@
+language keiro-dsl 4
+context guard-remedy-unavailable
+
+aggregate Example
+  regs
+    retained Text = ""
+  states Open Closed!
+
+  command Close { accepted:Bool }
+  command Stay { accepted:Bool }
+  event ClosedEvent = fields(Close)
+
+  Open -- Stay -->
+    guard cmd.accepted
+    goto Open

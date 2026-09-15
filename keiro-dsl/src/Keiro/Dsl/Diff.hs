@@ -1929,6 +1929,8 @@ validateGuardRoundTrip env aggregateName twins = do
   let modifiedSpec = appendGuardTwins aggregateName twins ((.new) env)
       modifiedService = checkedServiceWithSpec modifiedSpec ((.newService) env)
       contract = checkedLanguageContract modifiedService
+      fullErrors = filter ((== Error) . (.severity)) (validateService modifiedService)
+      roundTripSpec = guardRoundTripSpec aggregateName modifiedSpec
       syntheticSource =
         ParsedSource
           { sourceLanguage =
@@ -1936,8 +1938,11 @@ validateGuardRoundTrip env aggregateName twins = do
                 { declaredLanguageVersion = contract.contractLanguageVersion,
                   languageVersionLoc = noLoc
                 },
-            spec = checkedSpec modifiedService
+            spec = roundTripSpec
           }
+  if null fullErrors
+    then pure ()
+    else Left ("source validation failed: " <> T.intercalate " | " (map (renderDiagnostic "<guard-remedy>") fullErrors))
   parsed <-
     case parseSource "<guard-remedy>" (renderSource syntheticSource) of
       Left failure -> Left ("render/parse failed: " <> renderParseFailure failure)
@@ -1950,9 +1955,9 @@ validateGuardRoundTrip env aggregateName twins = do
   if null errors
     then pure ()
     else Left ("source validation failed: " <> T.intercalate " | " (map (renderDiagnostic "<guard-remedy>") errors))
-  if checkedSpec parsedService == modifiedSpec
+  if checkedSpec parsedService == roundTripSpec
     then pure ()
-    else Left "render/parse changed the normalized candidate specification"
+    else Left "render/parse changed the normalized affected-aggregate specification"
   let parsedTransitions =
         [ transition
         | NAggregate aggregate <- (.nodes) (checkedSpec parsedService),
@@ -1971,6 +1976,28 @@ validateGuardRoundTrip env aggregateName twins = do
       canonicalTransition parsedTransition == canonicalTransition twin
         && isNothing ((.outcome) parsedTransition)
         && null ((.outcomeDuplicateLocs) parsedTransition)
+
+-- A composed workspace graph is not itself one source member: its node order
+-- may interleave declarations that can only appear before an aggregate. Keep
+-- the full graph for validation, but round-trip the affected aggregate with
+-- the candidate's complete type-declaration environment.
+guardRoundTripSpec :: Name -> Spec -> Spec
+guardRoundTripSpec aggregateName spec =
+  Spec
+    { context = spec.context,
+      moduleRoot = spec.moduleRoot,
+      layout = spec.layout,
+      ids = spec.ids,
+      enums = spec.enums,
+      rules = spec.rules,
+      nominalScalars = spec.nominalScalars,
+      mapped = spec.mapped,
+      nodes =
+        [ node
+        | node@(NAggregate aggregate) <- spec.nodes,
+          aggregate.name == aggregateName
+        ]
+    }
 
 appendGuardTwins :: Name -> [Transition] -> Spec -> Spec
 appendGuardTwins _ [] spec = spec

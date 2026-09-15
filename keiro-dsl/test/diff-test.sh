@@ -368,4 +368,73 @@ else
   echo "FAIL: selective denial failed for the wrong reason"; exit 1
 fi
 
+echo "== 19) whole-body coverage distinguishes exact and partial replay twins =="
+GUARD_BODY="$DEMO/guard-body"
+mkdir -p "$GUARD_BODY"
+cp "$FIX/reservation.keiro" "$GUARD_BODY/service.keiro"
+git -C "$DEMO" add guard-body/service.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "guard body baseline"
+cp "$FIX/reservation-guard-tightened.keiro" "$GUARD_BODY/service.keiro"
+GUARD_BODY_REPORT="$GUARD_BODY/diff-report.json"
+if output="$("$EXE" diff --since HEAD --report-out "$GUARD_BODY_REPORT" "$GUARD_BODY/service.keiro" 2>&1)" \
+    && [[ "$output" == *"[AggGuardTightened]"* \
+    && "$output" == *"replay-only Unrequested -- RequestTransferReservation"* ]] \
+    && grep -q '"code":"AggGuardTightened"' "$GUARD_BODY_REPORT" \
+    && grep -q 'add the computed replay-only edge' "$GUARD_BODY_REPORT"; then
+  echo "$output"
+  echo "ok: changed replay body advertises one validated twin"
+else
+  echo "$output"
+  echo "FAIL: changed replay body did not advertise its validated twin"; exit 1
+fi
+cp "$FIX/reservation-guard-tightened-twin.keiro" "$GUARD_BODY/service.keiro"
+if output="$("$EXE" diff --since HEAD "$GUARD_BODY/service.keiro" 2>&1)" \
+    && [[ "$output" != *"[AggGuardTightened]"* \
+    && "$output" != *"[AggGuardRemedyUnavailable]"* ]]; then
+  echo "$output"
+  echo "ok: exact computed twin covers the complete removed region"
+else
+  echo "$output"
+  echo "FAIL: exact replay twin did not suppress the guard-history finding"; exit 1
+fi
+cp "$FIX/reservation-guard-tightened-partial-twin.keiro" "$GUARD_BODY/service.keiro"
+if output="$("$EXE" diff --since HEAD "$GUARD_BODY/service.keiro" 2>&1)" \
+    && [[ "$output" == *"[AggGuardTightened]"* ]]; then
+  echo "$output"
+  echo "ok: partial replay twin does not claim whole-body coverage"
+else
+  echo "$output"
+  echo "FAIL: partial replay twin incorrectly suppressed the hazard"; exit 1
+fi
+
+echo "== 20) unavailable remedies stay advisory and are selectively deniable =="
+UNAVAILABLE="$DEMO/guard-remedy-unavailable"
+mkdir -p "$UNAVAILABLE"
+cp "$FIX/guard-remedy-unavailable-old.keiro" "$UNAVAILABLE/service.keiro"
+git -C "$DEMO" add guard-remedy-unavailable/service.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "guard remedy unavailable baseline"
+cp "$FIX/guard-remedy-unavailable-new.keiro" "$UNAVAILABLE/service.keiro"
+UNAVAILABLE_REPORT="$UNAVAILABLE/diff-report.json"
+if output="$("$EXE" diff --since HEAD --report-out "$UNAVAILABLE_REPORT" "$UNAVAILABLE/service.keiro" 2>&1)" \
+    && [[ "$output" == *"[AggGuardRemedyUnavailable]"* \
+    && "$output" != *$'\n\nreplay-only Open -- Close'* ]] \
+    && grep -q 'do not deploy until the replay-only remedy validates' "$UNAVAILABLE_REPORT"; then
+  echo "$output"
+  echo "ok: invalid inserted twin is withheld with explicit guidance"
+else
+  echo "$output"
+  echo "FAIL: unavailable remedy was hidden, blocking by default, or printed as paste-ready"; exit 1
+fi
+if output="$("$EXE" diff --since HEAD --deny AggGuardRemedyUnavailable "$UNAVAILABLE/service.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: selective denial did not reject AggGuardRemedyUnavailable"; exit 1
+elif [[ "$output" == *"[AggGuardRemedyUnavailable]"* \
+    && "$output" == *"denied: AggGuardRemedyUnavailable"* ]]; then
+  echo "$output"
+  echo "ok: --deny AggGuardRemedyUnavailable blocks the unproved remedy"
+else
+  echo "$output"
+  echo "FAIL: unavailable-remedy denial failed for the wrong reason"; exit 1
+fi
+
 echo "PASS: diff --since gates single specs and whole workspaces with owned unified reports"

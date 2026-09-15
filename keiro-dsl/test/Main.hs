@@ -7618,6 +7618,16 @@ main = hspec $ do
       replayImpactSpecs explicitTrue unguarded `shouldBe` ReplayNeutral
       replayImpactSpecs explicitFalse narrowed `shouldBe` ReplayNeutral
       replayImpactSpecs (withTransitions [edge (Just aOrB)]) narrowed `shouldSatisfy` (/= ReplayNeutral)
+      let guardCodes oldSpec newSpec =
+            [ changeCode change
+            | change <- diffSpecs oldSpec newSpec,
+              changeCode change `elem` [AggGuardTightened, AggGuardRelationUnknown, AggGuardRemedyUnavailable]
+            ]
+      guardCodes unchangedUnionOld unchangedUnionNew `shouldBe` []
+      guardCodes (withTransitions [edge (Just aOrB)]) split `shouldBe` []
+      guardCodes split (withTransitions [edge (Just aOrB)]) `shouldBe` []
+      guardCodes explicitTrue unguarded `shouldBe` []
+      guardCodes explicitFalse narrowed `shouldBe` []
 
     it "targets both sides of a replay-body replacement" $ do
       base <- specOf "test/fixtures/transition-family.keiro"
@@ -7681,6 +7691,7 @@ main = hspec $ do
           splitUnion = withFamily [edge a, edge b]
           narrowed = withFamily [edge a]
           exactRemovedRegion = EAnd aOrB (complementExpr a)
+          hazardCodes oldSpec newSpec = map (.code) (guardFindings oldSpec newSpec)
       guardFindings oldUnion splitUnion `shouldBe` []
       guardFindings splitUnion oldUnion `shouldBe` []
       case guardFindings oldUnion narrowed of
@@ -7692,6 +7703,22 @@ main = hspec $ do
         `shouldBe` [AggGuardTightened]
       guardFindings oldUnion (withFamily [edge a, replayEdge exactRemovedRegion]) `shouldBe` []
       guardFindings oldUnion (withFamily [edge a, replayEdge aOrB]) `shouldBe` []
+      case guardFindings oldUnion (withFamily []) of
+        [finding] -> do
+          finding.code `shouldBe` AggGuardTightened
+          finding.detail `shouldSatisfy` T.isInfixOf (renderTransition (replayEdge aOrB))
+        findings -> expectationFailure ("expected one removed-body finding, got " <> show findings)
+      guardFindings oldUnion (withFamily [replayEdge aOrB]) `shouldBe` []
+
+      let mismatchedCoverage =
+            [ ("writes", transitionWithWrites [] (replayEdge exactRemovedRegion)),
+              ("target", transitionWithGoto "Unregistered" (replayEdge exactRemovedRegion)),
+              ("source", transitionWithSource "Unregistered" (replayEdge exactRemovedRegion)),
+              ("owner", transitionWithImplementation HoleImplementation (replayEdge exactRemovedRegion))
+            ]
+      forM_ mismatchedCoverage $ \(dimension, wrongTwin) ->
+        unless (not (null (hazardCodes oldUnion (withFamily [edge a, wrongTwin])))) $
+          expectationFailure ("mismatched " <> dimension <> " replay twin suppressed the hazard")
 
     it "withholds a replay-only remedy that cannot validate in the candidate" $ do
       base <- specOf "test/fixtures/transition-family.keiro"
@@ -7727,6 +7754,44 @@ main = hspec $ do
           remediationFor finding.context finding.code
             `shouldBe` RemedyDoNotDeploy "do not deploy until the replay-only remedy validates under the candidate language or a targeted replay audit proves the affected history safe" :| []
         values -> expectationFailure ("expected one unavailable-remedy finding, got " <> show values)
+
+    it "round-trips an affected aggregate without flattening a composed graph into one source" $ do
+      base <- specOf "test/fixtures/projection-catalog.keiro"
+      let aggregateNodes = [node | node@(NAggregate _) <- base.nodes]
+          otherNodes = [node | node <- base.nodes, case node of NAggregate _ -> False; _ -> True]
+          composedOrder = specWithNodes (aggregateNodes <> otherNodes) base
+          falseGuard = Just (ELiteral noLoc (LiteralBool False))
+          tightened =
+            modifyAggregate
+              "Orders"
+              (\aggregate -> aggregateWithTransitions (map (transitionWithGuard falseGuard) aggregate.transitions) aggregate)
+              composedOrder
+          findings =
+            [ kind
+            | Advisory kind <- diffSpecs composedOrder tightened,
+              kind.code `elem` [AggGuardTightened, AggGuardRemedyUnavailable]
+            ]
+      map (.code) findings `shouldBe` [AggGuardTightened]
+      map (.detail) findings `shouldSatisfy` all (not . T.isInfixOf "render/parse failed")
+
+    it "validates every proposed remedy alone and with its aggregate peers" $ do
+      base <- specOf "test/fixtures/transition-family.keiro"
+      let aggregate = onlyAggregate base
+          falseGuard = Just (ELiteral noLoc (LiteralBool False))
+          tightenEmitting transition
+            | null transition.emits = transition
+            | otherwise = transitionWithGuard falseGuard transition
+          candidate =
+            modifyAggregate
+              aggregate.name
+              (\value -> aggregateWithTransitions (map tightenEmitting value.transitions) value)
+              base
+          findings =
+            [ kind
+            | Advisory kind <- diffSpecs base candidate,
+              kind.code `elem` [AggGuardTightened, AggGuardRemedyUnavailable]
+            ]
+      map (.code) findings `shouldBe` [AggGuardTightened, AggGuardTightened]
 
   describe "replay impact" $ do
     it "treats new events and transitions as replay-neutral" $ do
@@ -15043,6 +15108,14 @@ transitionWithGuard guard (Transition source command implementation _ writes emi
 
 transitionWithEmits :: [Name] -> Transition -> Transition
 transitionWithEmits emits (Transition source command implementation guard writes _ outcome outcomeDuplicateLocs goto mode loc) =
+  Transition source command implementation guard writes emits outcome outcomeDuplicateLocs goto mode loc
+
+transitionWithImplementation :: TransitionImplementation -> Transition -> Transition
+transitionWithImplementation implementation (Transition source command _ guard writes emits outcome outcomeDuplicateLocs goto mode loc) =
+  Transition source command implementation guard writes emits outcome outcomeDuplicateLocs goto mode loc
+
+transitionWithWrites :: [(Name, Expr)] -> Transition -> Transition
+transitionWithWrites writes (Transition source command implementation guard _ emits outcome outcomeDuplicateLocs goto mode loc) =
   Transition source command implementation guard writes emits outcome outcomeDuplicateLocs goto mode loc
 
 projectionOwnerWithReplay :: ProjectionReplayPolicy -> ProjectionOwnerNode -> ProjectionOwnerNode
