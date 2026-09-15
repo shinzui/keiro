@@ -30,8 +30,8 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Implementation started 2026-09-15 from commit `20f2f378`; milestones 1–3 are implemented,
-with full regression and performance validation in progress.
+Completed 2026-09-15 from baseline commit `20f2f378`, with all four milestones,
+full regression/build checks, and the added performance acceptance validated.
 The existing outbox keeps a persisted message ID stable across publication retries; this plan
 adds stable identity when the producer maps and enqueues the source event again. Those are
 different retry boundaries.
@@ -39,8 +39,8 @@ different retry boundaries.
 After this change, replaying the same private source event through an `IntegrationProducer` derives
 the same outbox ID and integration message ID every time. A transaction rollback, subscription
 redelivery, process restart, or deliberate replay inserts at most one semantically identical row.
-If the producer mapping changes and the same deterministic identity would now carry different
-content, enqueue returns a typed conflict instead of silently accepting, dropping, or overwriting
+If the producer mapping changes while the original row is retained, and the same deterministic
+identity would now carry different content, enqueue returns a typed conflict instead of silently accepting, dropping, or overwriting
 the drift.
 
 The behavior is visible in a database test that enqueues the same recorded event before and after a
@@ -68,8 +68,11 @@ draft under that same event reports `ProducerIdentityConflict` and leaves the or
 - [x] (2026-09-15) Migration parity/history/schema regression: 36 examples, 0 failures
   (15.6999 seconds). No migration or dependency-bound changes were necessary.
 - [x] (2026-09-15) Full Keiro suite: 676 examples, 0 failures (159.1468 seconds).
-- [ ] Milestone 4: add rollback, concurrency, replay, compatibility, documentation, and full
-  validation coverage.
+- [x] (2026-09-15) Milestone 4: add rollback, concurrency, replay, compatibility, documentation, and full
+  validation coverage. `cabal build all` passed; `nix flake check` passed both native
+  aarch64-darwin checks (pre-commit and treefmt). Other architectures were not executed.
+- [x] (2026-09-15) ADR distillation complete in ADR-42; strict validation passes for all 42 ADRs
+  and 25 user-documentation concepts. Updated API reference and inbox/outbox guidance.
 
 
 ## Surprises & Discoveries
@@ -187,14 +190,31 @@ historical evidence and was not re-audited.
 ## Outcomes & Retrospective
 
 
-Milestones 1–3 now provide pure deterministic identity, recorded-event provenance defaulting,
-transactional typed outcomes, and locked comparison of both unique keys without schema changes.
-ADR-42 records the frozen version-1 tuple, UUIDv8/SHA-256 vector, conflict observation boundary,
-retention scope, and historical-random-ID cutover requirement. The expanded producer/outbox regression run passed 62 examples in 12.3877 seconds;
-the migration suite also passes 36 examples. Performance acceptance is complete: publisher
-medians stay within 3.4%, and the final fresh-write comparison guards pass with about 3% overhead.
-The full Keiro suite now passes 676 examples; all-component build and flake validation remain
-in progress.
+All four milestones and the user-added performance acceptance are complete. Canonical producer
+enqueue now derives frozen source-event identities, defaults provenance, and returns typed
+inserted/duplicate/conflict outcomes. Retained content and publication audit state are preserved;
+no schema migration or dependency-bound change was needed. Explicit envelope enqueue remains
+compatible. The canonical helper is source-incompatible, and historical random IDs require the
+cutover described in the user guide and ADR-42.
+
+Validation passed 18 focused examples, 62 outbox/Kafka examples, 676 examples in the full Keiro
+suite, and 36 migration examples. The focused/outbox examples are subsets of the full suite and
+must not be added to its count. `cabal build all` succeeded. `nix flake check` passed its two
+native aarch64-darwin checks; other architectures were not run. Strict ADR and user-documentation
+validation also passed. Existing unrelated working-tree documentation edits were preserved.
+
+The performance investigation found avoidable encoding allocations and an exploratory benchmark
+preparation mismatch. One-buffer tuple encoding and an exact-envelope-equality shortcut preserve
+the frozen vectors while reducing unnecessary work. Corrected, tighter fresh-write comparisons
+passed the 10% guards at +3.22% bulk and +2.66% per-event overhead; matched publisher medians were
+within 3.4%. These are small measured local costs, not proof of zero overhead or a production SLA.
+All valid preliminary samples, including guard failures, remain in the committed benchmark evidence.
+
+ADR-42 holds the durable contract: exact version-1 derivation, retained-content comparison,
+post-transaction conflict telemetry, schema-free storage, historical-ID cutover, and bounded
+retention guarantees. Transient benchmark setup and timing evidence stay with this plan and its
+benchmark artifacts. Implementation and performance work were committed in `3cdbe90a` and
+`844d3062`; this final revision records validation and closes the plan.
 
 ## Context and Orientation
 
@@ -449,3 +469,8 @@ Content comparison uses existing authoritative columns, so no redundant digest m
 Revision note (2026-09-15 validation): Completed replay/checkpoint and migration acceptance,
 added allocation-preserving performance optimizations, recorded matched benchmark evidence and
 a repeatable 10% guard, and reconciled the plan's context and work sections with implemented APIs.
+
+
+Revision note (2026-09-15 completion): All milestones and performance acceptance passed. Recorded
+full test/build/native-flake evidence, completed ADR distillation, updated public API/inbox guidance,
+and documented measured overhead and compatibility/retention limits without claiming zero cost.

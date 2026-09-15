@@ -48,16 +48,16 @@ data InboxDedupePolicy
   | CustomDedupeKey !Text
 ```
 
-`PreferIntegrationMessageId` uses the `messageId` minted at the
-producer's outbox (EP-20). Because the outbox row keeps that id stable
-across publish retries, this is the natural primary dedupe key for
-Kafka-delivered integration events.
+`PreferIntegrationMessageId` uses the opaque `messageId` selected at enqueue.
+Canonical producers derive it from stable source-event coordinates, preserving
+identity across both producer replay and publication retries. This is the natural
+primary dedupe key for Kafka-delivered integration events.
 
 `PreferSourceEventIdentity` uses the `sourceEventId` (or
 `sourceGlobalPosition` as fallback) of the private event that produced
 this integration event. Choose this when a producer may republish the
-same logical fact with a fresh `messageId` (for example, after a
-schema upgrade) and you want those republishes collapsed to one
+same logical fact with a new `messageId` (for example, after a deliberate
+producer-name/version cutover) and you want those republishes collapsed to one
 handler run.
 
 `KafkaDeliveryIdentity` uses `topic:partition:offset`. Use only when

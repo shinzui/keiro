@@ -877,11 +877,12 @@ Use it to construct and serialize events published across bounded contexts.
 
 ## `Keiro.Outbox`
 
-Transactional outbox. Re-exports `Keiro.Outbox.Types` and exports
+Transactional outbox. Re-exports `Keiro.Outbox.Types` and `Keiro.Outbox.Identity`, and exports
 `enqueueOutboxTx`, `claimOutboxBatch`, `markOutboxSent`,
 `lookupOutbox`, `listOutbox`, `freshOutboxId`, `enqueueIntegrationEventTx`,
-`IntegrationProducer (..)`, `IntegrationEventDraft (..)`, `mintIntegrationEvent`,
-`draftToEvent`, `enqueueProducerEventTx`, `PublishOutcome (..)`,
+`IntegrationProducer (..)`, `IntegrationEventDraft (..)`, `freshIntegrationEvent`,
+`draftToEvent`, `deriveProducerIdentity`, `enqueueProducerEventTx`,
+`recordProducerEnqueueOutcome`, `PublishOutcome (..)`,
 `publishClaimedOutbox`, `outboxMaintenancePass`, and `sampleOutboxBacklog`.
 `IntegrationProducerConfigError (..)`, `mkIntegrationProducer`,
 `requeueStuckOutbox`, `countOutboxBacklog`, and `garbageCollectSent` complete the
@@ -890,6 +891,34 @@ surface. `Keiro.Outbox.Kafka` adds the Kafka producer adapter.
 Use it to commit side-effect intents in the write transaction and publish them
 asynchronously with per-key ordering, backoff, dead-lettering, and a separate
 maintenance pass for crashed-worker reclamation and backlog sampling.
+
+The canonical producer helper derives stable source-event identity and returns a typed result:
+
+```haskell
+enqueueProducerEventTx
+  :: IntegrationProducer e
+  -> RecordedEvent
+  -> Word32
+  -> IntegrationEventDraft
+  -> Tx.Transaction ProducerEnqueueOutcome
+```
+
+Use emission index zero for a single-draft mapper. Missing source provenance defaults from the
+recorded event. Outcomes are `ProducerInserted`, `ProducerDuplicateIdentical`, and
+`ProducerIdentityConflict`; conflicts contain field classes, never payload values. Handle a
+conflict in the same checkpoint transaction and call `recordProducerEnqueueOutcome` after the
+runner returns. `mintIntegrationEvent` remains a deprecated alias for `freshIntegrationEvent`;
+those fresh helpers do not supply producer replay identity. The signature change and historical
+random-ID cutover are documented in [the outbox guide](outbox.md).
+
+## `Keiro.Outbox.Identity`
+
+Pure, frozen producer identity and content comparison. Exports `ProducerEventKey (..)`,
+`ProducerIdentity (..)`, `ProducerEnqueueOutcome (..)`, `ConflictField (..)`,
+`producerIdentityBytes`, `deriveIdentity`, `producerContentDigest`,
+`differingContentFields`, and `normalizeProducerEvent`. Producer identities use a versioned,
+length-prefixed tuple and SHA-256; the outbox ID is UUIDv8 and the message ID is opaque text.
+The producer-config adapter `deriveProducerIdentity` lives in `Keiro.Outbox`.
 
 ## `Keiro.Inbox`
 
