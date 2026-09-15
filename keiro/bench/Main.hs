@@ -92,6 +92,7 @@ import Kiroku.Store.Types
 import OpenTelemetry.MeterProvider (createMeterProvider, defaultSdkMeterProviderOptions)
 import OpenTelemetry.Metric.Core (getMeter)
 import OpenTelemetry.Resource (emptyMaterializedResources)
+import ProducerIdentityBench (producerIdentityBenchmarks)
 import ReadModelBench
   ( readModelBenchmarks,
     runReadModelExplainEvidenceIfRequested,
@@ -158,7 +159,7 @@ main =
         readModelFixture <- setupReadModelBench readModelStore readModelRunner
         runReadModelExplainEvidenceIfRequested readModelFixture
         runReadModelLatencyEvidenceIfRequested readModelFixture
-        defaultMain (benchmarks store runner metrics rebuildRunCounter <> readModelBenchmarks readModelFixture)
+        defaultMain (benchmarks store runner metrics rebuildRunCounter <> readModelBenchmarks readModelFixture <> producerIdentityBenchmarks store rebuildRunCounter)
 
 benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> IORef Int -> [Benchmark]
 benchmarks store runner metrics rebuildRunCounter =

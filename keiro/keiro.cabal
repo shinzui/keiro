@@ -61,6 +61,7 @@ library
     Keiro.Inbox.Schema
     Keiro.Inbox.Types
     Keiro.Outbox
+    Keiro.Outbox.Identity
     Keiro.Outbox.Kafka
     Keiro.Outbox.Schema
     Keiro.Outbox.Types
@@ -233,7 +234,10 @@ benchmark keiro-bench
   type: exitcode-stdio-1.0
   hs-source-dirs: bench
   main-is: Main.hs
-  other-modules: ReadModelBench
+  other-modules:
+    ProducerIdentityBench
+    ReadModelBench
+
   ghc-options:
     -threaded
     -rtsopts

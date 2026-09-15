@@ -3,6 +3,7 @@ id: 164
 slug: make-producer-outbox-identity-deterministic-and-replay-safe
 title: "Make producer outbox identity deterministic and replay-safe"
 kind: exec-plan
+intention: intention_01m2k2qqk4etts8x4aek5zz488
 created_at: 2026-07-31T14:46:36Z
 provenance:
   revisions:
@@ -11,6 +12,11 @@ provenance:
       at: 2026-09-15T17:40:35Z
       mode: "update"
       note: "Reconcile outstanding producer replay identity work with current implementation and related completed plans"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T17:46:56Z
+      mode: "implement"
+      note: "Implement versioned producer identity and locked replay content comparison"
 ---
 
 # Make producer outbox identity deterministic and replay-safe
@@ -24,7 +30,8 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Status refreshed 2026-09-15 against commit `edd142c1`: implementation remains outstanding.
+Implementation started 2026-09-15 from commit `20f2f378`; milestones 1–3 are implemented,
+with full regression and performance validation in progress.
 The existing outbox keeps a persisted message ID stable across publication retries; this plan
 adds stable identity when the producer maps and enqueues the source event again. Those are
 different retry boundaries.
@@ -45,18 +52,36 @@ draft under that same event reports `ProducerIdentityConflict` and leaves the or
 
 
 - [x] (2026-09-15) Reconcile the plan with current source, tests, documentation, ADRs, and git
-  history. All four implementation milestones remain open; related shipped work is recorded below.
+  history. This was the pre-implementation audit; related shipped work is recorded below.
 
-- [ ] Milestone 1: define and freeze a versioned pure producer identity derivation contract.
-- [ ] Milestone 2: replace fresh per-attempt IDs in the canonical producer helper and return typed
+- [x] (2026-09-15) Milestone 1: define and freeze a versioned pure producer identity derivation contract.
+- [x] (2026-09-15) Milestone 2: replace fresh per-attempt IDs in the canonical producer helper and return typed
   inserted/duplicate/conflict outcomes from enqueue.
-- [ ] Milestone 3: make the database statement distinguish identical replay from identity drift and
+- [x] (2026-09-15) Milestone 3: make the database statement distinguish identical replay from identity drift and
   preserve ordering/source provenance.
+- [ ] Performance acceptance (added at user request 2026-09-15): compare matched old/new
+  publisher benchmarks and legacy/new enqueue paths, measure duplicate replay and pure identity
+  cost, investigate material regressions, and record commands, machine-local results, and limits.
 - [ ] Milestone 4: add rollback, concurrency, replay, compatibility, documentation, and full
   validation coverage.
 
 
 ## Surprises & Discoveries
+
+
+- 2026-09-15 implementation: The original 15 focused producer tests pass against PostgreSQL,
+  including restart (close/reopen store), rollback/redelivery, concurrent identical and changed
+  attempts, all content classes, and rejected-row preservation. Fresh insertion remains one
+  statement and does not compute a content digest. The explicit escape hatch retains its original
+  SQL statement and result type. The expanded 18-test producer group and 44 existing outbox/Kafka tests now pass
+  together: 62 examples, 0 failures in 12.3877 seconds.
+- PostgreSQL round trips truncate sub-microsecond occurrence precision. Normalization before
+  insertion avoids a false conflict on identical replay. The existing broad MIME parser also
+  normalized raw stored content types; outbox row decoding now preserves exact MIME text so
+  comparison and publication do not lose parameters. Empty and JSON-null attributes are distinct.
+- A first publisher benchmark invocation used Tasty's one-second test timeout, which aborted
+  all three workloads without valid samples. It is discarded; completed before/after runs use
+  a larger timeout and sequential benchmark execution.
 
 
 The July observations about Keiro remain reproducible by source inspection on 2026-09-15.
@@ -92,6 +117,15 @@ The downstream observation is retained as historical evidence and was not re-aud
 
 
 ## Decision Log
+
+
+- Decision (2026-09-15 implementation): Compare canonical content reconstructed from locked
+  existing envelope columns; do not persist a redundant digest column. No schema migration is
+  needed. Use a conflict-agnostic insert followed by a separate locking read so READ COMMITTED
+  sees a concurrently committed winner. Retry if sent-row GC removed the winner between statements.
+  Producer timestamps are truncated to PostgreSQL microsecond precision before insertion/digesting.
+  Replay suppression lasts while the row is retained; after sent-row GC the deterministic wire ID
+  still supports downstream deduplication, but outbox re-publication is possible.
 
 
 - Decision: Keep all four implementation milestones open after the status audit. Reuse existing
@@ -138,19 +172,19 @@ The downstream observation is retained as historical evidence and was not re-aud
 ## Outcomes & Retrospective
 
 
-The 2026-09-15 refresh confirms this plan is still unimplemented in the current checkout.
-Existing durability, persisted-message retry, explicit caller-owned envelope IDs, deterministic
-workflow/router IDs, and terminal publication rejection remain useful foundations. The missing
-work is pure producer identity, typed enqueue outcomes, database content comparison, and their
-replay/concurrency tests and rollout documentation. Start implementation at Milestone 1.
-
-This update changed documentation only. Validation consisted of source/test-definition inspection
-and git history checks; no Haskell or database tests were run, and no new runtime acceptance is
-claimed. ADR-24 and ADR-37 already hold the relevant shipped decisions; this refresh introduces
-no new implemented architecture requiring an ADR edit. The producer identity ADR remains part
-of Milestone 4.
+Milestones 1–3 now provide pure deterministic identity, recorded-event provenance defaulting,
+transactional typed outcomes, and locked comparison of both unique keys without schema changes.
+ADR-42 records the frozen version-1 tuple, UUIDv8/SHA-256 vector, conflict observation boundary,
+retention scope, and historical-random-ID cutover requirement. The expanded producer/outbox regression run passed 62 examples in 12.3877 seconds;
+full-package validation and the user-requested performance comparison remain open.
 
 ## Context and Orientation
+
+
+The following source observations describe the pre-implementation baseline. The implemented
+`Keiro.Outbox.Identity` module and new helper signature are specified under Interfaces and
+Dependencies. [ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)
+now owns the frozen identity and cutover contract alongside the existing ADRs below.
 
 
 `keiro/src/Keiro/Outbox.hs` defines `IntegrationProducer`, `IntegrationEventDraft`,
@@ -196,7 +230,8 @@ identity and content digest match.
 ## Plan of Work
 
 
-All four milestones below describe remaining work. Existing prefix validation, `draftToEvent`,
+Milestones 1–3 below describe the implemented contract; milestone 4 and performance
+acceptance remain in validation. Existing prefix validation, `draftToEvent`,
 and explicit-envelope tests can be extended; they do not complete a milestone by themselves.
 Retain the current rejected-publication lifecycle and its tests while changing enqueue behavior.
 
@@ -258,7 +293,16 @@ algorithm/version and test vectors in the ADR and replace example counts in Prog
 ## Validation and Acceptance
 
 
-These are pending implementation acceptance criteria, not results from the status refresh.
+Performance acceptance also requires local before/after publisher measurements and same-process
+legacy/new producer enqueue benchmarks with the same payloads and transaction batching. Benchmark
+identity derivation separately and report duplicate replay overhead honestly: its locked content
+read adds correctness work absent from the old silent suppression. Use repeated wall-time samples,
+consider run-to-run noise, and investigate any sustained slowdown above 10 percent on comparable
+fresh-write/publisher paths. Do not trade away drift detection to improve a benchmark.
+
+
+These acceptance criteria drive implementation validation; measured results are in Progress
+and Outcomes & Retrospective.
 The current TypeID-prefix and fresh-ID tests do not satisfy deterministic replay acceptance.
 
 1. The same producer source/name, source event ID, and emission index always produce the exact same
@@ -283,8 +327,7 @@ The current TypeID-prefix and fresh-ID tests do not satisfy deterministic replay
 ## Idempotence and Recovery
 
 
-The following describes the target implementation; the current producer helper does not yet
-provide these guarantees. Pure derivation and identical enqueue are safe to repeat. Database
+The implemented producer helper provides these guarantees while rows remain retained. Pure derivation and identical enqueue are safe to repeat. Database
 comparison happens in the same transaction as insert/conflict handling, so a caller can retry the full subscription transaction.
 The implementation must never update an existing row to match a changed draft; resolving an
 identity conflict requires restoring the original deterministic mapper or deliberately versioning
@@ -299,9 +342,8 @@ strategy; never alter version 1 in place.
 ## Interfaces and Dependencies
 
 
-The current public helper takes `IntegrationProducer e`, `OutboxId`, and
-`IntegrationEventDraft`, returning `Eff es (Tx.Transaction ())`. The following is the proposed
-replacement, not an existing API. `Keiro.Outbox.Identity`, `Keiro.Outbox`, and
+The pre-implementation public helper took `IntegrationProducer e`, `OutboxId`, and
+`IntegrationEventDraft`, returning `Eff es (Tx.Transaction ())`. The following describes the implemented replacement. `Keiro.Outbox.Identity`, `Keiro.Outbox`, and
 `Keiro.Outbox.Schema` must expose equivalents of:
 
 ```haskell
@@ -347,3 +389,8 @@ ADRs, and git history after a request to check whether this was already implemen
 implementation milestones open, distinguished related completed work, documented the missing
 provenance defaulting, and corrected focused-test instructions so an empty selection cannot be
 mistaken for acceptance. No implementation or runtime validation was performed in this refresh.
+
+
+Revision note (2026-09-15 implementation): Added intention tracking, implemented milestones 1–3,
+recorded initial PostgreSQL evidence, and added performance acceptance at the user's request.
+Content comparison uses existing authoritative columns, so no redundant digest migration is needed.

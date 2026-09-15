@@ -73,6 +73,7 @@ module Keiro.Telemetry
     keiroOutboxBacklogName,
     keiroOutboxPublishedName,
     keiroOutboxRejectedName,
+    keiroOutboxIdentityConflictName,
     keiroOutboxRetriedName,
     keiroOutboxDeadletteredName,
     keiroOutboxReclaimedName,
@@ -126,6 +127,7 @@ module Keiro.Telemetry
     recordOutboxBacklog,
     recordOutboxPublished,
     recordOutboxRejected,
+    recordOutboxIdentityConflict,
     recordOutboxRetried,
     recordOutboxDeadlettered,
     recordOutboxReclaimed,
@@ -581,6 +583,9 @@ keiroOutboxBacklogName = "keiro.outbox.backlog"
 keiroOutboxPublishedName :: Text
 keiroOutboxPublishedName = "keiro.outbox.published"
 
+keiroOutboxIdentityConflictName :: Text
+keiroOutboxIdentityConflictName = "keiro.outbox.identity.conflict"
+
 keiroOutboxRejectedName :: Text
 keiroOutboxRejectedName = "keiro.outbox.rejected"
 
@@ -742,6 +747,7 @@ data KeiroMetrics = KeiroMetrics
   { outboxBacklog :: Gauge Int64,
     outboxPublished :: Counter Int64,
     outboxRejected :: Counter Int64,
+    outboxIdentityConflict :: Counter Int64,
     outboxRetried :: Counter Int64,
     outboxDeadlettered :: Counter Int64,
     outboxReclaimed :: Counter Int64,
@@ -802,6 +808,7 @@ newKeiroMetrics :: (MonadIO m) => Meter -> m KeiroMetrics
 newKeiroMetrics meter = liftIO $ do
   outboxBacklog' <- gaugeI64 keiroOutboxBacklogName "{event}" "Outbox rows awaiting publish."
   outboxPublished' <- counterI64 keiroOutboxPublishedName "{event}" "Outbox events successfully published."
+  outboxIdentityConflict' <- counterI64 keiroOutboxIdentityConflictName "{event}" "Producer enqueues refused because retained identity has different content."
   outboxRejected' <- counterI64 keiroOutboxRejectedName "{event}" "Outbox events intentionally and permanently rejected by the publisher."
   outboxRetried' <- counterI64 keiroOutboxRetriedName "{event}" "Outbox publish attempts that failed and will retry."
   outboxDeadlettered' <- counterI64 keiroOutboxDeadletteredName "{event}" "Outbox events parked after exhausting retries."
@@ -856,6 +863,7 @@ newKeiroMetrics meter = liftIO $ do
       { outboxBacklog = outboxBacklog',
         outboxPublished = outboxPublished',
         outboxRejected = outboxRejected',
+        outboxIdentityConflict = outboxIdentityConflict',
         outboxRetried = outboxRetried',
         outboxDeadlettered = outboxDeadlettered',
         outboxReclaimed = outboxReclaimed',
@@ -939,6 +947,10 @@ recordOutboxBacklog = recordGaugeI64 outboxBacklog
 
 recordOutboxPublished :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxPublished = recordCounter outboxPublished
+
+-- | Record after the transaction runner returns, including deliberate checkpoint rollback.
+recordOutboxIdentityConflict :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
+recordOutboxIdentityConflict = recordCounter outboxIdentityConflict
 
 recordOutboxRejected :: (MonadIO m) => Maybe KeiroMetrics -> Int64 -> m ()
 recordOutboxRejected = recordCounter outboxRejected

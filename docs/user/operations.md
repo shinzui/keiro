@@ -484,6 +484,10 @@ Outbox publisher (`Keiro.Outbox`):
   recorded each poll pass. Alert when it grows without draining.
 - `keiro.outbox.published` — Counter, `{event}` — successfully published rows. Watch for
   the rate dropping to zero while backlog rises.
+- `keiro.outbox.identity.conflict` — Counter, `{event}` — producer attempts whose
+  deterministic identity conflicts with retained content. Call
+  `recordProducerEnqueueOutcome` once after the transaction runner returns,
+  including a deliberate checkpoint rollback. No payload or identity labels.
 - `keiro.outbox.rejected` — Counter, `{event}` — rows intentionally and permanently
   refused by the publisher. It has no code or detail labels; inspect the retained row
   for bounded audit context. Alert according to application policy.

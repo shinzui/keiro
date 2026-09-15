@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-15
+* **Update**: Freeze version-1 producer identity, retained-content comparison, and cutover/retention boundaries.
+
 ## 2026-09-14
 * **Decision**: Accept additive process-manager reactions with exact saga witnesses, separate target recovery, and a target-keyed deterministic identity family (plan 279).
 

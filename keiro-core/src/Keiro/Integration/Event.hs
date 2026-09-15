@@ -68,11 +68,10 @@ import Kiroku.Store.Types (EventId (..), GlobalPosition (..))
 --
 -- Identity rules:
 --
--- * 'messageId' is an application-level id (UUIDv7 or equivalent
---   time-ordered UUID) minted by the producer subscription when it writes
---   the outbox row. It is stable across publish retries because it lives in
---   the row; Kafka topic/partition/offset are delivery metadata only and
---   are /not/ the canonical dedupe key.
+-- * 'messageId' is opaque application-level text. Canonical producers derive
+--   it deterministically from source-event coordinates; explicit callers own
+--   their identity policy. It is stable across publication retries. Kafka
+--   topic/partition/offset are delivery metadata, not the canonical dedupe key.
 -- * 'sourceEventId' and 'sourceGlobalPosition' identify the private event
 --   that produced this integration event. A single source event can fan out
 --   to multiple integration events with distinct 'messageId's; consumers

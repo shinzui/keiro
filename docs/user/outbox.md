@@ -48,8 +48,8 @@ deduplication.
 1. A command commits a private domain event to the local event store.
 2. A checkpointed `IntegrationProducer` subscription reads each
    recorded private event, maps it to a public
-   `IntegrationEventDraft`, mints a fresh `messageId` (a TypeID-shaped
-   UUIDv7), and writes one `keiro_outbox` row in the same transaction
+   `IntegrationEventDraft`, derives deterministic outbox and message IDs
+   from the producer/source-event coordinates, and writes one `keiro_outbox` row in the same transaction
    that advances its subscription cursor.
 3. The publisher worker (`publishClaimedOutbox`) claims rows with
    `FOR UPDATE SKIP LOCKED` plus a configurable ordering policy,
@@ -268,11 +268,58 @@ The supporting indexes:
 - `keiro_outbox_sent_gc_idx` on `(published_at)` partial `WHERE status = 'sent'`
   — backs `garbageCollectSent`.
 
-The enqueue `ON CONFLICT` target is `(source, message_id)`, so a retried
-attempt that reuses the same `messageId` is idempotent at the row level —
-re-inserting is a no-op. (The canonical producer path mints a fresh
-`messageId` per attempt, so reuse the message id explicitly when you want
-this de-duplication.)
+Both `outbox_id` and `(source, message_id)` are unique. The canonical
+`enqueueProducerEventTx producer recorded 0 draft` helper returns
+`ProducerInserted`, `ProducerDuplicateIdentical`, or `ProducerIdentityConflict`.
+It derives a UUIDv8 outbox ID and an opaque `<namespace>_v1_<sha256>` message ID
+from producer source/name, recorded event ID, and emission index. Use zero for
+today's single-draft mapper. Validate the non-empty namespace with
+`mkIntegrationProducer` before starting the subscription.
+
+Missing draft source event ID/global position default from `recorded`; explicit
+overrides participate in drift detection. Timestamps are truncated to whole
+microseconds before storage. Payload comparison is byte-exact; attributes use
+canonical JSON, so object key order does not matter. Destination, key, event
+schema, MIME text, time, causal/trace data, attributes, and provenance are all
+compared on replay. Conflicts report field classes without payload or metadata
+values and never overwrite the retained row or its publication state.
+
+Compose enqueue and checkpoint writes in one transaction. On conflict, call
+`Tx.condemn` and return the outcome so the checkpoint rolls back; after the
+transaction runner returns, call `recordProducerEnqueueOutcome metrics outcome`
+once to emit `keiro.outbox.identity.conflict`. Keeping observation outside SQL
+prevents serialization retries from multiplying counters. Run with Kiroku's
+normal retrying transaction runner; callers selecting repeatable-read or
+serializable isolation must retry serialization failures.
+
+The fresh insert needs one SQL statement. A replay adds a locking read through
+the two unique indexes and compares the retained envelope. It does not update
+`created_at`, status, retry counters, or rejection audit fields. Publisher
+ordering continues to use the original storage timestamp, not the hashed UUID.
+
+Suppression lasts while the row is retained. After successful-row garbage
+collection, replay can reinsert and republish with the same message ID;
+downstream inbox retention must cover the desired replay horizon. Rejected
+rows remain retained and cannot be revived by producer replay.
+
+### Migrating existing producers
+
+The helper signature is source-incompatible: replace caller-generated
+`OutboxId` and the outer `Eff` preparation with the recorded event plus stable
+emission index, and handle the typed result. `enqueueIntegrationEventTx`
+continues to accept caller-owned envelopes. `freshIntegrationEvent` explicitly
+creates fresh TypeIDs; the old `mintIntegrationEvent` name is deprecated.
+Neither fresh helper provides source-event replay identity.
+
+There is no automatic bridge from historical random message IDs. Before
+switching an existing subscription, drain in-flight old attempts and preserve
+its committed checkpoint; do not replay pre-cutover history under the new policy
+without an application-owned identity mapping or downstream reconciliation.
+Keep source, producer name, namespace, and emission-index assignments stable.
+Version a producer deliberately when changing its mapping, after assessing
+consumer deduplication and re-publication impact. No database migration is needed.
+See [ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)
+for the frozen encoding and vector.
 
 ## A worked example
 

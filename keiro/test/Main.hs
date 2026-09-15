@@ -165,11 +165,11 @@ import Keiro.Outbox
     defaultPublishOptions,
     draftToEvent,
     enqueueIntegrationEventTx,
+    freshIntegrationEvent,
     freshOutboxId,
     garbageCollectSent,
     lookupOutbox,
     markOutboxSent,
-    mintIntegrationEvent,
     mkIntegrationProducer,
     mkOutboxPublishOptions,
     mkPublishRejection,
@@ -179,6 +179,7 @@ import Keiro.Outbox
     publishRejectionDetail,
     sampleOutboxBacklog,
   )
+import Keiro.Outbox qualified as ProducerOutbox
 import Keiro.Outbox.Kafka qualified as OutboxKafka
 import Keiro.Outbox.Schema (markOutboxFailedTx, markOutboxRejectedTx)
 import Keiro.Prelude
@@ -6976,6 +6977,186 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           record = OutboxKafka.integrationEventToKafkaRecord envelope
       record ^. #key `shouldBe` Nothing
 
+  describe "Keiro.Outbox producer-identity" $ do
+    let sourceId = EventId (UUID.fromWords 0 0 0 1)
+        recorded = recordedFromEventId sourceId (CounterAdded 1)
+        identity = ProducerOutbox.deriveProducerIdentity sampleProducer (ProducerOutbox.ProducerEventKey sourceId 0)
+        enqueue producer event index draft storeHandle = Store.runStoreIO storeHandle (Store.runTransaction (ProducerOutbox.enqueueProducerEventTx producer event index draft))
+        runDraft = enqueue sampleProducer recorded 0
+        rows storeHandle = Store.runStoreIO storeHandle (ProducerOutbox.listOutbox "ordering")
+    it "pins the version-1 SHA-256/UUIDv8 vector" $ do
+      identity ^. #outboxId `shouldBe` OutboxId (UUID.fromWords 0x61dd62b4 0xbbfe81ce 0x96346ce6 0xafd48517)
+      identity ^. #messageId `shouldBe` "msg_v1_61dd62b4bbfef1ce56346ce6afd485172774bc060102e5cf455e39bd0edfa84b"
+      identity ^. #derivationVersion `shouldBe` 1
+    it "pins canonical content digest independently of storage lifecycle" $ do
+      ProducerOutbox.producerContentDigest (draftToEvent "ordering" "vector" sampleDraft)
+        `shouldBe` "8b2eb3af1146c43d592f0ec19519609d4316ba4c83133eeb059a115a0517e323"
+    it "separates source, name, event, index, tuple boundaries and UTF-8" $ do
+      let key = ProducerOutbox.ProducerEventKey sourceId 0
+          derive s n k = ProducerOutbox.deriveIdentity s n "msg" k
+          values =
+            [ derive "a" "bc" key,
+              derive "ab" "c" key,
+              derive "a" "b" key,
+              derive "a" "b" (key & #emissionIndex .~ 1),
+              derive "a" "b" (key & #sourceEventId .~ EventId sampleUuid),
+              derive "a" "\x0101" key,
+              derive "a" "\SOH" key
+            ]
+      Set.size (Set.fromList (fmap (^. #outboxId) values)) `shouldBe` length values
+    it "rejects an empty namespace before subscription startup" $ do
+      case mkIntegrationProducer (sampleProducer & #messageIdPrefix .~ "") of
+        Left InvalidMessageIdPrefix {} -> pure ()
+        _ -> expectationFailure "empty namespace was accepted"
+    it "replays after closing and reopening the store with one unchanged row" $
+      withFreshDatabase fixture $ \conn -> do
+        before <- Store.withStore (Store.defaultConnectionSettings conn) $ \storeHandle -> do
+          runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+          Right [row] <- rows storeHandle
+          pure row
+        Store.withStore (Store.defaultConnectionSettings conn) $ \storeHandle -> do
+          runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+          rows storeHandle `shouldReturn` Right [before]
+    around (withFreshStore fixture) $ do
+      it "returns inserted, identical retry, and defaults recorded provenance" $ \storeHandle -> do
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        Right [before] <- rows storeHandle
+        (before ^. #event) ^. #sourceEventId `shouldBe` Just sourceId
+        (before ^. #event) ^. #sourceGlobalPosition `shouldBe` Just (recorded ^. #globalPosition)
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+        rows storeHandle `shouldReturn` Right [before]
+      it "rolls back enqueue with a failed checkpoint and reuses both IDs on redelivery" $ \storeHandle -> do
+        result <- Store.runStoreIO storeHandle $ Store.runTransaction $ do
+          outcome <- ProducerOutbox.enqueueProducerEventTx sampleProducer recorded 0 sampleDraft
+          Tx.condemn
+          pure outcome
+        result `shouldBe` Right (ProducerOutbox.ProducerInserted identity)
+        rows storeHandle `shouldReturn` Right []
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+        Right retained <- rows storeHandle
+        length retained `shouldBe` 1
+      it "concurrent identical attempts converge to one inserted and one duplicate" $ \storeHandle -> do
+        a <- newEmptyMVar
+        b <- newEmptyMVar
+        _ <- forkIO (runDraft sampleDraft storeHandle >>= putMVar a)
+        _ <- forkIO (runDraft sampleDraft storeHandle >>= putMVar b)
+        outcomes <- sequence [takeMVar a, takeMVar b]
+        length (filter (== Right (ProducerOutbox.ProducerInserted identity)) outcomes) `shouldBe` 1
+        length (filter (== Right (ProducerOutbox.ProducerDuplicateIdentical identity)) outcomes) `shouldBe` 1
+        Right retained <- rows storeHandle
+        length retained `shouldBe` 1
+      it "concurrent changed content selects one winner and reports one conflict" $ \storeHandle -> do
+        a <- newEmptyMVar
+        b <- newEmptyMVar
+        _ <- forkIO (runDraft sampleDraft storeHandle >>= putMVar a)
+        _ <- forkIO (runDraft (sampleDraft & #payloadBytes .~ "changed-secret") storeHandle >>= putMVar b)
+        outcomes <- sequence [takeMVar a, takeMVar b]
+        length (filter (== Right (ProducerOutbox.ProducerInserted identity)) outcomes) `shouldBe` 1
+        length (filter (== Right (ProducerOutbox.ProducerIdentityConflict identity (ProducerOutbox.PayloadField NonEmpty.:| []))) outcomes) `shouldBe` 1
+        Right retained <- rows storeHandle
+        length retained `shouldBe` 1
+      it "detects drift in every envelope field class without changing the original row" $ \storeHandle -> do
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        Right [before] <- rows storeHandle
+        let cases =
+              [ (ProducerOutbox.RoutingField, sampleDraft & #destination .~ "elsewhere"),
+                (ProducerOutbox.RoutingField, sampleDraft & #key .~ Nothing),
+                (ProducerOutbox.SchemaField, sampleDraft & #eventType .~ "Renamed"),
+                (ProducerOutbox.SchemaField, sampleDraft & #schemaVersion .~ 2),
+                (ProducerOutbox.SchemaField, sampleDraft & #schemaReference ?~ SchemaReference (Just "r") (Just "s") (Just 2) (Just 3) (Just "f")),
+                (ProducerOutbox.SchemaField, sampleDraft & #contentType .~ OtherContentType "application/json; charset=utf-8"),
+                (ProducerOutbox.PayloadField, sampleDraft & #payloadBytes .~ "private-payload"),
+                (ProducerOutbox.OccurredAtField, sampleDraft & #occurredAt %~ addUTCTime 1),
+                (ProducerOutbox.CausalField, sampleDraft & #causationId ?~ sourceId),
+                (ProducerOutbox.CausalField, sampleDraft & #correlationId ?~ sourceId),
+                (ProducerOutbox.TraceField, sampleDraft & #traceContext ?~ TraceContext "parent" (Just "state")),
+                (ProducerOutbox.AttributesField, sampleDraft & #attributes ?~ object ["private" Aeson..= True]),
+                (ProducerOutbox.ProvenanceField, sampleDraft & #sourceEventId ?~ EventId sampleUuid),
+                (ProducerOutbox.ProvenanceField, sampleDraft & #sourceGlobalPosition ?~ GlobalPosition 99)
+              ]
+        forM_ cases $ \(field, draft) -> do
+          result <- runDraft draft storeHandle
+          result `shouldBe` Right (ProducerOutbox.ProducerIdentityConflict identity (field NonEmpty.:| []))
+          show result `shouldSatisfy` (not . isInfixOf "private-payload")
+          rows storeHandle `shouldReturn` Right [before]
+      it "normalizes sub-microsecond time and JSON object order across storage" $ \storeHandle -> do
+        let draft =
+              sampleDraft
+                & #occurredAt
+                %~ addUTCTime 0.123456789
+                & #attributes
+                ?~ object ["b" Aeson..= (2 :: Int), "a" Aeson..= (1 :: Int)]
+        runDraft draft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        runDraft (draft & #attributes ?~ object ["a" Aeson..= (1 :: Int), "b" Aeson..= (2 :: Int)]) storeHandle
+          `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+      it "distinguishes absent attributes from JSON null and preserves raw MIME text" $ \storeHandle -> do
+        let draft = sampleDraft & #attributes .~ Nothing & #contentType .~ OtherContentType "Application/JSON; charset=utf-8"
+        runDraft draft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        runDraft draft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+        runDraft (draft & #attributes ?~ Aeson.Null) storeHandle `shouldReturn` Right (ProducerOutbox.ProducerIdentityConflict identity (ProducerOutbox.AttributesField NonEmpty.:| []))
+      it "keeps wire identity after successful-row retention expires" $ \storeHandle -> do
+        _ <- runDraft sampleDraft storeHandle
+        Right summary <- Store.runStoreIO storeHandle $ publishClaimedOutbox (perRow (\_ -> pure PublishSucceeded)) defaultPublishOptions Nothing
+        summary ^. #published `shouldBe` 1
+        Right [sent] <- rows storeHandle
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+        rows storeHandle `shouldReturn` Right [sent]
+        now <- getCurrentTime
+        Store.runStoreIO storeHandle (garbageCollectSent 0 (addUTCTime 1 now)) `shouldReturn` Right 1
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+      it "different producer names and source events insert distinct identities" $ \storeHandle -> do
+        let producer2 = sampleProducer & #name .~ ("second-producer" :: Text)
+            recorded2 = recorded & #eventId .~ EventId sampleUuid
+        _ <- runDraft sampleDraft storeHandle
+        _ <- enqueue producer2 recorded 0 sampleDraft storeHandle
+        _ <- enqueue sampleProducer recorded2 0 sampleDraft storeHandle
+        Right retained <- rows storeHandle
+        length retained `shouldBe` 3
+        Set.size (Set.fromList (fmap (^. #outboxId) retained)) `shouldBe` 3
+      it "preserves a rejected publication and its audit data on replay" $ \storeHandle -> do
+        _ <- runDraft sampleDraft storeHandle
+        rejection <- shouldBeRight (mkPublishRejection "refused" (Just "audit"))
+        Right summary <-
+          Store.runStoreIO storeHandle $
+            publishClaimedOutbox (perRow (\_ -> pure (PublishRejected rejection))) defaultPublishOptions Nothing
+        summary ^. #rejected `shouldBe` 1
+        Right [before] <- rows storeHandle
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
+        rows storeHandle `shouldReturn` Right [before]
+      it "reports both unique-identity collision routes and keeps explicit envelopes usable" $ \storeHandle -> do
+        let event =
+              draftToEvent "ordering" (identity ^. #messageId) sampleDraft
+                & #sourceEventId
+                ?~ sourceId
+                & #sourceGlobalPosition
+                ?~ GlobalPosition 1
+        Store.runStoreIO storeHandle (Store.runTransaction (enqueueIntegrationEventTx (OutboxId outboxUuid1) event)) `shouldReturn` Right ()
+        Store.runStoreIO storeHandle (Store.runTransaction (enqueueIntegrationEventTx (OutboxId outboxUuid1) event)) `shouldReturn` Right ()
+        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerIdentityConflict identity (ProducerOutbox.IdentityField NonEmpty.:| []))
+        Right retained <- rows storeHandle
+        length retained `shouldBe` 1
+      it "treats namespace drift as an identity conflict on the outbox primary key" $ \storeHandle -> do
+        _ <- runDraft sampleDraft storeHandle
+        let changed = sampleProducer & #messageIdPrefix .~ ("event" :: Text)
+            changedId = ProducerOutbox.deriveProducerIdentity changed (ProducerOutbox.ProducerEventKey sourceId 0)
+        enqueue changed recorded 0 sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerIdentityConflict changedId (ProducerOutbox.IdentityField NonEmpty.:| []))
+      it "records a distinct conflict metric after a checkpoint rollback" $ \storeHandle -> do
+        (exporter, metricsRef) <- inMemoryMetricExporter
+        (provider, _) <- createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+        meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+        metrics <- Telemetry.newKeiroMetrics meter
+        Right first <- runDraft sampleDraft storeHandle
+        ProducerOutbox.recordProducerEnqueueOutcome (Just metrics) first
+        Right outcome <- Store.runStoreIO storeHandle $ Store.runTransaction $ do
+          result <- ProducerOutbox.enqueueProducerEventTx sampleProducer recorded 0 (sampleDraft & #payloadBytes .~ "secret")
+          Tx.condemn
+          pure result
+        ProducerOutbox.recordProducerEnqueueOutcome (Just metrics) outcome
+        _ <- forceFlushMeterProvider provider Nothing
+        exported <- readIORef metricsRef
+        lookup "keiro.outbox.identity.conflict" (flattenScalarPoints exported) `shouldBe` Just (IntNumber 1)
+
   describe "Keiro.Outbox" $ around (withFreshStore fixture) $ do
     it "validates terminal publication rejection data at its public boundary" $ \_storeHandle -> do
       let validCode64 = "a" <> Text.replicate 63 "z"
@@ -7988,7 +8169,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
 
     it "mints message ids with the configured TypeID prefix" $ \storeHandle -> do
       Right minted <-
-        Store.runStoreIO storeHandle (mintIntegrationEvent sampleProducer sampleDraft)
+        Store.runStoreIO storeHandle (freshIntegrationEvent sampleProducer sampleDraft)
       minted ^. #source `shouldBe` "ordering"
       minted ^. #destination `shouldBe` "billing.orders.v1"
       Text.isPrefixOf "msg_" (minted ^. #messageId) `shouldBe` True

@@ -6,9 +6,8 @@
 --
 -- * The canonical 'IntegrationProducer' helper maps durable private events
 --   to public 'Keiro.Integration.Event.IntegrationEvent' values and enqueues
---   one outbox row per mapped event. It mints @messageId@ as a prefixed
---   UUIDv7 (TypeID) so the id is time-ordered, human-readable, and stable
---   across publish retries.
+--   one outbox row per mapped event. Versioned source-event coordinates
+--   derive both IDs deterministically across producer and publication retries.
 -- * 'enqueueOutboxTx' is the inline escape hatch for sagas and process
 --   managers that need to emit an integration event without an intermediate
 --   private domain event. It runs inside the caller's
@@ -32,6 +31,9 @@
 module Keiro.Outbox
   ( -- * Re-exports
     module Keiro.Outbox.Types,
+    module Keiro.Outbox.Identity,
+    deriveProducerIdentity,
+    recordProducerEnqueueOutcome,
 
     -- * Storage primitives (transport-neutral)
     enqueueOutboxTx,
@@ -55,6 +57,7 @@ module Keiro.Outbox
     IntegrationEventDraft (..),
     mkIntegrationProducer,
     mintIntegrationEvent,
+    freshIntegrationEvent,
     draftToEvent,
     enqueueProducerEventTx,
 
@@ -71,6 +74,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
 import Data.TypeID qualified as TypeID
 import Data.UUID.V7 qualified as V7
+import Data.Word (Word32)
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (displayException, trySync)
 import Keiro.Integration.Event
@@ -79,6 +83,7 @@ import Keiro.Integration.Event
     SchemaReference,
     TraceContext,
   )
+import Keiro.Outbox.Identity
 import Keiro.Outbox.Kafka (outboxRowToKafkaRecord)
 import Keiro.Outbox.Schema
 import Keiro.Outbox.Types
@@ -87,6 +92,7 @@ import Keiro.Telemetry
   ( KeiroMetrics,
     recordOutboxBacklog,
     recordOutboxDeadlettered,
+    recordOutboxIdentityConflict,
     recordOutboxPublished,
     recordOutboxReclaimed,
     recordOutboxRejected,
@@ -95,7 +101,7 @@ import Keiro.Telemetry
   )
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
-import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent)
+import Kiroku.Store.Types (EventId, GlobalPosition, RecordedEvent (..))
 import OpenTelemetry.Attributes.Key (AttributeKey (..), unkey)
 import OpenTelemetry.SemanticConventions (error_type)
 import OpenTelemetry.Trace.Core (SpanStatus (..), addAttribute, setStatus)
@@ -133,18 +139,16 @@ enqueueIntegrationEventTx outboxId event =
 --
 -- A service running 'IntegrationProducer' reads its private event stream,
 -- decodes each event with a 'Keiro.Codec.Codec', calls 'mapEvent', and for
--- each 'Just' result writes one 'keiro_outbox' row. The helper mints
--- @messageId@ on each insert so the id is stable across publish retries.
+-- each 'Just' result writes one 'keiro_outbox' row. Source-event coordinates
+-- derive stable IDs across enqueue and publication retries.
 --
 -- * 'name' — subscription name used to checkpoint the producer's cursor
 --   in the @subscriptions@ table.
 -- * 'source' — value written into @keiro_outbox.source@; identifies the
 --   producing bounded context.
--- * 'messageIdPrefix' — TypeID prefix used when minting @messageId@.
---   Must be 1-63 lowercase Latin letters (e.g. @\"msg\"@, @\"order\"@).
---   Prefer constructing producers with 'mkIntegrationProducer'; an invalid
---   prefix passed directly to 'IntegrationProducer' raises when the first
---   message id is minted.
+-- * 'messageIdPrefix' — non-empty namespace, validated using TypeID prefix
+--   syntax. The resulting deterministic message ID is opaque text, not a TypeID.
+--   Prefer 'mkIntegrationProducer'; direct record construction bypasses validation.
 -- * 'mapEvent' — pure mapper from a private 'RecordedEvent' and its
 --   decoded payload to an 'IntegrationEventDraft'. Returning 'Nothing'
 --   skips the event without enqueuing a row.
@@ -162,22 +166,22 @@ data IntegrationProducerConfigError
 
 -- | Validate an integration producer before starting its subscription.
 mkIntegrationProducer :: IntegrationProducer e -> Either IntegrationProducerConfigError (IntegrationProducer e)
-mkIntegrationProducer producer =
-  case TypeID.checkPrefix (producer ^. #messageIdPrefix) of
-    Nothing -> Right producer
-    Just err ->
-      Left
-        ( InvalidMessageIdPrefix
-            (producer ^. #messageIdPrefix)
-            (Text.pack (show err))
-        )
+mkIntegrationProducer producer
+  | Text.null (producer ^. #messageIdPrefix) = Left (InvalidMessageIdPrefix "" "namespace must not be empty")
+  | otherwise = case TypeID.checkPrefix (producer ^. #messageIdPrefix) of
+      Nothing -> Right producer
+      Just err ->
+        Left
+          ( InvalidMessageIdPrefix
+              (producer ^. #messageIdPrefix)
+              (Text.pack (show err))
+          )
 
 -- | Everything in 'IntegrationEvent' except 'messageId' and 'source' —
--- those are filled in by 'mintIntegrationEvent' from the producer
--- configuration and the freshly minted TypeID.
+-- those are filled by 'enqueueProducerEventTx' using deterministic identity.
 --
 -- @sourceEventId@ and @sourceGlobalPosition@ default to the values on the
--- underlying 'RecordedEvent' (see 'mintIntegrationEvent'); a mapper that
+-- underlying 'RecordedEvent' (see 'enqueueProducerEventTx'); a mapper that
 -- needs to override them can replace the draft fields directly.
 data IntegrationEventDraft = IntegrationEventDraft
   { destination :: !Text,
@@ -205,7 +209,13 @@ mintIntegrationEvent ::
   IntegrationProducer e ->
   IntegrationEventDraft ->
   Eff es IntegrationEvent
-mintIntegrationEvent producer draft = do
+mintIntegrationEvent = freshIntegrationEvent
+{-# DEPRECATED mintIntegrationEvent "Use enqueueProducerEventTx for replay-safe producer identity, or freshIntegrationEvent for explicitly fresh envelopes." #-}
+
+-- | Generate an explicitly fresh envelope. Persist it before retrying; this
+-- helper alone provides no producer replay identity or provenance defaulting.
+freshIntegrationEvent :: (IOE :> es) => IntegrationProducer e -> IntegrationEventDraft -> Eff es IntegrationEvent
+freshIntegrationEvent producer draft = do
   typeId <- liftIO (TypeID.genTypeID (producer ^. #messageIdPrefix))
   pure (draftToEvent (producer ^. #source) (TypeID.toText typeId) draft)
 
@@ -231,33 +241,39 @@ draftToEvent source minted draft =
       attributes = draft ^. #attributes
     }
 
--- | Enqueue one drafted producer event inside an existing transaction.
---
--- This is the primitive a subscription worker calls per event. It mints a
--- fresh @messageId@ (TypeID), constructs the full envelope, and inserts
--- the row. The caller supplies the 'OutboxId' so retries from a known
--- subscription cursor coalesce on @(source, message_id)@.
---
--- The TypeID is minted before the insert; if the transaction rolls back
--- the message id is discarded (no observable effect) and the next attempt
--- mints a different id. Idempotency at the row level relies on a stable
--- 'OutboxId', not the minted message id.
---
--- Ordering caveat: @created_at@ records transaction-start time. Under
--- 'PerKeyHeadOfLine' or 'PerSourceStream', concurrent transactions for the same
--- key/source can commit in the opposite order and are therefore best-effort
--- unless the caller serializes them. The canonical producer subscription does
--- serialize same-key enqueues.
+-- | Observe a completed enqueue attempt outside its transaction. Invoke once
+-- after the runner returns; SQL serialization retries do not multiply metrics.
+recordProducerEnqueueOutcome :: (MonadIO m) => Maybe KeiroMetrics -> ProducerEnqueueOutcome -> m ()
+recordProducerEnqueueOutcome metrics = \case
+  ProducerIdentityConflict {} -> recordOutboxIdentityConflict metrics 1
+  _ -> pure ()
+
+-- | Pure identity for one stable producer/source-event coordinate.
+deriveProducerIdentity :: IntegrationProducer e -> ProducerEventKey -> ProducerIdentity
+deriveProducerIdentity producer = deriveIdentity (producer ^. #source) (producer ^. #name) (producer ^. #messageIdPrefix)
+
+-- | Enqueue a source event emission. Use index zero for today's single-draft
+-- mapper. Missing source provenance defaults from the recorded event. On a
+-- conflict, callers should condemn the surrounding checkpoint transaction and
+-- report the returned field classes after the transaction completes.
+-- Suppression is bounded by outbox retention; wire identity survives GC.
 enqueueProducerEventTx ::
-  forall e es.
-  (IOE :> es) =>
   IntegrationProducer e ->
-  OutboxId ->
+  RecordedEvent ->
+  Word32 ->
   IntegrationEventDraft ->
-  Eff es (Tx.Transaction ())
-enqueueProducerEventTx producer outboxId draft = do
-  event <- mintIntegrationEvent producer draft
-  pure (enqueueOutboxTx (OutboxMessage {outboxId, event}))
+  Tx.Transaction ProducerEnqueueOutcome
+enqueueProducerEventTx producer recorded emission draft =
+  enqueueProducerOutboxTx identity event
+  where
+    identity = deriveProducerIdentity producer (ProducerEventKey (recorded ^. #eventId) emission)
+    withProvenance =
+      draft
+        & #sourceEventId
+        .~ ((draft ^. #sourceEventId) <|> Just (recorded ^. #eventId))
+        & #sourceGlobalPosition
+        .~ ((draft ^. #sourceGlobalPosition) <|> Just (recorded ^. #globalPosition))
+    event = normalizeProducerEvent (draftToEvent (producer ^. #source) (identity ^. #messageId) withProvenance)
 
 -- ---------------------------------------------------------------------------
 -- Publisher worker

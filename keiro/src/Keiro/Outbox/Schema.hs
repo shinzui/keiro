@@ -7,6 +7,7 @@
 -- ('Keiro.Outbox.Kafka') consume these primitives.
 module Keiro.Outbox.Schema
   ( enqueueOutboxTx,
+    enqueueProducerOutboxTx,
     claimOutboxBatch,
     requeueStuckOutbox,
     markOutboxSent,
@@ -27,6 +28,7 @@ where
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
 import Data.ByteString (ByteString)
 import Data.Functor.Contravariant ((>$<))
+import Data.List.NonEmpty qualified as NE
 import Data.Time.Clock (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
 import Effectful (Eff, (:>))
@@ -34,12 +36,13 @@ import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
 import Keiro.Integration.Event
-  ( IntegrationEvent (..),
+  ( IntegrationContentType (..),
+    IntegrationEvent (..),
     SchemaReference (..),
     TraceContext (..),
     contentTypeText,
-    parseContentType,
   )
+import Keiro.Outbox.Identity
 import Keiro.Outbox.Rejection (PublishRejection (..))
 import Keiro.Outbox.Types
 import Keiro.Prelude
@@ -63,6 +66,33 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 enqueueOutboxTx :: OutboxMessage -> Tx.Transaction ()
 enqueueOutboxTx message =
   Tx.statement (toEncodedRow message) enqueueOutboxStmt
+
+-- | Insert or compare both unique identities without mutating a retained row.
+-- A separate statement sees a concurrent winner at READ COMMITTED. Higher
+-- isolation levels require the caller's normal serialization retry policy.
+enqueueProducerOutboxTx :: ProducerIdentity -> IntegrationEvent -> Tx.Transaction ProducerEnqueueOutcome
+enqueueProducerOutboxTx identity event = do
+  inserted <- Tx.statement (toEncodedRow (OutboxMessage (identity ^. #outboxId) event)) enqueueProducerStmt
+  if inserted
+    then pure (ProducerInserted identity)
+    else do
+      rows <- Tx.statement (unOutboxId (identity ^. #outboxId), event ^. #source, event ^. #messageId) producerConflictStmt
+      case rows of
+        [] -> enqueueProducerOutboxTx identity event -- GC won between insert and read.
+        _ -> case NE.nonEmpty (concatMap differences rows) of
+          Nothing -> pure (ProducerDuplicateIdentical identity)
+          Just fields -> pure (ProducerIdentityConflict identity fields)
+  where
+    differences row =
+      [IdentityField | row ^. #outboxId /= identity ^. #outboxId]
+        <> differingContentFields event (row ^. #event)
+
+producerConflictStmt :: Statement (UUID, Text, Text) [OutboxRow]
+producerConflictStmt =
+  preparable
+    (selectAllSql <> " WHERE outbox_id = $1 OR (source = $2 AND message_id = $3) ORDER BY outbox_id FOR UPDATE")
+    (contrazip3 (E.param (E.nonNullable E.uuid)) (E.param (E.nonNullable E.text)) (E.param (E.nonNullable E.text)))
+    (D.rowList outboxRowDecoder)
 
 -- | Read a single outbox row by id. Used by tests and inspection tooling.
 lookupOutbox :: (Store :> es) => OutboxId -> Eff es (Maybe OutboxRow)
@@ -372,39 +402,41 @@ encodedRowEncoder =
 -- ---------------------------------------------------------------------------
 
 enqueueOutboxStmt :: Statement EncodedRow ()
-enqueueOutboxStmt =
-  preparable
-    """
-    INSERT INTO keiro.keiro_outbox
-      ( outbox_id
-      , message_id
-      , source
-      , destination
-      , message_key
-      , event_type
-      , schema_version
-      , content_type
-      , schema_registry
-      , schema_subject
-      , schema_version_ref
-      , schema_id
-      , schema_fingerprint
-      , source_event_id
-      , source_global_position
-      , causation_id
-      , correlation_id
-      , traceparent
-      , tracestate
-      , payload_bytes
-      , attributes
-      , occurred_at
-      )
-    VALUES
-      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-    ON CONFLICT (source, message_id) DO NOTHING
-    """
-    encodedRowEncoder
-    D.noResult
+enqueueOutboxStmt = preparable (enqueueOutboxSql <> " ON CONFLICT (source, message_id) DO NOTHING") encodedRowEncoder D.noResult
+
+enqueueProducerStmt :: Statement EncodedRow Bool
+enqueueProducerStmt = preparable (enqueueOutboxSql <> " ON CONFLICT DO NOTHING") encodedRowEncoder ((> 0) <$> D.rowsAffected)
+
+enqueueOutboxSql :: Text
+enqueueOutboxSql =
+  """
+  INSERT INTO keiro.keiro_outbox
+    ( outbox_id
+    , message_id
+    , source
+    , destination
+    , message_key
+    , event_type
+    , schema_version
+    , content_type
+    , schema_registry
+    , schema_subject
+    , schema_version_ref
+    , schema_id
+    , schema_fingerprint
+    , source_event_id
+    , source_global_position
+    , causation_id
+    , correlation_id
+    , traceparent
+    , tracestate
+    , payload_bytes
+    , attributes
+    , occurred_at
+    )
+  VALUES
+    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+  """
 
 claimStmt :: OrderingPolicy -> Statement (Int64, UTCTime) [OutboxRow]
 claimStmt policy =
@@ -871,7 +903,7 @@ assembleRow raw =
             key = raw ^. #key,
             eventType = raw ^. #eventType,
             schemaVersion = raw ^. #schemaVersion,
-            contentType = parseContentType (raw ^. #contentType),
+            contentType = if raw ^. #contentType == "application/json" then ApplicationJson else OtherContentType (raw ^. #contentType),
             schemaReference,
             sourceEventId = raw ^. #sourceEventId,
             sourceGlobalPosition = raw ^. #sourceGlobalPosition,

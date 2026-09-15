@@ -6,6 +6,17 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- **Breaking:** `enqueueProducerEventTx` now takes a recorded source event and
+  emission index, derives deterministic UUIDv8/opaque message IDs, and returns
+  inserted, identical replay, or typed identity conflict directly in the transaction.
+  Missing source provenance defaults from the recorded event. Replays preserve
+  retained publication/audit state and reject content drift without payload disclosure.
+  Historical random IDs require a drained checkpoint cutover or an application-owned
+  mapping before replay. No schema migration is required.
+- Add `Keiro.Outbox.Identity`, a post-transaction identity-conflict metric, and
+  producer replay/performance coverage. Deprecate `mintIntegrationEvent` in favor
+  of explicitly named `freshIntegrationEvent`; caller-owned envelope enqueue remains.
+
 - Adopt the released 0.6.0.0 family from mori://shinzui/pgmq-hs and
   `shibuya-pgmq-adapter` 0.15.0.0 across PGMQ consumers, completing normal
   Cabal solver support. Partitioned job provisioning explicitly retains the
