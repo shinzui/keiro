@@ -57,6 +57,7 @@ library
     Keiro.DeadLetter.Schema
     Keiro.DeterministicId
     Keiro.Inbox
+    Keiro.Inbox.Delegated
     Keiro.Inbox.Kafka
     Keiro.Inbox.Schema
     Keiro.Inbox.Types

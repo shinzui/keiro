@@ -40,12 +40,16 @@ module Keiro.Inbox
     runInboxTransactionWithRetriesWith,
     runInboxTransactionWithRetriesKey,
     runInboxTransactionBatch,
+    runInboxDelegated,
+    runInboxDelegatedWithRetries,
+    runInboxDelegatedBatch,
     sampleInboxBacklog,
   )
 where
 
 import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe, mapMaybe)
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (displayException, trySync)
@@ -407,6 +411,117 @@ planInboxBatch policy = go Map.empty
            in if Map.member key seen
                 then BatchDuplicate : go seen rest
                 else BatchWork (event ^. #source) dedupe event kafka : go (Map.insert key () seen) rest
+
+-- | Run an integration handler whose downstream operation owns the durable
+-- deduplication receipt.
+--
+-- This wrapper computes the same policy key as the table-backed inbox, but it
+-- performs no inbox reads or writes and requires no 'Store' effect. The handler
+-- receives the computed key and must cover every protected effect with that
+-- identity. A returned 'DelegatedOutcome' is the handler's assertion about the
+-- downstream result; it is not independently verified by this wrapper.
+--
+-- Synchronous and asynchronous exceptions both propagate. Use
+-- 'runInboxDelegatedWithRetries' when synchronous failures should be classified
+-- for a caller-owned retry ladder.
+runInboxDelegated ::
+  forall a es.
+  (IOE :> es) =>
+  Maybe KeiroMetrics ->
+  InboxDedupePolicy ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
+  Eff es (Either InboxError (InboxResult a))
+runInboxDelegated mMetrics policy event kafka handler =
+  case dedupeKeyFor policy event kafka of
+    Left err -> pure (Left err)
+    Right dedupe -> do
+      result <- delegatedResult <$> handler dedupe event
+      recordInboxResult mMetrics Nothing result
+      pure (Right result)
+
+-- | Run delegated intake with an explicit, caller-owned retry position.
+--
+-- At an attempt above the configured ceiling, the handler is not invoked and
+-- the result is 'InboxPreviouslyFailed'. At or below the ceiling, synchronous
+-- exceptions become 'InboxHandlerFailed' with the current attempt number;
+-- asynchronous cancellation still propagates. Typed errors in the handler's
+-- effect stack are not exceptions and must be handled by the caller.
+runInboxDelegatedWithRetries ::
+  forall a es.
+  (IOE :> es) =>
+  Maybe KeiroMetrics ->
+  DelegatedRetryContext ->
+  InboxDedupePolicy ->
+  IntegrationEvent ->
+  Maybe KafkaDeliveryRef ->
+  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
+  Eff es (Either InboxError (InboxResult a))
+runInboxDelegatedWithRetries mMetrics retryContext policy event kafka handler =
+  case dedupeKeyFor policy event kafka of
+    Left err -> pure (Left err)
+    Right dedupe -> do
+      let attemptLimit = delegatedRetryCeiling retryContext
+          attempt = delegatedRetryAttempt retryContext
+      result <-
+        if attempt > attemptLimit
+          then pure (InboxPreviouslyFailed Nothing)
+          else do
+            attempted <- trySync (handler dedupe event)
+            pure $ case attempted of
+              Right outcome -> delegatedResult outcome
+              Left err -> InboxHandlerFailed (Text.pack (displayException err)) attempt
+      recordInboxResult mMetrics (Just attemptLimit) result
+      pure (Right result)
+
+-- | Process a bounded chunk of delegated deliveries sequentially.
+--
+-- Successful identities are remembered only for this call, keyed by source and
+-- dedupe key. A later occurrence of a successful identity is classified as a
+-- duplicate without invoking the handler. Policy errors and synchronous
+-- handler exceptions are returned per item and do not suppress a later retry of
+-- the same identity. Async cancellation propagates immediately. This function
+-- creates no threads or transactions and retains O(n) results and keys for an
+-- input chunk of size n.
+runInboxDelegatedBatch ::
+  forall a es.
+  (IOE :> es) =>
+  Maybe KeiroMetrics ->
+  InboxDedupePolicy ->
+  [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
+  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
+  Eff es [Either InboxError (InboxResult a)]
+runInboxDelegatedBatch mMetrics policy deliveries handler =
+  go Set.empty [] deliveries
+  where
+    go _ results [] = pure (reverse results)
+    go seen results ((event, kafka) : rest) =
+      case dedupeKeyFor policy event kafka of
+        Left err -> go seen (Left err : results) rest
+        Right dedupe -> do
+          let identity = (event ^. #source, dedupe)
+          if Set.member identity seen
+            then do
+              recordInboxResult mMetrics Nothing InboxDuplicate
+              go seen (Right InboxDuplicate : results) rest
+            else do
+              attempted <- trySync (handler dedupe event)
+              case attempted of
+                Left err -> do
+                  let result = InboxHandlerFailed (Text.pack (displayException err)) 1
+                  recordInboxResult mMetrics Nothing result
+                  go seen (Right result : results) rest
+                Right outcome -> do
+                  let result = delegatedResult outcome
+                      seen' = Set.insert identity seen
+                  recordInboxResult mMetrics Nothing result
+                  seen' `seq` go seen' (Right result : results) rest
+
+delegatedResult :: DelegatedOutcome a -> InboxResult a
+delegatedResult = \case
+  DelegatedFresh value -> InboxProcessed value
+  DelegatedDuplicate -> InboxDuplicate
 
 -- | Count the inbox backlog and record the gauge when metrics are enabled.
 --

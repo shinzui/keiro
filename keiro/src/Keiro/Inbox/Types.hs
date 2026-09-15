@@ -9,9 +9,15 @@
 module Keiro.Inbox.Types
   ( RetryDelay (..),
     InboxDedupePolicy (..),
+    InboxIdempotence (..),
     InboxPersistence (..),
     InboxStatus (..),
     InboxResult (..),
+    DelegatedOutcome (..),
+    DelegatedRetryContext,
+    mkDelegatedRetryContext,
+    delegatedRetryCeiling,
+    delegatedRetryAttempt,
     InboxError (..),
     InboxRow (..),
     KafkaDeliveryRef (..),
@@ -56,6 +62,16 @@ data InboxDedupePolicy
   | CustomDedupeKey !Text
   deriving stock (Generic, Eq, Show)
 
+-- | Where an integration consumer keeps its durable deduplication receipt.
+--
+-- 'IdempotenceInboxTable' uses Keiro's @keiro_inbox@ table. In
+-- 'IdempotenceDelegated' mode the supplied handler owns the receipt and Keiro
+-- performs no inbox reads or writes.
+data InboxIdempotence
+  = IdempotenceInboxTable
+  | IdempotenceDelegated
+  deriving stock (Generic, Eq, Show)
+
 -- | How much of the integration-event envelope the inbox persists on the
 -- success path.
 --
@@ -98,6 +114,42 @@ data InboxResult a
   | InboxPreviouslyFailed !(Maybe Text)
   | InboxHandlerFailed !Text !Int
   deriving stock (Generic, Eq, Show)
+
+-- | The result asserted by a delegated-idempotence handler.
+--
+-- 'DelegatedFresh' means the handler durably completed the protected operation
+-- for the first time. 'DelegatedDuplicate' means that same durable operation
+-- was already complete. This value is an explicit assertion by the caller;
+-- Keiro cannot prove that arbitrary effects were covered by the downstream
+-- receipt.
+data DelegatedOutcome a
+  = DelegatedFresh !a
+  | DelegatedDuplicate
+  deriving stock (Generic, Eq, Show)
+
+-- | Validated, caller-owned retry position for delegated intake.
+--
+-- The first value supplied to 'mkDelegatedRetryContext' is the positive attempt
+-- ceiling and the second is the positive, one-based current attempt. Attempts
+-- above the ceiling are valid: they classify a redelivery as
+-- 'InboxPreviouslyFailed' without invoking the handler.
+data DelegatedRetryContext = DelegatedRetryContext !Int !Int
+  deriving stock (Eq, Show)
+
+-- | Validate a retry ceiling and one-based current attempt.
+mkDelegatedRetryContext :: Int -> Int -> Either Text DelegatedRetryContext
+mkDelegatedRetryContext attemptLimit attempt
+  | attemptLimit <= 0 = Left "delegated retry ceiling must be positive"
+  | attempt <= 0 = Left "delegated retry attempt must be positive"
+  | otherwise = Right (DelegatedRetryContext attemptLimit attempt)
+
+-- | Read the configured attempt ceiling from a validated context.
+delegatedRetryCeiling :: DelegatedRetryContext -> Int
+delegatedRetryCeiling (DelegatedRetryContext attemptLimit _) = attemptLimit
+
+-- | Read the one-based current attempt from a validated context.
+delegatedRetryAttempt :: DelegatedRetryContext -> Int
+delegatedRetryAttempt (DelegatedRetryContext _ attempt) = attempt
 
 -- | Errors surfaced by the inbox wrapper that originate from the inbox
 -- itself rather than from the supplied handler.

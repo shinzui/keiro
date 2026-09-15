@@ -12,6 +12,11 @@ provenance:
       at: 2026-09-15T18:44:35Z
       mode: "update"
       note: "Refresh current runtime and DSL contracts; correct delegated duplicate, failure, identity and batch APIs; require measured performance gates."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-15T18:56:09Z
+      mode: "implement"
+      note: "Implement delegated runtime wrappers and adapters; continue through DSL, conformance, performance, documentation, and ADR milestones."
 ---
 
 # Delegated-idempotence inbox intake: bypass the keiro_inbox table when the downstream state machine already dedupes
@@ -37,8 +42,8 @@ Do not promise lower latency merely from fewer inbox rows. Aggregate deduplicati
 
 - [x] (2026-09-15) Refreshed the plan against current inbox, command, process-manager, workflow, DSL, benchmark, and fixture code; checked relevant ADRs and located dependency sources with Mori.
 - [x] (2026-09-15) Replaced unsafe duplicate/workflow assumptions, specified error-safe batching and source-scoped identities, and added API compatibility and performance acceptance.
-- [ ] M1: Add runtime outcome, validated retry context, and delegated single/retry/batch entry points with focused unit tests.
-- [ ] M2: Add deterministic identity and confirmed command/PM adapters with compile and pure contract tests.
+- [x] (2026-09-15 19:00Z) M1: Added runtime outcome, abstract validated retry context, and no-Store delegated single/retry/batch entry points. Focused tests passed with 7 examples and the complete `keiro-test` suite passed with 685 examples.
+- [ ] M2: Deterministic identity and command/PM adapter code is implemented; golden identity and pure PM folds pass. Remaining: exercise confirmed command dispatch and its failure cases through the Store interpreter before marking the milestone complete.
 - [ ] M3: Prove durable effects, duplicate races, failure handling, cancellation, zero inbox access, and bounded duplicate lookup against PostgreSQL.
 - [ ] M4: Add a successor-language intake mode, preserve published languages, and extend existing validation, generation, and compatibility reporting.
 - [ ] M5: Add generated and hand-filled delegated conformance under the advertised Haskell edition; run all DSL suites.
@@ -60,6 +65,8 @@ DSL intake evolution already exists in `intakePairDiff`: `DedupeIdentityChanged`
 
 Language 5 is published and stable, with no active candidate at the inspected commit. New syntax cannot widen it or add globally reserved words. The current `Justfile` runs all DSL suites through `cabal test keiro-dsl:tests`; `haskell-verify` does not build a website. Existing inbox benchmarks use no-op handlers and time a table reset within each sample, so they are unsuitable as an unchanged numerical comparator for a real downstream append.
 
+The delegated wrappers can share the existing private `recordInboxResult` without acquiring `Store`; the metric helpers require only `MonadIO`. A successful delegated batch identity must enter its local `Set` after both `DelegatedFresh` and `DelegatedDuplicate`, while a policy error or caught synchronous exception must leave the identity absent. The focused suite confirmed this failure-then-repeat boundary and synchronized async cancellation propagation.
+
 
 ## Decision Log
 
@@ -80,11 +87,13 @@ On 2026-09-15, replaced delimiter-joined IDs with a frozen versioned, length-pre
 
 On 2026-09-15, extend existing intake diffing and gate syntax in a successor language. Generate an actual delegated runner so the selected mode affects the callable API. Preserve published table-generated output. These are implementation decisions in this plan; accepted ADR contracts are not changed by this documentation-only refresh.
 
+On 2026-09-15, kept `DelegatedRetryContext` abstract while exporting read-only ceiling and attempt accessors for the runtime wrapper. The type omits `Generic`, so callers cannot reconstruct invalid values through generic product machinery, and the public constructor remains the only creation path.
+
 
 ## Outcomes & Retrospective
 
 
-The plan refresh is complete; runtime implementation, compiler validation of the proposed API, live behavior tests, and performance measurements remain outstanding. No performance result is claimed. The main corrections prevent false success on command failures or unrelated duplicate IDs, unsafe workflow acknowledgement, batch suppression after failure, and accidental widening of a published DSL.
+Milestone 1 is complete. The delegated wrappers compile without a Store interpreter, focused contract tests pass, and the full runtime suite remains green at 685 examples. Milestone 2 has its public implementation and pure identity/PM tests, while live command-dispatch cases, the DSL, conformance, performance evidence, documentation, and ADR distillation remain outstanding. No performance result is claimed.
 
 At implementation completion, record test counts, the exact benchmark environment and raw artifact paths, throughput and allocation comparisons, remaining restrictions, and the resulting ADR references. Do not mark this plan complete on compilation alone.
 
@@ -345,3 +354,5 @@ The PM adapter takes the resolved target stream name for reporting a zero-event 
 The generated delegated `runInboxIntake` has the `runInboxDelegated` signature with the policy argument removed. It preserves the polymorphic effect stack and does not require Store; the integration's command callback supplies its own additional effects. No generic workflow-start API is introduced.
 
 Revision note (2026-09-15): Replaced the July design with the current runtime/DSL baseline; corrected duplicate confirmation, no-op/failed-command handling, workflow guarantees, source/target identity encoding, retry semantics, and batch safety. Added published-language gating, generated runner conformance, explicit cutover risks, and measurable performance gates. Feature implementation remains pending.
+
+Revision note (2026-09-15): Recorded completion of Milestone 1 and the implemented portion of Milestone 2, including focused and full runtime validation evidence. Documented the abstract retry-context accessor decision and the exact remaining adapter proof.

@@ -38,7 +38,7 @@ import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
 import Data.Version (showVersion)
 import Data.Word (Word64)
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Exception qualified as EffException
 import ExternalReadSpec qualified
@@ -110,7 +110,8 @@ import Keiro.EventStream.Validate
     validateEventStream,
   )
 import Keiro.Inbox
-  ( InboxDedupePolicy (..),
+  ( DelegatedOutcome (..),
+    InboxDedupePolicy (..),
     InboxError (..),
     InboxPersistence (..),
     InboxResult (..),
@@ -120,12 +121,21 @@ import Keiro.Inbox
     listInbox,
     lookupInbox,
     markFailedTx,
+    mkDelegatedRetryContext,
+    runInboxDelegated,
+    runInboxDelegatedBatch,
+    runInboxDelegatedWithRetries,
     runInboxTransaction,
     runInboxTransactionBatch,
     runInboxTransactionWith,
     runInboxTransactionWithRetries,
     runInboxTransactionWithRetriesWith,
     sampleInboxBacklog,
+  )
+import Keiro.Inbox.Delegated
+  ( DelegatedCommandError (..),
+    delegatedEventId,
+    delegatedFromPMCommand,
   )
 import Keiro.Inbox.Kafka qualified as InboxKafka
 import Keiro.Integration.Event
@@ -8345,6 +8355,135 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       sampled <- readIORef metricsRef
       let sampledScalars = flattenScalarPoints sampled
       lookup "keiro.outbox.backlog" sampledScalars `shouldBe` Just (IntNumber 0)
+
+  describe "Keiro.Inbox delegated contracts" $ do
+    it "computes the existing dedupe key and runs without a Store interpreter" $ do
+      observed <- newIORef Nothing
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-no-store" & #source .~ "ordering"
+      result <-
+        runEff $
+          runInboxDelegated Nothing PreferIntegrationMessageId event Nothing $ \dedupe delivered -> do
+            liftIO (writeIORef observed (Just (dedupe, delivered ^. #source)))
+            pure (DelegatedFresh (42 :: Int))
+      result `shouldBe` Right (InboxProcessed 42)
+      readIORef observed `shouldReturn` Just ("delegated-no-store", "ordering")
+
+    it "rejects an invalid policy before invoking the delegated handler" $ do
+      invoked <- newIORef False
+      let event = sampleIntegrationEnvelope
+      result <-
+        runEff $
+          runInboxDelegated Nothing (CustomDedupeKey "") event Nothing $ \_ _ -> do
+            liftIO (writeIORef invoked True)
+            pure (DelegatedFresh ())
+      result `shouldBe` Left (DedupePolicyUnsatisfied (CustomDedupeKey ""))
+      readIORef invoked `shouldReturn` False
+
+    it "validates retry contexts and stops after the caller-owned ceiling" $ do
+      mkDelegatedRetryContext 0 1 `shouldBe` Left "delegated retry ceiling must be positive"
+      mkDelegatedRetryContext 3 0 `shouldBe` Left "delegated retry attempt must be positive"
+      context3 <- shouldBeRight (mkDelegatedRetryContext 3 3)
+      context4 <- shouldBeRight (mkDelegatedRetryContext 3 4)
+      invoked <- newIORef (0 :: Int)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-retry"
+          handler _ _ = do
+            liftIO (modifyIORef' invoked (+ 1))
+            pure (DelegatedFresh ("ok" :: Text))
+      atCeiling <- runEff (runInboxDelegatedWithRetries Nothing context3 PreferIntegrationMessageId event Nothing handler)
+      aboveCeiling <- runEff (runInboxDelegatedWithRetries Nothing context4 PreferIntegrationMessageId event Nothing handler)
+      atCeiling `shouldBe` Right (InboxProcessed "ok")
+      aboveCeiling `shouldBe` Right (InboxPreviouslyFailed Nothing)
+      readIORef invoked `shouldReturn` 1
+
+    it "reports the current retry attempt when a synchronous handler exception occurs" $ do
+      retryContext <- shouldBeRight (mkDelegatedRetryContext 3 2)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-retry-failure"
+          handler _ _ = liftIO (throwIO (userError "delegated exploded"))
+      result <- runEff (runInboxDelegatedWithRetries Nothing retryContext PreferIntegrationMessageId event Nothing handler)
+      case result of
+        Right (InboxHandlerFailed reason 2) -> Text.isInfixOf "delegated exploded" reason `shouldBe` True
+        other -> expectationFailure ("expected delegated attempt failure, got " <> show (void other))
+
+    it "retries a batch identity after failure and suppresses it only after success" $ do
+      invocations <- newIORef (0 :: Int)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-batch-retry" & #source .~ "source-a"
+          handler _ _ = do
+            current <- liftIO (atomicModifyIORef' invocations (\n -> (n + 1, n)))
+            when (current == 0) (liftIO (throwIO (userError "first attempt failed")))
+            pure (DelegatedFresh ())
+      results <-
+        runEff $
+          runInboxDelegatedBatch
+            Nothing
+            PreferIntegrationMessageId
+            [(event, Nothing), (event, Nothing), (event, Nothing)]
+            handler
+      case results of
+        [Right (InboxHandlerFailed reason 1), Right (InboxProcessed ()), Right InboxDuplicate] ->
+          Text.isInfixOf "first attempt failed" reason `shouldBe` True
+        other -> expectationFailure ("unexpected delegated batch results: " <> show other)
+      readIORef invocations `shouldReturn` 2
+
+    it "scopes in-batch suppression by integration source" $ do
+      invocations <- newIORef ([] :: [Text])
+      let first = sampleIntegrationEnvelope & #messageId .~ "shared" & #source .~ "source-a"
+          second = sampleIntegrationEnvelope & #messageId .~ "shared" & #source .~ "source-b"
+          handler _ event = do
+            liftIO (modifyIORef' invocations (<> [event ^. #source]))
+            pure (DelegatedFresh ())
+      results <-
+        runEff $
+          runInboxDelegatedBatch Nothing PreferIntegrationMessageId [(first, Nothing), (second, Nothing)] handler
+      results `shouldBe` [Right (InboxProcessed ()), Right (InboxProcessed ())]
+      readIORef invocations `shouldReturn` ["source-a", "source-b"]
+
+    it "propagates async cancellation from a synchronized delegated batch handler" $ do
+      entered <- newEmptyMVar
+      release <- newEmptyMVar
+      completed <- newEmptyMVar
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-cancel"
+          handler _ _ = liftIO (putMVar entered () >> takeMVar release) >> pure (DelegatedFresh ())
+      worker <-
+        forkIO $ do
+          outcome <-
+            try @AsyncException $
+              runEff (runInboxDelegatedBatch Nothing PreferIntegrationMessageId [(event, Nothing)] handler)
+          putMVar completed outcome
+      takeMVar entered
+      killThread worker
+      takeMVar completed `shouldReturn` Left ThreadKilled
+
+  describe "Keiro.Inbox.Delegated pure adapters" $ do
+    it "pins ASCII, Unicode, empty-field, and delimiter identity vectors" $ do
+      let base = delegatedEventId "consumer" "source" "message" (StreamName "counter-1") "apply"
+      base `shouldBe` EventId (uuidLiteral "8c9d74d0-1b27-5ef8-aa0c-3b37ed8ce8a8")
+      delegatedEventId "消費者" "源" "鍵" (StreamName "対象-1") "適用"
+        `shouldBe` EventId (uuidLiteral "e63f2f93-c519-5e9b-95e7-a233a1c32ae6")
+      delegatedEventId "" "a:b" "c" (StreamName "") ":"
+        `shouldBe` EventId (uuidLiteral "9ffa9002-be85-5713-8705-38c47a9731b4")
+      base `shouldNotBe` delegatedEventId "consumer:" "source" "message" (StreamName "counter-1") "apply"
+      base `shouldNotBe` delegatedEventId "consumer" ":source" "message" (StreamName "counter-1") "apply"
+      base `shouldNotBe` delegatedEventId "consumer" "source" "message" (StreamName "counter-2") "apply"
+
+    it "maps every process-manager command result without acknowledging failures or no-ops" $ do
+      let targetName = StreamName "counter-delegated-pm"
+          target = stream "counter-delegated-pm" :: Stream CounterEventStream
+          appended n =
+            CommandResult
+              { target,
+                streamVersion = StreamVersion (fromIntegral n),
+                globalPosition = if n > 0 then Just (GlobalPosition (fromIntegral n)) else Nothing,
+                eventsAppended = n
+              }
+          marker = EventId sampleUuid
+      delegatedFromPMCommand targetName (PMCommandAppended (appended 2))
+        `shouldBe` Right (DelegatedFresh (appended 2))
+      delegatedFromPMCommand targetName (PMCommandDuplicate marker)
+        `shouldBe` Right DelegatedDuplicate
+      delegatedFromPMCommand targetName (PMCommandAppended (appended 0))
+        `shouldBe` Left (DelegatedCommandWithoutReceipt targetName)
+      delegatedFromPMCommand targetName (PMCommandFailed targetName CommandRejected)
+        `shouldBe` Left (DelegatedCommandFailed targetName CommandRejected)
 
   describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
