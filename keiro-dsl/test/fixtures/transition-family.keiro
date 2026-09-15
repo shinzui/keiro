@@ -1,0 +1,27 @@
+language keiro-dsl 5
+context transition-family
+
+aggregate ProjectArtifact
+  regs
+    description Text = ""
+  states Unregistered Active
+
+  command Register { description:Text }
+  command ObserveDescription { description:Text }
+  event Registered = fields(Register)
+  event DescriptionObserved = fields(ObserveDescription)
+
+  Unregistered -- Register -->
+    write description := cmd.description
+    emit Registered
+    goto Active
+
+  Active -- ObserveDescription -->
+    guard cmd.description == reg.description
+    goto Active
+
+  Active -- ObserveDescription -->
+    guard cmd.description != reg.description
+    write description := cmd.description
+    emit DescriptionObserved
+    goto Active

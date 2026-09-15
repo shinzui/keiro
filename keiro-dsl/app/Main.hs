@@ -53,7 +53,7 @@ data Command
   | Inspect FilePath InspectionFormat
   | BehaviorObligations FilePath BehaviorFormat
   | Scaffold FilePath FilePath (Maybe String) (Maybe RuntimePackageName) Bool Bool Bool Bool (Maybe FilePath) (Maybe (String, FilePath))
-  | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions)
+  | Diff FilePath String (Maybe FilePath) (Maybe FilePath) [CompatibilitySurface] Bool (Maybe FilePath) (Maybe DiffCoverageOptions) [DiagnosticCode]
   | New String
 
 data InspectionFormat = InspectionJson
@@ -111,7 +111,7 @@ commands =
           (info (Scaffold <$> fileArg <*> outOpt <*> optional moduleRootOpt <*> optional runtimePackageOpt <*> collocateSwitch <*> forceGeneratedOverwriteSwitch <*> applyNameMigrationsSwitch <*> applyGeneratedHaskellEditionSwitch <*> optional goldensOpt <*> codecComparisonOpts <**> helper) (progDesc "Emit the generated layer + typed holes from a .keiro file"))
         <> command
           "diff"
-          (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <*> diffCoverageOptions <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
+          (info (Diff <$> fileArg <*> sinceOpt <*> optional emitGoldensOpt <*> optional replayImpactOutOpt <*> many gateOpt <*> explainSwitch <*> optional reportOutOpt <*> diffCoverageOptions <*> diffDenyCodesOptions <**> helper) (progDesc "Classify spec changes since a git ref as per-surface compatibility vectors; exit non-zero on any gated BREAKING surface"))
         <> command
           "new"
           (info (New <$> kindArg <**> helper) (progDesc "Print a minimal valid .keiro skeleton for a node kind (aggregate, process, router, contract, intake, emit, publisher, workqueue, dispatch, workflow, operation)"))
@@ -219,6 +219,31 @@ denyCodesOptions =
           (eitherReader parseDenyCodes)
           (long "deny" <> metavar "CODE[,CODE...]" <> help "Exit non-zero for warning diagnostics with these stable codes (repeatable)")
       )
+
+diffDenyCodesOptions :: Parser [DiagnosticCode]
+diffDenyCodesOptions =
+  concat
+    <$> many
+      ( option
+          (eitherReader parseDiffDenyCodes)
+          (long "deny" <> metavar "CODE[,CODE...]" <> help "Exit non-zero for advisory diff findings with these stable codes (repeatable)")
+      )
+
+parseDiffDenyCodes :: String -> Either String [DiagnosticCode]
+parseDiffDenyCodes raw = traverse parseOne (T.splitOn "," (T.pack raw))
+  where
+    parseOne token
+      | T.null token = Left "--deny requires one or more comma-separated diagnostic codes"
+      | otherwise = case parseDiagnosticCode token of
+          Nothing -> Left ("unknown diagnostic code `" <> T.unpack token <> "`; copy the spelling exactly from WARNING output")
+          Just diagnosticCode -> case diagnosticOrigin diagnosticCode of
+            DiffDiagnostic -> Right diagnosticCode
+            _ ->
+              Left
+                ( "diagnostic code `"
+                    <> T.unpack token
+                    <> "` is not emitted by the cross-revision diff finding pipeline"
+                )
 
 -- | Parse a @--deny@ argument, refusing codes @check@ can never emit.
 --
@@ -415,6 +440,23 @@ emitDeniedWarningSummary deniedCodes =
         <> T.intercalate ", " [diagnosticCodeText diagnosticCode | diagnosticCode <- [minBound .. maxBound], diagnosticCode `elem` deniedCodes]
         <> ")"
 
+deniedDiffWarningCodes :: [DiagnosticCode] -> [Change] -> [DiagnosticCode]
+deniedDiffWarningCodes selected changes =
+  [ (.code) kind
+  | Advisory kind <- changes,
+    (.code) kind `elem` selected
+  ]
+
+emitDeniedDiffSummary :: [DiagnosticCode] -> IO ()
+emitDeniedDiffSummary deniedCodes =
+  when (not (null deniedCodes)) $
+    TIO.hPutStrLn stderr $
+      "diff: "
+        <> T.pack (show (length deniedCodes))
+        <> " advisory finding(s) escalated to failure (denied: "
+        <> T.intercalate ", " [diagnosticCodeText diagnosticCode | diagnosticCode <- [minBound .. maxBound], diagnosticCode `elem` deniedCodes]
+        <> ")"
+
 checkReportEnforcement :: CheckOptions -> CheckReport.CheckReportEnforcement
 checkReportEnforcement options =
   CheckReport.CheckReportEnforcement
@@ -498,8 +540,8 @@ run (BehaviorObligations fp format)
   | isWorkspacePath fp = runWorkspaceBehaviorObligations fp format
 run (Scaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest)
   | isWorkspacePath fp = runWorkspaceScaffold fp out cliRoot cliRuntimePackage cliCollocate forceGeneratedOverwrite applyNameMigrations applyGeneratedHaskellEdition cliGoldens comparisonRequest
-run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions)
-  | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions
+run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions denyCodes)
+  | isWorkspacePath fp = runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions denyCodes
 run (Parse fp) = do
   input <- TIO.readFile fp
   case parseSourceDocument fp input of
@@ -605,7 +647,7 @@ run (BehaviorObligations fp format) = do
         else case sourceAwareBehaviorReport fp Nothing sourceIndex spec of
           Left failure -> renderBehaviorReportFailure failure
           Right report -> writeBehaviorReport format report
-run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions) = do
+run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions denyCodes) = do
   -- Resolve the spec to a repo-relative path so `git show <ref>:<relpath>` works.
   let dir = takeDirectory fp
   rootRes <- git dir ["rev-parse", "--show-toplevel"]
@@ -648,7 +690,9 @@ run (Diff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut
                     mapM_ (`Aeson.encodeFile` impact) replayImpactOut
                     mapM_ (\path -> Aeson.encodeFile path (diffReportWithImpacts effectiveGate changes semanticImpact coordination)) reportOut
                     coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-                    if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . (.severity)) coordination || not coverageOk then exitFailure else pure ()
+                    let deniedWarningCodes = deniedDiffWarningCodes denyCodes changes
+                    emitDeniedDiffSummary deniedWarningCodes
+                    if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . (.severity)) coordination || not coverageOk || not (null deniedWarningCodes) then exitFailure else pure ()
 
 -- | @parse@ on a workspace manifest: read it, parse it, and print it back in
 -- canonical form (clauses in order, members codepoint-sorted).
@@ -909,8 +953,9 @@ runWorkspaceDiff ::
   Bool ->
   Maybe FilePath ->
   Maybe DiffCoverageOptions ->
+  [DiagnosticCode] ->
   IO ()
-runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions = do
+runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain reportOut coverageOptions denyCodes = do
   let dir = takeDirectory fp
   rootRes <- git dir ["rev-parse", "--show-toplevel"]
   case rootRes of
@@ -990,7 +1035,9 @@ runWorkspaceDiff fp ref emitGoldensRoot replayImpactOut gatedSurfaces explain re
                           mapM_ (`Aeson.encodeFile` impact) replayImpactOut
                           mapM_ (\path -> Aeson.encodeFile path (workspaceDiffReportWithImpacts reportMeta effectiveGate workspaceChanges semanticImpact coordination)) reportOut
                           coverageOk <- runDiffCoverage fp (T.pack ref) oldSpec newSpec coverageOptions
-                          if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . (.severity)) coordination || not coverageOk then exitFailure else pure ()
+                          let deniedWarningCodes = deniedDiffWarningCodes denyCodes changes
+                          emitDeniedDiffSummary deniedWarningCodes
+                          if any (gatedBreaking effectiveGate) changes || any ((== CoordinationBreaking) . (.severity)) coordination || not coverageOk || not (null deniedWarningCodes) then exitFailure else pure ()
 
 -- | A @git show@ backed source rooted at a workspace manifest directory.
 gitContentSource :: FilePath -> String -> FilePath -> ContentSource

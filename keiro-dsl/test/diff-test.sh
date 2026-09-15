@@ -122,7 +122,7 @@ git -C "$DEMO" add svc.keiro
 git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "timer baseline"
 cp "$FIX/hospital-surge-window.keiro" "$DEMO/svc.keiro"
 if output="$("$EXE" diff --since HEAD "$DEMO/svc.keiro" 2>&1)"; then
-  if [[ "$output" == WARNING:* && "$output" == *"[TimerWindowChanged]"* ]]; then
+  if [[ "$output" == *"WARNING:"* && "$output" == *"[TimerWindowChanged]"* ]]; then
     echo "$output"
     echo "ok: timer policy change is visible without blocking the merge"
   else
@@ -315,6 +315,57 @@ if output="$("$EXE" diff --since HEAD "$MOVES/service.keiro-workspace" 2>&1)" \
 else
   echo "$output"
   echo "FAIL: unchanged ownership motion was hidden, blocking, or misclassified"; exit 1
+fi
+
+echo "== 17) identical sibling transition families cancel before guard classification =="
+FAMILY="$DEMO/transition-family"
+mkdir -p "$FAMILY"
+cp "$FIX/transition-family.keiro" "$FAMILY/service.keiro"
+git -C "$DEMO" add transition-family/service.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "transition family baseline"
+FAMILY_REPORT="$FAMILY/diff-report.json"
+FAMILY_REPLAY="$FAMILY/replay-impact.json"
+if output="$("$EXE" diff --since HEAD --report-out "$FAMILY_REPORT" --replay-impact-out "$FAMILY_REPLAY" "$FAMILY/service.keiro" 2>&1)" \
+    && grep -q '"findings":\[\]' "$FAMILY_REPORT" \
+    && grep -q '"verdict":"replay-neutral"' "$FAMILY_REPLAY" \
+    && [[ "$output" != *"[AggGuardTightened]"* \
+    && "$output" != *"[AggGuardRelationUnknown]"* \
+    && "$output" != *"replay-only Active -- ObserveDescription"* ]]; then
+  echo "$output"
+  echo "ok: identical transition siblings cancel before guard classification"
+else
+  echo "$output"
+  echo "FAIL: identical transition siblings produced guard or replay noise"; exit 1
+fi
+
+echo "== 18) ambiguous sibling families are advisory by default and selectively deniable =="
+AMBIGUOUS="$DEMO/transition-family-ambiguous"
+mkdir -p "$AMBIGUOUS"
+cp "$FIX/transition-family-ambiguous-old.keiro" "$AMBIGUOUS/service.keiro"
+git -C "$DEMO" add transition-family-ambiguous/service.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "ambiguous transition family baseline"
+cp "$FIX/transition-family-ambiguous-new.keiro" "$AMBIGUOUS/service.keiro"
+AMBIGUOUS_REPORT="$AMBIGUOUS/diff-report.json"
+if output="$("$EXE" diff --since HEAD --report-out "$AMBIGUOUS_REPORT" "$AMBIGUOUS/service.keiro" 2>&1)" \
+    && [[ "$output" == *"[AggGuardRelationUnknown]"* \
+    && "$output" != *$'\n\nreplay-only Active -- ObserveDescription'* ]] \
+    && grep -q 'do not deploy until the transition-family ambiguity is resolved' "$AMBIGUOUS_REPORT"; then
+  echo "$output"
+  echo "ok: ambiguous transition family stays advisory and carries stop-deployment guidance"
+else
+  echo "$output"
+  echo "FAIL: ambiguous transition family was hidden, blocking by default, or given a fabricated twin"; exit 1
+fi
+if output="$("$EXE" diff --since HEAD --deny AggGuardRelationUnknown "$AMBIGUOUS/service.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: selective denial did not reject AggGuardRelationUnknown"; exit 1
+elif [[ "$output" == *"[AggGuardRelationUnknown]"* \
+    && "$output" == *"denied: AggGuardRelationUnknown"* ]]; then
+  echo "$output"
+  echo "ok: --deny AggGuardRelationUnknown blocks the ambiguous change"
+else
+  echo "$output"
+  echo "FAIL: selective denial failed for the wrong reason"; exit 1
 fi
 
 echo "PASS: diff --since gates single specs and whole workspaces with owned unified reports"

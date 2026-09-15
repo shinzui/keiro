@@ -92,6 +92,7 @@ import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
+import Keiro.Dsl.TransitionFamily (TransitionFamilyDelta (..), TransitionFamilyKey (..), transitionFamilyDeltas)
 import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (DiagnosticCode (..))
 
@@ -393,7 +394,7 @@ classifyCompatibility context code
   | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
   | code == AggFoldSurfaceChanged =
       replaceSnapshotHydration VAdvisory (advisoryVector PrivateHistoryRead Set.empty)
-  | code == AggGuardTightened = advisoryVector PrivateHistoryRead Set.empty
+  | code `elem` [AggGuardTightened, AggGuardRelationUnknown] = advisoryVector PrivateHistoryRead Set.empty
   | code `elem` [RouterDecideSurfaceChanged, ProcessDecideSurfaceChanged] =
       replaceRollout (Set.singleton RolloutDrainRequired) compatibleVector
   | code == ProcessTimerPayloadChanged = advisoryVector PrivateHistoryRead (Set.singleton RolloutProducerLast)
@@ -1745,33 +1746,55 @@ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
 -- docs/plans/142) rather than guessing.
 guardTighteningDiff :: Aggregate -> Aggregate -> [Change]
 guardTighteningDiff oldAgg newAgg =
-  [ advisory ((.name) newAgg) "transition" subject AggGuardTightened detail
-  | newT <- (.transitions) newAgg,
-    (.mode) newT == TmLive,
-    Just oldT <-
-      [ find
-          (\o -> (.source) o == (.source) newT && (.command) o == (.command) newT && (.mode) o == TmLive)
-          ((.transitions) oldAgg)
-      ],
-    (.guard) newT /= (.guard) oldT,
-    Just newGuard <- [(.guard) newT],
-    not (hasReplayOnlyTwin newT),
-    let subject = (.source) newT <> " -- " <> (.command) newT,
-    let removedRegion =
-          maybe (complementExpr newGuard) (\o -> EAnd o (complementExpr newGuard)) ((.guard) oldT),
-    let twin = replaceTransitionGuardAndMode (Just removedRegion) TmReplayOnly oldT,
-    let detail =
-          "guard changed on "
-            <> subject
-            <> ". Stored events appended under the old guard may no longer invert: "
-            <> "the next command on any stream containing one fails hydration with "
-            <> "no inverting edge. Either confirm via the replay audit that no stored "
-            <> "stream exercises the removed region, or keep history replayable by "
-            <> "adding the computed replay-only twin (the removed region with the old "
-            <> "transition's writes/emits/goto):\n\n"
-            <> renderTransition twin
-  ]
+  concatMap classifyFamily (transitionFamilyDeltas oldAgg.transitions newAgg.transitions)
   where
+    classifyFamily delta
+      | (.familyMode) key /= TmLive = []
+      | null oldEmitting || null newEmitting = []
+      | [oldT] <- oldEmitting,
+        [newT] <- newEmitting =
+          oneToOne oldT newT
+      | otherwise =
+          [ advisory ((.name) newAgg) "transition-family" subject AggGuardRelationUnknown unknownDetail
+          ]
+      where
+        key = (.familyKey) delta
+        oldEmitting = filter (not . null . (.emits)) ((.oldRemainder) delta)
+        newEmitting = filter (not . null . (.emits)) ((.newRemainder) delta)
+        subject = (.familySource) key <> " -- " <> (.familyCommand) key
+        unknownDetail =
+          "guard relationship is ambiguous for aggregate '"
+            <> (.name) newAgg
+            <> "' transition family "
+            <> subject
+            <> ": exact cancellation left "
+            <> T.pack (show (length oldEmitting))
+            <> " old and "
+            <> T.pack (show (length newEmitting))
+            <> " new emitting transitions. No replay-only transition was generated because no unique old/new relationship can be proven; resolve the family ambiguity or run the targeted replay audit before deployment."
+
+    oneToOne oldT newT =
+      [ advisory ((.name) newAgg) "transition" subject AggGuardTightened detail
+      | (.guard) newT /= (.guard) oldT,
+        Just newGuard <- [(.guard) newT],
+        not (hasReplayOnlyTwin newT),
+        let removedRegion =
+              maybe (complementExpr newGuard) (\oldGuard -> EAnd oldGuard (complementExpr newGuard)) ((.guard) oldT),
+        let twin = replaceTransitionGuardAndMode (Just removedRegion) TmReplayOnly oldT,
+        let detail =
+              "guard changed on "
+                <> subject
+                <> ". Stored events appended under the old guard may no longer invert: "
+                <> "the next command on any stream containing one fails hydration with "
+                <> "no inverting edge. Either confirm via the replay audit that no stored "
+                <> "stream exercises the removed region, or keep history replayable by "
+                <> "adding the computed replay-only twin (the removed region with the old "
+                <> "transition's writes/emits/goto):\n\n"
+                <> renderTransition twin
+      ]
+      where
+        subject = (.source) newT <> " -- " <> (.command) newT
+
     hasReplayOnlyTwin newT =
       any
         (\t -> (.mode) t == TmReplayOnly && (.source) t == (.source) newT && (.command) t == (.command) newT)
@@ -1786,8 +1809,8 @@ replaceTransitionGuardAndMode guard mode transition =
       guard,
       writes = transition.writes,
       emits = transition.emits,
-      outcome = transition.outcome,
-      outcomeDuplicateLocs = transition.outcomeDuplicateLocs,
+      outcome = Nothing,
+      outcomeDuplicateLocs = [],
       goto = transition.goto,
       mode,
       loc = transition.loc
@@ -3175,6 +3198,7 @@ contextFor label root facet subject code =
         WorkflowPatchRemoved,
         WorkflowContinueSeedChanged,
         AggGuardTightened,
+        AggGuardRelationUnknown,
         DeprecatedEventReplayHazard,
         EventRetirementInProgress,
         EventUndeprecated,

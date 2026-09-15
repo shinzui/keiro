@@ -12,6 +12,11 @@ provenance:
       at: 2026-09-15T20:36:52Z
       mode: "update"
       note: "Validate current diff/replay APIs and refresh structural fix, test coverage, and implementation recommendation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-15T21:18:35Z
+      mode: "implement"
+      note: "Implement shared transition-family comparison, conservative ambiguity reporting, and regression coverage."
 ---
 
 # Make aggregate transition-family diffs idempotent and order-independent
@@ -56,18 +61,18 @@ deferred; the IR-33 review records why and under what conditions it may return.
 - [x] (2026-09-15) Revalidate the current API and source at Keiro commit
       `256b2595eb42fcb5e0c173fabd3acb04cc356e86`; retain the structural fix and correct
       record fields, family ordering, test visibility, and acceptance boundaries.
-- [ ] Capture the current contradiction with a minimized Language-5 sibling fixture and
+- [x] (2026-09-15) Capture the current contradiction with a minimized Language-5 sibling fixture and
       text, JSON, and replay-impact assertions.
-- [ ] Add one internal transition-family module that groups, sorts, and exactly cancels
+- [x] (2026-09-15) Add one internal transition-family module that groups, sorts, and exactly cancels
       transitions as a multiset.
-- [ ] Make both aggregate guard diffing and replay-impact analysis consume that shared
+- [x] (2026-09-15) Make both aggregate guard diffing and replay-impact analysis consume that shared
       family result, preserving conservative behavior for unresolved changes.
-- [ ] Exclude validator-proven no-op transitions (no `emit`) from guard-history
+- [x] (2026-09-15) Exclude validator-proven no-op transitions (no `emit`) from guard-history
       classification, and clear forward-only outcome fields from every printed twin.
-- [ ] Add the append-only `AggGuardRelationUnknown` diagnostic for structurally ambiguous
+- [x] (2026-09-15) Add the append-only `AggGuardRelationUnknown` diagnostic for structurally ambiguous
       families, with the private-history safety vector, an explicit do-not-deploy remedy
       mapping, and no replay-only remedy.
-- [ ] Prove identical, reordered, additive-only, genuinely changed, no-emit, Language-5
+- [x] (2026-09-15) Prove identical, reordered, additive-only, genuinely changed, no-emit, Language-5
       outcome, and ambiguous cases in unit and CLI tests, including the minimized
       Mori-derived shape.
 - [ ] Run the disposable Mori regression, the complete `keiro-dsl` test inventory, formatting,
@@ -151,6 +156,28 @@ deferred; the IR-33 review records why and under what conditions it may return.
   code that is not explicitly mapped silently receives a run-conformance remedy rather than
   failing to compile.
   Evidence: the final guard of `remediationFor`.
+
+- Observation (2026-09-15): the `diff` command did not accept `--deny`, even though the
+  plan's ambiguity policy required `--deny AggGuardRelationUnknown`. The existing denial parser
+  intentionally accepts only codes reachable from `check`.
+  Evidence: the first Git-backed ambiguity run failed with `Invalid option '--deny'`. The
+  implementation now has a separate diff-origin parser and the same run exits 1 with
+  `diff: 1 advisory finding(s) escalated to failure (denied: AggGuardRelationUnknown)`.
+
+- Observation (2026-09-15): Language-5 validation generates one initial-state acceptance helper
+  per transition, so two initial-state siblings with the same command collide on the helper name.
+  Mori's affected sibling families occur after registration, not at the aggregate's initial
+  state. The minimized fixture therefore includes a distinct registration transition and places
+  the sibling family at `Active`, matching the adopter and keeping `validateService` green.
+  Evidence: an initial draft produced `GeneratedOccurrenceCollision` for
+  `acceptObserveDescription`; all seven committed transition-family fixtures now pass
+  `keiro-dsl check`.
+
+- Observation (2026-09-15): the pre-existing timer-window CLI assertion required output to begin
+  with `WARNING:`, but the current CLI emits the Language-4 contract notice first. The underlying
+  diagnostic was correct.
+  Evidence: `diff-test.sh` failed at case 8 while printing `[TimerWindowChanged]`; changing the
+  assertion to search the complete output restored the 18-case script.
 
 
 ## Decision Log
@@ -239,21 +266,29 @@ deferred; the IR-33 review records why and under what conditions it may return.
   a conformance run as sufficient for an undecided private-history hazard.
   Date: 2026-08-21
 
+- Decision: Give `diff` its own `--deny` parser and advisory-code exit policy rather than routing
+  diff codes through `check`'s denial parser.
+  Rationale: diagnostic origins deliberately prevent a `check` invocation from accepting a code
+  it can never emit. Diff needs the inverse boundary: accept only `DiffDiagnostic` values, retain
+  advisory rendering and JSON unchanged, and fail the process after rendering when a selected
+  advisory occurs. This makes the plan's explicit ambiguity gate real without changing default
+  severity or compatibility vectors.
+  Date: 2026-09-15
+
 
 ## Outcomes & Retrospective
 
 
-The 2026-09-15 refresh recommends implementation of the bounded structural fix. Production code
-has not been changed and implementation milestones remain open. The executable builds, and the
-focused replay-impact suite passes (11 examples, zero failures). The existing Plan-143 suite
-also passes (7 examples, zero failures, including 100 complement-expression property trials).
-A fresh disposable Mori self-diff at `7a8ea8242f8cac0527f32bb2f7c97d408268b73a` produces
-39 `AggGuardTightened` findings alongside `replay-neutral`, confirming the defect remains.
-`git diff --check` passes for this documentation refresh. The complete implementation suite
-was not run for this plan-only update. Current public diff and
-replay-impact signatures still match the plan. The API corrections below remove stale record
-selectors and make testing possible without exposing a private module. Final acceptance still
-requires the new failing regression to turn green and the complete implementation validation bar.
+Milestones 1 through 3 are implemented. Ordinary diff and replay impact now consume the same
+canonical multiset remainder, no-emit branches cannot generate replay advice, and printed twins
+drop forward outcomes. Six focused transition-family examples pass, including every released
+language, all old/new declaration permutations, duplicate counts, the Language-5 outcome case,
+and conservative ambiguity reporting. The 18-case Git-backed CLI script passes; its new cases
+prove an unchanged sibling family reports empty findings plus `replay-neutral`, while an
+ambiguous family remains advisory by default and fails only under
+`--deny AggGuardRelationUnknown`. ADRs 0004 and 0018 now record the durable gating and shared
+comparison contracts. Final acceptance still requires the disposable Mori proof and the complete
+validation bar.
 
 
 ## Context and Orientation

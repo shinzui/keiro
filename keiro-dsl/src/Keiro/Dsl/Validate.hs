@@ -567,6 +567,8 @@ data DiagnosticCode
   | RouterSelectionCommandMappingDuplicate
   | RouterSelectionCommandMappingIncomplete
   | RouterSelectionCommandMappingTypeMismatch
+  | -- ExecPlan 265: exact family cancellation could not identify one guard pair.
+    AggGuardRelationUnknown
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -611,6 +613,7 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   -- Cross-revision evolution facts.
   AggFoldSurfaceChanged -> DiffDiagnostic
   AggGuardTightened -> DiffDiagnostic
+  AggGuardRelationUnknown -> DiffDiagnostic
   DomainOutcomeTypesChanged -> DiffDiagnostic
   DomainTransitionOutcomeChanged -> DiffDiagnostic
   CompatibilityStrengthened -> DiffDiagnostic

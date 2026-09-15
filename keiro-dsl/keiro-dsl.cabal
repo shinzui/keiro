@@ -150,6 +150,7 @@ library
     Keiro.Dsl.SourceIndex
     Keiro.Dsl.StructuralConformance
     Keiro.Dsl.Syntax
+    Keiro.Dsl.TransitionFamily
     Keiro.Dsl.TypeGraph
     Keiro.Dsl.Validate
     Keiro.Dsl.Workspace

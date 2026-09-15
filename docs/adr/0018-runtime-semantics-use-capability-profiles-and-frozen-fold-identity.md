@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-08-12T04:41:00Z
+timestamp: 2026-09-15T21:18:19Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -53,8 +53,13 @@ goldens. Presentation pretty printing may evolve independently. Fold surface
 construction is total: type-graph, nominal, register, guard, and event-output
 resolution failures return `FoldSurfaceError`, which diff, replay-impact,
 workspace, CLI, and scaffold planning propagate or refuse before output.
-Replay comparison groups transitions structurally, cancels exact and provable
-guard-loosening multisets, and sorts remaining canonical values before pairing.
+Ordinary diff and replay-impact analysis share one structural transition-family
+partition keyed by mode, source, and command. Each family sorts by frozen
+canonical transition bytes and cancels exact values as a duplicate-aware
+multiset before either consumer classifies the remainder. Replay impact then
+cancels its additional provable guard-loosening fragment and sorts remaining
+canonical values before pairing. Source location, declaration order, and
+forward-only domain outcomes do not participate in exact cancellation.
 
 Aggregate fold identity uses a dedicated FNV-1a-128 fold over the canonical
 UTF-8 octets. The offset basis, prime, XOR-then-multiply order, and modulo-2^128
@@ -89,6 +94,9 @@ cannot pair a replacement spec with stale derived state.
 - Invalid semantic graphs cannot receive truncated fingerprints or partial
   diff, replay, workspace, CLI, or generated output.
 - Replay-impact classification is invariant under sibling declaration order.
+- An identical transition family cannot be replay-neutral while independently
+  appearing as a guard change; both projections consume the same exact
+  remainder.
 - One checked service resolves its type graph at most once across validation,
   planning, generation, conformance, and record construction. Derived analysis
   cannot become stale when a caller replaces the spec.

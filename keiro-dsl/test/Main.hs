@@ -7405,6 +7405,182 @@ main = hspec $ do
       map (.message) collisions `shouldSatisfy` any (T.isInfixOf "fooBarAwait")
       collisions `shouldSatisfy` all (not . null . (.relatedLocations))
 
+  describe "transition family" $ do
+    it "cancels identical Language-5 siblings across source locations, additions, and declaration order" $ do
+      source <- readTestText "test/fixtures/transition-family.keiro"
+      base <- parsedSourceOf "test/fixtures/transition-family.keiro"
+      additive <- parsedSourceOf "test/fixtures/transition-family-additive.keiro"
+      relocated <-
+        case parseSource "<transition-family-relocated>" (T.replace "\n  Active -- ObserveDescription -->" "\n\n\n  Active -- ObserveDescription -->" source) of
+          Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+          Right parsed -> pure parsed
+      let guardCodes parsedOld parsedNew =
+            [ (.code) (kindOfChange change)
+            | change <- diffSources parsedOld parsedNew,
+              (.code) (kindOfChange change) `elem` [AggGuardTightened, AggGuardRelationUnknown]
+            ]
+      guardCodes base base `shouldBe` []
+      guardCodes base relocated `shouldBe` []
+      guardCodes base additive `shouldBe` []
+      ReplayImpact.replayImpactServices (checkedSource base) (checkedSource base)
+        `shouldBe` Right ReplayNeutral
+      ReplayImpact.replayImpactServices (checkedSource base) (checkedSource relocated)
+        `shouldBe` Right ReplayNeutral
+
+      let baseSpec = checkedSpec (checkedSource base)
+          aggregate = onlyAggregate baseSpec
+          withTransitions transitions =
+            modifyAggregate
+              ((.name) aggregate)
+              (\candidate -> candidate {transitions})
+              baseSpec
+      forM_ (permutations aggregate.transitions) $ \oldOrder ->
+        forM_ (permutations aggregate.transitions) $ \newOrder -> do
+          let oldSpec = withTransitions oldOrder
+              newSpec = withTransitions newOrder
+              changes = diffSpecs oldSpec newSpec
+          [changeCode change | change <- changes, changeCode change `elem` [AggGuardTightened, AggGuardRelationUnknown]]
+            `shouldBe` []
+          replayImpactSpecs oldSpec newSpec `shouldBe` ReplayNeutral
+
+    it "preserves duplicate counts and empty-side replay semantics" $ do
+      base <- specOf "test/fixtures/transition-family.keiro"
+      let aggregate = onlyAggregate base
+          withTransitions transitions =
+            modifyAggregate
+              ((.name) aggregate)
+              (\candidate -> candidate {transitions})
+              base
+      case [transition | transition <- aggregate.transitions, not (null transition.emits)] of
+        emitting : _ -> do
+          let duplicate = withTransitions [emitting, emitting]
+              single = withTransitions [emitting]
+              empty = withTransitions []
+          replayImpactSpecs duplicate duplicate `shouldBe` ReplayNeutral
+          replayImpactSpecs empty single `shouldBe` ReplayNeutral
+          replayImpactSpecs duplicate single `shouldSatisfy` (/= ReplayNeutral)
+          replayImpactSpecs single empty `shouldSatisfy` (/= ReplayNeutral)
+          forM_ [(duplicate, duplicate), (empty, single), (duplicate, single), (single, empty)] $ \(oldSpec, newSpec) ->
+            [changeCode change | change <- diffSpecs oldSpec newSpec, changeCode change == AggGuardRelationUnknown]
+              `shouldBe` []
+        [] -> expectationFailure "transition-family fixture must contain an emitting transition"
+
+    it "excludes no-emit guard edits from guard-history classification" $ do
+      changes <- diffFixtures "test/fixtures/transition-family.keiro" "test/fixtures/transition-family-no-emit-tightened.keiro"
+      [changeCode change | change <- changes, changeCode change `elem` [AggGuardTightened, AggGuardRelationUnknown]]
+        `shouldBe` []
+
+    it "reports ambiguous emitting remainders without inventing a twin" $ do
+      changes <- diffFixtures "test/fixtures/transition-family-ambiguous-old.keiro" "test/fixtures/transition-family-ambiguous-new.keiro"
+      let findings =
+            [ kind
+            | Advisory kind <- changes,
+              (.code) kind == AggGuardRelationUnknown
+            ]
+      finding <- case findings of
+        [value] -> pure value
+        values -> expectationFailure ("expected one ambiguous-family finding, got " <> show (length values)) >> fail "unreachable"
+      (.subject) finding `shouldBe` "Active -- ObserveDescription"
+      (.detail) finding `shouldSatisfy` T.isInfixOf "2 old and 2 new emitting transitions"
+      (.detail) finding `shouldSatisfy` T.isInfixOf "No replay-only transition was generated"
+      (.detail) finding `shouldNotSatisfy` T.isInfixOf "\n\nreplay-only "
+      verdictFor PrivateHistoryRead (finding.vector) `shouldBe` VAdvisory
+      remediationFor (finding.context) ((.code) finding)
+        `shouldBe` RemedyDoNotDeploy "do not deploy until the transition-family ambiguity is resolved or a targeted replay audit proves the affected history safe" :| []
+      let reportJson =
+            LazyText.toStrict
+              ( LazyTextEncoding.decodeUtf8
+                  (Aeson.encode (diffReport defaultGate [Advisory finding]))
+              )
+      reportJson `shouldSatisfy` T.isInfixOf "AggGuardRelationUnknown"
+      reportJson `shouldSatisfy` T.isInfixOf "do not deploy until the transition-family ambiguity is resolved"
+      reportJson `shouldNotSatisfy` T.isInfixOf "run the generated conformance"
+
+    it "prints a valid Language-5 twin without a forward outcome" $ do
+      old <- parsedSourceOf "test/fixtures/transition-family-outcome-old.keiro"
+      new <- parsedSourceOf "test/fixtures/transition-family-outcome-new.keiro"
+      newSource <- readTestText "test/fixtures/transition-family-outcome-new.keiro"
+      let findings =
+            [ kind
+            | Advisory kind <- diffSources old new,
+              (.code) kind == AggGuardTightened
+            ]
+      finding <- case findings of
+        [value] -> pure value
+        values -> expectationFailure ("expected one guard-tightening finding, got " <> show (length values)) >> fail "unreachable"
+      let twinText = snd (T.breakOnEnd "\n\n" ((.detail) finding))
+          pastedSource = newSource <> "\n" <> twinText <> "\n"
+      twinText `shouldSatisfy` T.isPrefixOf "replay-only "
+      twinText `shouldNotSatisfy` T.isInfixOf "outcome"
+      pasted <- case parseSource "<transition-family-outcome-pasted>" pastedSource of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right parsed -> pure parsed
+      [(.code) diagnostic | diagnostic <- validateService (checkedSource pasted), (.severity) diagnostic == Error]
+        `shouldBe` []
+      [kind | Advisory kind <- diffSources old pasted, (.code) kind == AggGuardTightened]
+        `shouldBe` []
+
+      let oldSpec = checkedSpec (checkedSource old)
+          outcomeOnly =
+            modifyAggregate
+              "ProjectArtifact"
+              ( \aggregate ->
+                  aggregate
+                    { transitions =
+                        [ transition {outcome = Nothing, outcomeDuplicateLocs = []}
+                        | transition <- aggregate.transitions
+                        ]
+                    }
+              )
+              oldSpec
+      [changeCode change | change <- diffSpecs oldSpec outcomeOnly, changeCode change `elem` [AggGuardTightened, AggGuardRelationUnknown]]
+        `shouldBe` []
+
+    it "keeps printed twins pasteable under every released language" $ do
+      forM_ [1 :: Int .. 4] $ \selectedVersion -> do
+        let version = T.pack (show selectedVersion)
+            fixtureSource guardExpression =
+              T.unlines
+                [ "language keiro-dsl " <> version,
+                  "context transition-family-language",
+                  "",
+                  "aggregate Example",
+                  "  regs",
+                  "    marker Text = \"\"",
+                  "  states Open Closed!",
+                  "",
+                  "  command Close { accepted:Bool extra:Bool }",
+                  "  event ClosedEvent = fields(Close)",
+                  "",
+                  "  Open -- Close -->",
+                  "    guard " <> guardExpression,
+                  "    emit ClosedEvent",
+                  "    goto Closed"
+                ]
+            oldSource = fixtureSource "accepted"
+            newSource = fixtureSource "accepted && extra"
+            parseChecked name input = case parseSource name input of
+              Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+              Right parsed -> pure parsed
+        old <- parseChecked ("<transition-family-language-" <> show selectedVersion <> "-old>") oldSource
+        new <- parseChecked ("<transition-family-language-" <> show selectedVersion <> "-new>") newSource
+        let findings =
+              [ kind
+              | Advisory kind <- diffSources old new,
+                (.code) kind == AggGuardTightened
+              ]
+        finding <- case findings of
+          [value] -> pure value
+          values -> expectationFailure ("expected one language-" <> show selectedVersion <> " tightening, got " <> show (length values)) >> fail "unreachable"
+        let twinText = snd (T.breakOnEnd "\n\n" ((.detail) finding))
+            pastedSource = newSource <> "\n" <> twinText <> "\n"
+        twinText `shouldNotSatisfy` T.isInfixOf "outcome"
+        pasted <- parseChecked ("<transition-family-language-" <> show selectedVersion <> "-pasted>") pastedSource
+        [(.code) diagnostic | diagnostic <- validateService (checkedSource pasted), (.severity) diagnostic == Error]
+          `shouldBe` []
+        [kind | Advisory kind <- diffSources old pasted, (.code) kind == AggGuardTightened]
+          `shouldBe` []
+
   describe "replay impact" $ do
     it "treats new events and transitions as replay-neutral" $ do
       old <- specOf "test/fixtures/reservation.keiro"

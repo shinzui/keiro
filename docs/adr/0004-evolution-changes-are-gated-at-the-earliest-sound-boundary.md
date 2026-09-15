@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-08-05T23:50:00Z
+timestamp: 2026-09-15T21:18:19Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -103,7 +103,7 @@ The landed inventory is:
 | `retiring` event without a live emitter | `EventRetirementInProgress` Error | Retirement start is Advisory | Generated shape remains the ordinary live machine |
 | Deprecated event without a replay-only emitter | `DeprecatedEventReplayHazard` Warning | Advisory with the same code | Targeted real-log audit proves whether stored streams still invert |
 | Deprecated event with a replay-only emitter | `EventRetirementInProgress` Warning | Replay-safe cutover Advisory | Transducer boundary validates the replay-only edge |
-| Guard tightening | Replay-only edge discipline from ADR 0002 | `AggGuardTightened` prints the retained twin and affected replay surface | Targeted real-log audit fails without a required twin and passes with it |
+| Guard tightening | Replay-only edge discipline from ADR 0002 | Exact sibling-family cancellation precedes classification. A unique changed emitting pair produces `AggGuardTightened` and a retained twin; an ambiguous emitting remainder produces `AggGuardRelationUnknown`, no guessed twin, and explicit do-not-deploy/audit guidance. Both are private-history advisories, and `diff --deny CODE` can promote either code to a failing invocation | Targeted real-log audit fails without a required twin and passes with it; ambiguous families must be resolved or audited before deployment |
 | Fold/control-state, generated guard/write, or transition-ownership change | Snapshot contract from ADR 0003 | `AggFoldSurfaceChanged` Advisory plus a deterministic replay-impact target | Generated fold fingerprint changes and the snapshot discriminator rejects stale seeds; audit named histories before cutover |
 | Forward/replay state divergence (dishonest wire/inversion boundary, later mapped-register bindings) | `validateTransducer` in the generated harness proves the declared structure; honesty of `WireCtor`/`InCtor` is not spec-expressible | Not required | Generated harness steps fixture commands forward, decodes the emitted chain through the generated codec, replays via `applyEventsEither`, and compares final vertex and every register in conformance CI; the DB-backed replay audit and the advisory post-append verification remain the stored-history and production gates |
 | New scaffolded workqueue payload | Candidate mapped fields resolve through the checked type graph; every top-level key remains required and `Optional T` governs nullability only | Direct and recursively reached mapped queue changes identify `WorkqueueHistory <queue>` separately from event history and snapshots; consumer-build is breaking with workers-first and drain-required rollout | Generated `QueueCodec` remains at schema version 1 with a `keiroJobCodec` `{v,t,data}` envelope and no upcasters; incompatible non-empty queues must drain or use an application-owned transitional codec |

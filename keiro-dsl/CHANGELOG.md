@@ -19,6 +19,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Other Changes
 
+- Aggregate transition diffs now partition live and replay-only transitions by
+  source and command, then cancel byte-identical canonical transitions as a
+  multiset before classifying guard changes. Identical and reordered sibling
+  branches no longer emit false `AggGuardTightened` advisories, and no-emit
+  branches are excluded from guard-history classification.
+- Ambiguous emitting sibling remainders now produce the append-only
+  `AggGuardRelationUnknown` advisory with explicit do-not-deploy guidance and
+  no guessed replay-only edge. `diff --deny AggGuardRelationUnknown` promotes
+  that advisory to a failing invocation when CI requires it.
+- Computed replay-only twins omit Language-5 forward outcome clauses, so the
+  printed remedy parses and validates under every released language.
 - No user-facing changes. The parser-scaling benchmark now uses the current
   scaffold `path` and `text` record fields.
 

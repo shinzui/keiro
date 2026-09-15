@@ -279,6 +279,8 @@ remediationFor context code
   | code == OwnershipMoved = RemedyRescaffoldWorkspace :| []
   | code == WorkspaceAuthorityChanged = RemedyRescaffoldWorkspace :| [RemedyRecompileConsumers]
   | code == AggGuardTightened = RemedyReplayOnlyEdge :| [RemedyRunConformance]
+  | code == AggGuardRelationUnknown =
+      RemedyDoNotDeploy "do not deploy until the transition-family ambiguity is resolved or a targeted replay audit proves the affected history safe" :| []
   | code == AggFoldSurfaceChanged = RemedyStateCodecBump :| [RemedyRunConformance]
   | code == IdDomainContractChanged =
       RemedyDeploymentOrder RolloutProducerLast :| [RemedyStateCodecBump, RemedyRecompileConsumers, RemedyRunConformance]

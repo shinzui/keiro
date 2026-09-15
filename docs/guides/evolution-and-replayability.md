@@ -413,7 +413,9 @@ ambiguity). The procedure when you tighten a guard:
 2. Run `keiro-dsl diff --since <ref>`. The `AggGuardTightened` advisory
    computes the removed region — `old-guard ∧ ¬new-guard`, expressed inside
    the guard grammar — and prints a **paste-ready** `replay-only` twin
-   carrying that region with the old transition's writes/emits/goto.
+   carrying that region with the old transition's writes/emits/goto. Forward
+   domain-outcome clauses are removed from the twin because replay-only edges
+   cannot declare them.
 3. Decide: if stored streams may exercise the removed region (the targeted
    replay audit answers this against real data), paste the twin — history
    stays replayable and the retired rule remains visible in the spec. If no
@@ -422,6 +424,20 @@ ambiguity). The procedure when you tighten a guard:
    into the generated transducer. Version-1 skeletons and hand-written services
    call `Keiki.Builder.replayOnly` in the edge body (or set `mode = ReplayOnly`
    on a raw `Edge`).
+
+Diff compares sibling transitions as an order-independent multiset before it
+attempts this one-to-one guard remedy. Identical siblings cancel exactly, so
+reordering branches or adding an unrelated declaration does not create a guard
+finding. A live branch with no `emit` is also excluded: validation already
+proves that such a branch changes neither state nor registers and therefore no
+stored history depends on its guard.
+
+If exact cancellation leaves several emitting old and new siblings, diff emits
+`AggGuardRelationUnknown` on the same private-history compatibility surface as
+`AggGuardTightened`. It does not guess a replay-only twin. Resolve the family or
+run the targeted replay audit before deployment; CI can enforce that policy
+with `keiro-dsl diff --deny AggGuardRelationUnknown`. Consumers that branch on
+diagnostic codes should recognize both guard-evolution codes.
 
 The validator keeps the pattern disciplined: a `replay-only` transition with
 no `emit` is an error (`ReplayOnlyEmitsNothing` — it can invert nothing), and

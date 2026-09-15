@@ -39,6 +39,7 @@ import Keiro.Dsl.NominalType
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (semanticImpact)
+import Keiro.Dsl.TransitionFamily (TransitionFamilyDelta (..), transitionFamilyDeltas)
 import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), DerivedMappedConsumer (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), TypeGraphError, wireFingerprint)
 
 -- | The smallest conservative audit input for one aggregate.
@@ -348,16 +349,12 @@ maybeToList = maybe [] pure
 changedTransitionEvents :: [Transition] -> [Transition] -> (Set Name, Bool)
 changedTransitionEvents oldTransitions newTransitions =
   foldl'
-    (\(affected, changed) key -> let (groupAffected, groupChanged) = compareGroup key in (affected <> groupAffected, changed || groupChanged))
+    (\(affected, changed) delta -> let (groupAffected, groupChanged) = compareGroup delta in (affected <> groupAffected, changed || groupChanged))
     (Set.empty, False)
-    (Set.toAscList allKeys)
+    (transitionFamilyDeltas oldTransitions newTransitions)
   where
-    oldGroups = transitionGroups oldTransitions
-    newGroups = transitionGroups newTransitions
-    allKeys = Map.keysSet oldGroups <> Map.keysSet newGroups
-    compareGroup key =
-      let (afterExactOld, afterExactNew) = cancelExact (Map.findWithDefault [] key oldGroups) (Map.findWithDefault [] key newGroups)
-          (remainingOld, remainingNew) = cancelLoosenings afterExactOld afterExactNew
+    compareGroup delta =
+      let (remainingOld, remainingNew) = cancelLoosenings ((.oldRemainder) delta) ((.newRemainder) delta)
           sortedOld = sortOn transitionSortKey remainingOld
           sortedNew = sortOn transitionSortKey remainingNew
           (pairedOld, unpairedOld) = splitAt (length sortedNew) sortedOld
@@ -367,34 +364,9 @@ changedTransitionEvents oldTransitions newTransitions =
           changed = not (null pairedOld) || not (null unpairedOld)
        in (pairedEvents <> removedEvents, changed)
 
-    transitionGroups =
-      Map.fromListWith (<>)
-        . map (\transition -> (transitionIdentity transition, [transition]))
-    transitionIdentity transition =
-      ( modeKey ((.mode) transition),
-        (.source) transition,
-        (.command) transition
-      )
-    modeKey TmLive = "live" :: Text
-    modeKey TmReplayOnly = "replay-only"
     transitionSortKey transition =
       (maybe "" canonicalExpr ((.guard) transition), canonicalTransition transition)
     emittedBy = Set.fromList . (.emits)
-
--- | Remove byte-identical transitions as a multiset. Sorting makes duplicate
--- cancellation independent of declaration order.
-cancelExact :: [Transition] -> [Transition] -> ([Transition], [Transition])
-cancelExact oldTransitions newTransitions = go sortedOld sortedNew [] []
-  where
-    sortedOld = sortOn canonicalTransition oldTransitions
-    sortedNew = sortOn canonicalTransition newTransitions
-    go [] remainingNew unmatchedOld unmatchedNew = (reverse unmatchedOld, reverse unmatchedNew <> remainingNew)
-    go remainingOld [] unmatchedOld unmatchedNew = (reverse unmatchedOld <> remainingOld, reverse unmatchedNew)
-    go old@(oldTransition : remainingOld) new@(newTransition : remainingNew) unmatchedOld unmatchedNew =
-      case compare (canonicalTransition oldTransition) (canonicalTransition newTransition) of
-        LT -> go remainingOld new (oldTransition : unmatchedOld) unmatchedNew
-        EQ -> go remainingOld remainingNew unmatchedOld unmatchedNew
-        GT -> go old remainingNew unmatchedOld (newTransition : unmatchedNew)
 
 -- | Deterministically cancel every provable guard-only loosening. At each step
 -- the lexicographically smallest canonical pair wins, so ambiguous siblings do

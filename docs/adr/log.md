@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-09-15
+* **Update**: Record conservative guard-family ambiguity diagnostics and selective diff denial.
+* **Update**: Share exact order-independent transition-family cancellation between ordinary diff and replay-impact analysis.
 * **Addition**: Record downstream event receipts as the ownership boundary for delegated inbox intake.
 * **Update**: Record producer identity allocation and exact-equality optimizations without changing the frozen byte contract.
 * **Update**: Freeze version-1 producer identity, retained-content comparison, and cutover/retention boundaries.

@@ -1,0 +1,21 @@
+language keiro-dsl 5
+context transition-family-outcome
+
+enum ArtifactRejection { InvalidDescription=invalid-description }
+enum ArtifactNoOp { DuplicateDescription=duplicate-description }
+
+aggregate ProjectArtifact
+  domain-outcomes rejection=ArtifactRejection no-op=ArtifactNoOp
+  regs
+    description Text = ""
+  states Active
+
+  command ObserveDescription { description:Text }
+  event DescriptionObserved = fields(ObserveDescription)
+
+  Active -- ObserveDescription -->
+    guard cmd.description != reg.description && cmd.description != ""
+    write description := cmd.description
+    outcome accepted
+    emit DescriptionObserved
+    goto Active
