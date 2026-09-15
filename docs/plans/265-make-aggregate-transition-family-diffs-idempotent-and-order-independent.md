@@ -75,8 +75,12 @@ deferred; the IR-33 review records why and under what conditions it may return.
 - [x] (2026-09-15) Prove identical, reordered, additive-only, genuinely changed, no-emit, Language-5
       outcome, and ambiguous cases in unit and CLI tests, including the minimized
       Mori-derived shape.
-- [ ] Run the disposable Mori regression, the complete `keiro-dsl` test inventory, formatting,
-      documentation validation, and the ADR distillation pass.
+- [x] (2026-09-15) Run the disposable Mori regression at
+      `7a8ea8242f8cac0527f32bb2f7c97d408268b73a`; observe zero findings and
+      `replay-neutral`.
+- [x] (2026-09-15) Run the complete `keiro-dsl` test inventory, focused runtime tests,
+      task-scoped formatting, and ADR validation; record the 11 pre-existing
+      improvement-request profile failures.
 
 
 ## Surprises & Discoveries
@@ -179,6 +183,39 @@ deferred; the IR-33 review records why and under what conditions it may return.
   Evidence: `diff-test.sh` failed at case 8 while printing `[TimerWindowChanged]`; changing the
   assertion to search the complete output restored the 18-case script.
 
+- Observation (2026-09-15): the fixed executable removes the entire real-adopter contradiction,
+  not only the minimized fixture.
+  Evidence: a disposable no-hardlinks clone of `mori://shinzui/mori/repos/mori` at
+  `7a8ea8242f8cac0527f32bb2f7c97d408268b73a` produced:
+
+  ```json
+  {"breaking": false, "findingCount": 0, "guardCodes": [], "codes": []}
+  {"verdict": "replay-neutral"}
+  ```
+
+- Observation (2026-09-15): the plan's `nix fmt -- --check` command is stale for the current
+  treefmt wrapper, which rejects `--check` and exposes `--ci` as the non-writing check mode. A
+  first whole-repository `--ci` run formatted unrelated ExecPlan 273; that change was reverted,
+  and a task-scoped `nix fmt -- --ci` over all 22 implementation paths completed with zero
+  changes.
+  Evidence: treefmt reported `traversed 22 files`, `emitted 8 files`, and `changed 0 files` on
+  the scoped run.
+
+- Observation (2026-09-15): the first complete `keiro-dsl` inventory found one missing test
+  contract update rather than a behavior defect. Its explicit list of fixtures outside published
+  Language 4 did not yet name the seven new Language-5 transition-family fixtures. Adding those
+  names made the focused case pass, and the complete rerun finished with 728 examples and zero
+  failures in `keiro-dsl-test`; every separate conformance test executable also passed.
+
+- Observation (2026-09-15): strict ADR validation passes, while strict improvement-request
+  validation reports 11 existing records that omit the profile's recommended `reviews` field.
+  None of those records is IR-33 or a file changed by this plan, so they remain outside this
+  implementation.
+  Evidence: `okf validate docs/adr ...` reported `OK: 43 concepts`; the improvement-request
+  command named 11 records, including the HTTP inspection, aggregate/process inspection,
+  read-model consistency, WebSocket feed, and outbox recovery requests, all solely for the
+  missing recommended field.
+
 
 ## Decision Log
 
@@ -279,16 +316,27 @@ deferred; the IR-33 review records why and under what conditions it may return.
 ## Outcomes & Retrospective
 
 
-Milestones 1 through 3 are implemented. Ordinary diff and replay impact now consume the same
-canonical multiset remainder, no-emit branches cannot generate replay advice, and printed twins
-drop forward outcomes. Six focused transition-family examples pass, including every released
+All four milestones are complete. Ordinary diff and replay impact now consume the same canonical
+multiset remainder, no-emit branches cannot generate replay advice, and printed twins drop
+forward outcomes. Six focused transition-family examples pass, including every released
 language, all old/new declaration permutations, duplicate counts, the Language-5 outcome case,
 and conservative ambiguity reporting. The 18-case Git-backed CLI script passes; its new cases
 prove an unchanged sibling family reports empty findings plus `replay-neutral`, while an
 ambiguous family remains advisory by default and fails only under
-`--deny AggGuardRelationUnknown`. ADRs 0004 and 0018 now record the durable gating and shared
-comparison contracts. Final acceptance still requires the disposable Mori proof and the complete
-validation bar.
+`--deny AggGuardRelationUnknown`.
+
+The complete `keiro-dsl:tests` inventory passes, with 728 examples in the main suite and every
+separate conformance executable green. The focused runtime checks pass one guard-tightening
+example, one black-acuity example, and all three replay-only-twin examples. Both library and CLI
+builds pass. Task-scoped formatting reports zero changed files, `git diff --check` passes, and the
+ADR profile validates all 43 concepts. Improvement-request validation remains red on 11 unrelated,
+pre-existing records that lack the profile's recommended `reviews` field; this result is recorded
+rather than broadening the plan into unrelated documentation cleanup.
+
+ADRs 0004 and 0018 record the durable gating and shared comparison contracts. The disposable Mori
+self-diff at `7a8ea8242f8cac0527f32bb2f7c97d408268b73a` produces zero findings and
+`replay-neutral`, eliminating the prior 39-finding contradiction. ExecPlan 266 can now build its
+body-keyed semantic classification on the shared structural family authority.
 
 
 ## Context and Orientation
@@ -594,7 +642,7 @@ cabal test keiro-dsl:tests
 cabal test keiro-test --test-options='--match "guard tightening"'
 cabal test keiro-test --test-options='--match "black-acuity"'
 cabal test keiro-test --test-options='--match "replay-only twin"'
-nix fmt -- --check
+nix fmt -- --ci <changed-paths>
 okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 okf validate docs/improvement-requests --strict --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
 ```
@@ -718,3 +766,12 @@ test visibility, the production-versus-test remedy-validation boundary, and the 
 exit-policy distinction. Added explicit build prerequisites, a commit-pinned adopter proof,
 per-language round-trip coverage, and precise ordering and ambiguity contracts. The four
 implementation milestones and deferred semantic scope remain intact.
+
+
+## Revision note (2026-09-15, implementation complete)
+
+
+Implemented the shared multiset comparison, no-emit exclusion, truthful ambiguity diagnostic,
+outcome-safe twins, diff-specific denial policy, regression fixtures, adopter proof, and ADR
+updates. Recorded the complete validation results, the current treefmt invocation, and the
+unrelated improvement-request profile failures discovered at the final acceptance bar.

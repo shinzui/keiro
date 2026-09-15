@@ -1784,6 +1784,13 @@ main = hspec $ do
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
             "projection-owner-multi-query.keiro",
+            "transition-family-additive.keiro",
+            "transition-family-ambiguous-new.keiro",
+            "transition-family-ambiguous-old.keiro",
+            "transition-family-no-emit-tightened.keiro",
+            "transition-family-outcome-new.keiro",
+            "transition-family-outcome-old.keiro",
+            "transition-family.keiro",
             "workflow-evolution.keiro"
           ]
 
