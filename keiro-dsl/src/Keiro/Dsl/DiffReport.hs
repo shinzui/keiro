@@ -397,6 +397,7 @@ remediationFor context code
       [ DerivedIdentityChanged,
         IdPrefixChanged,
         DedupeIdentityChanged,
+        IntakeIdempotenceModeChanged,
         RouterStableNameChanged,
         WorkflowStableNameChanged,
         ReadModelVersionDecreased,

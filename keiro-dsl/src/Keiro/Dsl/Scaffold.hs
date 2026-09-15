@@ -3359,26 +3359,23 @@ emitIntakeGen genPrefix i =
            "  ( InboxFailure (..)",
            "  , " <> outcomeType <> " (..)",
            "  , " <> dispositionType <> " (..)",
-           "  , inboxDedupePolicy",
-           "  , inboxPersistence",
-           "  , inboxDispositionFor",
+           "  , inboxDedupePolicy"
+         ]
+      ++ modeExports
+      ++ [ "  , inboxDispositionFor",
            "  , inboxDisposition",
            "  ) where",
            "",
            "import Data.Text (Text)",
-           "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..), RetryDelay (..))",
+           modeImport,
            "",
            "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.",
            "inboxDedupePolicy :: InboxDedupePolicy",
            "inboxDedupePolicy = " <> (.dedupePolicy) i,
-           "",
-           "-- | Success-path envelope retention passed to runInboxTransactionWith.",
-           "-- Failures always retain their full operator-facing dead-letter envelope.",
-           "-- Dedupe-only success rows decode with an empty payload.",
-           "inboxPersistence :: InboxPersistence",
-           "inboxPersistence = " <> persistenceCtor ((.persist) i),
-           "",
-           "-- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.",
+           ""
+         ]
+      ++ modeDefinitions
+      ++ [ "-- Runtime failure detail retained when the inbox wrapper reports a failed handler attempt.",
            "data InboxFailure = InboxFailure",
            "  { inboxFailureReason :: !Text",
            "  , inboxFailureAttempt :: !(Maybe Int)",
@@ -3434,6 +3431,38 @@ emitIntakeGen genPrefix i =
     actionExpression (IDeadLetter mr) = "InboxDeadLetter " <> maybe "Nothing" (\reason -> "(Just " <> tshow reason <> ")") mr <> " Nothing"
     persistenceCtor InkPersistFull = "PersistFullEnvelope"
     persistenceCtor InkPersistDedupeOnly = "PersistDedupeOnly"
+    modeExports = case (.idempotence) i of
+      IdemInboxTable -> ["  , inboxPersistence"]
+      IdemDelegated -> ["  , inboxIdempotence", "  , runInboxIntake"]
+    modeImport = case (.idempotence) i of
+      IdemInboxTable -> "import Keiro.Inbox.Types (InboxDedupePolicy (..), InboxPersistence (..), InboxResult (..), RetryDelay (..))"
+      IdemDelegated -> "import Effectful (Eff, IOE, (:>))\nimport Keiro.Inbox (runInboxDelegated)\nimport Keiro.Inbox.Types (DelegatedOutcome, InboxDedupePolicy (..), InboxError, InboxIdempotence (..), InboxResult (..), KafkaDeliveryRef, RetryDelay (..))\nimport Keiro.Integration.Event (IntegrationEvent)\nimport Keiro.Telemetry (KeiroMetrics)"
+    modeDefinitions = case (.idempotence) i of
+      IdemInboxTable ->
+        [ "-- | Success-path envelope retention passed to runInboxTransactionWith.",
+          "-- Failures always retain their full operator-facing dead-letter envelope.",
+          "-- Dedupe-only success rows decode with an empty payload.",
+          "inboxPersistence :: InboxPersistence",
+          "inboxPersistence = " <> persistenceCtor ((.persist) i),
+          ""
+        ]
+      IdemDelegated ->
+        [ "-- | The downstream state machine owns the durable dedupe receipt.",
+          "inboxIdempotence :: InboxIdempotence",
+          "inboxIdempotence = IdempotenceDelegated",
+          "",
+          "-- | Run this intake without reading or writing the Keiro inbox table.",
+          "runInboxIntake ::",
+          "  IOE :> es =>",
+          "  Maybe KeiroMetrics ->",
+          "  IntegrationEvent ->",
+          "  Maybe KafkaDeliveryRef ->",
+          "  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->",
+          "  Eff es (Either InboxError (InboxResult a))",
+          "runInboxIntake metrics event delivery =",
+          "  runInboxDelegated metrics inboxDedupePolicy event delivery",
+          ""
+        ]
 
 --------------------------------------------------------------------------------
 -- Integration publisher (EP-4): config vs the live Keiro.Outbox runtime

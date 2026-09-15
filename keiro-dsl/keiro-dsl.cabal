@@ -962,6 +962,28 @@ test-suite keiro-dsl-conformance-intake-runtime
     keiro,
     text >=2.1 && <2.2,
 
+-- Candidate Language 6 delegated intake: generated no-Store runner plus a
+-- hand-filled integration wrapper compiled and executed against the live API.
+test-suite keiro-dsl-conformance-intake-delegated
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-intake-delegated
+  main-is: Main.hs
+  other-modules:
+    Generated.HospitalCapacity.Emergency.Contract
+    Generated.HospitalCapacity.IncidentInbox.Inbox
+    HospitalCapacity.IncidentInbox.DelegatedIntegration
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    effectful-core,
+    keiro,
+    keiro-core,
+    mmzk-typeid >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+
 -- EP-4 M5 full-service conformance: a complete integration service — scaffolded
 -- inbox dedupe + a filled inbox transaction runner and outbox IntegrationProducer
 -- — compiled against the live keiro runtime (Inbox / Outbox / Kiroku.Store).

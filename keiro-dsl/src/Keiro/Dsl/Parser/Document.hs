@@ -129,7 +129,7 @@ pTopItem context laterPreambleCode =
         ++ [ plain (SurfaceNode . NRouter <$> pRouter context),
              plain (SurfaceNode . NProcess <$> pProcess),
              plain (SurfaceNode . NContract <$> pContract context),
-             plain (SurfaceNode . NIntake <$> pIntake),
+             plain (SurfaceNode . NIntake <$> pIntake context),
              plain (SurfaceNode . NEmit <$> pEmit),
              plain (SurfaceNode . NPublisher <$> pPublisher),
              plain (SurfaceNode . NWorkqueue <$> pWorkqueue context),

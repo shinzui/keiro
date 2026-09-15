@@ -1456,6 +1456,8 @@ instance HasLocs IdExpr
 
 instance HasLocs IdStrategy
 
+instance HasLocs IdempotenceMode
+
 instance HasLocs InboxAction
 
 instance HasLocs InkPersist

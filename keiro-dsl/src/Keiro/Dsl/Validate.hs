@@ -104,6 +104,7 @@ data DiagnosticCode
   | DispositionDuplicateRetry
   | DispositionPreviouslyFailedRetry
   | DispositionDecodeUnboundedRetry
+  | DelegatedInboxDedupeOnlyPersistence
   | -- EP-4 (integration coupling).
     EmitSkipMissing
   | EmitUnresolvedContract
@@ -158,6 +159,7 @@ data DiagnosticCode
   | EmitMappingChanged
   | DecodePostureChanged
   | IntakePersistenceChanged
+  | IntakeIdempotenceModeChanged
   | ProjectionChanged
   | PublisherPolicyChanged
   | DispatchRetargeted
@@ -642,6 +644,7 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   IdDomainContractChanged -> DiffDiagnostic
   IdPrefixChanged -> DiffDiagnostic
   IntakePersistenceChanged -> DiffDiagnostic
+  IntakeIdempotenceModeChanged -> DiffDiagnostic
   MappedArmAdded -> DiffDiagnostic
   MappedArmRemoved -> DiffDiagnostic
   MappedArmTagChanged -> DiffDiagnostic
@@ -3470,7 +3473,7 @@ windowRangeRule languageContract diagnosticLine context window =
 -- | EP-4 inbox disposition rules: the table must be complete over the seven
 -- outcomes, and the three dangerous inversions must be stated the safe way.
 validateIntake :: EffectiveLanguageContract -> IntakeNode -> [Diagnostic]
-validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, decodeVersionFloor, envelopeVocabulary, decodePosture, windows]
+validateIntake languageContract i = concat [completeness, duplicateRows, inversions, dedupeVocabulary, delegatedPersistence, decodeVersionFloor, envelopeVocabulary, decodePosture, windows]
   where
     il = locLine ((.loc) i)
     -- `decBodyStrict` reaches nothing but the pretty-printer: generated contract
@@ -3511,6 +3514,14 @@ validateIntake languageContract i = concat [completeness, duplicateRows, inversi
             <> (.dedupePolicy) i
             <> "'; expected PreferIntegrationMessageId, PreferSourceEventIdentity, or KafkaDeliveryIdentity"
       | (.dedupePolicy) i `Set.notMember` intakeDedupePolicies
+      ]
+    delegatedPersistence =
+      [ mkErr il DelegatedInboxDedupeOnlyPersistence $
+          "intake '"
+            <> (.name) i
+            <> "' delegates idempotence to its downstream state machine, so 'persist = dedupe-only' describes inbox storage that does not exist; remove the persist clause"
+      | (.idempotence) i == IdemDelegated,
+        (.persist) i == InkPersistDedupeOnly
       ]
     decodeVersionFloor =
       [ mkErr il IntakeDecodeSchemaVersionBelowMinimum $

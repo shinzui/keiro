@@ -1765,6 +1765,7 @@ main = hspec $ do
             "declarative-router/valid.keiro",
             "domain-command-outcomes.keiro",
             "id-domain-migration-v3.keiro",
+            "intake-delegated.keiro",
             "language-duplicate.keiro",
             "language-identifier-v1.keiro",
             "language-identifier-v2.keiro",
@@ -6999,6 +7000,43 @@ main = hspec $ do
     it "accepts the intake spec (complete disposition, no inversions)" $ do
       codes <- errorCodesOf "test/fixtures/intake.keiro"
       codes `shouldBe` []
+    it "gates delegated intake to Language 6 and round-trips the explicit mode" $ do
+      input <- readTestText "test/fixtures/intake-delegated.keiro"
+      parsed <- case parseSource "intake-delegated.keiro" input of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right source -> pure source
+      let rendered = renderSource parsed
+      rendered `shouldSatisfy` T.isInfixOf "idempotence delegated"
+      parseSource "intake-delegated-roundtrip.keiro" rendered `shouldBe` Right parsed
+      case parseSource "intake-delegated-v5.keiro" (T.replace "language keiro-dsl 6" "language keiro-dsl 5" input) of
+        Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        other -> expectationFailure ("expected a Language 5 feature refusal, got " <> show other)
+    it "generates a delegated runner while preserving published table bytes" $ do
+      delegated <- specOf "test/fixtures/intake-delegated.keiro"
+      publishedInput <- readTestText "test/fixtures/intake.keiro"
+      candidateTable <- case parseSpec "intake-table-v6.keiro" (T.replace "language keiro-dsl 4" "language keiro-dsl 6" publishedInput) of
+        Left failure -> expectationFailure (T.unpack failure) >> fail "unreachable"
+        Right value -> pure value
+      let oneInbox spec = case [intake | NIntake intake <- (.nodes) spec] of
+            [intake] -> intake
+            values -> error ("expected one intake, got " <> show (length values))
+          delegatedIntake = oneInbox delegated
+          delegatedModule = generatedTextEndingIn "Inbox.hs" (scaffoldIntake (defaultContext (delegated.context)) delegatedIntake)
+          publishedSpec = either (error . T.unpack) id (parseSpec "intake-v4.keiro" publishedInput)
+          publishedModule = generatedTextEndingIn "Inbox.hs" (scaffoldIntake (defaultContext (publishedSpec.context)) (oneInbox publishedSpec))
+          candidateModule = generatedTextEndingIn "Inbox.hs" (scaffoldIntake (defaultContext (candidateTable.context)) (oneInbox candidateTable))
+      (.idempotence) delegatedIntake `shouldBe` IdemDelegated
+      delegatedModule `shouldSatisfy` T.isInfixOf "runInboxIntake metrics event delivery ="
+      delegatedModule `shouldSatisfy` T.isInfixOf "runInboxDelegated metrics inboxDedupePolicy event delivery"
+      delegatedModule `shouldSatisfy` T.isInfixOf "inboxIdempotence = IdempotenceDelegated"
+      delegatedModule `shouldNotSatisfy` T.isInfixOf "inboxPersistence"
+      candidateModule `shouldBe` publishedModule
+    it "rejects dedupe-only persistence in delegated mode and reports mode flips as breaking" $ do
+      tableSpec <- specOf "test/fixtures/intake.keiro"
+      let delegated = mapIntake (intakeWithIdempotence IdemDelegated) tableSpec
+      errorCodes delegated `shouldContain` [DelegatedInboxDedupeOnlyPersistence]
+      [(.code) change | Breaking change <- diffSpecs tableSpec delegated]
+        `shouldContain` [IntakeIdempotenceModeChanged]
     it "warns when intake bind flags describe unenforced generated behavior" $ do
       codes <- diagnosticCodesOf "test/fixtures/intake.keiro"
       codes `shouldContain` [IntakeBindFlagUnenforced]
@@ -11984,7 +12022,7 @@ assertSkeletonUsesAuthoringLanguage kind = case skeletonFor kind of
     Right parsed -> do
       let service = checkedSource parsed
       (.contractLanguageVersion) (checkedLanguageContract service) `shouldBe` currentAuthoringLanguageVersion
-      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Stable
+      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Candidate
       [(.code) diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error]
         `shouldBe` ([] :: [DiagnosticCode])
       scaffoldServiceModules (defaultContext ((checkedSpec service).context)) service
@@ -14108,6 +14146,7 @@ genIntake =
     <*> smallList (BindRow <$> genName <*> genWireSource <*> arbitrary <*> arbitrary)
     <*> genName
     <*> genName
+    <*> pure IdemInboxTable
     <*> elements [InkPersistFull, InkPersistDedupeOnly]
     <*> genDecodeSpec
     <*> smallList genDispositionRow
@@ -14781,28 +14820,32 @@ backoffWithWindow :: T.Text -> BackoffSpec -> BackoffSpec
 backoffWithWindow window (BackoffSpec kind _ maximumValue multiplier) = BackoffSpec kind window maximumValue multiplier
 
 intakeWithDedupePolicy :: Name -> IntakeNode -> IntakeNode
-intakeWithDedupePolicy dedupePolicy (IntakeNode name contract topic accept binds dedupeKey _ persist decode disposition loc) =
-  IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc
+intakeWithDedupePolicy dedupePolicy (IntakeNode name contract topic accept binds dedupeKey _ idempotence persist decode disposition loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
 
 intakeWithDedupeKey :: Name -> IntakeNode -> IntakeNode
-intakeWithDedupeKey dedupeKey (IntakeNode name contract topic accept binds _ dedupePolicy persist decode disposition loc) =
-  IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc
+intakeWithDedupeKey dedupeKey (IntakeNode name contract topic accept binds _ dedupePolicy idempotence persist decode disposition loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
 
 intakeWithDecode :: DecodeSpec -> IntakeNode -> IntakeNode
-intakeWithDecode decode (IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist _ disposition loc) =
-  IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc
+intakeWithDecode decode (IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist _ disposition loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
 
 intakeWithBinds :: [BindRow] -> IntakeNode -> IntakeNode
-intakeWithBinds binds (IntakeNode name contract topic accept _ dedupeKey dedupePolicy persist decode disposition loc) =
-  IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc
+intakeWithBinds binds (IntakeNode name contract topic accept _ dedupeKey dedupePolicy idempotence persist decode disposition loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
 
 intakeWithDisposition :: [DispositionRow] -> IntakeNode -> IntakeNode
-intakeWithDisposition disposition (IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode _ loc) =
-  IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc
+intakeWithDisposition disposition (IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode _ loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
 
 intakeWithContract :: Name -> IntakeNode -> IntakeNode
-intakeWithContract contract (IntakeNode name _ topic accept binds dedupeKey dedupePolicy persist decode disposition loc) =
-  IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc
+intakeWithContract contract (IntakeNode name _ topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
+
+intakeWithIdempotence :: IdempotenceMode -> IntakeNode -> IntakeNode
+intakeWithIdempotence idempotence (IntakeNode name contract topic accept binds dedupeKey dedupePolicy _ persist decode disposition loc) =
+  IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc
 
 decodeWithEnvelope :: T.Text -> DecodeSpec -> DecodeSpec
 decodeWithEnvelope envelope (DecodeSpec _ bodyStrict bodySchemaVersion) = DecodeSpec envelope bodyStrict bodySchemaVersion

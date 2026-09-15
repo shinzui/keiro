@@ -565,6 +565,7 @@ docIntake i =
       ++ map (indent 2 . docBind) ((.binds) i)
       ++ [ indent 2 ("dedupe key" <+> pretty ((.dedupeKey) i) <+> "policy" <+> pretty ((.dedupePolicy) i))
          ]
+      ++ [indent 2 "idempotence delegated" | (.idempotence) i == IdemDelegated]
       ++ [indent 2 "persist = dedupe-only" | (.persist) i == InkPersistDedupeOnly]
       ++ [ indent 2 (docDecode ((.decode) i)),
            indent 2 "disposition {"

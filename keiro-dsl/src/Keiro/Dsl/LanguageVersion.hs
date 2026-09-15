@@ -141,6 +141,7 @@ data RuntimeCapability
   | ProjectionCatalogRuntime
   | TypedDomainCommandOutcomes
   | SeparatedProjectionQueryPolicy
+  | DelegatedInboxRuntime
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -170,6 +171,7 @@ capabilityFoldSegment StrictSpecSurfaceValidation = Nothing
 capabilityFoldSegment ProjectionCatalogRuntime = Just "semantic-contract:keiro-dsl/projection-catalog/1"
 capabilityFoldSegment TypedDomainCommandOutcomes = Nothing
 capabilityFoldSegment SeparatedProjectionQueryPolicy = Nothing
+capabilityFoldSegment DelegatedInboxRuntime = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {capabilities} =
@@ -237,6 +239,9 @@ version4 = LanguageVersion 4
 version5 :: LanguageVersion
 version5 = LanguageVersion 5
 
+version6 :: LanguageVersion
+version6 = LanguageVersion 6
+
 -- | The authoritative registry of recognized language contracts. Published
 -- entries are append-only; any future pre-release candidate is amended in place.
 languageRegistry :: NonEmpty LanguageDefinition
@@ -245,7 +250,8 @@ languageRegistry =
     :| [ LanguageDefinition version2 (Just version1) LanguageBodyParserV2 profileV2 runtimeProfileV1 CompatibilityOnly PublishedLanguage,
          LanguageDefinition version3 (Just version2) LanguageBodyParserV2 profileV2 runtimeProfileV2 CompatibilityOnly PublishedLanguage,
          LanguageDefinition version4 (Just version3) LanguageBodyParserV2 profileV3 runtimeProfileV3 CompatibilityOnly PublishedLanguage,
-         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Stable PublishedLanguage
+         LanguageDefinition version5 (Just version4) LanguageBodyParserV2 profileV4 runtimeProfileV4 Stable PublishedLanguage,
+         LanguageDefinition version6 (Just version5) LanguageBodyParserV2 profileV5 runtimeProfileV5 Candidate CandidateLanguage
        ]
 
 profileV1 :: SyntaxProfile
@@ -290,6 +296,12 @@ profileV4 =
         )
     )
 
+profileV5 :: SyntaxProfile
+profileV5 =
+  SyntaxProfile
+    "keiro-dsl/syntax-profile/5"
+    (Set.insert DelegatedInboxSyntax ((.features) profileV4))
+
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
   RuntimeSemanticsProfile
@@ -322,6 +334,12 @@ runtimeProfileV4 =
         SeparatedProjectionQueryPolicy
         (Set.insert TypedDomainCommandOutcomes (Set.insert ProjectionCatalogRuntime ((.capabilities) runtimeProfileV3)))
     )
+
+runtimeProfileV5 :: RuntimeSemanticsProfile
+runtimeProfileV5 =
+  RuntimeSemanticsProfile
+    "keiro-dsl/runtime-semantics/5"
+    (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -366,6 +384,7 @@ data LanguageFeature
   | DomainCommandOutcomeSyntax
   | DeclarativeRouterSelectionSyntax
   | SeparatedProjectionQueryPolicySyntax
+  | DelegatedInboxSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

@@ -131,7 +131,9 @@ depsForNode service n = case n of
   NProcess {} -> ["aeson", "keiki", "keiro", "shibuya-core", "text", "time", "uuid"]
   NRouter {} -> ["effectful-core", "keiro", "shibuya-core", "text"]
   NContract contract -> ["aeson", "text"] <> [dependency | hasTypedContractId contract, dependency <- ["keiro-core", "mmzk-typeid"]]
-  NIntake {} -> integration
+  NIntake intake -> case (.idempotence) intake of
+    IdemInboxTable -> integration
+    IdemDelegated -> ["effectful-core", "keiro", "keiro-core", "text"]
   NEmit {} -> integration
   NPublisher {} -> integration
   NWorkqueue workqueue -> ["aeson", "keiro-core", "keiro-pgmq", "text"] <> workqueueDependencies workqueue

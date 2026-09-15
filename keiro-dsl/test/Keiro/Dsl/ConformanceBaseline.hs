@@ -140,7 +140,7 @@ conformanceBaselineSpec = describe "conformance baseline" $ do
       `shouldBe` ([] :: [Text])
     forM_ ((.baselineCompiledSuites) baseline) $ \suite -> do
       (.suiteRole) suite
-        `shouldSatisfy` (`elem` ["stable-primary", "published-compatibility", "compatibility-proof", "version-independent"])
+        `shouldSatisfy` (`elem` ["stable-primary", "candidate-primary", "published-compatibility", "compatibility-proof", "version-independent"])
       validateSuiteLanguageOwnership baseline suite
       (.suiteReason) suite `shouldSatisfy` (not . T.null . T.strip)
       directory <- resolveRepoDirectory ("keiro-dsl" </> (.suiteDirectory) suite)
@@ -194,6 +194,11 @@ validateSuiteLanguageOwnership baseline suite = case ((.suiteRole) suite, (.suit
     definition <- requireRegisteredDefinition suite rawVersion
     (.support) definition `shouldBe` Stable
     (.maturity) definition `shouldBe` PublishedLanguage
+  ("candidate-primary", Just rawVersion) -> do
+    rawVersion `shouldBe` (.baselineAuthoringLanguageVersion) baseline
+    definition <- requireRegisteredDefinition suite rawVersion
+    (.support) definition `shouldBe` Candidate
+    (.maturity) definition `shouldBe` CandidateLanguage
   ("published-compatibility", Just rawVersion) -> do
     rawVersion `shouldNotBe` (.baselineStableLanguageVersion) baseline
     definition <- requireRegisteredDefinition suite rawVersion

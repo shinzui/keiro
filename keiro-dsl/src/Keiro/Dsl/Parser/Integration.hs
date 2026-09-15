@@ -9,7 +9,7 @@ where
 
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (FieldAliasSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (DelegatedInboxSyntax, FieldAliasSyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
@@ -67,8 +67,8 @@ pContract context = do
           CInt <$ keyword "int"
         ]
 
-pIntake :: P IntakeNode
-pIntake = do
+pIntake :: FrontendContext -> P IntakeNode
+pIntake context = do
   loc <- getLoc
   keyword "intake"
   nm <- ident
@@ -85,6 +85,19 @@ pIntake = do
   dk <- ident
   keyword "policy"
   dp <- ident
+  idem <-
+    maybe IdemInboxTable id
+      <$> optionalLanguageFeature
+        context
+        DelegatedInboxSyntax
+        "idempotence"
+        ( try $ do
+            keyword "idempotence"
+            choice
+              [ IdemInboxTable <$ keyword "table",
+                IdemDelegated <$ keyword "delegated"
+              ]
+        )
   persistence <-
     option InkPersistFull $
       keyword "persist"
@@ -105,6 +118,7 @@ pIntake = do
         binds = binds,
         dedupeKey = dk,
         dedupePolicy = dp,
+        idempotence = idem,
         persist = persistence,
         decode = dec,
         disposition = disp,

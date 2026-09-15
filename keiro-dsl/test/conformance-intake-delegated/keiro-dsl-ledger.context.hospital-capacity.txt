@@ -1,0 +1,13 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/intake-delegated.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract emergency (line 4)","path":"Generated/HospitalCapacity/Emergency/Contract.hs"}
+module-role {"family":"Inbox","kind":"generated","ownerKind":"intake","ownerName":"intake incidentInbox (line 14)","path":"Generated/HospitalCapacity/IncidentInbox/Inbox.hs"}
+generated Generated/HospitalCapacity/Emergency/Contract.hs
+generated Generated/HospitalCapacity/IncidentInbox/Inbox.hs
+id-domain id-domain|name=contract:emergency.IncidentTransferNeedDeclared.incidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

@@ -439,6 +439,7 @@ classifyCompatibility context code
       [ DerivedIdentityChanged,
         IdPrefixChanged,
         DedupeIdentityChanged,
+        IntakeIdempotenceModeChanged,
         QueueIdentityChanged,
         RouterStableNameChanged,
         WorkflowStableNameChanged
@@ -2825,6 +2826,19 @@ intakePairDiff oldIntake newIntake =
       "dedupe key or policy changed; redelivered messages no longer match their persisted dedupe record"
   | ((.dedupeKey) oldIntake, (.dedupePolicy) oldIntake) /= ((.dedupeKey) newIntake, (.dedupePolicy) newIntake)
   ]
+    ++ [ breaking
+           ((.name) newIntake)
+           "inbox-idempotence-mode"
+           ((.name) newIntake)
+           IntakeIdempotenceModeChanged
+           ( "intake idempotence ownership changed "
+               <> renderIdempotenceMode ((.idempotence) oldIntake)
+               <> " -> "
+               <> renderIdempotenceMode ((.idempotence) newIntake)
+               <> "; persisted dedupe history does not transfer between the inbox table and the downstream state machine"
+           )
+       | (.idempotence) oldIntake /= (.idempotence) newIntake
+       ]
     ++ [ advisory
            ((.name) newIntake)
            "decode-posture"
@@ -2845,6 +2859,10 @@ intakePairDiff oldIntake newIntake =
 renderInkPersist :: InkPersist -> Text
 renderInkPersist InkPersistFull = "full-envelope"
 renderInkPersist InkPersistDedupeOnly = "dedupe-only"
+
+renderIdempotenceMode :: IdempotenceMode -> Text
+renderIdempotenceMode IdemInboxTable = "table"
+renderIdempotenceMode IdemDelegated = "delegated"
 
 addedIntakeDiff :: IntakeNode -> [Change]
 addedIntakeDiff intake = [additive ((.name) intake) "intake" ((.name) intake) DeclarationAdded "new intake"]

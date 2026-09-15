@@ -24,40 +24,44 @@ frontendProfilesSpec = do
                      (2, Just 1, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/1"),
                      (3, Just 2, "keiro-dsl/syntax-profile/2", "keiro-dsl/runtime-semantics/2"),
                      (4, Just 3, "keiro-dsl/syntax-profile/3", "keiro-dsl/runtime-semantics/3"),
-                     (5, Just 4, "keiro-dsl/syntax-profile/4", "keiro-dsl/runtime-semantics/4")
+                     (5, Just 4, "keiro-dsl/syntax-profile/4", "keiro-dsl/runtime-semantics/4"),
+                     (6, Just 5, "keiro-dsl/syntax-profile/5", "keiro-dsl/runtime-semantics/5")
                    ]
       map definitionCapabilities (NE.toList languageRegistry)
         `shouldBe` [ [],
                      [],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy],
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime]
                    ]
       map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],
                      [],
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"],
                      ["semantic-contract:keiro-dsl/runtime-semantics/2"],
+                     ["semantic-contract:keiro-dsl/projection-catalog/1", "semantic-contract:keiro-dsl/runtime-semantics/2"],
                      ["semantic-contract:keiro-dsl/projection-catalog/1", "semantic-contract:keiro-dsl/runtime-semantics/2"]
                    ]
       map (.support) (NE.toList languageRegistry)
-        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable]
+        `shouldBe` [CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, CompatibilityOnly, Stable, Candidate]
       map (.maturity) (NE.toList languageRegistry)
-        `shouldBe` [PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage]
+        `shouldBe` [PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage, PublishedLanguage, CandidateLanguage]
       currentStableLanguageVersion `shouldBe` version 5
-      currentAuthoringLanguageVersion `shouldBe` version 5
+      currentAuthoringLanguageVersion `shouldBe` version 6
       languageSupportForVersion (version 1) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 2) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 3) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 4) `shouldBe` Just CompatibilityOnly
       languageSupportForVersion (version 5) `shouldBe` Just Stable
+      languageSupportForVersion (version 6) `shouldBe` Just Candidate
       languageSupportForVersion (version 999999) `shouldBe` Nothing
       [definition.version | definition <- NE.toList languageRegistry, (.support) definition == Stable]
         `shouldBe` [currentStableLanguageVersion]
       [definition.version | definition <- NE.toList languageRegistry, (.support) definition == Candidate]
-        `shouldBe` []
+        `shouldBe` [currentAuthoringLanguageVersion]
       (NE.last languageRegistry).version `shouldBe` currentAuthoringLanguageVersion
-      (.predecessor) (NE.last languageRegistry) `shouldBe` Just (version 4)
+      (.predecessor) (NE.last languageRegistry) `shouldBe` Just (version 5)
       forM_ (adjacent (NE.toList languageRegistry)) $ \(predecessor, successor) ->
         forM_ allRuntimeCapabilities $ \capability ->
           runtimeProfileHasCapability ((.runtimeSemanticsProfile) predecessor) capability
@@ -72,10 +76,11 @@ frontendProfilesSpec = do
               DomainCommandOutcomeSyntax -> version 5
               DeclarativeRouterSelectionSyntax -> version 5
               SeparatedProjectionQueryPolicySyntax -> version 5
+              DelegatedInboxSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
-        forM_ [1, 2, 3, 4, 5] $ \versionNumber ->
+        forM_ [1, 2, 3, 4, 5, 6] $ \versionNumber ->
           languageSupportsFeature (version versionNumber) feature
             `shouldBe` (version versionNumber >= minimumVersion)
 
@@ -100,7 +105,7 @@ frontendProfilesSpec = do
 
     it "checks every real feature marker against the exact selected profile" $ do
       forM_ featureCases $ \FeatureCase {feature, marker, body} ->
-        forM_ [1, 2, 3, 4, 5] $ \versionNumber -> do
+        forM_ [1, 2, 3, 4, 5, 6] $ \versionNumber -> do
           let sourceName = "profile-" <> show versionNumber <> ".keiro"
               source = preamble versionNumber <> body
           case (languageSupportsFeature (version versionNumber) feature, parseSurfaceSource sourceName source) of
@@ -116,7 +121,7 @@ frontendProfilesSpec = do
 
     it "keeps feature spellings inert in comments, strings, wire keys, and identifiers" $ do
       inertBody <- readRepoText "keiro-dsl/test/fixtures/language-identifier-v1.keiro"
-      forM_ [1, 2, 3, 4, 5] $ \versionNumber ->
+      forM_ [1, 2, 3, 4, 5, 6] $ \versionNumber ->
         parseSurfaceSource ("inert-" <> show versionNumber <> ".keiro") (preamble versionNumber <> inertBody)
           `shouldSatisfy` isRight
 
@@ -187,7 +192,8 @@ featureCases =
     FeatureCase MappedConsumerSurfaceSyntax ":" mappedQueueFeatureBody,
     FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody,
     FeatureCase DeclarativeRouterSelectionSyntax "declarative" declarativeRouterFeatureBody,
-    FeatureCase SeparatedProjectionQueryPolicySyntax "freshness" separatedProjectionQueryPolicyBody
+    FeatureCase SeparatedProjectionQueryPolicySyntax "freshness" separatedProjectionQueryPolicyBody,
+    FeatureCase DelegatedInboxSyntax "idempotence" delegatedInboxFeatureBody
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -255,9 +261,25 @@ featureBody = \case
       ]
   DeclarativeRouterSelectionSyntax -> declarativeRouterFeatureBody
   SeparatedProjectionQueryPolicySyntax -> separatedProjectionQueryPolicyBody
+  DelegatedInboxSyntax -> delegatedInboxFeatureBody
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax]
+
+delegatedInboxFeatureBody :: Text
+delegatedInboxFeatureBody =
+  T.unlines
+    [ "context profile",
+      "intake ProfileInbox {",
+      "  contract ProfileContract",
+      "  topic profiles",
+      "  accept ProfileChanged",
+      "  dedupe key messageId policy PreferIntegrationMessageId",
+      "  idempotence delegated",
+      "  decode { envelope strict-required lenient-optional body strict schemaVersion == 1 }",
+      "  disposition { }",
+      "}"
+    ]
 
 separatedProjectionQueryPolicyBody :: Text
 separatedProjectionQueryPolicyBody =

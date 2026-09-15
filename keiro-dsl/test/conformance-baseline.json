@@ -1,8 +1,8 @@
 {
   "schema": "keiro-dsl/conformance-baseline/2",
   "stableLanguageVersion": 5,
-  "authoringLanguageVersion": 5,
-  "primaryLanguageVersions": [4, 5],
+  "authoringLanguageVersion": 6,
+  "primaryLanguageVersions": [4, 5, 6],
   "fixtureExceptions": [
     {"path": "test/fixtures/aggregate-collection-expressions-v2-rejects.keiro", "sourceForm": "declared", "effectiveVersion": 2, "role": "compatibility-proof", "reason": "version-2 grammar rejection vector"},
     {"path": "test/fixtures/aggregate-scalar-expressions-v1-rejects.keiro", "sourceForm": "declared", "effectiveVersion": 1, "role": "compatibility-proof", "reason": "version-1 predecessor feature rejection vector"},
@@ -39,6 +39,7 @@
     {"component": "keiro-dsl-conformance-contract", "directory": "test/conformance-contract", "source": "test/fixtures/contract-v4.keiro", "generation": "source", "role": "published-compatibility", "languageVersion": 4, "reason": "published Language 4 typed contract and field-identity selector/wire-key proof"},
     {"component": "keiro-dsl-conformance-contract-v1-compat", "directory": "test/conformance-contract-v1-compat", "source": "test/fixtures/contract-v1-compat.keiro", "generation": "none", "role": "compatibility-proof", "reason": "version-1 permissive Text contract compatibility proof"},
     {"component": "keiro-dsl-conformance-intake-runtime", "directory": "test/conformance-intake-runtime", "source": "test/fixtures/intake.keiro", "generation": "source", "role": "published-compatibility", "languageVersion": 4, "reason": "published Language 4 intake runtime proof"},
+    {"component": "keiro-dsl-conformance-intake-delegated", "directory": "test/conformance-intake-delegated", "source": "test/fixtures/intake-delegated.keiro", "generation": "source", "role": "candidate-primary", "languageVersion": 6, "reason": "candidate Language 6 delegated runner and no-Store hand-filled integration proof"},
     {"component": "keiro-dsl-conformance-intake-full", "directory": "test/conformance-intake-full", "source": "test/fixtures/intake.keiro", "generation": "source", "role": "published-compatibility", "languageVersion": 4, "reason": "published Language 4 complete intake scaffold proof"},
     {"component": "keiro-dsl-conformance-publisher-runtime", "directory": "test/conformance-publisher-runtime", "source": "test/fixtures/emit.keiro", "generation": "source", "role": "published-compatibility", "languageVersion": 4, "reason": "published Language 4 publisher runtime proof"},
     {"component": "keiro-dsl-conformance-queue", "directory": "test/conformance-queue", "source": "test/fixtures/reservation-work.keiro", "generation": "source", "role": "published-compatibility", "languageVersion": 4, "reason": "published Language 4 workqueue scaffold proof"},

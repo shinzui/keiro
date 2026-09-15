@@ -107,6 +107,7 @@ module Keiro.Dsl.Grammar
     DispositionRow (..),
     DecodeSpec (..),
     InkPersist (..),
+    IdempotenceMode (..),
     IntakeNode (..),
 
     -- * The integration emit/publisher nodes (EP-4)
@@ -1009,6 +1010,10 @@ data DecodeSpec = DecodeSpec
 data InkPersist = InkPersistFull | InkPersistDedupeOnly
   deriving stock (Eq, Show, Generic)
 
+-- | Which durable state machine owns intake deduplication.
+data IdempotenceMode = IdemInboxTable | IdemDelegated
+  deriving stock (Eq, Show, Generic)
+
 -- | An @intake@ (Kafka consumer / inbox) node. The runtime-config @consumer@
 -- block (brokers/groupId/offsetReset) is hole-kind 8, delegated to deployment
 -- and not modelled here.
@@ -1020,6 +1025,7 @@ data IntakeNode = IntakeNode
     binds :: ![BindRow],
     dedupeKey :: !Name,
     dedupePolicy :: !Name,
+    idempotence :: !IdempotenceMode,
     persist :: !InkPersist,
     decode :: !DecodeSpec,
     disposition :: ![DispositionRow],

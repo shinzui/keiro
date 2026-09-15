@@ -285,8 +285,8 @@ setNodeLoc loc = \case
     NRouter (RouterNode nodeId name input key resolve target projections dispatch rejected poison loc)
   NContract (ContractNode name schemaVersion discriminator topics events _) ->
     NContract (ContractNode name schemaVersion discriminator topics events loc)
-  NIntake (IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition _) ->
-    NIntake (IntakeNode name contract topic accept binds dedupeKey dedupePolicy persist decode disposition loc)
+  NIntake (IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition _) ->
+    NIntake (IntakeNode name contract topic accept binds dedupeKey dedupePolicy idempotence persist decode disposition loc)
   NEmit (EmitNode name contract topic source key discriminant mapping skip messageId idempotencyKey _) ->
     NEmit (EmitNode name contract topic source key discriminant mapping skip messageId idempotencyKey loc)
   NPublisher (PublisherNode name emit ordering maxAttempts backoff outboxField _) ->
