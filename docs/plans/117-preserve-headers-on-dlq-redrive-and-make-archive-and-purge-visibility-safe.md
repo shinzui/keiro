@@ -18,6 +18,11 @@ provenance:
       at: 2026-09-12T17:28:45Z
       mode: "update"
       note: "Audited local downstream changes and aligned handoffs with client-only ordering, optional additive indexes, and no SQL overrides."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T19:58:38Z
+      mode: "update"
+      note: "Refresh released pgmq-hs 0.6 ownership, keiro-ops caller coverage, and purge safety limitations."
 ---
 
 # Preserve headers on DLQ redrive and make archive and purge visibility-safe
@@ -29,541 +34,414 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 ## Purpose / Big Picture
 
-`keiro-pgmq`'s dead-letter queue (DLQ) helpers are the operator's toolbox: `readDlq` to
-inspect poisoned messages, `redriveDlq` to send their payloads back to the main queue after
-a fix, `archiveDlq` to retain them in PGMQ's archive table for audit, and `purgeDlq` to
-delete them. The 2026-07 pgmq review (master plan:
-`docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md`)
-confirmed two operator-facing defects here. First (PGQ-3): redrive silently strips message
-headers — a redriven FIFO message loses its `x-pgmq-group` key and falls into the default
-group (its ordering relationship with its siblings is gone), tenant metadata in headers is
-gone, and the producer's trace link is gone — even though both DLQ writers carefully
-preserve the original headers inside the DLQ payload wrapper. Second (PGQ-6): the module's
-own recommended inspect-then-archive-then-purge runbook destroys the audit trail if executed
-within 30 seconds, because `readDlq` hides the rows it inspected behind a visibility
-timeout, `archiveDlq` only sees visible rows (archiving nothing and returning 0, which
-nothing checks), and `purgeDlq` truncates *everything*, hidden rows included.
 
-After this plan, a redriven message re-enters the main queue with its original headers —
-same FIFO group, same tenant metadata, same `traceparent` — pinned by a test that fails
-against today's code; archiving can target the exact rows an inspection returned regardless
-of visibility; `purgeDlq` refuses to destroy a queue that still has invisible (in-flight or
-recently inspected) rows unless the operator explicitly forces it; and all four verbs
-document the 30-second visibility window so the runbook can be followed as written without
-data loss. You can see it working by running `cabal test keiro-pgmq-test` from the
-repository root and reading the new DLQ examples, especially the end-to-end runbook example
-that inspects, archives, and purges back-to-back with no waiting.
+Keiro's dead-letter queue (DLQ) stores messages whose processing failed. Operators use
+`readDlq` to inspect them, `redriveDlq` to send them back for processing,
+`archiveDlq` to retain them for audit, and `purgeDlq` to delete them.
+
+Two defects remain after the pgmq-hs 0.6.0.0 upgrade. Redrive drops the original message
+headers, including the FIFO group (first-in, first-out ordering group), tenant metadata,
+and producer trace context. Inspection hides rows for 30 seconds; the count-based archive
+then skips those rows, while purge deletes them anyway. This plan preserves headers,
+adds archive-by-ids, and makes ordinary purge refuse when metrics report hidden rows.
+
+All remaining implementation belongs in keiro: principally `keiro-pgmq`, with a required
+`keiro-ops` caller update. The released pgmq-hs APIs already support these operations.
+No pgmq-hs change, migration, SQL-function override, or further dependency upgrade is a
+prerequisite. The purge guard is best effort: metrics and truncate are separate operations,
+so this plan protects the sequential inspection runbook, not concurrent readers or writers.
+An audit-safe full-queue runbook requires quiescing concurrent activity and accounting for
+every row before purge.
 
 
 ## Progress
 
-- [ ] M1: `DlqEnvelope`/`parseDlqEnvelope` parse `original_headers`; `DlqEntry` exposes it; `redriveDlq` re-sends with the preserved headers when present.
-- [ ] M1: Header-preservation tests pass (FIFO group key, `traceparent`, app metadata survive redrive; header-less legacy rows still redrive as before).
-- [ ] M2: `purgeDlq` returns a `PurgeDlqResult` and refuses when invisible rows exist; `purgeDlqForce` provides the old unconditional behavior; `archiveDlqEntries` archives an explicit id list regardless of visibility.
-- [ ] M2: Visibility-safety tests pass (purge refuses after an inspection; archive-by-ids succeeds on hidden rows).
-- [ ] M3: Module haddock rewritten (visibility window on every verb, corrected runbook); end-to-end runbook example passes; full suite green.
-- [ ] CHANGELOG entry for keiro-pgmq (breaking `purgeDlq` signature); ADR distillation pass done if any durable context emerged.
+
+- [x] (2026-09-15) Refreshed against keiro source, Mori-discovered dependency source, Hackage versions, and upstream release tag v0.6.0.0; established keiro versus pgmq-hs ownership.
+- [ ] M1: Parse and expose original headers, preserve them on redrive, and pass header/legacy-wrapper regressions.
+- [ ] M2: Add archive-by-ids, typed guarded purge, explicit force purge, and visibility regressions.
+- [ ] M2: Update keiro-ops purge result handling and test refusal without deleting inspected rows.
+- [ ] M3: Correct the operator runbook and compatibility notes; pass both affected suites and the no-wait inspect/archive/purge example.
+- [ ] Update both affected changelogs and complete ADR distillation before marking implementation complete.
 
 
 ## Surprises & Discoveries
 
-- Migration-status validation (2026-09-12): this plan is still keiro-owned and still unimplemented.
-  PGQ-3 and PGQ-6 are pure keiro-pgmq defects, so no pgmq-project plan ever claimed them, and both
-  reproduce at keiro `503475fa`: `redriveDlq` re-sends through a bare `Pgmq.sendMessage` with no
-  headers (`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs:177`) and `purgeDlq` is still the unconditional
-  `Eff es ()` truncation (`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs:198`). `sendMessageWithHeaders` is still
-  exported by `Pgmq.Effectful`, so M1's fix needs no upstream change.
-- Migration-status validation (2026-09-12): keiro-pgmq now builds against pgmq-hs 0.6.0.0
-  (`>=0.6 && <0.7`, keiro commit `e4ec781b`), not the 0.4.x/0.5.0.0 family this plan was written
-  against. That matters for M2's purge guard: PGMQ 1.13.0 added a nullable
-  `default_partition_length` to `metrics_result`, so the `pgmq.metrics` record this plan reads for
-  visible-vs-total counts has one more field than the plan's prose assumes. The counts themselves are
-  unchanged.
+
+The 2026-09-15 source audit confirms both defects remain in
+`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`: `parseDlqEnvelope` ignores `original_headers`,
+`redriveOne` calls bare `Pgmq.sendMessage`, and `purgeDlq` discards the result of
+unconditional `deleteAllMessagesFromQueue`. This refresh did not execute the regression
+suite; these are source findings, not new runtime test results.
+
+The upgrade is already represented by `>=0.6 && <0.7` family bounds in
+`keiro-pgmq/keiro-pgmq.cabal`, including the test dependency on pgmq-migration.
+Hackage's preferred-version responses for pgmq-effectful and pgmq-hasql both list 0.6.0.0
+as the newest normal version. Upstream tag `v0.6.0.0` resolves to
+`7269f4de0a6e4e6f138c849758c18c7324410ac2`. The relevant local API and migration files
+have no diff from that tag. The old plan's trailing 0.4 bounds were stale.
+
+The released migration history ends at `0006-preserve-partitioned-reentry-v1.13.0.sql`,
+after `0004-upgrade-v1.12.0.sql` and `0005-upgrade-v1.13.0.sql`; the previous revision's
+migration-0007 premise is obsolete. pgmq-hasql already projects and decodes the nullable
+`defaultPartitionLength` metric. Keiro's guard needs only `queueLength` and
+`queueVisibleLength`; it must neither decode SQL itself nor interpret the partition
+estimate as a count of hidden rows.
+
+There is a production caller omitted from the old plan:
+`keiro-ops/src/Keiro/Ops/Pgmq.hs` matches the purge result as `()` in `runPurge`.
+Its existing global `--force` flag authorizes mutations after preview; using it implicitly
+to bypass the new visibility guard would defeat the operator fix.
+
+Adding a field to exported `DlqEntry (..)` can break external constructors, and changing
+`purgeDlq`'s result does not force every caller to inspect it: callers using `void` or
+discarding a do-block result can still compile. A source search and migration guidance
+are required in addition to compilation.
 
 
 ## Decision Log
 
-- Decision: Redrive takes the original headers from the DLQ payload wrapper's
-  `original_headers` key only; when the wrapper has none (legacy or hand-written rows), the
-  message is redriven without headers exactly as today. The DLQ row's *own* row-level
-  headers are deliberately not used as a fallback.
-  Rationale: Both DLQ writers put the verbatim original headers in the wrapper
-  (`keiro-pgmq/src/Keiro/PGMQ/Job.hs` `sendDlq`, lines 1049-1067, passes
-  `mkDlqPayload message reason True`; the adapter's
-  `mkDlqPayload`, `shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Convert.hs` lines 135-160,
-  writes `original_headers` when metadata is included, and keiro always includes it). The
-  row-level headers of a worker-path DLQ row are *not* verbatim: the adapter merges the
-  failing consumer's current trace headers over them
-  (`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Internal.hs` line 260,
-  `mergeDlqHeaders consumerHdrs msg.headers`), so a row-level fallback would redrive a
-  message whose `traceparent` points at the consumer's failure span instead of the
-  producer's trace. Wrapper-only is the only source that is correct on both writer paths.
-  Date: 2026-07-23
 
-- Decision: Close the archive/purge visibility trap with two API changes and documentation,
-  not with an upstream pgmq change: `purgeDlq` refuses (returns a typed
-  `PurgeDlqBlocked` result, does not throw) when the DLQ has invisible rows, with
-  `purgeDlqForce` keeping the old unconditional truncate; and a new `archiveDlqEntries`
-  archives an explicit list of message ids regardless of visibility. The count-based
-  `archiveDlq` keeps its semantics (visible rows only) and documents them.
-  Rationale: The finding's first-preference fix — make `archiveDlq` enumerate *all* row ids
-  regardless of visibility — cannot be built on the current pgmq surface: pgmq 1.11.0 has no
-  SQL function that lists message ids without claiming them, and every pgmq-hasql statement
-  goes through a pgmq SQL function with the queue name as a bind parameter (verified across
-  `pgmq-hasql/src/Pgmq/Hasql/Statements/*.hs`; prepared statements cannot parameterize the
-  table name, so a "plain SELECT msg_id" needs a new upstream SQL function and a pgmq-hs
-  release). Meanwhile `pgmq.archive(queue, msg_ids[])` already ignores visibility (its
-  `DELETE ... WHERE msg_id = ANY($1)` has no `vt` predicate — migration SQL lines 523-549),
-  `Pgmq.batchArchiveMessages` already exposes it, and `readDlq` already returns every
-  inspected row's id (`DlqEntry.dlqMessageId`) — so "archive exactly what I inspected,
-  regardless of the visibility my inspection caused" is expressible today with an id-list
-  API. The refusal guard is expressible today too: `pgmq.metrics` reports both total and
-  visible row counts (`queueLength` vs `queueVisibleLength` on the existing
-  `Pgmq.queueMetrics`). This closes the trap using existing APIs. Plan 116's optional
-  client ordering adoption depends on a pgmq-hasql release; plan 118's optional
-  supplemental index does not require a migration release. This plan depends on neither.
-  Any future proposal for a `pgmq.list_msg_ids` upstream function is separate work and
-  must not introduce a local override of extension-owned SQL.
-  Date: 2026-07-23
+Decision (2026-07-23, reaffirmed 2026-09-15): use only the wrapper's
+`original_headers` for redrive. Missing or JSON-null values mean no preserved headers.
+Never substitute the DLQ row's own headers: the worker adapter can merge the failing
+consumer's trace context into them. The wrapper retains the original producer metadata.
 
-- Decision: `purgeDlq`'s type changes from `Eff es ()` to `Eff es PurgeDlqResult` (breaking)
-  instead of keeping `()` and throwing on refusal.
-  Rationale: A silent behavior change under an unchanged signature is the worst option for
-  an operator verb; a changed return type makes every call site re-decide at compile time
-  whether it wants the guarded verb or `purgeDlqForce`. The refusal must also be
-  best-effort by construction — the metrics check and the truncate are two statements, so a
-  concurrent reader between them can still hide rows that get truncated; the haddock states
-  this and positions the guard as protection against the self-inflicted runbook race, not
-  as a transactional fence.
-  Date: 2026-07-23
+Decision (2026-07-23, clarified 2026-09-15): retain the count-based archive's visible-row
+semantics and add `archiveDlqEntries` for known ids. The existing batch archive SQL
+has no visibility predicate. There is no need to add a new queue-enumeration primitive
+or construct queue-table SQL in keiro to implement the inspection workflow.
+
+Decision (2026-07-23, clarified 2026-09-15): `purgeDlq` returns a typed refusal or purge
+count; `purgeDlqForce` retains unconditional deletion. The check is a metrics snapshot
+followed by truncate, not a transactional guarantee. A future requirement to prevent
+concurrent claims/inserts from being purged needs separate design of a generic atomic
+operation in `mori://shinzui/pgmq-hs`, including locking semantics and concurrency tests.
+Merely wrapping two calls in a transaction must not be advertised as sufficient.
+
+Decision (2026-09-15): no work is required in pgmq-hs for the acceptance criteria below.
+Its ownership remains the generic send/archive/metrics/purge primitives and their server
+compatibility. Keiro owns wrapper interpretation, operator policy, public job helpers,
+CLI presentation, documentation, and integration regressions. The 0.6 grouped-head APIs
+and partition controls do not implement any of these keiro policies.
+
+Decision (2026-09-15): keep keiro-ops mutation preview/confirmation behavior, call guarded
+`purgeDlq` on execution, map `PurgeDlqBlocked` to `Failed`, and report the count for
+`PurgeDlqPurged`. Do not turn the existing global `--force` into a hidden-row override.
+The explicit unconditional escape hatch in this plan is the Haskell `purgeDlqForce`
+API; a new CLI bypass flag is outside this plan.
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+
+The plan refresh is complete; implementation remains outstanding. The dependency upgrade
+provides a usable baseline but does not fix either DLQ defect. Three implementation
+milestones remain, now including the keiro-ops caller and tests. No source code or
+dependency bounds were changed during this refresh. Record actual test results here
+during implementation rather than carrying forward the old fixed example counts.
 
 
 ## Context and Orientation
 
-This repository (`/Users/shinzui/Keikaku/bokuno/keiro`) contains `keiro-pgmq`, typed
-background jobs over PGMQ. PGMQ stores each queue as a PostgreSQL table `pgmq.q_<name>` and
-each queue's archive as `pgmq.a_<name>`. "Reading" a message claims it by setting its `vt`
-column (visibility timeout — a timestamp before which no other read returns the row) into
-the future. A dead-letter queue (DLQ) is an ordinary PGMQ queue that failed messages are
-moved to; for a job it is derived by `Keiro.PGMQ.Runtime.queueRef` and reachable as
-`job.jobQueue.dlqName`.
 
-All the code this plan changes is in `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` (244 lines; read it
-fully before editing). The shape of a DLQ row: both writers wrap the original message in a
-JSON object — the "DLQ wrapper" — with required keys `original_message` and
-`dead_letter_reason` and, on every keiro path, metadata keys `original_message_id`,
-`original_enqueued_at`, `last_read_at`, `read_count`, and `original_headers`. The drain-path
-writer is `sendDlq` in `keiro-pgmq/src/Keiro/PGMQ/Job.hs` (lines 1049-1067), which calls the
-adapter's pure `mkDlqPayload message reason True`
-(`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Convert.hs` lines 135-160 in the shibuya
-repo at `/Users/shinzui/Keikaku/bokuno/shibuya-project/shibuya-pgmq-adapter`) — the `True`
-includes the metadata, so `original_headers` is always present when the original message
-had headers (the JSON value is `null` when it had none: the field is
-`msg.headers :: Maybe Value`). The worker-path writer is the adapter's transactional
-`deadLetterTransactionally` (`.../Pgmq/Internal.hs` lines 273-330), same wrapper.
+`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` contains the wrapper parser, public `DlqEntry`,
+and all DLQ helpers. `keiro-pgmq/src/Keiro/PGMQ.hs` re-exports the module.
+`keiro-pgmq/src/Keiro/PGMQ/Job.hs` writes DLQ wrappers in `sendDlq`;
+`keiro-pgmq/src/Keiro/PGMQ/Metrics.hs` wraps the metrics operation.
+`keiro-pgmq/test/Main.hs` contains the integration examples, `readMessages`,
+`headerKey`, and `archiveCount` helpers. `keiro-ops/src/Keiro/Ops/Pgmq.hs`
+implements the operator commands, with integration coverage in `keiro-ops/test/Main.hs`.
 
-The defects, re-verified on 2026-07-23:
+PGMQ stores live queue rows in `pgmq.q_<name>` and archive rows in `pgmq.a_<name>`.
+A read advances `vt`, the timestamp until which the row is hidden from subsequent reads.
+Keiro's read-based DLQ helpers use a 30-second timeout. Archive by id moves rows regardless
+of that timestamp, using one SQL statement that deletes from the queue and inserts into
+the archive. Purge truncates the active queue, including hidden rows, but leaves its
+archive alone.
 
-PGQ-3 (confirmed; high impact for FIFO jobs). `redriveDlq` (Dlq.hs lines 154-196) parses
-the wrapper with `parseDlqEnvelope` (lines 83-106), which reads `original_message`,
-`dead_letter_reason`, and the three id/time/count metadata keys — but never
-`original_headers`. Its `redriveOne` (lines 178-196) then re-sends *only*
-`envelope.originalMessage` via `Pgmq.sendMessage` with no headers (lines 183-189; this is
-the only send in the function). Consequences: a redriven FIFO message loses `x-pgmq-group`
-and joins PGMQ's `_default_fifo_group`; caller metadata riding in headers is gone; the
-enqueue-time `traceparent` is gone. All silent. The existing redrive test
-(`keiro-pgmq/test/Main.hs` lines 718-734) enqueues a header-less payload, so it cannot
-notice — a header-preservation assertion added today fails against current code.
+Both keiro writer paths preserve a wrapper with required `original_message` and
+`dead_letter_reason`, and optional original id/time/read-count/header metadata.
+The adapter's `mkDlqPayload` supplies the wrapper; its `mergeDlqHeaders` explains why
+row-level trace context must not be used as a fallback. Locate dependency sources with:
 
-PGQ-6 (confirmed). `readDlq` (Dlq.hs lines 108-123) reads with `delay = 30`, hiding every
-inspected row for 30 seconds — intentionally, so concurrent inspections do not collide.
-`archiveDlq` (lines 209-235) loops over `Pgmq.readMessage` (also `delay = 30`), so it can
-only archive rows that are *visible* when it runs; when everything is hidden it reads
-nothing and returns 0, and the return value is the only signal. `purgeDlq` (lines 199-201)
-calls `Pgmq.deleteAllMessagesFromQueue`, which is `pgmq.purge_queue` — a `TRUNCATE TABLE`
-(migration SQL lines 843-859 in
-`/Users/shinzui/Keikaku/bokuno/libraries/pgmq-hs-project/pgmq-hs/pgmq-migration/migrations/0001-install-v1.11.0.sql`)
-that deletes every row including invisible ones. So the module haddock's own recommended
-sequence (lines 15-21: archive to retain, then purge to clear) silently archives nothing
-and then permanently deletes the un-archived audit rows whenever it runs within the
-30-second window after an inspection. Two facts make the fix cheap: `pgmq.archive(queue,
-msg_ids[])` deletes by id with *no* `vt` predicate (SQL lines 523-549), so archiving hidden
-rows by id already works — `archiveDlqEntry` (Dlq.hs lines 238-244) proves it per-row and
-`Pgmq.batchArchiveMessages` exposes the batch form; and `Pgmq.queueMetrics` already reports
-`queueLength` (all rows) alongside `queueVisibleLength` (visible only), so "are there
-invisible rows?" is one query (`keiro-pgmq/src/Keiro/PGMQ/Metrics.hs` wraps it as
-`jobDlqMetrics`).
+```bash
+mori registry search pgmq
+mori registry show shinzui/pgmq-hs --full
+mori registry docs shinzui/pgmq-hs
+mori registry show shinzui/shibuya-pgmq-adapter --full
+```
 
-Verified-sound context to carry (do not regress): the wrapper shape above; PGMQ's archive
-is a single-statement atomic CTE (`DELETE ... RETURNING` feeding an `INSERT`, SQL lines
-490-549), so a crash cannot leave a row in both the queue and the archive; redrive is
-documented at-least-once (send to main queue, then delete from DLQ — a crash between the
-two duplicates the message; module haddock lines 23-25); and the existing DLQ examples in
-`keiro-pgmq/test/Main.hs` — readDlq decode (line 701), redrive round-trip (line 718), purge
-(line 736), malformed wrapper (line 746), archive retention (line 1223), archive survives
-purge (line 1239) — all stay green unmodified.
+The canonical dependency project is `mori://shinzui/pgmq-hs`. Within it, inspect
+`pgmq-effectful/src/Pgmq/Effectful/Effect.hs`,
+`pgmq-hasql/src/Pgmq/Hasql/Statements/Types.hs`,
+`pgmq-hasql/src/Pgmq/Hasql/Statements/Message.hs`,
+`pgmq-hasql/src/Pgmq/Hasql/Statements/QueueObservability.hs`,
+`pgmq-hasql/src/Pgmq/Hasql/Decoders.hs`,
+`pgmq-migration/migrations/manifest`, and
+`pgmq-migration/migrations/0001-install-v1.11.0.sql`.
+These source-file artifact URIs are pending; the canonical project URI plus relative paths
+identify them. The same convention applies to
+`mori://shinzui/shibuya-pgmq-adapter`, whose relevant files are
+`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Convert.hs` and
+`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Internal.hs`.
+Its operator guide is `mori://shinzui/shibuya-pgmq-adapter/docs/pgmq-dead-letter-queues`.
 
-Relevant ADR: `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md` (the only ADR
-in `docs/adr/`) fixes the one-process-span-per-delivery telemetry contract on the worker and
-one-shot execution paths. This plan does not touch those paths — `Dlq.hs` has no spans and
-gets none (its PGMQ operations are traced by the `pgmq-effectful` interpreter like any
-other) — but its tests drive `runJobOnce` to *produce* DLQ rows, and those drives must keep
-using the public API so the contract's captured-span examples remain representative. State
-changes here must not alter `sendDlq` or the drain fold; if an edit seems to need that, it
-belongs to `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
-instead.
+The relevant local ADR is
+[docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md).
+It requires one process span per delivery on both worker and one-shot paths.
+This plan preserves original trace headers without adding process spans to DLQ helpers
+or changing those processing paths. Keep the captured-span regressions intact.
 
-Sibling plans: FIFO delivery enforcement is
-`docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
-(note: it adds a required `jobOrdering` field to `Job`; if it lands before this plan, the
-new tests here construct jobs with that field — follow the compiler). Provisioning and
-retention documentation is
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`; it also
-corrects a *different* sentence of the Dlq module haddock (the "PGMQ does not expire DLQ
-rows by itself" claim, false for partitioned queues). Coordinate the haddock edits by
-keeping each plan's sentence-level change scoped to its own finding.
+The parent remains
+`docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md`.
+Sibling `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
+owns FIFO consumption policy, and
+`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`
+owns partition retention/provisioning. Neither is a prerequisite. Follow the current
+test job constructors if those plans land first. Preserving a group header does not restore
+a redriven message's old queue position: a fresh send gets a new id and read count.
 
 
 ## Plan of Work
 
-### Milestone 1 — redrive preserves the original headers (PGQ-3)
 
-Scope: parse `original_headers` out of the DLQ wrapper, expose it to operators on
-`DlqEntry`, and re-send it on redrive. At the end, a dead-lettered FIFO message redriven to
-the main queue is read back with its `x-pgmq-group`, `traceparent`, and application header
-keys intact — asserted by tests that fail against today's code.
+### Milestone 1 — preserve original headers on redrive
 
-All edits in `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`:
 
-1. Extend the internal `DlqEnvelope` (lines 75-81) with
-   `envelopeOriginalHeaders :: !(Maybe Value)` and parse it in `parseDlqEnvelope`'s parser
-   (lines 87-102) with `obj .:? "original_headers"`, then normalize JSON `null` to
-   `Nothing` (the drain-path writer serializes `Maybe Value`, so a header-less original
-   yields `"original_headers": null`; treat `Just Null` as `Nothing` so the redrive branch
-   below stays honest). Aeson note for the implementer: `.:?` on a present-but-null field
-   yields `Just Null` for a `Maybe Value` target only via `parseJSON`; write the
-   normalization explicitly rather than relying on instance subtleties:
+Extend internal `DlqEnvelope` with `envelopeOriginalHeaders :: Maybe Value` and public
+`DlqEntry` with `originalHeaders :: Maybe Value`. Parse the wrapper's
+`original_headers` as optional, treating absent and null as `Nothing`; preserve other
+JSON values unchanged. Populate the field in `toEntry`, including `Nothing` in its
+malformed-wrapper branch. Keep the wrapper and raw body available for forensics.
 
-   ```haskell
-   rawHeaders <- obj .:? "original_headers"
-   let envelopeOriginalHeaders = case rawHeaders of
-           Just Null -> Nothing
-           other -> other
-   ```
+In `redriveOne`, use `Pgmq.sendMessageWithHeaders` for `Just headers`, constructing
+`SendMessageWithHeaders` with the physical queue name, original body,
+`MessageHeaders headers`, and `delay = Nothing`. Keep bare `sendMessage` for
+`Nothing`. Delete the DLQ row after sending as today. Redrive remains at-least-once:
+a crash between send and delete can duplicate delivery.
 
-2. Expose it on the public record: add `originalHeaders :: !(Maybe Value)` to `DlqEntry`
-   (lines 60-73) with a haddock ("the preserved PGMQ headers of the original message —
-   group key, trace context, caller metadata — when the DLQ writer recorded them"), fill it
-   in `toEntry` (lines 125-148: `Nothing` in the malformed branch, the parsed value in the
-   happy branch). This is additive but changes the record's field set; the record is
-   constructed only inside this module, so no external breakage.
+Add tests in `keiro-pgmq/test/Main.hs` for FIFO group, valid fixed `traceparent`,
+and application metadata preservation, using existing enqueue/Dead-handler helpers.
+Assert `readDlq` exposes the original headers. Add wrappers with missing and explicit
+null headers, and a row whose own headers conflict with wrapper headers; only the
+wrapper must determine the result. Legacy wrappers must redrive without adopting row
+headers. Retain malformed-wrapper behavior. Use separate fixtures for inspect and redrive
+tests so inspection does not hide the redrive input.
 
-3. In `redriveOne` (lines 178-196), branch on the parsed headers; import
-   `SendMessageWithHeaders (..)` and `MessageHeaders (..)` from `Pgmq.Effectful` (extend
-   the existing import list at lines 45-53):
+Run `cabal test keiro-pgmq-test`. First write behavioral preservation tests that use
+existing APIs and observe their failure against unchanged redrive; then implement the
+fields and behavior and add field assertions. Do not stash unrelated work to demonstrate
+the regression. Acceptance is verbatim header preservation and unchanged headerless
+redrive, with existing processing/telemetry examples passing.
 
-   ```haskell
-   Right envelope -> do
-       _ <- case envelope.envelopeOriginalHeaders of
-           Just headers ->
-               Pgmq.sendMessageWithHeaders
-                   SendMessageWithHeaders
-                       { queueName = job.jobQueue.physicalName
-                       , messageBody = MessageBody envelope.originalMessage
-                       , messageHeaders = MessageHeaders headers
-                       , delay = Nothing
-                       }
-           Nothing ->
-               Pgmq.sendMessage
-                   SendMessage
-                       { queueName = job.jobQueue.physicalName
-                       , messageBody = MessageBody envelope.originalMessage
-                       , delay = Nothing
-                       }
-       ...delete unchanged...
-   ```
 
-4. Update `redriveDlq`'s haddock (lines 150-153): redriven messages carry the original
-   headers when the DLQ wrapper preserved them (all keiro-written rows), so a FIFO
-   message returns to its group and the trace link survives; wrappers without
-   `original_headers` redrive header-less.
+### Milestone 2 — archive inspected ids and guard purge, including the CLI
 
-New tests in `keiro-pgmq/test/Main.hs`, next to the existing redrive example (line 718).
-Use the existing helpers: `enqueueWithHeaders`/`enqueueToGroup` to produce a message with
-headers, a `Dead`-returning handler via `runJobOnce` to dead-letter it, `redriveDlq`, then
-`readMessages job.jobQueue.physicalName 1` and the suite's `headerKey` helper to inspect
-the redriven row's raw headers:
 
-- "redriveDlq preserves the FIFO group key": enqueue with `enqueueToGroup job "g1" p`,
-  dead-letter, redrive, read the main-queue row raw, assert
-  `headerKey "x-pgmq-group" m.headers == Just (String "g1")`.
-- "redriveDlq preserves trace and application headers": enqueue with
-  `enqueueWithHeaders job (MessageHeaders (object ["traceparent" .= t, "x-tenant" .= String "acme"])) p`
-  where `t` is a fixed valid W3C value (copy the literal from the existing traceparent
-  example at line 862), dead-letter, redrive, assert both keys survive verbatim.
-- "redriveDlq without preserved headers behaves as before": send a hand-written wrapper
-  containing only `original_message` and `dead_letter_reason` directly to the DLQ with
-  `Pgmq.sendMessage` (the malformed-wrapper example at line 746 shows the technique),
-  redrive, assert the main-queue row has no headers and the redrive count is 1.
-- Extend the readDlq decode example (line 701) or add a sibling: `originalHeaders` on the
-  entry is `Just` the enqueued header object for a headered original and `Nothing` for a
-  header-less one.
+Add and export `archiveDlqEntries`. Empty input returns `[]` without a statement;
+otherwise call `Pgmq.batchArchiveMessages` with
+`BatchMessageQuery { queueName = job.jobQueue.dlqName, messageIds = ids }`.
+Return the ids actually moved, treating unknown or already archived ids as omissions.
+Do not promise returned-id order. Keep `archiveDlqEntry` and its existing
+`archiveDlqEntryById` numeric convenience wrapper.
 
-Acceptance: the two preservation examples fail before the `Dlq.hs` edit (run them against
-stashed changes to confirm at least once) and pass after; the whole suite is green.
+Add `PurgeDlqResult` and implement the guard as follows; import `QueueMetrics (..)`
+so record selectors are available along with the existing effect imports:
 
-### Milestone 2 — archive by explicit ids; purge refuses over invisible rows (PGQ-6)
+```haskell
+data PurgeDlqResult
+  = PurgeDlqPurged !Int64
+  | PurgeDlqBlocked !Int64
+  deriving stock (Eq, Show)
 
-Scope: give the runbook a visibility-proof archive step and a guarded purge. At the end an
-operator can inspect and immediately archive exactly what was inspected, and cannot
-truncate hidden rows without typing "force".
+purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es PurgeDlqResult
+purgeDlq job = do
+  metrics <- Pgmq.queueMetrics job.jobQueue.dlqName
+  let invisible = metrics.queueLength - metrics.queueVisibleLength
+  if invisible > 0
+    then pure (PurgeDlqBlocked invisible)
+    else PurgeDlqPurged <$> Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
 
-All edits in `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` (plus its import list and the export list
-at lines 27-34):
+purgeDlqForce :: (Pgmq :> es, IOE :> es) => Job p -> Eff es Int64
+purgeDlqForce job = Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
+```
 
-1. Add `archiveDlqEntries`:
+The blocked count is from the metrics observation; the purged count is what PGMQ reports.
+Neither is a concurrency guarantee. Exceptions from either operation propagate normally.
+Do not consult `defaultPartitionLength`, or change pgmq-hasql's decoder.
 
-   ```haskell
-   -- | Archive (retain) exactly these DLQ rows by id, regardless of their
-   -- visibility state. PGMQ's @archive@ has no visibility predicate, so rows
-   -- hidden by a prior 'readDlq' inspection are archived too — this is the
-   -- verb to pair with 'readDlq': archive the 'dlqMessageId's you inspected.
-   -- Returns the ids actually moved (already-archived or unknown ids are
-   -- reported missing by omission). Empty input issues no statement.
-   archiveDlqEntries :: (Pgmq :> es, IOE :> es) => Job p -> [MessageId] -> Eff es [MessageId]
-   archiveDlqEntries _ [] = pure []
-   archiveDlqEntries job msgIds =
-       Pgmq.batchArchiveMessages
-           BatchMessageQuery
-               { queueName = job.jobQueue.dlqName
-               , messageIds = msgIds
-               }
-   ```
+Update `runPurge` in `keiro-ops/src/Keiro/Ops/Pgmq.hs` after its existing confirmation.
+Return `Failed` with the hidden count and guidance to archive inspected ids or wait when
+blocked; return success with the reported deleted count when purged. The global force flag
+continues to authorize executing the guarded operation. Preserve preview and confirmation
+behavior. Audit all `purgeDlq` and `DlqEntry` construction sites, including external
+migration guidance for callers that silently discard results.
 
-   Import `BatchMessageQuery (..)` from `Pgmq.Effectful`. (Check the record's exact field
-   names in `pgmq-hasql`'s `Pgmq.Hasql.Statements.Types` before writing; `pgmq-effectful`
-   re-exports it and the operation `batchArchiveMessages :: BatchMessageQuery -> Eff es [MessageId]`
-   exists at `pgmq-effectful/src/Pgmq/Effectful/Effect.hs` lines 269-270.)
+In `keiro-pgmq/test/Main.hs`, assert purge refuses immediately after inspection and
+leaves all rows intact; force purge removes hidden rows; explicit-id archive moves hidden
+rows and preserves archive contents; count-based archive returns zero for hidden-only
+input; empty/idempotent/unknown-id batch archive has the documented outcome. Compare
+returned ids as sets or sorted lists. Update existing purge assertions for the new result.
 
-2. Replace `purgeDlq` (lines 198-201) with a guarded version plus a force escape hatch:
+In `keiro-ops/test/Main.hs`, cover preview, successful purge, and inspect-then-execute
+with the existing force flag: the last case returns `Failed` and leaves DLQ depth
+unchanged. Existing archive-by-entry continues to work while a row is hidden.
+Run both affected suites. Acceptance is observable refusal in both the library and operator
+command, and successful archival of the exact inspected ids without waiting.
 
-   ```haskell
-   -- | The outcome of a guarded 'purgeDlq'.
-   data PurgeDlqResult
-       = -- | The DLQ was truncated; this many rows were deleted.
-         PurgeDlqPurged !Int64
-       | -- | Refused: this many rows are currently invisible (claimed by an
-         -- inspection, a redrive in progress, or an in-flight consumer).
-         -- Deleting them would destroy rows an operator may believe are safe
-         -- in the archive. Wait out the visibility window, archive by id
-         -- ('archiveDlqEntries'), or use 'purgeDlqForce'.
-         PurgeDlqBlocked !Int64
-       deriving stock (Eq, Show)
 
-   -- | Delete all rows in the DLQ — unless some are invisible, in which case
-   -- refuse with 'PurgeDlqBlocked'. The check and the truncate are separate
-   -- statements: a reader that claims a row between them is not detected, so
-   -- this guards the documented runbook race, not concurrent operators.
-   purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es PurgeDlqResult
-   purgeDlq job = do
-       metrics <- Pgmq.queueMetrics job.jobQueue.dlqName
-       let invisible = metrics.queueLength - metrics.queueVisibleLength
-       if invisible > 0
-           then pure (PurgeDlqBlocked invisible)
-           else PurgeDlqPurged <$> Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
+### Milestone 3 — document and prove the complete operator workflow
 
-   -- | Unconditionally delete all rows in the DLQ, invisible ones included
-   -- (PGMQ @purge_queue@, a TRUNCATE). The pre-plan behavior of 'purgeDlq'.
-   purgeDlqForce :: (Pgmq :> es, IOE :> es) => Job p -> Eff es Int64
-   purgeDlqForce job = Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
-   ```
 
-   `QueueMetrics`'s field names are `queueLength` and `queueVisibleLength`
-   (`keiro-pgmq/src/Keiro/PGMQ/Metrics.hs` uses both). Export `PurgeDlqResult (..)`,
-   `purgeDlqForce`, and `archiveDlqEntries`; keep exporting `purgeDlq`.
+Rewrite the DLQ module haddock to explain the timeout on every read-based verb, preserved
+headers, new queue position on redrive, typed purge outcomes, and the guard's concurrency
+limit. The example inspects, archives the returned ids, verifies all requested ids were
+moved, and only then considers purge. If archival omits ids, stop and investigate rather
+than claiming retention succeeded.
 
-3. Document the visibility window on the count-based `archiveDlq` (lines 203-208): it
-   archives *visible* rows only — rows hidden by a prior inspection are skipped and do not
-   count; use `archiveDlqEntries` with the inspected ids to archive through the window.
-   Do not change its behavior.
+For a full-queue audit, pause producers/other operators, archive every row that requires
+retention, and verify the active depth is zero before purge. Reading a bounded batch and
+then purging would still destroy uninspected visible rows. Retention guarantees for
+partitioned archives remain subject to partition maintenance; coordinate that explanation
+with plan 118 and do not promise indefinite retention.
 
-4. Update the one existing `purgeDlq` call site in tests: the "purgeDlq empties the DLQ"
-   example (`test/Main.hs` line 736) and "archived DLQ rows survive a purge" (line 1239)
-   now bind the result (assert `PurgeDlqPurged 1` in the former; in the latter the archive
-   ran first so `PurgeDlqPurged 0` — adjust to what the archive left, currently zero rows).
+Add a no-sleep test: dead-letter two rows, inspect both, archive their ids, then guarded
+purge. Expect two inspected entries, both ids moved, `PurgeDlqPurged 0`, archive count
+two, and active depth zero. Keep the existing archive-survives-purge example.
 
-New tests in `keiro-pgmq/test/Main.hs`:
-
-- "purgeDlq refuses while inspected rows are hidden": dead-letter one message, `readDlq
-  job 1` (hides it for 30 s), then `purgeDlq` — assert `PurgeDlqBlocked 1` and DLQ
-  `queueLength` still 1.
-- "purgeDlqForce truncates hidden rows": same setup, `purgeDlqForce` returns 1, DLQ empty.
-  (This pins the sharp edge deliberately: the force verb exists and is destructive.)
-- "archiveDlqEntries archives rows a prior inspection hid": dead-letter two messages,
-  `entries <- readDlq job 2`, immediately
-  `archiveDlqEntries job (fmap (.dlqMessageId) entries)` — assert both ids returned, DLQ
-  `queueLength` 0, and `archiveCount` (existing raw-SQL helper, `test/Main.hs` lines
-  106-120) reports 2.
-- "count-based archiveDlq skips hidden rows (documented)": dead-letter one, `readDlq job 1`,
-  then `archiveDlq job 10` — assert it returns 0 and the row still exists. This pins the
-  documented limitation so a future change to it is deliberate.
-
-Acceptance: suite green; the refusal example fails against pre-plan code (old `purgeDlq`
-returned `()` and deleted the hidden row).
-
-### Milestone 3 — a truthful runbook, end to end
-
-Scope: rewrite the module haddock's operational guidance and prove the corrected runbook
-with one end-to-end example. At the end, an operator following the haddock verbatim cannot
-lose audit rows to the visibility window.
-
-1. Rewrite the `Keiro.PGMQ.Dlq` module haddock (lines 6-26). Keep the wrapper-shape
-   paragraph and the at-least-once redrive paragraph. Replace the retention paragraph with
-   the corrected runbook, in prose along these lines: every read-based verb (`readDlq`,
-   `redriveDlq`, `archiveDlq`) claims the rows it touches for 30 seconds; within that
-   window those rows are invisible to the other verbs. The audit-safe sequence is:
-   `readDlq` to inspect, `archiveDlqEntries` with the inspected `dlqMessageId`s to retain
-   exactly those rows (archive-by-id sees through the window), then `purgeDlq` — which
-   refuses with `PurgeDlqBlocked` if anything is still invisible (someone else inspecting,
-   a redrive mid-flight) and `purgeDlqForce` for the eyes-open override. Mention that a
-   redriven message keeps its original headers (M1). Do not touch the "PGMQ does not expire
-   DLQ rows by itself" sentence — its correction (it is false for partitioned queues)
-   belongs to `docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`.
-
-2. Add the end-to-end example "the documented inspect-archive-purge runbook is
-   visibility-safe": dead-letter two messages; with no sleeps anywhere run
-   `entries <- readDlq job 10`, `archiveDlqEntries job (fmap (.dlqMessageId) entries)`,
-   `purgeDlq job`; assert two entries were read, two ids archived, the purge result is
-   `PurgeDlqPurged 0` (nothing left un-archived), `archiveCount` reports 2, and the DLQ is
-   empty. Against pre-plan code this exact sequence archived zero and truncated both rows —
-   the example is the finding, inverted.
-
-Acceptance: `cabal test keiro-pgmq-test` fully green; reading the module haddock top to
-bottom describes exactly what the code now does.
+Update `keiro-pgmq/CHANGELOG.md` for the result type, record-field compatibility change,
+force API, and header behavior; update `keiro-ops/CHANGELOG.md` for refusal semantics
+under its existing execution flag. Run both affected suites and build the project.
+Review the Decision Log for ADR distillation under the repository's current ADR profile
+before declaring implementation done. This refresh establishes no new implemented
+architecture and does not change the existing telemetry ADR.
 
 
 ## Concrete Steps
 
-All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro`. The suite
-starts its own PostgreSQL (keiro-test-support template-database fixture); no external
-database or environment variables are needed.
 
-Baseline before any edit:
+Run from the keiro repository root. The integration suites use
+`keiro-test-support/src/Keiro/Test/Postgres.hs` to start an ephemeral PostgreSQL server
+and migrate a template database, then clone it per example. PostgreSQL tools must be on
+PATH; use the project's development shell if they are missing.
 
 ```bash
-cd /Users/shinzui/Keikaku/bokuno/keiro
-cabal test keiro-pgmq-test
+cabal test keiro-pgmq-test keiro-ops-test
 ```
 
-Expected tail:
+The expected outcome is both suites reporting PASS and zero failures. Record the actual
+example/pending counts at execution time. Two pgmq examples are currently marked pending
+(transient polling fault injection and live partition configuration); do not add new pending
+cases to conceal DLQ failures. If required tooling is absent, run:
 
-```text
-58 examples, 0 failures, 2 pending
-Test suite keiro-pgmq-test: PASS
+```bash
+nix develop -c cabal test keiro-pgmq-test keiro-ops-test
 ```
 
-(The two pending examples are pre-existing and unrelated: `test/Main.hs` lines 645 and
-1096.) If `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
-has landed first, the baseline count is higher and `Job` records need its `jobOrdering`
-field — the compiler will say so; this plan's FIFO redrive tests then declare
-`jobOrdering = FifoThroughput`.
+Implement M1, M2, and M3 in order, running the affected suites after each. Before completion:
 
-Then per milestone: edit as described, re-run the same command, and commit on green with
-Conventional Commits:
-
-```text
-fix(keiro-pgmq): preserve original headers on DLQ redrive
-feat(keiro-pgmq)!: guard purgeDlq behind a visibility check and add archiveDlqEntries
-docs(keiro-pgmq): correct the DLQ runbook for the visibility window
+```bash
+rg -n 'purgeDlq|DlqEntry' keiro-pgmq keiro-ops
+cabal build all
+cabal test keiro-pgmq-test keiro-ops-test
+git diff --check
 ```
 
-To demonstrate that the M1 preservation tests bite, run them once against the unedited
-`Dlq.hs` (for example, write the tests first and observe the failures):
+Use Conventional Commits when committing implementation, with the plan and intention
+trailers. Commit only changes belonging to this work:
 
 ```text
-expected: Just (String "g1")
- but got: Nothing
+ExecPlan: docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md
+Intention: intention_01m2b1p3vhe179jtr5qz6ghqks
 ```
 
 
 ## Validation and Acceptance
 
-The plan is done when all of the following are observable from the repository root:
 
-1. `cabal test keiro-pgmq-test` prints `0 failures, 2 pending`, with the example count
-   grown by this plan's nine new examples (record the exact final count in Progress).
-2. A dead-lettered message enqueued with `enqueueToGroup job "g1" p`, after `redriveDlq`,
-   is read back from the main queue with `x-pgmq-group = "g1"` — and the analogous
-   assertions hold for `traceparent` and an application header key.
-3. The sequence `readDlq` → `purgeDlq` with no wait refuses: the purge returns
-   `PurgeDlqBlocked n` with `n > 0` and deletes nothing.
-4. The sequence `readDlq` → `archiveDlqEntries (inspected ids)` → `purgeDlq` with no wait
-   retains every inspected row in `pgmq.a_<dlq>` (raw-SQL `archiveCount` proves it) and
-   ends with an empty DLQ.
-5. All six pre-existing DLQ examples pass unmodified except the two `purgeDlq` call sites,
-   which changed only because the return type did (their assertions are strictly
-   stronger, never weaker).
-6. The ADR-0001 captured-span examples (`test/Main.hs` lines 901-1060) pass unmodified —
-   this plan never touches the drain or worker execution paths.
+Headered messages return to the main queue with the wrapper's exact group, trace, and
+application metadata. Missing/null wrapper headers remain headerless even if the DLQ row
+has headers. Malformed wrappers remain inspectable and are not redriven.
+
+An immediate inspection followed by guarded purge returns `PurgeDlqBlocked n` for
+`n > 0` and deletes nothing. The same sequence through keiro-ops reports failure,
+including when its normal mutation flag is supplied. Explicit force purge remains
+unconditional through its distinctly named Haskell API.
+
+Inspection followed by archive-by-ids retains every inspected row despite the timeout.
+The no-wait two-row runbook finishes with two archive rows, no active rows, and
+`PurgeDlqPurged 0`. Empty/repeated/unknown-id requests behave as documented.
+These examples run without concurrent queue activity; no concurrency-safety claim is made.
+
+Both affected suites pass without new pending tests, all project packages build, and the
+existing job process-span contract remains intact. Record actual commands and outcomes in
+Progress and Outcomes & Retrospective. No upstream package release or SQL change is part
+of acceptance.
 
 
 ## Idempotence and Recovery
 
-Every edit is an ordinary source change under test; re-running any step is safe, and the
-test fixture clones a fresh database per example so failed runs leave no residue.
 
-The `purgeDlq` signature change is compile-loud: any call site not updated fails to build.
-If a consumer outside this repository needs the old behavior verbatim, `purgeDlqForce` *is*
-the old behavior (modulo also returning the deleted count).
+Tests use isolated databases. Retrying archive-by-id is safe: rows already archived are
+omitted from the returned list. Keep inspected ids if a later operation fails so operators
+can retry archival directly without waiting for visibility.
 
-Operationally nothing in this plan is destructive beyond what the verbs already were:
-`archiveDlqEntries` only moves rows into the archive (atomic single statement upstream);
-the newly guarded `purgeDlq` strictly refuses in more cases than before; only
-`purgeDlqForce` retains the old truncate-everything semantics, clearly named. If M2 must be
-rolled back independently, M1 stands alone (redrive headers have no dependency on the
-archive/purge changes), and vice versa.
+Redrive remains at-least-once and application handlers must tolerate duplicates.
+A blocked purge changes nothing; wait for visibility to expire or archive known ids.
+Waiting alone does not retain evidence: purge still permanently deletes remaining rows.
+Force purge is intentionally destructive. Quiesce concurrent activity for the documented
+audit workflow, and never treat a metrics snapshot as a lock.
+
+M1 can ship independently of M2. Roll back the M2 library and keiro-ops caller together
+if necessary because their result types must agree. No schema migration or dependency
+rollback is required.
 
 
 ## Interfaces and Dependencies
 
-At the end of the plan, `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` exports (module
-`Keiro.PGMQ.Dlq`, re-exported through `Keiro.PGMQ`):
+
+Keep existing exports, including `archiveDlqEntryById`, and add:
 
 ```haskell
-data DlqEntry p = DlqEntry
-    { dlqMessageId :: !MessageId
-    , reason :: !Text
-    , originalPayload :: !(Either JobDecodeError p)
-    , originalMessageId :: !(Maybe Int64)
-    , originalEnqueuedAt :: !(Maybe UTCTime)
-    , readCount :: !(Maybe Int64)
-    , originalHeaders :: !(Maybe Value)  -- new
-    , rawBody :: !Value
-    }
+-- New field on exported DlqEntry p:
+originalHeaders :: Maybe Value
 
-readDlq :: (Pgmq :> es, IOE :> es) => Job p -> Int32 -> Eff es [DlqEntry p]      -- unchanged
-redriveDlq :: (Pgmq :> es, IOE :> es) => Job p -> Int -> Eff es Int              -- unchanged type, preserves headers
-archiveDlq :: (Pgmq :> es, IOE :> es) => Job p -> Int -> Eff es Int              -- unchanged, documented
-archiveDlqEntry :: (Pgmq :> es, IOE :> es) => Job p -> MessageId -> Eff es Bool  -- unchanged
-archiveDlqEntries :: (Pgmq :> es, IOE :> es) => Job p -> [MessageId] -> Eff es [MessageId]  -- new
-
-data PurgeDlqResult = PurgeDlqPurged !Int64 | PurgeDlqBlocked !Int64             -- new
-purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es PurgeDlqResult            -- breaking: was Eff es ()
-purgeDlqForce :: (Pgmq :> es, IOE :> es) => Job p -> Eff es Int64                -- new: old behavior
+archiveDlqEntries :: (Pgmq :> es, IOE :> es) => Job p -> [MessageId] -> Eff es [MessageId]
+data PurgeDlqResult = PurgeDlqPurged !Int64 | PurgeDlqBlocked !Int64
+purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es PurgeDlqResult
+purgeDlqForce :: (Pgmq :> es, IOE :> es) => Job p -> Eff es Int64
 ```
 
-Dependencies, all already in `keiro-pgmq.cabal` with satisfied bounds (`pgmq-effectful
->=0.4 && <0.5`): `Pgmq.Effectful`'s existing operations `sendMessageWithHeaders`,
-`batchArchiveMessages` (with `BatchMessageQuery`), `queueMetrics` (with `QueueMetrics`'s
-`queueLength`/`queueVisibleLength`), and `deleteAllMessagesFromQueue`. No pgmq-hs, shibuya,
-or SQL-migration change is required by this plan (see the Decision Log for why), so it
-rides no release train and can land in any order relative to its siblings
-`docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md` and
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`.
+`readDlq`, `redriveDlq`, `archiveDlq`, `archiveDlqEntry`, and
+`archiveDlqEntryById` keep their existing types. Document compatibility for exported
+record construction and for callers that ignored the old purge result.
 
-Revision (2026-09-12): Aligned the sibling dependency handoff with client-only ordering and optional additive indexes; DLQ behavior remains independently implementable.
+The existing `>=0.6 && <0.7` bounds are sufficient.
+`mori://shinzui/pgmq-hs/packages/pgmq-effectful` supplies
+`sendMessageWithHeaders`, `batchArchiveMessages`, `queueMetrics`, and
+`deleteAllMessagesFromQueue`, including their argument/result types through its public
+umbrella. `mori://shinzui/pgmq-hs/packages/pgmq-hasql` owns statement encoding and the
+1.12/1.13-compatible metrics projection.
+`mori://shinzui/pgmq-hs/packages/pgmq-migration` already supplies the native 1.13 schema.
+Keep those responsibilities upstream and consume their released interfaces in keiro.
+
+Release verification on 2026-09-15 used Hackage's package preferred-version endpoints and
+upstream Git tags. To repeat the check without relying on a stale local registry:
+
+```bash
+curl -fsSL https://hackage.haskell.org/package/pgmq-effectful/preferred.json
+curl -fsSL https://hackage.haskell.org/package/pgmq-hasql/preferred.json
+git ls-remote --tags https://github.com/shinzui/pgmq-hs.git
+```
+
+These registry/remote endpoints verify the release of `mori://shinzui/pgmq-hs`;
+the canonical project and package URIs above identify the dependency.
+
+Revision (2026-09-12): Aligned the sibling dependency handoff with client-only ordering
+and optional additive indexes; DLQ behavior remains independently implementable.
+
+Revision (2026-09-15): Refreshed against released pgmq-hs 0.6.0.0 and current keiro source.
+Corrected dependency/migration premises, made repository ownership explicit, added the
+keiro-ops caller and regressions, removed stale line numbers and fixed test counts, and
+clarified best-effort purge, compatibility, and complete-audit limitations.
