@@ -1,0 +1,4 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.inbox.downstream.delegated-history-duplicate.events-10,55286800178,27461597644,23771045,644970,101711872
+All.inbox.downstream.delegated-history-duplicate.events-1000,57160800152,27063578746,23870063,640582,101711872
+All.inbox.downstream.delegated-history-duplicate.events-100000,57141400166,29533090332,23907382,640323,101711872

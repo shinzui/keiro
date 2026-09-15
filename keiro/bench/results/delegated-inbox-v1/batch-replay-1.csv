@@ -1,0 +1,17 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.inbox.downstream.table-downstream-batch-100.repeated-key.metrics-off,4046249958,7007837098,5125113,34078,101711872
+All.inbox.downstream.table-downstream-batch-100.repeated-key.metrics-on,5860600038,7138870424,7094441,158556,101711872
+All.inbox.downstream.table-downstream-batch-100.all-duplicate.metrics-off,3400325004,3407320354,4839406,20994,101711872
+All.inbox.downstream.table-downstream-batch-100.all-duplicate.metrics-on,5052150015,6726986616,6812124,148674,101711872
+All.inbox.downstream.delegated-batch-100.repeated-key.metrics-off,1328174982,1694268692,953771,9381,101711872
+All.inbox.downstream.delegated-batch-100.repeated-key.metrics-on,3166925017,3530304180,2923170,137063,101711872
+All.inbox.downstream.delegated-batch-100.all-duplicate.metrics-off,915162502,1694436414,676789,7182,101711872
+All.inbox.downstream.delegated-batch-100.all-duplicate.metrics-on,2654925004,3488936822,2646126,131656,101711872
+All.inbox.downstream.table-downstream-batch-1000.repeated-key.metrics-off,1111862502,1714057886,1854364,29425,101711872
+All.inbox.downstream.table-downstream-batch-1000.repeated-key.metrics-on,3090049996,3558255072,3822460,177576,101711872
+All.inbox.downstream.table-downstream-batch-1000.all-duplicate.metrics-off,660374995,850823836,1567012,15773,101711872
+All.inbox.downstream.table-downstream-batch-1000.all-duplicate.metrics-on,2454825011,3425767936,3535645,154564,101711872
+All.inbox.downstream.delegated-batch-1000.repeated-key.metrics-off,573943753,886545054,736989,5273,101711872
+All.inbox.downstream.delegated-batch-1000.repeated-key.metrics-on,2465499980,3389319958,2705211,140768,101711872
+All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-off,223240625,426963212,459460,2106,101711872
+All.inbox.downstream.delegated-batch-1000.all-duplicate.metrics-on,1976200025,3479992606,2428291,135802,101711872

@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.inbox.downstream.table-downstream-single.repeated-key.metrics-off,303106200063,28386436618,363317494,1739325,102760448
+All.inbox.downstream.table-downstream-single.repeated-key.metrics-on,309922599936,31532136762,365109100,1872398,102760448
+All.inbox.downstream.delegated-single.repeated-key.metrics-off,62453200076,27438342194,24375564,641677,102760448
+All.inbox.downstream.delegated-single.repeated-key.metrics-on,65134000024,30133252408,26370315,778895,102760448

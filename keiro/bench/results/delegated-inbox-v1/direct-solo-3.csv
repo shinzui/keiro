@@ -1,0 +1,2 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.inbox.downstream.delegated-direct-single.fresh.metrics-off,1626138400051,1685616017446,192459002,9541734,101711872

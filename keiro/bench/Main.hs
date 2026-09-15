@@ -17,6 +17,7 @@ import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
+import InboxDelegatedBench (prepareInboxDelegatedBenchmarks, runInboxDelegatedExplainIfRequested)
 import Keiki.Core
   ( Edge (..),
     HsPred,
@@ -159,10 +160,12 @@ main =
         readModelFixture <- setupReadModelBench readModelStore readModelRunner
         runReadModelExplainEvidenceIfRequested readModelFixture
         runReadModelLatencyEvidenceIfRequested readModelFixture
-        defaultMain (benchmarks store runner metrics rebuildRunCounter <> readModelBenchmarks readModelFixture <> producerIdentityBenchmarks store rebuildRunCounter)
+        delegatedInboxBenchmarks <- prepareInboxDelegatedBenchmarks store metrics
+        runInboxDelegatedExplainIfRequested store
+        defaultMain (benchmarks store runner metrics rebuildRunCounter delegatedInboxBenchmarks <> readModelBenchmarks readModelFixture <> producerIdentityBenchmarks store rebuildRunCounter)
 
-benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> IORef Int -> [Benchmark]
-benchmarks store runner metrics rebuildRunCounter =
+benchmarks :: Store.KirokuStore -> StoreRunner -> Telemetry.KeiroMetrics -> IORef Int -> [Benchmark] -> [Benchmark]
+benchmarks store runner metrics rebuildRunCounter delegatedInboxBenchmarks =
   [ bgroup
       "outbox"
       [ scenarioBench store hotKey,
@@ -174,7 +177,8 @@ benchmarks store runner metrics rebuildRunCounter =
       [ inboxScenarioBench store (singleFull metrics),
         inboxScenarioBench store singleNoMetrics,
         inboxScenarioBench store batch100,
-        inboxScenarioBench store singleSlim
+        inboxScenarioBench store singleSlim,
+        bgroup "downstream" delegatedInboxBenchmarks
       ],
     bgroup
       "command"

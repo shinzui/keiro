@@ -1,0 +1,20 @@
+server_version = 18.6
+fsync = off
+synchronous_commit = off
+full_page_writes = off
+
+Result  (cost=2.39..2.40 rows=1 width=1) (actual time=0.133..0.133 rows=1.00 loops=1)
+  Buffers: shared hit=4 read=3 dirtied=1 written=3
+  InitPlan 2
+    ->  Index Only Scan using stream_events_pkey on stream_events se  (cost=1.18..7.24 rows=5 width=0) (actual time=0.132..0.132 rows=1.00 loops=1)
+          Index Cond: ((event_id = '70bd2cf5-88db-5e11-b9e7-8535950ab56c'::uuid) AND (stream_id = (InitPlan 1).col1))
+          Heap Fetches: 1
+          Index Searches: 1
+          Buffers: shared hit=4 read=3 dirtied=1 written=3
+          InitPlan 1
+            ->  Seq Scan on streams  (cost=0.00..1.01 rows=1 width=8) (actual time=0.009..0.009 rows=1.00 loops=1)
+                  Filter: ((deleted_at IS NULL) AND (stream_name = 'benchInbox-history-100000-1'::text))
+                  Rows Removed by Filter: 15
+                  Buffers: shared hit=1
+Planning Time: 0.111 ms
+Execution Time: 0.150 ms

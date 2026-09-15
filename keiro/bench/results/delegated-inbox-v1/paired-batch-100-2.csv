@@ -1,0 +1,3 @@
+Name,Mean (ps),2*Stdev (ps),Allocated,Copied,Peak Memory
+All.inbox.downstream.table-downstream-batch-100.fresh.metrics-off,1289219200204,1140884813938,364681277,10364114,101711872
+All.inbox.downstream.delegated-batch-100.fresh.metrics-off,1442037200076,92208288660,191685445,9663444,101711872
