@@ -5,357 +5,257 @@ title: "Delegated-idempotence inbox intake: bypass the keiro_inbox table when th
 kind: exec-plan
 created_at: 2026-07-02T02:34:14Z
 intention: "intention_01kwganm3be0q8z4g6rmcqdj05"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:44:35Z
+      mode: "update"
+      note: "Refresh current runtime and DSL contracts; correct delegated duplicate, failure, identity and batch APIs; require measured performance gates."
 ---
 
 # Delegated-idempotence inbox intake: bypass the keiro_inbox table when the downstream state machine already dedupes
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
+
+This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective current. This revision is grounded in commit `97c1c27a` on 2026-09-15. The delegated feature is not implemented.
 
 
 ## Purpose / Big Picture
 
-keiro's idempotent inbox (`keiro/src/Keiro/Inbox.hs`) guarantees that a Kafka-delivered integration event runs its local handler at most once by inserting a row into the Postgres table `keiro_inbox`, keyed on `(source, dedupe_key)`, in the same transaction as the handler. That guarantee is exactly right when the handler's effects are arbitrary SQL. But many consumers do exactly one thing in their handler: dispatch a command into an event-sourced aggregate under a *deterministic event id*, or seed a durable workflow under a *deterministic workflow id*. Both of those targets are already idempotent state machines — the event store's unique constraint on event ids collapses a replayed command into a benign duplicate, and a workflow journal only ever appends a given step once. For those consumers, the `keiro_inbox` insert is a second uniqueness check on the same identity: it costs an extra row write, unique-index maintenance, WAL volume, table bloat, and a periodic garbage-collection pass, and it buys nothing the downstream state machine does not already provide.
 
-After this plan, a consumer whose handler is fully guarded by a downstream state machine can opt into **delegated idempotence**: a new entry point `runInboxDelegated` (plus a batch variant) computes the same dedupe key as today — key computation is pure, no I/O — but never touches `keiro_inbox`. Instead, the handler must *prove* it delegated the duplicate check by returning a witness value, `DelegatedOutcome`, that it can only construct by folding the downstream duplicate signal (the store's `DuplicateEvent` rejection, a process-manager `PMCommandDuplicate`, or an already-seeded workflow instance). The wrapper maps that witness back onto the existing `InboxResult` classification, so metrics, ack dispositions, and the keiro-dsl disposition table all keep working unchanged.
+Allow an integration-event consumer to avoid the `keiro_inbox` write when its downstream operation already durably prevents repeated effects. The new entry points compute the existing dedupe key, invoke an explicitly idempotent handler, and translate its report into `InboxResult`. They perform no database work themselves. Existing table-backed entry points remain the default.
 
-Observable outcome: an hspec test delivers the same integration event twice through a delegated intake whose handler appends to an aggregate under a deterministic event id; the first delivery classifies as `InboxProcessed`, the second as `InboxDuplicate`, the aggregate stream contains the event exactly once, and `listInbox` proves the `keiro_inbox` table has zero rows for that source. A `.keiro` intake spec can declare `idempotence delegated`, `keiro-dsl scaffold` emits the mode alongside the dedupe policy, and `keiro-dsl diff` exits non-zero when a spec changes the idempotence mode or the dedupe identity scheme, because those changes silently alter delivery semantics.
+An integration event is a public message whose producer-assigned `messageId` survives publication retries. A dedupe key identifies deliveries that a consumer considers the same operation. Delegation is safe only when the complete operation is protected by that identity: repeating it, concurrently or after a crash, must not repeat committed effects. A `DelegatedOutcome` is a caller assertion, not a type-level proof. Public constructors cannot establish that arbitrary IO is idempotent.
+
+The primary demonstration is a deterministic aggregate append with its SQL effects in the same transaction: first delivery returns `InboxProcessed`, replay returns `InboxDuplicate`, the event and SQL effect exist once, and the inbox is neither read nor written. A declared `idempotence delegated` intake generates a typed delegated runner and receives persisted-identity compatibility gating.
+
+Do not promise lower latency merely from fewer inbox rows. Aggregate deduplication needs an indexed read before command hydration, and delegated batches do not share a commit. Performance acceptance below measures those costs and blocks unbounded replay work or regressions hidden by baseline replacement.
 
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
 
-- [ ] M1: `DelegatedOutcome` and `InboxIdempotence` types added to `keiro/src/Keiro/Inbox/Types.hs`
-- [ ] M1: `runInboxDelegated`, `runInboxDelegatedWithRetries`, `runInboxDelegatedBatch` added to `keiro/src/Keiro/Inbox.hs` with metrics classification and delegation-contract haddocks
-- [ ] M1: `just haskell-build` green
-- [ ] M2: `keiro/src/Keiro/Inbox/Delegated.hs` created with `delegatedEventId`, `delegatedFromCommand`, `delegatedFromPMCommand`, `delegatedWorkflowStart`; exported from `keiro.cabal` and re-exported where appropriate
-- [ ] M3: hspec coverage in `keiro/test/Main.hs` — aggregate twice-delivery, workflow twice-delivery, batch in-batch duplicate, retries/poison metrics, zero-inbox-rows assertions; `cabal test keiro-test` green
-- [ ] M4: DSL — `inkIdempotence` field in Grammar, `idempotence` clause in Parser, PrettyPrint round-trip, Skeleton default, Scaffold emits `inboxIdempotence`; `intakeDiff` wired into `diffSpecs` with new `DiagnosticCode`s; fixtures + `cabal test keiro-dsl-test` green
-- [ ] M5: delegated conformance fixture (Generated module + hand-filled Integration) compiling in `keiro-dsl-conformance-intake-full`; conformance suites green
-- [ ] M6: `inbox.delegated-single` and `inbox.delegated-batch-100` benches added; before/after numbers recorded in Outcomes & Retrospective; `keiro/bench/baseline-inbox.csv` regenerated
-- [ ] M6: docs updated (`docs/user/integration-events.md`, `docs/guides/integration-events-with-kafka.md`, `docs/corpus/keiro-dsl-corpus.md`)
-- [ ] Final: `just haskell-verify` green; Outcomes & Retrospective written
+- [x] (2026-09-15) Refreshed the plan against current inbox, command, process-manager, workflow, DSL, benchmark, and fixture code; checked relevant ADRs and located dependency sources with Mori.
+- [x] (2026-09-15) Replaced unsafe duplicate/workflow assumptions, specified error-safe batching and source-scoped identities, and added API compatibility and performance acceptance.
+- [ ] M1: Add runtime outcome, validated retry context, and delegated single/retry/batch entry points with focused unit tests.
+- [ ] M2: Add deterministic identity and confirmed command/PM adapters with compile and pure contract tests.
+- [ ] M3: Prove durable effects, duplicate races, failure handling, cancellation, zero inbox access, and bounded duplicate lookup against PostgreSQL.
+- [ ] M4: Add a successor-language intake mode, preserve published languages, and extend existing validation, generation, and compatibility reporting.
+- [ ] M5: Add generated and hand-filled delegated conformance under the advertised Haskell edition; run all DSL suites.
+- [ ] M6: Record paired performance evidence, update user documentation and ADRs, and complete verification.
 
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
 
-(None yet.)
+The old plan treated every `StoreFailed (DuplicateEvent _)` as success. Current `Keiro.ProcessManager.confirmBenignDuplicate` explicitly checks the attempted ID in the target stream, because event IDs are globally unique and the error may contain no parsed ID. Its companion `dispatchDeduplicatedCommand` probes before dispatch, avoiding hydration of an already-applied command. `eventAlreadyIn` now delegates to the store's indexed `eventExistsInStream`; it does not replay the stream.
+
+The old PM fold mapped every nonduplicate constructor to fresh success. `PMCommandResult` includes `PMCommandFailed StreamName CommandError`, so that fold could acknowledge a failed command. A successful `CommandResult` can also report zero appended events; that does not establish a durable dedupe marker.
+
+The proposed workflow helper was unsafe. `keiro/src/Keiro/Workflow.hs` explicitly documents at-least-once step effects across a crash between the action and journal commit. An instance row can describe suspended, failed, or cancelled work and is not a completion receipt. Its live `runWorkflow` signature additionally requires `Error StoreError :> es`. Remove the lookup-then-run helper from this plan.
+
+The batch planner marks a key seen before its handler executes. That is suitable only in the existing table batch's transaction/fallback design; copying it into independent delegated calls could acknowledge a repeat after its first attempt failed. Exceptions also stop ordinary traversal unless caught. Delegated batching must record only confirmed successes and isolate synchronous exceptions per item.
+
+DSL intake evolution already exists in `intakePairDiff`: `DedupeIdentityChanged` is breaking, while decode and persistence changes are advisory. The current AST uses `dedupeKey`, `dedupePolicy`, `persist`, and `disposition`, not `ink*` selectors. The parser is split into `Parser/Integration.hs`. Generated dispositions are service-specific types carrying retry/dead-letter details, not `InboxAck`.
+
+Language 5 is published and stable, with no active candidate at the inspected commit. New syntax cannot widen it or add globally reserved words. The current `Justfile` runs all DSL suites through `cabal test keiro-dsl:tests`; `haskell-verify` does not build a website. Existing inbox benchmarks use no-op handlers and time a table reset within each sample, so they are unsuitable as an unchanged numerical comparator for a real downstream append.
 
 
 ## Decision Log
 
-Record every decision made while working on the plan.
 
-- Decision: This plan is standalone, not a third child of `docs/masterplans/11-keiro-inbox-and-outbox-kafka-throughput-overhaul.md`.
-  Rationale: Master plan 11 is complete (both child plans landed 2026-07-02) and its scope was hot-path cost reduction *within* the table-backed design. Delegated idempotence is a new API mode with DSL surface, not a tuning of the existing one. The master plan is referenced from Context instead.
-  Date: 2026-07-02
+The 2026-07-02 standalone scope and separate-entry-point decisions are retained. This is not a child of completed [master plan 11](../masterplans/11-keiro-inbox-and-outbox-kafka-throughput-overhaul.md). The table handler is a transaction action; the delegated handler is an effectful action whose downstream owns transactions. No mode flag should pretend those handler types are interchangeable.
 
-- Decision: Delegated mode is a separate entry point (`runInboxDelegated`) with a different handler type, not a mode flag on `runInboxTransaction`.
-  Rationale: The table-backed handler runs inside the inbox's own `Tx.Transaction` and cannot observe duplicates (the wrapper branches on the row). The delegated handler must run in `Eff es` (aggregate and workflow runners open their own store transactions) and must *report* duplicate detection. Different types, different contracts — overloading one function with both would force partiality.
-  Date: 2026-07-02
+On 2026-09-15, superseded the original witness claim: `DelegatedOutcome` records an explicit success/duplicate assertion but cannot prove effect confinement. Adapters and executable concurrency/crash tests supply evidence. Keep wrapper constraints at `IOE :> es`; only the downstream adapter needs `Store`.
 
-- Decision: The duplicate report is a required witness type (`DelegatedOutcome a = DelegatedFresh !a | DelegatedDuplicate`), not documentation.
-  Rationale: A consumer physically cannot compile a delegated handler without deciding where `DelegatedDuplicate` comes from. That converts the correctness contract ("your state machine must actually dedupe") from prose into a type obligation, and it keeps duplicate metrics accurate without the table.
-  Date: 2026-07-02
+On 2026-09-15, replaced the pure command-error fold with a dispatch adapter that probes first and confirms duplicate errors against the target stream. Preserve PM failures as failures and reject successful no-event commands from the convenience adapter. Such operations need their own durable receipt or must keep table-backed intake.
 
-- Decision: The delegated wrapper takes only `IOE :> es` (no `Store`); it performs no database work itself.
-  Rationale: Key computation is pure; metrics recording needs IO. Requiring `Store` would be a lie in the signature and would block non-Postgres handlers (the whole point is that the *downstream* owns storage).
-  Date: 2026-07-02
+On 2026-09-15, removed `delegatedWorkflowStart`. Workflow instance existence and journal append uniqueness do not establish exactly-once effects. A future workflow-start API would need an atomic, durable acceptance/handoff contract and recovery proof; it is not a lookup added to this feature.
 
-- Decision: Retry/poison accounting in delegated mode is driven by a caller-supplied delivery-attempt count, not by a Postgres ledger.
-  Rationale: Without a failed row there is no durable attempt counter. The Kafka layer already has one — the consumer's redelivery loop (or a delivery-attempt header) — so `runInboxDelegatedWithRetries` accepts `attemptCeiling` and the current attempt number, returns `InboxHandlerFailed` below the ceiling and `InboxPreviouslyFailed` at it, and records the poisoned metric exactly as the table-backed path does. Dead-lettering the payload becomes the consumer's DLQ-topic responsibility; the plan documents this loss explicitly.
-  Date: 2026-07-02
+On 2026-09-15, changed batch suppression to a local set of successful `(source, dedupeKey)` identities, populated only after fresh or confirmed-duplicate success. Retain sequential input order and per-item failures. Do not refactor the table batch planner for this feature.
 
-- Decision: Downstream adapters live in a new module `Keiro.Inbox.Delegated` rather than in `Keiro.Inbox`.
-  Rationale: The adapters import `Keiro.Command`, `Keiro.ProcessManager`, and `Keiro.Workflow.*`. Nothing in `keiro/src` imports `Keiro.Inbox` (verified by grep), so the new module creates no cycle, and `Keiro.Inbox` keeps its narrow dependency footprint (Schema, Types, Telemetry, kiroku Store).
-  Date: 2026-07-02
+On 2026-09-15, retained explicit retry accounting but require a validated context. The caller owns durable attempts across restarts and rebalances; neither a Kafka offset nor these wrappers supplies such a counter. Metrics count observations and are not exactly-once durable counters. `InboxPreviouslyFailed` is reachable in the retrying delegated API.
 
-- Decision: In the DSL, a delegated intake still supplies the full seven-outcome disposition table.
-  Rationale: The generated `inboxDisposition` is a total `case` over the live `InboxResult` type, whose constructors do not change. `inProgress` and `previouslyFailed` rows are unreachable at runtime in delegated mode but keeping them preserves totality, keeps the validator's completeness rule (`DispositionIncomplete`) uniform, and costs nothing. The scaffold emits a comment marking them unreachable.
-  Date: 2026-07-02
+On 2026-09-15, replaced delimiter-joined IDs with a frozen versioned, length-prefixed UTF-8 identity including consumer, source, dedupe key, target stream, and stable operation name. One ID guards the first event of the command's atomic append. Distinct commands need distinct stable operation names.
 
-- Decision: `keiro-dsl diff` gains intake coverage (`intakeDiff`) gating three things as Breaking: idempotence-mode changes, dedupe-policy changes, and dedupe-key-field changes.
-  Rationale: `diffSpecs` currently walks only aggregates/events — intakes are not diffed at all. A mode or identity-scheme flip silently changes delivery semantics (which deliveries are collapsed, where failure records live), which is exactly the class of change diff-gating exists for. Policy/key changes are gated even in table mode: they change the dedupe identity of in-flight messages.
-  Date: 2026-07-02
-
-- Decision: No schema or migration changes.
-  Rationale: Delegated mode writes nothing; the `keiro_inbox` table and its migrations are untouched. Everything in this plan is additive Haskell.
-  Date: 2026-07-02
+On 2026-09-15, extend existing intake diffing and gate syntax in a successor language. Generate an actual delegated runner so the selected mode affects the callable API. Preserve published table-generated output. These are implementation decisions in this plan; accepted ADR contracts are not changed by this documentation-only refresh.
 
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose.
 
-(To be filled during and after implementation.)
+The plan refresh is complete; runtime implementation, compiler validation of the proposed API, live behavior tests, and performance measurements remain outstanding. No performance result is claimed. The main corrections prevent false success on command failures or unrelated duplicate IDs, unsafe workflow acknowledgement, batch suppression after failure, and accidental widening of a published DSL.
+
+At implementation completion, record test counts, the exact benchmark environment and raw artifact paths, throughput and allocation comparisons, remaining restrictions, and the resulting ADR references. Do not mark this plan complete on compilation alone.
 
 
 ## Context and Orientation
 
-This is a Haskell monorepo built with cabal (`cabal.project` at the root) and orchestrated by a `Justfile`. The packages that matter here: `keiro/` (the runtime library: event-sourced commands, process managers, workflows, outbox, inbox), `keiro-core/` (the pure integration-event envelope contract), `keiro-dsl/` (a toolchain that parses `.keiro` service specifications, validates them, scaffolds Haskell modules, and diffs spec revisions for unsafe evolution), and `keiro-test-support/` (Postgres test fixtures; `withFreshStore` in `keiro-test-support/src/Keiro/Test/Postgres.hs` hands each hspec example a fresh store cloned from a suite-level template database, so `cabal test keiro-test` needs no externally managed Postgres).
 
-Some vocabulary, all defined here so the plan is self-contained. An **integration event** (`Keiro.Integration.Event` in `keiro-core`) is a public message crossing bounded contexts over Kafka; its `messageId` is minted once at the producer's outbox enqueue and is stable across publish retries. The **inbox** is the consumer-side dedupe: `runInboxTransaction` (`keiro/src/Keiro/Inbox.hs`) computes a **dedupe key** from an `InboxDedupePolicy` (`keiro/src/Keiro/Inbox/Types.hs` — `PreferIntegrationMessageId`, `PreferSourceEventIdentity`, `KafkaDeliveryIdentity`, `CustomDedupeKey`; the computation `dedupeKeyFor` is pure), then in one Postgres transaction inserts a `completed` row into `keiro_inbox` via `tryInsertCompletedTx` (`keiro/src/Keiro/Inbox/Schema.hs`) and runs the caller's handler (`IntegrationEvent -> Tx.Transaction a`). A conflicting row classifies the delivery as `InboxDuplicate` / `InboxInProgress` / `InboxPreviouslyFailed` (the `InboxResult` type). `runInboxTransactionWithRetries` adds a Postgres-ledger attempt counter (`recordFailedAttemptTx`) and an attempt ceiling; `runInboxTransactionBatch` amortizes one commit across N messages with in-memory in-batch duplicate suppression (`planInboxBatch`, pure) and a per-message fallback on failure. Metrics are recorded through `recordInboxResult` against `Keiro.Telemetry.KeiroMetrics` counters (`recordInboxProcessed`, `recordInboxDuplicates`, `recordInboxFailed`, `recordInboxPoisoned`).
+This Cabal monorepo contains `keiro/` (runtime), `keiro-core/` (integration envelope), `keiro-dsl/` (language and generation), and `keiro-test-support/` (isolated PostgreSQL fixtures). `keiro/src/Keiro/Inbox.hs` owns table entry points, batch planning, and the private `recordInboxResult`; `keiro/src/Keiro/Inbox/Types.hs` owns `InboxResult`, `InboxError`, `InboxDedupePolicy`, and pure `dedupeKeyFor`. `keiro/src/Keiro/Inbox/Schema.hs` supplies `listInbox :: Store :> es => Text -> Eff es [InboxRow]`.
 
-The **downstream state machines** this plan delegates to. First, aggregate command dispatch: `Keiro.Command.RunCommandOptions` carries `eventIds :: [EventId]`, caller-supplied ids assigned to emitted events; the kiroku event store enforces event-id uniqueness, so appending under a repeated id fails with `StoreFailed (DuplicateEvent …)` (a `CommandError`). `Keiro.ProcessManager.deterministicCommandId :: Text -> Text -> EventId -> Int -> EventId` shows the established recipe: a v5 UUID over a `:`-joined name string, and both `Keiro.ProcessManager` and `Keiro.Router` fold `DuplicateEvent` into a benign `PMCommandDuplicate` (see `keiro/src/Keiro/Router.hs`, "Dispatch is idempotent by construction"). `eventAlreadyIn` (`keiro/src/Keiro/ProcessManager.hs`) is the cheap pre-dispatch existence check. Second, durable workflows: `Keiro.Workflow.runWorkflow :: WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (WorkflowOutcome a)` journals each step append-if-absent, and `Keiro.Workflow.Instance.lookupInstance :: WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)` reads the one-row-per-instance summary table `keiro_workflows` — a `Just` row means this workflow identity was already seeded.
+Table identity is `(source, dedupe_key)`. `PreferIntegrationMessageId` requires a nonempty message ID; `PreferSourceEventIdentity` uses event ID, falling back to source global position; `KafkaDeliveryIdentity` requires delivery metadata; `CustomDedupeKey` rejects an empty key. Preserve these exact rules. Table-backed retention is a finite dedupe window, not permanent exactly-once delivery; its module documents the concurrent-GC caveat.
 
-The **keiro-dsl intake surface**. An inbox consumer is specified as an `intake` block in a `.keiro` file (canonical fixture: `keiro-dsl/test/fixtures/intake.keiro`); the AST node is `IntakeNode` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs` (fields include `inkDedupeKey :: Name`, `inkDedupePolicy :: Name`, `inkDisposition :: [DispositionRow]` where `InboxAction = IAckOk | IRetry Text | IDeadLetter (Maybe Text)`). The parser (`pIntake`, `keiro-dsl/src/Keiro/Dsl/Parser.hs`) reads `dedupe key <field> policy <PolicyName>` and a `disposition { <outcome> => <action> … }` table over exactly seven outcomes (`processed`, `duplicate`, `inProgress`, `previouslyFailed`, `decodeFailed`, `dedupeFailed`, `storeFailed`); the validator (`validateIntake`, `keiro-dsl/src/Keiro/Dsl/Validate.hs`) enforces completeness (`DispositionIncomplete`) and dangerous inversions, with `data Severity = Error | Warning` and a single `DiagnosticCode` registry. The scaffolder (`scaffoldIntake` / `emitIntakeGen`, `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`) emits one Generated module per intake exporting `inboxDedupePolicy :: InboxDedupePolicy` (the spec's policy name lowered verbatim onto the live runtime enum) and `inboxDisposition :: InboxResult a -> InboxAck`; the transaction runner and handler are hand-filled (see `keiro-dsl/test/conformance-intake-full/HospitalCapacity/IncidentInbox/Integration.hs`, which calls `runInboxTransaction Nothing inboxDedupePolicy …`). The differ (`keiro-dsl/src/Keiro/Dsl/Diff.hs`) classifies spec changes as `Additive` or `Breaking` via `Change`/`ChangeKind` (with `ckCode :: Maybe DiagnosticCode`), and the CLI (`keiro-dsl/app/Main.hs`, commands `parse`/`check`/`scaffold`/`diff`/`new`) exits non-zero on any `Breaking`. Important gap: `diffSpecs` currently walks only aggregates and events — intakes are not diffed at all. The `new` command's intake skeleton is `intakeSkeleton` in `keiro-dsl/src/Keiro/Dsl/Skeleton.hs`. The pretty-printer `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` must round-trip whatever the parser accepts.
+`keiro/src/Keiro/Command.hs` hydrates state before deciding whether to append. A replayed command can therefore reject in the new state before ever hitting event-ID uniqueness. `RunCommandOptions.eventIds` assigns supplied IDs to emitted events in order; remaining events get store-generated IDs. All events in one append commit atomically, so a deterministic first event guards that batch. `runCommandWithSql` and related transactional runners require the resource interpreter and carry additional typed store errors; use `withFreshResourceStore`/the `StoreRunner` harness in `keiro-test-support/src/Keiro/Test/Postgres.hs` for these tests.
 
-Tests and benches. `keiro/test/Main.hs` is one large hspec file; the inbox specs live under `describe "Keiro.Inbox"` (around line 3299) wrapped in `around (withFreshStore fixture)`. The benchmark component `keiro-bench` (`keiro/bench/Main.hs`, tasty-bench) has an `InboxScenario` record driving scenarios named `inbox.single-full`, `inbox.single-nometrics`, `inbox.batch-100`, `inbox.single-slim`; the standing baseline is `keiro/bench/baseline-inbox.csv`, guarded by the manual `just bench-regression` target (`--time-mode wall --baseline … --fail-if-slower 25`). Recent history: plans 82 (`docs/plans/82-…md`) and master plan 11 already removed the double-write, the per-message gauge, and added batching/slim persistence — this plan is the next step, removing the table from the path entirely for consumers that can prove they don't need it.
+`keiro/src/Keiro/ProcessManager.hs` exports `dispatchDeduplicatedCommand`, `eventAlreadyIn`, and `confirmBenignDuplicate`. The latter accepts only matching/missing duplicate IDs and confirms stream membership. `keiro/src/Keiro/Router.hs` demonstrates length-prefixed identity encoding. The downstream store is owned by `mori://shinzui/kiroku`; source artifacts used here are project-relative `kiroku-store/src/Kiroku/Store/Read.hs`, `SQL.hs`, and `Error.hs` (artifact-level source URI pending). Mori's current docs registry has no curated entries for it. Its SQL probe uses `SELECT EXISTS` over `stream_events` and a live stream-name lookup.
 
-Why the win is real but bounded, stated up front so nobody oversells it: the dedupe insert rides the same transaction as the handler, so delegated mode does not remove a network round trip on the happy path. It removes the `keiro_inbox` row write (25 columns), the unique-index maintenance, the WAL those generate, the table's growth, and the retention GC scan — and in duplicate storms it moves detection to an index the store maintains anyway. The bench milestone quantifies this honestly.
+Relevant decisions are [ADR 24](../adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md), which freezes UTF-8 identity recipes and requires unambiguous new encodings; [ADR 8](../adr/0008-workflow-failure-history-is-immutable-and-derived-terminal-state-is-revivable.md), which separates workflow history from revivable derived state; [ADR 16](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md), which freezes published languages and preserves located source provenance; [ADR 19](../adr/0019-generated-haskell-has-an-explicit-edition-and-local-extension-contract.md), which owns generated compilation editions; and [ADR 38](../adr/0038-keiro-dsl-records-use-concise-labels-without-product-selectors.md), which requires concise AST labels without product selectors.
+
+The DSL touch points are `keiro-dsl/src/Keiro/Dsl/Grammar.hs`, `Parser/Integration.hs`, `Parser/Document.hs`, `Parser/Core.hs`, `Frontend/Internal.hs`, `LanguageVersion.hs`, `PrettyPrint.hs`, `Skeleton.hs`, `Validate.hs`, `Scaffold.hs`, `Diff.hs`, and `DiffReport.hs`. Paths after the first are relative to the same `keiro-dsl/src/Keiro/Dsl/` directory. `Frontend/Internal.hs` reconstructs `IntakeNode` positionally, so adding a field requires updating it. The seven source disposition names remain `processed`, `duplicate`, `inProgress`, `previouslyFailed`, `decodeFailed`, `dedupeFailed`, and `storeFailed`; `InboxHandlerFailed` currently maps to the generated `storeFailed` disposition with failure details.
 
 
 ## Plan of Work
 
-The work proceeds in six milestones. M1–M3 land the runtime feature end to end (types, entry points, adapters, behavior tests) and are independently shippable. M4–M5 teach the DSL to declare and gate the mode and prove the generated surface type-checks against the live runtime. M6 measures and documents.
+
+Six milestones deliver the runtime, adapters, live proof, DSL integration, compiled generation, and performance/documentation evidence. Implement runtime milestones before widening the language surface.
 
 
-### Milestone 1 — Runtime types and delegated entry points
-
-Scope: the witness type, the mode enum, and three new functions in `Keiro.Inbox`, plus metrics wiring. At the end of this milestone the API compiles and is exported; nothing calls it yet.
-
-In `keiro/src/Keiro/Inbox/Types.hs`, add two types and export them. `DelegatedOutcome` is the witness a delegated handler must return; give it a haddock stating the contract in one breath — construct `DelegatedDuplicate` only from a downstream duplicate signal, never speculatively:
-
-```haskell
--- | The delegated handler's report of what its downstream state machine
--- observed. 'DelegatedDuplicate' must be constructed only by folding a
--- downstream duplicate signal ('DuplicateEvent' from the store,
--- 'PMCommandDuplicate' from dispatch, an already-seeded workflow
--- instance) — it is the inbox's only evidence that dedupe happened.
-data DelegatedOutcome a
-    = DelegatedFresh !a
-    | DelegatedDuplicate
-    deriving stock (Generic, Eq, Show)
-
--- | Which mechanism guarantees at-most-once handler effects for an
--- intake. 'IdempotenceInboxTable' is the classic keiro_inbox row;
--- 'IdempotenceDelegated' trusts the handler's own state machine.
-data InboxIdempotence
-    = IdempotenceInboxTable
-    | IdempotenceDelegated
-    deriving stock (Generic, Eq, Show)
-```
-
-`InboxIdempotence` exists so the DSL scaffold (M4) has a live enum to lower onto, mirroring how `inboxDedupePolicy` lowers onto `InboxDedupePolicy`.
-
-In `keiro/src/Keiro/Inbox.hs`, add three exported functions. The single-message base variant computes the key, runs the handler, classifies, records metrics. Note the constraint set: `IOE` only — the wrapper does no store work. The module haddock must spell out the two-part **delegation contract**: (1) *identity absorption* — the handler must derive its downstream identity (event id / workflow id) from the dedupe key it is given, so a redelivery lands on the same identity; (2) *effect confinement* — every effect of the handler must be inside the transaction guarded by that identity (inline projections and outbox enqueues already ride the append transaction; anything else is unguarded on duplicates).
-
-```haskell
-runInboxDelegated ::
-    forall a es.
-    (IOE :> es) =>
-    Maybe KeiroMetrics ->
-    InboxDedupePolicy ->
-    IntegrationEvent ->
-    Maybe KafkaDeliveryRef ->
-    (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
-    Eff es (Either InboxError (InboxResult a))
-```
-
-Implementation shape: `dedupeKeyFor policy event kafka` — `Left err` short-circuits exactly as today; on `Right dedupe`, run `handler dedupe event`, map `DelegatedFresh a -> InboxProcessed a` and `DelegatedDuplicate -> InboxDuplicate`, then reuse the existing `recordInboxResult mMetrics Nothing`. Exceptions from the handler propagate (same as `runInboxTransaction`); the caller's ack layer maps them to redelivery.
-
-The retrying variant replaces the Postgres attempt ledger with a caller-supplied delivery attempt (from the consumer's redelivery counter or a broker delivery-attempt header):
-
-```haskell
-runInboxDelegatedWithRetries ::
-    forall a es.
-    (IOE :> es) =>
-    Maybe KeiroMetrics ->
-    Int ->  -- ^ attempt ceiling
-    Int ->  -- ^ this delivery's attempt number, 1-based, from the Kafka layer
-    InboxDedupePolicy ->
-    IntegrationEvent ->
-    Maybe KafkaDeliveryRef ->
-    (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
-    Eff es (Either InboxError (InboxResult a))
-```
-
-Semantics, mirroring `runInboxTransactionWithRetries` as closely as the missing table allows: if `attempt > attemptCeiling`, return `InboxPreviouslyFailed Nothing` without running the handler (the consumer's disposition maps it to dead-letter — in delegated mode the DLQ topic, not a failed row, is the dead-letter record). Otherwise `trySync` the handler; on exception return `InboxHandlerFailed (Text.pack (displayException err)) attempt` and record via `recordInboxResult mMetrics (Just attemptCeiling)` so the poisoned counter fires at the ceiling exactly as today.
-
-The batch variant reuses the existing pure planner. Extract the current `planInboxBatch`/`BatchPlan` so both paths share it; the delegated batch simply never opens a transaction of its own:
-
-```haskell
-runInboxDelegatedBatch ::
-    forall a es.
-    (IOE :> es) =>
-    Maybe KeiroMetrics ->
-    InboxDedupePolicy ->
-    [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
-    (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
-    Eff es [Either InboxError (InboxResult a)]
-```
-
-Results in input order: `BatchKeyError err -> Left err`, `BatchDuplicate -> Right InboxDuplicate` (in-batch repeat, handler not run), `BatchWork -> ` run the handler and classify. There is no batch-transaction fallback dance because there is no batch transaction — each handler invocation owns its own commit scope, and one poison message cannot poison batch mates by construction. Note this in the haddock: the *commit amortization* that `runInboxTransactionBatch` provides is the handler's own business in delegated mode (e.g. batching appends), not the inbox's.
-
-Acceptance: `just haskell-build` compiles the new exports; no behavior change anywhere else (`cabal test keiro-test` still green).
+### Milestone 1 — No-store wrappers and explicit retry ownership
 
 
-### Milestone 2 — Downstream adapters: folding duplicate signals into the witness
+In `keiro/src/Keiro/Inbox/Types.hs`, add `DelegatedOutcome a = DelegatedFresh !a | DelegatedDuplicate` and `InboxIdempotence = IdempotenceInboxTable | IdempotenceDelegated`, deriving the usual `Generic`, `Eq`, and `Show`. Update `InboxDuplicate` documentation: delegated handlers may execute to determine a duplicate even though protected effects do not repeat.
 
-Scope: a new module `keiro/src/Keiro/Inbox/Delegated.hs` (add to `keiro.cabal`'s `exposed-modules`) with the helpers that make the witness easy to construct correctly for the three supported state machines. Nothing in `keiro/src` imports `Keiro.Inbox`, so importing `Keiro.Command`, `Keiro.ProcessManager`, and `Keiro.Workflow.*` here creates no cycle (verified during planning).
+Add abstract `DelegatedRetryContext` with an unexported constructor and `mkDelegatedRetryContext :: Int -> Int -> Either Text DelegatedRetryContext`, taking ceiling then current one-based attempt. Reject nonpositive values; accept attempts above the ceiling for terminal classification. Do not expose Generic-based reconstruction of this validated type. Callers validate configuration/delivery metadata before intake; existing `InboxError` remains the dedupe-policy error.
 
-First, identity absorption made concrete — the deterministic id recipe, mirroring `deterministicCommandId`'s v5-UUID construction but namespaced to delegated intake:
+Implement the three signatures in Interfaces and Dependencies in `keiro/src/Keiro/Inbox.hs`. All paths compute policy errors before invoking handlers. The base single wrapper propagates handler exceptions and typed effects; successful results receive exactly one `recordInboxResult` call with no backlog sampling or timestamps.
 
-```haskell
--- | Stable event id for a delegated intake's append, derived from
--- (consumer name, dedupe key, emit index) via a v5 UUID. The same
--- delivery always yields the same id, so the store's uniqueness
--- constraint collapses redeliveries.
-delegatedEventId :: Text -> Text -> Int -> EventId
-```
+The retry wrapper validates through its supplied context: at attempt greater than ceiling, return `InboxPreviouslyFailed Nothing` without invoking the handler. At or below the ceiling, catch only synchronous exceptions with existing `trySync`, returning `InboxHandlerFailed reason attempt`; success at the ceiling remains success. Use `recordInboxResult` with the ceiling. A failure at attempt equal to ceiling increments poisoned once for that invocation; repeated invocations with that count increment again. Never claim cross-process exactly-once metrics. A typed `Error e` effect is not automatically a synchronous exception: callers must explicitly handle downstream errors and apply their retry/dead-letter policy.
 
-Join `["keiro", "inbox-delegated", consumerName, dedupeKey, show emitIndex]` with `":"` and hash with `UUID.V5.generateNamed UUID.V5.namespaceURL`, byte-for-byte the same technique as `deterministicCommandId` in `keiro/src/Keiro/ProcessManager.hs`.
+The batch API processes sequentially and catches synchronous handler exceptions per item, returning `InboxHandlerFailed reason 1` with no poison ceiling. It has no durable retry accounting. Use a strict `Set (Text, Text)` scoped to this call, adding identities only after `DelegatedFresh` or confirmed `DelegatedDuplicate`. Policy errors and exceptions never add entries. Suppressed repeats still increment duplicate metrics once. Build results by reverse accumulation or a single traversal, never repeated list append or indexing. Async cancellation propagates immediately. Callers supply bounded chunks; the function has O(n log n) set work and O(n) retained keys/results, and creates no threads or database transactions.
 
-Then three folds:
-
-```haskell
--- | Classify a 'Keiro.Command.runCommand' result: a store-level
--- duplicate-id rejection is the state machine saying "already applied".
--- All other errors stay errors (Left) for the caller to map to
--- retry/dead-letter.
-delegatedFromCommand ::
-    Either CommandError (CommandResult target) ->
-    Either CommandError (DelegatedOutcome (CommandResult target))
-
--- | Classify a process-manager/router dispatch result.
-delegatedFromPMCommand ::
-    PMCommandResult target ->
-    DelegatedOutcome (PMCommandResult target)
-
--- | Seed-or-detect for workflows: an existing keiro_workflows instance
--- row means this identity was already seeded; otherwise run the
--- workflow. The lookup-then-run pair is not atomic — two concurrent
--- first deliveries can both observe no row and both call 'runWorkflow';
--- the journal's append-if-absent still makes effects exactly-once, and
--- the second run merely classifies as Fresh. Document, don't fight it.
-delegatedWorkflowStart ::
-    (IOE :> es, Store :> es) =>
-    WorkflowName ->
-    WorkflowId ->
-    Eff (Workflow : es) a ->
-    Eff es (DelegatedOutcome (WorkflowOutcome a))
-```
-
-`delegatedFromCommand` pattern-matches `Left (StoreFailed (DuplicateEvent _)) -> Right DelegatedDuplicate`; `delegatedFromPMCommand` maps `PMCommandDuplicate _ -> DelegatedDuplicate` and every other constructor to `DelegatedFresh`. `delegatedWorkflowStart` is `lookupInstance name wid >>= maybe (DelegatedFresh <$> runWorkflow name wid action) (const (pure DelegatedDuplicate))`.
-
-Acceptance: builds; haddocks on every export state which duplicate signal each fold consumes.
+Acceptance: build `keiro`, run existing `keiro-test`, and add no-store tests with only IOE proving valid/invalid keys, retry boundaries, failure-then-repeat execution, result ordering, and cancellation. These API tests must compile without installing a Store interpreter.
 
 
-### Milestone 3 — Behavior tests against a live store
-
-Scope: a new `describe "Keiro.Inbox delegated"` block in `keiro/test/Main.hs`, `around (withFreshStore fixture)` like the existing inbox block. These tests are the demonstrable-behavior anchor of the whole plan.
-
-Test (a), aggregate twice-delivery: build an integration event with a fixed `messageId`; the handler dispatches a command to a test aggregate via `runCommand` with `eventIds = [delegatedEventId "test-consumer" dedupe 0]` and folds through `delegatedFromCommand`. Deliver twice via `runInboxDelegated`. Assert first result `Right (InboxProcessed _)`, second `Right InboxDuplicate`, the target stream contains exactly one appended event, and — the headline — `listInbox "<source>"` returns `[]` (the inbox table was never touched). Reuse whichever minimal test aggregate the existing command-cycle specs in this file already define rather than inventing a new one.
-
-Test (b), workflow twice-delivery: handler is `delegatedWorkflowStart` with `WorkflowId` derived from the dedupe key; a journaled step increments a counter table. Two deliveries: first `InboxProcessed`, second `InboxDuplicate`, counter is 1, `listInbox` empty.
-
-Test (c), batch: three deliveries where two share a `messageId`; `runInboxDelegatedBatch` returns, in input order, `Processed`, `Duplicate` (in-batch suppression — handler ran twice total, verify via counter), `Processed`.
-
-Test (d), retries and poison: a handler that always throws. With ceiling 3, attempts 1 and 2 return `InboxHandlerFailed _ n` with the supplied attempt number; attempt 4 (`> ceiling`) returns `InboxPreviouslyFailed Nothing` without invoking the handler (assert via an `IORef` invocation counter). With a metrics handle installed (the existing inbox metrics specs show the harness), assert the poisoned counter increments exactly once at the ceiling.
-
-Test (e), key-policy failure: `PreferSourceEventIdentity` on an envelope lacking source identity returns `Left (DedupePolicyUnsatisfied _)` without running the handler — the delegated path must preserve the table path's error surface.
-
-Acceptance: `cabal test keiro-test` green from the repo root. This milestone plus M1/M2 is a shippable runtime feature; commit history should reflect that (`feat(inbox): …` commits with the trailers listed under Concrete Steps).
+### Milestone 2 — Safe downstream identity and adapters
 
 
-### Milestone 4 — DSL: spec syntax, scaffold, and diff gating
+Create `keiro/src/Keiro/Inbox/Delegated.hs` and expose it in `keiro/keiro.cabal`. Keep it separate from `Keiro.Inbox` to avoid a broad command/process-manager re-export. Reuse current process-manager primitives rather than duplicating SQL or scanning streams.
 
-Scope: the `.keiro` spec owns the idempotence mode, and changing it (or the dedupe identity) is gated as Breaking. All files under `keiro-dsl/`.
+Define `delegatedEventId consumer source dedupe target operation`. Encode the ordered fields `["keiro/inbox-delegated/1", consumer, source, dedupe, targetStreamText, operation]` as UTF-8, prefixing each field with its decimal byte length and a colon, concatenate, and hash with UUID v5 namespaceURL. Follow the router's unambiguous encoding pattern; route seed-byte conversion through `Keiro.DeterministicId.identitySeedBytes`. Freeze golden IDs for ASCII, Unicode, empty-field boundaries, and delimiter-containing values. Different sources, consumers, targets, and operation names must differ even when message IDs coincide. No normalization, random salt, clock, or deployment-version component is allowed.
 
-Grammar (`src/Keiro/Dsl/Grammar.hs`): add `data IdempotenceMode = IdemInboxTable | IdemDelegated` and a field `inkIdempotence :: !IdempotenceMode` to `IntakeNode`.
+Expose `DelegatedCommandError = DelegatedCommandFailed !StreamName !CommandError | DelegatedCommandWithoutReceipt !StreamName`. The `delegatedCommand` adapter takes base options, the target stream name, the deterministic first-event ID, and a callback accepting the prepared options. It replaces `eventIds` with the singleton marker and invokes `dispatchDeduplicatedCommand` with that same singleton probe. The callback must use those supplied options and target, run exactly one atomic append, and include all protected SQL/outbox work in that append transaction. This is a documented precondition, not a proof enforced by the callback type.
 
-Parser (`src/Keiro/Dsl/Parser.hs`): in `pIntake`, accept an optional clause after the `dedupe` line — `idempotence table` or `idempotence delegated` — defaulting to `IdemInboxTable` when absent so every existing spec parses unchanged. Reserve the new keywords (`idempotence`, `table`, `delegated`) in the reserved-word list alongside `dedupe`/`disposition`; check first that `table` is not already reserved by another vertical, and if collision is a problem use `inbox-table` as the literal. PrettyPrint (`src/Keiro/Dsl/PrettyPrint.hs`): print the clause (always print it explicitly, even for the default, or omit-when-default — match whichever convention the printer uses for other optional clauses; the parser/printer round-trip test in `keiro-dsl-test` will catch a mismatch). Skeleton (`src/Keiro/Dsl/Skeleton.hs`, `intakeSkeleton`): emit `idempotence table` with a one-line comment naming the alternative.
+Preflight hit returns duplicate without invoking the callback. A positive `eventsAppended` result returns fresh; zero returns `DelegatedCommandWithoutReceipt`. On errors, the existing duplicate confirmer protects against unrelated/global collisions; preserve nonbenign failures, including unconfirmed missing-ID collisions. A concurrent winner can cause a state rejection or conflict before a duplicate append: returning a failure is safe, and the next delivery's preflight must detect the winner. Do not turn arbitrary errors into duplicates.
 
-Scaffold (`src/Keiro/Dsl/Scaffold.hs`, `emitIntakeGen`): alongside `inboxDedupePolicy`, emit
+The pure `delegatedFromPMCommand` adapter maps `PMCommandDuplicate` to duplicate, positive-event `PMCommandAppended` to fresh, zero-event results to without-receipt, and `PMCommandFailed stream err` to a typed failure preserving both values. It is valid for a single dispatch whose identity already absorbs the intake identity; it is not evidence that an entire multi-command manager reaction completed.
 
-```haskell
-inboxIdempotence :: InboxIdempotence
-inboxIdempotence = IdempotenceInboxTable  -- or IdempotenceDelegated, per spec
-```
+Adapters return typed `Either DelegatedCommandError`. Integration code must inspect Left and route retry/dead-letter explicitly; when using the retry wrapper it may translate a retryable error to its application exception inside the handler. Never wrap an `Either` in `DelegatedFresh`, which would acknowledge a Left.
 
-importing `InboxIdempotence (..)` from `Keiro.Inbox.Types`. When the mode is delegated, also emit a comment above the `InboxInProgress` and `InboxPreviouslyFailed` disposition cases stating they are unreachable at runtime in delegated mode and retained for totality. The disposition table itself and the seven-outcome completeness rule in `validateIntake` stay exactly as they are (Decision Log).
-
-Diff (`src/Keiro/Dsl/Diff.hs` + `src/Keiro/Dsl/Validate.hs`): add two `DiagnosticCode` constructors, `IntakeIdempotenceModeChanged` and `IntakeIdentitySchemeChanged`. Add `intakeDiff :: Spec -> IntakeNode -> [Change]` that finds the same-named intake in the old spec and emits `breaking` for: `inkIdempotence` changed (mode flip — delivery semantics change), `inkDedupePolicy` changed, or `inkDedupeKey` changed (identity scheme change — in-flight messages dedupe differently). A brand-new intake is `additive`. Wire it into `diffSpecs` next to the aggregate walk. Follow the existing `breaking`/`additive` helper idiom (`breaking n subj code detail`).
-
-Tests (`keiro-dsl/test/`, suite `keiro-dsl-test`): a new fixture `test/fixtures/intake-delegated.keiro` (copy `intake.keiro`, add `idempotence delegated`); parser test that it parses with `inkIdempotence = IdemDelegated` and that `intake.keiro` (no clause) defaults to `IdemInboxTable`; round-trip test through PrettyPrint; validator test that the delegated fixture is diagnostic-clean; diff tests asserting mode flip, policy change, and key change each produce a `Breaking` with the right code, and that an unchanged spec produces none.
-
-Acceptance: `cabal test keiro-dsl-test` green; `cabal run keiro-dsl -- check keiro-dsl/test/fixtures/intake-delegated.keiro` exits 0 (adjust invocation to the CLI's actual argument shape in `keiro-dsl/app/Main.hs`).
+There is no workflow adapter and no raw `delegatedFromCommand` error fold. General workflow bodies, silent commands, separately committed side effects, and arbitrary fan-out remain outside these convenience adapters. Acceptance: module builds, adapter cases are exhaustively tested, identity goldens pass, and Haddocks spell out each restriction.
 
 
-### Milestone 5 — Delegated conformance fixture against the live runtime
-
-Scope: prove the generated surface and a hand-filled delegated runner type-check against the real `keiro` API, the same way the existing intake fixtures do.
-
-Add to `keiro-dsl/test/conformance-intake-full/`: a Generated module `Generated/HospitalCapacity/IncidentInboxDelegated/Inbox.hs` (what `scaffold` would emit for the delegated fixture: `inboxDedupePolicy`, `inboxIdempotence = IdempotenceDelegated`, `inboxDisposition` with the unreachable-case comments) and a hand-filled `HospitalCapacity/IncidentInboxDelegated/Integration.hs` whose runner wires `runInboxDelegated Nothing inboxDedupePolicy` and whose handler demonstrates the aggregate fold: derive `delegatedEventId`, call a command, classify via `delegatedFromCommand`. Register both in the `keiro-dsl-conformance-intake-full` stanza's `other-modules` in `keiro-dsl/keiro-dsl.cabal`; extend that suite's `Main.hs` with pure assertions on `inboxIdempotence` and the disposition table, mirroring the existing `conformance-intake-runtime` assertions. If the scaffolder's output for the delegated fixture and this hand-written Generated module drift, the conformance suite is the tripwire — regenerate with `keiro-dsl scaffold` against `intake-delegated.keiro` and diff to confirm they match.
-
-Acceptance: `cabal test keiro-dsl-conformance-intake-runtime keiro-dsl-conformance-intake-full` green.
+### Milestone 3 — Durable behavior, races, and no-inbox proof
 
 
-### Milestone 6 — Benchmarks and documentation
+In `keiro/test/Main.hs`, add `describe "Keiro.Inbox delegated"` using the existing suite-level PostgreSQL fixture and resource-aware runner where needed. Use a real aggregate and a transactional SQL counter or projection; do not replace the durable proof with IORef-only tests.
 
-Scope: quantify the win honestly and teach users when (not) to use the mode.
+Deliver the same event twice using `delegatedCommand`: assert processed then duplicate, one event batch, one counter change, and `listInbox source == []`. Make the replayed command invalid in the post-append state so the test proves preflight occurs before hydration/dispatch. Repeat for a multi-event append, then simulate loss of acknowledgement by discarding the first successful return and redelivering.
 
-Bench (`keiro/bench/Main.hs`): add `inbox.delegated-single` and `inbox.delegated-batch-100`. To compare like with like, both the table-backed comparator (`inbox.single-nometrics`) and the delegated scenario must do the same downstream work: give the delegated handler a single-statement transaction inserting into a scratch table with the dedupe key as primary key (the moral equivalent of a deterministic-id append), and note in a comment that the table scenario performs the identical handler statement *plus* the `keiro_inbox` insert. Extend the `InboxScenario` record (or add a sibling) as needed. Run before/after:
+Race two independent connections on the same identity using a barrier. Assert exactly one committed event batch and SQL effect; the loser may be a confirmed duplicate or a retryable failure followed by duplicate on redelivery. Install an event with the same ID in another stream and prove it remains a failure. Test mismatched `DuplicateEvent (Just id)` and `DuplicateEvent Nothing` without target membership; neither is acknowledged. Prove zero-event and failed PM results never become processed.
 
-```bash
-cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench-after-inbox.csv"
-```
+Test batch sequences with a first synchronous failure followed by the same identity, successful duplicate suppression, mixed sources sharing a key, invalid policies, and unrelated messages after a poison message. Ensure input-order results and no success caching after failure. Retry cases include invalid context inputs, attempts 1/2/3/4 with ceiling 3, success at attempt 3, poisoned metrics at failing attempt 3, and no invocation at attempt 4. Verify async cancellation with a synchronized handler, not a timing sleep.
 
-Record the table in Outcomes & Retrospective with the explicit caveat that single-message wall time is commit-dominated, so expect a modest delta there; the structural win (no row growth, no unique-index churn, no GC) should be stated in prose next to the numbers, not claimed as latency. Regenerate `keiro/bench/baseline-inbox.csv` to include the new scenarios so `just bench-regression` keeps passing (it pattern-matches `-p inbox`).
+Zero rows alone do not prove no inbox reads or rolled-back writes. Add an interpreter/instrumented test that fails on inbox operations, or a dedicated database role lacking all inbox-table privileges while retaining downstream permissions. Run delegated intake successfully through it. The wrapper-only test must also succeed without Store.
 
-Docs: in `docs/user/integration-events.md`, add a "Delegated idempotence" subsection after the message-identity section: when the table is redundant, the delegation contract (identity absorption, effect confinement), the witness type, what you give up (no `keiro_inbox` dead-letter rows, no `listInbox`/backlog visibility for these consumers, retry accounting moves to the Kafka layer/DLQ topic), and a worked handler snippet using `delegatedEventId` + `delegatedFromCommand`. Touch `docs/guides/integration-events-with-kafka.md` with a pointer. In `docs/corpus/keiro-dsl-corpus.md`, document the `idempotence` clause and the new Breaking diff rules.
+Acceptance is the focused suite and complete `cabal test keiro-test` passing, with evidence recorded here. Fixtures clean up only their own temporary database state.
 
-Acceptance: `just haskell-verify` green (build + all tests + website build, which validates the docs render); bench table recorded.
+
+### Milestone 4 — Versioned DSL mode and current diff infrastructure
+
+
+Add `IdempotenceMode = IdemInboxTable | IdemDelegated` and strict `idempotence :: IdempotenceMode` to `IntakeNode`. Update all construction, normalization, generators, and equality fixtures, including `Frontend/Internal.hs`, under the existing NoFieldSelectors convention.
+
+At this baseline register candidate language 6 with predecessor 5, new syntax profile including `DelegatedInboxSyntax`, and an explicit runtime capability/profile for delegated intake generation. Preserve the predecessor aggregate-fold fingerprint segment because inbox routing changes no aggregate fold. If another plan has already opened a candidate when implementation starts, extend that candidate rather than allocate a competing version. Do not relabel any published language or rewrite historical fixtures.
+
+Thread the frontend language context to `pIntake` in `Parser/Integration.hs` through `Parser/Document.hs`. Parse optional `idempotence table|delegated` immediately after dedupe and before optional `persist`. Claim the clause with the existing located feature-gate helper. These are contextual tokens, never additions to the global reserved-word list. Omission normalizes to table mode in every version; published versions reject the explicit new clause. PrettyPrint omits the default table clause, retaining historical rendering, and emits delegated explicitly. Candidate skeletons may show the table clause/comment; published skeletons remain unchanged.
+
+Delegated mode creates no persisted envelope. Reject explicit `persist = dedupe-only` with a clear validator diagnostic because it suggests storage that does not exist; default/full persistence is accepted but documented as inapplicable. Keep all seven disposition rows and failure detail attachment. `inProgress` is never emitted by the new wrappers; `previouslyFailed` is reachable in retry mode and must not be labelled unreachable.
+
+In `Scaffold.hs`, make generation consult the checked mode. For delegated intake emit `inboxIdempotence = IdempotenceDelegated`, `inboxDedupePolicy`, the existing service-specific outcome/disposition types, and a signed `runInboxIntake` wrapper partially applying `runInboxDelegated` to the generated policy. It takes metrics, event, optional Kafka metadata, and the delegated handler. Omit `inboxPersistence` from this new delegated surface and explain why. Keep published table output byte-compatible; a table-mode new-language module may export `inboxIdempotence = IdempotenceInboxTable` without changing the existing transaction handler contract. Register generated names/imports in the existing collision and manifest machinery.
+
+Extend `intakePairDiff` rather than adding another intake walk. Retain `DedupeIdentityChanged` for key/policy changes and add only `IntakeIdempotenceModeChanged` for mode flips. Register it as `DiffDiagnostic` in `Validate.hs` and as persisted-identity context in both `Diff.hs` and `DiffReport.hs`, so compatibility vectors and CLI gates agree. Preserve addition/removal, decode, and persistence behavior. Both mode directions are breaking because their durable dedupe histories differ.
+
+Acceptance: `keiro-dsl-test` proves candidate parsing and pretty round trips, exact predecessor rejection, unchanged historical generated bytes, normalization survival, invalid persistence diagnostics, exhaustive dispositions, diff code/vector/remedy classification, and a mode-change CLI test failing specifically on `--gate persisted-identity`. Use checked source/service APIs in tests; do not introduce bare-Spec shortcuts around source provenance.
+
+
+### Milestone 5 — Real generated conformance
+
+
+Add a dedicated candidate fixture `keiro-dsl/test/fixtures/intake-delegated.keiro` and generated/Hole integration under `keiro-dsl/test/conformance-intake-delegated/`, registered as `keiro-dsl-conformance-intake-delegated` in `keiro-dsl/keiro-dsl.cabal`. Keep the current table conformance suites as published-language evidence.
+
+Generate source from the fixture into a temporary directory, compare it byte-for-byte to the committed generated layer, and compile through the generated manifest's edition defaults. A hand-filled integration imports generated `runInboxIntake`, uses `delegatedEventId` with envelope source and the stable target/operation name, invokes `delegatedCommand`, and explicitly handles its typed errors. Use the actual resource/error interpreter stack for SQL command callbacks. Add a live two-delivery test proving generated runner, duplicate classification, disposition, and durable effects together.
+
+Update the conformance language-ownership inventory and record-migration inventory through their existing scripts as required. Do not regenerate unrelated released corpora. Acceptance: the dedicated suite, existing intake suites, `cabal test keiro-dsl:tests`, and generated/record/conformance policy targets all pass.
+
+
+### Milestone 6 — Performance evidence, documentation, and durable decisions
+
+
+Keep existing `keiro/bench/Main.hs` inbox scenarios and their baseline meanings. Add separately named `inbox.delegated-single`, `inbox.delegated-batch-100`, and matched `inbox.table-downstream-single`/`inbox.table-downstream-batch-100` comparators. Both modes perform the same downstream business write and duplicate check. The table version places that work and inbox insert in one transaction; delegated performs only downstream work. Do not change `single-nometrics` to a different workload under its historical name.
+
+Measure fresh traffic, repeated-key traffic, and all-duplicate traffic, with metrics both off and on. Include one, 100, and 1,000 delivery chunks and a real aggregate duplicate case with 10, 1,000, and 100,000 historical events. A confirmed duplicate must use one indexed existence probe and zero command hydrations, appends, or inbox queries, independent of stream length. Fresh aggregate intake has one preflight plus the normal command work; matching/missing duplicate append errors allow one additional confirmation lookup. Verify SQL plans with `EXPLAIN (ANALYZE, BUFFERS)` in the isolated benchmark database to rule out a full stream scan.
+
+Report time per delivery, deliveries/second, allocations per delivery, and peak residency for chunk sizes, with at least five paired serial runs and medians/ranges. Keep setup, ID generation, reset, and duplicate prepopulation outside the measured operation for new scenarios; report separately if the harness cannot exclude them. All runs use equivalent payloads, durability settings, connection pool, metrics, and downstream writes. Record GHC/package versions, PostgreSQL settings, hardware, and raw CSV locations.
+
+Require no more than 10% median wrapper overhead versus an equivalent sequential direct-handler loop, and no more than 10% regression for untouched table scenarios on the same machine; investigate repeatable failures instead of updating a baseline to pass. Memory must scale with the caller's chunk, never total backlog or stream length. A delegated batch has up to one downstream transaction per unsuppressed item and therefore may lose to the table batch's shared commit. Record that crossover and explicitly recommend table batching where measured throughput is better. This is a measured selection criterion, not a promise that delegation always wins.
+
+Use a clone-local candidate baseline only after the old table comparisons pass; retain raw old/new evidence before adding new scenario rows to `keiro/bench/baseline-inbox.csv`. No baseline refresh excuses a regression. Retain the project's 25% manual guard as an additional broad check.
+
+Update `docs/user/integration-events.md`, `docs/guides/integration-events-with-kafka.md`, and `docs/corpus/keiro-dsl-corpus.md` with the delegation contract, command adapter, language version, retry ownership, throughput tradeoff, and lack of inbox backlog/dead-letter visibility. Explain that callers must durably publish a DLQ record before acknowledging a terminal failure; these wrappers do not do so.
+
+Distill implemented decisions into a new or existing ADR using the profiled `docs/adr` contract, allocation tooling, and strict validation; update language ADR context only when that change actually lands. Update user-document timestamps/logs through the declared profile workflow. Acceptance: full Haskell verification, documentation/ADR/policy checks, and recorded performance evidence pass.
 
 
 ## Concrete Steps
 
-All commands run from the repository root, `/Users/shinzui/Keikaku/bokuno/keiro` (adjust to your checkout path).
 
-Build and test loop while implementing:
-
-```bash
-just haskell-build                 # cabal build all
-cabal test keiro-test              # runtime hspec (spins its own template-DB Postgres fixture)
-cabal test keiro-dsl-test          # DSL parser/validator/diff specs
-cabal test keiro-dsl-conformance-intake-runtime keiro-dsl-conformance-intake-full
-```
-
-Expected shape of a passing runtime test run (hspec summary line):
-
-```text
-... examples, 0 failures
-Test suite keiro-test: PASS
-```
-
-To run only the new inbox specs while iterating:
+Run from the repository root with its normal development environment. PostgreSQL tests start an isolated server through the fixture; they require PostgreSQL executables available on PATH. Use `nix develop` if the checkout's tools are not already available. Never inspect dependency code in the Nix store.
 
 ```bash
+git status --short
+mori registry search kiroku
+mori registry show shinzui/kiroku --full
+mori registry docs shinzui/kiroku
+cabal build keiro keiro-dsl
 cabal test keiro-test --test-options='--match "Keiro.Inbox delegated"'
+cabal test keiro-test
+cabal test keiro-dsl-test
+cabal test keiro-dsl-conformance-intake-delegated
+cabal test keiro-dsl:tests
 ```
 
-Bench (M6, manual/local — the baseline reflects the primary dev machine):
+The delegated suite/fixture commands become available in their milestones. Expected test completion includes `0 failures` and `Test suite ...: PASS`. Before selecting any new dependency bound, verify the released package against its authoritative registry and upstream release tags after Mori discovery; this plan requires no bound change.
 
-```bash
-cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --csv bench-after-inbox.csv"
-just bench-regression
-```
-
-DSL CLI smoke checks (M4; confirm exact argument shape against `keiro-dsl/app/Main.hs`):
+Candidate CLI and generation proof:
 
 ```bash
 cabal run keiro-dsl -- check keiro-dsl/test/fixtures/intake-delegated.keiro
-cabal run keiro-dsl -- diff --since HEAD~1 <path-to-spec>   # non-zero exit on Breaking
+cabal run keiro-dsl -- pretty keiro-dsl/test/fixtures/intake-delegated.keiro
+delegated_scaffold_dir=$(mktemp -d /tmp/keiro-inbox-scaffold.XXXXXX)
+cabal run keiro-dsl -- scaffold keiro-dsl/test/fixtures/intake-delegated.keiro --out "$delegated_scaffold_dir"
 ```
 
-Commit style: Conventional Commits, small and working at every step — suggested sequence `feat(inbox): add DelegatedOutcome witness and delegated intake entry points` (M1), `feat(inbox): add downstream duplicate-signal adapters` (M2), `test(inbox): cover delegated intake against live store` (M3), `feat(dsl): spec-level idempotence mode with breaking-change diff gating` (M4), `test(dsl): delegated intake conformance fixture` (M5), `perf(inbox): benchmark delegated intake` + `docs(inbox): document delegated idempotence` (M6). Every commit body must end with both trailers:
+The check exits zero, pretty retains delegated mode and source version, and scaffold emits the typed runner. Implement the breaking-diff smoke test in the CLI test harness with a disposable Git repository: commit the same candidate spec in table mode, change only its idempotence clause, then invoke `keiro-dsl diff intake.keiro --since HEAD --gate persisted-identity` there. It must exit nonzero with `IntakeIdempotenceModeChanged`; an unchanged source exits zero. This avoids meaningless `HEAD~1` comparisons or tests that fail only because a fixture did not exist historically.
+
+Benchmark and final validation:
+
+```bash
+cabal bench keiro-bench --benchmark-options="-p inbox -j1 --time-mode wall --csv bench-after-inbox.csv"
+just bench-regression
+just haskell-verify
+just extension-policy
+just dsl-api-boundaries
+just record-migration-policy
+just generated-name-policy
+just conformance-corpus-policy
+just user-documentation-validate
+just adr-validate
+```
+
+Cabal runs the benchmark from `keiro/`, so the CSV is `keiro/bench-after-inbox.csv`. Archive named paired runs rather than overwriting evidence. The full manual benchmark guard includes other subsystem groups and may take longer than the focused inbox run.
+
+Implementation commits use Conventional Commits and both trailers:
 
 ```text
 ExecPlan: docs/plans/83-delegated-idempotence-inbox-intake-bypass-the-keiro-inbox-table-when-the-downstream-state-machine-already-dedupes.md
@@ -365,63 +265,83 @@ Intention: intention_01kwganm3be0q8z4g6rmcqdj05
 
 ## Validation and Acceptance
 
-The feature is accepted when the following behaviors are observable, in this order of importance.
 
-Delivering the same integration event twice through `runInboxDelegated` with an aggregate-appending handler yields `Right (InboxProcessed _)` then `Right InboxDuplicate`, the aggregate stream holds the appended event exactly once, and `listInbox` for that source returns the empty list — proving both exactly-once effects and zero `keiro_inbox` writes (M3 test (a); run `cabal test keiro-test`).
+Acceptance requires the complete operation to have one committed effect after sequential replay, concurrent delivery, and loss of acknowledgement, with confirmed duplicates avoiding hydration and all inbox access. A failure, no-event command, unrelated event-ID collision, or mere workflow-instance existence must never be acknowledged as delegated success by a convenience adapter.
 
-The workflow, batch, retries/poison, and policy-error behaviors described in Milestone 3 all pass in the same suite, and the poisoned-messages counter fires exactly once at the attempt ceiling with a metrics handle installed.
+Batch tests must prove failure-then-repeat execution, source-scoped suppression, stable ordering, poison isolation, cancellation propagation, and metrics per classification. Retry tests must distinguish current invocation counts from durable caller bookkeeping. A no-Store wrapper test and denied/instrumented inbox access complement the empty-row assertion.
 
-A `.keiro` intake spec carrying `idempotence delegated` parses, validates cleanly, round-trips through the pretty-printer, and scaffolds a Generated module exporting `inboxIdempotence = IdempotenceDelegated`; editing a spec's idempotence mode, dedupe policy, or dedupe key field and running the diff produces a `Breaking` change and a non-zero exit (`cabal test keiro-dsl-test` covers all of this; the CLI smoke commands above demonstrate it interactively).
+The candidate DSL must preserve published parser/generator contracts and emit a callable delegated runner. Mode changes must be breaking on the persisted-identity axis, while existing key/policy diagnostics stay intact. Generated output must be reproduced by the tool, compiled under its manifest contract, and exercised against the runtime.
 
-The delegated conformance fixture compiles against the live runtime (`cabal test keiro-dsl-conformance-intake-full`), so any future signature drift in `runInboxDelegated` or the adapters breaks the DSL's build, exactly as the existing table-backed fixture guards `runInboxTransaction`.
-
-`just bench-regression` passes against the regenerated `keiro/bench/baseline-inbox.csv`, and the Outcomes section contains the before/after table for `inbox.delegated-single` vs `inbox.single-nometrics` with the honest commit-dominated framing.
-
-`just haskell-verify` is green at the end (build, all test suites, website build including the edited docs).
+Performance is accepted only with the M6 operation-count, memory-scaling, historical-regression, and paired measurement evidence. A slower batch comparison is a documented usage limitation, not permission to hide commit costs or claim a universal win. No benchmark or runtime acceptance has been executed during this plan-only revision.
 
 
 ## Idempotence and Recovery
 
-Every step is additive and re-runnable. No migration touches the database; the `keiro_inbox` table, its schema, and all existing entry points are unchanged, so partial implementation cannot break existing consumers — the new functions simply sit unused until called. Re-running `keiro-dsl scaffold` overwrites Generated modules by design (they are marked `@generated`; hand-filled modules are never overwritten). Regenerating the bench baseline is safe to repeat; if bench numbers drift on a different machine, re-record rather than force — the baseline is documented as primary-dev-machine-specific and the guard is manual, not CI. If a milestone must be rolled back, revert its commits; no state outlives the code.
 
-One semantic risk to keep in view rather than recover from: delegated mode is only correct under the delegation contract (identity absorption + effect confinement). The witness type, the adapters, the haddocks, the docs section, and the DSL diff gate all exist to keep a consumer from drifting out of that contract silently. Do not weaken any of them to save time.
+The implementation adds no production schema or migration. Repeat tests in fresh fixture databases and regenerate only disposable or generator-owned outputs. Preserve hand-owned source and obey scaffold preflight/adoption checks; do not assume every generated file can be overwritten unconditionally.
+
+Switching an existing consumer between table and delegated modes is not automatically safe. Old inbox rows do not imply downstream marker IDs exist, and delegated completions create no inbox history for a rollback. Drain in-flight work and establish an explicit cutover/replay boundary or a separately designed receipt migration before either switch. Merely reverting code may replay effects. Target deletion, relinking, changed source/consumer/operation naming, and dropping marker events can also invalidate the dedupe contract; retain identities and durable evidence for the full delivery/replay horizon.
+
+If a delegated batch is interrupted after some commits, redeliver unacknowledged input; downstream identity checks must absorb completed items. Do not resume by trusting the discarded in-memory set. Retrying external effects without their own idempotence key is outside this API.
 
 
 ## Interfaces and Dependencies
 
-No new external dependencies; everything builds on packages already in `keiro.cabal` (`uuid` for v5 ids — already used by `Keiro.ProcessManager` — `effectful`, `hasql-transaction`) and `keiro-dsl.cabal`.
 
-At the end of M1, `Keiro.Inbox.Types` additionally exports `DelegatedOutcome (..)` and `InboxIdempotence (..)`, and `Keiro.Inbox` exports:
+These are proposed APIs, not existing exports. Keep the wrappers' metrics implementation shared with the current inbox code. No new external package or dependency bound is required.
 
 ```haskell
+-- Keiro.Inbox.Types
+data DelegatedOutcome a = DelegatedFresh !a | DelegatedDuplicate
+data InboxIdempotence = IdempotenceInboxTable | IdempotenceDelegated
+
+-- Export the type abstractly; constructor validates both positive values.
+mkDelegatedRetryContext :: Int -> Int -> Either Text DelegatedRetryContext
+
+-- Keiro.Inbox
 runInboxDelegated ::
-    (IOE :> es) =>
-    Maybe KeiroMetrics -> InboxDedupePolicy -> IntegrationEvent -> Maybe KafkaDeliveryRef ->
-    (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
-    Eff es (Either InboxError (InboxResult a))
+  IOE :> es =>
+  Maybe KeiroMetrics -> InboxDedupePolicy ->
+  IntegrationEvent -> Maybe KafkaDeliveryRef ->
+  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
+  Eff es (Either InboxError (InboxResult a))
 
 runInboxDelegatedWithRetries ::
-    (IOE :> es) =>
-    Maybe KeiroMetrics -> Int -> Int -> InboxDedupePolicy -> IntegrationEvent -> Maybe KafkaDeliveryRef ->
-    (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
-    Eff es (Either InboxError (InboxResult a))
+  IOE :> es =>
+  Maybe KeiroMetrics -> DelegatedRetryContext -> InboxDedupePolicy ->
+  IntegrationEvent -> Maybe KafkaDeliveryRef ->
+  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
+  Eff es (Either InboxError (InboxResult a))
 
 runInboxDelegatedBatch ::
-    (IOE :> es) =>
-    Maybe KeiroMetrics -> InboxDedupePolicy -> [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
-    (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
-    Eff es [Either InboxError (InboxResult a)]
+  IOE :> es =>
+  Maybe KeiroMetrics -> InboxDedupePolicy ->
+  [(IntegrationEvent, Maybe KafkaDeliveryRef)] ->
+  (Text -> IntegrationEvent -> Eff es (DelegatedOutcome a)) ->
+  Eff es [Either InboxError (InboxResult a)]
+
+-- Keiro.Inbox.Delegated
+delegatedEventId ::
+  Text -> Text -> Text -> StreamName -> Text -> EventId
+
+data DelegatedCommandError
+  = DelegatedCommandFailed !StreamName !CommandError
+  | DelegatedCommandWithoutReceipt !StreamName
+
+delegatedCommand ::
+  Store :> es =>
+  RunCommandOptions -> StreamName -> EventId ->
+  (RunCommandOptions -> Eff es (Either CommandError (CommandResult target))) ->
+  Eff es (Either DelegatedCommandError (DelegatedOutcome (CommandResult target)))
+
+delegatedFromPMCommand ::
+  StreamName ->
+  PMCommandResult target ->
+  Either DelegatedCommandError (DelegatedOutcome (CommandResult target))
 ```
 
-At the end of M2, `Keiro.Inbox.Delegated` (new exposed module) exports:
+The PM adapter takes the resolved target stream name for reporting a zero-event result; `CommandResult.target` is a typed stream reference, not necessarily its resolved store name. A `PMCommandFailed` retains the stream name carried by that failure.
 
-```haskell
-delegatedEventId :: Text -> Text -> Int -> EventId
-delegatedFromCommand :: Either CommandError (CommandResult t) -> Either CommandError (DelegatedOutcome (CommandResult t))
-delegatedFromPMCommand :: PMCommandResult t -> DelegatedOutcome (PMCommandResult t)
-delegatedWorkflowStart :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> Eff (Workflow : es) a -> Eff es (DelegatedOutcome (WorkflowOutcome a))
-```
+The generated delegated `runInboxIntake` has the `runInboxDelegated` signature with the policy argument removed. It preserves the polymorphic effect stack and does not require Store; the integration's command callback supplies its own additional effects. No generic workflow-start API is introduced.
 
-At the end of M4, `Keiro.Dsl.Grammar` exports `IdempotenceMode (..)` and `IntakeNode` carries `inkIdempotence :: !IdempotenceMode`; `Keiro.Dsl.Validate.DiagnosticCode` carries `IntakeIdempotenceModeChanged` and `IntakeIdentitySchemeChanged`; `Keiro.Dsl.Diff` exports (or internally wires) `intakeDiff` through `diffSpecs`.
-
-Module-dependency note recorded for the implementer: `Keiro.Inbox.Delegated` imports `Keiro.Command`, `Keiro.ProcessManager`, `Keiro.Workflow`, `Keiro.Workflow.Instance`, and `Keiro.Inbox.Types`; as of planning, nothing under `keiro/src` imports any `Keiro.Inbox*` module except the inbox modules themselves and `Keiro.Telemetry` (which imports only `Keiro.Inbox.Kafka` for a type), so no import cycle is possible.
+Revision note (2026-09-15): Replaced the July design with the current runtime/DSL baseline; corrected duplicate confirmation, no-op/failed-command handling, workflow guarantees, source/target identity encoding, retry semantics, and batch safety. Added published-language gating, generated runner conformance, explicit cutover risks, and measurable performance gates. Feature implementation remains pending.
