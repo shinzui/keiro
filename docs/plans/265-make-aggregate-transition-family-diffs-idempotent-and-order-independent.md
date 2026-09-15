@@ -5,9 +5,17 @@ title: "Make aggregate transition-family diffs idempotent and order-independent"
 kind: exec-plan
 created_at: 2026-08-22T03:59:33Z
 intention: "intention_01m0kst1x4ejdsnxmweqv8brne"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T20:36:52Z
+      mode: "update"
+      note: "Validate current diff/replay APIs and refresh structural fix, test coverage, and implementation recommendation."
 ---
 
 # Make aggregate transition-family diffs idempotent and order-independent
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -15,6 +23,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 
 ## Purpose / Big Picture
+
 
 `keiro-dsl diff` currently compares each candidate aggregate transition with the first
 baseline transition that has the same source state, command, and mode. That is incorrect
@@ -32,16 +41,21 @@ Language-5 regression against itself and by diffing a disposable checkout of
 `replay-neutral` result.
 
 This plan deliberately stops at the per-transition structural boundary. It does not group
-siblings by replay body, does not validate the printed twin against the candidate language, and
+siblings by replay body, does not add a production-time validator for every printed twin, and
 does not claim anything about guard satisfiability. The dependent
 [ExecPlan 266](266-classify-guard-unions-by-replay-body-and-validate-replay-only-remedies.md)
 adds body-keyed guard-union classification and remedy validation after this plan establishes one
-shared, deterministic transition-family comparison. A semantic proof engine was reviewed and
+shared, deterministic transition-family comparison. This plan does test representative printed
+twins through the candidate language and clears their illegal forward outcome fields. A semantic proof engine was reviewed and
 deferred; the IR-33 review records why and under what conditions it may return.
 
 
 ## Progress
 
+
+- [x] (2026-09-15) Revalidate the current API and source at Keiro commit
+      `256b2595eb42fcb5e0c173fabd3acb04cc356e86`; retain the structural fix and correct
+      record fields, family ordering, test visibility, and acceptance boundaries.
 - [ ] Capture the current contradiction with a minimized Language-5 sibling fixture and
       text, JSON, and replay-impact assertions.
 - [ ] Add one internal transition-family module that groups, sorts, and exactly cancels
@@ -62,9 +76,22 @@ deferred; the IR-33 review records why and under what conditions it may return.
 
 ## Surprises & Discoveries
 
+
+- Observation (2026-09-15): the freshly built local executable reproduces the original
+  contradiction against a disposable clone of `mori://shinzui/mori/repos/mori` at commit
+  `7a8ea8242f8cac0527f32bb2f7c97d408268b73a`. Diffing its unchanged
+  `domain/mori.keiro-workspace` against `HEAD` exits successfully but emits 39 false guard
+  advisories. This is a current executable reproduction, not just a source-level inference.
+  Evidence from the report and replay-impact outputs:
+
+  ```json
+  {"breaking": false, "findings": 39, "codes": [{"code": "AggGuardTightened", "count": 39}]}
+  {"verdict": "replay-neutral"}
+  ```
+
 - Observation: baseline and candidate workspace loading is already symmetric for an ordinary
   self-diff. `keiro-dsl/app/Main.hs` loads the working tree with `loadWorkspace`, loads the Git
-  revision through the same `loadWorkspace` entry point and a different `ContentSource`, then
+  revision through the same `loadWorkspace` entry point and a different `Contensource`, then
   passes both through `checkedWorkspace`. The special adoption baseline applies only when the
   historical manifest does not exist.
   Evidence: `runWorkspaceDiff` in `keiro-dsl/app/Main.hs` and `diffWorkspaces` in
@@ -89,8 +116,8 @@ deferred; the IR-33 review records why and under what conditions it may return.
 - Observation: sibling mispairing explains every one of the 39 reported findings. Counting
   second-and-later live transitions per (aggregate, source, command) in Mori's committed
   `domain/` sources gives exactly 39 (31 `ProjectArtifact`, 8 `Project`), and every such family
-  is a no-op branch declared before its complementary emitting branch. No second cause needs to
-  be searched for.
+  is a no-op branch declared before its complementary emitting branch. This is historical evidence for that revision, not an invariant of the current adopter
+  or a reason to omit the fresh regression below.
   Evidence: validation pass on 2026-08-21 over `mori://shinzui/mori/repos/mori` `domain/*.keiro`;
   the IR-33 total of 39.
 
@@ -105,10 +132,10 @@ deferred; the IR-33 review records why and under what conditions it may return.
   `project.keiro` `Active -- ObserveProjectDescription` in Mori.
 
 - Observation: the printed twin copies the whole old `Transition` and changes only guard and
-  mode, so in Language 5 it carries the old `tOutcome`. The validator rejects a replay-only
-  transition with a forward outcome as `DomainOutcomeReplayOnlyClause`, so every Language-5
-  twin printed today is unpasteable as-is.
-  Evidence: `let twin = oldT {tGuard = ..., tMode = TmReplayOnly}` in `guardTighteningDiff`;
+  mode, so in Language 5 it carries the old `outcome`. The validator rejects a replay-only
+  transition with a forward outcome as `DomainOutcomeReplayOnlyClause`, so a twin copied from a Language-5 transition with an explicit outcome is
+  unpasteable as-is. Language-5 transitions without that clause are not affected by this issue.
+  Evidence: `replaceTransitionGuardAndMode` called by `guardTighteningDiff` preserves both outcome fields;
   `transitionOutcomeRules` in `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
 
 - Observation: `test/fixtures/fold-identity-diff-replay.golden` renders findings in emission
@@ -127,6 +154,22 @@ deferred; the IR-33 review records why and under what conditions it may return.
 
 
 ## Decision Log
+
+
+- Decision: Proceed with this four-milestone structural fix after the 2026-09-15 API refresh.
+  Rationale: current `guardTighteningDiff` still pairs every new sibling with the first old
+  sibling, whereas replay impact already cancels exact multisets. The fix removes demonstrable
+  false advisories without a dependency or persisted-identity change. Plan 266 remains necessary
+  for body changes, existing-twin coverage, and general remedy validation; this plan alone does
+  not establish semantic guard equivalence or close IR-33.
+  Date: 2026-09-15
+
+- Decision: Keep the new module private and test its observable contract through `diffServices`
+  and `replayImpactServices`; use an explicit mode ordering inside the family key.
+  Rationale: `keiro-dsl-test` imports the built library and cannot import its `other-modules`.
+  `TransitionMode` currently derives `Eq`, `Show`, and `Generic`, but not `Ord`. Neither a public
+  helper export nor a new public `Ord` instance is needed for this fix.
+  Date: 2026-09-15
 
 - Decision: Split IR-33 into this structural correctness plan and dependent ExecPlan 266 for
   replay-body classification and remedy validation.
@@ -174,7 +217,7 @@ deferred; the IR-33 review records why and under what conditions it may return.
   guard proof, so it belongs in this plan rather than ExecPlan 266.
   Date: 2026-08-21
 
-- Decision: Every printed twin clears `tOutcome` and `tOutcomeDuplicateLocs` in this plan.
+- Decision: Every printed twin clears `outcome` and `outcomeDuplicateLocs` in this plan.
   Rationale: a forward-only domain outcome is illegal on a replay-only transition
   (`DomainOutcomeReplayOnlyClause`). Leaving the copy in place would knowingly ship an
   unpasteable remedy to every Language-5 adopter until ExecPlan 266 lands; the fix is two field
@@ -199,18 +242,39 @@ deferred; the IR-33 review records why and under what conditions it may return.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+
+The 2026-09-15 refresh recommends implementation of the bounded structural fix. Production code
+has not been changed and implementation milestones remain open. The executable builds, and the
+focused replay-impact suite passes (11 examples, zero failures). The existing Plan-143 suite
+also passes (7 examples, zero failures, including 100 complement-expression property trials).
+A fresh disposable Mori self-diff at `7a8ea8242f8cac0527f32bb2f7c97d408268b73a` produces
+39 `AggGuardTightened` findings alongside `replay-neutral`, confirming the defect remains.
+`git diff --check` passes for this documentation refresh. The complete implementation suite
+was not run for this plan-only update. Current public diff and
+replay-impact signatures still match the plan. The API corrections below remove stale record
+selectors and make testing possible without exposing a private module. Final acceptance still
+requires the new failing regression to turn green and the complete implementation validation bar.
 
 
 ## Context and Orientation
+
+
+API validation on 2026-09-15 found that `Transition` uses unprefixed record fields:
+`source`, `command`, `implementation`, `guard`, `writes`, `emits`, `outcome`,
+`outcomeDuplicateLocs`, `goto`, `mode`, and `loc`. `canonicalTransition :: Transition -> Text`
+returns frozen canonical text, whose UTF-8 bytes feed persisted identity. Use these actual
+fields and the existing reconstruction helper `replaceTransitionGuardAndMode` in `Diff.hs`;
+clear `outcome` and `outcomeDuplicateLocs` there. Do not introduce the obsolete `t*` selectors.
+`CheckedService` carries the language context but does not itself certify successful validation;
+valid fixture tests must call `validateService` explicitly.
 
 The affected package is `keiro-dsl`, identified across repositories by this canonical handle:
 
 `mori://shinzui/keiro/packages/keiro-dsl`
 
 Its normalized aggregate syntax lives in
-`keiro-dsl/src/Keiro/Dsl/Grammar.hs`. A `Transition` records a source state (`tSource`), command
-(`tCommand`), behavior owner, optional guard, ordered writes and emitted events, an optional
+`keiro-dsl/src/Keiro/Dsl/Grammar.hs`. A `Transition` records a source state (`source`), command
+(`command`), behavior owner, optional guard, ordered writes and emitted events, an optional
 forward-only domain outcome, target state, mode, and source location. A *live* transition may
 accept a new command. A *replay-only* transition is skipped by forward execution and retained so
 historical events can still be inverted and folded.
@@ -244,7 +308,7 @@ The syntactic loosening rule remains private to replay impact until ExecPlan 266
 with the diff pass.
 
 `keiro-dsl/src/Keiro/Dsl/CanonicalEncoding.hs` defines `canonicalTransition`. These bytes are
-frozen persisted fold identity: they include replay behavior and exclude `tOutcome`, because a
+frozen persisted fold identity: they include replay behavior and exclude `outcome`, because a
 domain outcome labels forward command behavior without changing replay. This plan must not
 normalize, simplify, or otherwise change those bytes. It may sort and compare them.
 
@@ -288,7 +352,9 @@ stepping, event codecs, fold fingerprints, or stored data.
 
 ## Plan of Work
 
+
 ### Milestone 1 — Pin the sibling-family failure
+
 
 Add a small Language-5 aggregate fixture under `keiro-dsl/test/fixtures/` derived from Mori's
 `ProjectArtifact` pattern. It must contain at least two valid live transitions with the same
@@ -326,6 +392,7 @@ false `AggGuardTightened` is observed; after later milestones, all new assertion
 
 ### Milestone 2 — Establish one transition-family authority
 
+
 Create the internal module `keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` and register it under
 `other-modules` in `keiro-dsl/keiro-dsl.cabal`. Define an ordered `TransitionFamilyKey` containing
 mode, source, and command, plus a `TransitionFamilyDelta` containing that key and the exact old and
@@ -337,8 +404,16 @@ transitionFamilyDeltas :: [Transition] -> [Transition] -> [TransitionFamilyDelta
 
 The implementation groups both inputs, sorts each family by `canonicalTransition`, and performs
 duplicate-aware merge cancellation. It returns families in key order and remainders in canonical
-order. Do not use source locations or list positions as semantic identity. Add focused tests for
-duplicates, empty sides, unrelated keys, and every permutation of a three-sibling family.
+order. Do not use source locations or list positions as semantic identity. Exercise duplicates, empty sides, unrelated keys, and every pair of old/new permutations of a
+three-sibling family through the public diff/replay APIs in `keiro-dsl/test/Main.hs`, under
+`describe "transition family"`. Follow the existing replay-impact test's aggregate mutation
+pattern for multiset edge cases; separately validate the source fixtures used for end-to-end
+claims. Do not import this private module from the test suite or expose it just for tests.
+
+Use an internal mode rank (`TmLive` before `TmReplayOnly`) when ordering keys; `TransitionMode`
+has no `Ord` instance. Return the union of keys, including fully cancelled families with empty
+remainders. Canonical ordering means ordering by encoded replay identity: transitions differing
+only in location or outcome have equal keys, so no ordering of those ignored fields is promised.
 
 Replace the private `cancelExact` and grouping code in
 `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` with this shared result. Continue applying the existing
@@ -346,16 +421,19 @@ Replace the private `cancelExact` and grouping code in
 now. The existing replay-impact permutation test must remain green.
 
 Rewrite `guardTighteningDiff` in place, keeping it inside the spec-level `aggregatePairDiff`
-at its current position so finding emission order and the existing rendering golden are
-unchanged. The rewritten pass starts with `transitionFamilyDeltas` over the two aggregates'
+at its current position so ordering relative to other passes and the existing rendering golden
+are preserved. Within the guard pass, family-key ordering intentionally replaces declaration
+ordering; do not promise identical ordering for historically mispaired multi-family reports. The rewritten pass starts with `transitionFamilyDeltas` over the two aggregates'
 transitions and then drops every no-emit transition from both remainders of each live family
 before any classification, because such a transition is a validator-proven no-op that cannot
-strand history. A family with an empty exact remainder produces no guard finding. Exactly one
+strand history. A family with both exact remainders empty produces no guard finding. Exactly one
 old and one new emitting live remainder follows the existing raw guard-change path so the
 established Plan-143 behavior remains available; the twin it prints is the old transition with
-the removed-region guard, replay-only mode, `tOutcome = Nothing`, and
-`tOutcomeDuplicateLocs = []`. A family with emitting transitions on both sides but no unique
-remaining pair produces the conservative unknown finding defined in Milestone 3. An old-only
+the removed-region guard, replay-only mode, `outcome = Nothing`, and
+`outcomeDuplicateLocs = []`. A family with emitting transitions on both sides but no unique
+remaining pair produces the conservative unknown finding defined in Milestone 3. Emit that
+unknown even if a replay-only sibling exists: the legacy source/command-only twin check belongs
+only to the one-to-one path and is not evidence that an ambiguous family is covered. An old-only
 removal or new-only addition remains owned by the independent fold/replay/declaration analyses
 rather than being mislabeled as a guard relation; ExecPlan 266 records that a removed emitting
 body is a hydration hazard that deserves its own remedy, and owns that extension.
@@ -365,9 +443,11 @@ and replay-neutral, while the genuine one-to-one tightening remains visible.
 
 ### Milestone 3 — Make ambiguity truthful and machine-readable
 
+
 Append `AggGuardRelationUnknown` to `DiagnosticCode` in
-`keiro-dsl/src/Keiro/Dsl/Validate.hs`, classify it as `DiffDiagnostic`, and include it in every
-exhaustive diff-code registry used by `Diff.hs`. In `classifyCompatibility`, give it the same
+`keiro-dsl/src/Keiro/Dsl/Validate.hs`, classify it as `DiffDiagnostic`, and add it to the `privateCodes` list used for context
+classification in `Diff.hs`. Pin diagnostic text round-trip and diff-only denial policy behavior
+alongside the existing code inventory tests. In `classifyCompatibility`, give it the same
 `private-history-read=advisory` vector as `AggGuardTightened`; do not demote it merely because the
 tool lacks a unique pair. Its detail must name the aggregate family, old/new remainder counts, and
 state that no replay-only transition was generated because the relationship is ambiguous.
@@ -381,13 +461,17 @@ JSON remedies for an ambiguous family contain `do-not-deploy` and not the run-co
 fallthrough alone. Update `keiro-dsl/CHANGELOG.md` and the guard-evolution section of
 `docs/guides/evolution-and-replayability.md` to explain that code-specific consumers of
 `AggGuardTightened` must also recognize `AggGuardRelationUnknown`, while compatibility-surface
-gates continue to catch both automatically.
+gates continue to classify both on the same surface. An advisory does not itself make the
+CLI fail: add a Git-backed assertion that `--deny AggGuardRelationUnknown` refuses an ambiguous
+change while the default policy retains its advisory exit behavior. `RemedyDoNotDeploy` is
+report guidance, not an automatic change to severity or exit status.
 
 Milestone acceptance is that an ambiguous family cannot disappear, cannot print a guessed twin,
 and remains classified on the private-history surface in the default report so downstream policy
 can recognize it without scraping prose.
 
 ### Milestone 4 — Prove the real adopter and close the structural plan
+
 
 Build the local `keiro-dsl` executable. Resolve `mori://shinzui/mori/repos/mori` with Mori, clone it
 to a fresh temporary directory, and run the local executable there against the committed
@@ -407,13 +491,16 @@ noise. ExecPlan 266 may then begin.
 
 ## Concrete Steps
 
+
 Run all Keiro commands from the repository root:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
 
+cabal build exe:keiro-dsl
 cabal test keiro-dsl-test --test-options='--match "transition family"'
 cabal test keiro-dsl-test --test-options='--match "replay impact"'
+cabal test keiro-dsl-test --test-options='--match "plan 143"'
 bash keiro-dsl/test/diff-test.sh
 ```
 
@@ -431,12 +518,14 @@ hard-coding another repository's filesystem path:
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
 
+cabal build exe:keiro-dsl
 keiro_dsl_bin="$(cabal list-bin exe:keiro-dsl)"
 mori_source="$(mori path mori://shinzui/mori/repos/mori)"
 guard_diff_scratch="$(mktemp -d "${TMPDIR:-/tmp}/keiro-guard-family.XXXXXX")"
 git clone --local --no-hardlinks "$mori_source" "$guard_diff_scratch/mori"
 
 cd "$guard_diff_scratch/mori"
+git rev-parse HEAD
 "$keiro_dsl_bin" diff domain/mori.keiro-workspace --since HEAD \
   --report-out "$guard_diff_scratch/mori-diff.json" \
   --replay-impact-out "$guard_diff_scratch/mori-replay.json"
@@ -482,11 +571,14 @@ test counts and Mori commit rather than copying anticipated counts into the comp
 
 ## Validation and Acceptance
 
+
 The plan is complete only when all of the following observable behaviors hold.
 
 The minimized Language-5 sibling fixture diffed against itself, against a location-only rewrite,
 and under every tested declaration permutation produces neither `AggGuardTightened` nor
-`AggGuardRelationUnknown`. The corresponding replay impact is `ReplayNeutral`. Adding an unrelated
+`AggGuardRelationUnknown`. The corresponding replay impact is `ReplayNeutral`. The no-emit guard-edit case promises no
+guard finding, not necessarily replay-neutral snapshot impact: preserve ReplayImpact's existing
+conservative treatment of changed fold surfaces. Adding an unrelated
 command, event, mapped declaration, or projection owner does not create a finding for an existing
 transition family.
 
@@ -497,7 +589,10 @@ own `HEAD`.
 
 A one-to-one real tightening continues to produce exactly one `AggGuardTightened` with the
 existing private-history compatibility vector, and its printed twin carries no `outcome` clause,
-parses, and validates under Languages 1 through 5. A guard change confined to a no-emit
+parses, and validates in representative fixtures for each Language 1 through 5. Use
+`parseSource`, `checkedSource`, and `validateService` for explicit language fixtures; do not
+route Language 5 through the legacy `parseSpec` helper. Include the explicit accepted-outcome
+case for Language 5 and an outcome-only change that causes no guard finding. A guard change confined to a no-emit
 transition produces no guard finding of any code. This plan does not weaken the runtime or audit
 proofs from ExecPlan 143. Conversely, a family whose exact emitting remainders cannot be uniquely
 paired produces exactly one `AggGuardRelationUnknown`, uses the private-history advisory vector,
@@ -515,6 +610,7 @@ The entire `cabal test keiro-dsl:tests` inventory and the focused Keiro black-ac
 
 
 ## Idempotence and Recovery
+
 
 All production changes are pure comparison logic and append-only diagnostics. Running the tests,
 Mori lookup, or disposable clone repeatedly does not alter a service specification or stored data.
@@ -538,6 +634,7 @@ how often it appears, but must keep parsing and reporting the code.
 
 ## Interfaces and Dependencies
 
+
 `keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` is an internal library module, registered in
 `keiro-dsl/keiro-dsl.cabal`. It owns `TransitionFamilyKey`, `TransitionFamilyDelta`, and
 `transitionFamilyDeltas`. The exact record field names may follow repository conventions, but the
@@ -549,7 +646,9 @@ observable contract is fixed: key-ordered families, duplicate-aware exact cancel
 `transitionFamilyDeltas`, excludes no-emit transitions, and clears outcome fields from the twin
 instead of performing its own first-match guard comparison. The public
 `diffServices :: CheckedService -> CheckedService -> Either FoldSurfaceError [Change]` signature,
-finding emission order, the rendering golden, and the JSON schema remain unchanged.
+ordering relative to other passes, the existing rendering golden, and the JSON schema remain
+unchanged. Guard findings themselves use deterministic family-key order. The new diagnostic
+value is an additive change to the code vocabulary, which code-specific consumers must handle.
 
 `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` consumes the same family deltas before its existing
 syntactic loosening pass. Its public
@@ -573,3 +672,14 @@ Every commit implementing this plan must include:
 ExecPlan: docs/plans/265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md
 Intention: intention_01m0kst1x4ejdsnxmweqv8brne
 ```
+
+
+## Revision note (2026-09-15)
+
+
+Refreshed against the current implementation and local executable before recommending that work
+proceed. Corrected renamed transition fields, the missing mode `Ord` instance, internal-module
+test visibility, the production-versus-test remedy-validation boundary, and the advisory-versus-
+exit-policy distinction. Added explicit build prerequisites, a commit-pinned adopter proof,
+per-language round-trip coverage, and precise ordering and ambiguity contracts. The four
+implementation milestones and deferred semantic scope remain intact.
