@@ -31,6 +31,7 @@ module Keiro.Test.Postgres
     StoreRunner (..),
     withFreshResourceStore,
     withFreshResourceStoreWith,
+    withFreshResourceStorePrepared,
     withFreshStores2,
   )
 where
@@ -148,14 +149,35 @@ withFreshResourceStoreWith ::
   IO ()
 withFreshResourceStoreWith fixture modify action =
   withFreshDatabase fixture \connStr ->
-    runEff $
-      withKirokuStore (modify (Store.defaultConnectionSettings connStr)) $ do
-        store <- getKirokuStore
-        withEffToIO (ConcUnlift Persistent Unlimited) \unlift ->
-          action
-            ( store,
-              StoreRunner (unlift . runErrorNoCallStack . runStoreResource)
-            )
+    runResourceStore (modify (Store.defaultConnectionSettings connStr)) action
+
+-- | Clone a database, let a privileged store prepare database roles or ACLs,
+-- then open the resource-aware store with modified application settings.
+-- The preparation store is closed before the application store is opened.
+withFreshResourceStorePrepared ::
+  Fixture ->
+  (Store.KirokuStore -> IO ()) ->
+  (Store.ConnectionSettings -> Store.ConnectionSettings) ->
+  ((Store.KirokuStore, StoreRunner) -> IO ()) ->
+  IO ()
+withFreshResourceStorePrepared fixture prepare modify action =
+  withFreshDatabase fixture \connStr -> do
+    Store.withStore (Store.defaultConnectionSettings connStr) prepare
+    runResourceStore (modify (Store.defaultConnectionSettings connStr)) action
+
+runResourceStore ::
+  Store.ConnectionSettings ->
+  ((Store.KirokuStore, StoreRunner) -> IO ()) ->
+  IO ()
+runResourceStore settings action =
+  runEff $
+    withKirokuStore settings $ do
+      store <- getKirokuStore
+      withEffToIO (ConcUnlift Persistent Unlimited) \unlift ->
+        action
+          ( store,
+            StoreRunner (unlift . runErrorNoCallStack . runStoreResource)
+          )
 
 -- | Like 'withFreshStore' but provides two independent migrated databases (and
 -- two stores) cloned from the same template — used by cross-context

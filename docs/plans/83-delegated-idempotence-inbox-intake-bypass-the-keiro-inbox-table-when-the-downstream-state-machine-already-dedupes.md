@@ -44,7 +44,7 @@ Do not promise lower latency merely from fewer inbox rows. Aggregate deduplicati
 - [x] (2026-09-15) Replaced unsafe duplicate/workflow assumptions, specified error-safe batching and source-scoped identities, and added API compatibility and performance acceptance.
 - [x] (2026-09-15 19:00Z) M1: Added runtime outcome, abstract validated retry context, and no-Store delegated single/retry/batch entry points. Focused tests passed with 7 examples and the complete `keiro-test` suite passed with 685 examples.
 - [x] (2026-09-15 19:13Z) M2: Added the versioned length-prefixed identity and safe command/PM adapters. Golden vectors, preflight-before-invalid-dispatch, multi-event lost-ack recovery, no-receipt rejection, and collision confirmation all pass.
-- [ ] M3: Durable effects, races, retry boundaries, batch isolation, cancellation, and empty inbox state pass in 15 focused examples. Remaining: add the explicit denied-inbox-privilege proof and rerun the complete runtime suite at this checkpoint.
+- [x] (2026-09-15 19:24Z) M3: Durable effects, races, retry boundaries, batch isolation, cancellation, and empty inbox state pass in 15 focused examples. A denied-inbox database role completes first delivery and replay while direct inbox access fails; the complete runtime suite passes with 694 examples.
 - [ ] M4: Add a successor-language intake mode, preserve published languages, and extend existing validation, generation, and compatibility reporting.
 - [ ] M5: Add generated and hand-filled delegated conformance under the advertised Haskell edition; run all DSL suites.
 - [ ] M6: Record paired performance evidence, update user documentation and ADRs, and complete verification.
@@ -68,6 +68,8 @@ Language 5 is published and stable, with no active candidate at the inspected co
 The delegated wrappers can share the existing private `recordInboxResult` without acquiring `Store`; the metric helpers require only `MonadIO`. A successful delegated batch identity must enter its local `Set` after both `DelegatedFresh` and `DelegatedDuplicate`, while a policy error or caught synchronous exception must leave the identity absent. The focused suite confirmed this failure-then-repeat boundary and synchronized async cancellation propagation.
 
 The live command tests expose an important race boundary: one concurrent delivery commits the marker and SQL effect; the other may observe either a confirmed duplicate or a safe command failure caused by state changing before its append. Redelivery then resolves through the marker preflight. A marker collision in another stream remains a failure, including duplicate errors that omit or mismatch the attempted ID.
+
+The test fixture needed a preparation phase before opening its application-role resource store. Keeping the privileged preparation store and restricted application store sequential avoids leaking owner privileges into the proof. The restricted role has event-store and application-table permissions, schema visibility for the inbox, and no privileges on `keiro.keiro_inbox`; its direct inbox query fails while delegated command intake succeeds and replays as duplicate.
 
 
 ## Decision Log
@@ -95,7 +97,7 @@ On 2026-09-15, kept `DelegatedRetryContext` abstract while exporting read-only c
 ## Outcomes & Retrospective
 
 
-Milestones 1 and 2 are complete. The delegated wrappers compile without a Store interpreter, the adapter is proven through real command dispatch, and 15 focused contract/live PostgreSQL examples pass. The durable test matrix covers first delivery, replay, lost acknowledgement, an invalid post-append replay, multi-event atomicity, concurrent delivery, foreign collisions, no-receipt failures, retry/poison boundaries, source-scoped batches, and cancellation. The explicit denied-inbox-privilege proof, the DSL, conformance, performance evidence, documentation, and ADR distillation remain outstanding. No performance result is claimed.
+Milestones 1 through 3 are complete. The delegated wrappers compile without a Store interpreter, the adapter is proven through real command dispatch, 15 focused contract/live PostgreSQL examples pass, and the complete runtime suite passes with 694 examples. The durable test matrix covers first delivery, replay, lost acknowledgement, an invalid post-append replay, multi-event atomicity, concurrent delivery, foreign collisions, no-receipt failures, retry/poison boundaries, source-scoped batches, cancellation, and operation under a database role denied all inbox-table privileges. The DSL, conformance, performance evidence, documentation, and ADR distillation remain outstanding. No performance result is claimed.
 
 At implementation completion, record test counts, the exact benchmark environment and raw artifact paths, throughput and allocation comparisons, remaining restrictions, and the resulting ADR references. Do not mark this plan complete on compilation alone.
 
@@ -360,3 +362,5 @@ Revision note (2026-09-15): Replaced the July design with the current runtime/DS
 Revision note (2026-09-15): Recorded completion of Milestone 1 and the implemented portion of Milestone 2, including focused and full runtime validation evidence. Documented the abstract retry-context accessor decision and the exact remaining adapter proof.
 
 Revision note (2026-09-15): Recorded completion of Milestone 2 and the focused durable evidence for Milestone 3. Added the observed concurrent-race classification and retained the denied-inbox-privilege/full-suite checks as explicit remaining work.
+
+Revision note (2026-09-15): Recorded completion of Milestone 3 after the restricted-role proof and the 694-example complete runtime suite passed.

@@ -233,6 +233,7 @@ import Keiro.Test.Postgres
   ( StoreRunner (..),
     withFreshDatabase,
     withFreshResourceStore,
+    withFreshResourceStorePrepared,
     withFreshResourceStoreWith,
     withFreshStore,
     withFreshStoreWith,
@@ -8749,6 +8750,46 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Vector.length targetEvents `shouldBe` 0
       Vector.length foreignEvents `shouldBe` 1
 
+  describe "Keiro.Inbox delegated access control"
+    $ around
+      ( withFreshResourceStorePrepared
+          fixture
+          prepareDelegatedDeniedInboxRole
+          (\settings -> settings & #connString %~ (<> " user=delegated_inbox_denied"))
+      )
+    $ do
+      it "runs with downstream privileges while the inbox table is denied" $ \(storeHandle, StoreRunner runner) -> do
+        denied <- Store.runStoreIO storeHandle (listInbox "delegated-denied-source")
+        denied `shouldSatisfy` \case
+          Left _ -> True
+          Right _ -> False
+        let event = sampleIntegrationEnvelope & #messageId .~ "delegated-denied" & #source .~ "delegated-denied-source"
+            targetName = StreamName "counter-delegated-denied"
+            target = stream "counter-delegated-denied" :: Stream CounterEventStream
+            marker = delegatedEventId "billing-consumer" (event ^. #source) (event ^. #messageId) targetName "apply-denied"
+            handler dedupe _ = do
+              outcome <- delegatedCommand defaultRunCommandOptions targetName marker $ \prepared ->
+                fmap (fmap Prelude.fst) $
+                  runCommandWithSql
+                    prepared
+                    counterEventStream
+                    target
+                    (Add 1)
+                    (\_ -> Tx.statement dedupe inboxTestCounterInsertStmt)
+              case outcome of
+                Left err -> liftIO (throwIO (userError (show err)))
+                Right delegated -> pure delegated
+        first <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        first `shouldSatisfy` \case
+          Right (Right (InboxProcessed commandResult)) -> commandResult ^. #eventsAppended == 1
+          _ -> False
+        replay <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+        replay `shouldBe` Right (Right InboxDuplicate)
+        Right stored <- Store.runStoreIO storeHandle (Store.readStreamForward targetName (StreamVersion 0) 10)
+        Vector.length stored `shouldBe` 1
+        Right counterRows <- Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () inboxTestCounterCountStmt))
+        counterRows `shouldBe` 1
+
   describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
       Right () <-
@@ -14938,6 +14979,28 @@ orderCancelledEnvelope orderId messageId =
     .~ ("{\"orderId\":\"" <> TE.encodeUtf8 orderId <> "\"}")
     & #contentType
     .~ ApplicationJson
+
+prepareDelegatedDeniedInboxRole :: Store.KirokuStore -> IO ()
+prepareDelegatedDeniedInboxRole storeHandle = do
+  prepared <-
+    Store.runStoreIO storeHandle $
+      Store.runTransaction $
+        Tx.sql $
+          ByteString.intercalate
+            "\n"
+            [ "CREATE TABLE IF NOT EXISTS kiroku.inbox_test_counter (message_id TEXT PRIMARY KEY);",
+              "DO $role$ BEGIN",
+              "  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'delegated_inbox_denied') THEN",
+              "    CREATE ROLE delegated_inbox_denied LOGIN;",
+              "  END IF;",
+              "END $role$;",
+              "GRANT USAGE ON SCHEMA kiroku, keiro, public TO delegated_inbox_denied;",
+              "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA kiroku, public TO delegated_inbox_denied;",
+              "GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA kiroku, public TO delegated_inbox_denied;",
+              "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA kiroku, public TO delegated_inbox_denied;",
+              "REVOKE ALL PRIVILEGES ON TABLE keiro.keiro_inbox FROM delegated_inbox_denied;"
+            ]
+  either (fail . show) pure prepared
 
 inboxTestCounterInsertStmt :: Statement Text ()
 inboxTestCounterInsertStmt =
