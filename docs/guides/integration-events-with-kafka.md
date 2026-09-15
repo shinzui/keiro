@@ -7,6 +7,7 @@ tags: [keiro, integration-events, kafka, guide]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
+timestamp: 2026-09-15T20:23:47Z
 ---
 
 # Integration Events With Kafka
@@ -125,6 +126,46 @@ runs at most once.
 
 The next section shows the consumer wiring in detail.
 
+### Delegating the receipt to a downstream command
+
+Candidate Keiro DSL Language 6 accepts `idempotence delegated` on an intake.
+Its generated `runInboxIntake` partially applies `runInboxDelegated` and has no
+`Store` constraint of its own. The application callback still supplies the
+effects required by its downstream command:
+
+```haskell
+runInboxIntake metrics event (Just kafkaRef) $ \dedupe delivered -> do
+  let target = StreamName ("invoice-" <> invoiceId delivered)
+      marker = delegatedEventId
+        "billing-order-intake"
+        delivered.source
+        dedupe
+        target
+        "apply-order"
+  delegatedCommand defaultRunCommandOptions target marker $ \prepared ->
+    runInvoiceCommand prepared target delivered
+```
+
+The callback must inspect the typed `Either DelegatedCommandError` and turn a
+retryable failure into its application retry path. Do not acknowledge a `Left`.
+On terminal failure, durably publish or store a DLQ record before acknowledging
+the Kafka delivery. Neither `runInboxDelegated` nor its retry/batch variants
+write an inbox failure or DLQ record.
+
+The marker protects one atomic append and all SQL/outbox work committed with
+that append. Keep the consumer name, source, target naming, operation name, and
+marker event for the full replay horizon. Renaming any input changes receipt
+identity. Drain in-flight deliveries and establish a cutover boundary before
+switching either direction between table and delegated intake.
+
+Delegated retries use caller-supplied one-based attempt context; Kafka offsets
+and metrics are not durable attempt counters. The batch wrapper preserves input
+order and isolates synchronous failures, but each unsuppressed delegated item
+may commit independently. Table batching can be faster because it shares a
+transaction. Delegated mode also removes inbox backlog, retention, and
+dead-letter visibility, so operational tooling must use the downstream state
+machine and the caller-owned DLQ instead.
+
 ## Wiring up the Kafka consumer
 
 The keiro side of the consumer is one function — `runInboxTransaction`
@@ -223,10 +264,13 @@ receive**.
 - **Kafka** gives at-least-once delivery and per-partition ordering
   for records sharing a key. It does not give cross-key order; it does
   not give exactly-once across topics or services.
-- **Inbox** gives idempotent receive within the retention window,
+- **Table inbox** gives idempotent receive within the retention window,
   keyed on `(source, dedupe_key)` where `dedupe_key` is derived from
   the chosen `InboxDedupePolicy`. A redelivery after retention GC is
   treated as new.
+- **Delegated inbox** gives idempotent receive only through the downstream
+  receipt contract. A confirmed marker has no inbox retention window, but its
+  safety ends if the marker event or target identity is removed or renamed.
 
 The combination does *not* promise an exactly-once cross-service
 distributed transaction. No single transaction can cover both Postgres

@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-09-15
+* **Update**: Document delegated inbox receipt ownership, retry and DLQ obligations, cutover boundaries, and measured tradeoffs.
+
 ## 2026-09-14
 * **Update**: Document the drain required when adopting or changing the process-reaction dispatch identity family.
 * **Update**: Document the additive process-manager reaction API, result distinctions, phase boundaries, replay behavior, and transactional timer cancellation.

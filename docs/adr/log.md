@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-15
+* **Addition**: Record downstream event receipts as the ownership boundary for delegated inbox intake.
 * **Update**: Record producer identity allocation and exact-equality optimizations without changing the frozen byte contract.
 * **Update**: Freeze version-1 producer identity, retained-content comparison, and cutover/retention boundaries.
 

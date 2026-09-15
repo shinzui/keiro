@@ -6,14 +6,19 @@ keiro repository. Start with the stable Language-5 fixture for a Language-5-excl
 or the published-compatibility Language-4 fixture for an inherited surface, then use its negative
 or diff variants to see the exact guardrails.
 
+Candidate Language 6 adds `idempotence delegated` to inbox intake. Omission and
+explicit `table` retain the table-backed contract; Languages 1 through 5 reject
+the new clause. The candidate keeps Language 5's aggregate-fold fingerprint
+because receipt routing does not change aggregate replay semantics.
+
 ## Published stable and compatibility lanes
 
 Language 5 is the published stable contract and authoring default. Language 4 remains a published,
-immutable compatibility contract. The machine-checked baseline contains 245 fixture sources: 229
-declared Language-4 sources, three focused Language-5 sources, and 13 named
-historical/source-selection exceptions. It also accounts for all 39 compiled conformance
-components: eight `stable-primary` Language-5 suites, 27 `published-compatibility` Language-4
-suites, three focused compatibility proofs, and one version-independent codec comparison.
+immutable compatibility contract. The machine-checked baseline contains the released fixture
+inventory plus the candidate delegated-intake source and its generated plan. It accounts for all
+40 compiled conformance components: one `candidate-primary` Language-6 suite, eight
+`stable-primary` Language-5 suites, 27 `published-compatibility` Language-4 suites, three focused
+compatibility proofs, and one version-independent codec comparison.
 
 Stable suites exercise Language 5's syntax profile 4 and runtime semantics 4, including typed
 domain outcomes, mapped consumers, projection catalogs, declarative routing, and the live workflow
@@ -23,6 +28,10 @@ IDs, typed `KindID` public-contract fields, nominal equality, and strict service
 The baseline checker loads each primary source or workspace, checks the selected service, and
 compares fresh non-writing scaffold plans with the committed language-owned generated banners and
 exact module inventory. Skeleton coverage uses the union of all distinct published starters.
+
+The candidate suite exercises Language 6 syntax profile 5 and runtime semantics 5. It compiles
+the generated delegated runner and hand-filled command adapter, then proves fresh and duplicate
+delivery against the runtime. Its aggregate-fold segment remains equal to Language 5.
 
 ## Historical source-language lane
 
@@ -98,6 +107,7 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/intake-pf-retry.keiro` | negative previously-failed-as-retry inversion |
 | `test/fixtures/intake-topic-mismatch.keiro` | negative intake event/topic affinity |
 | `test/fixtures/intake.keiro` | valid contract and inbox intake vertical |
+| `test/fixtures/intake-delegated.keiro` | candidate Language-6 delegated intake and generated no-Store runner |
 | `test/fixtures/mapped-workqueue.keiro` | stable Language-5 mapped workqueue payload with nested structural, opaque, nullable, required-key, and explicit Json coverage |
 | `test/fixtures/mapped-readmodel.keiro` | stable Language-5 typed read-model input/result contract with direct, nested, shared, and unused mapped declarations |
 | `test/fixtures/mapped-readmodel-workspace/service.keiro-workspace` | two-member Language-5 workspace proving cross-member query-contract type resolution and ownership |
@@ -208,6 +218,7 @@ the stable Language-5 feature lanes and form the primary product baseline.
 | `test/conformance-contract/` (`keiro-dsl-conformance-contract`) | distinct typed `KindID "inc"`, `KindID "rsv"`, and `KindID "hsp"` fields round-trip canonical JSON and reject invalid current inputs |
 | `test/conformance-intake-runtime/` (`keiro-dsl-conformance-intake-runtime`) | generated inbox disposition/dedupe policy compiles against live inbox types |
 | `test/conformance-intake-full/` (`keiro-dsl-conformance-intake-full`) | filled inbox transaction and outbox producer compile as a full integration service |
+| `test/conformance-intake-delegated/` (`keiro-dsl-conformance-intake-delegated`) | candidate generated runner, deterministic command receipt, and live fresh/duplicate delivery compile and execute |
 | `test/conformance-publisher-runtime/` (`keiro-dsl-conformance-publisher-runtime`) | generated publisher ordering/backoff compiles against live outbox types |
 | `test/conformance-queue/` (`keiro-dsl-conformance-queue`) | generated workqueue payload codec round-trips |
 | `test/conformance-queue-runtime/` (`keiro-dsl-conformance-queue-runtime`) | queue naming parity, ordering/provisioning, retry policy, and dispositions compile against live PGMQ |

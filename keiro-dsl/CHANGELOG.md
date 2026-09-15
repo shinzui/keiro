@@ -6,6 +6,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Candidate Language 6 adds `idempotence delegated` to intake declarations and
+  generates a typed `runInboxIntake` wrapper over delegated runtime intake.
+  Published Languages 1 through 5 and table-generated output remain unchanged.
+
+### Breaking Changes
+
+- Changing an intake between table and delegated idempotence is classified as
+  `IntakeIdempotenceModeChanged` on the persisted-identity compatibility axis.
+
 ### Other Changes
 
 - No user-facing changes. The parser-scaling benchmark now uses the current

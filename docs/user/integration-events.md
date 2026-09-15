@@ -7,6 +7,7 @@ tags: [keiro, integration-events, messaging]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
+timestamp: 2026-09-15T20:23:47Z
 ---
 
 # Integration Events
@@ -150,6 +151,36 @@ metadata a future adapter needs:
 The byte-oriented `payloadBytes` field lets a registry-backed encoder
 write Confluent-framed Avro, Apicurio-framed JSON Schema, or any other
 binary format; the inbox and outbox preserve those bytes verbatim.
+
+## Choosing inbox idempotence ownership
+
+Table-backed intake remains the default. `runInboxTransaction` inserts a
+`keiro_inbox` receipt and runs the handler in the same transaction. It provides
+a bounded deduplication window, retry status, backlog inspection, and failed-row
+visibility.
+
+Use `runInboxDelegated` only when the downstream state machine already records a
+durable receipt for the complete operation. `delegatedEventId` derives that
+receipt from the consumer, integration source, dedupe key, target stream, and a
+stable operation name. `delegatedCommand` probes the receipt before command
+dispatch, assigns it to the first event of the atomic append, and accepts only a
+positive append or a confirmed replay. Failed commands, unrelated global event
+ID collisions, and successful commands that append no event remain failures.
+
+Delegated intake creates no inbox row. It therefore has no inbox backlog,
+failed-row, retention, or dead-letter inspection surface. The caller owns
+durable attempt accounting across restarts and rebalances. Before acknowledging
+a terminal failure, durably publish or store the dead-letter record; the
+delegated wrappers do not write one. Keep table intake for silent commands,
+non-atomic side effects, general workflow bodies, and multi-command reactions
+without one atomic receipt.
+
+The benchmark evidence in `keiro/bench/results/delegated-inbox-v1/` shows why
+this is a correctness and workload choice. Delegation substantially reduces
+allocation and accelerates confirmed duplicates, while a fresh batch can lose
+to the table path's shared transaction. Measure the service's mix and chunk
+size before switching. Drain in-flight delivery and define a replay boundary at
+cutover because inbox rows and downstream receipt IDs are different histories.
 
 ## Worked example
 

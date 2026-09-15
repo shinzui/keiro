@@ -28,6 +28,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Add no-Store delegated inbox single, retry, and sequential batch wrappers for
+  consumers whose downstream operation owns a durable idempotence receipt.
+- Add frozen `delegatedEventId`, safe aggregate-command dispatch, and typed
+  process-manager result adaptation. Command failures, no-event successes, and
+  unconfirmed event-ID collisions are never acknowledged as duplicates.
 - Add `Keiro.ProcessManager.Reaction`, an additive typed process-manager API
   with explicit no-advance and accepted-only follow-ups, atomic saga/timer
   mutation, target-keyed dispatch identity, exact accepted-witness recovery,
@@ -47,6 +52,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Other Changes
 
+- Add matched table/delegated inbox benchmarks for fresh, repeated, duplicate,
+  chunked, metrics, and long-history receipt-probe workloads.
 - Deprecate `mintIntegrationEvent` in favor of `freshIntegrationEvent`, which
   names its fresh-envelope behavior explicitly; use `enqueueProducerEventTx` for
   replay-safe producer identity. Caller-owned `enqueueOutboxTx` is unchanged.
