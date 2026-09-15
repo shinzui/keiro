@@ -5,9 +5,19 @@ title: "Shared codd migration scaffold library (design capture)"
 kind: exec-plan
 created_at: 2026-06-04T03:40:34Z
 intention: "intention_01kt8bff84em99ykf0mz660yam"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Shared codd migration scaffold library (design capture)
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -21,6 +31,8 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 Every new project in this ecosystem is moving to **codd** (the Haskell database
 migration runner, `mzabani/codd`) for schema migrations. Four projects already
@@ -66,15 +78,16 @@ This section must always reflect the actual current state of the work.
 - [x] Survey the four codd-using projects and record how they diverge (see Context and Orientation + Surprises). — 2026-06-04
 - [x] Draft the proposed config-driven design and API sketch (see Plan of Work + Interfaces and Dependencies). — 2026-06-04
 - [x] Record the open questions that need a human decision before any code (see Decision Log "Open questions"). — 2026-06-04
-- [ ] **Review gate:** user kicks off a review; record greenlit/deferred/rejected decision in the Decision Log. (Blocks everything below.)
-- [ ] M1 — Bootstrap the standalone package skeleton with the core generator (`newMigrationFile`, `migrationSlug`, `migrationFileName`) lifted from `Keiro.Migrations.New`, parameterized by `MigrationConfig`.
-- [ ] M2 — Prototype and validate the directory-tracking `embedMigrationsTracked` TH helper; confirm it removes the touch-comment hack.
-- [ ] M3 — Add `validateMigrations` and the shared `migrateScaffoldMain` CLI (`new` / `validate`).
-- [ ] M4 — Adopt the library in the next new project as the first real consumer.
-- [ ] M5 — Backport: migrate `keiro` (and optionally `kiroku`, `kizashi`) onto the shared library; retire the per-project copies.
-
+- [-] **Review gate:** user kicks off a review; record greenlit/deferred/rejected decision in the Decision Log. (Blocks everything below.) {disposition=superseded-by, by=docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md}
+- [-] M1 — Bootstrap the standalone package skeleton with the core generator (`newMigrationFile`, `migrationSlug`, `migrationFileName`) lifted from `Keiro.Migrations.New`, parameterized by `MigrationConfig`. {disposition=superseded-by, by=docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md}
+- [-] M2 — Prototype and validate the directory-tracking `embedMigrationsTracked` TH helper; confirm it removes the touch-comment hack. {disposition=superseded-by, by=docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md}
+- [-] M3 — Add `validateMigrations` and the shared `migrateScaffoldMain` CLI (`new` / `validate`). {disposition=superseded-by, by=docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md}
+- [-] M4 — Adopt the library in the next new project as the first real consumer. {disposition=superseded-by, by=docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md}
+- [-] M5 — Backport: migrate `keiro` (and optionally `kiroku`, `kizashi`) onto the shared library; retire the per-project copies. {disposition=superseded-by, by=docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -124,6 +137,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): Close this design capture without approving or implementing the proposed standalone Codd scaffolder. Native migration ownership and embedding replaced the Keiro adoption rationale. This does not claim the shared package was built or that legacy Codd tools have been removed. Replacement: `docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md`.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 Record every decision made while working on the plan.
 
@@ -178,6 +194,10 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. Close this design capture without approving or implementing the proposed standalone Codd scaffolder. Native migration ownership and embedding replaced the Keiro adoption rationale. This does not claim the shared package was built or that legacy Codd tools have been removed. Replacement: `docs/plans/123-add-the-embed-recompile-plugin-and-native-manifest-coverage.md`.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -188,6 +208,8 @@ four divergent implementations catalogued here.)
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 This section assumes no prior knowledge. Terms used throughout:
 
@@ -269,6 +291,8 @@ a codd scaffold today but are candidate future consumers as they adopt codd.
 
 ## Plan of Work
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 All milestones below are gated on the review (see Progress "Review gate"). They
 are written so a novice can execute them once greenlit. The working package name
 `codd-scaffold` is used throughout; substitute the name chosen during review.
@@ -321,6 +345,8 @@ backports are in scope now or deferred.
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 These are the commands to run **once the review greenlights M1**. They are
 recorded now so the next project can bootstrap immediately; do not run them
 before the review decision is logged.
@@ -355,6 +381,8 @@ Update this section with the real transcript as M1 proceeds.
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Phrased as observable behavior a human can check once implemented:
 
 - **Generator:** `migrate new "add foo index"` creates a file whose name is
@@ -378,6 +406,8 @@ Phrased as observable behavior a human can check once implemented:
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 This plan, as design capture, is safe to revisit repeatedly; it changes no code.
 The proposed generator is idempotent-by-refusal: it never overwrites an existing
 migration (the keiro version already errors on collision), so re-running it is
@@ -390,6 +420,8 @@ a last resort until codegen lands.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 Proposed library surface (subject to the review; names indicative). Module
 `Codd.Scaffold` in package `codd-scaffold`:
@@ -445,3 +477,6 @@ request to "start a document and kick start a review later" and the rule-of-thre
 (extract on the second real consumer). The survey, divergence matrix, proposed
 `MigrationConfig`-driven API, and five-milestone path are recorded so the next
 project can bootstrap the library quickly once greenlit.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

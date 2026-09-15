@@ -6,9 +6,19 @@ kind: exec-plan
 created_at: 2026-06-10T00:09:18Z
 intention: "intention_01ktqdn85xe2btqzr2zghxgrpr"
 superseded_by: "docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Build the keiro-dsl service DSL toolchain — SUPERSEDED (converted to a MasterPlan)
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 > **This ExecPlan has been converted into a MasterPlan.** Do not implement from this
 > file. Its scope grew to span a shared engine plus five independent node verticals, so
@@ -38,3 +48,29 @@ holes and **never** a keiki symbolic operator (the firewall invariant); the beha
 bearing transducer body and the eight hole-kinds are agent-written and harness-pinned;
 and the conformance corpus is the external `keiro-runtime-jitsurei`, captured as
 read-only fixtures.
+
+
+## Progress
+
+- [-] Original monolithic DSL plan was decomposed into MasterPlan 8 and its seven children. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+
+
+## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): This file is a redirect, not an unstarted implementation. MasterPlan 8 owns the replacement scope.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
+
+
+## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
+
+
+## Outcomes & Retrospective
+
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. This file is a redirect, not an unstarted implementation. MasterPlan 8 owns the replacement scope.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

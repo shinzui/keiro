@@ -6,15 +6,27 @@ kind: exec-plan
 created_at: 2026-06-10T01:05:27Z
 intention: "intention_01ktqdn85xe2btqzr2zghxgrpr"
 master_plan: "docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # keiro-dsl workflow and operation nodes
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 A **keiro service** is a bounded context built on event sourcing. Two of its node types
 coordinate *long-running, cross-time* behavior rather than a single command turn. A
@@ -96,6 +108,12 @@ a keiki symbolic operator.
 
 ## Progress
 
+Accepted delivery scope (reconciled 2026-09-15):
+
+- [x] Full-service conformance delivered in `834efeb6`, accepted by MasterPlan 8, and retained in the current `conformance-workflow-full` component (source and delivery record audited 2026-09-15).
+
+The original milestone descriptions below are historical. Void entries close the old specification under the accepted delivery scope; they do not certify every originally proposed generator or assertion.
+
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
@@ -103,35 +121,36 @@ This section must always reflect the actual current state of the work.
 Milestone 1 — Grammar + parser for `workflow`/`operation`: **DONE 2026-06-10** (NWorkflow + NOperation parse/pretty/round-trip)
 
 
-- [ ] Add a `Workflow !WorkflowNode` and an `Operation !OperationNode` constructor (and their field records) to `Keiro.Dsl.Grammar`, including the ordered `BodyItem` sum (`StepItem`/`AwaitItem`/`SleepItem`/`ChildItem`), the `OperationShape` sum (`CommandOp`/`QueryOp`/`SignalOp`/`RunOp`), and the `Consistency` type.
-- [ ] Extend `Keiro.Dsl.Parser` with `pWorkflow` and `pOperation`, wired into the top-level node parser; the workflow `id from <field>` clause, the body lines (`step`/`await`/`sleep`/`child`), and the four operation forms all parse.
-- [ ] Extend `Keiro.Dsl.PrettyPrint` so a parsed `workflow`/`operation` round-trips (`parse` then pretty-print is idempotent).
-- [ ] `keiro-dsl parse` on a `workflow`-bearing spec prints the parsed model back out.
+- [-] Add a `Workflow !WorkflowNode` and an `Operation !OperationNode` constructor (and their field records) to `Keiro.Dsl.Grammar`, including the ordered `BodyItem` sum (`StepItem`/`AwaitItem`/`SleepItem`/`ChildItem`), the `OperationShape` sum (`CommandOp`/`QueryOp`/`SignalOp`/`RunOp`), and the `Consistency` type. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Extend `Keiro.Dsl.Parser` with `pWorkflow` and `pOperation`, wired into the top-level node parser; the workflow `id from <field>` clause, the body lines (`step`/`await`/`sleep`/`child`), and the four operation forms all parse. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Extend `Keiro.Dsl.PrettyPrint` so a parsed `workflow`/`operation` round-trips (`parse` then pretty-print is idempotent). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] `keiro-dsl parse` on a `workflow`-bearing spec prints the parsed model back out. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 2 — Validator rules: **PARTIAL 2026-06-10** (headline await<->signal + run resolution done; remaining rules deferred)
 
 
-- [ ] Implement the rules in `Keiro.Dsl.Validate`: no wall-clock/randomness outside a journaled step; sleep deadline from injected data only; step + await labels unique per workflow; every `await` has a matching `signal` operation (or is flagged external-only) deriving the same `(name,id,label)`; `child` resolves to a declared+registered workflow with a provably-distinct id; step/await result types require JSON codecs (a type change is breaking); `WorkflowName` and read-model `shapeHash`/`version` are stable (warn on rename); command `stream … from <field>` and `via`/`project` resolve; reject `Eventual`/`PositionWait` on a `Strong` read model without an explicit override.
-- [ ] `keiro-dsl check` rejects each violation with a line-numbered diagnostic; a complete spec passes clean.
+- [-] Implement the rules in `Keiro.Dsl.Validate`: no wall-clock/randomness outside a journaled step; sleep deadline from injected data only; step + await labels unique per workflow; every `await` has a matching `signal` operation (or is flagged external-only) deriving the same `(name,id,label)`; `child` resolves to a declared+registered workflow with a provably-distinct id; step/await result types require JSON codecs (a type change is breaking); `WorkflowName` and read-model `shapeHash`/`version` are stable (warn on rename); command `stream … from <field>` and `via`/`project` resolve; reject `Eventual`/`PositionWait` on a `Strong` read model without an explicit override. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] `keiro-dsl check` rejects each violation with a line-numbered diagnostic; a complete spec passes clean. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 3 — Scaffold emitters:
 
-- [ ] Emit the `-- @generated` workflow wiring module: `WorkflowName`, the `WorkflowId` derivation, the awakeable-id + child-id helpers, the resume-registry entry, and the *structural* body skeleton (ordered `step`/`awaitStep`/`sleepNamed`/`spawnChild`+`awaitChild` calls with journal names + result types), with no keiki symbolic operator and no step-body logic.
-- [ ] Emit the `-- @generated` operation wiring: `runCommand`/inline-projection plumbing, the `ReadModel` record, `signalAwakeable`, and `runWorkflowWith`.
-- [ ] Emit the create-if-absent hole module (signatures for each step body and each id/field derivation); firewall invariant test passes.
+- [-] Emit the `-- @generated` workflow wiring module: `WorkflowName`, the `WorkflowId` derivation, the awakeable-id + child-id helpers, the resume-registry entry, and the *structural* body skeleton (ordered `step`/`awaitStep`/`sleepNamed`/`spawnChild`+`awaitChild` calls with journal names + result types), with no keiki symbolic operator and no step-body logic. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Emit the `-- @generated` operation wiring: `runCommand`/inline-projection plumbing, the `ReadModel` record, `signalAwakeable`, and `runWorkflowWith`. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Emit the create-if-absent hole module (signatures for each step body and each id/field derivation); firewall invariant test passes. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 4 — Harness emission:
 
-- [ ] Emit a harness test module that pins: replay determinism (a body re-run from a journal produces identical results and runs no replayed side effect twice); the await↔signal id match (`deterministicAwakeableId` of the workflow equals the signal operation's derived id); and golden step-result codec round-trips (each step/await result type encodes-then-decodes identically).
+- [-] Emit a harness test module that pins: replay determinism (a body re-run from a journal produces identical results and runs no replayed side effect twice); the await↔signal id match (`deterministicAwakeableId` of the workflow equals the signal operation's derived id); and golden step-result codec round-trips (each step/await result type encodes-then-decodes identically). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 5 — Conformance vs `ReservationWorkflow` + `EvacuationWorkflow`:
 
-- [ ] Capture `ReservationWorkflow.hs`, `EvacuationWorkflow.hs`, `Reservation/CommandProcessor.hs`, `Reservation/Projection.hs`, and the relevant `Store.hs` operation wrappers as read-only fixtures under `keiro-dsl/test/fixtures/`.
-- [ ] Author `hospital-reservation.keiro` and `incident-evacuation.keiro`; `check` passes; `scaffold` produces modules that compile once step bodies are filled to match the captured reference; harness green.
-- [ ] Mutation test: changing one side of the await↔signal label (or a step result type) turns a specific harness test red.
-
+- [-] Capture `ReservationWorkflow.hs`, `EvacuationWorkflow.hs`, `Reservation/CommandProcessor.hs`, `Reservation/Projection.hs`, and the relevant `Store.hs` operation wrappers as read-only fixtures under `keiro-dsl/test/fixtures/`. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Author `hospital-reservation.keiro` and `incident-evacuation.keiro`; `check` passes; `scaffold` produces modules that compile once step bodies are filled to match the captured reference; harness green. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Mutation test: changing one side of the await↔signal label (or a step result type) turns a specific harness test red. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -140,6 +159,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): The delivered workflow facts and runtime helpers are paired with a hand-written ordered step/await body. Automatic workflow-body and complete operation-wrapper generation from the original proposal are not delivered capabilities; Harness.hs explicitly keeps workflows without a domain scaffold. The accepted delivery is recorded by commit `834efeb6` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-workflow-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 Record every decision made while working on the plan.
 
@@ -227,6 +249,10 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. The delivered workflow facts and runtime helpers are paired with a hand-written ordered step/await body. Automatic workflow-body and complete operation-wrapper generation from the original proposal are not delivered capabilities; Harness.hs explicitly keeps workflows without a domain scaffold. The accepted delivery is recorded by commit `834efeb6` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-workflow-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -234,6 +260,8 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 This section assumes no prior knowledge. It defines every term, names every file by full
 path, and restates the shared signatures from EP-1 that this plan depends on.
@@ -654,6 +682,8 @@ when violated:
 
 ## Plan of Work
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The work is five milestones, each independently verifiable. They follow the engine's data
 flow: grammar+parser → validator → scaffold → harness → conformance. All edits are additive
 to the shared `keiro-dsl` modules EP-1 created; this plan introduces no new runtime package
@@ -819,6 +849,8 @@ Acceptance: see Validation and Acceptance.
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro` unless noted.
 The `keiro-dsl` package and its CLI are provided by EP-1; this plan assumes EP-1 is Complete
 (the `keiro-dsl` executable builds and `parse`/`check`/`scaffold` work on an aggregate-only
@@ -950,6 +982,8 @@ and codecs are genuinely pinned.
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The plan is accepted when all of the following observable behaviors hold, each demonstrable by
 the commands in *Concrete Steps*:
 
@@ -995,6 +1029,8 @@ to the `Keiro.Workflow` and `Keiro.Command`/`Keiro.ReadModel` primitives.
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Every step in this plan is safe to repeat.
 
 - **`parse` and `check`** are pure reads of a `.keiro` file and produce no side effects; run them
@@ -1031,6 +1067,8 @@ properties intact in scaffolded services.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 ### Runtime primitives this plan binds to (the bijection targets)
 
@@ -1127,3 +1165,6 @@ plan reuses keiro's existing `aeson`, `time`, and `uuid` deps (already in the ru
 only indirectly, by *emitting* code that imports them — `keiro-dsl` itself does not link the
 runtime. The conformance fixtures depend on the external `keiro-runtime-jitsurei` corpus only
 as read-only captured copies, not as a build dependency.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

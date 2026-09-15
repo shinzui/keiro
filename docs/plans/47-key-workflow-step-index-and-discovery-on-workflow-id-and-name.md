@@ -5,15 +5,27 @@ title: "Key workflow step index and discovery on workflow id and name"
 kind: exec-plan
 created_at: 2026-06-03T21:22:04Z
 intention: "intention_01kt7npxxbedqt8e0ba4dmyxzb"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Key workflow step index and discovery on workflow id and name
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
 
 A durable workflow in Keiro is identified by a pair: a stable *workflow name* (the
 definition, e.g. `order-fulfillment`) and a *workflow id* (the instance, e.g. an
@@ -64,24 +76,25 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: add a migration that re-keys `keiro_workflow_steps` on
+- [-] Milestone 1: add a migration that re-keys `keiro_workflow_steps` on
   `(workflow_id, workflow_name, step_name)` and widens the lookup index to
-  `(workflow_id, workflow_name)`.
-- [ ] Milestone 1: confirm `cabal test keiro-migrations-test` (fresh apply) green.
-- [ ] Milestone 2: update `Keiro.Workflow.Schema` — `recordStepStmt` ON CONFLICT,
+  `(workflow_id, workflow_name)`. {disposition=delivered-elsewhere, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
+- [-] Milestone 1: confirm `cabal test keiro-migrations-test` (fresh apply) green. {disposition=delivered-elsewhere, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
+- [-] Milestone 2: update `Keiro.Workflow.Schema` — `recordStepStmt` ON CONFLICT,
   `stepExists`/`loadStepIndex` to take the workflow name, and
   `findUnfinishedWorkflowIdsStmt`'s terminal-marker subquery to match name too;
-  thread the name through the three `stepExists` call sites in `Keiro.Workflow`.
-- [ ] Milestone 2: `cabal build keiro` green; update any test/call sites that pass
-  the old `stepExists`/`loadStepIndex` signatures.
+  thread the name through the three `stepExists` call sites in `Keiro.Workflow`. {disposition=delivered-elsewhere, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
+- [-] Milestone 2: `cabal build keiro` green; update any test/call sites that pass
+  the old `stepExists`/`loadStepIndex` signatures. {disposition=delivered-elsewhere, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
 - [ ] Milestone 3: add the shared-id parent/child regression test to
   `keiro/test/Main.hs`; prove it fails before and passes after.
 - [ ] Milestone 4: full green — `cabal build all`, `cabal test keiro`,
   `cabal test jitsurei-test` — and refresh the EP-45/MasterPlan notes so the
   "distinct ids" guidance is downgraded from "required" to "recommended".
 
-
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -90,6 +103,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): Plan 48 absorbed the name-aware workflow index and queries (its Progress and Outcomes explicitly record the handoff). Current keys also include generation. Keep the dedicated same-id/different-name parent-child regression proof and guidance/validation closeout open; the presence of the implementation is not proof that this particular regression was tested.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 - Decision: Fix the footgun at the root (key the index, existence checks, and
   discovery on `(workflow_id, workflow_name)`) rather than only documenting "use
@@ -126,6 +142,10 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+Implementation and validation closeout remain open as listed in Progress. Plan 48 absorbed the name-aware workflow index and queries (its Progress and Outcomes explicitly record the handoff). Current keys also include generation. Keep the dedicated same-id/different-name parent-child regression proof and guidance/validation closeout open; the presence of the implementation is not proof that this particular regression was tested.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -133,6 +153,8 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
 
 Read this fully before editing; it assumes no prior knowledge of the repository.
 
@@ -231,6 +253,8 @@ which is exactly what this plan re-keys.
 
 ## Plan of Work
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+
 ### Milestone 1: re-key the index (migration)
 
 Add a new migration file
@@ -321,6 +345,8 @@ demo (which already uses distinct ids via `shipChildId`) needs no change.
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+
 Run all commands from the repository root.
 
 **Step 0 — confirm the current name-blind shape:**
@@ -376,6 +402,8 @@ cabal test jitsurei-test
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+
 Acceptance is observable behavior:
 
 **Check 1 — a parent and child sharing an id both complete.** The Milestone 3 test
@@ -398,6 +426,8 @@ step_name)`.
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+
 The migration is a one-way key relaxation and is safe to apply once (codd records it
 by filename and will not re-run it). It cannot fail on existing data because adding a
 column to a primary key never introduces a duplicate. The schema-layer edits are
@@ -410,6 +440,8 @@ state during rollout is safe.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
 
 This plan adds one migration and changes the signatures of two internal lookups; it
 adds no new package dependency.
@@ -445,3 +477,6 @@ here regardless, so the two plans are independent in either order). Supersedes t
 ExecPlan: docs/plans/47-key-workflow-step-index-and-discovery-on-workflow-id-and-name.md
 Intention: intention_01kt7npxxbedqt8e0ba4dmyxzb
 ```
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

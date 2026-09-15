@@ -6,15 +6,27 @@ kind: exec-plan
 created_at: 2026-06-10T01:05:27Z
 intention: "intention_01ktqdn85xe2btqzr2zghxgrpr"
 master_plan: "docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # keiro-dsl integration nodes: inbox, outbox, Kafka and contract
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 A keiro **service** is a bounded context that uses event sourcing plus Kafka to exchange
 public messages with other services. Today the Kafka-facing code — receiving a message
@@ -81,6 +93,12 @@ reference them by path.
 
 ## Progress
 
+Accepted delivery scope (reconciled 2026-09-15):
+
+- [x] Full-service conformance delivered in `ed03e6ba`, accepted by MasterPlan 8, and retained in the current `conformance-intake-full` component (source and delivery record audited 2026-09-15).
+
+The original milestone descriptions below are historical. Void entries close the old specification under the accepted delivery scope; they do not certify every originally proposed generator or assertion.
+
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work. All items begin
@@ -100,48 +118,49 @@ Milestone 2 — Validator rules: **PARTIAL 2026-06-10** (the inbox-disposition r
 
 - [x] `validateIntake`: `DispositionIncomplete` (the table must cover all seven outcomes) and the three dangerous inversions — `DispositionDuplicateRetry`, `DispositionPreviouslyFailedRetry`, `DispositionDecodeUnboundedRetry` — each rejected with a line-numbered diagnostic; the canonical intake passes clean. (2026-06-10)
 - [x] `EmitSkipMissing` (skip-totality), cross-node contract coupling (`IntakeUnresolvedContract`, `EmitUnresolvedContract` over contract/topic/event), and `PublisherUnresolvedEmit` (producer pairing). (2026-06-10)
-- [ ] Remaining (lower-value): envelope-binding completeness, cross-check-declaration, dedupe-key resolution, explicit-decode-strictness checks.
+- [-] Remaining (lower-value): envelope-binding completeness, cross-check-declaration, dedupe-key resolution, explicit-decode-strictness checks. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 3–4 (scaffold + harness) — **PARTIAL 2026-06-10**: `scaffoldContract` emits a self-contained `-- @generated` payload ADT (per-event Data records) + topic constants + `messageType` discriminator + strict codec; the `keiro-dsl-conformance-contract` component compiles it and round-trips every contract event type (firewall holds). The intake/emit/publisher scaffold (inbox/outbox wiring, runtime-coupled) and M5 conformance vs the captured `Integration/` modules remain.
 
 Milestone 2 — Validator rules:
 
-- [ ] Implement the eleven integration validator rules (disposition completeness, the three
+- [-] Implement the eleven integration validator rules (disposition completeness, the three
       inversion flags, transient-only-retry, envelope-binding completeness, cross-check
       declaration, dedupe-key resolution, explicit decode strictness, cross-node contract
-      coupling, producer at-least-once pairing, skip-totality).
-- [ ] Negative tests: each rule fires on a crafted bad spec; positive test: the conformance
-      spec passes clean.
+      coupling, producer at-least-once pairing, skip-totality). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Negative tests: each rule fires on a crafted bad spec; positive test: the conformance
+      spec passes clean. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 3 — Scaffold (symbol-free):
 
-- [ ] Emit `-- @generated` contract module (`IntegrationMessage`/`IntegrationPayload`,
-      topic constants, `messageType` discriminator, topic-routing predicates).
-- [ ] Emit `-- @generated` inbox wiring (envelope reconstruction call, dedupe policy,
-      decode-strictness scaffold) and `-- @generated` outbox/publisher config records.
-- [ ] Emit `-- HOLE:` typed stubs for mapper bodies, custom id derivations, and the
-      disposition function.
-- [ ] Assert the firewall invariant on every emitted `Generated` module (no keiki symbolic
-      operator on any `-- @generated` line).
+- [-] Emit `-- @generated` contract module (`IntegrationMessage`/`IntegrationPayload`,
+      topic constants, `messageType` discriminator, topic-routing predicates). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Emit `-- @generated` inbox wiring (envelope reconstruction call, dedupe policy,
+      decode-strictness scaffold) and `-- @generated` outbox/publisher config records. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Emit `-- HOLE:` typed stubs for mapper bodies, custom id derivations, and the
+      disposition function. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Assert the firewall invariant on every emitted `Generated` module (no keiki symbolic
+      operator on any `-- @generated` line). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 4 — Harness:
 
-- [ ] Emit a round-trip golden-fixture test per contract event type.
-- [ ] Emit a disposition-table coverage test asserting all four inbox classifications plus
-      decode/dedupe/store failures map to the spec's acknowledgement.
-- [ ] Emit a clock-free assertion (time is injected, never sampled, in scaffolded code).
+- [-] Emit a round-trip golden-fixture test per contract event type. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Emit a disposition-table coverage test asserting all four inbox classifications plus
+      decode/dedupe/store failures map to the spec's acknowledgement. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Emit a clock-free assertion (time is injected, never sampled, in scaffolded code). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 Milestone 5 — Conformance:
 
-- [ ] Capture `hospital-capacity` and `incident-command` `Integration/` into
-      `keiro-dsl/test/fixtures/` (read-only reference modules + the derived `.keiro`).
-- [ ] Prove generated contract equals the captured `Contracts.hs` shape (same topics,
-      event types, field-sets, discriminator) and the harness is green.
-- [ ] Mutation check: flip one disposition row in the spec; the harness coverage test turns
-      red.
-
+- [-] Capture `hospital-capacity` and `incident-command` `Integration/` into
+      `keiro-dsl/test/fixtures/` (read-only reference modules + the derived `.keiro`). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Prove generated contract equals the captured `Contracts.hs` shape (same topics,
+      event types, field-sets, discriminator) and the harness is green. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Mutation check: flip one disposition row in the spec; the harness coverage test turns
+      red. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -150,6 +169,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): The delivered contract codec, intake policies, publisher configuration, and full integration fixture compile with hand-written inbox runner and producer mapping bodies. Complete automatic integration-body generation is not a delivered capability. The accepted delivery is recorded by commit `ed03e6ba` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-intake-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 Record every decision made while working on the plan.
 
@@ -216,6 +238,10 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. The delivered contract codec, intake policies, publisher configuration, and full integration fixture compile with hand-written inbox runner and producer mapping bodies. Complete automatic integration-body generation is not a delivered capability. The accepted delivery is recorded by commit `ed03e6ba` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-intake-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -223,6 +249,8 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 This section assumes you know nothing about this repository. Read it fully before editing.
 
@@ -602,6 +630,8 @@ not surprised:
 
 ## Plan of Work
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The work is five milestones. Each is independently verifiable and each builds the
 integration vertical strictly additively on top of EP-1's shared engine — no existing keiro
 runtime package is touched, only the `keiro-dsl` package is extended.
@@ -809,6 +839,8 @@ fixtures; the documented mutation makes `check` exit non-zero with the rule-2 di
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 All commands run from the repository root unless a working directory is named. The
 `keiro-dsl` package is created by EP-1; confirm it exists before starting.
 
@@ -917,6 +949,8 @@ Expected: `exit=1` with the rule-2 diagnostic, then the file is restored.
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The change is effective when these behaviors are observable, not merely when code compiles.
 
 **Behavior 1 — the checker rejects the dangerous inversions.** Given a spec whose `intake`
@@ -964,6 +998,8 @@ Concrete Steps, and the MasterPlan Progress line "EP-4: …" can be checked off.
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Every step in this plan is safe to repeat.
 
 - **Editing the engine modules** (`Grammar.hs`, `Parser.hs`, `Validate.hs`, `Scaffold.hs`,
@@ -994,6 +1030,8 @@ half-finished milestone because each is independently verifiable.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 ### Libraries and runtime modules consumed (read-only)
 
@@ -1081,3 +1119,6 @@ by path, the stable shape is:
 EP-5 should reference this section by path
 (`docs/plans/62-keiro-dsl-integration-nodes-inbox-outbox-kafka-and-contract.md`,
 "The `contract` artifact EP-5 consumes") rather than re-deriving the contract shape.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

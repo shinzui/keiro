@@ -5,15 +5,27 @@ title: "Keiro framework migrations self-set search_path for incremental upgrades
 intention: "intention_01kt7npxrzew99s8gxcfqbwa6x"
 kind: exec-plan
 created_at: 2026-06-03T21:22:04Z
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Keiro framework migrations self-set search_path for incremental upgrades
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 Keiro stores all of its framework tables in a dedicated PostgreSQL schema named
 `kiroku` (not the default `public` schema). The runtime always connects with the
@@ -61,23 +73,24 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] Milestone 1: prepend `SET search_path TO kiroku, pg_catalog;` (with an
+- [-] Milestone 1: prepend `SET search_path TO kiroku, pg_catalog;` (with an
   explanatory comment) as the first executable statement of every Keiro framework
-  migration in `keiro-migrations/sql-migrations/`.
-- [ ] Milestone 1: confirm a fresh full-batch apply still works — `cabal test
-  keiro-migrations-test` green.
-- [ ] Milestone 2: extend `keiro-migrations/test/Main.hs` so `expectedTables`
+  migration in `keiro-migrations/sql-migrations/`. {disposition=superseded-by, by=docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md}
+- [-] Milestone 1: confirm a fresh full-batch apply still works — `cabal test
+  keiro-migrations-test` green. {disposition=superseded-by, by=docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md}
+- [-] Milestone 2: extend `keiro-migrations/test/Main.hs` so `expectedTables`
   includes the three v2 workflow tables (covered by the existing fresh-apply
   assertions), and add a new test that applies a v2 migration's SQL in a
-  `search_path = public` session and asserts the table lands in `kiroku`.
-- [ ] Milestone 2: confirm the new test fails before the Milestone 1 edits and
-  passes after (the regression proof).
-- [ ] Milestone 3: full repo green — `cabal build all`, `cabal test
+  `search_path = public` session and asserts the table lands in `kiroku`. {disposition=superseded-by, by=docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md}
+- [-] Milestone 2: confirm the new test fails before the Milestone 1 edits and
+  passes after (the regression proof). {disposition=superseded-by, by=docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md}
+- [-] Milestone 3: full repo green — `cabal build all`, `cabal test
   keiro-migrations-test`, `cabal test keiro` — and a remediation note for any
-  database that already mis-applied the v2 migrations into `public`.
-
+  database that already mis-applied the v2 migrations into `public`. {disposition=superseded-by, by=docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -86,6 +99,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): The proposed search_path edits were superseded by schema-qualified DDL in the dedicated keiro schema (commit fcd97705). ADR-9 now rejects migration search_path manipulation. Do not execute the old migration-editing recipe. Replacement: `docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md`.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 - Decision: Fix the migrations by making each Keiro framework migration self-set
   `search_path TO kiroku, pg_catalog;` as its first statement, rather than (a)
@@ -121,6 +137,10 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. The proposed search_path edits were superseded by schema-qualified DDL in the dedicated keiro schema (commit fcd97705). ADR-9 now rejects migration search_path manipulation. Do not execute the old migration-editing recipe. Replacement: `docs/plans/85-rewrite-keiro-migrations-to-own-a-dedicated-keiro-schema-with-qualified-ddl.md`.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -128,6 +148,8 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 Read this fully before editing; it assumes no prior knowledge of the repository.
 
@@ -212,6 +234,8 @@ incremental (`search_path = public`) condition directly.
 
 
 ## Plan of Work
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 ### Milestone 1: make every Keiro migration self-set search_path
 
@@ -301,6 +325,8 @@ upgraded after this fix never need it.
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Run all commands from the repository root `/Users/shinzui/Keikaku/bokuno/keiro`.
 
 **Step 0 — confirm the starting state (no migration sets search_path):**
@@ -361,6 +387,8 @@ cabal test keiro
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Acceptance is observable behavior:
 
 **Check 1 — incremental apply lands in `kiroku`.** The new test in
@@ -389,6 +417,8 @@ keiro-migrations-test`, and `cabal test keiro` all pass.
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Every step is safe to repeat. `SET search_path` is idempotent. Editing the migration
 files does not retrigger an apply on databases that already ran them (codd keys on
 filename); re-running `runAllKeiroMigrations` against any database is a no-op once
@@ -402,6 +432,8 @@ existence checks.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 This plan adds **no** new library code and **no** new migration file (the primary
 path edits existing files in place). It touches:
@@ -426,3 +458,6 @@ unchanged by this plan. No runtime Haskell signatures change.
 ExecPlan: docs/plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md
 Intention: intention_01kt7npxrzew99s8gxcfqbwa6x
 ```
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

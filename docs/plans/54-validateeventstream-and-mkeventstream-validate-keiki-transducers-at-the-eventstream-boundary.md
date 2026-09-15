@@ -5,9 +5,19 @@ title: "validateEventStream and mkEventStream: validate keiki transducers at the
 kind: exec-plan
 created_at: 2026-06-06T15:00:00Z
 intention: "intention_01ktensqv9ecmv5cd5jrbcfej7"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # validateEventStream and mkEventStream: validate keiki transducers at the EventStream boundary
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -92,13 +102,14 @@ section must always reflect the actual current state of the work.
 - [x] Changelog (2026-06-06): added an `### Added` (and `### Changed` for the keiki pin bump) entry
       under `## [Unreleased]` in `keiro/CHANGELOG.md` announcing `Keiro.EventStream.Validate` and the
       keiki bump.
-- [ ] M3 (optional follow-up): cross-check that the transducer's emitted event-type tags are
+- [-] M3 (optional follow-up): cross-check that the transducer's emitted event-type tags are
       covered by the `Codec`'s `eventTypes`. **Blocked on keiki**: there is currently no exported
       keiki function that enumerates the event tags a `SymTransducer` can emit (confirmed by audit
-      of `Keiki.Core` exports), so this stays a recorded follow-up, not in-scope work.
-
+      of `Keiki.Core` exports), so this stays a recorded follow-up, not in-scope work. {disposition=out-of-scope}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -190,6 +201,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): Core EventStream validation and the smart constructor were delivered with recorded positive and negative tests on 2026-06-06. The optional emitted-tag/codec coverage extension is outside this completed scope. Reassess the upstream enumeration API before chartering it; the old dependency observation is historical.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 Record every decision made while working on the plan.
 
@@ -299,6 +313,10 @@ Record every decision made while working on the plan.
   Date: 2026-06-06
 
 ## Outcomes & Retrospective
+
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. Core EventStream validation and the smart constructor were delivered with recorded positive and negative tests on 2026-06-06. The optional emitted-tag/codec coverage extension is outside this completed scope. Reassess the upstream enumeration API before chartering it; the old dependency observation is historical.
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion. Compare the
 result against the original purpose.
@@ -864,3 +882,6 @@ at the pin). The validation pass had inspected the local `../keiki` working copy
    Ord`; `OrderState` is jitsurei-side and not in the keiro-test assertion, so it was left as-is.
 
 Outcome: M0–M2 complete and green (3 examples, 0 failures). M3 remains a blocked follow-up.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

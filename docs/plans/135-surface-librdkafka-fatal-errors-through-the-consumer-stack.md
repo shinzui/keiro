@@ -6,9 +6,19 @@ kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
 intention: intention_01kyhskznseyk9f76y9z8ddt1q
 master_plan: "docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Surface librdkafka fatal errors through the consumer stack
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -66,11 +76,11 @@ table) and `docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-st
       "Upstream PR text (prepared, not submitted)" and staged in the fork clone at
       `/Users/shinzui/Keikaku/bokuno/hw-kafka-client/PR_BODY.md` (git-excluded via
       `.git/info/exclude` so it is not part of the patch).
-- [ ] M1: PR **deliberately not opened** — see Decision Log (2026-07-27). To submit
+- [-] M1: PR **deliberately not opened** — see Decision Log (2026-07-27). To submit
       later: `gh pr create --repo haskell-works/hw-kafka-client --title "fix(consumer):
       surface consumer fatal errors and stop leaking polled messages" --body-file
       PR_BODY.md` from the fork clone. Left unchecked as a standing reminder, not as
-      incomplete work.
+      incomplete work. {disposition=declined}
 - [x] M2: `isFatal` in `hw-kafka-streamly` gains `RdKafkaRespErrFatal` and
       `RdKafkaRespErrSaslAuthenticationFailed` arms; `StreamTest.hs` taxonomy pins
       updated (20 fatal + 3 non-fatal); tests pass — done 2026-07-27. Fail-then-pass
@@ -94,12 +104,13 @@ table) and `docs/plans/137-guarantee-deterministic-consumer-close-in-hw-kafka-st
       Written now rather than deferred to the last sibling plan because EP-1 alone
       establishes the durable contract and the fork-pin obligation; the record names
       plans 136 and 137 as pending extensions.
-- [ ] Optional demo (not gating): fenced-consumer end-to-end repro against local
+- [-] Optional demo (not gating): fenced-consumer end-to-end repro against local
       Redpanda. Not executed — see Outcomes & Retrospective for why and for exactly how
-      to run it if the evidence is wanted.
-
+      to run it if the evidence is wanted. {disposition=out-of-scope}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Findings from plan-authoring verification (2026-07-23), all re-checked against the
 sources on disk; treat these as the evidence base for the design below.
@@ -275,6 +286,9 @@ sources on disk; treat these as the evidence base for the design below.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): The 2026-07-27 outcome records the implementation and test evidence. Upstream PR submission was deliberately declined in the recorded user decision; the broker demo was explicitly optional. Both reminders are closed without being marked delivered. The PR recipe remains historical preparation, not authorization to submit.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 - Decision: Fix fatal observability upstream in a `hw-kafka-client` fork (pin + PR),
   not with an application-level no-progress watchdog.
@@ -456,6 +470,10 @@ injectable.
 
 
 ## Outcomes & Retrospective
+
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. The 2026-07-27 outcome records the implementation and test evidence. Upstream PR submission was deliberately declined in the recorded user decision; the broker demo was explicitly optional. Both reminders are closed without being marked delivered. The PR recipe remains historical preparation, not authorization to submit.
 
 Completed 2026-07-27. A fenced or otherwise fatally-dead consumer is now observable in
 both callback poll modes, and the stream terminates on it instead of polling forever.
@@ -1036,3 +1054,6 @@ table (its classifier must include the two new arms); sibling plan 137 shares th
 `hw-kafka-streamly` package release — its bracket API and this plan's `isFatal` arms
 land in `Stream.hs` in disjoint sections, and `StreamTest.hs` conflicts are resolved
 by keeping both plans' cases.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

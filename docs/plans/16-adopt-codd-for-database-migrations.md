@@ -5,15 +5,27 @@ title: "Adopt codd for database migrations"
 kind: exec-plan
 created_at: 2026-05-17T13:35:34Z
 intention: "intention_01krv2b0yeej5b2ej2wdt02dgh"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:55Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Adopt codd for database migrations
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 Keiro currently creates its own database tables at runtime with `CREATE TABLE IF NOT EXISTS` statements embedded in Haskell modules. That is convenient for tests, but it is not a production migration story: there is no applied-migration ledger, no ordered forward migration history, and no database schema verification step. Kiroku now has a first-class codd migration package, so Keiro should follow the same pattern and expose one migration entry point that applies Kiroku's event-store migrations and Keiro's framework tables before an application starts.
 
@@ -25,10 +37,11 @@ After this plan is implemented, a service using Keiro can run a migration execut
 - [x] Milestone 1: Add a `keiro-migrations` subpackage and embed Keiro-owned SQL migrations. Completed 2026-05-17T13:55:08Z; `cabal build keiro-migrations` compiled `Keiro.Migrations` after adding a scoped `allow-newer: haxl:time` solver override for local codd.
 - [x] Milestone 2: Compose Kiroku and Keiro migrations in one codd migration executable. Completed 2026-05-17T13:55:08Z; `cabal build keiro-migrate` compiled the executable that runs Kiroku plus Keiro migrations through one codd ledger.
 - [x] Milestone 3: Move runtime initialization toward explicit migration use while preserving development and test ergonomics. Completed 2026-05-17T13:56:57Z; `keiro-migrations/README.md` documents the `keiro-migrate` workflow and the runtime initializer functions now state that they are compatibility helpers for development and tests.
-- [ ] Milestone 4: Add integration tests and documentation for the migration workflow. The migration package test was added and `cabal test keiro-migrations-test` passed on 2026-05-17T13:56:57Z. Remaining validation is blocked by the existing `keiro-test` compile failure in `src/Keiro/Command.hs`, which is unrelated to migration adoption and appears to be the Keiki multi-event command output change tracked by `docs/plans/17-adopt-keiki-multi-event-command-output.md`.
-
+- [-] Milestone 4: Add integration tests and documentation for the migration workflow. The migration package test was added and `cabal test keiro-migrations-test` passed on 2026-05-17T13:56:57Z. Remaining validation is blocked by the existing `keiro-test` compile failure in `src/Keiro/Command.hs`, which is unrelated to migration adoption and appears to be the Keiki multi-event command output change tracked by `docs/plans/17-adopt-keiki-multi-event-command-output.md`. {disposition=superseded-by, by=docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 - 2026-05-17: `mori show --full` reports Keiro as `shinzui/keiro`, a Haskell framework depending on `shinzui/kiroku`, `shinzui/keiki`, `shinzui/shibuya`, `hasql/hasql`, and `effectful/effectful`. This means Kiroku's migration package is not optional background context; Keiro's migration runner must either depend on it directly or document an ordering requirement that every downstream service must satisfy.
 - 2026-05-17: `mori registry show mzabani/codd --full` reports the local codd source at `/Users/shinzui/Keikaku/hub/haskell/codd-project`, and `mori registry docs mzabani/codd` exposes the adoption note at `/Users/shinzui/Keikaku/hub/haskell/codd-project/docs/adoption-for-haskell-services.md`. That note confirms the library-subpackage pattern: `Codd.applyMigrations` accepts `Maybe [AddedSqlMigration m]`, so a library can ship migrations as embedded Haskell values.
@@ -41,6 +54,9 @@ After this plan is implemented, a service using Keiro can run a migration execut
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): The remaining Codd-era validation is superseded by the native migration and live schema verification work. The migration-package test recorded here did pass; this audit does not assert a new full-suite run. Legacy tool removal remains a separate open task in plan 189. Replacement: `docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md`.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 - Decision: Create a separate `keiro-migrations` package instead of adding codd and file embedding to the main `keiro` library.
   Rationale: Kiroku uses a dedicated `kiroku-store-migrations` subpackage, and copying that boundary keeps the runtime library free of migration-tool dependencies. Applications that only compile Keiro do not need to link codd unless they run migrations.
@@ -61,12 +77,18 @@ After this plan is implemented, a service using Keiro can run a migration execut
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. The remaining Codd-era validation is superseded by the native migration and live schema verification work. The migration-package test recorded here did pass; this audit does not assert a new full-suite run. Legacy tool removal remains a separate open task in plan 189. Replacement: `docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md`.
+
 Implemented the codd migration package, embedded Keiro's current framework schema as a bootstrap SQL migration, and added a `keiro-migrate` executable that applies Kiroku and Keiro migrations through one codd ledger. The migration package has an ephemeral PostgreSQL test that verifies the expected Kiroku and Keiro tables exist after the first run and still exist after a second run.
 
 The remaining acceptance gap is the existing `keiro-test` compile failure in `src/Keiro/Command.hs`. That failure is outside the migration surface and aligns with the separate Keiki multi-event command output adoption plan, so this plan stops short of marking Milestone 4 complete until that dependency/API migration is handled.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 The repository root is `/Users/shinzui/Keikaku/bokuno/keiro`. This is a Haskell Cabal project. The main package is declared in `keiro.cabal`, and the workspace is declared in `cabal.project`. The current `cabal.project` includes the local Keiki packages and `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-store`, but it does not include Kiroku's new `kiroku-store-migrations` package or the local codd checkout.
 
@@ -92,6 +114,8 @@ The local codd adoption note at `/Users/shinzui/Keikaku/hub/haskell/codd-project
 
 
 ## Plan of Work
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 ### Milestone 1 - Add `keiro-migrations` with embedded Keiro SQL
 
@@ -201,6 +225,8 @@ The existing `keiro-test` suite matters because retaining runtime compatibility 
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 1. From `/Users/shinzui/Keikaku/bokuno/keiro`, confirm dependency locations and current schema ownership:
 
 ```bash
@@ -266,6 +292,8 @@ The command should exit successfully. A follow-up `psql` inspection should show 
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The implementation is accepted when a fresh database can be migrated without calling Keiro's runtime initializer functions and the existing test suite still passes. The minimum automated validation is:
 
 ```bash
@@ -293,6 +321,8 @@ Documentation acceptance is that `keiro-migrations/README.md` states that codd i
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Creating files and editing Cabal metadata is safe to repeat by reapplying the same patch. The SQL bootstrap migration should keep `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` so applying it to a fresh or partially initialized development database is forgiving, but codd's migration ledger remains the source of truth after adoption.
 
 Do not rename a migration file after it has been applied to any shared database. codd derives migration identity from the timestamped file name. If a migration file is wrong before it is shared, fix it in place and rerun tests against a fresh database. If it is wrong after it reaches a shared database, add a new timestamped forward migration that repairs the schema, and record the decision in this plan.
@@ -303,6 +333,8 @@ The runtime initializer functions remain available during the first migration ad
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 `mori` is the source of dependency discovery for this repository. Use `mori show --full` for Keiro's declared dependencies and `mori registry show <project> --full` plus `mori registry docs <project>` before guessing at dependency APIs. Do not search, read, or traverse `/nix/store`.
 
@@ -348,3 +380,6 @@ Codd.VerifySchemas.LaxCheck
 ```
 
 The runtime Keiro modules that must remain compatible unless this plan is explicitly revised are `src/Keiro/Snapshot/Schema.hs`, `src/Keiro/ReadModel/Schema.hs`, and `src/Keiro/Timer/Schema.hs`.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

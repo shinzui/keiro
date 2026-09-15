@@ -6,15 +6,27 @@ kind: exec-plan
 created_at: 2026-06-10T01:05:27Z
 intention: "intention_01ktqdn85xe2btqzr2zghxgrpr"
 master_plan: "docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # keiro-dsl process manager and durable timer nodes
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 A **keiro service** is a bounded context built on event sourcing. Two of its hardest node
 types to hand-write correctly are the **process manager** (a "saga": a small state machine
@@ -78,6 +90,12 @@ invariant guarantees the generated layer never contains a keiki symbolic operato
 
 ## Progress
 
+Accepted delivery scope (reconciled 2026-09-15):
+
+- [x] Full-service conformance delivered in `aa1e9987`, accepted by MasterPlan 8, and retained in the current `conformance-process-full` component (source and delivery record audited 2026-09-15).
+
+The original milestone descriptions below are historical. Void entries close the old specification under the accepted delivery scope; they do not certify every originally proposed generator or assertion.
+
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
@@ -108,10 +126,11 @@ Milestone 5 — Conformance vs `SurgeManager`: **PARTIAL 2026-06-10** (spec→be
 
 - [x] Author `hospital-surge.keiro` (+ minimal Surge/Hospital aggregate decls); `check` passes clean (benign-inversion warnings only). (2026-06-10)
 - [x] Mutation test (`keiro-dsl/test/process-mutation-test.sh`): flipping the timer-fire `on-reject` from `Fired` to `Retry` in the spec, re-scaffolding, turns the *specific* `onReject` assertion red against the hand-written expectation in `test/conformance-process/Main.hs`; restoring returns to green. This is the headline spec→behaviour pin. (2026-06-10)
-- [ ] **Deferred:** capturing the external `SurgeManager.hs` + `Surge/Transducer.hs` and compiling the runtime-coupled Generated `Process` module against the full effectful/hasql/kiroku stack (a much heavier integration than the aggregate codec). The aggregate-level compilation conformance is already proven in EP-1; the process facts harness + mutation pin demonstrate the spec→behaviour link without it.
-
+- [-] **Deferred:** capturing the external `SurgeManager.hs` + `Surge/Transducer.hs` and compiling the runtime-coupled Generated `Process` module against the full effectful/hasql/kiroku stack (a much heavier integration than the aggregate codec). The aggregate-level compilation conformance is already proven in EP-1; the process facts harness + mutation pin demonstrate the spec→behaviour link without it. {disposition=delivered-elsewhere, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -142,6 +161,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): A full service pairs generated timer wiring with a hand-written ProcessManager handle; conformance exercises advance, dispatch, and timer outputs. The accepted delivery is recorded by commit `aa1e9987` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-process-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 Record every decision made while working on the plan.
 
@@ -189,6 +211,10 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. A full service pairs generated timer wiring with a hand-written ProcessManager handle; conformance exercises advance, dispatch, and timer outputs. The accepted delivery is recorded by commit `aa1e9987` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-process-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -196,6 +222,8 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 This section assumes no prior knowledge. It defines every term, names every file by full
 path, and restates the shared signatures from EP-1 that this plan depends on.
@@ -486,6 +514,8 @@ Each rule produces a line-numbered `Diagnostic` of error severity when violated:
 
 ## Plan of Work
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The work is five milestones, each independently verifiable. They follow the engine's data
 flow: grammar+parser → validator → scaffold → harness → conformance. All edits are additive
 to the shared `keiro-dsl` modules EP-1 created; this plan introduces no new runtime package
@@ -639,6 +669,8 @@ Acceptance: see Validation and Acceptance.
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 All commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro` unless
 noted. The `keiro-dsl` package and its CLI are provided by EP-1; this plan assumes EP-1 is
 Complete (the `keiro-dsl` executable builds and `parse`/`check`/`scaffold` work on an
@@ -761,6 +793,8 @@ benign-inversion decision is genuinely pinned.
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The plan is accepted when all of the following observable behaviors hold, each demonstrable
 by the commands in *Concrete Steps*:
 
@@ -802,6 +836,8 @@ not an internal attribute. The conformance target is the real, external
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Every step in this plan is safe to repeat.
 
 - **`parse` and `check`** are pure reads of a `.keiro` file and produce no side effects; run
@@ -835,6 +871,8 @@ property intact in scaffolded services.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 ### Runtime primitives this plan binds to (the bijection targets)
 
@@ -911,3 +949,6 @@ packages) only indirectly, by *emitting* code that imports them — `keiro-dsl` 
 not link the runtime. The conformance fixtures depend on the external
 `keiro-runtime-jitsurei` corpus only as read-only captured copies, not as a build
 dependency.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

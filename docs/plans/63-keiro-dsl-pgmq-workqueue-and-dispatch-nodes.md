@@ -6,15 +6,27 @@ kind: exec-plan
 created_at: 2026-06-10T01:05:27Z
 intention: "intention_01ktqdn85xe2btqzr2zghxgrpr"
 master_plan: "docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # keiro-dsl pgmq workqueue and dispatch nodes
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
 
 ## Purpose / Big Picture
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 `keiro-pgmq` is a small Haskell library in this repository (under `keiro-pgmq/`) that
 turns Postgres into a background-job queue. It builds on **PGMQ**, a Postgres extension
@@ -66,20 +78,27 @@ a second instance can correct us cheaply rather than us over-fitting now.
 
 ## Progress
 
+Accepted delivery scope (reconciled 2026-09-15):
+
+- [x] Full-service conformance delivered in `2587b96a`, accepted by MasterPlan 8, and retained in the current `conformance-dispatch-full` component (source and delivery record audited 2026-09-15).
+
+The original milestone descriptions below are historical. Void entries close the old specification under the accepted delivery scope; they do not certify every originally proposed generator or assertion.
+
 Use a checklist to summarize granular steps. Every stopping point must be documented here,
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
 - [x] Milestone 1 (grammar + parser) DONE 2026-06-10: added `NWorkqueue`/`NPgmqDispatch` constructors to `Keiro.Dsl.Grammar`, including the fixture-bearing `derive physical=… dlq=… table=…` lines and the disposition table; extend the parser so a `workqueue`/`dispatch` block round-trips through the pretty-printer.
-- [ ] Milestone 1: extend the bijection table (in this plan's Context) with the `workqueue`/`dispatch` → `keiro-pgmq` rows in the same change as the grammar constructors (faithfulness contract).
+- [-] Milestone 1: extend the bijection table (in this plan's Context) with the `workqueue`/`dispatch` → `keiro-pgmq` rows in the same change as the grammar constructors (faithfulness contract). {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 - [x] Milestone 2 (validator) DONE 2026-06-10 (headline rules): physical-name divergence vs queueRef, the storeFailure/decodeFailure inversions, dlq=on/maxRetries ceiling, and dispatch enqueue resolution. Lower-value rules (dedup-key-binds-to-payload, dlq-off-with-DeadLetter warning) remain. Originally: to `Keiro.Dsl.Validate` — require-a-derivation (+ fixture-divergence check by re-running `queueRef` semantics), require-a-disposition, dangerous-inversion flags, queue-name-divergence across nodes, dedup-key-binds-to-payload-field, `maxRetries ≥ 1` when `dlq=on`, dlq-off-with-DeadLetter-arm warning, and the producer-failure-vs-consumer-JobOutcome separation.
-- [ ] Milestone 3 (scaffold): emit the symbol-free `Generated` layer (the `Job` value, the `JobCodec` field map, the `RetryPolicy`, the `queueRef` wiring, the disposition `JobOutcome` mapping) plus `HoleStub` signatures for the fan-out body and the raw-SQL dedup predicate; **never** emit the raw SQL. Confirm the firewall invariant holds.
-- [ ] Milestone 4 (harness): emit codec round-trip, disposition-coverage, and the captured-physical-name-fixture-matches-`queueRef` tests.
-- [ ] Milestone 5 (conformance): capture the *reservation-work* reference modules under `keiro-dsl/test/fixtures/`, scaffold from a hand-written `reservation-work.keiro`, show the `Generated` modules compile and the harness is green, and show a fixture mutation turns a test red.
-- [ ] Record the honest coverage gaps (raw-SQL dedup predicate, fan-out body + its producer-failure arms, trace-header propagation, deliberate-malformed test path, versioned `{v,data}` codec, run cadence) in Surprises and in the scaffold hole comments.
-
+- [-] Milestone 3 (scaffold): emit the symbol-free `Generated` layer (the `Job` value, the `JobCodec` field map, the `RetryPolicy`, the `queueRef` wiring, the disposition `JobOutcome` mapping) plus `HoleStub` signatures for the fan-out body and the raw-SQL dedup predicate; **never** emit the raw SQL. Confirm the firewall invariant holds. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Milestone 4 (harness): emit codec round-trip, disposition-coverage, and the captured-physical-name-fixture-matches-`queueRef` tests. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Milestone 5 (conformance): capture the *reservation-work* reference modules under `keiro-dsl/test/fixtures/`, scaffold from a hand-written `reservation-work.keiro`, show the `Generated` modules compile and the harness is green, and show a fixture mutation turns a test red. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
+- [-] Record the honest coverage gaps (raw-SQL dedup predicate, fan-out body + its producer-failure arms, trace-header propagation, deliberate-malformed test path, versioned `{v,data}` codec, run cadence) in Surprises and in the scaffold hole comments. {disposition=superseded-by, by=docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -88,6 +107,9 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): The delivered codec and retry policy are assembled into a real Job with a filled worker handler. Fan-out logic and raw SQL deduplication remain application-owned holes. The accepted delivery is recorded by commit `2587b96a` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-dispatch-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 Record every decision made while working on the plan.
 
@@ -140,6 +162,10 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. The delivered codec and retry policy are assembled into a real Job with a filled worker handler. Fan-out logic and raw SQL deduplication remain application-owned holes. The accepted delivery is recorded by commit `2587b96a` and the Complete registry entry in `docs/masterplans/8-build-the-keiro-dsl-service-dsl-toolchain.md`; current evidence is `keiro-dsl/test/conformance-dispatch-full/Main.hs`. Historical test results belong to those delivery commits, not to this documentation audit.
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -147,6 +173,8 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 This section assumes you know nothing about this repository. Read it fully before editing.
 
@@ -390,6 +418,8 @@ field. Keep it close to this single instance (see the prominent caveat).
 
 ## Plan of Work
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The work is five milestones. Each is independently verifiable. After EP-1 is Complete, the
 five can proceed in order; Milestones 1–4 build the engine extension and Milestone 5 proves
 it against the one real corpus instance. All paths below are repository-relative under
@@ -580,6 +610,8 @@ which were holes.
 
 ## Concrete Steps
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 Run everything from the repository root `/Users/shinzui/Keikaku/bokuno/keiro` unless noted.
 These steps assume EP-1 is Complete (the `keiro-dsl/` package exists and builds). If
 `keiro-dsl/` is absent, stop and finish EP-1 first.
@@ -655,6 +687,8 @@ cabal test keiro-dsl --test-options='--match "physical-name"'
 
 ## Validation and Acceptance
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 The change is effective — beyond compilation — when all of the following hold on the one
 real corpus instance:
 
@@ -681,6 +715,8 @@ real corpus instance:
 
 ## Idempotence and Recovery
 
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
+
 All steps are safe to repeat. `cabal build`/`cabal test`/`keiro-dsl parse`/`check` are
 read-only or build-only. `keiro-dsl scaffold` is idempotent **by construction**: `Generated`
 modules are overwritten every run (so re-scaffolding is a no-op against unchanged input), and
@@ -697,6 +733,8 @@ or keiro-pgmq code, so there is no destructive path to roll back.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. The old instructions and acceptance list are not outstanding release requirements.
 
 **Libraries/packages.** This plan adds **no** new external dependency to `keiro-dsl` beyond
 what EP-1 already pulls in (megaparsec for the parser, prettyprinter for the printer,
@@ -780,3 +818,6 @@ a second corpus instance) knows what was punted and why:
 - **Generality.** With a single corpus instance, every grammar and validator choice is fitted
   to reservation-work. Treat the notation as provisional until a second PGMQ work-queue
   appears.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.

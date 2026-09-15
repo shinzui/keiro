@@ -6,9 +6,19 @@ kind: exec-plan
 created_at: 2026-07-23T04:18:42Z
 intention: intention_01kyhskznseyk9f76y9z8ddt1q
 master_plan: "docs/masterplans/23-make-the-kafka-consumer-streaming-stack-surface-fatal-errors-and-close-deterministically.md"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:17:56Z
+      mode: "update"
+      note: "Reconcile backlog disposition with delivered scope, superseding plans, and remaining evidence."
 ---
 
 # Guarantee deterministic consumer close in hw-kafka-streamly
+
+> **Backlog disposition — 2026-09-15:** See current Progress and Outcomes & Retrospective for the reconciled scope and evidence. Older instructions are retained as history.
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -83,12 +93,13 @@ downstream can break.
       non-fatal plus the `skipNonFatal` regression case, and `cabal.project` carries the
       fork pin at `6caed636898a78e9f6e5a9c93eeb5562cbb2580a`. Both plans' changes sit
       under one `## Unreleased` heading.
-- [ ] M3 optional: broker-backed group-membership verification — **skipped**, reason
+- [-] M3 optional: broker-backed group-membership verification — **skipped**, reason
       recorded in Outcomes & Retrospective. Not gating; the plan marks it
-      evidence-grade.
-
+      evidence-grade. {disposition=out-of-scope}
 
 ## Surprises & Discoveries
+
+- (2026-09-15) The checklist lagged the delivery or scope decisions. The reconciliation in Outcomes & Retrospective records the evidence and distinguishes closure from implementation.
 
 Findings from plan-authoring verification (2026-07-23):
 
@@ -168,6 +179,9 @@ Findings from plan-authoring verification (2026-07-23):
 
 
 ## Decision Log
+
+- Decision (2026-09-15 backlog cleanup): Implementation, regression evidence, and release coordination were recorded complete on 2026-07-27. The optional broker-backed demonstration was explicitly skipped and is outside the completed scope; its recipe remains available as historical evidence guidance.
+  Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 - Decision: Ship a with-style scope function implemented with plain
   `Control.Exception.bracket` — not with streamly's `withAcquireIO`/`bracketIO'`
@@ -258,6 +272,10 @@ Findings from plan-authoring verification (2026-07-23):
 
 
 ## Outcomes & Retrospective
+
+### Backlog reconciliation — 2026-09-15
+
+This plan has no remaining in-scope work. Implementation, regression evidence, and release coordination were recorded complete on 2026-07-27. The optional broker-backed demonstration was explicitly skipped and is outside the completed scope; its recipe remains available as historical evidence guidance.
 
 Completed 2026-07-27. A partially-consumed Kafka stream now closes its consumer
 deterministically, and the examples that used to demonstrate the leak demonstrate the
@@ -713,3 +731,6 @@ Coordination: sibling plan 135 edits `Stream.hs` (isFatal, lines 183–204 regio
 and `StreamTest.hs`; this plan edits `Stream.hs` (module header, examples, new
 functions at the end of the Streams section) and adds `WithStreamTest.hs` — merge
 order is irrelevant, conflicts are textual-only in the module header/export list.
+
+
+Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.
