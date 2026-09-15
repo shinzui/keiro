@@ -134,6 +134,7 @@ import Keiro.Inbox
   )
 import Keiro.Inbox.Delegated
   ( DelegatedCommandError (..),
+    delegatedCommand,
     delegatedEventId,
     delegatedFromPMCommand,
   )
@@ -8404,6 +8405,54 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         Right (InboxHandlerFailed reason 2) -> Text.isInfixOf "delegated exploded" reason `shouldBe` True
         other -> expectationFailure ("expected delegated attempt failure, got " <> show (void other))
 
+    it "applies attempts 1 through 4 exactly at a ceiling of 3" $ do
+      contexts <- traverse (shouldBeRight . mkDelegatedRetryContext 3) [1, 2, 3, 4]
+      invocations <- newIORef (0 :: Int)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-retry-ladder"
+          failing _ _ = do
+            liftIO (modifyIORef' invocations (+ 1))
+            liftIO (throwIO (userError "retry ladder failure"))
+            pure (DelegatedFresh ())
+          succeeding _ _ = do
+            liftIO (modifyIORef' invocations (+ 1))
+            pure (DelegatedFresh ())
+          forbidden _ _ = do
+            liftIO (modifyIORef' invocations (+ 1))
+            pure (DelegatedFresh ())
+      case contexts of
+        [attempt1, attempt2, attempt3, attempt4] -> do
+          first <- runEff (runInboxDelegatedWithRetries Nothing attempt1 PreferIntegrationMessageId event Nothing failing)
+          second <- runEff (runInboxDelegatedWithRetries Nothing attempt2 PreferIntegrationMessageId event Nothing failing)
+          third <- runEff (runInboxDelegatedWithRetries Nothing attempt3 PreferIntegrationMessageId event Nothing succeeding)
+          fourth <- runEff (runInboxDelegatedWithRetries Nothing attempt4 PreferIntegrationMessageId event Nothing forbidden)
+          first `shouldSatisfy` \case Right (InboxHandlerFailed _ 1) -> True; _ -> False
+          second `shouldSatisfy` \case Right (InboxHandlerFailed _ 2) -> True; _ -> False
+          third `shouldBe` Right (InboxProcessed ())
+          fourth `shouldBe` Right (InboxPreviouslyFailed Nothing)
+          readIORef invocations `shouldReturn` 3
+        other -> expectationFailure ("unexpected retry contexts: " <> show other)
+
+    it "records failed and poisoned metrics on a failing ceiling attempt" $ do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider
+          emptyMaterializedResources
+          defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      metrics <- Telemetry.newKeiroMetrics meter
+      retryContext <- shouldBeRight (mkDelegatedRetryContext 3 3)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-poison-metrics"
+          handler _ _ = do
+            liftIO (throwIO (userError "terminal delegated failure"))
+            pure (DelegatedFresh ())
+      result <- runEff (runInboxDelegatedWithRetries (Just metrics) retryContext PreferIntegrationMessageId event Nothing handler)
+      result `shouldSatisfy` \case Right (InboxHandlerFailed _ 3) -> True; _ -> False
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      let scalars = flattenScalarPoints exported
+      lookup "keiro.inbox.failed" scalars `shouldBe` Just (IntNumber 1)
+      lookup "keiro.inbox.poisoned" scalars `shouldBe` Just (IntNumber 1)
+
     it "retries a batch identity after failure and suppresses it only after success" $ do
       invocations <- newIORef (0 :: Int)
       let event = sampleIntegrationEnvelope & #messageId .~ "delegated-batch-retry" & #source .~ "source-a"
@@ -8436,6 +8485,30 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           runInboxDelegatedBatch Nothing PreferIntegrationMessageId [(first, Nothing), (second, Nothing)] handler
       results `shouldBe` [Right (InboxProcessed ()), Right (InboxProcessed ())]
       readIORef invocations `shouldReturn` ["source-a", "source-b"]
+
+    it "keeps invalid and poison deliveries isolated from later batch items" $ do
+      invoked <- newIORef ([] :: [Text])
+      let invalid = sampleIntegrationEnvelope & #messageId .~ "" & #source .~ "invalid-source"
+          poison = sampleIntegrationEnvelope & #messageId .~ "poison" & #source .~ "poison-source"
+          healthy = sampleIntegrationEnvelope & #messageId .~ "healthy" & #source .~ "healthy-source"
+          handler _ event = do
+            liftIO (modifyIORef' invoked (<> [event ^. #source]))
+            when (event ^. #source == "poison-source") (liftIO (throwIO (userError "poison item")))
+            pure (DelegatedFresh ())
+      results <-
+        runEff $
+          runInboxDelegatedBatch
+            Nothing
+            PreferIntegrationMessageId
+            [(invalid, Nothing), (poison, Nothing), (healthy, Nothing)]
+            handler
+      case results of
+        [ Left (DedupePolicyUnsatisfied PreferIntegrationMessageId),
+          Right (InboxHandlerFailed reason 1),
+          Right (InboxProcessed ())
+          ] -> Text.isInfixOf "poison item" reason `shouldBe` True
+        other -> expectationFailure ("unexpected isolated batch results: " <> show other)
+      readIORef invoked `shouldReturn` ["poison-source", "healthy-source"]
 
     it "propagates async cancellation from a synchronized delegated batch handler" $ do
       entered <- newEmptyMVar
@@ -8484,6 +8557,197 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldBe` Left (DelegatedCommandWithoutReceipt targetName)
       delegatedFromPMCommand targetName (PMCommandFailed targetName CommandRejected)
         `shouldBe` Left (DelegatedCommandFailed targetName CommandRejected)
+
+  describe "Keiro.Inbox delegated" $ around (withFreshResourceStore fixture) $ do
+    it "bypasses the inbox and preflights a one-shot command before invalid dispatch" $ \(storeHandle, StoreRunner runner) -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      callbackInvocations <- newIORef (0 :: Int)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-command-once" & #source .~ "delegated-source"
+          targetName = StreamName "delegated-once-1"
+          target = stream "delegated-once-1" :: Stream DelegatedOneShotEventStream
+          marker = delegatedEventId "billing-consumer" (event ^. #source) (event ^. #messageId) targetName "apply-order"
+          handler dedupe _ = do
+            outcome <- delegatedCommand defaultRunCommandOptions targetName marker $ \prepared -> do
+              liftIO (modifyIORef' callbackInvocations (+ 1))
+              fmap (fmap Prelude.fst) $
+                runCommandWithSql
+                  prepared
+                  delegatedOneShotEventStream
+                  target
+                  (Add 1)
+                  (\_ -> Tx.statement dedupe inboxTestCounterInsertStmt)
+            case outcome of
+              Left err -> liftIO (throwIO (userError (show err)))
+              Right delegated -> pure delegated
+      first <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+      case first of
+        Right (Right (InboxProcessed commandResult)) -> commandResult ^. #eventsAppended `shouldBe` 1
+        other -> expectationFailure ("expected a fresh delegated command, got " <> show other)
+
+      -- Hydrating and dispatching the command now would reject in the terminal
+      -- state. Delegated replay must find the marker before reaching that path.
+      directReplay <- runner (runCommand defaultRunCommandOptions delegatedOneShotEventStream target (Add 1))
+      directReplay `shouldBe` Right (Left CommandRejected)
+      second <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+      second `shouldBe` Right (Right InboxDuplicate)
+      readIORef callbackInvocations `shouldReturn` 1
+
+      Right stored <- Store.runStoreIO storeHandle (Store.readStreamForward targetName (StreamVersion 0) 10)
+      Vector.length stored `shouldBe` 1
+      stored Vector.! 0 ^. #eventId `shouldBe` marker
+      Right counterRows <- Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () inboxTestCounterCountStmt))
+      counterRows `shouldBe` 1
+      Right inboxRows <- Store.runStoreIO storeHandle (listInbox "delegated-source")
+      inboxRows `shouldBe` []
+
+    it "recovers a lost acknowledgement for an atomic multi-event command" $ \(storeHandle, StoreRunner runner) -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-command-multi" & #source .~ "delegated-multi-source"
+          targetName = StreamName "counter-delegated-multi"
+          target = stream "counter-delegated-multi" :: Stream CounterEventStream
+          marker = delegatedEventId "billing-consumer" (event ^. #source) (event ^. #messageId) targetName "apply-multi"
+          handler dedupe _ = do
+            outcome <- delegatedCommand defaultRunCommandOptions targetName marker $ \prepared ->
+              fmap (fmap Prelude.fst) $
+                runCommandWithSql
+                  prepared
+                  multiCounterEventStream
+                  target
+                  (Add 2)
+                  (\_ -> Tx.statement dedupe inboxTestCounterInsertStmt)
+            case outcome of
+              Left err -> liftIO (throwIO (userError (show err)))
+              Right delegated -> pure delegated
+      -- Discard the first successful return to simulate a crash before source
+      -- acknowledgement, then redeliver the same envelope.
+      _ <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+      redelivery <- runner (runInboxDelegated Nothing PreferIntegrationMessageId event Nothing handler)
+      redelivery `shouldBe` Right (Right InboxDuplicate)
+      Right stored <- Store.runStoreIO storeHandle (Store.readStreamForward targetName (StreamVersion 0) 10)
+      Vector.length stored `shouldBe` 2
+      stored Vector.! 0 ^. #eventId `shouldBe` marker
+      Right counterRows <- Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () inboxTestCounterCountStmt))
+      counterRows `shouldBe` 1
+      Right inboxRows <- Store.runStoreIO storeHandle (listInbox "delegated-multi-source")
+      inboxRows `shouldBe` []
+
+    it "rejects zero-event commands and unconfirmed duplicate errors" $ \(_storeHandle, StoreRunner runner) -> do
+      let targetName = StreamName "counter-delegated-errors"
+          target = stream "counter-delegated-errors" :: Stream CounterEventStream
+          marker = EventId sampleUuid
+          other = EventId sampleUuid2
+          noOp prepared = runCommand prepared noOpCounterEventStream target (Add 1)
+      zero <- runner (delegatedCommand defaultRunCommandOptions targetName marker noOp)
+      zero `shouldBe` Right (Left (DelegatedCommandWithoutReceipt targetName))
+      mismatched <-
+        runner $
+          delegatedCommand defaultRunCommandOptions targetName marker $ \_ ->
+            pure (Left (StoreFailed (Store.DuplicateEvent (Just other))))
+      mismatched `shouldBe` Right (Left (DelegatedCommandFailed targetName (StoreFailed (Store.DuplicateEvent (Just other)))))
+      missing <-
+        runner $
+          delegatedCommand defaultRunCommandOptions targetName marker $ \_ ->
+            pure (Left (StoreFailed (Store.DuplicateEvent Nothing)))
+      missing `shouldBe` Right (Left (DelegatedCommandFailed targetName (StoreFailed (Store.DuplicateEvent Nothing))))
+
+    it "converges a concurrent delivery race to one event batch and SQL effect" $ \(storeHandle, StoreRunner runner) -> do
+      Right () <-
+        Store.runStoreIO storeHandle $
+          Store.runTransaction (Tx.sql "CREATE TABLE IF NOT EXISTS inbox_test_counter (message_id TEXT PRIMARY KEY)")
+      arrivals <- newMVar (0 :: Int)
+      release <- newEmptyMVar
+      firstDone <- newEmptyMVar
+      secondDone <- newEmptyMVar
+      retryContext <- shouldBeRight (mkDelegatedRetryContext 3 1)
+      let event = sampleIntegrationEnvelope & #messageId .~ "delegated-race" & #source .~ "delegated-race-source"
+          targetName = StreamName "counter-delegated-race"
+          target = stream "counter-delegated-race" :: Stream CounterEventStream
+          marker = delegatedEventId "billing-consumer" (event ^. #source) (event ^. #messageId) targetName "apply-race"
+          awaitPeer = do
+            arrived <- modifyMVar arrivals $ \count ->
+              let next = count + 1
+               in pure (next, next)
+            when (arrived == 2) (putMVar release ())
+            readMVar release
+          options =
+            defaultRunCommandOptions
+              & #retryLimit
+              .~ 0
+              & #beforeAppend
+              .~ awaitPeer
+          handler dedupe _ = do
+            outcome <- delegatedCommand options targetName marker $ \prepared ->
+              fmap (fmap Prelude.fst) $
+                runCommandWithSql
+                  prepared
+                  counterEventStream
+                  target
+                  (Add 1)
+                  (\_ -> Tx.statement dedupe inboxTestCounterInsertStmt)
+            case outcome of
+              Left err -> liftIO (throwIO (userError (show err)))
+              Right delegated -> pure delegated
+          runOne destination =
+            runner
+              (runInboxDelegatedWithRetries Nothing retryContext PreferIntegrationMessageId event Nothing handler)
+              >>= putMVar destination
+      _ <- forkIO (runOne firstDone)
+      _ <- forkIO (runOne secondDone)
+      outcomes <- traverse takeMVar [firstDone, secondDone]
+      let processed =
+            Prelude.length
+              [ ()
+              | Right (Right (InboxProcessed {})) <- outcomes
+              ]
+          safeLosers =
+            Prelude.length
+              [ ()
+              | Right (Right InboxDuplicate) <- outcomes
+              ]
+              + Prelude.length
+                [ ()
+                | Right (Right (InboxHandlerFailed {})) <- outcomes
+                ]
+      (processed, safeLosers) `shouldBe` (1, 1)
+
+      -- A retry after either allowed loser classification observes the winner.
+      replay <-
+        runner $
+          runInboxDelegated Nothing PreferIntegrationMessageId event Nothing $ \_ _ -> do
+            outcome <- delegatedCommand defaultRunCommandOptions targetName marker (\_ -> error "race replay dispatched")
+            case outcome of
+              Left err -> liftIO (throwIO (userError (show err)))
+              Right delegated -> pure delegated
+      replay `shouldBe` Right (Right InboxDuplicate)
+      Right stored <- Store.runStoreIO storeHandle (Store.readStreamForward targetName (StreamVersion 0) 10)
+      Vector.length stored `shouldBe` 1
+      Right counterRows <- Store.runStoreIO storeHandle (Store.runTransaction (Tx.statement () inboxTestCounterCountStmt))
+      counterRows `shouldBe` 1
+      Right inboxRows <- Store.runStoreIO storeHandle (listInbox "delegated-race-source")
+      inboxRows `shouldBe` []
+
+    it "does not acknowledge a globally colliding marker from another stream" $ \(storeHandle, StoreRunner runner) -> do
+      let marker = EventId sampleUuid3
+          foreignName = StreamName "counter-delegated-foreign"
+          targetName = StreamName "counter-delegated-collision"
+          target = stream "counter-delegated-collision" :: Stream CounterEventStream
+      appendCounterEventWithId storeHandle foreignName marker (CounterAdded 9)
+      outcome <-
+        runner $
+          delegatedCommand defaultRunCommandOptions targetName marker $ \prepared ->
+            runCommand prepared counterEventStream target (Add 1)
+      case outcome of
+        Right (Left (DelegatedCommandFailed failedTarget (StoreFailed Store.DuplicateEvent {}))) ->
+          failedTarget `shouldBe` targetName
+        other -> expectationFailure ("expected an unconfirmed foreign collision, got " <> show other)
+      Right targetEvents <- Store.runStoreIO storeHandle (Store.readStreamForward targetName (StreamVersion 0) 10)
+      Right foreignEvents <- Store.runStoreIO storeHandle (Store.readStreamForward foreignName (StreamVersion 0) 10)
+      Vector.length targetEvents `shouldBe` 0
+      Vector.length foreignEvents `shouldBe` 1
 
   describe "Keiro.Inbox" $ around (withFreshStore fixture) $ do
     it "runs the handler once and records the row as completed" $ \storeHandle -> do
@@ -14927,6 +15191,10 @@ type CounterEventStream = EventStream (HsPred '[] CounterCommand) '[] CounterSta
 
 type ValidatedCounterEventStream = ValidatedEventStream (HsPred '[] CounterCommand) '[] CounterState CounterCommand CounterEvent
 
+type DelegatedOneShotEventStream = EventStream (HsPred '[] CounterCommand) '[] DelegatedOneShotState CounterCommand CounterEvent
+
+type ValidatedDelegatedOneShotEventStream = ValidatedEventStream (HsPred '[] CounterCommand) '[] DelegatedOneShotState CounterCommand CounterEvent
+
 type SnapshotCounterRegs = '[ '("lastAmount", Int)]
 
 type UninitializedSnapshotRegs = '[ '("initialized", Int), '("neverWritten", Int)]
@@ -14959,6 +15227,11 @@ data CounterState
   deriving anyclass (FromJSON, ToJSON)
 
 instance CanonicalStateShape CounterState
+
+data DelegatedOneShotState
+  = DelegatedReady
+  | DelegatedDone
+  deriving stock (Generic, Eq, Show, Enum, Bounded, Ord)
 
 data CounterStateV2
   = CountingV2
@@ -15004,6 +15277,36 @@ counterEventStreamDef =
 
 counterEventStream :: ValidatedCounterEventStream
 counterEventStream = mkEventStreamOrThrow "counter" counterEventStreamDef
+
+delegatedOneShotEventStream :: ValidatedDelegatedOneShotEventStream
+delegatedOneShotEventStream =
+  mkEventStreamOrThrow
+    "delegated-one-shot"
+    EventStream
+      { transducer =
+          SymTransducer
+            { edgesOut = \case
+                DelegatedReady ->
+                  [ Edge
+                      { guard = matchInCtor addCtor,
+                        update = UKeep,
+                        output = [pack addCtor counterAddedCtor (inpCtor addCtor #amount *: oNil)],
+                        target = DelegatedDone,
+                        mode = Keiki.Live
+                      }
+                  ]
+                DelegatedDone -> [],
+              initial = DelegatedReady,
+              initialRegs = RNil,
+              isFinal = (== DelegatedDone)
+            },
+        initialState = DelegatedReady,
+        initialRegisters = RNil,
+        eventCodec = counterCodec,
+        resolveStreamName = Stream.streamName,
+        snapshotPolicy = Never,
+        stateCodec = Nothing
+      }
 
 auditedCounterEventStream :: ValidatedCounterEventStream
 auditedCounterEventStream =

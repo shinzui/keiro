@@ -100,8 +100,10 @@ data InboxStatus
 -- | The classified outcome of 'Keiro.Inbox.runInboxTransaction'.
 --
 -- * 'InboxProcessed a' — first delivery; handler ran and returned @a@.
--- * 'InboxDuplicate' — a previous delivery already completed; handler not
---   run.
+-- * 'InboxDuplicate' — a previous delivery already completed. Table-backed
+--   intake does not run the handler; delegated intake may run it so the
+--   downstream state machine can confirm the duplicate, while its protected
+--   effects remain unchanged.
 -- * 'InboxInProgress' — a previous attempt is currently in-flight, or a
 --   legacy @processing@ row was read. Current single-transaction intake
 --   does not commit @processing@ rows. Treat as transient.
