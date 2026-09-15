@@ -6,9 +6,9 @@ description: >-
   keiro's inspection surface with kiroku-metrics', shibuya-metrics', and pgmq-hs's future
   surface under per-surface path prefixes, so an application serves its whole runtime's
   inspection API on one process and one port.
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-09-15T19:24:42Z
 requestId: IR-31
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro-ui
 ---
 
@@ -23,6 +23,16 @@ Composition is the one cross-cutting concern the initiative's layer-ownership ma
 (`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-1`) assigns to keiro: each library owns its
 surface, and keiro — already the layer that composes the libraries — owns mounting them into
 one process. Implementation is keiro's downstream work.
+
+Accepted (2026-09-15) against the boundary in
+[ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md), whose
+fifth condition ("composition, not duplication") sanctions exactly this router-only mounting.
+No ExecPlan exists yet. Keiro's own HTTP surface is planned as the `keiro-ops-http` sister package
+in [ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md), which explicitly leaves
+composition to this request, and its `/ws` feeds in
+[ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md) are designed to sit
+behind this request's prefixes. Neither has started implementation, so planning this request is
+most useful once plan 276 fixes the `Application` it would mount.
 
 ## Context
 

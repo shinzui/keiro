@@ -5,7 +5,7 @@ description: >-
   Let Language 5 transitions define total, typed event-field expressions at each emit site,
   including derived and conditional values, while preserving Keiki's static output shape and
   replay-invertibility checks and reserving hand-owned output hooks for genuinely external work.
-timestamp: 2026-08-12T02:41:10Z
+timestamp: 2026-09-15T19:24:42Z
 requestId: IR-25
 status: proposed
 origin: mori://tan/notification-render-service
@@ -42,6 +42,14 @@ This request generalizes the output-ownership work completed by
 `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-13`. It does not reopen first-class
 collection registers or replace the aggregate-boundary evaluation in
 `mori://shinzui/keiro/plans/166-evaluate-bounded-aggregate-collection-membership-and-quantification`.
+
+**Retargeting note (2026-09-15).** No plan implements this request.
+[MasterPlan 38](../masterplans/38-finalize-projection-ownership-and-query-freshness-before-stable-language-5.md)
+deferred it from the 0.12 release to a later language, and MasterPlan 41 and Plan 255 also exclude
+it. Language 5 has since been published as stable, so the "candidate Language 5" gating below no
+longer applies: the emit-site mapping and conditional value forms must be gated to the current
+candidate language (Language 6), and Language 5 sources must keep their frozen behavior. The
+requested semantics are otherwise unchanged and still fit.
 
 
 ## Context

@@ -4,9 +4,9 @@ title: Make process-manager reactions first-class in keiro-dsl
 description: >-
   Support multiple typed and conditional process reactions, optional and multiple
   timers, and executable generated coordination behavior with explicit custom holes.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-15T19:24:42Z
 requestId: IR-39
-status: accepted
+status: in-progress
 origin: mori://shinzui/keiro
 plan: docs/plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md
 relatedPlans:
@@ -17,11 +17,13 @@ relatedPlans:
 
 ## Status
 
-Accepted and planned, not yet implemented.
-[Plan 273](../plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md) delivers
-the DSL surface. It depends on
-[Plan 279](../plans/279-harden-process-manager-reaction-apis-before-dsl-generation.md), which
-hardens the runtime process-manager reaction APIs before any generation work begins.
+In progress. The runtime prerequisite is complete:
+[Plan 279](../plans/279-harden-process-manager-reaction-apis-before-dsl-generation.md) delivered
+the hardened process-manager reaction APIs (identity primitives, once runner, and reaction worker,
+closed at `edd142c1`). [Plan 273](../plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md)
+delivers the DSL surface; its M0 accepted plan 279 and its sections were reconciled with the
+delivered runtime on 2026-09-15, but grammar, checking, and generation milestones M1–M6 have not
+started. The DSL half of this request remains unimplemented.
 
 ## Context
 

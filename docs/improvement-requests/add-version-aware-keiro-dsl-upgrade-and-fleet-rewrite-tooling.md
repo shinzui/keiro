@@ -4,7 +4,7 @@ title: Add version-aware keiro-dsl upgrade and fleet rewrite tooling
 description: >-
   Upgrade declared Keiro DSL source versions through checked sequential rewrites with dry-run,
   workspace atomicity, and fleet-wide reporting instead of blind syntax replacement.
-timestamp: 2026-07-31T15:03:53Z
+timestamp: 2026-09-15T19:24:42Z
 requestId: IR-5
 status: proposed
 origin: mori://shinzui/keiro
@@ -28,9 +28,13 @@ reviews:
 
 ## Status
 
-Proposed for later work. [Plan 160](../plans/160-add-an-explicit-keiro-dsl-language-version-contract.md)
-must land first. No registered fleet is treated as production, so dependent sources may later be
-rewritten in place after review; this request does not make fleet migration part of plan 160.
+Proposed for later work. The prerequisite
+[Plan 160](../plans/160-add-an-explicit-keiro-dsl-language-version-contract.md) is complete, and
+Languages 1 through 5 now exist, so the request is unblocked. No plan implements it: the
+`keiro-dsl` CLI still offers only `pretty`, `check`, `scaffold`, and `diff`, and MasterPlans 29 and
+34 and Plan 176 explicitly left source rewriting and fleet upgrade automation to this request. No
+registered fleet is treated as production, so dependent sources may later be rewritten in place
+after review.
 
 ## Context
 

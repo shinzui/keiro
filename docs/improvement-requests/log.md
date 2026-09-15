@@ -1,5 +1,17 @@
 # Bundle Update Log
 
+## 2026-09-15
+* **Update**: Audit non-completed request statuses against their plans and the current tree. No
+accepted request is complete: plans 265–267 and 274–278 have not started implementation, and
+IR-7 still awaits plan 232's committed generation baseline and `bench-regression` wiring. IR-39
+moves to in-progress because its runtime prerequisite plan 279 shipped (closed at `edd142c1`)
+and plan 273's M0 accepted it; the DSL milestones M1–M6 remain pending. IR-31 moves to accepted,
+matching ADR-40's disposition; it has no ExecPlan yet and follows plan 276.
+* **Revision**: IR-5's status no longer waits on plan 160, which is complete; it stays proposed
+with no implementing plan. IR-25 gains a retargeting note: Language 5 is stable, so the request
+now targets the candidate Language 6. IR-8, IR-10, IR-37, and IR-38 remain proposed with no
+change; nothing on the current tree addresses them.
+
 ## 2026-09-11
 * **Completed**: Close IR-3: plan 165's terminal outbox rejection outcome shipped in Keiro
 0.14.0.0 (implementation commit c237424a is in the `keiro-0.14.0.0` tag; Hackage lists the
