@@ -5,590 +5,647 @@ title: "Classify guard unions by replay body and validate replay-only remedies"
 kind: exec-plan
 created_at: 2026-08-22T03:59:33Z
 intention: "intention_01m0kst1x4ejdsnxmweqv8brne"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T20:57:23Z
+      mode: "update"
+      note: "Refresh API contracts and EP-265 handoff; correct full-union coverage, replay-impact integration, opaque ownership, and remedy validation boundaries."
 ---
 
 # Classify guard unions by replay body and validate replay-only remedies
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
+
+This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log,
+and Outcomes & Retrospective current. Follow agents/skills/exec-plan/PLANS.md and ADR.md.
+This is an implementation plan; the 2026-09-15 update changes documentation only.
 
 
 ## Purpose / Big Picture
 
-After this plan, `keiro-dsl diff` reasons about aggregate guard evolution per *replay body*
-rather than per declared transition. Inside each live transition family left over by
-[ExecPlan 265](265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md)'s
-exact cancellation, transitions are grouped by the part of their behavior that matters to
-hydration: behavior ownership, ordered writes, emitted events, and target. The union of live
-guards for one body is compared across revisions. A body whose union changed produces one
-`AggGuardTightened` with a mechanically exact replay-only twin; a body that emitted events and
-no longer exists produces the same hazard with the old transition itself as the twin; a body
-whose union is syntactically provably preserved produces nothing; a new-only body is additive.
 
-Every printed twin is proved before it is advertised: it is inserted into a copy of the
-candidate, rendered, parsed back through the candidate's language, and validated. A twin that
-cannot survive that round trip is reported as `AggGuardRemedyUnavailable` rather than pasted
-into the advisory. An existing replay-only sibling suppresses the hazard only when it has the
-same replay body and its guard is, by construction, the twin this tool would print, the old
-guard verbatim, or unguarded; a stale, unrelated, or differently behaving replay-only sibling
-no longer hides a real change.
+After this plan, `keiro-dsl diff` compares the union of live guards for each replay body:
+the ownership, ordered writes, ordered emitted events, and target of a transition within
+one source-state/command family. It reports a changed or removed emitting body with one
+`AggGuardTightened` advisory and a mechanically constructed replay-only transition,
+but only after that transition survives insertion, rendering, parsing, and validation
+under the candidate's effective language. Failure produces `AggGuardRemedyUnavailable`
+with a reason and no paste-ready transition.
 
-This plan is deliberately structural. It does not decide satisfiability, does not claim two
-guards are semantically equivalent beyond the syntactic fragment replay impact already
-trusts, and never withholds a twin because a region might be empty. Today's conservative rule
-stands: any change to a body's guard union is reported with its exact remedy. The semantic
-proof engine originally planned here was narrowed out by the IR-33 review recorded in
-`docs/improvement-requests/make-aggregate-guard-diffs-idempotent-and-semantically-exact.md`;
-that review records the conditions under which it may return.
+This follows [ExecPlan 265](265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md).
+That prerequisite owns exact multiset cancellation and the shared family partition.
+This plan uses its remainders to identify affected bodies, then compares the complete
+old and new live guard sets for those bodies. Already-cancelled siblings can still cover
+history and must participate in the unions. Existing replay-only coverage is looked up
+in the full candidate aggregate, independently of cancellation.
+
+The work remains structural: syntactically proved preservation suppresses an advisory;
+an unproved generated guard change keeps its exact remedy even when its removed region
+might be empty. No solver, satisfiability proof, dependency change, or fold-encoding
+migration is included. The accepted and deferred scope is recorded in
+`docs/improvement-requests/make-aggregate-guard-diffs-idempotent-and-semantically-exact.md`
+(IR-33). Source validation is not a proof of runtime inversion or hand-written Hole
+behavior; runtime conformance and targeted replay audits remain independent gates.
 
 
 ## Progress
 
-- [ ] Confirm ExecPlan 265 is complete and that its no-emit exclusion, outcome clearing, and
-      `AggGuardRelationUnknown` contract are in place before changing any pairing boundary.
-- [ ] Add a replay-body key and per-body guard-union grouping to
-      `keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs`, on top of exact family remainders.
-- [ ] Share the existing syntactic `guardImplies` fragment between diff and replay impact as
-      the single loosening authority.
-- [ ] Classify each body: preserved, changed, removed, or added; replace ExecPlan 265's
-      one-to-one path and reserve `AggGuardRelationUnknown` for structurally undecidable bodies.
-- [ ] Replace the source/command-only `hasReplayOnlyTwin` with same-body, by-construction
-      coverage, and build every twin from the body's representative old transition.
-- [ ] Gate every advertised twin behind insert, render, parse, and `validateService`; add
-      `AggGuardRemedyUnavailable` for twins that fail.
-- [ ] Thread the two `CheckedService`s into `DiffEnv` without changing finding emission order.
-- [ ] Cover preserved, loosened, changed, removed-body, added-body, exact-twin, verbatim-twin,
-      stale-twin, body-mismatch-twin, and Language-5 outcome cases in unit, CLI, and runtime
-      safety tests.
-- [ ] Update evolution guidance, CHANGELOG, ADRs 0002/0004/0018 where durable rules change,
-      run all package, OKF, and disposable Mori gates, and close IR-33.
+
+- [x] (2026-09-15) Refresh against current record, checked-service, parser, renderer,
+      validation, diff-report, and replay-impact APIs and the updated EP-265 contract.
+- [ ] Confirm EP-265 implementation and acceptance are complete; inspect its actual private
+      family types before extending them.
+- [ ] Add deterministic body grouping over full family members, using exact remainders only
+      to select affected bodies; share the syntactic preservation helper.
+- [ ] Make diff and replay impact consume the same generated-body classification, preserving
+      replay-only removal, no-emit snapshot, codec, and non-transition impact behavior.
+- [ ] Implement exact whole-union twins, complete-candidate same-body coverage, and honest
+      Hole-owned unknown cases.
+- [ ] Thread checked services through the existing diff pass; validate all advertised remedies
+      through the candidate effective language; append AggGuardRemedyUnavailable.
+- [ ] Cover cancellation survivors, duplicates, splits/merges, removed families, stale and
+      mismatched twins, Hole ownership, outcome clearing, and Languages 1–5.
+- [ ] Run CLI, runtime, disposable Mori, package, formatting, and documentation gates;
+      update durable ADRs and close IR-33's accepted scope.
 
 
 ## Surprises & Discoveries
 
-- Observation: `CheckedService` is a normalized spec paired with an effective language contract
-  and lazy type/projection analyses; its constructor does not prove that `validateService` has no
-  errors. A remedy must therefore be validated explicitly rather than trusted by type.
-  Evidence: `CheckedService`, `checkedServiceWithSpec`, and `checkedTypeGraph` in
-  `keiro-dsl/src/Keiro/Dsl/SemanticContract.hs`; `validateService` in
-  `keiro-dsl/src/Keiro/Dsl/Validate.hs`.
 
-- Observation: the current replay-only suppression accepts any candidate replay-only transition
-  with the same source and command. It does not compare guard, writes, emits, target, or
-  behavior ownership. An unrelated or stale retained edge can therefore hide a later real
-  change.
-  Evidence: local helper `hasReplayOnlyTwin` in `keiro-dsl/src/Keiro/Dsl/Diff.hs`.
+The 2026-09-15 source review found obsolete selectors throughout the earlier plan.
+`Transition` fields are `source`, `command`, `implementation`, `guard`, `writes`,
+`emits`, `outcome`, `outcomeDuplicateLocs`, `goto`, `mode`, and `loc`.
+ADR 0038 requires record-dot reads and explicit reconstruction helpers; the package
+does not enable OverloadedRecordUpdate. WorkspaceSpec uses `mergedSpec`, not
+`wsMergedSpec`. The private canonical clause renderers are not exported.
 
-- Observation: ADR 0002 makes inversion two-phase and live-first, and keiki's static
-  inversion-ambiguity check refuses two same-mode edges at one vertex that share a first output
-  constructor regardless of guards. Two consequences drive this plan's design. First, within a
-  live family every emitting body is already distinguishable by its emitted events, so the
-  replay-body key is a faithful hydration identity. Second, an over-covering replay-only edge
-  (for example the old guard verbatim) is operationally safe: a live edge always wins
-  attribution, and the twin only serves history no live edge can invert.
-  Evidence: `docs/adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md`;
-  the inversion paragraph in `docs/guides/evolution-and-replayability.md`.
+Exact cancellation alone cannot supply the guard unions. For example, old guards
+`a || b` and `a`, versus new guard `a || b`, leave an old-only `a` after
+cancellation. That remainder is covered by the surviving live guard. Calling it a
+removed body would be false. Likewise, any one old guard is not necessarily a superset
+of a multi-sibling removed region; coverage must account for every old alternative.
 
-- Observation: removing an emitting live transition strands its history exactly as a tightening
-  does, and worse: the whole old guard region loses its inverting edge, not merely the removed
-  region. Today neither `guardTighteningDiff` nor ExecPlan 265 reports this as a guard-history
-  hazard; only `AggFoldSurfaceChanged` (which speaks of snapshot invalidation) and the
-  replay-affected verdict (which says "audit") fire, and no remedy is offered although the
-  sanctioned one applies directly. The same gap makes today's one-to-one twin too narrow when a
-  guard and an emitted event change together.
-  Evidence: `guardTighteningDiff` iterates candidate transitions only; `transitionSurfaceDiff`
-  text; IR-33 review finding 7.
+`renderSource :: ParsedSource -> Text` cannot consume a CheckedService.
+`checkedServiceWithSpec :: Spec -> CheckedService -> CheckedService` preserves the
+effective language and rebuilds analyses, but does not validate the replacement.
+CheckedService intentionally does not preserve source declarations. The gate must
+construct a synthetic ParsedSource with an explicit version taken from
+`checkedLanguageContract`, not pretend it recovered a member's original preamble.
 
-- Observation: the validator proves a no-emit transition is a pure no-op, so only emitting
-  bodies can carry a guard-history hazard. ExecPlan 265 already excludes no-emit transitions;
-  this plan must keep that exclusion ahead of the round-trip gate, otherwise an irrelevant
-  guard change would be misreported as a hazard with an unavailable remedy.
-  Evidence: the no-emit rule in `keiro-dsl/src/Keiro/Dsl/Validate.hs`; ExecPlan 265 Decision
-  Log.
+The current `guardImplies` in ReplayImpact recognizes identity, Boolean atom
+true/false, conjunction elimination, and disjunction introduction. It does not prove
+`g => (g && a) || (g && !a)`. The earlier promised split example therefore exceeded
+the accepted fragment. A split of an explicit `a || b` into guards `a` and `b`
+can instead be handled by deterministic top-level disjunction alternatives.
 
-- Observation: `ReplayImpact`'s `guardImplies` already proves `old => new` for a small
-  syntactic fragment (identity, true/false, conjunction elimination, disjunction introduction)
-  and treats everything else as not provable. It is sound, solver-free, and currently the only
-  reason a loosening is replay-neutral while the diff still reports it. Sharing it makes the two
-  outputs agree on the fragment without any new proof machinery.
-  Evidence: `guardOnlyLoosening` and `guardImplies` in
-  `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs`; the guide's "tightening detection is conservative"
-  sentence.
+`remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy` has no
+finding detail parameter. It can assign generic do-not-deploy guidance, while the
+specific parse or validation error belongs in ChangeKind.detail. Advisory guidance
+does not itself change the CLI exit status.
 
-- Observation: the originally planned finite-domain proof engine would have returned `Unknown`
-  for every guard over Text, Int, Integer, Natural, Time, or ID roots, which is every guard in
-  Mori's workspace, and would have withheld the twin in that case. That is a regression in
-  actionable safety for the dominant guard class, and it is why the engine was removed from this
-  plan.
-  Evidence: IR-33 review findings 5 and 6; Mori `project.keiro` guard shapes.
+The older plan claimed that every pair of same-mode edges sharing a first emitted
+constructor is rejected regardless of guards. That is not an appropriate assumption:
+current source in `mori://shinzui/keiki/packages/keiki` includes a conservative
+register-disjointness analysis in `inversionAmbiguityWarnings`. More fundamentally,
+Keiro's validateService is a source gate, not assembled Keiki runtime validation.
+Neither body classification nor twin coverage may depend on a claim that all
+same-body siblings are impossible. Live-first inversion avoids cross-phase ambiguity,
+but does not make arbitrary additional replay-only siblings safe within their phase.
 
-- Observation: the released Keiki 0.9.1.0 solver surface (`Keiki.Symbolic.verifyPredicate`)
-  accepts a statically typed `HsPred rs ci` and performs work in `IO`; Keiro's `diffServices` is
-  pure over dynamically resolved `TypedScalarExpr`s. It remains background evidence only.
-  Evidence: Mori registration `mori://shinzui/keiki/packages/keiki`; Keiro's `>=0.9 && <0.10`
-  bound in `keiro-dsl/keiro-dsl.cabal`.
+A wholly removed family is not automatically covered by an event-retirement diagnostic.
+`ReplayOnlyCommandStillLive` is a warning emitted only when a replay-only edge
+already exists; retained event declarations alone do not establish history coverage.
+Include old-only families in removed-body classification whenever the aggregate survives.
 
 
 ## Decision Log
 
-- Decision: Narrow this plan to structural body classification and remedy validation; drop the
-  three-valued proof engine, `AggGuardRegionReplaced`, satisfiability-gated twins, semantic
-  equivalence detection, and exact-equivalence twin coverage.
-  Rationale: the IR-33 review found two safety regressions in the original design. Witnesses
-  restricted to finite Bool/enum domains turn every real tightening on Text/Int/Time/ID guards
-  into `Unknown` with no remedy, which is worse than today's conservative advisory with an exact
-  twin. Requiring an existing twin to be provably *equivalent* to the removed region turns the
-  natural hand-written twin (old guard verbatim, explicitly safe under ADR 0002) into a perpetual
-  finding. The structural parts of the plan remove the remaining known defects without either
-  cost. The review in IR-33 records the conditions under which a semantic engine may be
-  reconsidered.
-  Date: 2026-08-22
 
-- Decision: Compare the union of live guards per replay body, not per declared transition, and
-  represent an absent guard as true.
-  Rationale: several declarations may split one behavior into alternative guards without
-  changing its replay meaning. Union comparison is invariant under splitting, merging,
-  duplication, and declaration order, and it resolves most families ExecPlan 265 must call
-  `AggGuardRelationUnknown`. Body changes remain independently owned by fold-surface and
-  replay-impact findings.
-  Date: 2026-08-22
+Decision (2026-08-22, retained): deliver structural body classification and validated
+remedies, deferring semantic equivalence and satisfiability. IR-33 rejected a finite-only
+proof engine that would withhold useful twins for ordinary Text/Int/Time/ID guards.
+An undecided generated guard relation still has an exact syntactic removed-region twin.
 
-- Decision: Never withhold a twin for a changed or removed emitting body. The twin's guard is
-  exactly `oldUnion AND complement(newUnion)` for a changed body and the old guard union for a
-  removed body; it is printed whenever it validates.
-  Rationale: the twin is sound whether or not the removed region is empty: an empty region makes
-  it a dead replay-only edge, which is harmless under live-first inversion, while a non-empty
-  region makes it the only thing keeping history replayable. Withholding it pushes users to
-  hand-write complements, the error class `complementExpr` exists to eliminate.
-  Date: 2026-08-22
+Decision (2026-09-15): use EP-265's exact deltas as a work-selection boundary, then recover
+complete old/new family members for union comparison. Candidate replay-only members are
+always read from the full aggregate. This preserves cancelled coverage and separates mode
+partitioning from cross-mode remedy lookup.
 
-- Decision: A removed emitting body inside a surviving live family is a guard-history hazard with
-  the same code and vector as a tightening, and its twin is the old transition re-moded
-  replay-only with its guard unchanged and its outcome cleared.
-  Rationale: every event that body emitted loses its inverting edge. Reporting only
-  `AggFoldSurfaceChanged` understates the failure mode and offers no remedy. A removed
-  aggregate, or a family whose every live transition is gone, stays with the existing
-  `EvtRemovedNotDeprecated` and `ReplayOnlyCommandStillLive` paths.
-  Date: 2026-08-22
+Decision (2026-09-15): normalize only the temporary comparison list of top-level OR
+alternatives: flatten EOr, sort and deduplicate by canonicalExpr, absorb a true guard,
+and reconstruct a right-nested EOr when needed. This is comparison-local union
+construction, not rewriting declared expressions or canonical fold bytes. Do not
+distribute AND, prove excluded middle, or introduce a semantic solver.
 
-- Decision: Suppress a finding for an existing replay-only sibling only when it has the same
-  replay body and its guard is by construction one of: the twin this tool would print for the
-  current change (canonical text equality), one of the body's old live guards verbatim, or
-  absent. Containment suffices; extra replay-only siblings are not a defect.
-  Rationale: each accepted shape provably covers the removed region without any solver: the
-  computed twin is the region itself, the old guard verbatim is a superset, and an unguarded
-  replay-only edge covers everything. ADR 0002 makes supersets safe. Anything else is not
-  demonstrably coverage and stays a finding. Containment rather than equality keeps a second
-  tightening's twin from invalidating the first.
-  Date: 2026-08-22
+Decision (2026-09-15): a single same-body replay-only edge covers a body if its guard
+is the computed twin, the complete old union, absent/true, or a guard that every old
+alternative implies through the shared syntactic fragment. A single old sibling guard
+does not suffice unless it covers all alternatives. Keep coverage conservative; combining
+several partial replay-only guards is deferred. Coverage suppresses the advisory only,
+not independent replay-audit or snapshot effects.
 
-- Decision: Share the syntactic `guardImplies` fragment between diff and replay impact; a body
-  whose every old live guard syntactically implies the new union produces no guard finding.
-  Rationale: the fragment is sound and already trusted by replay impact. Sharing it removes the
-  one case where the diff reports a hazard that replay impact calls neutral, without adding
-  proof machinery. Extending the fragment is not in scope.
-  Date: 2026-08-22
+Decision (2026-09-15): removed generated emitting bodies include entirely old-only
+families inside a matched aggregate. Their twin carries the complete old union.
+Deleted aggregates remain owned by removedAggregateDiff and replay-impact removal.
+Warnings about retired commands are permitted by the source-remedy gate.
 
-- Decision: A generated twin is advertised only after whole-spec insert, render, parse, and
-  candidate-language validation succeed; failure becomes `AggGuardRemedyUnavailable`.
-  Rationale: `renderTransition` alone proves presentation, not that the pasted transition is
-  legal under the candidate language. A failed proof must be a truthful code with the reason,
-  not an unpasteable suggestion.
-  Date: 2026-08-22
+Decision (2026-09-15): affected old Hole-owned behavior cannot be copied or proved
+covered from its structural envelope. Emit one AggGuardRelationUnknown per affected
+family involving unmatched old Hole behavior or a generated/Hole ownership switch
+for the same event envelope; suppress guessed body remedies for that ambiguous family.
+Unchanged exactly cancelled Hole transitions create no new guard finding; newly added
+Hole bodies alone are additive. No claim about invisible hand-written code changes is made.
 
-- Decision: Thread both `CheckedService`s into `DiffEnv` rather than relocating the guard pass
-  to a service-level step.
-  Rationale: the round-trip gate needs the candidate's language contract, but moving the pass
-  after `diffCheckedSpecs` would reorder the emission-ordered rendering golden and change text
-  output order for every adopter. Carrying the services in the environment keeps the pass at
-  its current position.
-  Date: 2026-08-22
+Decision (2026-09-15): migrate live generated-body replay classification as well as
+sharing guardImplies. Importing the helper alone would leave one-to-one cancellation
+unable to recognize a split/merge that diff calls preserved. Preserve existing
+independent audit causes and replay-only deletion handling.
 
-- Decision: Semantic normalization of any kind stays out of this plan; canonical encoding,
-  pretty printing, and fold fingerprints are untouched.
-  Rationale: ADR 0018 freezes canonical fold bytes. Nothing here needs to rewrite an
-  expression; the body key is derived from canonical text of the body clauses only.
-  Date: 2026-08-22
+Decision (2026-08-22, clarified 2026-09-15): keep the guard pass in aggregatePairDiff
+at its current emission position. Carry both CheckedServices through DiffEnv and
+derive its Spec fields from them. Preserve ordering relative to other passes;
+within the guard pass order by family key then body key.
+
+Decision (2026-09-15): validate remedies under the effective language using a synthetic
+ParsedSource. Compare canonical replay identity plus cleared outcome fields after parsing,
+rather than relying on raw AST equality across expression representations.
+Detailed errors belong in the finding; remediationFor retains its existing signature.
+These are proposed implementation decisions; amend accepted ADRs when implementation lands.
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+
+The plan has been refreshed for implementation after EP-265. Source inspection corrected
+API names and argument order, union/cancellation interactions, multi-sibling coverage,
+Hole opacity, removed-family handling, replay-impact integration, and the limits of the
+source round-trip proof. EP-266 production work remains unimplemented. EP-265 was still
+open and its TransitionFamily module absent at the start of this refresh; its eventual
+field names must be read from the completed implementation. No runtime acceptance is
+claimed by this documentation update. During the final check, the concurrent EP-265
+implementation added TransitionFamily.hs and wired both consumers to it; its fields
+match the handoff below. EP-265 completion and its tests still need to finish before
+EP-266 implementation begins. This update did not edit those concurrent code changes.
+Documentation validation passed: plan-scoped git diff --check, required section order
+by inspection, and an automated check for required sections and tagged, balanced fences.
+No build or test suite was run for this plan-only update during concurrent EP-265 work.
 
 
 ## Context and Orientation
 
-This plan begins only after ExecPlan 265 lands. Its internal
-`keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` groups transitions by mode, source, and command,
-cancels exact replay identities as a multiset, and returns canonical-order remainders. Its guard
-pass already excludes no-emit transitions, clears outcome fields from twins, and reports
-`AggGuardRelationUnknown` for families it cannot pair. Read that completed plan's Progress,
-discoveries, and Decision Log before implementation; do not recreate its cancellation algorithm.
 
-The originating request is
-`docs/improvement-requests/make-aggregate-guard-diffs-idempotent-and-semantically-exact.md`
-(IR-33). Its review section records which acceptance items this plan delivers and which are
-deferred. The relevant package uses this canonical handle:
+A transition family groups one mode, source state, and command. EP-265's internal
+`keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` supplies
+`transitionFamilyDeltas :: [Transition] -> [Transition] -> [TransitionFamilyDelta]`.
+The in-progress implementation inspected at the final refresh exposes key fields
+`familyMode`, `familySource`, and `familyCommand`, and delta fields `familyKey`,
+`oldRemainder`, and `newRemainder`. Its `transitionFamilyKey` and `transitionFamilies`
+helpers are private to the module. Extend those helpers locally when recovering full
+members; do not assume they are already exported to Diff or ReplayImpact.
+It returns the union of keys, including fully cancelled families, with duplicate-aware
+exact remainders sorted by canonicalTransition. TransitionMode lacks Ord; retain its
+explicit mode rank. Keep this module private under other-modules in
+`keiro-dsl/keiro-dsl.cabal`; test through public APIs rather than importing it from
+`keiro-dsl/test/Main.hs`.
 
-`mori://shinzui/keiro/packages/keiro-dsl`
+A guard is a Boolean condition; an absent guard means true. A replay body contains
+`implementation`, ordered `writes`, ordered `emits`, and `goto` within one
+source/command family. Mode, guard, location, and forward outcome are excluded.
+Only emitting live bodies enter guard-history classification. A removed region is the
+old union O AND the complement of the new union N; removed bodies use O alone.
 
-The real adopter evidence uses these canonical plan handles:
+`keiro-dsl/src/Keiro/Dsl/CanonicalEncoding.hs` exposes canonicalExpr and
+canonicalTransition, returning Text. Its bytes are frozen. Derive ReplayBodyKey by
+reconstructing a transition with guard absent, mode TmLive, outcomes cleared, and
+location noLoc, then calling canonicalTransition. This intentionally also contains the
+source and command, which are fixed within the family and enforce correct coverage
+lookup. It avoids importing private renderers or introducing a second expression encoding.
 
-- `mori://shinzui/mori/plans/223-move-the-mori-workspace-to-keiro-dsl-language-5`
-- `mori://shinzui/mori/plans/236-model-project-releases-in-the-registry`
+`keiro-dsl/src/Keiro/Dsl/Diff.hs` owns DiffEnv, diffCheckedSpecs, aggregateDiff,
+aggregatePairDiff, guardTighteningDiff, privateCodes, and classifyCompatibility.
+`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` owns changedTransitionEvents and
+matchedAggregateImpact; the latter combines transition events with codec, mapped,
+non-transition fold, and snapshot causes. `keiro-dsl/src/Keiro/Dsl/DiffReport.hs`
+maps codes to remedies and serializes vector/remedies fields.
+`keiro-dsl/src/Keiro/Dsl/Validate.hs` owns DiagnosticCode and validateService.
 
-Use a disposable clone of `mori://shinzui/mori/repos/mori` for acceptance; never edit its
-registered checkout.
+`keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` supplies checkedSpec,
+checkedLanguageContract, checkedServiceWithSpec, and checkedSource.
+`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs` supplies ParsedSource and
+SourceLanguage constructors. PrettyPrint.hs supplies renderSource/renderTransition;
+Parser.hs supplies parseSource; Grammar.hs supplies complementExpr and noLoc.
+Workspace.hs composes members into WorkspaceSpec.mergedSpec with one effective
+language contract. Round-tripping that merged graph is an in-memory proof and never
+rewrites workspace members.
 
-A *guard* is the Boolean expression attached to a transition; absence means true. A *replay
-body* is everything hydration needs from a transition other than its guard: behavior ownership
-(`tImplementation`), ordered `tWrites`, ordered `tEmits`, and `tGoto`. Mode, source location,
-and the forward-only `tOutcome` are excluded. Two transitions with the same body are alternative
-guards over one behavior. For a body with old union `O` and new union `N`, the *removed region*
-is `O && !N`, rendered inside the grammar by `complementExpr` in
-`keiro-dsl/src/Keiro/Dsl/Grammar.hs`.
+Relevant local ADRs are
+[0002](../adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md)
+(live-first replay and retained-edge lifecycle),
+[0004](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
+(independent source, diff, runtime and audit gates),
+[0016](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md)
+(effective versus declared language),
+[0017](../adr/0017-aggregate-transitions-have-explicit-generated-or-hole-behavior-ownership.md)
+(opaque Hole behavior),
+[0018](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md)
+(frozen canonical bytes and replay ordering), and
+[0038](../adr/0038-keiro-dsl-records-use-concise-labels-without-product-selectors.md)
+(record-dot and constructor boundaries). Their relevant rules are summarized above.
 
-Body classification within one live family, after exact cancellation and no-emit exclusion:
-
-- preserved: the body exists on both sides and every old live guard syntactically implies the
-  new union (`guardImplies`), or the canonical guard unions are identical;
-- changed: the body exists on both sides and is not preserved;
-- removed: the body has old live transitions and no new live transition;
-- added: the body has new live transitions only.
-
-Only changed and removed bodies carry a guard-history hazard. Because keiki refuses two live
-edges at one vertex sharing a first output constructor, emitting bodies in one family are
-distinguished by their emits in practice; the key still includes ownership, writes, and target
-so a write or target change is a different body rather than a guard change.
-
-`keiro-dsl/src/Keiro/Dsl/Diff.hs` owns `AggGuardTightened` and its private-history vector;
-`DiffEnv` currently carries only the two `Spec`s. `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` owns
-audit targeting and the syntactic `guardImplies`. `keiro-dsl/src/Keiro/Dsl/DiffReport.hs` owns
-remedies and JSON encoding; its `remediationFor` has an `otherwise` fallthrough, so every new
-code needs an explicit case. `keiro-dsl/src/Keiro/Dsl/Validate.hs` owns append-only diagnostic
-codes and `validateService`. `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` supplies `renderSpec`,
-`renderSource`, and `renderTransition`; `keiro-dsl/src/Keiro/Dsl/Parser.hs` supplies
-`parseSource`. Workspaces merge into one `Spec` (`wsMergedSpec` in
-`keiro-dsl/src/Keiro/Dsl/Workspace.hs`), and the validator already runs on that merged spec, so
-the round trip operates on a single-document rendering of it.
-
-Relevant decisions are:
-
-- [ADR 0002](../adr/0002-replay-only-edges-are-the-sanctioned-remedy-for-guard-tightening.md)
-  defines replay-only edges, live-first inversion, and the retained-edge lifecycle.
-- [ADR 0004](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
-  requires cross-spec hazards at diff while runtime validation and database replay audit remain
-  independent defenses.
-- [ADR 0016](../adr/0016-source-language-provenance-wraps-the-semantic-keiro-dsl-graph.md)
-  defines `CheckedService`, effective language contracts, and symmetric semantic inputs.
-- [ADR 0017](../adr/0017-aggregate-transitions-have-explicit-generated-or-hole-behavior-ownership.md)
-  makes generated expressions authoritative and requires Hole behavior to remain honestly opaque.
-- [ADR 0018](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md)
-  freezes canonical fold encoding and requires sibling-order-independent replay comparison.
-
-[ExecPlan 143](143-add-first-class-replay-only-transitions-for-guard-evolution.md) supplies the
-runtime black-acuity proof: history fails without a twin, succeeds through the twin, and a new
-command in the removed region remains rejected. This plan changes no Keiki runtime semantics.
+[ExecPlan 143](143-add-first-class-replay-only-transitions-for-guard-evolution.md)
+supplies the runtime safety regression: history fails without its twin, succeeds with
+the twin, and new commands in the removed region remain rejected. Adopter evidence is
+at `mori://shinzui/mori/plans/223-move-the-mori-workspace-to-keiro-dsl-language-5`
+and `mori://shinzui/mori/plans/236-model-project-releases-in-the-registry`.
+Locate `mori://shinzui/mori/repos/mori` with Mori and test only a disposable clone.
 
 
 ## Plan of Work
 
-### Milestone 1 — Key families by replay body and share the loosening fragment
 
-Extend `keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` with a `ReplayBodyKey` built from the
-canonical text of ownership marker, writes, emits, and target only (reuse the clause renderers
-behind `canonicalTransition`; do not add a new encoding of expressions), and a function that
-groups one family's exact old and new remainders by that key, drops no-emit transitions, and
-returns for each body the old live guards, the new live guards, the old and new replay-only
-guards, and one representative old live transition in canonical order. Represent an absent guard
-as `Nothing` and build unions as right-nested `EOr` chains in canonical order so the printed
-twin is deterministic.
+### Milestone 1 — Share complete body unions and syntactic preservation
 
-Move `guardImplies` from `ReplayImpact.hs` into the shared module unchanged, extend it to treat
-`ELiteral _ (LiteralBool True)` and `ELiteral _ (LiteralBool False)` exactly like the atom forms,
-and define `unionPreserved oldGuards newUnion` as "every old guard implies the new union". Make
-`ReplayImpact.hs` import the shared function; its behavior must not change, and its existing
-permutation test must remain green.
 
-Add focused tests: bodies that differ only in guard group together; a write, emit, target, or
-ownership difference yields a distinct body; no-emit transitions never appear in a body; the
-union is identical under every permutation of three siblings; `unionPreserved` holds for
-identity, disjunction introduction, conjunction elimination, and literal true, and fails for an
-unguarded old transition against a guarded new union.
+Extend TransitionFamily.hs without replacing EP-265's exact cancellation. For each
+live family with an emitting remainder, select affected body keys from either remainder,
+then gather all old/new live members with those keys from the original lists.
+An empty member list means an absent body, not an unguarded body. Use NonEmpty
+(or an equivalent explicit present/absent representation) for present-body guards;
+within a present body, Nothing means true. Never encode both an absent body and true
+as Nothing.
 
-### Milestone 2 — Classify bodies and build exact twins
+Sort and deduplicate top-level OR alternatives by canonicalExpr. A Nothing or literal
+true alternative makes the union true; preserve explicit false without requiring
+satisfiability analysis. For nontrivial unions use right-nested EOr. Move guardImplies
+to this module and give typed ELiteral Boolean constants the same treatment as EAtom
+Boolean constants, including Nothing implying explicit true. For preservation, every
+old alternative must imply the new union; canonical union equality also proves it.
+Preservation is directional: a loosening is safe, not necessarily equivalent.
 
-Rewrite ExecPlan 265's guard pass in `Diff.hs` to iterate bodies. A preserved or added body
-produces nothing. A changed body produces one `AggGuardTightened` whose subject is the source
-and command, whose detail names the body's emitted events and old/new sibling counts, and whose
-twin is the representative old transition with guard `oldUnion AND complementExpr newUnion`
-(just `complementExpr newUnion` when the old union is absent), mode `TmReplayOnly`,
-`tOutcome = Nothing`, `tOutcomeDuplicateLocs = []`, and `noLoc`. A removed body produces one
-`AggGuardTightened` whose detail states that the body was removed and whose twin is the
-representative old transition with its guard unchanged, re-moded the same way. Keep
-`AggGuardRelationUnknown` only for a family whose remainders contain a Hole-owned transition on
-one side and generated ownership on the other for the same emits, where the body key cannot
-decide whether behavior was preserved; everything else now classifies.
+In ReplayImpact.hs use this same classification for emitting generated live bodies:
+preserved/added bodies contribute no guard-derived target; changed/removed bodies
+contribute old emitted events and, for a changed body, the same body's new events.
+A body replacement contributes both the removed body's and replacement body's events
+conservatively within the family. Keep unknown families conservative. Retain EP-265's
+comparison for replay-only families and the existing no-emit snapshot treatment.
+Existing replay-only coverage does not make an actual live change audit-neutral.
 
-Replace `hasReplayOnlyTwin`. A changed or removed body is covered when the candidate contains at
-least one replay-only transition with the same `ReplayBodyKey` whose guard's `canonicalExpr` is
-equal to the guard the twin would carry, equal to one of the body's old live guards, or absent.
-Coverage suppresses the finding for that body only.
+Test publicly through diffServices/replayImpactServices under "replay body". Cover
+duplicates, all permutations of three alternatives, outcome/location independence,
+body differences, unchanged cancellation survivors, and false/true/unguarded forms.
+For diff-specific classification assertions initially add red regressions and turn
+them green in Milestone 2; the replay-impact assertions pass at this milestone.
+Keep the existing "replay impact" and "transition family" groups green. No canonical,
+fingerprint, or parser/scaffold golden may change.
 
-Keep the existing Plan-143 fixtures green: the one-to-one tightening still yields exactly one
-`AggGuardTightened` with the same twin text as today, and the twin fixture still suppresses it.
-Add fixtures for: a sibling split (`g` into `g && a` plus `g && !a`) that is preserved; a
-loosening by disjunction introduction that is preserved; a removed emitting sibling with a
-surviving same-body sibling (a changed body); a removed emitting body with no survivor; a guard
-and emit changed together (removed body plus added body, twin guard equals the whole old guard);
-a stale twin from a previous tightening that does not cover a new change; a replay-only sibling
-with the right guard but a different write that does not cover; and the old guard verbatim as a
-replay-only sibling that does cover.
 
-### Milestone 3 — Prove every printed twin
+### Milestone 2 — Classify bodies and construct complete remedies
 
-Extend `DiffEnv` with the old and new `CheckedService`s, threaded from `diffServices`, so the
-guard pass can reach the candidate's language contract without moving. Before any twin is
-rendered into a detail, insert it into a copy of the candidate spec's aggregate, wrap that spec
-with `checkedServiceWithSpec`, render the whole document with `renderSource` under the
-candidate's declared language, parse it back with `parseSource`, reconstruct the checked
-service, and run `validateService`. Require no `Error` diagnostics and require that the
-round-tripped aggregate contains a transition equal to the proposed twin (`Loc` equality is
-already constant-true). Only then may the finding carry `renderTransition twin` and map to
-`RemedyReplayOnlyEdge`.
 
-Append `AggGuardRemedyUnavailable` to `DiagnosticCode` after ExecPlan 265's code, classify it as
-`DiffDiagnostic`, add it to the private code registry and `classifyCompatibility` with the same
-private-history advisory vector, and add an explicit `remediationFor` case mapping it to
-`RemedyDoNotDeploy` carrying the parse or validation reason. Its detail must say the hazard is
-real and the mechanical remedy could not be validated; it must not print the failed twin.
+Replace the one-to-one guard path with the shared body classification. Preserved and
+added bodies emit no guard finding. Changed generated bodies produce one proposed
+twin carrying O AND complementExpr N; when O is true, use complementExpr N alone.
+N=true must already classify preserved. Removed bodies use the complete old union O,
+including old-only families inside matched aggregates. Choose the representative by
+canonicalTransition, copy its body, set mode TmReplayOnly, clear outcome and
+outcomeDuplicateLocs, and set loc=noLoc. Do not copy one representative's guard
+instead of the union. No-emit bodies never reach remedy generation.
 
-Prove the gate on a Language-5 `domain-outcomes` fixture whose old live transition declares an
-accepted outcome and whose guard tightens: the printed twin contains no `outcome` clause, the
-pasted source parses and validates, and re-diffing suppresses the finding. Prove the negative by
-a test-only hook or fixture in which the rendered twin is made invalid (for example an emit the
-candidate no longer declares after an event removal) and assert `AggGuardRemedyUnavailable`
-with the reason and no `replay-only` text. Add a spike test first that renders and re-parses the
-unmodified merged Mori-shaped workspace fixture and asserts semantic equality, so a round-trip
-infidelity is found before it can masquerade as an unavailable remedy.
+Classify opaque families first, using the Decision Log's Hole rule, and emit one
+AggGuardRelationUnknown with no proposed twin. Record aggregate, source/command,
+old/new counts, and the ownership reason. Keep the code append-only and its explicit
+do-not-deploy mapping from EP-265.
 
-### Milestone 4 — Close the end-to-end contract
+Search the complete candidate for a covering replay-only transition with the same
+source, command, and body key. Accept computed-twin equality, complete-old-union equality,
+true, or shared-fragment implication from every old alternative to that edge's guard.
+Compare through comparison-local union forms/canonicalExpr, not source locations.
+Do not accept a single old guard just because it once belonged to that body.
+Require the candidate to have no source-validation errors before using coverage as
+evidence; cache that validation for the diff invocation.
 
-Expand `keiro-dsl/test/diff-test.sh` so Git-backed text and JSON cover preserved, changed,
-removed-body, exact-twin, verbatim-twin, stale-twin, and unavailable-remedy cases, asserting
-codes, vectors, and remedies rather than prose. Re-run the Keiro black-acuity and replay-audit
-examples from ExecPlan 143 unchanged.
+Add cases for `a || b` split into `a` and `b`, the inverse merge, a duplicated
+branch removed, and `a` removed while cancelled `a || b` survives. These require no
+distributivity. Keep `g` versus `(g && a) || (g && !a)` conservative with a
+mechanical twin; it is explicitly outside the fragment. Source fixtures must validate;
+synthetic aggregate mutations may test algebraic edge cases but do not prove assembled
+runtime validity.
 
-Run the local `keiro-dsl` binary against a disposable clone identified by
-`mori://shinzui/mori/repos/mori`: the identical `HEAD` diff remains empty and replay-neutral.
-Then, in the disposable clone only, tighten one `ObserveProjectDescription` emitting branch and
-confirm exactly one `AggGuardTightened` naming `ProjectDescriptionChanged`, a twin that pastes
-and validates, and suppression on re-diff; record the evidence in this plan and discard the
-clone.
+Also cover a removed emitting body, an entirely removed family with event declarations
+retained, guard-plus-emit replacement, stale twin, wrong source/command/write/emit/target/
+owner twin, full-old-union twin, and a partial old-sibling twin that must not suppress
+a multi-alternative hazard. Exact-cancelled replay-only coverage must still be found.
+Keep Plan-143's one-to-one advisory and twin text. Milestone acceptance is passing
+"replay body", "transition family", and "plan 143" unit groups, with proposed twins
+internally routed to Milestone 3's gate before final release.
 
-Update `docs/guides/evolution-and-replayability.md` with the replay-body vocabulary, the
-removed-body hazard, the three accepted coverage shapes, and the unavailable-remedy code. Add a
-`keiro-dsl/CHANGELOG.md` entry. Update ADR 0002's computed-remedy wording (removed bodies,
-coverage shapes), ADR 0004's diff-gate inventory (the two new codes), and ADR 0018's replay
-comparison statement (body-keyed union comparison) if the final implementation establishes
-these durable rules; log every timestamp change. After every gate passes, close IR-33 per its
-review section and append the `Implemented` log entry.
+
+### Milestone 3 — Prove every advertised transition under the effective language
+
+
+Extend DiffEnv with oldService/newService while retaining its old/new Spec views,
+derived together in one constructor path. Change private diffCheckedSpecs to accept
+the checked services, aggregatePairDiff to accept DiffEnv, and guardTighteningDiff
+to receive the candidate context. Keep the public diffServices signature and pass
+position unchanged. Cache candidate validation and its unmodified render/parse
+preflight once per diff; do not rerun them for every body.
+
+Insert the proposed twin into the matching aggregate in a copied candidate Spec.
+Rebuild with checkedServiceWithSpec modifiedSpec candidateService. Construct a
+synthetic source using the effective version, as shown in Interfaces and Dependencies.
+Render with renderSource, parse with parseSource, and call checkedSource on the result.
+Require the same effective contract, no Error diagnostics from validateService, and
+preservation of the proposed twin's canonicalTransition with both outcome fields empty.
+Canonical transition comparison ignores location and alternate AST representations
+that print identically. Also verify that the unmodified merged candidate round-trips
+without losing semantic declarations; fixture checks may compare Spec equality where
+the parser representation is already stable. Treat failed preflight as unavailable
+proof with a precise reason, never as evidence of a real guard relation.
+
+On success emit AggGuardTightened with renderTransition twin. On failure emit
+AggGuardRemedyUnavailable instead, naming the potential history hazard and the failed
+proof stage. Never claim an unproved region is inhabited. Never include the failed
+transition block in detail. Append the code after EP-265's addition, classify it as
+DiffDiagnostic, include it in privateCodes and the private-history advisory vector,
+and explicitly map it to generic RemedyDoNotDeploy guidance. Store specific errors
+in detail; do not change remediationFor's signature to smuggle them into a code-level
+mapping. Round-trip and policy-code inventory tests must include it.
+
+Validate all proposed remedies together as well as individually before advertising
+a set; any source-validation conflict makes the affected suggestions unavailable.
+This still proves only source legality. Same-phase runtime ambiguity, old/new output
+hooks, and hand-written behavior require conformance/audit; describe that limit in
+guidance and do not advertise an unconditional safe-deploy guarantee.
+
+Use valid old and candidate fixtures for failure tests: remove an event or register
+used only by an old removed body so inserting its twin becomes invalid. Preserve the
+independent removal finding, assert the unavailable code and reason, and assert no
+rendered transition block or replay-only-edge remedy. A production test hook is
+unnecessary. Add merged-workspace round-trip preflight and per-language tests for
+legacy/explicit Language 1 through 5 using parseSource/checkedSource/validateService,
+including a Language-5 accepted outcome cleared from the twin. Pasting a successful
+twin must validate and suppress that body's guard finding on re-diff.
+
+Acceptance is passing focused groups and domain-outcomes conformance, including
+diagnostic text parsing, JSON vector/remedy mapping, and explicit --deny behavior.
+
+
+### Milestone 4 — Prove CLI and runtime behavior and record the durable contract
+
+
+Extend keiro-dsl/test/diff-test.sh with Git-backed self-diff, preservation, changed,
+removed-family, exact/verbatim-union coverage, stale coverage, unknown-Hole, and
+unavailable cases. Assert the number of guard-history findings by code, not the total
+findings: fold, codec, or declaration findings may accompany them. Pin
+private-history-read=advisory and remedies in JSON. Default advisories retain the
+default exit behavior; --deny AggGuardRemedyUnavailable and --deny
+AggGuardRelationUnknown must fail deliberately. DoNotDeploy is guidance, not an
+implicit change of severity.
+
+Run the existing Keiro black-acuity/replay-only safety tests unchanged. Multi-sibling
+algebraic tests do not replace these compiled runtime proofs. Keep runtime validation
+and replay audits independent of source-level coverage.
+
+Build the executable and clone Mori as below. Record the clone's commit. Its HEAD
+self-diff must have an empty findings array and replay-neutral verdict. In the clone,
+tighten one emitting ObserveProjectDescription branch by conjoining a type-correct
+extra condition over a field already present in that branch. Record the actual patch,
+filtered guard finding, twin, successful check, and suppression after pasting.
+Expect one guard finding naming ProjectDescriptionChanged, not necessarily one total
+finding. If the adopter has renamed that branch, select and record the equivalent
+existing emitting branch after inspecting its source.
+
+Update docs/guides/evolution-and-replayability.md and keiro-dsl/CHANGELOG.md.
+Distill the implemented rules into ADRs 0002, 0004, and 0018, respecting current
+profile/log metadata and retaining the source-versus-runtime distinction. EP-265
+already owns the unknown code; EP-266 adds only the unavailable code.
+After all acceptance gates pass, update IR-33's status/timestamp and append its
+Implemented log entry, explicitly retaining the deferred semantic scope.
+Milestone acceptance is the full validation bar and recorded adopter evidence.
 
 
 ## Concrete Steps
 
-At the start of implementation, verify the prerequisite:
+
+Run from the Keiro repository root. First inspect EP-265 completion and actual APIs:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
-
 rg -n '^-[[:space:]]+\[ \]' docs/plans/265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md
-rg -n 'AggGuardRelationUnknown|null \(tEmits' keiro-dsl/src/Keiro/Dsl/Diff.hs
+sed -n '1,260p' keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs
+rg -n 'AggGuardRelationUnknown|\.emits|outcomeDuplicateLocs' keiro-dsl/src/Keiro/Dsl/Diff.hs
 ```
 
-The first command must print no unchecked Progress item; the second must show ExecPlan 265's
-code and no-emit exclusion in place.
-
-Run focused tests while implementing:
+The first command should return no unchecked Progress items (rg exits 1 for no matches);
+read EP-265's completion evidence as well. Do not infer completion merely from a
+diagnostic name appearing in source.
 
 ```bash
+cabal build exe:keiro-dsl
 cabal test keiro-dsl-test --test-options='--match "transition family"'
 cabal test keiro-dsl-test --test-options='--match "replay body"'
-cabal test keiro-dsl-test --test-options='--match "guard tightening"'
 cabal test keiro-dsl-test --test-options='--match "replay impact"'
+cabal test keiro-dsl-test --test-options='--match "plan 143"'
 cabal test keiro-dsl-conformance-domain-outcomes
 bash keiro-dsl/test/diff-test.sh
-```
-
-Expected focused behavior is comparable to:
-
-```text
-preserved body: no guard-history finding
-changed body: AggGuardTightened with validated replay-only twin
-removed body: AggGuardTightened with the old transition as replay-only twin
-covered body: no finding (computed twin / old guard verbatim / unguarded)
-invalid twin: AggGuardRemedyUnavailable without replay-only text
-```
-
-Run the runtime safety proof without broadening its assertions:
-
-```bash
 cabal test keiro-test --test-options='--match "guard tightening"'
 cabal test keiro-test --test-options='--match "black-acuity"'
 cabal test keiro-test --test-options='--match "replay-only twin"'
 ```
 
-Run the disposable Mori proof:
+Each focused group must execute examples, not succeed with zero matches. Build the
+CLI before its shell test. Expected new behavior includes:
+
+```text
+cancelled survivor covers removed alternative: no guard-history finding
+changed generated body: AggGuardTightened with source-validated twin
+removed generated family: AggGuardTightened with whole old guard union
+partial old-sibling twin: does not suppress whole-body hazard
+affected opaque family: AggGuardRelationUnknown without a transition block
+invalid inserted twin: AggGuardRemedyUnavailable without a transition block
+```
+
+Run the disposable adopter proof:
 
 ```bash
+cabal build exe:keiro-dsl
 keiro_dsl_bin="$(cabal list-bin exe:keiro-dsl)"
 mori_source="$(mori path mori://shinzui/mori/repos/mori)"
 guard_proof_scratch="$(mktemp -d "${TMPDIR:-/tmp}/keiro-guard-body.XXXXXX")"
 git clone --local --no-hardlinks "$mori_source" "$guard_proof_scratch/mori"
-
 cd "$guard_proof_scratch/mori"
+git rev-parse HEAD
 "$keiro_dsl_bin" diff domain/mori.keiro-workspace --since HEAD \
   --report-out "$guard_proof_scratch/mori-diff.json" \
   --replay-impact-out "$guard_proof_scratch/mori-replay.json"
-jq '{breaking, findings: [.findings[] | {code, vector, remedies}]}' \
-  "$guard_proof_scratch/mori-diff.json"
+jq '{breaking, findings: [.findings[] | {code, vector, remedies}]}' "$guard_proof_scratch/mori-diff.json"
 jq . "$guard_proof_scratch/mori-replay.json"
 ```
 
-The identical-source result must contain no findings and must be replay-neutral. For the
-experimental tightening, edit only the clone, re-run the same command, and capture the single
-finding and its twin before discarding the clone. Delete only `guard_proof_scratch`, never the
-Mori source.
+The unchanged result is `{"breaking":false,"findings":[]}` and
+`{"verdict":"replay-neutral"}`. After the experimental edit and again after pasting
+the twin, rerun diff and `"$keiro_dsl_bin" check domain/mori.keiro-workspace`.
+Record the guard-code count and check result; independent audit/fold findings may
+remain after coverage suppresses the guard advisory.
 
-Run the complete repository validation from `/Users/shinzui/Keikaku/bokuno/keiro`:
+Run the final gates back in Keiro:
 
 ```bash
+cd /Users/shinzui/Keikaku/bokuno/keiro
 cabal build all
 cabal test keiro-dsl:tests
 cabal test keiro-test
 nix fmt -- --check
 git diff --check
 okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
-mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
 okf validate docs/improvement-requests --strict \
-  --profile mori/improvement-requests-profile.dhall \
-  --profile-enforce --log-enforce
+  --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
 ```
 
-Only after these pass, close IR-33 and add its bundle log entry:
+When implementation updates ADR timestamps, append the matching entries with
+`okf log add` before strict validation. To close IR-33, update its implementation
+status and timestamp using the existing bundle convention, then:
 
 ```bash
 okf log add docs/improvement-requests IR-33 \
   --kind Implemented \
-  --message "Close IR-33's accepted scope after Plans 265 and 266 make transition-family diffs idempotent, classify guard unions by replay body, and validate every replay-only remedy; the deferred semantic engine remains recorded in the IR-33 review."
-mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
+  --message "Implemented the accepted structural scope of Plans 265 and 266; semantic guard proofs remain deferred in the IR-33 review."
 okf validate docs/improvement-requests --strict \
-  --profile mori/improvement-requests-profile.dhall \
-  --profile-enforce --log-enforce
+  --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
 git diff --check
 git status --short
 ```
 
-Record actual test counts and the disposable Mori commit in Progress and Outcomes rather than
-copying anticipated values.
+Record actual examples, failures, and the pinned adopter commit in Progress and
+Outcomes. This refresh does not authorize closing the request before implementation.
 
 
 ## Validation and Acceptance
 
-The plan is complete only when all of the following observable behaviors hold.
 
-Identical sources and every declaration permutation produce no `AggGuardTightened`,
-`AggGuardRelationUnknown`, or `AggGuardRemedyUnavailable`, and the replay verdict is neutral. A
-sibling split or merge that preserves the canonical guard union, and a loosening provable by the
-shared syntactic fragment, produce no guard-history finding and no guard-derived audit target;
-they may still produce the independent `AggFoldSurfaceChanged`.
+Identical sources and declaration permutations produce no guard-history code and are
+replay-neutral. An unrelated addition does not change an existing body's classification.
+Cancelled live and replay-only siblings remain available for coverage. No-emit edits
+produce no guard-history finding; they retain existing independent snapshot treatment.
 
-A changed emitting body produces exactly one `AggGuardTightened` carrying the private-history
-advisory vector, a detail naming its emitted events, and a twin whose guard is exactly
-`oldUnion AND complement(newUnion)` over the body's old representative, with replay-only mode and
-no outcome. A removed emitting body produces the same code with the old transition as twin. The
-existing Plan-143 fixture's twin text is byte-identical to today's.
+Preserved explicit unions and syntactic loosenings have no guard-derived audit target.
+Changed/removed generated bodies produce one guard finding per body, with the exact
+whole-union twin when the source gate succeeds. Entire removed families are included
+inside matched aggregates. Body replacements conservatively target both sides' events.
+Opaque affected families produce one unknown finding without a guessed twin.
 
-Every advertised twin has been inserted, rendered, parsed, and validated under the candidate's
-language; a twin that fails produces `AggGuardRemedyUnavailable` with the reason, the same
-vector, `RemedyDoNotDeploy`, and no `replay-only` text. Both new codes parse by name, are
-`DiffDiagnostic`s, and have explicit remedy cases.
+Only a same-family, same-body, demonstrably covering candidate replay-only edge suppresses
+an advisory. One partial old guard cannot cover all old alternatives. Extra unrelated
+siblings do not invalidate coverage evidence, but that does not establish runtime
+same-phase determinism. Covered changes may still require targeted replay/snapshot audits.
 
-A replay-only sibling suppresses a finding only with the same replay body and a guard that is the
-computed twin, an old guard verbatim, or absent. Tests prove that stale, unrelated, differently
-writing, differently emitting, differently targeted, and Hole-owned siblings do not suppress it,
-and that extra replay-only siblings beyond a covering one do not reintroduce it.
+Every advertised twin preserves its canonical replay body and cleared outcomes through
+the effective-language round trip and validates without Error diagnostics, both alone
+and with the other advertised twins. Failed proof produces only the unavailable guard
+code, with specific detail and generic do-not-deploy guidance. Both unknown and unavailable
+codes are diff diagnostics with explicit policy and remedy mappings.
 
-Text and JSON findings and replay-impact agree: every body reported as a hazard has its emitted
-events in the audit target set, and every body the diff calls preserved is replay-neutral with
-respect to guards. Finding emission order and the rendering golden are unchanged except for the
-deliberate additions this plan makes to fixtures.
+Public signatures, JSON schemas, canonical fold bytes, and Languages 1–5 parser/scaffold
+contracts remain unchanged. Existing one-to-one Plan-143 twin text stays pinned.
+Finding order relative to other passes stays unchanged; revised guard findings are
+deterministic by family/body key. Any necessary rendering-golden change must be explained
+by the intended classification change, never by moving the whole pass.
 
-The disposable Mori `HEAD` self-diff is empty and replay-neutral, and a single experimental
-tightening in the clone yields one finding with a pasteable, validating twin. The black-acuity
-tests pass unchanged. All `keiro-dsl:tests`, `keiro-test`, formatting, ADR, and
-improvement-request gates pass without changing Keiki, package bounds, canonical fold goldens, or
-released Languages 1–5 parsing/scaffolding semantics.
+The disposable adopter proof, unchanged compiled runtime proofs, full package tests,
+formatting, and strict documentation checks pass. IR-33 closes only for its accepted
+structural scope; no semantic-engine completion or unconditional replay safety is claimed.
 
 
 ## Idempotence and Recovery
 
-Everything here is pure comparison and rendering. Re-running a diff, test, or report generation
-does not alter source or stored data, and twins remain suggestions rather than automatic edits.
-Candidate validation runs on an in-memory copy; a failing twin leaves the user's source untouched.
 
-Develop additively. Land the replay-body grouping and the shared `guardImplies` with focused
-tests before routing production findings through them, then switch the diff pass in one working
-commit so there is never a released state with two authorities. If body classification fails,
-restore ExecPlan 265's one-to-one path rather than weakening the round-trip gate. Never bypass
-validation to keep a paste-ready assertion green.
+Comparison, candidate insertion, and validation are pure and operate on copied values.
+Repeated diffs never apply a twin or alter stored data. Cache only within the invocation,
+keyed to its candidate; never reuse analyses from a different Spec.
 
-The diagnostic registry is append-only. Once committed, keep `AggGuardRemedyUnavailable`
-parseable. JSON remains schema `keiro-dsl/diff-report/1`; additions use existing ignore-unknown
-conventions.
+Keep changes incremental and leave the release state with one shared classification
+authority. If a round-trip fails, retain the truthful unavailable diagnostic and fix
+the cause; never bypass validation to preserve a paste-ready golden. Preserve EP-265's
+code vocabulary and keep AggGuardRemedyUnavailable append-only after it lands.
 
-Mori validation always uses a fresh temporary clone; if interrupted, discard that clone and create
-another. Preserve unrelated user work in Keiro, and do not reset, clean, or rewrite the registered
-Mori or Keiki checkout.
+Use a new mktemp directory for an interrupted adopter proof. Remove only its recorded
+temporary clone when finished; never reset or clean the registered Mori checkout.
+Preserve concurrent EP-265 edits and reconcile its actual private APIs when complete.
+No feature branch, dependency upgrade, database operation, or consumer-source rewrite
+is required.
 
 
 ## Interfaces and Dependencies
 
-`keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` gains `ReplayBodyKey`, per-body guard grouping, and
-the shared `guardImplies`/`unionPreserved` on top of ExecPlan 265's exact family delta. It must
-not change `Keiro.Dsl.CanonicalEncoding.canonicalTransition`.
 
-`keiro-dsl/src/Keiro/Dsl/Diff.hs` keeps its guard pass at the current emission position;
-`DiffEnv` gains the old and new `CheckedService`s. `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs`
-imports the shared implication fragment. Their public signatures remain:
+The following public signatures are verified against the working tree and remain unchanged:
 
 ```haskell
 diffServices :: CheckedService -> CheckedService -> Either FoldSurfaceError [Change]
 
 replayImpactServices
-  :: CheckedService
-  -> CheckedService
-  -> Either FoldSurfaceError ReplayImpact
+  :: CheckedService -> CheckedService -> Either FoldSurfaceError ReplayImpact
+
+checkedServiceWithSpec :: Spec -> CheckedService -> CheckedService
+checkedSpec :: CheckedService -> Spec
+checkedLanguageContract :: CheckedService -> EffectiveLanguageContract
+checkedSource :: ParsedSource -> CheckedService
+renderSource :: ParsedSource -> Text
+parseSource :: FilePath -> Text -> Either ParseFailure ParsedSource
+validateService :: CheckedService -> [Diagnostic]
+remediationFor :: ChangeContext -> DiagnosticCode -> NonEmpty Remedy
 ```
 
-`keiro-dsl/src/Keiro/Dsl/Validate.hs` retains ExecPlan 265's `AggGuardRelationUnknown` and
-appends `AggGuardRemedyUnavailable`. Both are `DiffDiagnostic`s with the private-history advisory
-vector. `keiro-dsl/src/Keiro/Dsl/DiffReport.hs` maps only a validated twin to
-`RemedyReplayOnlyEdge`; unknown and unavailable cases map explicitly to `RemedyDoNotDeploy`.
+The candidate effective-language adapter is concrete; local variable names below assume
+the candidate CheckedService and modified Spec have already been supplied:
 
-`keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` supplies `checkedServiceWithSpec`,
-`checkedLanguageContract`, and `checkedSpec`. `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`,
-`keiro-dsl/src/Keiro/Dsl/Parser.hs`, and `validateService` form the remedy round-trip gate.
-`keiro-dsl/src/Keiro/Dsl/Grammar.hs` supplies `complementExpr` and `noLoc`.
+```haskell
+modifiedService = checkedServiceWithSpec modifiedSpec candidateService
+contract = checkedLanguageContract modifiedService
+syntheticSource =
+  ParsedSource
+    { sourceLanguage = DeclaredLanguage contract.contractLanguageVersion noLoc,
+      spec = checkedSpec modifiedService
+    }
+parsedResult = parseSource "<guard-remedy>" (renderSource syntheticSource)
+-- On Right parsed, construct checkedSource parsed and inspect validateService.
+-- Accept Warning diagnostics; reject every diagnostic whose severity is Error.
+```
 
-There is no new package dependency and no Keiki modification. Keiki remains referenced by
-`mori://shinzui/keiki/packages/keiki` under Keiro's existing `>=0.9 && <0.10` bound. Any future
-semantic guard engine belongs in a separate plan opened from IR-33's review, not in this one.
+Private proposed interfaces in TransitionFamily.hs may follow EP-265's actual record
+conventions, but must preserve this meaning:
 
-Every implementation commit must use a Conventional Commit subject and include both trailers:
+```haskell
+replayBodyKey :: Transition -> ReplayBodyKey
+guardImplies :: Maybe Expr -> Maybe Expr -> Bool
+guardUnion :: NonEmpty (Maybe Expr) -> Maybe Expr
+unionPreserved :: NonEmpty (Maybe Expr) -> NonEmpty (Maybe Expr) -> Bool
+```
+
+Represent body absence separately from guardUnion; keep original member lists and
+canonical-order representatives in body records. A family/body result must expose enough
+information for both diff findings and replay targets, without either consumer repeating
+pairing or union construction. Helpers remain internal, tested via public observable
+behavior. There are no new libraries and no Keiki API or bound changes. The existing
+dependency is `mori://shinzui/keiki/packages/keiki`; any future dependency change requires
+a separate registry/upstream version check and plan.
+
+Every implementation commit uses a Conventional Commit subject and these trailers:
 
 ```text
 ExecPlan: docs/plans/266-classify-guard-unions-by-replay-body-and-validate-replay-only-remedies.md
 Intention: intention_01m0kst1x4ejdsnxmweqv8brne
 ```
+
+
+## Revision note (2026-09-15)
+
+
+Refreshed all sections against the current APIs and EP-265 prerequisite. Corrected
+record fields, effective-language source construction, canonical-key derivation, private
+test visibility, and code-level remediation limits. Fixed cancellation-survivor unions,
+partial-twin coverage, whole-family removals, Hole opacity, and missing replay-impact
+integration. Replaced the unsupported distributive split promise with an explicit-union
+test and documented the boundary between source-valid remedies and runtime safety.
+Implementation milestones remain open.
