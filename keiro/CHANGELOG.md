@@ -6,6 +6,26 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `Keiro.Outbox.enqueueProducerEventTx` now takes the source `RecordedEvent` and
+  a `Word32` emission index instead of a caller-supplied `OutboxId`, and is a pure
+  `Tx.Transaction ProducerEnqueueOutcome` rather than an `Eff` action producing a
+  transaction. It derives a deterministic UUIDv8 `OutboxId` and an opaque
+  `<namespace>_v1_<sha256-hex>` message ID from producer source/name and the
+  source-event coordinates, and returns `ProducerInserted`,
+  `ProducerDuplicateIdentical`, or `ProducerIdentityConflict` with the differing
+  field classes (never payload values). Missing `sourceEventId` /
+  `sourceGlobalPosition` default from the recorded event, and `occurredAt` is
+  normalized to microseconds. Replays leave retained publication/audit state
+  untouched. Canonical producer message IDs are no longer TypeIDs; historical
+  random IDs need a drained checkpoint cutover or an application-owned mapping
+  before old events are replayed (see ADR-42 and `docs/user/outbox.md`). No schema
+  migration is required.
+- `mkIntegrationProducer` now rejects an empty `messageIdPrefix`.
+- `KeiroMetrics` gains an `outboxIdentityConflict` field; code that constructs
+  the record directly rather than through `newKeiroMetrics` must supply it.
+
 ### New Features
 
 - Add `Keiro.ProcessManager.Reaction`, an additive typed process-manager API
@@ -15,8 +35,25 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - Add `Keiro.Timer.cancelTimerTx`, the transaction-level form of guarded timer
   cancellation, so callers can compose cancellation with an event append and
   other timer mutations.
+- Add `Keiro.Outbox.Identity` (`ProducerEventKey`, `ProducerIdentity`,
+  `ProducerEnqueueOutcome`, `ConflictField`, `deriveIdentity`,
+  `producerIdentityBytes`, `producerContentDigest`, `differingContentFields`,
+  `normalizeProducerEvent`), re-exported from `Keiro.Outbox` together with
+  `deriveProducerIdentity`, `recordProducerEnqueueOutcome`, and
+  `freshIntegrationEvent`. `Keiro.Outbox.Schema` adds `enqueueProducerOutboxTx`.
+- Add the `keiro.outbox.identity.conflict` counter
+  (`keiroOutboxIdentityConflictName`, `recordOutboxIdentityConflict`), recorded
+  once after the transaction runner returns.
 
 ### Other Changes
+
+- Deprecate `mintIntegrationEvent` in favor of `freshIntegrationEvent`, which
+  names its fresh-envelope behavior explicitly; use `enqueueProducerEventTx` for
+  replay-safe producer identity. Caller-owned `enqueueOutboxTx` is unchanged.
+- The `ProcessManagerAction` documentation now states the real atomicity
+  boundary: manager-state append and timer writes share one transaction, while
+  each target command commits in its own.
+- Add a producer identity benchmark with retained baseline results.
 
 - Existing process-manager APIs and positional deterministic identities remain
   unchanged. Switching an existing manager name to the reaction runner is an

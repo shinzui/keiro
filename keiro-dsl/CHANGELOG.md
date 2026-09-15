@@ -6,6 +6,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- No user-facing changes. The parser-scaling benchmark now uses the current
+  scaffold `path` and `text` record fields.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Other Changes

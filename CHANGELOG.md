@@ -6,23 +6,45 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-- **Breaking:** `enqueueProducerEventTx` now takes a recorded source event and
+### Breaking Changes
+
+- `keiro`: `enqueueProducerEventTx` now takes a recorded source event and
   emission index, derives deterministic UUIDv8/opaque message IDs, and returns
   inserted, identical replay, or typed identity conflict directly in the transaction.
   Missing source provenance defaults from the recorded event. Replays preserve
   retained publication/audit state and reject content drift without payload disclosure.
-  Historical random IDs require a drained checkpoint cutover or an application-owned
-  mapping before replay. No schema migration is required.
-- Add `Keiro.Outbox.Identity`, a post-transaction identity-conflict metric, and
-  producer replay/performance coverage. Deprecate `mintIntegrationEvent` in favor
-  of explicitly named `freshIntegrationEvent`; caller-owned envelope enqueue remains.
-
-- Adopt the released 0.6.0.0 family from mori://shinzui/pgmq-hs and
+  Canonical producer message IDs change from TypeIDs to opaque
+  `<namespace>_v1_<sha256-hex>` text. Historical random IDs require a drained
+  checkpoint cutover or an application-owned mapping before replay (ADR-42).
+  No schema migration is required.
+- `keiro-pgmq`: adopt the released 0.6.0.0 family from mori://shinzui/pgmq-hs and
   `shibuya-pgmq-adapter` 0.15.0.0 across PGMQ consumers, completing normal
-  Cabal solver support. Partitioned job provisioning explicitly retains the
+  Cabal solver support. The re-exported `QueueMetrics` record gains nullable
+  `defaultPartitionLength`. Partitioned job provisioning explicitly retains the
   server's default premake with `Nothing`.
+
+### New Features
+
+- `keiro`: add `Keiro.ProcessManager.Reaction`, an additive typed process-manager
+  API with explicit no-advance and accepted-only follow-ups, atomic saga/timer
+  mutation, target-keyed dispatch identity, exact accepted-witness recovery,
+  detailed one-shot results, and strict worker integration. Switching an existing
+  manager name to the reaction runner is an identity migration; existing
+  process-manager APIs and identities are unchanged.
+- `keiro`: add `Keiro.Timer.cancelTimerTx`, the transaction-level form of guarded
+  timer cancellation.
+- `keiro`: add `Keiro.Outbox.Identity`, a post-transaction identity-conflict metric
+  (`keiro.outbox.identity.conflict`), and producer replay/performance coverage.
+
+### Other Changes
+
+- `keiro`: deprecate `mintIntegrationEvent` in favor of explicitly named
+  `freshIntegrationEvent`; caller-owned envelope enqueue remains.
+- `keiro-core`: `IntegrationEvent.messageId` is documented as opaque text rather
+  than a time-ordered UUID.
 - Fix parser-scaling benchmark access to the current scaffold `path` and `text`
   fields, discovered by the full PGMQ 0.6 component build.
+- Reformat cabal files with cabal-gild and migrate to nix-haskell-flake v0.21.0.
 
 ## 0.16.0.0 — 2026-09-07
 

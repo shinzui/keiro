@@ -6,6 +6,13 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- `IntegrationEvent.messageId` is now documented as opaque application-level
+  text: canonical Keiro producers derive it deterministically from source-event
+  coordinates, and explicit callers own their identity policy. It was previously
+  described as a time-ordered UUID. The type is unchanged.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Other Changes

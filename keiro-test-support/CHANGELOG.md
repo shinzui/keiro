@@ -6,6 +6,10 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+### Other Changes
+
+- No user-facing changes.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Other Changes

@@ -6,6 +6,11 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- No user-facing library changes. The test-suite's `pgmq-migration` bound moves
+  from `>=0.5 && <0.6` to `>=0.6 && <0.7` with the PGMQ 0.6 adoption.
+
 ## 0.16.0.0 — 2026-09-07
 
 ### Other Changes
