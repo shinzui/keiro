@@ -5,9 +5,9 @@ description: >-
   Stop keiro-dsl diff from reporting AggGuardTightened for byte-identical or additive-only
   aggregate sources, and emit the replay-only remedy only when the old guard has a real,
   satisfiable region excluded by the new guard.
-timestamp: 2026-08-21T19:32:06Z
+timestamp: 2026-09-15T22:33:25Z
 requestId: IR-33
-status: accepted
+status: implemented
 origin: mori://shinzui/mori
 plan: docs/plans/265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md
 relatedPlans:
@@ -40,7 +40,7 @@ reviews:
 
 ## Status
 
-**Reviewed and approved with a narrowed scope; planned, not yet implemented.** Proposed from
+**Implemented for the accepted structural scope; semantic guard proofs remain deferred.** Proposed from
 `mori://shinzui/mori/plans/236-model-project-releases-in-the-registry`, after reproducing the
 problem with the current published `keiro-dsl` 0.14.0.0 binary and current Keiro `master`.
 The same defect was first isolated during
@@ -55,6 +55,13 @@ The 2026-08-22 review confirmed the defect, traced it to a single cause, and spl
 engine originally drafted for Plan 266 was **deferred**; the "Review Decision" section below
 records the findings, the narrowed scope, and the conditions under which the engine may be
 reconsidered.
+
+Plans 265 and 266 now share exact family cancellation and complete replay-body guard unions
+between ordinary diff and replay impact. Generated changed or removed bodies receive an exact
+replay-only remedy only after it survives candidate-language insertion, rendering, parsing, and
+validation. Partial or stale replay siblings no longer hide a hazard; explicit Hole-owned changes
+remain unknown; failed remedy proofs produce `AggGuardRemedyUnavailable` without transition text.
+The deferred semantic engine and its revival conditions below are unchanged.
 
 ## Context
 

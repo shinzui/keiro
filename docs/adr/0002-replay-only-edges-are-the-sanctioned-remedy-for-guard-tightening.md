@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Replay-only edges are the sanctioned remedy for guard tightening
 description: Retired guards keep an inverting edge through keiki's ReplayOnly edge mode instead of the guarded-but-inert command-flag hack.
-timestamp: 2026-08-05T14:23:30Z
+timestamp: 2026-09-15T22:33:25Z
 docId: ADR-2
 status: Accepted
 date: 2026-07-23
@@ -79,6 +79,25 @@ and no twin exists. The twin is printed, never auto-applied: whether history
 should stay replayable (paste) or be truncated instead is a business
 decision.
 
+Guard evolution is classified per replay body, not per declaration. Within one
+live source/command family, a replay body is the behavior owner, ordered writes,
+ordered emitted events, and target. Exact multiset remainders select affected
+bodies, then every old and new sibling for those bodies participates in a
+comparison-local guard union. Changed bodies use `old-union ∧ ¬new-union` and
+removed bodies use `old-union`; cancelled siblings can therefore prove that a
+seemingly removed alternative is still covered.
+
+Existing coverage must have the same replay body. Diff accepts the exact
+computed twin, the complete old union, an unguarded edge, or a guard that the
+shared syntactic implication fragment proves covers every old alternative. It
+does not accept a stale edge or one old sibling in isolation. Before transition
+text is advertised, diff inserts proposed twins into a copied candidate and
+proves their effective-language render, parse, validation, replay identity, and
+cleared forward outcome. Failure emits `AggGuardRemedyUnavailable` with no
+paste-ready edge. Explicit Hole-owned behavior emits
+`AggGuardRelationUnknown`; its structural envelope is not copied as though it
+were the hand-written implementation.
+
 Generated conformance preserves the same phase boundary at every source,
 including the aggregate's initial vertex. Step-based acceptance and
 forward/replay probes are generated only for `Live` transitions. A
@@ -108,6 +127,12 @@ replay audit.
   refused loudly at hydration if ignored, resolved by pasting the twin or by
   audit-then-truncate (the replay audit of plan 142 is the checker for
   "does stored data exercise the removed region").
+- Split and merged sibling guards, duplicate declarations, and cancelled
+  covering siblings are judged by their complete body union. A removed
+  emitting body receives the same retained-edge remedy as a tightened body.
+- A source-valid generated twin remains only source evidence. Runtime
+  same-phase inversion, output hooks, explicit Hole behavior, and real stored
+  history remain the responsibilities of conformance and the replay audit.
 - Replay-only twins are a *scoped, explicit* reintroduction of the
   decide/evolve split — deliberately. A twin cannot drift (it still couples
   its event to its writes); it merely stops accepting new commands. The

@@ -95,8 +95,10 @@ one actually checks, because none of them checks everything:
    named delta. Reporting is advisory. `--fail-on-opaque` and
    `--fail-on-opaque-increase` are separate opt-in policies and are accepted
    only with that report. The differ also advises on spec-visible aggregate fold,
-   process/router decide, and timer-payload changes, and prints a replay-only
-   twin for guard tightening. Hole bodies remain invisible to it.
+   process/router decide, and timer-payload changes. For guard evolution it
+   compares complete live guard unions per replay body and prints a replay-only
+   twin only after the candidate language can render, parse, and validate it.
+   Explicit Hole-owned bodies remain opaque and are reported as such.
 
 For a `.keiro-workspace` input, both commands operate on one composed service graph.
 `diff` reads the old manifest and old member set from Git, emits one compatibility
@@ -425,19 +427,33 @@ ambiguity). The procedure when you tighten a guard:
    call `Keiki.Builder.replayOnly` in the edge body (or set `mode = ReplayOnly`
    on a raw `Edge`).
 
-Diff compares sibling transitions as an order-independent multiset before it
-attempts this one-to-one guard remedy. Identical siblings cancel exactly, so
-reordering branches or adding an unrelated declaration does not create a guard
-finding. A live branch with no `emit` is also excluded: validation already
-proves that such a branch changes neither state nor registers and therefore no
-stored history depends on its guard.
+Diff first cancels exact sibling transitions as an order-independent multiset.
+The remaining transitions select affected replay bodies, where a body means the
+same behavior owner, ordered writes, ordered emitted events, and target within
+one source/command family. Diff then recovers every old and new sibling for that
+body and compares the complete guard unions. A split from `a || b` into sibling
+guards `a` and `b`, a merge in the other direction, removal of one duplicate,
+or removal of `a` while a cancelled `a || b` sibling survives does not create a
+false history warning. A live branch with no `emit` remains excluded because no
+stored event depends on it.
 
-If exact cancellation leaves several emitting old and new siblings, diff emits
-`AggGuardRelationUnknown` on the same private-history compatibility surface as
-`AggGuardTightened`. It does not guess a replay-only twin. Resolve the family or
-run the targeted replay audit before deployment; CI can enforce that policy
-with `keiro-dsl diff --deny AggGuardRelationUnknown`. Consumers that branch on
-diagnostic codes should recognize both guard-evolution codes.
+For a changed body, the proposed twin carries the whole removed union
+`old-union ∧ ¬new-union`; for a removed body it carries the old union. Existing
+coverage must have the same replay body and must be the exact computed twin,
+the complete old union, unguarded, or syntactically provable to cover every old
+alternative. A stale sibling or a twin for only one old alternative does not
+suppress the finding.
+
+Before presenting transition text, diff inserts the twin into a copied
+candidate, renders and parses it under the candidate's effective language, and
+validates the result. A failed proof emits `AggGuardRemedyUnavailable` with the
+validation reason and no paste-ready block. An affected explicit
+`implementation hole` family emits `AggGuardRelationUnknown`, because its
+structural envelope cannot prove or copy the hand-written behavior. Both codes
+are private-history advisories with do-not-deploy guidance and can be enforced
+with `keiro-dsl diff --deny CODE`. These source checks do not prove hand-written
+behavior or runtime same-phase inversion; generated conformance and the
+targeted real-log audit remain separate gates.
 
 The validator keeps the pattern disciplined: a `replay-only` transition with
 no `emit` is an error (`ReplayOnlyEmitsNothing` — it can invert nothing), and
@@ -872,7 +888,7 @@ DSL-only gates do not exist for hand-authored services.
 | Field removal, unguarded | BREAKING | versioned golden CI | decodes fine | **silent wrong state** in hand-written/tolerant codecs without a golden | Landed convention: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md) |
 | Version bump + upcaster | ADDITIVE only with contiguous declarations | `mkCodec` checks chain; harness decodes old-shape golden | `GapInUpcasterChain`/`UpcasterError` if bypassed | hand-written semantic upcaster bugs | Landed: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md), [140](../plans/140-fix-dsl-upcaster-lowering-and-adopt-versioned-job-codecs.md) |
 | Deprecate event, live streams affected | `DeprecatedEventReplayHazard`; safe two-stage retirement advised | ε-variant rejected; replay-only edge validated | `HydrationNoInvertingEdge` if ignored | actual affected streams unknown until audit | Landed gate: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit) |
-| Guard/output change vs old logs | `AggFoldSurfaceChanged`; tightening prints replay-only twin; version-2 scalar guards/writes are generated authority | new machine plus generated concrete/symbolic conformance | `HydrationReplayFailed` (loud/delayed) | inversion-compatible edits can shift state silently | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
+| Guard/output change vs old logs | `AggFoldSurfaceChanged`; complete replay-body unions classify preserved, changed, and removed behavior; a tightening prints a source-validated replay-only twin, while `AggGuardRelationUnknown` and `AggGuardRemedyUnavailable` withhold unproved remedies | new machine plus generated concrete/symbolic conformance | `HydrationReplayFailed` (loud/delayed) | source validation does not prove Hole behavior or runtime same-phase inversion | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
 | Decide change over redelivery window | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | — | deduped as benign duplicates | hole-only edits remain invisible | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) + drain rule |
 | Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint; version-2 Hole changes require a per-transition `FoldVersion` bump | three-component discriminator and ownership/predicate-verification report | full replay on mismatch | **manual-bump residual** for version-1 Holes and other hand-written folds; an unbumped version-2 Hole is still a contract violation | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
 | Register slot change | n/a | register shape hash changes | full replay (benign) | mixed-deploy snapshot thrash | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |

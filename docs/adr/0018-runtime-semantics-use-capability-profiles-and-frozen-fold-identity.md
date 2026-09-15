@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-09-15T21:18:19Z
+timestamp: 2026-09-15T22:33:25Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -57,9 +57,15 @@ Ordinary diff and replay-impact analysis share one structural transition-family
 partition keyed by mode, source, and command. Each family sorts by frozen
 canonical transition bytes and cancels exact values as a duplicate-aware
 multiset before either consumer classifies the remainder. Replay impact then
-cancels its additional provable guard-loosening fragment and sorts remaining
-canonical values before pairing. Source location, declaration order, and
-forward-only domain outcomes do not participate in exact cancellation.
+classifies generated live transitions by replay body. Exact remainders select
+affected bodies, but every original sibling for each selected body participates
+in the complete guard union. Top-level disjunction alternatives are flattened,
+sorted, and deduplicated for comparison only; frozen canonical transition bytes
+remain unchanged. The same directional syntactic implication fragment proves
+preservation for diff and replay impact. Replay-only and no-emit comparison keep
+their independent structural treatment. Source location, declaration order,
+and forward-only domain outcomes do not participate in exact cancellation or
+body identity.
 
 Aggregate fold identity uses a dedicated FNV-1a-128 fold over the canonical
 UTF-8 octets. The offset basis, prime, XOR-then-multiply order, and modulo-2^128
@@ -97,6 +103,10 @@ cannot pair a replacement spec with stale derived state.
 - An identical transition family cannot be replay-neutral while independently
   appearing as a guard change; both projections consume the same exact
   remainder.
+- A cancelled sibling can still cover an affected guard alternative because
+  body classification recovers complete family membership after work
+  selection. Split and merged explicit unions therefore agree across ordinary
+  diff and replay impact without changing frozen fold bytes.
 - One checked service resolves its type graph at most once across validation,
   planning, generation, conformance, and record construction. Derived analysis
   cannot become stale when a caller replaces the spec.

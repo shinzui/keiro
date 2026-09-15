@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-09-15
+* **Update**: Share complete replay-body union classification between diff and replay impact without changing frozen fold bytes (plan 266).
+* **Update**: Gate replay-only remedies through candidate-language round trips and report unknown or unavailable remedies explicitly (plan 266).
+* **Update**: Classify guard evolution by complete replay-body unions and advertise only source-validated replay-only remedies (plan 266).
 * **Update**: Record conservative guard-family ambiguity diagnostics and selective diff denial.
 * **Update**: Share exact order-independent transition-family cancellation between ordinary diff and replay-impact analysis.
 * **Addition**: Record downstream event receipts as the ownership boundary for delegated inbox intake.

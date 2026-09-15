@@ -75,10 +75,10 @@ behavior; runtime conformance and targeted replay audits remain independent gate
 - [x] (2026-09-15) Cover complete-union cancellation, explicit-OR splits/merges, exact,
       full-union, and partial replay coverage, explicit Hole ownership, outcome clearing,
       invalid inserted twins, and successful remedy round trips under Languages 1–5.
-- [ ] Cover cancellation survivors, duplicates, splits/merges, removed families, stale and
+- [x] (2026-09-15) Cover cancellation survivors, duplicates, splits/merges, removed families, stale and
       mismatched body/source/command/write/emit/target/owner twins, and combined-remedy
       conflicts not exercised by the focused cases above.
-- [ ] Run CLI, runtime, disposable Mori, package, formatting, and documentation gates;
+- [x] (2026-09-15) Run CLI, runtime, disposable Mori, package, formatting, and documentation gates;
       update durable ADRs and close IR-33's accepted scope.
 
 
@@ -152,6 +152,20 @@ including exact/full/partial coverage and a removed event that makes twin insert
 `AggGuardRemedyUnavailable`; six `transition family` examples pass across released Languages
 1–5; and all seven Plan-143 examples retain their expected behavior.
 
+The first disposable Mori tightening exposed a workspace-only proof bug. A composed
+`CheckedService` is one semantic graph, not one legal source member; rendering the complete
+merged graph placed a `target` after an aggregate and failed to parse. The final gate validates
+the complete modified service, then renders and parses only the affected aggregate with the
+complete candidate type-declaration environment. A focused composed-node-order regression pins
+that boundary, and the `replay body` group now has six passing examples including two remedies
+validated alone and together.
+
+The plan's `nix fmt -- --check` command is obsolete for the installed treefmt. The equivalent
+CI gate is `nix fmt -- --ci`; it traversed 2,450 files, processed 278, and changed none. Strict
+ADR validation passed for 43 concepts. Strict improvement-request bundle validation still
+reports eleven unrelated pre-existing requests with no recommended `reviews` field; IR-33 has
+its review and its updated document/log metadata did not appear in that failure set.
+
 
 ## Decision Log
 
@@ -202,7 +216,9 @@ derive its Spec fields from them. Preserve ordering relative to other passes;
 within the guard pass order by family key then body key.
 
 Decision (2026-09-15): validate remedies under the effective language using a synthetic
-ParsedSource. Compare canonical replay identity plus cleared outcome fields after parsing,
+ParsedSource. Validate the complete copied candidate graph, then round-trip the affected
+aggregate with the complete type-declaration environment because a merged workspace is not one
+legal source member. Compare canonical replay identity plus cleared outcome fields after parsing,
 rather than relying on raw AST equality across expression representations.
 Detailed errors belong in the finding; remediationFor retains its existing signature.
 These are proposed implementation decisions; amend accepted ADRs when implementation lands.
@@ -217,19 +233,30 @@ author-declared behavior boundary that cannot be copied from the structural enve
 ## Outcomes & Retrospective
 
 
-The plan has been refreshed for implementation after EP-265. Source inspection corrected
-API names and argument order, union/cancellation interactions, multi-sibling coverage,
-Hole opacity, removed-family handling, replay-impact integration, and the limits of the
-source round-trip proof. EP-266 production work remains unimplemented. EP-265 was still
-open and its TransitionFamily module absent at the start of this refresh; its eventual
-field names must be read from the completed implementation. No runtime acceptance is
-claimed by this documentation update. During the final check, the concurrent EP-265
-implementation added TransitionFamily.hs and wired both consumers to it; its fields
-match the handoff below. EP-265 completion and its tests still need to finish before
-EP-266 implementation begins. This update did not edit those concurrent code changes.
-Documentation validation passed: plan-scoped git diff --check, required section order
-by inspection, and an automated check for required sections and tagged, balanced fences.
-No build or test suite was run for this plan-only update during concurrent EP-265 work.
+EP-266 is implemented. Diff and replay impact share complete live guard unions per replay body;
+changed and removed generated bodies receive whole-union twins, candidate replay coverage must
+match and cover the body, explicit Hole ownership stays unknown, and transition text is withheld
+as `AggGuardRemedyUnavailable` unless the copied candidate validates and the affected aggregate
+survives its effective-language round trip. Frozen fold bytes and public signatures are unchanged.
+
+Acceptance passed with six replay-body, six transition-family, eleven replay-impact, seven
+Plan-143, and twenty Git-backed CLI cases; the domain-outcomes conformance executable and the
+unchanged guard-tightening, black-acuity, and replay-only runtime checks passed. `cabal build all`,
+all `keiro-dsl:tests` (733 main examples plus conformance executables), and all `keiro-test`
+(694 examples) passed. The final test-only combined-remedy assertion was then added and passed in
+the six-example focused replay-body group; production code was unchanged, so the complete suites
+were not repeated. Formatting changed no files, `git diff --check` passed, and the ADR bundle
+validated strictly. The improvement-request bundle retains the unrelated review-metadata failures
+recorded above.
+
+The disposable adopter proof used Mori commit `7a8ea8242f8cac0527f32bb2f7c97d408268b73a`.
+Its unchanged workspace produced no findings and `replay-neutral`. Tightening the emitting
+`Active -- ObserveProjectDescription` branch with
+`cmd.projectId == reg.currentProjectId` produced exactly one `AggGuardTightened` naming
+`ProjectDescriptionChanged`; Mori still checked `OK`. Pasting the printed replay-only twin kept
+the workspace valid and reduced the guard-history count to zero, while the independent fold and
+replay-impact findings remained. ADRs 0002, 0004, and 0018 now record the durable boundary, and
+IR-33 is implemented for its accepted structural scope while its semantic engine remains deferred.
 
 
 ## Context and Orientation
@@ -643,10 +670,12 @@ the candidate CheckedService and modified Spec have already been supplied:
 ```haskell
 modifiedService = checkedServiceWithSpec modifiedSpec candidateService
 contract = checkedLanguageContract modifiedService
+-- Validate modifiedService as the complete candidate graph first.
+roundTripSpec = affectedAggregateWithTypeDeclarations aggregateName modifiedSpec
 syntheticSource =
   ParsedSource
     { sourceLanguage = DeclaredLanguage contract.contractLanguageVersion noLoc,
-      spec = checkedSpec modifiedService
+      spec = roundTripSpec
     }
 parsedResult = parseSource "<guard-remedy>" (renderSource syntheticSource)
 -- On Right parsed, construct checkedSource parsed and inspect validateService.
@@ -688,4 +717,8 @@ test visibility, and code-level remediation limits. Fixed cancellation-survivor 
 partial-twin coverage, whole-family removals, Hole opacity, and missing replay-impact
 integration. Replaced the unsupported distributive split promise with an explicit-union
 test and documented the boundary between source-valid remedies and runtime safety.
-Implementation milestones remain open.
+Implementation completed the refreshed milestones. The final pass added whole-body and
+combined-remedy regressions, fixed composed-workspace round trips to use an affected-aggregate
+source view after full-graph validation, recorded the pinned Mori adopter proof, distilled the
+contract into ADRs 0002, 0004, and 0018, and closed IR-33's accepted structural scope while
+retaining its deferred semantic engine.

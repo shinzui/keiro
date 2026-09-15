@@ -30,6 +30,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   that advisory to a failing invocation when CI requires it.
 - Computed replay-only twins omit Language-5 forward outcome clauses, so the
   printed remedy parses and validates under every released language.
+- Guard evolution now compares the complete live guard union for each replay
+  body after exact cancellation. Split and merged alternatives, duplicate
+  removal, and cancelled covering siblings no longer produce false history
+  advisories; removed emitting bodies receive the same mechanical remedy.
+- Existing replay-only coverage must match the same replay body and cover the
+  exact removed region or every old alternative. Stale or partial siblings no
+  longer hide a later hazard.
+- Diff now inserts every proposed twin into a copied candidate and proves its
+  effective-language render, parse, replay identity, cleared outcome, and
+  validation before printing it. Failed proofs emit the append-only
+  `AggGuardRemedyUnavailable` advisory with do-not-deploy guidance and no
+  paste-ready transition. Explicit Hole-owned changes remain
+  `AggGuardRelationUnknown`.
 - No user-facing changes. The parser-scaling benchmark now uses the current
   scaffold `path` and `text` record fields.
 
