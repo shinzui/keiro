@@ -54,6 +54,8 @@ data ConflictField
   | ProvenanceField
   deriving stock (Generic, Eq, Ord, Show)
 
+-- | Transaction-local result. Insertion does not assert that the surrounding
+-- transaction committed; later checkpoint failure can still roll it back.
 data ProducerEnqueueOutcome
   = ProducerInserted !ProducerIdentity
   | ProducerDuplicateIdentical !ProducerIdentity
@@ -66,18 +68,22 @@ data ProducerEnqueueOutcome
 -- changing it intentionally conflicts with the unchanged outbox UUID.
 producerIdentityBytes :: Text -> Text -> ProducerEventKey -> BS.ByteString
 producerIdentityBytes source name key =
-  Lazy.toStrict . Builder.toLazyByteString . foldMap field $
-    [ "keiro.producer.outbox",
-      bytes (Builder.word16BE 1),
-      TE.encodeUtf8 source,
-      TE.encodeUtf8 name,
-      bytes (Builder.word32BE a <> Builder.word32BE b <> Builder.word32BE c <> Builder.word32BE d),
-      bytes (Builder.word32BE (key ^. #emissionIndex))
-    ]
+  Lazy.toStrict . Builder.toLazyByteString $
+    field "keiro.producer.outbox"
+      <> Builder.word64BE 2
+      <> Builder.word16BE 1
+      <> field (TE.encodeUtf8 source)
+      <> field (TE.encodeUtf8 name)
+      <> Builder.word64BE 16
+      <> Builder.word32BE a
+      <> Builder.word32BE b
+      <> Builder.word32BE c
+      <> Builder.word32BE d
+      <> Builder.word64BE 4
+      <> Builder.word32BE (key ^. #emissionIndex)
   where
     EventId uuid = key ^. #sourceEventId
     (a, b, c, d) = UUID.toWords uuid
-    bytes = Lazy.toStrict . Builder.toLazyByteString
     field value = Builder.word64BE (fromIntegral (BS.length value)) <> Builder.byteString value
 
 -- | SHA-256 of the canonical tuple. UUID uses the first 128 bits with RFC
@@ -108,8 +114,12 @@ producerContentDigest :: IntegrationEvent -> Text
 producerContentDigest = replayDigest . toJSON . fmap snd . contentFields
 
 differingContentFields :: IntegrationEvent -> IntegrationEvent -> [ConflictField]
-differingContentFields a b =
-  [field | ((field, x), (_, y)) <- zip (contentFields a) (contentFields b), canonicalJsonBytes x /= canonicalJsonBytes y]
+differingContentFields a b
+  -- Exact envelope equality implies canonical equality. This avoids hex/JSON
+  -- allocation for the usual identical replay; canonical comparison still
+  -- handles equivalent structured values and wire-equivalent optional schemas.
+  | normalizeProducerEvent a == normalizeProducerEvent b = []
+  | otherwise = [field | ((field, x), (_, y)) <- zip (contentFields a) (contentFields b), canonicalJsonBytes x /= canonicalJsonBytes y]
 
 contentFields :: IntegrationEvent -> [(ConflictField, Value)]
 contentFields original =

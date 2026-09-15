@@ -7026,13 +7026,28 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
         rows storeHandle `shouldReturn` Right [before]
       it "rolls back enqueue with a failed checkpoint and reuses both IDs on redelivery" $ \storeHandle -> do
+        Right () <-
+          Store.runStoreIO storeHandle $
+            Store.runTransaction $
+              Tx.sql "CREATE TABLE producer_checkpoint (position bigint NOT NULL); INSERT INTO producer_checkpoint VALUES (0)"
+        let checkpoint =
+              Store.runStoreIO storeHandle $
+                Store.runTransaction $
+                  Tx.statement () (preparable "SELECT position FROM producer_checkpoint" E.noParams (D.singleRow (D.column (D.nonNullable D.int8))))
         result <- Store.runStoreIO storeHandle $ Store.runTransaction $ do
           outcome <- ProducerOutbox.enqueueProducerEventTx sampleProducer recorded 0 sampleDraft
+          Tx.sql "UPDATE producer_checkpoint SET position = 1"
           Tx.condemn
           pure outcome
         result `shouldBe` Right (ProducerOutbox.ProducerInserted identity)
         rows storeHandle `shouldReturn` Right []
-        runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerInserted identity)
+        checkpoint `shouldReturn` Right 0
+        retried <- Store.runStoreIO storeHandle $ Store.runTransaction $ do
+          outcome <- ProducerOutbox.enqueueProducerEventTx sampleProducer recorded 0 sampleDraft
+          Tx.sql "UPDATE producer_checkpoint SET position = 1"
+          pure outcome
+        retried `shouldBe` Right (ProducerOutbox.ProducerInserted identity)
+        checkpoint `shouldReturn` Right 1
         runDraft sampleDraft storeHandle `shouldReturn` Right (ProducerOutbox.ProducerDuplicateIdentical identity)
         Right retained <- rows storeHandle
         length retained `shouldBe` 1

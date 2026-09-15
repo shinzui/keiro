@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Producer outbox identity is a versioned source-event contract
 description: Canonical producers derive frozen source-event identities and reject differing retained content without rewriting publication history.
-timestamp: 2026-09-15T18:00:00Z
+timestamp: 2026-09-15T18:19:26Z
 docId: ADR-42
 status: Accepted
 date: 2026-09-15
@@ -64,7 +64,9 @@ attributes encode absence as an empty array or presence as a singleton array
 (including JSON null). Schema-reference absence and an all-absent reference have
 the same wire meaning. SHA-256 of this canonical representation is available for
 diagnostics; correctness compares canonical bytes, avoiding hash-collision-based
-false duplicates. No payload or metadata values are returned in conflict outcomes.
+false duplicates. Exact normalized envelope equality short-circuits canonical encoding
+on identical replay; this implies the same canonical representation without allocating hex/JSON
+buffers. Identity encoding uses one builder buffer while retaining every frozen byte. No payload or metadata values are returned in conflict outcomes.
 
 No digest column is added: existing envelope columns are authoritative. Fresh
 insertion executes one statement with `ON CONFLICT DO NOTHING` across either

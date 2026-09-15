@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps)
+All.producer-identity.legacy-fresh-1000,84333572655,1276868184
+All.producer-identity.deterministic-fresh-1000,87049821873,1182824054
+All.producer-identity.legacy-single-tx-per-event-1000,126704845312,18520910826
+All.producer-identity.deterministic-single-tx-per-event-1000,130071423438,9241682924

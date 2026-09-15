@@ -1,0 +1,5 @@
+Name,Mean (ps),2*Stdev (ps)
+All.producer-identity.derive-v1,1459544,207064
+All.producer-identity.legacy-fresh-1000,88616799999,14709302512
+All.producer-identity.deterministic-fresh-1000,97037500057,14118533152
+All.producer-identity.deterministic-fresh-and-replay-1000,516608200191,32348747358

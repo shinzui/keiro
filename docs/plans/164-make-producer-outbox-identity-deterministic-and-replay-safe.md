@@ -59,9 +59,15 @@ draft under that same event reports `ProducerIdentityConflict` and leaves the or
   inserted/duplicate/conflict outcomes from enqueue.
 - [x] (2026-09-15) Milestone 3: make the database statement distinguish identical replay from identity drift and
   preserve ordering/source provenance.
-- [ ] Performance acceptance (added at user request 2026-09-15): compare matched old/new
-  publisher benchmarks and legacy/new enqueue paths, measure duplicate replay and pure identity
-  cost, investigate material regressions, and record commands, machine-local results, and limits.
+- [x] (2026-09-15) Performance acceptance added at user request: matched publisher medians
+  +3.29%, +0.89%, and -0.54%; fresh bulk +3.22% and per-event +2.66% in the final guard run.
+  Both 10% fresh-write guards passed. Raw samples, preliminary failures, workload corrections,
+  and limits are retained in `keiro/bench/results/producer-identity-v1/README.md`.
+- [x] (2026-09-15) Expanded focused tests: 18 examples, 0 failures (2.9789 seconds);
+  outbox/Kafka regression selection: 62 examples, 0 failures (12.9049 seconds).
+- [x] (2026-09-15) Migration parity/history/schema regression: 36 examples, 0 failures
+  (15.6999 seconds). No migration or dependency-bound changes were necessary.
+- [x] (2026-09-15) Full Keiro suite: 676 examples, 0 failures (159.1468 seconds).
 - [ ] Milestone 4: add rollback, concurrency, replay, compatibility, documentation, and full
   validation coverage.
 
@@ -84,8 +90,9 @@ draft under that same event reports `ProducerIdentityConflict` and leaves the or
   a larger timeout and sequential benchmark execution.
 
 
-The July observations about Keiro remain reproducible by source inspection on 2026-09-15.
-The downstream observation is retained as historical evidence and was not re-audited.
+The following observations describe the pre-implementation audits in July and September.
+They are superseded by the implemented source above. The downstream observation remains
+historical evidence and was not re-audited.
 
 - 2026-07-31: `enqueueProducerEventTx` receives a caller-supplied `OutboxId` but calls
   `mintIntegrationEvent`, which generates a fresh TypeID message ID on every attempt. The table's
@@ -118,6 +125,14 @@ The downstream observation is retained as historical evidence and was not re-aud
 
 ## Decision Log
 
+
+- Decision (2026-09-15 performance acceptance): Add a same-process 10% fresh-write comparison
+  guard for bulk and per-event transactions to `just bench-regression`, tighter than the existing
+  25% cross-run benchmark guards. Investigate crossings with matched preparation boundaries and
+  tighter sampling, and retain failed exploratory samples. The final measured overhead is about
+  3%, not literally zero; shared-machine variation and large-table/payload limits are explicit.
+  Identity encoding now uses one builder and exact envelope equality avoids unnecessary canonical
+  encoding on identical replay. Both optimizations preserve every frozen identity/content vector.
 
 - Decision (2026-09-15 implementation): Compare canonical content reconstructed from locked
   existing envelope columns; do not persist a redundant digest column. No schema migration is
@@ -176,93 +191,116 @@ Milestones 1–3 now provide pure deterministic identity, recorded-event provena
 transactional typed outcomes, and locked comparison of both unique keys without schema changes.
 ADR-42 records the frozen version-1 tuple, UUIDv8/SHA-256 vector, conflict observation boundary,
 retention scope, and historical-random-ID cutover requirement. The expanded producer/outbox regression run passed 62 examples in 12.3877 seconds;
-full-package validation and the user-requested performance comparison remain open.
+the migration suite also passes 36 examples. Performance acceptance is complete: publisher
+medians stay within 3.4%, and the final fresh-write comparison guards pass with about 3% overhead.
+The full Keiro suite now passes 676 examples; all-component build and flake validation remain
+in progress.
 
 ## Context and Orientation
 
 
-The following source observations describe the pre-implementation baseline. The implemented
-`Keiro.Outbox.Identity` module and new helper signature are specified under Interfaces and
-Dependencies. [ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)
-now owns the frozen identity and cutover contract alongside the existing ADRs below.
+`keiro/src/Keiro/Outbox.hs` owns the producer configuration, draft, pure
+`deriveProducerIdentity` adapter, and `enqueueProducerEventTx`. The helper now receives the
+recorded event and a `Word32` emission index, fills missing provenance, normalizes time to
+microseconds, and returns a `Tx.Transaction ProducerEnqueueOutcome`. `freshIntegrationEvent`
+is the explicitly fresh TypeID escape hatch; the former `mintIntegrationEvent` name is deprecated.
+`enqueueIntegrationEventTx` preserves caller-owned envelopes and its original SQL behavior.
 
+`keiro/src/Keiro/Outbox/Identity.hs` defines the frozen version-1 encoding, SHA-256/UUIDv8
+identity, canonical content digest, and conflict field classes. Each tuple field is prefixed by
+an unsigned 64-bit big-endian byte length. Fields are ASCII `keiro.producer.outbox`, the
+version as two big-endian bytes, UTF-8 source, UTF-8 producer name, the recorded event UUID as
+16 network-order bytes, and emission index as four big-endian bytes. SHA-256 hashes the tuple.
+The first 16 digest bytes become a UUID with version 8 and RFC variant bits; the full lowercase
+hex digest becomes `<namespace>_v1_<digest>`. Namespace is outside the hash, so changing it
+conflicts with the same retained outbox UUID. The namespace must be non-empty and satisfy
+TypeID prefix syntax. These bytes and the fixed vectors may not be changed in place.
 
-`keiro/src/Keiro/Outbox.hs` defines `IntegrationProducer`, `IntegrationEventDraft`,
-`mintIntegrationEvent`, `enqueueProducerEventTx`, and the explicit `enqueueIntegrationEventTx`
-escape hatch. The producer mapper receives both `RecordedEvent` and decoded private event, but the
-current enqueue helper does not receive the `RecordedEvent`; callers separately generate an
-`OutboxId`, and the helper mints a fresh message ID.
+For source `ordering`, name `ordering-integration-producer`, source event UUID
+`00000000-0000-0000-0000-000000000001`, index zero, and namespace `msg`, the outbox UUID is
+`61dd62b4-bbfe-81ce-9634-6ce6afd48517` and message ID is
+`msg_v1_61dd62b4bbfef1ce56346ce6afd485172774bc060102e5cf455e39bd0edfa84b`.
+The test suite also pins a canonical content digest independently of storage state.
 
-`keiro/src/Keiro/Outbox/Schema.hs` encodes the row. `enqueueOutboxStmt` inserts and applies
-`ON CONFLICT (source, message_id) DO NOTHING`; it returns `()` and cannot distinguish insertion,
-identical replay, or conflicting content. The schema has primary key `outbox_id` and unique
-`(source, message_id)`. Existing source event ID/global position columns provide provenance but are
-not the idempotency key.
+`keiro/src/Keiro/Outbox/Schema.hs` owns both SQL paths. Producer insertion uses
+`ON CONFLICT DO NOTHING` across either unique index and returns whether it inserted. On a
+collision, a separate `FOR UPDATE` statement reads rows matching either identity in UUID order.
+This sees a concurrent winner at READ COMMITTED, which the Kiroku runner uses. If GC removed
+that row between statements, insertion retries. Canonical comparison includes identity, routing,
+event schema/reference and raw MIME text, exact payload bytes, microsecond occurrence time,
+causal/trace metadata, structured attributes, and source provenance. Exact envelope equality
+short-circuits encoding; otherwise comparisons use RFC 8785 canonical bytes per field class.
+The digest is diagnostic, not a substitute for equality. No redundant column or migration is needed.
 
-The producer subscription/checkpoint integration and tests live in `keiro/test/Main.hs`. Telemetry
-already distinguishes publish/retry/dead behavior but has no enqueue identity conflict counter.
-Keiro already depends on cryptographic digest support for `ReplayDigest`; use the existing
-authoritative primitives where their byte contract is suitable. If a UUID namespace function is
-needed, verify its dependency source and released version through Mori before adding a bound.
+`keiro/test/Main.hs` contains the `Keiro.Outbox producer-identity` group and existing outbox/Kafka
+regression groups. Tests include actual checkpoint-row rollback, close/reopen store replay,
+concurrent duplicates and drift, all content classes, explicit envelopes, null attributes, MIME
+preservation, terminal rejection preservation, and post-GC re-publication with the same wire ID.
+`keiro/bench/ProducerIdentityBench.hs` compares legacy and deterministic fresh writes, both in
+one transaction per 1,000 messages and one transaction per event; it measures prepared replay and
+pure identity derivation separately. `keiro/bench/Main.hs` retains publisher benchmarks.
+`keiro/src/Keiro/Telemetry.hs` adds the unlabelled conflict counter. Call
+`recordProducerEnqueueOutcome` once after the transaction runner returns, including deliberate
+checkpoint rollback; no metric is emitted from inside SQL retries.
 
-Completed MasterPlan 3 introduced the inbox/outbox and chose message identity at enqueue time, but
-its persisted-message identity remains stable only after enqueue. This standalone plan owns
-source-event re-enqueue identity. See
-[MasterPlan 3](../masterplans/3-implement-inbox-and-outbox-for-kafka-integration-events.md).
-[ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
-supports surfacing identity drift at enqueue rather than later publish. A new ADR is required for
-the derivation tuple/algorithm because downstream producers will persist and depend on it.
-[ADR-24](../adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md)
-already requires length-prefixed UTF-8 fields for new deterministic derivations and forbids
-renaming persisted IDs without an explicit compatibility strategy. Its existing workflow and
-process-manager derivations must remain frozen.
-[ADR-37](../adr/0037-outbox-publication-rejection-is-terminal-audit-truth.md) makes publication
-rejection a retained terminal state with at-least-once transport callbacks. Enqueue identity
-comparison must preserve that state and its audit data on replay; rejection is not an enqueue
-identity conflict.
+All dependency bounds remain unchanged. Mori located the existing SHA-256, UUID, TypeID, and
+transaction implementations before use. No new dependency or compatibility workaround was
+chosen. The pure digest stack reuses `Keiro.ReplayDigest` and existing package primitives.
 
-“Emission index” is zero for today's `Maybe IntegrationEventDraft` mapper and reserves stable
-identity if a future mapper emits an ordered list. “Content digest” covers every delivery-relevant
-envelope field except storage status/timestamps. “Identical replay” means both deterministic
-identity and content digest match.
+`mori registry dependents shinzui/keiro --packages` identified consumers at
+`mori://shinzui/danwa`, `mori://shinzui/kanmon`, `mori://shinzui/kawa`,
+`mori://shinzui/keiei`, `mori://shinzui/keiro-runtime-docs`,
+`mori://shinzui/keiro-runtime-jitsurei`, `mori://shinzui/keiro-runtime-patterns`,
+`mori://shinzui/keiro-syntax`, `mori://shinzui/kikan`, `mori://shinzui/kioku`,
+`mori://shinzui/kizashi`, `mori://shinzui/kotei`, `mori://shinzui/meibo`,
+`mori://shinzui/mori`, `mori://shinzui/mori-app`, `mori://shinzui/rei`, and
+`mori://shinzui/shikigami`. This is dependency discovery, not a claim that each calls this helper.
+Their repositories are outside this change. Callers must replace the old supplied-outbox-ID/outer
+`Eff` preparation with recorded event and emission index, and handle the typed result. Historical
+random IDs need a drained checkpoint cutover or an application-owned mapping before old events
+are replayed under the new policy; there is no automatic identity bridge.
+
+[MasterPlan 3](../masterplans/3-implement-inbox-and-outbox-for-kafka-integration-events.md)
+introduced persisted-message retry identity. This plan adds source-event re-enqueue identity.
+[ADR-4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md) motivates
+enqueue-time drift detection. [ADR-24](../adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md)
+requires UTF-8 and frozen persisted derivation; existing workflow/process-manager IDs are unchanged.
+[ADR-37](../adr/0037-outbox-publication-rejection-is-terminal-audit-truth.md) preserves terminal
+publication truth. [ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)
+records the new producer contract, including cutover and retention limits.
+
+“Emission index” is zero for today's single-draft mapper and reserves stable identity for future
+ordered multi-emission mappings. “Identical replay” means the same identity and canonical content.
+Outbox suppression lasts while its row remains retained; after sent-row GC, stable wire identity
+supports downstream deduplication but cannot prevent re-publication by the outbox.
 
 
 ## Plan of Work
 
 
-Milestones 1–3 below describe the implemented contract; milestone 4 and performance
-acceptance remain in validation. Existing prefix validation, `draftToEvent`,
-and explicit-envelope tests can be extended; they do not complete a milestone by themselves.
-Retain the current rejected-publication lifecycle and its tests while changing enqueue behavior.
+Milestone 1 defines pure identity and content representation in `Keiro.Outbox.Identity`, exposes
+the module, validates namespaces, and pins independent identity/content vectors. Its observable
+acceptance is exact vector stability plus separation of source/name/event/index, tuple boundaries,
+and non-ASCII UTF-8 inputs in the `producer-identity` group.
 
-Milestone 1 adds a pure `Keiro.Outbox.Identity` module. Define a canonical binary encoding for the
-versioned tuple using length prefixes, publish fixed test vectors, and derive a UUID outbox ID plus
-an opaque lowercase message ID carrying the configured human-readable namespace. Reject empty or
-invalid namespaces in `mkIntegrationProducer`. Add a content digest over source, destination, key,
-event type/schema/reference, payload bytes, occurred-at, causal/correlation/trace data, attributes,
-and source event provenance using canonical encodings for structured values.
+Milestone 2 replaces the canonical helper signature, supplies recorded-event provenance defaults,
+and returns inserted/duplicate/conflict outcomes directly in the transaction. It renames the fresh
+helper and preserves the explicit envelope API. Acceptance is an inserted row followed by an
+identical typed duplicate, with the stored IDs and defaulted source fields unchanged.
 
-Milestone 2 changes `enqueueProducerEventTx` to receive the source `RecordedEvent` and emission
-index (or a `ProducerEmission` containing both), fill default source event ID/global position,
-derive both IDs without `IO`, construct the envelope, enqueue it, and return a typed outcome. Remove
-`freshOutboxId` from the canonical producer call path and rename/deprecate `mintIntegrationEvent`
-so documentation cannot claim fresh IDs are replay-stable. Keep explicit external-envelope callers
-on `enqueueIntegrationEventTx`.
+Milestone 3 separates fresh insertion from locked conflict comparison through both unique indexes.
+No schema addition is needed because stored envelope columns are authoritative. Concurrent
+identical writers converge; different content returns field classes without overwriting the row.
+Acceptance includes both unique-key collision routes, concurrency, and unchanged ordering,
+publication status, attempt counts, timestamps, and rejection audit data.
 
-Milestone 3 updates `Outbox.Schema`. The insert path must return `OutboxInserted` when it writes.
-On either unique identity conflict, lock/read the existing row and compare deterministic identity
-and content digest. Return `OutboxDuplicateIdentical` only when they match; otherwise return a typed
-conflict containing IDs and differing field classes, never payload bytes. Add any digest/identity
-schema columns through a forward migration, update both migration representations, lockfiles, and
-expected schema. Concurrent identical enqueues must converge without a uniqueness exception;
-concurrent different content must select one row and report conflict to the other.
-
-Milestone 4 adds pure test vectors and PostgreSQL tests for rollback/retry, redelivery after
-checkpoint failure, process restart, concurrent identical attempts, changed mapper content,
-different producer names, and different source events. Add a compatibility test for
-`enqueueIntegrationEventTx`, telemetry for identity conflict, public API docs, producer guide,
-changelog, migration artifacts, and the identity ADR. Use Mori dependents to list consumers of
-Keiro and document the source migration; this plan does not edit their repositories.
+Milestone 4 completes checkpoint rollback/redelivery, restart, retention, compatibility, metadata,
+and telemetry coverage; updates public docs, changelog, and ADR-42; and runs full regression,
+migration, build, and flake checks. The user added performance acceptance during implementation:
+retain reproducible old/new publisher samples, compare fresh enqueue under matching transaction
+and preparation boundaries, measure replay overhead, and investigate sustained regressions. The
+producer benchmark enforces a 10 percent fresh-write guard against its same-process legacy
+reference for both batching styles. Measurements are local evidence, not a production latency SLA.
 
 
 ## Concrete Steps
@@ -278,11 +316,22 @@ cabal test keiro-migrations-test
 cabal test keiro-test
 cabal build all
 nix flake check
+cabal bench keiro-bench --benchmark-options='-p producer-identity -j1 --time-mode wall --hide-progress --stdev 1 --timeout 120s +RTS -N2 -RTS'
 ```
 
 For the new focused command, group new tests under a description containing the literal
-`producer-identity`. That group does not exist at refresh time: a zero-example pass is not
+`producer-identity`. Its expanded group contains 18 examples; a zero-example pass is not
 acceptance. The broader `Keiro.Outbox` match covers the existing outbox regression group.
+
+Performance commands, machine/compiler details, all raw CSV cohorts, and a before/after table
+are retained in [the benchmark evidence](../../keiro/bench/results/producer-identity-v1/README.md).
+Publisher tests use 2,000 one-KiB messages; producer tests use 1,000. A detached old executable
+from `20f2f378` supplies the publisher baseline. The same-process producer reference retains the
+old fresh-ID recipe and explicit insert SQL. On the Apple M1 Max with GHC 9.12.4 at `-O1`, the
+final guarded fresh batches measured 84.33 versus 87.05 ms; individual transactions measured
+126.70 versus 130.07 ms. Pure derivation measured a 1.03-microsecond median, and a fresh batch
+plus one prepared replay measured a 436.95-ms median. These are local evidence, not an SLA or
+proof of behavior for large retained tables or much larger payloads.
 
 The focused test transcript must show one deterministic vector, one inserted row, identical retry,
 rollback retry, concurrent duplicate, and content conflict. In each replay case the derived
@@ -310,9 +359,10 @@ The current TypeID-prefix and fresh-ID tests do not satisfy deterministic replay
    algorithm version.
 2. Different producer names, sources, source events, or indices produce different identities.
    Tuple component boundaries cannot collide through concatenation.
-3. A rollback followed by retry, subscription redelivery, and concurrent identical attempt each
-   leave one row and return `Inserted` once plus `DuplicateIdentical` thereafter; no primary-key
-   exception leaks.
+3. Rollback leaves no row or checkpoint advancement; its transaction-local result may be
+   `ProducerInserted`. The committed retry returns `ProducerInserted`, and later redelivery returns
+   `ProducerDuplicateIdentical`. Concurrent identical attempts leave one row, one inserted result,
+   and one identical duplicate; no primary-key exception leaks.
 4. Changing destination, schema reference/version, payload, metadata, occurred time, or provenance
    under the same identity returns `IdentityConflict`, preserves the original row, emits a distinct
    metric, and does not expose payload content in errors/logs.
@@ -373,8 +423,8 @@ enqueueProducerEventTx
   -> Tx.Transaction ProducerEnqueueOutcome
 ```
 
-The exact effect wrapper may remain `Eff` if canonical digesting needs it, but identity generation
-must be pure and must not call a clock, random UUID/TypeID generator, or global sequence. Reuse
+The implemented helper returns `Tx.Transaction` directly. Identity generation is pure and does
+not call a clock, random UUID/TypeID generator, or global sequence. Reuse
 Keiro's canonical JSON/digest stack only after specifying exact bytes. Any new UUID/hash dependency
 must be located through Mori and verified against its authoritative released version and tag before
 bounds are selected.
@@ -394,3 +444,8 @@ mistaken for acceptance. No implementation or runtime validation was performed i
 Revision note (2026-09-15 implementation): Added intention tracking, implemented milestones 1–3,
 recorded initial PostgreSQL evidence, and added performance acceptance at the user's request.
 Content comparison uses existing authoritative columns, so no redundant digest migration is needed.
+
+
+Revision note (2026-09-15 validation): Completed replay/checkpoint and migration acceptance,
+added allocation-preserving performance optimizations, recorded matched benchmark evidence and
+a repeatable 10% guard, and reconciled the plan's context and work sections with implemented APIs.
