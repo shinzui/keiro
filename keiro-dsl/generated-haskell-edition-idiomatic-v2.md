@@ -8,7 +8,7 @@ spelling while deriving their target and structural facts from current v2 output
 rows intentionally
 over-approximate selector use so no consumer occurrence is silently omitted during review.
 
-Inventory: 487 generated modules, 332 record declarations, 1459 fields, 12217 field-label occurrences, 19 local default-pragmas, and 122 hand-owned conformance modules.
+Inventory: 489 generated modules, 334 record declarations, 1462 fields, 12249 field-label occurrences, 19 local default-pragmas, and 123 hand-owned conformance modules.
 
 The `idiomatic-v2` manifest defaults are `DuplicateRecordFields`, `NoFieldSelectors`,
 `OverloadedRecordDot`, and `OverloadedStrings`. Constructor names, arity, field order, wire
@@ -375,6 +375,9 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs:30` | `RecordedValuesData` | data | `localCollision` | `localCollision` | `!Domain.CollisionLedgerCommand` | `(.localCollision)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/CollisionLedger/Domain.hs:31` | `RecordedValuesData` | data | `details` | `details` | `!Details` | `(.details)` or constructor pattern |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/Structural/Shape/Details.hs:8` | `DetailsShape` | data | `label` | `label` | `!Text` | `(.label)` or constructor pattern |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:24` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), region :: !Text` | `(.incidentId)` or constructor pattern |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:41` | `InboxFailure` | data | `reason` | `reason` | `!Text` | `(.reason)` or constructor pattern |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:42` | `InboxFailure` | data | `attempt` | `attempt` | `!(Maybe Int)` | `(.attempt)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs:24` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), region :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:27` | `InboxFailure` | data | `inboxFailureReason` | `reason` | `!Text` | `(.reason)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:28` | `InboxFailure` | data | `inboxFailureAttempt` | `attempt` | `!(Maybe Int)` | `(.attempt)` or constructor pattern |
@@ -4388,6 +4391,38 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/StructuralProjections.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/StructuralProjections.hs:19` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-import-planning/Generated/ImportPlanningCollisions/StructuralProjections.hs:23` | `label` | record-dot `(.label)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:14` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:14` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:16` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:24` | `incidentId` | record-dot `(.incidentId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:24` | `region` | record-dot `(.region)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:25` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:29` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:40` | `incidentId` | record-dot `(.incidentId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:41` | `region` | record-dot `(.region)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:48` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:49` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:53` | `incidentId` | record-dot `(.incidentId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:54` | `region` | record-dot `(.region)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:62` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:63` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:64` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/Emergency/Contract.hs:64` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:20` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:24` | `machine` | record-dot `(.machine)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:39` | `attempt` | record-dot `(.attempt)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:39` | `detail` | record-dot `(.detail)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:39` | `failed` | record-dot `(.failed)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:44` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:56` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:58` | `details` | record-dot `(.details)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:63` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:65` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:84` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:86` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:87` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-intake-delegated/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:92` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs:14` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs:14` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-intake-full/Generated/HospitalCapacity/Emergency/Contract.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
@@ -13757,6 +13792,7 @@ These files are inventory inputs only. Edition adoption must not rewrite their b
 | `keiro-dsl/test/conformance-import-planning/ImportPlanning/Consumer/Order/Types.hs` | none |
 | `keiro-dsl/test/conformance-import-planning/ImportPlanning/Consumer/Shared/Types.hs` | none |
 | `keiro-dsl/test/conformance-import-planning/ImportPlanningCollisions/CollisionLedger/BehaviorHoles.hs` | `Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract` |
+| `keiro-dsl/test/conformance-intake-delegated/HospitalCapacity/IncidentInbox/DelegatedIntegration.hs` | `Generated.HospitalCapacity.IncidentInbox.Inbox` |
 | `keiro-dsl/test/conformance-intake-full/HospitalCapacity/IncidentInbox/Integration.hs` | `Generated.HospitalCapacity.IncidentInbox.Inbox` |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Bindings.hs` | `Generated.MappedQueue.Structural.Shape.JobMetadata`, `Generated.MappedQueue.Structural.Shape.JobPayload` |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Domain.hs` | none |

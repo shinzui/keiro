@@ -22,7 +22,7 @@ provenance:
 # Delegated-idempotence inbox intake: bypass the keiro_inbox table when the downstream state machine already dedupes
 
 
-This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective current. This revision is grounded in commit `97c1c27a` on 2026-09-15. The delegated feature is not implemented.
+This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective current. This revision was implemented and verified on 2026-09-15.
 
 
 ## Purpose / Big Picture
@@ -47,7 +47,7 @@ Do not promise lower latency merely from fewer inbox rows. Aggregate deduplicati
 - [x] (2026-09-15 19:24Z) M3: Durable effects, races, retry boundaries, batch isolation, cancellation, and empty inbox state pass in 15 focused examples. A denied-inbox database role completes first delivery and replay while direct inbox access fails; the complete runtime suite passes with 694 examples.
 - [x] (2026-09-15 19:56Z) M4: Added candidate Language 6 delegated intake syntax, validation, generation, and persisted-identity diffing while retaining Language 5 semantics and byte-identical published table output. The 85-example language group and 23-example contract group pass.
 - [x] (2026-09-15 19:56Z) M5: Added the candidate delegated fixture, generated layer, hand-filled command adapter, manifest, corpus ownership, and live two-delivery conformance. The dedicated suite, focused corpus regeneration, conformance baseline, and complete 722-example DSL suite pass.
-- [ ] M6: Record paired performance evidence, update user documentation and ADRs, and complete verification.
+- [x] (2026-09-15 20:45Z) M6: Recorded five-run paired performance and indexed-probe evidence, updated user and Kafka guidance, accepted ADR 43, regenerated policy inventories, and completed the full Haskell and documentation/policy verification.
 
 
 ## Surprises & Discoveries
@@ -75,6 +75,12 @@ The semantic `Spec` QuickCheck renderer is intentionally unversioned compatibili
 
 Candidate conformance needed an explicit `candidate-primary` ownership role because the previous inventory classified only stable published and compatibility suites. Focused corpus regeneration also discovers new suite sidecars from Git's tracked inventory, so the generated ledger and Cabal fragment must be force-added before running the focused policy command.
 
+Fresh benchmark timing depends on transaction shape rather than merely the absence of an inbox write. Delegation was faster for single deliveries and chunks of 1,000, but the table path was about 23% faster at chunks of 100 because its batch shares a commit. Confirmed replay was about five times faster under delegation and remained flat from 10 to 100,000 historical events.
+
+Running both fresh wrapper and direct-loop benchmarks in one process introduced an order effect: the second benchmark inherited thousands of catalog rows and ran more slowly. Separate five-run processes produced the accepted 0.68% wrapper-overhead comparison; the affected paired CSVs remain in the evidence directory and are explicitly excluded from that calculation.
+
+The final record migration policy exposed stale generated inventories after the public `IntakeNode` field and conformance tree landed. Regenerating both `record-field-migration-0.15.md` and `generated-haskell-edition-idiomatic-v2.md` made the new public field and generated modules reviewable and restored check-mode stability.
+
 
 ## Decision Log
 
@@ -97,13 +103,19 @@ On 2026-09-15, extend existing intake diffing and gate syntax in a successor lan
 
 On 2026-09-15, kept `DelegatedRetryContext` abstract while exporting read-only ceiling and attempt accessors for the runtime wrapper. The type omits `Generic`, so callers cannot reconstruct invalid values through generic product machinery, and the public constructor remains the only creation path.
 
+On 2026-09-15, accepted [ADR 43](../adr/0043-delegated-inbox-intake-uses-a-downstream-event-receipt.md): delegated intake treats a downstream event in the target stream as the durable receipt, freezes its source-scoped identity recipe, and assigns retry, DLQ publication, and observability ownership to the caller.
+
+On 2026-09-15, retained both intake modes as measured choices. Recommend delegated intake for a downstream state machine with an atomic durable receipt and favor table batching when the service's measured chunk shape benefits from a shared transaction; the benchmark crossover precludes a universal latency claim.
+
 
 ## Outcomes & Retrospective
 
 
-Milestones 1 through 5 are complete. The delegated wrappers compile without a Store interpreter, the adapter is proven through real command dispatch, 15 focused contract/live PostgreSQL examples pass, and the complete runtime suite passes with 694 examples. The durable test matrix covers first delivery, replay, lost acknowledgement, an invalid post-append replay, multi-event atomicity, concurrent delivery, foreign collisions, no-receipt failures, retry/poison boundaries, source-scoped batches, cancellation, and operation under a database role denied all inbox-table privileges. Candidate Language 6 now selects delegated intake without changing published Language 5 parsing, runtime folds, or table-generated bytes; its checked scaffold emits a callable no-Store runner, and its compiled integration proves fresh/duplicate behavior against the real command adapter. The complete 722-example DSL suite and all conformance components pass. Performance evidence, documentation, and ADR distillation remain outstanding. No performance result is claimed.
+All six milestones are complete. The delegated wrappers compile without a Store interpreter, and the command adapter is proven through real dispatch. Fifteen focused contract/live PostgreSQL examples and the complete 694-example runtime suite cover first delivery, replay, lost acknowledgement, invalid post-append replay, multi-event atomicity, concurrent delivery, foreign collisions, no-receipt failures, retry/poison boundaries, source-scoped batches, cancellation, and operation under a database role denied every inbox-table privilege. Candidate Language 6 selects delegated intake without changing published Language 5 parsing, runtime folds, or table-generated bytes; its checked scaffold emits a callable no-Store runner, and its compiled integration proves fresh/duplicate behavior against the real command adapter. The complete 722-example DSL suite and all 40 conformance components pass.
 
-At implementation completion, record test counts, the exact benchmark environment and raw artifact paths, throughput and allocation comparisons, remaining restrictions, and the resulting ADR references. Do not mark this plan complete on compilation alone.
+Five-run medians on an Apple M1 Max with GHC 9.12.4 and PostgreSQL 18.6 show fresh single delivery at 1,222 delegated versus 1,084 table deliveries/s, with 95,612 versus 200,228 allocated bytes/delivery. Confirmed duplicates reach 33,960 versus 6,607 deliveries/s and about 12 KiB versus 182 KiB/delivery. Delegation reaches 1,511 versus 1,264 deliveries/s for fresh chunks of 1,000; table batching reaches 1,530 versus 1,240 for chunks of 100. Wrapper overhead versus an isolated direct loop is 0.68%. Duplicate timing remains flat at 57.7--59.6 ms per 2,000 deliveries across 10, 1,000, and 100,000 historical events, and the SQL plan shows one `stream_events_pkey` index-only probe without stream hydration. Process peak residency stayed between 97 and 106 MiB. Raw CSVs, ranges, method, environment, and the SQL plan are retained in [`keiro/bench/results/delegated-inbox-v1/`](../../keiro/bench/results/delegated-inbox-v1/); the unchanged historical scenarios passed their committed regression guard before 34 new baseline rows were appended.
+
+The remaining operational restrictions are explicit: downstream effects must commit atomically with the receipt; zero-event commands are rejected; retry attempts and durable DLQ publication belong to the caller; delegated batches can commit once per unsuppressed item; and changing modes requires a planned replay boundary because table rows and downstream markers are not interchangeable. [ADR 43](../adr/0043-delegated-inbox-intake-uses-a-downstream-event-receipt.md) records the durable contract. User guidance explains the loss of inbox backlog/dead-letter visibility and the measured transaction-shape crossover.
 
 
 ## Context and Orientation
@@ -289,7 +301,7 @@ Batch tests must prove failure-then-repeat execution, source-scoped suppression,
 
 The candidate DSL must preserve published parser/generator contracts and emit a callable delegated runner. Mode changes must be breaking on the persisted-identity axis, while existing key/policy diagnostics stay intact. Generated output must be reproduced by the tool, compiled under its manifest contract, and exercised against the runtime.
 
-Performance is accepted only with the M6 operation-count, memory-scaling, historical-regression, and paired measurement evidence. A slower batch comparison is a documented usage limitation, not permission to hide commit costs or claim a universal win. No benchmark or runtime acceptance has been executed during this plan-only revision.
+Performance acceptance passed with the M6 operation-count, memory-scaling, historical-regression, and paired measurement evidence. The slower chunk-100 delegated comparison is documented as a usage limitation, with raw results retained alongside the accepted isolated wrapper comparison.
 
 
 ## Idempotence and Recovery
@@ -305,7 +317,7 @@ If a delegated batch is interrupted after some commits, redeliver unacknowledged
 ## Interfaces and Dependencies
 
 
-These are proposed APIs, not existing exports. Keep the wrappers' metrics implementation shared with the current inbox code. No new external package or dependency bound is required.
+These APIs are implemented exports. The wrappers share the current inbox metrics implementation. No new external package or dependency bound was required.
 
 ```haskell
 -- Keiro.Inbox.Types
@@ -370,3 +382,5 @@ Revision note (2026-09-15): Recorded completion of Milestone 2 and the focused d
 Revision note (2026-09-15): Recorded completion of Milestone 3 after the restricted-role proof and the 694-example complete runtime suite passed.
 
 Revision note (2026-09-15): Recorded completion of Milestones 4 and 5 after candidate Language 6, persisted-identity diffing, generated delegated conformance, corpus policy, and the complete 722-example DSL suite passed.
+
+Revision note (2026-09-15): Recorded Milestone 6 completion with paired benchmark evidence, the chunk-100 transaction crossover, flat indexed replay through 100,000 events, final user guidance and ADR 43, regenerated API inventories, and the complete Haskell/documentation/policy verification.
