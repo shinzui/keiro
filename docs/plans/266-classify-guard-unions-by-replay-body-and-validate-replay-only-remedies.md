@@ -12,6 +12,11 @@ provenance:
       at: 2026-09-15T20:57:23Z
       mode: "update"
       note: "Refresh API contracts and EP-265 handoff; correct full-union coverage, replay-impact integration, opaque ownership, and remedy validation boundaries."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-15T22:02:18Z
+      mode: "implement"
+      note: "Confirmed EP-265 completion and began body-union classification implementation."
 ---
 
 # Classify guard unions by replay body and validate replay-only remedies
@@ -54,8 +59,8 @@ behavior; runtime conformance and targeted replay audits remain independent gate
 
 - [x] (2026-09-15) Refresh against current record, checked-service, parser, renderer,
       validation, diff-report, and replay-impact APIs and the updated EP-265 contract.
-- [ ] Confirm EP-265 implementation and acceptance are complete; inspect its actual private
-      family types before extending them.
+- [x] (2026-09-15) Confirm EP-265 implementation and acceptance are complete; inspect its
+      actual private family types before extending them.
 - [ ] Add deterministic body grouping over full family members, using exact remainders only
       to select affected bodies; share the syntactic preservation helper.
 - [ ] Make diff and replay impact consume the same generated-body classification, preserving
@@ -117,6 +122,12 @@ A wholly removed family is not automatically covered by an event-retirement diag
 `ReplayOnlyCommandStillLive` is a warning emitted only when a replay-only edge
 already exists; retained event declarations alone do not establish history coverage.
 Include old-only families in removed-body classification whenever the aggregate survives.
+
+EP-265 completed before implementation began. Its Outcomes & Retrospective records 728
+main-suite examples, all conformance executables, the focused runtime checks, CLI checks,
+formatting, and ADR validation as passing. The landed `TransitionFamilyDelta` fields are
+exactly `familyKey`, `oldRemainder`, and `newRemainder`; fully cancelled families remain in
+the result, and the family key fields are `familyMode`, `familySource`, and `familyCommand`.
 
 
 ## Decision Log
