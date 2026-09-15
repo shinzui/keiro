@@ -39,7 +39,15 @@ import Keiro.Dsl.NominalType
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (semanticImpact)
-import Keiro.Dsl.TransitionFamily (TransitionFamilyDelta (..), transitionFamilyDeltas)
+import Keiro.Dsl.TransitionFamily
+  ( ReplayBodyDelta (..),
+    ReplayBodyStatus (..),
+    TransitionFamilyDelta (..),
+    TransitionFamilyKey (..),
+    guardImplies,
+    replayBodyDeltas,
+    transitionFamilyDeltas,
+  )
 import Keiro.Dsl.TypeGraph (BindingVersion (..), CanonicalTypeId (..), DerivedMappedConsumer (..), MappedKey (..), QualifiedValueName (..), TypeGraph (..), TypeGraphError, wireFingerprint)
 
 -- | The smallest conservative audit input for one aggregate.
@@ -349,12 +357,49 @@ maybeToList = maybe [] pure
 changedTransitionEvents :: [Transition] -> [Transition] -> (Set Name, Bool)
 changedTransitionEvents oldTransitions newTransitions =
   foldl'
-    (\(affected, changed) delta -> let (groupAffected, groupChanged) = compareGroup delta in (affected <> groupAffected, changed || groupChanged))
+    combine
     (Set.empty, False)
-    (transitionFamilyDeltas oldTransitions newTransitions)
+    (liveBodyImpacts <> nonBodyImpacts)
   where
-    compareGroup delta =
-      let (remainingOld, remainingNew) = cancelLoosenings ((.oldRemainder) delta) ((.newRemainder) delta)
+    combine (affected, changed) (groupAffected, groupChanged) =
+      (affected <> groupAffected, changed || groupChanged)
+
+    liveBodyImpacts = map compareLiveBodies (Map.elems liveBodyGroups)
+    liveBodyGroups =
+      Map.fromListWith
+        (flip (<>))
+        [ ((.bodyFamilyKey) bodyDelta, [bodyDelta])
+        | bodyDelta <- replayBodyDeltas oldTransitions newTransitions,
+          (.familyMode) ((.bodyFamilyKey) bodyDelta) == TmLive
+        ]
+
+    compareLiveBodies bodyDeltas
+      | any bodyCanChangeReplay bodyDeltas =
+          ( Set.unions
+              [ emittedBy transition
+              | bodyDelta <- bodyDeltas,
+                transition <- (.oldBodyMembers) bodyDelta <> (.newBodyMembers) bodyDelta
+              ],
+            True
+          )
+      | otherwise = (Set.empty, False)
+
+    bodyCanChangeReplay bodyDelta =
+      (.bodyStatus) bodyDelta `elem` [ReplayBodyChanged, ReplayBodyRemoved]
+        || any ((/= GeneratedImplementation) . (.implementation)) ((.oldBodyMembers) bodyDelta)
+
+    nonBodyImpacts =
+      [ compareRemainder oldRelevant newRelevant
+      | delta <- transitionFamilyDeltas oldTransitions newTransitions,
+        let mode = (.familyMode) ((.familyKey) delta),
+        let select = if mode == TmReplayOnly then const True else null . (.emits),
+        let oldRelevant = filter select ((.oldRemainder) delta),
+        let newRelevant = filter select ((.newRemainder) delta),
+        not (null oldRelevant && null newRelevant)
+      ]
+
+    compareRemainder oldRemainder newRemainder =
+      let (remainingOld, remainingNew) = cancelLoosenings oldRemainder newRemainder
           sortedOld = sortOn transitionSortKey remainingOld
           sortedNew = sortOn transitionSortKey remainingNew
           (pairedOld, unpairedOld) = splitAt (length sortedNew) sortedOld
@@ -433,19 +478,6 @@ replaceTransitionGuard guard transition =
       mode = transition.mode,
       loc = transition.loc
     }
-
-guardImplies :: Maybe Expr -> Maybe Expr -> Bool
-guardImplies _ Nothing = True
-guardImplies Nothing (Just _) = False
-guardImplies (Just oldGuard) (Just newGuard) = implies oldGuard newGuard
-  where
-    implies old new
-      | old == new = True
-    implies (EAtom (ABool False)) _ = True
-    implies _ (EAtom (ABool True)) = True
-    implies (EAnd left right) new = implies left new || implies right new
-    implies old (EOr left right) = implies old left || implies old right
-    implies _ _ = False
 
 renderReplayImpact :: ReplayImpact -> Text
 renderReplayImpact ReplayNeutral =

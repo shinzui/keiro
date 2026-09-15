@@ -61,10 +61,12 @@ behavior; runtime conformance and targeted replay audits remain independent gate
       validation, diff-report, and replay-impact APIs and the updated EP-265 contract.
 - [x] (2026-09-15) Confirm EP-265 implementation and acceptance are complete; inspect its
       actual private family types before extending them.
-- [ ] Add deterministic body grouping over full family members, using exact remainders only
-      to select affected bodies; share the syntactic preservation helper.
-- [ ] Make diff and replay impact consume the same generated-body classification, preserving
-      replay-only removal, no-emit snapshot, codec, and non-transition impact behavior.
+- [x] (2026-09-15) Add deterministic body grouping over full family members, using exact
+      remainders only to select affected bodies; share the syntactic preservation helper.
+- [x] (2026-09-15) Make replay impact consume the generated-body classification while
+      preserving replay-only removal, no-emit snapshot, codec, and non-transition impact.
+- [ ] Make diff consume the same generated-body classification and construct whole-union
+      remedies.
 - [ ] Implement exact whole-union twins, complete-candidate same-body coverage, and honest
       Hole-owned unknown cases.
 - [ ] Thread checked services through the existing diff pass; validate all advertised remedies
@@ -128,6 +130,12 @@ main-suite examples, all conformance executables, the focused runtime checks, CL
 formatting, and ADR validation as passing. The landed `TransitionFamilyDelta` fields are
 exactly `familyKey`, `oldRemainder`, and `newRemainder`; fully cancelled families remain in
 the result, and the family key fields are `familyMode`, `familySource`, and `familyCommand`.
+
+EP-265's duplicate-count replay assertion was intentionally superseded by the complete-union
+contract: old duplicate copies of the same transition versus one surviving copy have the same
+live guard union and are replay-neutral. Focused evidence after the change is 2 passing
+`replay body` examples, 6 passing `transition family` examples, and 11 passing examples matched
+by `replay impact`.
 
 
 ## Decision Log

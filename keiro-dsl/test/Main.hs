@@ -7465,7 +7465,7 @@ main = hspec $ do
               empty = withTransitions []
           replayImpactSpecs duplicate duplicate `shouldBe` ReplayNeutral
           replayImpactSpecs empty single `shouldBe` ReplayNeutral
-          replayImpactSpecs duplicate single `shouldSatisfy` (/= ReplayNeutral)
+          replayImpactSpecs duplicate single `shouldBe` ReplayNeutral
           replayImpactSpecs single empty `shouldSatisfy` (/= ReplayNeutral)
           forM_ [(duplicate, duplicate), (empty, single), (duplicate, single), (single, empty)] $ \(oldSpec, newSpec) ->
             [changeCode change | change <- diffSpecs oldSpec newSpec, changeCode change == AggGuardRelationUnknown]
@@ -7587,6 +7587,64 @@ main = hspec $ do
           `shouldBe` []
         [kind | Advisory kind <- diffSources old pasted, (.code) kind == AggGuardTightened]
           `shouldBe` []
+
+  describe "replay body" $ do
+    it "compares complete guard unions after exact cancellation" $ do
+      base <- specOf "test/fixtures/transition-family.keiro"
+      let aggregate = onlyAggregate base
+          emitting =
+            case [transition | transition <- aggregate.transitions, transition.emits == ["DescriptionObserved"]] of
+              [transition] -> transition
+              transitions -> error ("expected one DescriptionObserved transition, got " <> show (length transitions))
+          a =
+            case emitting.guard of
+              Just expression -> expression
+              Nothing -> error "DescriptionObserved transition must be guarded"
+          b = complementExpr a
+          aOrB = EOr a b
+          edge guardExpression = emitting {guard = guardExpression, outcome = Nothing, outcomeDuplicateLocs = [], loc = noLoc}
+          withTransitions transitions =
+            modifyAggregate aggregate.name (\candidate -> candidate {transitions}) base
+          unchangedUnionOld = withTransitions [edge (Just aOrB), edge (Just a)]
+          unchangedUnionNew = withTransitions [edge (Just aOrB)]
+          split = withTransitions [edge (Just a), edge (Just b)]
+          explicitTrue = withTransitions [edge (Just (ELiteral noLoc (LiteralBool True)))]
+          unguarded = withTransitions [edge Nothing]
+          explicitFalse = withTransitions [edge (Just (ELiteral noLoc (LiteralBool False)))]
+          narrowed = withTransitions [edge (Just a)]
+      replayImpactSpecs unchangedUnionOld unchangedUnionNew `shouldBe` ReplayNeutral
+      replayImpactSpecs (withTransitions [edge (Just aOrB)]) split `shouldBe` ReplayNeutral
+      replayImpactSpecs split (withTransitions [edge (Just aOrB)]) `shouldBe` ReplayNeutral
+      replayImpactSpecs explicitTrue unguarded `shouldBe` ReplayNeutral
+      replayImpactSpecs explicitFalse narrowed `shouldBe` ReplayNeutral
+      replayImpactSpecs (withTransitions [edge (Just aOrB)]) narrowed `shouldSatisfy` (/= ReplayNeutral)
+
+    it "targets both sides of a replay-body replacement" $ do
+      base <- specOf "test/fixtures/transition-family.keiro"
+      let aggregate = onlyAggregate base
+          emitting =
+            case [transition | transition <- aggregate.transitions, transition.emits == ["DescriptionObserved"]] of
+              [transition] -> transition
+              transitions -> error ("expected one DescriptionObserved transition, got " <> show (length transitions))
+          descriptionEvent =
+            case [event | event <- aggregate.events, event.name == "DescriptionObserved"] of
+              [event] -> event
+              events -> error ("expected one DescriptionObserved event, got " <> show (length events))
+          replacementEvent = eventWithNameAndLoc "DescriptionObservedAgain" noLoc descriptionEvent
+          baseWithReplacementEvent =
+            modifyAggregate aggregate.name (\candidate -> candidate {events = candidate.events <> [replacementEvent]}) base
+          withTransition transition =
+            modifyAggregate aggregate.name (\candidate -> candidate {transitions = [transition]}) baseWithReplacementEvent
+          replacement = emitting {emits = ["DescriptionObservedAgain"], loc = noLoc}
+      replayImpactSpecs (withTransition emitting) (withTransition replacement)
+        `shouldBe` ReplayAffected
+          ( Map.singleton
+              aggregate.name
+              AggregateImpact
+                { eventTypes = Set.fromList ["DescriptionObserved", "DescriptionObservedAgain"],
+                  includeSnapshotStreams = True
+                }
+          )
 
   describe "replay impact" $ do
     it "treats new events and transitions as replay-neutral" $ do
