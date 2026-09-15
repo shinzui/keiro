@@ -386,7 +386,7 @@ changedTransitionEvents oldTransitions newTransitions =
 
     bodyCanChangeReplay bodyDelta =
       (.bodyStatus) bodyDelta `elem` [ReplayBodyChanged, ReplayBodyRemoved]
-        || any ((/= GeneratedImplementation) . (.implementation)) ((.oldBodyMembers) bodyDelta)
+        || any ((== HoleImplementation) . (.implementation)) ((.oldBodyMembers) bodyDelta)
 
     nonBodyImpacts =
       [ compareRemainder oldRelevant newRelevant

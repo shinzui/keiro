@@ -17,11 +17,13 @@ aggregate ProjectArtifact
     goto Active
 
   Active -- ObserveDescription -->
+    implementation hole
     guard cmd.description == "old-a"
     emit DescriptionObserved
     goto Active
 
   Active -- ObserveDescription -->
+    implementation hole
     guard cmd.description == "old-b"
     emit DescriptionObserved
     goto Active

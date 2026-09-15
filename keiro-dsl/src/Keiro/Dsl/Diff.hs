@@ -59,7 +59,8 @@ where
 
 import Data.Char (toUpper)
 import Data.Foldable (traverse_)
-import Data.List (find, sort, (\\))
+import Data.List (find, sort, sortOn, (\\))
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust, isNothing, mapMaybe, maybeToList)
 import Data.Set (Set)
@@ -67,7 +68,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType (typeExprCanonicalName)
-import Keiro.Dsl.CanonicalEncoding (canonicalDomainOutcomeTypes, canonicalTransition, canonicalTransitionOutcome)
+import Keiro.Dsl.CanonicalEncoding (canonicalDomainOutcomeTypes, canonicalExpr, canonicalTransition, canonicalTransitionOutcome)
 import Keiro.Dsl.FieldIdentity
   ( ResolvedFieldIdentity (..),
     resolveAggregateFieldIdentity,
@@ -77,12 +78,14 @@ import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForServi
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor)
-import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage, declaredLanguageVersionMaybe, languageVersionText, sourceFormText)
+import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), declaredLanguageVersionMaybe, languageVersionText, renderParseFailure, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
+import Keiro.Dsl.Parser (parseSource)
 import Keiro.Dsl.PrettyPrint
   ( renderHandleSurface,
     renderResolveSurface,
     renderRouterDispatchSurface,
+    renderSource,
     renderTimerPayloadSurface,
     renderTransition,
     renderTypeExpr,
@@ -90,11 +93,11 @@ import Keiro.Dsl.PrettyPrint
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedServiceWithSpec, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
-import Keiro.Dsl.TransitionFamily (TransitionFamilyDelta (..), TransitionFamilyKey (..), transitionFamilyDeltas)
+import Keiro.Dsl.TransitionFamily (ReplayBodyDelta (..), ReplayBodyKey, ReplayBodyStatus (..), TransitionFamilyKey (..), guardAlternatives, guardImplies, guardUnion, replayBodyDeltas, replayBodyKey)
 import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
-import Keiro.Dsl.Validate (DiagnosticCode (..))
+import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), renderDiagnostic, validateService)
 
 -- | A classified spec change.
 data Change
@@ -394,7 +397,7 @@ classifyCompatibility context code
   | code == ContractSchemaVersionBumped = advisoryVector PublicConsumer (Set.singleton RolloutProducerLast)
   | code == AggFoldSurfaceChanged =
       replaceSnapshotHydration VAdvisory (advisoryVector PrivateHistoryRead Set.empty)
-  | code `elem` [AggGuardTightened, AggGuardRelationUnknown] = advisoryVector PrivateHistoryRead Set.empty
+  | code `elem` [AggGuardTightened, AggGuardRelationUnknown, AggGuardRemedyUnavailable] = advisoryVector PrivateHistoryRead Set.empty
   | code `elem` [RouterDecideSurfaceChanged, ProcessDecideSurfaceChanged] =
       replaceRollout (Set.singleton RolloutDrainRequired) compatibleVector
   | code == ProcessTimerPayloadChanged = advisoryVector PrivateHistoryRead (Set.singleton RolloutProducerLast)
@@ -669,7 +672,10 @@ isAdvisory (Breaking _) = False
 -- | Both specs supplied to a node-family differ, always old then new.
 data DiffEnv = DiffEnv
   { old :: !Spec,
-    new :: !Spec
+    new :: !Spec,
+    oldService :: !CheckedService,
+    newService :: !CheckedService,
+    newValidationErrors :: ![Diagnostic]
   }
   deriving stock (Eq, Show)
 
@@ -782,7 +788,7 @@ diffServices oldService newService = do
   traverse_ (aggregateFoldSurfaceForService oldService . snd) oldAggregates
   traverse_ (aggregateFoldSurfaceForService newService . snd) newAggregates
   semanticContractFoldChanges <- fmap concat (traverse semanticContractFoldChange oldAggregates)
-  pure (diffCheckedSpecs oldSpec newSpec <> idDomainContractChanges <> contractTypeIdDomainChanges <> semanticContractFoldChanges)
+  pure (diffCheckedSpecs oldService newService <> idDomainContractChanges <> contractTypeIdDomainChanges <> semanticContractFoldChanges)
   where
     oldSpec = checkedSpec oldService
     newSpec = checkedSpec newService
@@ -878,12 +884,19 @@ renderContractIdDomainChange valueType oldContract newContract =
           <> "\" to Text and the generated decoder no longer enforces the frozen TypeID-v7 domain"
       _ -> "; generated contract admission changed while the source field type remained unchanged"
 
-diffCheckedSpecs :: Spec -> Spec -> [Change]
-diffCheckedSpecs old new =
+diffCheckedSpecs :: CheckedService -> CheckedService -> [Change]
+diffCheckedSpecs oldService newService =
   sharedDeclarationDiff env
     ++ concatMap (runFamily env . snd) familyRegistry
   where
-    env = DiffEnv old new
+    env =
+      DiffEnv
+        { old = checkedSpec oldService,
+          new = checkedSpec newService,
+          oldService,
+          newService,
+          newValidationErrors = filter ((== Error) . (.severity)) (validateService newService)
+        }
 
 -- | Compare provenance first, then delegate semantic graphs to 'diffServices'.
 diffSources :: ParsedSource -> ParsedSource -> Either FoldSurfaceError [Change]
@@ -1653,23 +1666,23 @@ renderScope (RmCategory categoryName) = "category '" <> categoryName <> "'"
 aggregateDiff :: DiffEnv -> [Change]
 aggregateDiff env =
   concatMap
-    (\(oldAggregate, newAggregate) -> aggregatePairDiff ((.old) env) ((.new) env) oldAggregate newAggregate)
+    (uncurry (aggregatePairDiff env))
     ((.matched) paired)
     ++ concatMap addedAggregateDiff ((.added) paired)
     ++ concatMap removedAggregateDiff ((.removed) paired)
   where
     paired = pairByName nodeAggregate (.name) env
 
-aggregatePairDiff :: Spec -> Spec -> Aggregate -> Aggregate -> [Change]
-aggregatePairDiff oldSpec newSpec oldAgg newAgg =
+aggregatePairDiff :: DiffEnv -> Aggregate -> Aggregate -> [Change]
+aggregatePairDiff env oldAgg newAgg =
   commandFieldIdentityDiff oldAgg newAgg
     ++ concatMap (eventDiff oldAgg newAgg) ((.events) newAgg)
     ++ removedEvents oldAgg newAgg
     ++ wireDiff oldAgg newAgg
     ++ projectionDiff oldAgg newAgg
-    ++ guardTighteningDiff oldAgg newAgg
+    ++ guardTighteningDiff env oldAgg newAgg
     ++ domainOutcomeDiff oldAgg newAgg
-    ++ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
+    ++ transitionSurfaceDiff ((.old) env) ((.new) env) oldAgg newAgg
 
 -- | Typed outcomes are forward command behavior, not persisted fold behavior.
 -- Pair transitions by their frozen fold canonical form so a reason-only change
@@ -1744,61 +1757,259 @@ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
 -- contain a replay-only twin for the pair. A pure loosening also matches; the
 -- advisory says how to confirm no stored data is affected (the replay audit,
 -- docs/plans/142) rather than guessing.
-guardTighteningDiff :: Aggregate -> Aggregate -> [Change]
-guardTighteningDiff oldAgg newAgg =
-  concatMap classifyFamily (transitionFamilyDeltas oldAgg.transitions newAgg.transitions)
+data GuardProposal = GuardProposal
+  { proposalBody :: !ReplayBodyDelta,
+    proposalTwin :: !Transition
+  }
+  deriving stock (Eq, Show)
+
+guardTighteningDiff :: DiffEnv -> Aggregate -> Aggregate -> [Change]
+guardTighteningDiff env oldAgg newAgg = concatMap classifyFamily (Map.toAscList familyBodies)
   where
-    classifyFamily delta
-      | (.familyMode) key /= TmLive = []
-      | null oldEmitting || null newEmitting = []
-      | [oldT] <- oldEmitting,
-        [newT] <- newEmitting =
-          oneToOne oldT newT
-      | otherwise =
-          [ advisory ((.name) newAgg) "transition-family" subject AggGuardRelationUnknown unknownDetail
+    familyBodies =
+      Map.fromListWith
+        (flip (<>))
+        [ ((.bodyFamilyKey) bodyDelta, [bodyDelta])
+        | bodyDelta <- replayBodyDeltas oldAgg.transitions newAgg.transitions,
+          (.familyMode) ((.bodyFamilyKey) bodyDelta) == TmLive
+        ]
+
+    allProposals = concatMap proposalsForFamily (Map.elems familyBodies)
+    proposalResults = validateGuardProposals env ((.name) newAgg) allProposals
+
+    classifyFamily (key, bodyDeltas)
+      | opaqueFamily bodyDeltas = [unknownFinding key bodyDeltas]
+      | otherwise = concatMap renderProposal (proposalsForFamily bodyDeltas)
+
+    proposalsForFamily bodyDeltas
+      | opaqueFamily bodyDeltas = []
+      | otherwise = mapMaybe proposalForBody bodyDeltas
+
+    proposalForBody bodyDelta
+      | (.bodyStatus) bodyDelta `notElem` [ReplayBodyChanged, ReplayBodyRemoved] = Nothing
+      | otherwise = do
+          oldMembers <- NE.nonEmpty (sortOn canonicalTransition ((.oldBodyMembers) bodyDelta))
+          let oldUnion = bodyGuardUnion (NE.toList oldMembers)
+              newUnion = bodyGuardUnion ((.newBodyMembers) bodyDelta)
+              twinGuard = case (.bodyStatus) bodyDelta of
+                ReplayBodyRemoved -> oldUnion
+                ReplayBodyChanged ->
+                  case newUnion of
+                    Nothing -> oldUnion
+                    Just newGuard -> Just (maybe (complementExpr newGuard) (\oldGuard -> EAnd oldGuard (complementExpr newGuard)) oldUnion)
+                _ -> oldUnion
+              twin = replaceTransitionGuardAndMode twinGuard TmReplayOnly (NE.head oldMembers)
+          if coveredByCandidate bodyDelta twin
+            then Nothing
+            else Just GuardProposal {proposalBody = bodyDelta, proposalTwin = twin}
+
+    coveredByCandidate bodyDelta twin =
+      null ((.newValidationErrors) env)
+        && any coversBody candidateReplayBodies
+      where
+        candidateReplayBodies =
+          [ transition
+          | transition <- (.transitions) newAgg,
+            (.mode) transition == TmReplayOnly,
+            replayBodyKey transition == (.bodyKey) bodyDelta
+          ]
+        oldAlternatives =
+          NE.toList
+            (guardAlternatives (NE.fromList (map (.guard) ((.oldBodyMembers) bodyDelta))))
+        coversBody transition =
+          guardsCanonicalEqual ((.guard) transition) ((.guard) twin)
+            || all (\oldGuard -> guardImplies oldGuard ((.guard) transition)) oldAlternatives
+
+    renderProposal proposal =
+      case Map.lookup (canonicalTransition ((.proposalTwin) proposal)) proposalResults of
+        Just (Left reason) ->
+          [ advisory ((.name) newAgg) "transition" subject AggGuardRemedyUnavailable (unavailableDetail reason)
+          ]
+        _ ->
+          [ advisory ((.name) newAgg) "transition" subject AggGuardTightened (tightenedDetail ((.proposalTwin) proposal))
           ]
       where
-        key = (.familyKey) delta
-        oldEmitting = filter (not . null . (.emits)) ((.oldRemainder) delta)
-        newEmitting = filter (not . null . (.emits)) ((.newRemainder) delta)
-        subject = (.familySource) key <> " -- " <> (.familyCommand) key
-        unknownDetail =
-          "guard relationship is ambiguous for aggregate '"
+        familyKey = (.bodyFamilyKey) ((.proposalBody) proposal)
+        subject = familySubject familyKey
+        unavailableDetail reason =
+          "guard history may no longer invert on "
+            <> subject
+            <> ", but the computed replay-only remedy could not be advertised because its candidate-language proof failed: "
+            <> reason
+            <> ". Resolve the source error or run the targeted replay audit before deployment."
+        tightenedDetail twin =
+          "guard changed on "
+            <> subject
+            <> ". Stored events appended under the old guard may no longer invert: "
+            <> "the next command on any stream containing one fails hydration with "
+            <> "no inverting edge. Either confirm via the replay audit that no stored "
+            <> "stream exercises the removed region, or keep history replayable by "
+            <> "adding the computed replay-only twin (the removed region with the old "
+            <> "transition's writes/emits/goto):\n\n"
+            <> renderTransition twin
+
+    unknownFinding key bodyDeltas =
+      advisory ((.name) newAgg) "transition-family" (familySubject key) AggGuardRelationUnknown detail
+      where
+        oldCount = sum (map (length . (.oldBodyMembers)) bodyDeltas)
+        newCount = sum (map (length . (.newBodyMembers)) bodyDeltas)
+        detail =
+          "guard relationship is opaque for aggregate '"
             <> (.name) newAgg
             <> "' transition family "
-            <> subject
-            <> ": exact cancellation left "
-            <> T.pack (show (length oldEmitting))
+            <> familySubject key
+            <> ": affected replay bodies contain "
+            <> T.pack (show oldCount)
             <> " old and "
-            <> T.pack (show (length newEmitting))
-            <> " new emitting transitions. No replay-only transition was generated because no unique old/new relationship can be proven; resolve the family ambiguity or run the targeted replay audit before deployment."
+            <> T.pack (show newCount)
+            <> " new transitions with Hole-owned behavior or a generated/Hole ownership switch. No replay-only transition was generated because Hole behavior cannot be copied or proved covered from its structural envelope; resolve the ownership ambiguity or run the targeted replay audit before deployment."
 
-    oneToOne oldT newT =
-      [ advisory ((.name) newAgg) "transition" subject AggGuardTightened detail
-      | (.guard) newT /= (.guard) oldT,
-        Just newGuard <- [(.guard) newT],
-        not (hasReplayOnlyTwin newT),
-        let removedRegion =
-              maybe (complementExpr newGuard) (\oldGuard -> EAnd oldGuard (complementExpr newGuard)) ((.guard) oldT),
-        let twin = replaceTransitionGuardAndMode (Just removedRegion) TmReplayOnly oldT,
-        let detail =
-              "guard changed on "
-                <> subject
-                <> ". Stored events appended under the old guard may no longer invert: "
-                <> "the next command on any stream containing one fails hydration with "
-                <> "no inverting edge. Either confirm via the replay audit that no stored "
-                <> "stream exercises the removed region, or keep history replayable by "
-                <> "adding the computed replay-only twin (the removed region with the old "
-                <> "transition's writes/emits/goto):\n\n"
-                <> renderTransition twin
-      ]
+    opaqueFamily bodyDeltas = oldOpaque || ownershipSwitch
       where
-        subject = (.source) newT <> " -- " <> (.command) newT
+        oldMembers = concatMap (.oldBodyMembers) bodyDeltas
+        newMembers = concatMap (.newBodyMembers) bodyDeltas
+        oldOpaque = any ((== HoleImplementation) . (.implementation)) oldMembers
+        ownershipSwitch =
+          or
+            [ (.implementation) oldTransition /= (.implementation) newTransition
+                && ( (.implementation) oldTransition == HoleImplementation
+                       || (.implementation) newTransition == HoleImplementation
+                   )
+            | oldTransition <- oldMembers,
+              newTransition <- newMembers,
+              ownershipNeutralBodyKey oldTransition == ownershipNeutralBodyKey newTransition
+            ]
 
-    hasReplayOnlyTwin newT =
-      any
-        (\t -> (.mode) t == TmReplayOnly && (.source) t == (.source) newT && (.command) t == (.command) newT)
-        ((.transitions) newAgg)
+    familySubject key = (.familySource) key <> " -- " <> (.familyCommand) key
+
+bodyGuardUnion :: [Transition] -> Maybe Expr
+bodyGuardUnion transitions = guardUnion (NE.fromList (map (.guard) transitions))
+
+guardsCanonicalEqual :: Maybe Expr -> Maybe Expr -> Bool
+guardsCanonicalEqual left right = maybe "" canonicalExpr left == maybe "" canonicalExpr right
+
+ownershipNeutralBodyKey :: Transition -> ReplayBodyKey
+ownershipNeutralBodyKey transition = replayBodyKey (replaceTransitionImplementation GeneratedImplementation transition)
+
+replaceTransitionImplementation :: TransitionImplementation -> Transition -> Transition
+replaceTransitionImplementation implementation transition =
+  Transition
+    { source = transition.source,
+      command = transition.command,
+      implementation,
+      guard = transition.guard,
+      writes = transition.writes,
+      emits = transition.emits,
+      outcome = transition.outcome,
+      outcomeDuplicateLocs = transition.outcomeDuplicateLocs,
+      goto = transition.goto,
+      mode = transition.mode,
+      loc = transition.loc
+    }
+
+validateGuardProposals :: DiffEnv -> Name -> [GuardProposal] -> Map.Map Text (Either Text ())
+validateGuardProposals _ _ [] = Map.empty
+validateGuardProposals env aggregateName proposals =
+  Map.fromList
+    [ (canonicalTransition ((.proposalTwin) proposal), resultFor proposal)
+    | proposal <- proposals
+    ]
+  where
+    twins = map (.proposalTwin) proposals
+    preflight = validateGuardRoundTrip env aggregateName []
+    combined = validateGuardRoundTrip env aggregateName twins
+
+    resultFor proposal = do
+      preflight
+      validateGuardRoundTrip env aggregateName [(.proposalTwin) proposal]
+      combined
+
+validateGuardRoundTrip :: DiffEnv -> Name -> [Transition] -> Either Text ()
+validateGuardRoundTrip env aggregateName twins = do
+  let modifiedSpec = appendGuardTwins aggregateName twins ((.new) env)
+      modifiedService = checkedServiceWithSpec modifiedSpec ((.newService) env)
+      contract = checkedLanguageContract modifiedService
+      syntheticSource =
+        ParsedSource
+          { sourceLanguage =
+              DeclaredLanguage
+                { declaredLanguageVersion = contract.contractLanguageVersion,
+                  languageVersionLoc = noLoc
+                },
+            spec = checkedSpec modifiedService
+          }
+  parsed <-
+    case parseSource "<guard-remedy>" (renderSource syntheticSource) of
+      Left failure -> Left ("render/parse failed: " <> renderParseFailure failure)
+      Right value -> Right value
+  let parsedService = checkedSource parsed
+      errors = filter ((== Error) . (.severity)) (validateService parsedService)
+  if checkedLanguageContract parsedService /= contract
+    then Left "render/parse selected a different effective language contract"
+    else pure ()
+  if null errors
+    then pure ()
+    else Left ("source validation failed: " <> T.intercalate " | " (map (renderDiagnostic "<guard-remedy>") errors))
+  if checkedSpec parsedService == modifiedSpec
+    then pure ()
+    else Left "render/parse changed the normalized candidate specification"
+  let parsedTransitions =
+        [ transition
+        | NAggregate aggregate <- (.nodes) (checkedSpec parsedService),
+          (.name) aggregate == aggregateName,
+          transition <- (.transitions) aggregate
+        ]
+  traverse_
+    ( \twin ->
+        if any (preservesTwin twin) parsedTransitions
+          then Right ()
+          else Left ("render/parse did not preserve replay identity for " <> (.source) twin <> " -- " <> (.command) twin)
+    )
+    twins
+  where
+    preservesTwin twin parsedTransition =
+      canonicalTransition parsedTransition == canonicalTransition twin
+        && isNothing ((.outcome) parsedTransition)
+        && null ((.outcomeDuplicateLocs) parsedTransition)
+
+appendGuardTwins :: Name -> [Transition] -> Spec -> Spec
+appendGuardTwins _ [] spec = spec
+appendGuardTwins aggregateName twins spec =
+  Spec
+    { context = spec.context,
+      moduleRoot = spec.moduleRoot,
+      layout = spec.layout,
+      ids = spec.ids,
+      enums = spec.enums,
+      rules = spec.rules,
+      nominalScalars = spec.nominalScalars,
+      mapped = spec.mapped,
+      nodes =
+        [ case node of
+            NAggregate aggregate
+              | aggregate.name == aggregateName ->
+                  NAggregate (appendAggregateTransitions twins aggregate)
+            _ -> node
+        | node <- spec.nodes
+        ]
+    }
+
+appendAggregateTransitions :: [Transition] -> Aggregate -> Aggregate
+appendAggregateTransitions additions aggregate =
+  Aggregate
+    { name = aggregate.name,
+      regs = aggregate.regs,
+      states = aggregate.states,
+      commands = aggregate.commands,
+      events = aggregate.events,
+      transitions = aggregate.transitions <> additions,
+      domainOutcomeTypes = aggregate.domainOutcomeTypes,
+      domainOutcomeDuplicateLocs = aggregate.domainOutcomeDuplicateLocs,
+      wire = aggregate.wire,
+      projection = aggregate.projection,
+      snapshot = aggregate.snapshot,
+      loc = aggregate.loc
+    }
 
 replaceTransitionGuardAndMode :: Maybe Expr -> TransitionMode -> Transition -> Transition
 replaceTransitionGuardAndMode guard mode transition =
@@ -1813,7 +2024,7 @@ replaceTransitionGuardAndMode guard mode transition =
       outcomeDuplicateLocs = [],
       goto = transition.goto,
       mode,
-      loc = transition.loc
+      loc = noLoc
     }
 
 addedAggregateDiff :: Aggregate -> [Change]
@@ -3199,6 +3410,7 @@ contextFor label root facet subject code =
         WorkflowContinueSeedChanged,
         AggGuardTightened,
         AggGuardRelationUnknown,
+        AggGuardRemedyUnavailable,
         DeprecatedEventReplayHazard,
         EventRetirementInProgress,
         EventUndeprecated,

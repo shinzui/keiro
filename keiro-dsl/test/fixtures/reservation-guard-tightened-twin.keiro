@@ -30,7 +30,7 @@ aggregate Reservation
     emit  TransferReservationCreated
     goto  Held
   replay-only Unrequested -- RequestTransferReservation -->
-    guard (cmd.divertStatus != DivertStatus.TotalDivert || cmd.lifeCriticalOverride) && cmd.patientAcuity == PatientAcuity.RedTag
+    guard (cmd.divertStatus != DivertStatus.TotalDivert || cmd.lifeCriticalOverride) && (cmd.divertStatus == DivertStatus.TotalDivert && cmd.lifeCriticalOverride == false || cmd.patientAcuity == PatientAcuity.RedTag)
     emit  TransferReservationCreated
     goto  Held
   Held -- ConfirmReservation --> emit TransferReservationConfirmed ; goto Confirmed

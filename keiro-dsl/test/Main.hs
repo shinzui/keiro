@@ -7488,8 +7488,8 @@ main = hspec $ do
         [value] -> pure value
         values -> expectationFailure ("expected one ambiguous-family finding, got " <> show (length values)) >> fail "unreachable"
       (.subject) finding `shouldBe` "Active -- ObserveDescription"
-      (.detail) finding `shouldSatisfy` T.isInfixOf "2 old and 2 new emitting transitions"
-      (.detail) finding `shouldSatisfy` T.isInfixOf "No replay-only transition was generated"
+      (.detail) finding `shouldSatisfy` T.isInfixOf "2 old and 2 new transitions"
+      (.detail) finding `shouldSatisfy` T.isInfixOf "Hole behavior cannot be copied"
       (.detail) finding `shouldNotSatisfy` T.isInfixOf "\n\nreplay-only "
       verdictFor PrivateHistoryRead (finding.vector) `shouldBe` VAdvisory
       remediationFor (finding.context) ((.code) finding)
@@ -7645,6 +7645,88 @@ main = hspec $ do
                   includeSnapshotStreams = True
                 }
           )
+
+    it "classifies whole unions and requires complete replay-only coverage" $ do
+      base <- specOf "test/fixtures/transition-family.keiro"
+      let aggregate = onlyAggregate base
+          emitting =
+            case [transition | transition <- aggregate.transitions, transition.emits == ["DescriptionObserved"]] of
+              [transition] -> transition
+              transitions -> error ("expected one DescriptionObserved transition, got " <> show (length transitions))
+          untouched =
+            [ transition
+            | transition <- aggregate.transitions,
+              not (transition.source == emitting.source && transition.command == emitting.command && not (null transition.emits))
+            ]
+          a =
+            case emitting.guard of
+              Just expression -> expression
+              Nothing -> error "DescriptionObserved transition must be guarded"
+          b = complementExpr a
+          aOrB = EOr a b
+          edge guardExpression = emitting {guard = Just guardExpression, outcome = Nothing, outcomeDuplicateLocs = [], loc = noLoc}
+          replayEdge guardExpression =
+            (edge guardExpression)
+              { mode = TmReplayOnly,
+                loc = noLoc
+              }
+          withFamily transitions =
+            modifyAggregate aggregate.name (\candidate -> candidate {transitions = untouched <> transitions}) base
+          guardFindings oldSpec newSpec =
+            [ kind
+            | Advisory kind <- diffSpecs oldSpec newSpec,
+              kind.code `elem` [AggGuardTightened, AggGuardRelationUnknown, AggGuardRemedyUnavailable]
+            ]
+          oldUnion = withFamily [edge aOrB]
+          splitUnion = withFamily [edge a, edge b]
+          narrowed = withFamily [edge a]
+          exactRemovedRegion = EAnd aOrB (complementExpr a)
+      guardFindings oldUnion splitUnion `shouldBe` []
+      guardFindings splitUnion oldUnion `shouldBe` []
+      case guardFindings oldUnion narrowed of
+        [finding] -> do
+          finding.code `shouldBe` AggGuardTightened
+          finding.detail `shouldSatisfy` T.isInfixOf (renderTransition (replayEdge exactRemovedRegion))
+        findings -> expectationFailure ("expected one whole-union finding, got " <> show findings)
+      map (.code) (guardFindings oldUnion (withFamily [edge a, replayEdge b]))
+        `shouldBe` [AggGuardTightened]
+      guardFindings oldUnion (withFamily [edge a, replayEdge exactRemovedRegion]) `shouldBe` []
+      guardFindings oldUnion (withFamily [edge a, replayEdge aOrB]) `shouldBe` []
+
+    it "withholds a replay-only remedy that cannot validate in the candidate" $ do
+      base <- specOf "test/fixtures/transition-family.keiro"
+      let aggregate = onlyAggregate base
+          emitting =
+            case [transition | transition <- aggregate.transitions, transition.emits == ["DescriptionObserved"]] of
+              [transition] -> transition
+              transitions -> error ("expected one DescriptionObserved transition, got " <> show (length transitions))
+          candidate =
+            modifyAggregate
+              aggregate.name
+              ( \value ->
+                  value
+                    { events = filter ((/= "DescriptionObserved") . (.name)) value.events,
+                      transitions =
+                        [ transition
+                        | transition <- value.transitions,
+                          not (transition.source == emitting.source && transition.command == emitting.command && not (null transition.emits))
+                        ]
+                    }
+              )
+              base
+          findings =
+            [ kind
+            | Advisory kind <- diffSpecs base candidate,
+              kind.code `elem` [AggGuardTightened, AggGuardRemedyUnavailable]
+            ]
+      case findings of
+        [finding] -> do
+          finding.code `shouldBe` AggGuardRemedyUnavailable
+          finding.detail `shouldSatisfy` T.isInfixOf "source validation failed"
+          finding.detail `shouldNotSatisfy` T.isInfixOf "\n\nreplay-only "
+          remediationFor finding.context finding.code
+            `shouldBe` RemedyDoNotDeploy "do not deploy until the replay-only remedy validates under the candidate language or a targeted replay audit proves the affected history safe" :| []
+        values -> expectationFailure ("expected one unavailable-remedy finding, got " <> show values)
 
   describe "replay impact" $ do
     it "treats new events and transitions as replay-neutral" $ do

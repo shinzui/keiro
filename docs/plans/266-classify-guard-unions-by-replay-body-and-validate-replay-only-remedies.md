@@ -65,14 +65,19 @@ behavior; runtime conformance and targeted replay audits remain independent gate
       remainders only to select affected bodies; share the syntactic preservation helper.
 - [x] (2026-09-15) Make replay impact consume the generated-body classification while
       preserving replay-only removal, no-emit snapshot, codec, and non-transition impact.
-- [ ] Make diff consume the same generated-body classification and construct whole-union
-      remedies.
-- [ ] Implement exact whole-union twins, complete-candidate same-body coverage, and honest
-      Hole-owned unknown cases.
-- [ ] Thread checked services through the existing diff pass; validate all advertised remedies
-      through the candidate effective language; append AggGuardRemedyUnavailable.
+- [x] (2026-09-15) Make diff consume the same generated-body classification and construct
+      whole-union remedies.
+- [x] (2026-09-15) Implement exact whole-union twins, complete-candidate same-body coverage,
+      and honest explicit-Hole-owned unknown cases.
+- [x] (2026-09-15) Thread checked services through the existing diff pass; validate all
+      advertised remedies through the candidate effective language; append
+      AggGuardRemedyUnavailable.
+- [x] (2026-09-15) Cover complete-union cancellation, explicit-OR splits/merges, exact,
+      full-union, and partial replay coverage, explicit Hole ownership, outcome clearing,
+      invalid inserted twins, and successful remedy round trips under Languages 1–5.
 - [ ] Cover cancellation survivors, duplicates, splits/merges, removed families, stale and
-      mismatched twins, Hole ownership, outcome clearing, and Languages 1–5.
+      mismatched body/source/command/write/emit/target/owner twins, and combined-remedy
+      conflicts not exercised by the focused cases above.
 - [ ] Run CLI, runtime, disposable Mori, package, formatting, and documentation gates;
       update durable ADRs and close IR-33's accepted scope.
 
@@ -137,6 +142,16 @@ live guard union and are replay-neutral. Focused evidence after the change is 2 
 `replay body` examples, 6 passing `transition family` examples, and 11 passing examples matched
 by `replay impact`.
 
+The Plan-143 checked-in coverage fixture carried a syntactic partial twin (`old && RedTag`),
+not the exact mechanical region (`old && (!old || RedTag)`). The previous source/command-only
+lookup accepted it accidentally. The fixture now carries the exact generated transition, while
+the replay-body group separately proves that the partial form does not suppress the finding.
+
+The effective-language proof is observable in focused tests: four `replay body` examples pass,
+including exact/full/partial coverage and a removed event that makes twin insertion fail with
+`AggGuardRemedyUnavailable`; six `transition family` examples pass across released Languages
+1–5; and all seven Plan-143 examples retain their expected behavior.
+
 
 ## Decision Log
 
@@ -191,6 +206,12 @@ ParsedSource. Compare canonical replay identity plus cleared outcome fields afte
 rather than relying on raw AST equality across expression representations.
 Detailed errors belong in the finding; remediationFor retains its existing signature.
 These are proposed implementation decisions; amend accepted ADRs when implementation lands.
+
+Decision (2026-09-15): treat only explicit `HoleImplementation` as opaque for body remedies.
+`LegacyHoleImplementation` remains structurally comparable so released Language-1 sources keep
+their existing paste-ready remedy behavior. The legacy constructor carries the parser's frozen
+aggregate-wide ownership marker, while an explicit Language-2+ `implementation hole` is the
+author-declared behavior boundary that cannot be copied from the structural envelope.
 
 
 ## Outcomes & Retrospective
