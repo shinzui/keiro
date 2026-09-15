@@ -4,9 +4,17 @@ slug: make-producer-outbox-identity-deterministic-and-replay-safe
 title: "Make producer outbox identity deterministic and replay-safe"
 kind: exec-plan
 created_at: 2026-07-31T14:46:36Z
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T17:40:35Z
+      mode: "update"
+      note: "Reconcile outstanding producer replay identity work with current implementation and related completed plans"
 ---
 
 # Make producer outbox identity deterministic and replay-safe
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -14,6 +22,12 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 
 ## Purpose / Big Picture
+
+
+Status refreshed 2026-09-15 against commit `edd142c1`: implementation remains outstanding.
+The existing outbox keeps a persisted message ID stable across publication retries; this plan
+adds stable identity when the producer maps and enqueues the source event again. Those are
+different retry boundaries.
 
 After this change, replaying the same private source event through an `IntegrationProducer` derives
 the same outbox ID and integration message ID every time. A transaction rollback, subscription
@@ -29,9 +43,9 @@ draft under that same event reports `ProducerIdentityConflict` and leaves the or
 
 ## Progress
 
-Use a checklist to summarize granular steps. Every stopping point must be documented here,
-even if it requires splitting a partially completed task into two ("done" vs. "remaining").
-This section must always reflect the actual current state of the work.
+
+- [x] (2026-09-15) Reconcile the plan with current source, tests, documentation, ADRs, and git
+  history. All four implementation milestones remain open; related shipped work is recorded below.
 
 - [ ] Milestone 1: define and freeze a versioned pure producer identity derivation contract.
 - [ ] Milestone 2: replace fresh per-attempt IDs in the canonical producer helper and return typed
@@ -44,8 +58,9 @@ This section must always reflect the actual current state of the work.
 
 ## Surprises & Discoveries
 
-Document unexpected behaviors, bugs, optimizations, or insights discovered during
-implementation. Provide concise evidence.
+
+The July observations about Keiro remain reproducible by source inspection on 2026-09-15.
+The downstream observation is retained as historical evidence and was not re-audited.
 
 - 2026-07-31: `enqueueProducerEventTx` receives a caller-supplied `OutboxId` but calls
   `mintIntegrationEvent`, which generates a fresh TypeID message ID on every attempt. The table's
@@ -58,10 +73,32 @@ implementation. Provide concise evidence.
   explicitly bypasses the canonical helper to construct deterministic message IDs. This is audit
   evidence that the missing capability already forces downstream workarounds.
 
+- 2026-09-15: `keiro/src/Keiro/Outbox.hs` still calls `mintIntegrationEvent` from
+  `enqueueProducerEventTx`; the latter accepts a caller-owned `OutboxId` and returns
+  `Eff es (Tx.Transaction ())`. It has no recorded-event or emission-index argument.
+  `keiro/src/Keiro/Outbox/Schema.hs` still uses `ON CONFLICT (source, message_id) DO NOTHING`
+  with `D.noResult`. No `Keiro.Outbox.Identity` module or `ProducerIdentityConflict` result exists.
+- 2026-09-15: `keiro/test/Main.hs` tests configured TypeID prefixes, explicit `draftToEvent`
+  identity, and distinct fresh UUIDv7 outbox IDs. It does not call `enqueueProducerEventTx`.
+  These tests do not establish producer rollback/replay identity or drift detection.
+  `docs/user/outbox.md` explicitly says the canonical producer mints a fresh ID per attempt.
+- 2026-09-15: Related implementations have different scope. Plan 202 and ADR-24 freeze
+  workflow/process-manager deterministic IDs; plan 165 and ADR-37 implement terminal publication
+  rejection (completed in `a2c93027`). Neither changes producer enqueue identity. This plan's
+  file history contains only its original planning commit `ce0c3028` before this refresh.
+- 2026-09-15: Draft comments claim source provenance defaults from `RecordedEvent`, but
+  `draftToEvent` only copies draft fields and the helper cannot receive the recorded event.
+  Milestone 2 must implement that defaulting, not merely preserve the comment.
+
 
 ## Decision Log
 
-Record every decision made while working on the plan.
+
+- Decision: Keep all four implementation milestones open after the status audit. Reuse existing
+  deterministic-ID guidance and preserve shipped terminal rejection behavior during implementation.
+  Rationale: Current source directly demonstrates fresh producer IDs and untyped conflict handling;
+  completion of adjacent replay or publication features is not evidence for this enqueue contract.
+  Date: 2026-09-15
 
 - Decision: Derive identity from a domain-separated, length-prefixed tuple of algorithm version,
   producer source, producer name, source event ID, and emission index.
@@ -100,15 +137,21 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose. Before marking the plan complete,
-distill durable project context from the Decision Log, Surprises & Discoveries, and
-this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The 2026-09-15 refresh confirms this plan is still unimplemented in the current checkout.
+Existing durability, persisted-message retry, explicit caller-owned envelope IDs, deterministic
+workflow/router IDs, and terminal publication rejection remain useful foundations. The missing
+work is pure producer identity, typed enqueue outcomes, database content comparison, and their
+replay/concurrency tests and rollout documentation. Start implementation at Milestone 1.
 
+This update changed documentation only. Validation consisted of source/test-definition inspection
+and git history checks; no Haskell or database tests were run, and no new runtime acceptance is
+claimed. ADR-24 and ADR-37 already hold the relevant shipped decisions; this refresh introduces
+no new implemented architecture requiring an ADR edit. The producer identity ADR remains part
+of Milestone 4.
 
 ## Context and Orientation
+
 
 `keiro/src/Keiro/Outbox.hs` defines `IntegrationProducer`, `IntegrationEventDraft`,
 `mintIntegrationEvent`, `enqueueProducerEventTx`, and the explicit `enqueueIntegrationEventTx`
@@ -129,10 +172,20 @@ authoritative primitives where their byte contract is suitable. If a UUID namesp
 needed, verify its dependency source and released version through Mori before adding a bound.
 
 Completed MasterPlan 3 introduced the inbox/outbox and chose message identity at enqueue time, but
-none of its children planned deterministic producer replay. This standalone plan owns that gap.
+its persisted-message identity remains stable only after enqueue. This standalone plan owns
+source-event re-enqueue identity. See
+[MasterPlan 3](../masterplans/3-implement-inbox-and-outbox-for-kafka-integration-events.md).
 [ADR 4](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
 supports surfacing identity drift at enqueue rather than later publish. A new ADR is required for
 the derivation tuple/algorithm because downstream producers will persist and depend on it.
+[ADR-24](../adr/0024-deterministic-ids-hash-utf-8-seed-bytes-and-are-frozen-replay-identity.md)
+already requires length-prefixed UTF-8 fields for new deterministic derivations and forbids
+renaming persisted IDs without an explicit compatibility strategy. Its existing workflow and
+process-manager derivations must remain frozen.
+[ADR-37](../adr/0037-outbox-publication-rejection-is-terminal-audit-truth.md) makes publication
+rejection a retained terminal state with at-least-once transport callbacks. Enqueue identity
+comparison must preserve that state and its audit data on replay; rejection is not an enqueue
+identity conflict.
 
 “Emission index” is zero for today's `Maybe IntegrationEventDraft` mapper and reserves stable
 identity if a future mapper emits an ordered list. “Content digest” covers every delivery-relevant
@@ -141,6 +194,11 @@ identity and content digest match.
 
 
 ## Plan of Work
+
+
+All four milestones below describe remaining work. Existing prefix validation, `draftToEvent`,
+and explicit-envelope tests can be extended; they do not complete a milestone by themselves.
+Retain the current rejected-publication lifecycle and its tests while changing enqueue behavior.
 
 Milestone 1 adds a pure `Keiro.Outbox.Identity` module. Define a canonical binary encoding for the
 versioned tuple using length prefixes, publish fixed test vectors, and derive a UUID outbox ID plus
@@ -174,16 +232,22 @@ Keiro and document the source migration; this plan does not edit their repositor
 
 ## Concrete Steps
 
+
 Run from `/Users/shinzui/Keikaku/bokuno/keiro`:
 
 ```bash
 mori registry dependents shinzui/keiro --packages
-cabal test keiro-test --test-options='--match=producer.*identity'
+cabal test keiro-test --test-options='--match=Keiro.Outbox'
+cabal test keiro-test --test-options='--match=producer-identity'
 cabal test keiro-migrations-test
 cabal test keiro-test
 cabal build all
 nix flake check
 ```
+
+For the new focused command, group new tests under a description containing the literal
+`producer-identity`. That group does not exist at refresh time: a zero-example pass is not
+acceptance. The broader `Keiro.Outbox` match covers the existing outbox regression group.
 
 The focused test transcript must show one deterministic vector, one inserted row, identical retry,
 rollback retry, concurrent duplicate, and content conflict. In each replay case the derived
@@ -192,6 +256,10 @@ algorithm/version and test vectors in the ADR and replace example counts in Prog
 
 
 ## Validation and Acceptance
+
+
+These are pending implementation acceptance criteria, not results from the status refresh.
+The current TypeID-prefix and fresh-ID tests do not satisfy deterministic replay acceptance.
 
 1. The same producer source/name, source event ID, and emission index always produce the exact same
    outbox and message IDs across processes and platforms. Fixed vectors pin the encoding and
@@ -214,8 +282,10 @@ algorithm/version and test vectors in the ADR and replace example counts in Prog
 
 ## Idempotence and Recovery
 
-Pure derivation and identical enqueue are safe to repeat. Database comparison happens in the same
-transaction as insert/conflict handling, so a caller can retry the full subscription transaction.
+
+The following describes the target implementation; the current producer helper does not yet
+provide these guarantees. Pure derivation and identical enqueue are safe to repeat. Database
+comparison happens in the same transaction as insert/conflict handling, so a caller can retry the full subscription transaction.
 The implementation must never update an existing row to match a changed draft; resolving an
 identity conflict requires restoring the original deterministic mapper or deliberately versioning
 the producer name/identity policy after reviewing downstream idempotency impact.
@@ -228,7 +298,11 @@ strategy; never alter version 1 in place.
 
 ## Interfaces and Dependencies
 
-`Keiro.Outbox.Identity`, `Keiro.Outbox`, and `Keiro.Outbox.Schema` must expose equivalents of:
+
+The current public helper takes `IntegrationProducer e`, `OutboxId`, and
+`IntegrationEventDraft`, returning `Eff es (Tx.Transaction ())`. The following is the proposed
+replacement, not an existing API. `Keiro.Outbox.Identity`, `Keiro.Outbox`, and
+`Keiro.Outbox.Schema` must expose equivalents of:
 
 ```haskell
 data ProducerEventKey = ProducerEventKey
@@ -266,3 +340,10 @@ bounds are selected.
 
 Revision note: Detached this plan from the completed inbox/outbox MasterPlan so it is an independent
 implementation unit, 2026-07-31.
+
+
+Revision note (2026-09-15): Refreshed status against current source, test definitions, documentation,
+ADRs, and git history after a request to check whether this was already implemented. Kept all four
+implementation milestones open, distinguished related completed work, documented the missing
+provenance defaulting, and corrected focused-test instructions so an empty selection cannot be
+mistaken for acceptance. No implementation or runtime validation was performed in this refresh.
