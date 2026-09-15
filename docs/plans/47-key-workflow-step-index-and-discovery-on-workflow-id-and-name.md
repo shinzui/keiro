@@ -25,7 +25,7 @@ Decision Log, and Outcomes & Retrospective must be kept up to date as work proce
 
 ## Purpose / Big Picture
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 A durable workflow in Keiro is identified by a pair: a stable *workflow name* (the
 definition, e.g. `order-fulfillment`) and a *workflow id* (the instance, e.g. an
@@ -86,11 +86,11 @@ This section must always reflect the actual current state of the work.
   thread the name through the three `stepExists` call sites in `Keiro.Workflow`. {disposition=delivered-elsewhere, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
 - [-] Milestone 2: `cabal build keiro` green; update any test/call sites that pass
   the old `stepExists`/`loadStepIndex` signatures. {disposition=delivered-elsewhere, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
-- [ ] Milestone 3: add the shared-id parent/child regression test to
-  `keiro/test/Main.hs`; prove it fails before and passes after.
-- [ ] Milestone 4: full green — `cabal build all`, `cabal test keiro`,
+- [-] Milestone 3: add the shared-id parent/child regression test to
+  `keiro/test/Main.hs`; prove it fails before and passes after. {disposition=superseded-by, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
+- [-] Milestone 4: full green — `cabal build all`, `cabal test keiro`,
   `cabal test jitsurei-test` — and refresh the EP-45/MasterPlan notes so the
-  "distinct ids" guidance is downgraded from "required" to "recommended".
+  "distinct ids" guidance is downgraded from "required" to "recommended". {disposition=superseded-by, by=docs/plans/48-continue-as-new-journal-rotation-for-durable-workflows.md}
 
 ## Surprises & Discoveries
 
@@ -104,7 +104,7 @@ implementation. Provide concise evidence.
 
 ## Decision Log
 
-- Decision (2026-09-15 backlog cleanup): Plan 48 absorbed the name-aware workflow index and queries (its Progress and Outcomes explicitly record the handoff). Current keys also include generation. Keep the dedicated same-id/different-name parent-child regression proof and guidance/validation closeout open; the presence of the implementation is not proof that this particular regression was tested.
+- Decision (2026-09-15 backlog cleanup): Plan 48 absorbed the name-aware workflow index and queries (its Progress and Outcomes explicitly record the handoff). Current keys also include generation. The standalone plan is superseded by plan 48. Its old regression and guidance checklist is closed under that replacement scope, not certified as separately executed. The exact shared-ID parent-child regression evidence was not located in this audit; record that as an evidence question against the delivered workflow behavior rather than reopening the obsolete implementation plan.
   Rationale: distinguish delivered work, superseded proposals, and genuine remaining evidence in Mina.
 
 - Decision: Fix the footgun at the root (key the index, existence checks, and
@@ -144,7 +144,7 @@ implementation. Provide concise evidence.
 
 ### Backlog reconciliation — 2026-09-15
 
-Implementation and validation closeout remain open as listed in Progress. Plan 48 absorbed the name-aware workflow index and queries (its Progress and Outcomes explicitly record the handoff). Current keys also include generation. Keep the dedicated same-id/different-name parent-child regression proof and guidance/validation closeout open; the presence of the implementation is not proof that this particular regression was tested.
+This standalone plan is closed as superseded. Plan 48 absorbed the name-aware workflow index and queries (its Progress and Outcomes explicitly record the handoff). Current keys also include generation. The standalone plan is superseded by plan 48. Its old regression and guidance checklist is closed under that replacement scope, not certified as separately executed. The exact shared-ID parent-child regression evidence was not located in this audit; record that as an evidence question against the delivered workflow behavior rather than reopening the obsolete implementation plan.
 
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
@@ -154,7 +154,7 @@ Compare the result against the original purpose.
 
 ## Context and Orientation
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 Read this fully before editing; it assumes no prior knowledge of the repository.
 
@@ -253,7 +253,7 @@ which is exactly what this plan re-keys.
 
 ## Plan of Work
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 ### Milestone 1: re-key the index (migration)
 
@@ -345,7 +345,7 @@ demo (which already uses distinct ids via `shipChildId`) needs no change.
 
 ## Concrete Steps
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 Run all commands from the repository root.
 
@@ -402,7 +402,7 @@ cabal test jitsurei-test
 
 ## Validation and Acceptance
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 Acceptance is observable behavior:
 
@@ -426,7 +426,7 @@ step_name)`.
 
 ## Idempotence and Recovery
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 The migration is a one-way key relaxation and is safe to apply once (codd records it
 by filename and will not re-run it). It cannot fail on existing data because adding a
@@ -441,7 +441,7 @@ state during rollout is safe.
 
 ## Interfaces and Dependencies
 
-> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Only the remaining regression and documentation tasks are live; do not reapply the old schema change.
+> Historical specification: interpret this section through the 2026-09-15 disposition and current Progress above. Plan 48 owns the replacement scope; do not reapply the old schema change.
 
 This plan adds one migration and changes the signatures of two internal lookups; it
 adds no new package dependency.
@@ -480,3 +480,8 @@ Intention: intention_01kt7npxxbedqt8e0ba4dmyxzb
 
 
 Revision note (2026-09-15): reconciled backlog status against recorded delivery and replacement scope; preserved historical evidence and explicit remaining work. No implementation tests were run for this documentation revision.
+
+
+Revision note (2026-09-15 correction): closed the entire superseded plan under
+plan 48. The audit’s unlocated shared-ID regression evidence is retained as an
+evidence question in docs/backlog.md, not as outstanding plan 47 implementation.

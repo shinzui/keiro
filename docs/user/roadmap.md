@@ -329,7 +329,7 @@ Goal: make the library easier to learn, operate, and upgrade.
 | Haddocks | Partially complete | Each public module gets reference docs and copy-pasteable examples. |
 | Stability policy | Planned | Users know what can break before a stronger public API milestone. |
 | Read-model migration guide | Planned | Application-owned query tables have clear migration ownership. |
-| Decider-style facade | Exploratory | A higher-level pure-CQRS wrapper may reduce authoring friction if it stays thin. |
+| Decider-style facade | Declined | Keiro will not support a Decider facade; see [plan 7](../plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md). |
 
 Remaining work:
 
@@ -340,9 +340,8 @@ Remaining work:
 - Production checklist covering workers, dead letters, timer repair, outbox
   drain repair, projection rebuilds, and snapshot GC.
 
-The exploratory Decider-style facade belongs here only if real examples prove it
-helps. It should remain a wrapper over `EventStream` and `runCommand`, not a
-second framework model.
+Decider support was rejected. The historical exploration in plan 7 is closed
+and is not part of the adoption or API ergonomics backlog.
 
 ## Phase 5: v2 Durable Execution
 

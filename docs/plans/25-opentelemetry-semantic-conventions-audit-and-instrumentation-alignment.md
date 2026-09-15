@@ -5,6 +5,13 @@ title: "OpenTelemetry semantic-conventions audit and instrumentation alignment"
 kind: exec-plan
 created_at: 2026-05-19T22:10:07Z
 intention: "intention_01ks14d0rfeg9teej0zc4jfmta"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:29:29Z
+      mode: "update"
+      note: "Credit implemented tracing and W3C propagation; retain only example and documentation closeout."
 ---
 
 # OpenTelemetry semantic-conventions audit and instrumentation alignment
@@ -12,8 +19,17 @@ intention: "intention_01ks14d0rfeg9teej0zc4jfmta"
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
+**Status (2026-09-15): core instrumentation delivered; documentation and example
+closeout remain.** The W3C helpers already exist. Plan 32 subsequently upgraded
+the tracing dependencies and typed semantic-convention bindings with recorded
+passing tests. This plan does not require reimplementing instrumentation.
+
 
 ## Purpose / Big Picture
+
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
 
 This work audits every place in the `keiro` library where the code already touches
 tracing — outbox publishing, inbox consumption, the integration-event envelope —
@@ -208,13 +224,14 @@ This section must always reflect the actual current state of the work.
       Final shape uses an opt-in `Maybe Tracer` on `RunCommandOptions`,
       consistent with the `OutboxPublishOptions.tracer` pattern from M4.
       Callers that don't configure a tracer see no behavior change.
-- [ ] **Milestone 7: Wire up the W3C propagator in `Keiro.Integration.Event`.**
-      Add `traceContextFromCurrentSpan` / `traceContextFromHeaders` helpers in
-      `Keiro.Telemetry` that bridge between the `TraceContext` record and the
-      `Propagator` API. Replace any caller that constructs a `TraceContext`
-      from a string with one that goes through the propagator. Update
-      `jitsurei/app/Main.hs:116` (currently `traceContext = Nothing`) to a
-      worked example that captures the current span context.
+- [x] M7 core propagation helpers are delivered: `traceContextFromCurrentSpan`,
+      `traceContextFromHeaders`, and `injectTraceContext` are present in
+      `keiro/src/Keiro/Telemetry.hs`; producer-to-consumer parentage is covered
+      in `keiro/test/Main.hs`. Plan 32 retained and validated this surface
+      during the 1.0 upgrade. Source and recorded evidence checked 2026-09-15.
+- [ ] M7 example follow-up: reconcile or deliver the promised jitsurei tracing
+      example and its round-trip assertion. The current app console exporter
+      is for metrics, not the proposed producer-to-consumer tracing walkthrough.
 - [ ] **Milestone 8: Guide-backed example and `docs/guides`.** Add a new
       guide-backed walk-through under `docs/guides/telemetry/README.md` showing
       a producer → consumer trace end to end with the console exporter, and a
@@ -226,6 +243,12 @@ This section must always reflect the actual current state of the work.
 
 
 ## Surprises & Discoveries
+
+- (2026-09-15) `Keiro.Telemetry` contains the M7 helpers, already acknowledged
+  by M3 in this plan. Plan 32 records the later upgrade and passing 81-example
+  suite. `docs/research/opentelemetry-semconv-audit.md` still contains the
+  historical Gap labels, and the current jitsurei console exporter exports
+  metrics. The proposed tracing walkthrough was not found in docs/guides.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -269,6 +292,12 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15): Credit the existing W3C helpers and later plan 32
+  upgrade, retaining only the example/guide and audit-document closeout.
+  Rationale: runtime delivery is established, but the requested guide path is
+  absent and the audit still labels implemented producer/consumer/command spans
+  as gaps. Do not infer documentary completion from runtime delivery.
 
 Record every decision made while working on the plan.
 
@@ -402,6 +431,15 @@ Record every decision made while working on the plan.
 
 ## Outcomes & Retrospective
 
+### Current reconciliation — 2026-09-15
+
+Core tracing and propagation are delivered; later dependency and conventions
+modernization belongs to `docs/plans/32-upgrade-to-hs-opentelemetry-1-0-and-align-to-latest-opentelemetry-semantic-conventions.md`.
+Three checklist entries retain only jitsurei tracing-example, guide, and audit
+closeout. Historical test results are recorded evidence, not fresh test runs.
+
+### Historical notes
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -409,6 +447,10 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
 
 `keiro` is a Haskell library for event sourcing and workflow orchestration. The
 source lives under `src/Keiro/`. The library is built with `cabal` and tested
@@ -614,6 +656,10 @@ instrumentation tests.
 
 
 ## Plan of Work
+
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
 
 The work is sliced into nine milestones. Milestones 1 and 2 stand alone and
 unblock everything else. Milestones 3 and 4–6 layer on top of Milestone 2.
@@ -854,6 +900,10 @@ Outcomes & Retrospective on this plan with the closing summary.
 
 ## Concrete Steps
 
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
+
 This section is updated as work proceeds. The commands below are the ones
 the implementer will run repeatedly; expected output is short and pasted as
 fenced `text` blocks.
@@ -924,6 +974,10 @@ test prints nothing extra and the `cabal test` summary is the only output.
 
 ## Validation and Acceptance
 
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
+
 A complete implementation of this plan can be validated by a reader with no
 prior context as follows.
 
@@ -947,6 +1001,10 @@ Log entry for every judgement call.
 
 ## Idempotence and Recovery
 
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
+
 Every milestone is additive: the audit document is a new file, the new
 dependencies are added entries, `Keiro.Telemetry` is a new module, and each
 of Milestones 4–7 wraps existing code paths in conditional helpers that
@@ -966,6 +1024,10 @@ backwards-compatible at every call site that uses
 
 
 ## Interfaces and Dependencies
+
+> Historical implementation specification: use current Progress for the
+> remaining example and documentation work. The old dependency bounds, missing
+> instrumentation claims, and proposed signatures are not current requirements.
 
 ### New module: `Keiro.Telemetry`
 
@@ -1108,3 +1170,8 @@ Decision Log.
 * **Backwards-compatibility shims for the deprecated `messaging.operation`
   attribute.** Per Decision Log, we use the current `messaging.operation.type`
   / `messaging.operation.name` pair and do not also emit the deprecated key.
+
+
+Revision note (2026-09-15): credited delivered propagation and plan 32’s
+modernization; narrowed unfinished work to the tracing example, guide, and audit
+closeout after checking source, jitsurei, and the audit compliance table.

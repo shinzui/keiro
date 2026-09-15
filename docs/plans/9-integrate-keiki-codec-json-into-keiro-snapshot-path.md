@@ -5,6 +5,13 @@ title: "Integrate keiki-codec-json into keiro snapshot path"
 kind: exec-plan
 created_at: 2026-05-10T15:01:32Z
 intention: "intention_01kr96cnxhee3sf8m3da0wrcpj"
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:27:05Z
+      mode: "update"
+      note: "Credit snapshot codec implementation to plan 13 and retain only unverified evidence and documentation follow-ups."
 ---
 
 # Integrate keiki-codec-json into keiro snapshot path
@@ -12,19 +19,22 @@ intention: "intention_01kr96cnxhee3sf8m3da0wrcpj"
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
-**Status: in progress; dependency and codec implementation present, validation
-blocked by a build failure.** The queued upstream wait is no longer accurate for
-this checkout: `cabal.project` includes the local
-`/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json` package, `keiro.cabal`
-depends on `keiki-codec-json >= 0.1`, and `src/Keiro/Snapshot/Codec.hs` implements
-`defaultStateCodec` with `Keiki.Codec.JSON.regFileToJSON` /
-`regFileFromJSON` plus `Keiki.Shape.regFileShapeHash`. The remaining work is to
-restore a green build under the current keiki API, finish the documentation
-promised by M4, close the exact M3 acceptance gap about comparing snapshot
-hydration with full replay, and run/record the M5 performance check.
+**Status: implementation delivered elsewhere; follow-up evidence remains.**
+Plan 13 (`docs/plans/13-add-snapshots-and-accelerated-hydration.md`) delivered
+this integration on 2026-05-15 in commit `d08ab0bc`. Its M2 explicitly records
+`regFileToJSON`, `regFileFromJSON`, and `regFileShapeHash`, and its Outcomes
+record a passing full test run. The current implementation is
+`keiro/src/Keiro/Snapshot/Codec.hs`. The 2026-05-17 build failure below is a
+historical observation, not a current blocker or a reason to reimplement codecs.
+Only the three follow-ups in current Progress remain; their exact acceptance
+has not been established by this audit.
 
 
 ## Purpose / Big Picture
+
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
 
 keiro's EP-4 snapshot strategy (`docs/research/09-snapshot-strategy.md`) defines a
 `StateCodec (s, RegFile rs)` that writes the joint state to a `keiro_snapshots` row,
@@ -82,40 +92,17 @@ the meantime), and operators get a stable, browseable JSON for incident response
       `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json/keiki-codec-json.cabal`
       at version `0.1.0.0`. Hackage publication was not re-verified here; this
       checkout consumes the local package directly through `cabal.project`.
-- [ ] M1 — Cabal dependencies are present, but build validation is not complete.
-      `cabal.project` includes
-      `/Users/shinzui/Keikaku/bokuno/keiki/keiki-codec-json`; `keiro.cabal` lists
-      `keiki-codec-json >= 0.1` for the library and `keiki-codec-json` for
-      `keiro-test`. `cabal test keiro-test` currently fails while compiling
-      `src/Keiro/Command.hs`, before the snapshot tests run.
-- [ ] M2 — Replace any hand-rolled `RegFile` walkers in keiro's snapshot codec
-      sketches with calls to `regFileToJSON`/`regFileFromJSON`. Adopt
-      `regFileShapeHash` for the `regfile_shape_hash` column. Update
-      `docs/research/09-snapshot-strategy.md`'s §3 / §15 prose to remove the "hand-
-      rolled walker" workaround language. The code path is complete in
-      `src/Keiro/Snapshot/Codec.hs`; `docs/research/09-snapshot-strategy.md` still
-      preserves old prose with closure notes rather than fully rewriting the
-      historical design text, and validation is blocked by the current build
-      failure.
-- [ ] M3 — End-to-end test: a fixture aggregate with a non-trivial RegFile (modelled
-      after EP-36 §10 Case A or C — small enough for a unit test) writes a snapshot,
-      crashes, restarts, reads the snapshot back, replays a tail event, and produces
-      the same joint state as full replay would. Partially complete: `test/Main.hs`
-      already exercises real-Postgres snapshot write/read/fallback behavior with
-      `SnapshotCounterRegs`; remaining work is an explicit full-replay equivalence
-      assertion.
-- [ ] M4 — Documentation: a `Usage Patterns` section in `docs/research/09-snapshot-
-      strategy.md` (or a new `docs/research/regfile-codec-usage.md`) covering when
-      to reach for `Keiki.Codec.JSON` directly vs through keiro's `StateCodec`. See
-      §"Usage guidance" below for the content this section must capture.
-- [ ] M5 — Performance check: against a representative aggregate with a moderately
-      large RegFile (matched to EP-36 §10 Case B-style shape), measure encode/decode
-      latency in the snapshot hot path and verify the streaming-encoder path (R10
-      from EP-36) is wired correctly when `esSnapshotPolicy` is aggressive. Numbers
-      recorded in this plan's Surprises log; not a release gate.
-
+- [-] M1 — Snapshot dependency/build integration delivered under plan 13; its recorded validation supersedes this plan’s historical build blocker. {disposition=delivered-elsewhere, by=docs/plans/13-add-snapshots-and-accelerated-hydration.md}
+- [-] M2 — Default StateCodec uses the upstream JSON helpers and shape hash, delivered by plan 13 in d08ab0bc and retained in keiro/src/Keiro/Snapshot/Codec.hs. {disposition=delivered-elsewhere, by=docs/plans/13-add-snapshots-and-accelerated-hydration.md}
+- [ ] M3 follow-up — Establish the exact snapshot-seed-plus-tail versus full-replay joint-state equality assertion requested here. Plan 13’s snapshot and fallback tests are delivered; do not recreate that implementation. Reconcile existing later replay tests first, and add evidence only if the specific assertion remains absent.
+- [ ] M4 follow-up — Reconcile the direct codec helper versus StateCodec usage guidance with docs/user/snapshots.md and plan 37’s worked example. The existence of snapshot documentation alone does not certify all four usage cases from the original proposal.
+- [ ] M5 optional, non-release-gating — Locate or record the representative register-file encode/decode benchmark and streaming-encoder assessment. No matching benchmark result was established in this audit.
 
 ## Surprises & Discoveries
+
+- (2026-09-15) Plan 13 M2 and commit `d08ab0bc` explicitly delivered the
+  upstream JSON codec and shape-hash integration. Current source still imports and
+  calls those helpers. The earlier audit failed to credit that completed work.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -147,6 +134,11 @@ implementation. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-09-15): Credit the codec integration to plan 13 and keep this
+  document only for the three explicit evidence/documentation follow-ups.
+  Rationale: plan 13 names this plan as an input and records delivery of its core
+  integration. The user correctly identified the missed handoff in the backlog audit.
 
 - Decision: Frame this plan as **queued** rather than active. M0 is "wait for the
   upstream landing"; the rest of the milestones are real work that begins when
@@ -190,6 +182,15 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
+### Current reconciliation — 2026-09-15
+
+Implementation delivered by plan 13; source confirmed in
+`keiro/src/Keiro/Snapshot/Codec.hs`. Its historical `cabal test all` result is
+recorded evidence, not a fresh run by this audit. Three follow-ups remain in
+Progress; this plan must not appear as an unimplemented codec integration.
+
+### Historical observations
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original purpose.
 
@@ -202,6 +203,10 @@ Compare the result against the original purpose.
 
 
 ## Context and Orientation
+
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
 
 ### The upstream work
 
@@ -250,6 +255,10 @@ codec without needing to build infrastructure for very large RegFiles.
 
 
 ## Usage guidance
+
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
 
 This is the content M4 must capture in the documentation. Carrying it here so it
 isn't lost between plan authoring and M4 execution.
@@ -330,6 +339,10 @@ not change the hash; only changing the *type* of a slot does.
 
 
 ## Plan of Work
+
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
 
 Single-track. Six milestones (M0–M5) executed sequentially. As of 2026-05-17,
 M0 is complete, M1 and M2 are partially complete in the working tree, and M3, M4,
@@ -433,6 +446,10 @@ for keiro v1.
 
 ## Concrete Steps
 
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
+
 ### M0
 
 1. Completed for this checkout on 2026-05-17. `mori registry show shinzui/keiki
@@ -502,6 +519,10 @@ for keiro v1.
 
 ## Validation and Acceptance
 
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
+
 **Plan-level acceptance**: a keiro user can declare an aggregate with a register
 file, configure a non-trivial `esSnapshotPolicy`, run commands against it, restart
 the runtime, and have their state hydrated via the snapshot row written by EP-36's
@@ -519,6 +540,10 @@ this plan.
 
 ## Idempotence and Recovery
 
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
+
 Implementation steps are idempotent at the cabal-build level. M0 has no side
 effects (it's monitoring upstream). M1's cabal edit can be repeated safely. M2's
 doc edits are diffs; revertable. M3's test addition is isolated to a new file or a
@@ -533,6 +558,10 @@ becomes the durable place for cross-cutting issues.
 
 
 ## Interfaces and Dependencies
+
+> Historical specification. Current Progress defines the remaining follow-ups.
+> Dependency versions, build failures, and implementation instructions below are
+> historical; the codec integration was delivered by plan 13.
 
 ### Libraries used
 
@@ -597,3 +626,8 @@ against the upstream primitives; the shapes are unchanged.
   `src/Keiro/Command.hs`, and kept M3-M5 open where the repository still lacks the
   exact full-replay equivalence assertion, usage guidance, and performance
   measurements.
+
+
+- 2026-09-15: Credited integration to plan 13 using its explicit M2 and delivery
+  commit; removed the stale active build blocker, retained the three unverified
+  follow-ups, and corrected the backlog classification.

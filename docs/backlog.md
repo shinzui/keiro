@@ -1,6 +1,6 @@
 # Keiro backlog and next release
 
-Audited and reconciled 2026-09-15. This index covers the 47 plans surfaced by the original unfinished-plan audit, including four redirect documents. It removes 14 stale entries from actionable work and narrows plan 47 to its remaining evidence. The other 33 retain real work, evidence gaps, or dependency decisions. This is a snapshot; each plan's current Progress and Mina tracking remain authoritative as implementation proceeds.
+Audited and reconciled 2026-09-15. This index covers the 47 plans surfaced by the original unfinished-plan audit, including four redirect documents. It removes 16 stale entries from actionable work and narrows plans 9 and 25 to their remaining follow-ups. The other 31 retain real work, evidence gaps, or dependency decisions. This is a snapshot; each plan's current Progress and Mina tracking remain authoritative as implementation proceeds.
 
 ## Next release collection
 
@@ -32,6 +32,8 @@ Mina's `[-]` marker means closed without claiming delivery here. Disposition ann
 
 | Plan | Disposition | Basis / retained boundary |
 | --- | --- | --- |
+| [47](plans/47-key-workflow-step-index-and-discovery-on-workflow-id-and-name.md) | Closed: superseded by 48 | Plan 48 explicitly absorbed name-aware keying into generation-aware workflow indexes and queries. Original regression checklist is not claimed independently executed. |
+| [7](plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md) | Closed: declined | User confirmed the existing decision against Decider support on 2026-09-15. The earlier deferred-evaluation classification was incorrect. |
 | [16](plans/16-adopt-codd-for-database-migrations.md) | Closed: superseded remainder | Native migration verification (122) replaces remaining Codd-era validation; legacy removal stays in 189. |
 | [46](plans/46-keiro-framework-migrations-self-set-search-path-for-incremental-upgrades.md) | Closed: superseded | Schema-qualified DDL (85, commit fcd97705) replaces the proposed search_path edits; ADR-9 governs current migration ownership. |
 | [52](plans/52-shared-codd-migration-scaffold-library-design-capture.md) | Closed: superseded remainder | Native migration ownership/embedding (122–123) replaces the Keiro rationale for a standalone Codd scaffold library; the library proposal was not implemented. |
@@ -57,9 +59,8 @@ The three upstream replacements are:
 
 | Plan | Disposition | Next action |
 | --- | --- | --- |
-| [9](plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md) | Open: validation/docs | Codec integration exists; refresh the old build blocker, verify snapshot parity, finish usage guidance, and record codec performance. |
-| [47](plans/47-key-workflow-step-index-and-discovery-on-workflow-id-and-name.md) | Open: regression/docs | Implementation absorbed by 48. Retain dedicated shared-ID/different-name parent-child regression proof and guidance/full-suite closeout; account for current generation-aware keys. |
-| [25](plans/25-opentelemetry-semantic-conventions-audit-and-instrumentation-alignment.md) | Open: instrumentation | Complete W3C propagator wiring, a trace walkthrough, and reconciliation of the original instrumentation audit. |
+| [9](plans/9-integrate-keiki-codec-json-into-keiro-snapshot-path.md) | Delivered by 13; follow-ups open | Codec integration shipped in d08ab0bc under plan 13. Retain only the exact replay-equivalence, usage-guidance, and optional benchmark follow-ups pending evidence reconciliation. |
+| [25](plans/25-opentelemetry-semantic-conventions-audit-and-instrumentation-alignment.md) | Core delivered; documentation open | W3C helpers and tracing are present; plan 32 delivered the later conventions upgrade. Retain only the tracing example, guide, and audit-document reconciliation. |
 | [179](plans/179-generate-one-human-readable-authoritative-keiro-transducer.md) | Open: historical release evidence | Reconcile the old 0.9.0.0 publication checkbox with actual release records; do not publish that historical version again. |
 | [189](plans/189-remove-the-legacy-codd-runner-while-retaining-history-import-compatibility.md) | Open: migration cleanup | Move the two legacy migration drills into the default suite before removing legacy-codd-tools and its code/history duplicates. |
 | [199](plans/199-close-the-final-review-findings-and-cut-keiro-dsl-0-11-0-0.md) | Open: release documentation | Record the downstream upgrade sequence requested by its final checklist item. |
@@ -86,8 +87,7 @@ The remaining gate in 207 is `mori://shinzui/kiroku/okf/improvement-requests/con
 
 | Plan | Disposition | Next action |
 | --- | --- | --- |
-| [7](plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md) | Deferred: evaluation | Measure ergonomic value of a Decider facade before adding public API. |
-| [83](plans/83-delegated-idempotence-inbox-intake-bypass-the-keiro-inbox-table-when-the-downstream-state-machine-already-dedupes.md) | Deferred: feature | Delegated inbox idempotence changes runtime and DSL contracts; retain its existing tracking rather than adding it to this release. |
+| [83](plans/83-delegated-idempotence-inbox-intake-bypass-the-keiro-inbox-table-when-the-downstream-state-machine-already-dedupes.md) | High-priority feature; release stretch candidate | Removes redundant inbox writes for consumers protected by downstream idempotence. Runtime/DSL bypass remains unimplemented; plan 82 still writes inbox rows and plan 109 excluded it. Prove duplicate safety and retry/poison behavior before adoption. |
 | [163](plans/163-productize-event-history-migration-bootstrap-backup-restore-and-checkpoint-tooling.md) | Deferred: large initiative | History backup/restore/bootstrap adds a package and upstream primitives; scope as a separate release initiative. |
 | [166](plans/166-evaluate-bounded-aggregate-collection-membership-and-quantification.md) | Deferred: experiment | Complete the bounded-collection GO/NO-GO evaluation before any production language feature; refresh the historical version gate. |
 | [267](plans/267-add-safe-mapped-register-construction-to-declared-transitions.md) | Deferred: language feature | Mapped-register construction needs a coordinated candidate Language 6 charter with 273. |
@@ -104,3 +104,20 @@ For the following feature release, prefer 273 if authoring capability is the goa
 ## Verification boundary
 
 The cleanup changes plan metadata and dispositions, preserving real pending acceptance work. Delivery commits and current source/fixture presence support historical completion claims; their old test transcripts are not fresh test runs. Verification passed: Mina parsed all 15 changed plans, every void item carried a disposition, the 14 closed entries had no pending items, and plan 47 retained exactly two. The six collection members, their order, statuses, and one note each were verified. `git diff --check` passed. Runtime tests and release publication remain acceptance work of the selected implementation plans.
+
+Correction (2026-09-15): plan 7 was additionally closed as declined following the user’s clarification. Mina parsing confirmed four void items with declined dispositions and no pending work.
+
+Correction (2026-09-15): credited plan 9’s codec implementation to plan 13 and removed the stale build-blocked classification. Its three follow-ups remain open; this does not change the count of open documents.
+
+Corrections (2026-09-15): plan 47 is superseded by plan 48; the initial decision
+to retain its old implementation checklist was incorrect. Its dedicated
+shared-ID/different-name parent-child regression evidence remains an audit
+question, not a release gate or a claim of failure. Plan 25 has delivered runtime
+tracing but retains documentary/example work. Plan 83 was rechecked against its
+proposed behavior and the current runtime/DSL and remains unimplemented.
+
+Priority correction (2026-09-15): plan 83 is a high-priority feature and a
+correctness-release stretch candidate after the selected fixes. Its primary win
+is eliminating redundant inbox writes and lifecycle costs; quantify latency
+separately because commits may dominate. It is not yet added to the six-plan
+release collection.

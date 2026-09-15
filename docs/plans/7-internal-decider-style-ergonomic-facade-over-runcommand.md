@@ -4,6 +4,13 @@ slug: internal-decider-style-ergonomic-facade-over-runcommand
 title: "Internal Decider-style ergonomic facade over runCommand"
 kind: exec-plan
 created_at: 2026-05-09T14:41:34Z
+provenance:
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-15T18:25:38Z
+      mode: "update"
+      note: "Close Decider exploration as declined following the user-confirmed prior decision; reconcile active backlog and roadmap."
 ---
 
 # Internal Decider-style ergonomic facade over runCommand
@@ -11,20 +18,17 @@ created_at: 2026-05-09T14:41:34Z
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
 
-**Status: evaluated; do not implement now.** This plan exists to investigate a
-hedge against the v1 contract decision's ergonomic costs. It MAY land as a shipped
-feature, MAY be downgraded to a documentation-only cookbook entry, or MAY be
-rejected outright. The decision sits with the implementation MasterPlan, which is
-downstream of this exploration. A 2026-05-17 working-tree check found no
-`Keiro.Decider` module, no `PureAggregate` implementation, no cookbook artifacts,
-and user documentation still describes higher-level ergonomic facades as future
-work. A follow-up feasibility check on the same date found that the proposed
-`PureAggregate` facade cannot be implemented as a thin wrapper over today's
-`runCommand` without first generalizing Keiro's command runner or adding a new
-keiki-side adapter.
+**Status: closed — declined.** Keiro will not support a Decider-style authoring
+facade. The user reaffirmed that existing decision on 2026-09-15 during backlog
+cleanup. The earlier evaluation and proposed interfaces below are historical;
+they are not deferred implementation or cookbook obligations. Reopening Decider
+support requires a new explicit product decision.
 
 
 ## Purpose / Big Picture
+
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
 
 The 2026-05-09 cost-benefit audit on the keiro `SymTransducer`-vs-`Decider` contract
 decision (recorded in the parent MasterPlan's Surprises & Discoveries entry of the same
@@ -100,28 +104,32 @@ flowchart LR
 
 ## Progress
 
-- [ ] M1 — Survey the actual ergonomic shape a pure-CQRS aggregate hits today using
+- [-] M1 — Survey the actual ergonomic shape a pure-CQRS aggregate hits today using
       the EP-1 spike's contract. Author a "before" example: a 3-state Order aggregate
       (`Pending → Submitted → Delivered`) with two commands and three events, written
       against `EventStream phi rs s ci co` directly. Count lines, type annotations,
-      keiki-specific constructs (`InCtor`, `Term`, `OutTerm`).
-- [ ] M2 — Author the same aggregate against the proposed `Keiro.Decider`-style
-      facade. Count the same metrics. Compare side-by-side.
-- [ ] M3 — Verify the facade can be implemented purely as a wrapper over `runCommand`
+      keiki-specific constructs (`InCtor`, `Term`, `OutTerm`). {disposition=declined}
+- [-] M2 — Author the same aggregate against the proposed `Keiro.Decider`-style
+      facade. Count the same metrics. Compare side-by-side. {disposition=declined}
+- [-] M3 — Verify the facade can be implemented purely as a wrapper over `runCommand`
       (no changes to `EventStream`, no changes to keiki). Sketch the wrapper's type
       signature and the translation from `PureAggregate c e s` to
       `EventStream NoSym '[] s c c` (or whatever phi/rs phantoms work for a no-workflow
-      case). Identify any load-bearing complications.
-- [ ] M4 — Make the decision. Three possible outcomes, each with a follow-up artifact:
+      case). Identify any load-bearing complications. {disposition=declined}
+- [-] M4 — Make the decision. Three possible outcomes, each with a follow-up artifact:
       (a) **Ship** → upgrade this plan with concrete implementation milestones (M5+);
       (b) **Cookbook only** → close this plan; produce a docs cookbook entry showing
       authoring patterns that approximate Decider-shaped ergonomics without the
       facade;
       (c) **Reject** → close this plan; record rationale here and append to the
-      MasterPlan's Decision Log.
+      MasterPlan's Decision Log. {disposition=declined}
 
 
 ## Surprises & Discoveries
+
+- (2026-09-15) Unchecked exploration tasks and the stale roadmap entry caused a
+  rejected product direction to reappear in the backlog. The user corrected the
+  classification; absence of a shipped facade is not evidence of pending work.
 
 - Discovery: The Decider-style facade has not shipped in the current working tree.
   Evidence from 2026-05-17: `keiro.cabal` exposes no `Keiro.Decider` module;
@@ -149,6 +157,12 @@ flowchart LR
 
 
 ## Decision Log
+
+- Decision (2026-09-15): Close this exploration as declined. The user confirmed
+  that supporting a Decider had already been rejected.
+  Rationale: the prior backlog audit incorrectly treated the rejected direction as
+  an unresolved evaluation. No facade, comparison spike, or cookbook is owed by
+  this plan. Preserve the old investigation as historical context.
 
 - Decision: Frame this plan as **exploratory**, not implementation-bound. The goal is
   the M4 decision (ship / cookbook only / reject), not a particular implementation
@@ -182,10 +196,16 @@ flowchart LR
 
 ## Outcomes & Retrospective
 
-(To be filled at M4 and again at any post-implementation milestone.)
+Closed as declined on 2026-09-15, recording the user-confirmed decision against
+Decider support. All four original exploration tasks are void rather than marked
+implemented. No `PureAggregate` facade or cookbook was delivered by this closure.
+The backlog index and active user documentation now reflect that decision.
 
 
 ## Context and Orientation
+
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
 
 ### What kicked this off
 
@@ -235,6 +255,9 @@ EP-36 work (`keiki/docs/plans/36-...`) is contract-orthogonal and proceeds regar
 
 
 ## Plan of Work
+
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
 
 ### M1 — "Before" example: authoring a pure-CQRS aggregate directly against `EventStream`
 
@@ -360,6 +383,9 @@ authored; if (b), the cookbook entry exists; if (c), no further artifacts.
 
 ## Concrete Steps
 
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
+
 ### M1
 
 1. From `/Users/shinzui/Keikaku/bokuno/keiro`, study the spike at
@@ -410,6 +436,9 @@ authored; if (b), the cookbook entry exists; if (c), no further artifacts.
 
 ## Validation and Acceptance
 
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
+
 **Plan-level acceptance.** This plan is complete when M4's decision is recorded with
 rationale, and any artifact required by the chosen outcome (M5+ milestones, cookbook
 entry, or rejection note) exists.
@@ -423,6 +452,9 @@ real Postgres).
 
 ## Idempotence and Recovery
 
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
+
 Steps M1–M3 produce documentation artifacts only; reversible by deletion. M4's
 decision is durable in two Decision Logs (this plan + MasterPlan); reversal would
 require explicit follow-up entries.
@@ -433,6 +465,9 @@ and migrating any v1 users — same shape as any API deprecation.
 
 
 ## Interfaces and Dependencies
+
+> Historical proposal, closed as declined. The instructions and acceptance
+> criteria below no longer define outstanding work; the current decision above governs.
 
 This is an exploratory plan; no interface commitments at M1–M4. Outcome-(a)-specific
 interfaces would be authored in M5+.
@@ -477,3 +512,8 @@ deliberately scopes to "purely a keiro-side wrapper".
   a status update; the answer is no, and the plan now records the evidence.
 
 - 2026-05-13: **Renamed the typed event-stream-id wrapper `AggregateId a` → `Stream a`** in this plan body, cascaded from the parent MasterPlan's 2026-05-13 rename decision. **Updates this revision applied (this plan only)**: line 56 (the §"Purpose / Big Picture" sketch of the proposed `runPureCommand` signature) and line 216 (the M2 design-target full signature). The plan-internal type `PureAggregate c e s` is *not* renamed because it is a *deliberate* DDD-flavoured ergonomic facade — the entire point of this plan is to give pure-CQRS aggregate authors a Decider/Aggregate-shaped API; "Aggregate" in `PureAggregate` is the *thing being modelled*, not the framework type. Same for the `paDecide`/`paEvolve`/`paEventCodec`/`paEventTag`/`AggError` field/error names: they are local to the facade and intentionally evoke the DDD vocabulary the facade caters to. The general-purpose framework type that this facade reduces to (`EventStream phi rs s ci co`) and the framework's typed-id wrapper (`Stream a`) carry the keiro-general framing; the facade's local names carry the DDD framing it adapts to. **Streamly-collision note**: the parent MasterPlan's 2026-05-13 Decision Log entry records that an intermediate `StreamRef a` selection was discarded after team feedback in favour of the bare `Stream a`, accepting the name collision with `Streamly.Data.Stream.Stream` and resolving it at use sites with qualified imports — when the implementation MasterPlan ships EP-7's facade module, it should follow the same convention (`import qualified Streamly.Data.Stream as Stream` only if the facade module also consumes Streamly streams; the facade itself does not, so a plain unqualified `Stream` import from keiro is sufficient at the facade boundary). The parent MasterPlan's 2026-05-13 Decision Log + Revisions entries record the cross-plan cascade. EP-7 status is unchanged by this rename pass; only the type name carried in the proposed signatures is refreshed. Reason: cascade from the MasterPlan rename; the user observed that `AggregateId` is too tied to DDD and keiro is a more general framework — but the facade's local DDD-flavoured names are the facade's whole purpose and stay.
+
+
+- 2026-09-15: Closed the plan as declined following the user’s correction that
+  Decider support had already been rejected. Voided the exploration checklist,
+  retained the historical proposal, and reconciled the backlog and user docs.

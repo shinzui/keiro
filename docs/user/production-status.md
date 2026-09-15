@@ -211,8 +211,10 @@ on the sample.
 
 The command, projection, read-model, process-manager, and timer APIs expose the
 runtime primitives directly. `keiro-ops` now provides the supported operational
-facade, but authoring ergonomics remain lower-level and higher-level facades are
-future work. Durable subscription checkpoint inventory is still waiting on the
+facade. The DSL provides generated aggregate authoring over the transducer
+contract; a Decider-style facade was declined (see
+[plan 7](../plans/7-internal-decider-style-ergonomic-facade-over-runcommand.md)).
+Durable subscription checkpoint inventory is still waiting on the
 owning Kiroku API tracked by
 `mori://shinzui/kiroku/okf/improvement-requests/concepts/IR-2`; Keiro does not
 query Kiroku's private subscription tables as a workaround.
