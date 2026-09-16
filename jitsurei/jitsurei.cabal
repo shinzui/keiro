@@ -171,7 +171,7 @@ test-suite jitsurei-test
     pgmq-effectful >=0.6 && <0.7,
     pgmq-migration >=0.6 && <0.7,
     shibuya-core ^>=0.9.0.0,
-    shibuya-pgmq-adapter ^>=0.15.0.0,
+    shibuya-pgmq-adapter ^>=0.16.0.0,
     text >=2.1,
     time >=1.12,
     uuid >=1.3,

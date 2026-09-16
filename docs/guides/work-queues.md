@@ -128,6 +128,7 @@ shipmentNoticeJob =
     { jobName   = "jitsurei-shipment-notices"
     , jobQueue  = queueRef "jitsurei.shipment_notices"
     , jobCodec  = keiroJobCodec shipmentNoticeCodec
+    , jobOrdering = FifoHeads
     , jobPolicy =
         RetryPolicy
           { maxRetries        = 3
@@ -158,15 +159,17 @@ groups give exactly that, and the queue opts in on both sides:
 
 ```haskell
 shipmentNoticeTuning :: JobTuning
-shipmentNoticeTuning = withOrdering FifoThroughput defaultJobTuning
+shipmentNoticeTuning = withOrdering FifoHeads defaultJobTuning
 
 enqueueShipmentNotice :: (Pgmq :> es, IOE :> es) => ShipmentNotice -> Eff es MessageId
 enqueueShipmentNotice notice =
   enqueueToGroup shipmentNoticeJob (orderIdText notice.orderId) notice
 ```
 
-Within one group, messages are delivered in send order; distinct groups proceed
-in parallel. Ordering is not deduplication — delivery is still at-least-once.
+Within one group, messages are delivered in send order; distinct group heads can
+be claimed together and remain independently eligible. Keiro's current handlers
+are serial, so this does not promise parallel execution. Ordering is not
+deduplication — delivery is still at-least-once.
 
 Grouped reads match against a GIN index on the queue's `headers` column, so
 ordered queues must be provisioned with it. That is what `ensureOrderedJobQueue`

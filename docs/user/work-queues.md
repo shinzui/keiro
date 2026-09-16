@@ -14,10 +14,11 @@ generated:
 The `keiro-pgmq` package gives an application a typed background-job queue on
 top of [PGMQ](https://github.com/pgmq/pgmq) (the PostgreSQL-native message
 queue) and Shibuya's worker framework. You declare a `Job` value bundling a
-queue, a payload codec, and a retry policy, then write a plain domain handler of
-type `p -> Eff es JobOutcome`. The package absorbs the boilerplate: PGMQ wire
-types, Shibuya's `Ingested`/`AckDecision` vocabulary, dead-letter routing, and
-queue-name derivation never reach your handler.
+queue, a payload codec, a required ordering contract, and a retry policy, then
+write a plain domain handler of type `p -> Eff es JobOutcome`. The package
+absorbs the boilerplate: PGMQ wire types, Shibuya's `Ingested`/`AckDecision`
+vocabulary, dead-letter routing, and queue-name derivation never reach your
+handler.
 
 This is a separate package from `keiro`. Add `keiro-pgmq` to `build-depends` and
 import `Keiro.PGMQ` for the whole surface, or the individual modules
@@ -62,6 +63,7 @@ thumbnailJob = Job
   { jobName   = "thumbnails"          -- ProcessorId and telemetry label
   , jobQueue  = queueRef "media.thumbnails"
   , jobCodec  = aesonJobCodec
+  , jobOrdering = Unordered
   , jobPolicy = defaultRetryPolicy
   }
 ```
@@ -204,7 +206,11 @@ waits inside the database instead of sleeping.
 
 Prefer `mkJobTuning visibilityTimeout batchSize polling`, which rejects
 non-positive values, then layer ordering on with
-`withOrdering FifoThroughput`. The raw constructor is exported but unvalidated.
+`withOrdering job.jobOrdering`. The raw constructor is exported, but both
+consumer entry points validate it before constructing an adapter or reading.
+They reject non-positive tuning, a mismatch with the job's declared ordering,
+and legacy FIFO batches larger than one. `Unordered` and `FifoHeads` may use any
+positive batch size. The default wrappers derive their ordering from the job.
 
 ### The job context
 
@@ -305,19 +311,34 @@ both shapes.
 **no** per-key delivery-order guarantee under concurrent workers, retries, or
 visibility-timeout expiry.
 
-For strict per-key ordering, enqueue into a group and consume with an ordered
-tuning:
+For strict per-key ordering across retries and batched consumption, declare
+`FifoHeads`, enqueue into a group, and use matching tuning:
 
 ```haskell
-_ <- enqueueToGroup thumbnailJob (assetIdText assetId) request
+let fifoThumbnailJob = thumbnailJob { jobOrdering = FifoHeads }
 
-let tuning = withOrdering FifoThroughput defaultJobTuning
+_ <- enqueueToGroup fifoThumbnailJob (assetIdText assetId) request
+
+let tuning = withOrdering fifoThumbnailJob.jobOrdering defaultJobTuning
 ```
 
 The group key rides in PGMQ's reserved `x-pgmq-group` JSONB header. Within one
-group messages are delivered in strict send order; distinct groups proceed in
-parallel. `FifoThroughput` fills a batch from the oldest eligible group first
-(SQS-style); `FifoRoundRobin` interleaves fairly across groups.
+group, `FifoHeads` leases only the absolute head: a failed, invisible, or delayed
+head blocks its successors while distinct groups remain independently eligible.
+Its batch size bounds the number of group heads claimed in one read. Current
+Keiro handlers process that claimed batch serially; this is safe batching, not a
+parallel-handler guarantee.
+
+`FifoThroughput` fills a batch from the oldest eligible group first (SQS-style),
+and `FifoRoundRobin` interleaves fairly across groups. Both legacy modes can
+lease multiple members from one group, so Keiro permits them only with
+`batchSize = 1`. Use `FifoHeads` for safe batching.
+
+`FifoHeads` requires PGMQ 1.12 or later. For a rolling deployment, first deploy
+consumers built with the required `jobOrdering` field and `FifoHeads` support;
+only then change generated queue policy or producer assumptions to the new
+ordering contract. An older consumer must not be left to interpret the queue as
+unordered or through a legacy batch-filling read.
 
 Delivery is still at-least-once and there is still no deduplication — ordering
 is not exactly-once. Ordered reads also require the FIFO GIN index on the
@@ -491,6 +512,10 @@ or write an upcaster automatically. Deploy a backward-reading worker first; if
 the old payload cannot be decoded, drain the queue or provide a temporary codec
 that accepts both forms. See
 [Adopting Mapped Consumer Surfaces](mapped-consumer-adoption.md).
+
+The DSL ordering vocabulary is `unordered`, `fifo-throughput`,
+`fifo-roundrobin`, and `fifo-heads`; scaffolding lowers the last form to
+`FifoHeads` and creates the FIFO index.
 
 `keiro-dsl check` enforces the contracts that are dangerous to reconstruct by
 hand: FIFO queues require a group key and unordered queues reject one, and the

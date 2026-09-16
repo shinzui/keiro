@@ -1237,7 +1237,7 @@ data WqDispRow = WqDispRow
   deriving stock (Eq, Show, Generic)
 
 -- | The queue's semantic delivery-order contract.
-data WqOrdering = WqUnordered | WqFifoThroughput | WqFifoRoundRobin
+data WqOrdering = WqUnordered | WqFifoThroughput | WqFifoRoundRobin | WqFifoHeads
   deriving stock (Eq, Show, Generic)
 
 -- | A FIFO message-group key derived from one payload field.

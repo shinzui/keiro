@@ -11,7 +11,7 @@
 -- The producer side is equally deliberate. 'shipmentNoticeFor' maps a recorded
 -- 'OrderShipped' event to a job payload, and 'enqueueShipmentNotice' sends it into
 -- a FIFO group keyed by the order id, so two notices for the same order are
--- delivered in send order while different orders proceed in parallel.
+-- delivered in send order while different orders remain independently eligible.
 --
 -- Note what is /not/ claimed: the enqueue is not atomic with the order append. If
 -- losing a notice when the process dies between the two is unacceptable, the
@@ -164,6 +164,7 @@ shipmentNoticeJob =
     { jobName = "jitsurei-shipment-notices",
       jobQueue = queueRef "jitsurei.shipment_notices",
       jobCodec = keiroJobCodec shipmentNoticeCodec,
+      jobOrdering = FifoHeads,
       jobPolicy =
         RetryPolicy
           { maxRetries = 3,
@@ -173,10 +174,11 @@ shipmentNoticeJob =
     }
 
 -- | Per-order FIFO delivery. Notices for one order are handled in send order;
--- distinct orders proceed in parallel. Requires the queue's FIFO index, which
--- 'Keiro.PGMQ.Job.ensureOrderedJobQueue' creates.
+-- distinct orders can be claimed together, though handlers remain serial today.
+-- Requires the queue's FIFO index, which 'Keiro.PGMQ.Job.ensureOrderedJobQueue'
+-- creates.
 shipmentNoticeTuning :: JobTuning
-shipmentNoticeTuning = withOrdering FifoThroughput defaultJobTuning
+shipmentNoticeTuning = withOrdering FifoHeads defaultJobTuning
 
 -- | Enqueue one notice into its order's FIFO group. The group key is the order
 -- id, so redelivery and concurrent workers cannot reorder two notices for the same

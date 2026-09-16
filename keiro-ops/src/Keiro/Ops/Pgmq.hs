@@ -181,6 +181,7 @@ rawJob queue =
     { jobName = queue,
       jobQueue = queueRef queue,
       jobCodec = aesonJobCodec,
+      jobOrdering = Unordered,
       jobPolicy = defaultRetryPolicy
     }
 

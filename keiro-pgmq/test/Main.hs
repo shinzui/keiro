@@ -4,6 +4,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | End-to-end integration test for @keiro-pgmq@.
 --
@@ -17,7 +18,7 @@
 module Main (main) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (bracket, throwIO)
+import Control.Exception (bracket, throwIO, try)
 import Data.Aeson (FromJSON, ToJSON, Value (..), object, parseJSON, toJSON, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
@@ -130,6 +131,7 @@ mkJob name =
     { jobName = name,
       jobQueue = queueRef name,
       jobCodec = aesonJobCodec,
+      jobOrdering = Unordered,
       jobPolicy = defaultRetryPolicy
     }
 
@@ -1147,7 +1149,7 @@ spec = do
   it "a FIFO delivery carries shibuya.partition on its process span" $ \connStr -> do
     (provider, spansRef) <- setupCapturingProvider
     let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
-        job = mkJob "keiro_pgmq_test.span_partition"
+        job = (mkJob "keiro_pgmq_test.span_partition") {jobOrdering = FifoThroughput}
     drained <-
       runDbTraced connStr tracer $ do
         ensureOrderedJobQueue job
@@ -1225,7 +1227,7 @@ spec = do
       _ -> expectationFailure ("expected one message, got " <> show (length msgs))
 
   it "ensureOrderedJobQueue is idempotent and the queue accepts grouped work" $ \connStr -> do
-    let job = mkJob "keiro_pgmq_test.ordered_setup"
+    let job = (mkJob "keiro_pgmq_test.ordered_setup") {jobOrdering = FifoThroughput}
     len <-
       runDb connStr $ do
         ensureOrderedJobQueue job
@@ -1237,10 +1239,263 @@ spec = do
         queueLen job.jobQueue.physicalName
     len `shouldBe` 0
 
+  it "rejects invalid, mismatched, and unsafe raw consumption tuning before a read" $ \connStr -> do
+    let unorderedJob = mkJob "keiro_pgmq_test.invalid_consumption"
+        headsJob = unorderedJob {jobOrdering = FifoHeads}
+        throughputJob = unorderedJob {jobOrdering = FifoThroughput}
+        invalidTuning =
+          JobTuning
+            { visibilityTimeout = 30,
+              batchSize = 0,
+              polling = PollEvery 1,
+              ordering = Unordered
+            }
+        mismatchedTuning = defaultJobTuning
+        unsafeTuning =
+          withOrdering FifoThroughput $
+            either (error . show) id $
+              mkJobTuning 30 8 (PollEvery 1)
+        run tuning job =
+          runDb connStr $
+            runJobOnceWithContext tuning 0 job \_ctx _payload -> pure Done
+    invalid <- try @JobConsumptionConfigError (run invalidTuning unorderedJob)
+    mismatch <- try @JobConsumptionConfigError (run mismatchedTuning headsJob)
+    unsafeBatch <- try @JobConsumptionConfigError (run unsafeTuning throughputJob)
+    invalid `shouldBe` Left (InvalidJobTuning (NonPositiveBatchSize 0))
+    mismatch
+      `shouldBe` Left
+        JobOrderingMismatch
+          { jobOrderingDeclared = FifoHeads,
+            tuningOrderingGiven = Unordered
+          }
+    unsafeBatch
+      `shouldBe` Left
+        UnsafeLegacyFifoBatch
+          { unsafeOrdering = FifoThroughput,
+            unsafeBatchSize = 8
+          }
+
+  it "accepts large batches for unordered and grouped-head jobs" $ \connStr -> do
+    let unorderedJob = mkJob "keiro_pgmq_test.valid_unordered_batch"
+        headsJob = (mkJob "keiro_pgmq_test.valid_heads_batch") {jobOrdering = FifoHeads}
+        unorderedTuning = either (error . show) id $ mkJobTuning 30 50 (PollEvery 1)
+        headsTuning = withOrdering FifoHeads unorderedTuning
+        run tuning job =
+          runDb connStr $
+            runJobOnceWithContext tuning 0 job \_ctx _payload -> pure Done
+    run unorderedTuning unorderedJob `shouldReturn` 0
+    run headsTuning headsJob `shouldReturn` 0
+    headsTuning.batchSize `shouldBe` 50
+
+  it "rejects mismatched ordering before emitting a receive span" $ \connStr -> do
+    (provider, spansRef) <- setupCapturingProvider
+    let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+        job = (mkJob "keiro_pgmq_test.mismatch_no_receive") {jobOrdering = FifoHeads}
+        receiveName = "receive " <> queueNameToText job.jobQueue.physicalName
+    result <-
+      try @JobConsumptionConfigError $
+        runDbTraced connStr tracer $
+          runJobOnceWithContext defaultJobTuning 1 job \_ctx _payload -> pure Done
+    case result of
+      Left JobOrderingMismatch {} -> pure ()
+      Left err -> expectationFailure ("unexpected mismatch error: " <> show err)
+      Right _ -> expectationFailure "expected mismatched ordering to fail"
+    spans <- capturedSpans provider spansRef
+    map csName spans `shouldNotSatisfy` elem receiveName
+
+  it "worker construction rejects invalid raw tuning and mismatched ordering before adapter use" $ \connStr -> do
+    let job = (mkJob "keiro_pgmq_test.worker_mismatch") {jobOrdering = FifoHeads}
+        invalidTuning =
+          JobTuning
+            { visibilityTimeout = 0,
+              batchSize = 1,
+              polling = PollEvery 1,
+              ordering = FifoHeads
+            }
+        build tuning =
+          runDb connStr $
+            jobProcessorWithContext tuning job \_ctx _payload -> pure Done
+    invalid <- try @JobConsumptionConfigError (build invalidTuning)
+    mismatch <-
+      try @JobConsumptionConfigError $
+        build defaultJobTuning
+    case invalid of
+      Left (InvalidJobTuning (NonPositiveVisibilityTimeout 0)) -> pure ()
+      Left err -> expectationFailure ("unexpected invalid-tuning error: " <> show err)
+      Right _ -> expectationFailure "expected worker construction to reject raw invalid tuning"
+    case mismatch of
+      Left JobOrderingMismatch {jobOrderingDeclared = FifoHeads, tuningOrderingGiven = Unordered} -> pure ()
+      Left err -> expectationFailure ("unexpected validation error: " <> show err)
+      Right _ -> expectationFailure "expected worker construction to reject mismatched ordering"
+
+  it "FifoHeads blocks a failed group head while other groups continue" $ \connStr -> do
+    firstA <- newIORef True
+    observed <- newIORef ([] :: [Text])
+    let job = (mkJob "keiro_pgmq_test.fifo_heads_failure") {jobOrdering = FifoHeads}
+        tuning =
+          withOrdering FifoHeads $
+            either (error . show) id $
+              mkJobTuning 1 50 (PollEvery 0.1)
+        handler _ctx payload = do
+          liftIO $ modifyIORef' observed (<> [payload.message])
+          shouldFail <- liftIO $ do
+            firstPending <- readIORef firstA
+            if payload.message == "a1" && firstPending
+              then writeIORef firstA False >> pure True
+              else pure False
+          if shouldFail
+            then liftIO (throwIO (userError "fail a1 once"))
+            else pure Done
+    (firstDrain, independentDrain) <-
+      runDb connStr $ do
+        ensureOrderedJobQueue job
+        _ <- enqueueToGroup job "a" (Ping "a1" 1)
+        _ <- enqueueToGroup job "a" (Ping "a2" 2)
+        _ <- enqueueToGroup job "b" (Ping "b1" 1)
+        _ <- enqueueToGroup job "b" (Ping "b2" 2)
+        firstDrain <- runJobOnceWithContext tuning 2 job handler
+        independentDrain <- runJobOnceWithContext tuning 2 job handler
+        pure (firstDrain, independentDrain)
+    firstDrain `shouldBe` 2
+    independentDrain `shouldBe` 0
+    readIORef observed `shouldReturn` ["a1", "b1", "b2"]
+    threadDelay 1_100_000
+    recovered <- runDb connStr $ runJobOnceWithContext tuning 2 job handler
+    recovered `shouldBe` 2
+    readIORef observed `shouldReturn` ["a1", "b1", "b2", "a1", "a2"]
+
+  it "FifoHeads blocks a group successor when its head returns Retry" $ \connStr -> do
+    observed <- newIORef ([] :: [Text])
+    let job = (mkJob "keiro_pgmq_test.fifo_heads_retry") {jobOrdering = FifoHeads}
+        tuning =
+          withOrdering FifoHeads $
+            either (error . show) id $
+              mkJobTuning 30 50 (PollEvery 0.1)
+        handler _ctx payload = do
+          liftIO $ modifyIORef' observed (<> [payload.message])
+          pure $
+            if payload.message == "a1"
+              then Retry (RetryDelay 30)
+              else Done
+    (firstDrain, blockedDrain) <-
+      runDb connStr $ do
+        ensureOrderedJobQueue job
+        _ <- enqueueToGroup job "a" (Ping "a1" 1)
+        _ <- enqueueToGroup job "a" (Ping "a2" 2)
+        _ <- enqueueToGroup job "b" (Ping "b1" 1)
+        firstDrain <- runJobOnceWithContext tuning 2 job handler
+        blockedDrain <- runJobOnceWithContext tuning 1 job handler
+        pure (firstDrain, blockedDrain)
+    firstDrain `shouldBe` 2
+    blockedDrain `shouldBe` 0
+    readIORef observed `shouldReturn` ["a1", "b1"]
+
+  it "FifoHeads drains sixteen independent heads with one receive" $ \connStr -> do
+    (provider, spansRef) <- setupCapturingProvider
+    let tracer = OTel.makeTracer provider "keiro-pgmq-test" OTel.tracerOptions
+        job = (mkJob "keiro_pgmq_test.fifo_heads_batch") {jobOrdering = FifoHeads}
+        tuning =
+          withOrdering FifoHeads $
+            either (error . show) id $
+              mkJobTuning 30 16 (PollEvery 0.1)
+        messages = [("g" <> Text.pack (show i), Ping ("m" <> Text.pack (show i)) i) | i <- [1 .. 16]]
+        receiveName = "receive " <> queueNameToText job.jobQueue.physicalName
+    drained <-
+      runDbTraced connStr tracer $ do
+        ensureOrderedJobQueue job
+        traverse_ (\(groupName, payload) -> enqueueToGroup job groupName payload) messages
+        runJobOnceWithContext tuning 16 job \_ctx _payload -> pure Done
+    drained `shouldBe` 16
+    spans <- capturedSpans provider spansRef
+    length (filter ((== receiveName) . csName) spans) `shouldBe` 1
+
+  it "FifoHeads blocks a successor behind a delayed head while other groups run" $ \connStr -> do
+    observed <- newIORef ([] :: [Text])
+    let job = (mkJob "keiro_pgmq_test.fifo_heads_delay") {jobOrdering = FifoHeads}
+        tuning =
+          withOrdering FifoHeads $
+            either (error . show) id $
+              mkJobTuning 30 50 (PollEvery 1)
+        handler _ctx payload = do
+          liftIO $ modifyIORef' observed (<> [payload.message])
+          pure Done
+    independentDrain <-
+      runDb connStr $ do
+        ensureOrderedJobQueue job
+        _ <- enqueueToGroup job "a" (Ping "a1" 1)
+        _ <- runJobOnceWithContext tuning 1 job handler
+        _ <- enqueueToGroupWithDelay job 2 "a" (Ping "a2" 2)
+        _ <- enqueueToGroup job "a" (Ping "a3" 3)
+        _ <- enqueueToGroup job "b" (Ping "b1" 1)
+        runJobOnceWithContext tuning 3 job handler
+    independentDrain `shouldBe` 1
+    readIORef observed `shouldReturn` ["a1", "b1"]
+    threadDelay 2_100_000
+    recovered <- runDb connStr $ runJobOnceWithContext tuning 2 job handler
+    recovered `shouldBe` 2
+    readIORef observed `shouldReturn` ["a1", "b1", "a2", "a3"]
+
+  it "FifoHeads advances a group after its head is dead-lettered" $ \connStr -> do
+    observed <- newIORef ([] :: [Text])
+    let job = (mkJob "keiro_pgmq_test.fifo_heads_dead") {jobOrdering = FifoHeads}
+        tuning = withOrdering FifoHeads defaultJobTuning
+        record outcome _ctx payload = do
+          liftIO $ modifyIORef' observed (<> [payload.message])
+          pure outcome
+    (deadCount, successorCount, mainDepth, dlqDepth) <-
+      runDb connStr $ do
+        ensureOrderedJobQueue job
+        _ <- enqueueToGroup job "a" (Ping "a1" 1)
+        _ <- enqueueToGroup job "a" (Ping "a2" 2)
+        deadCount <- runJobOnceWithContext tuning 1 job (record (Dead "poison"))
+        successorCount <- runJobOnceWithContext tuning 1 job (record Done)
+        mainDepth <- queueLen job.jobQueue.physicalName
+        dlqDepth <- queueLen job.jobQueue.dlqName
+        pure (deadCount, successorCount, mainDepth, dlqDepth)
+    deadCount `shouldBe` 1
+    successorCount `shouldBe` 1
+    mainDepth `shouldBe` 0
+    dlqDepth `shouldBe` 1
+    readIORef observed `shouldReturn` ["a1", "a2"]
+
+  it "default one-shot tuning inherits the job's grouped-head ordering" $ \connStr -> do
+    let job = (mkJob "keiro_pgmq_test.default_heads") {jobOrdering = FifoHeads}
+    len <-
+      runDb connStr $ do
+        ensureOrderedJobQueue job
+        _ <- enqueueToGroup job "a" (Ping "a1" 1)
+        runJobOnce 1 job (\_payload -> pure Done)
+        queueLen job.jobQueue.physicalName
+    len `shouldBe` 0
+
+  it "default worker tuning inherits the job's grouped-head ordering" $ \connStr -> do
+    let job = (mkJob "keiro_pgmq_test.default_heads_worker") {jobOrdering = FifoHeads}
+    result <-
+      try @JobConsumptionConfigError $
+        runDb connStr $
+          jobProcessor job (\_payload -> pure Done)
+    case result of
+      Left err -> expectationFailure ("default worker tuning was rejected: " <> show err)
+      Right _ -> pure ()
+
+  it "legacy FIFO strategies remain available with batch size one" $ \connStr -> do
+    traverse_
+      ( \(suffix, declaredOrdering) -> do
+          let job = (mkJob ("keiro_pgmq_test.legacy_fifo_" <> suffix)) {jobOrdering = declaredOrdering}
+              tuning = withOrdering declaredOrdering defaultJobTuning
+          drained <-
+            runDb connStr $ do
+              ensureOrderedJobQueue job
+              _ <- enqueueToGroup job "a" (Ping "a1" 1)
+              runJobOnceWithContext tuning 1 job \_ctx _payload -> pure Done
+          drained `shouldBe` 1
+      )
+      [("throughput", FifoThroughput), ("round_robin", FifoRoundRobin)]
+
   -- EP-3 M4: end-to-end ordering proof.
   it "FifoThroughput drain preserves strict within-group order and fully drains" $ \connStr -> do
     observed <- newIORef ([] :: [Text])
-    let job = mkJob "keiro_pgmq_test.fifo_order"
+    let job = (mkJob "keiro_pgmq_test.fifo_order") {jobOrdering = FifoThroughput}
     drained <-
       runDb connStr $ do
         ensureOrderedJobQueue job
@@ -1259,13 +1514,13 @@ spec = do
     filter (Text.isPrefixOf "a") log' `shouldBe` ["a1", "a2", "a3"]
     filter (Text.isPrefixOf "b") log' `shouldBe` ["b1", "b2"]
 
-  it "FifoThroughput worker path preserves within-group order" $ \connStr -> do
+  it "FifoHeads worker path preserves within-group order with a large batch" $ \connStr -> do
     observed <- newIORef ([] :: [Text])
-    let job = mkJob "keiro_pgmq_test.fifo_worker"
+    let job = (mkJob "keiro_pgmq_test.fifo_worker") {jobOrdering = FifoHeads}
         tuning =
-          withOrdering FifoThroughput $
+          withOrdering FifoHeads $
             either (error . show) id $
-              mkJobTuning 30 1 (PollEvery 0.1)
+              mkJobTuning 30 50 (PollEvery 0.1)
     processed <-
       runDb connStr $ do
         ensureOrderedJobQueue job
@@ -1289,6 +1544,49 @@ spec = do
     processed `shouldBe` True
     log' <- readIORef observed
     filter (Text.isPrefixOf "a") log' `shouldBe` ["a1", "a2", "a3"]
+    len <- runDb connStr (queueLen job.jobQueue.physicalName)
+    len `shouldBe` 0
+
+  it "FifoHeads worker retries a failed head before its successor while other groups progress" $ \connStr -> do
+    firstA <- newIORef True
+    observed <- newIORef ([] :: [Text])
+    let job = (mkJob "keiro_pgmq_test.fifo_worker_retry") {jobOrdering = FifoHeads}
+        tuning =
+          withOrdering FifoHeads $
+            either (error . show) id $
+              mkJobTuning 30 50 (PollEvery 0.1)
+        handler _ctx payload = do
+          liftIO $ modifyIORef' observed (<> [payload.message])
+          retryA <- liftIO $ do
+            retryPending <- readIORef firstA
+            if payload.message == "a1" && retryPending
+              then writeIORef firstA False >> pure True
+              else pure False
+          pure $
+            if retryA
+              then Retry (RetryDelay 0)
+              else Done
+    processed <-
+      runDb connStr $ do
+        ensureOrderedJobQueue job
+        _ <- enqueueToGroup job "a" (Ping "a1" 1)
+        _ <- enqueueToGroup job "a" (Ping "a2" 2)
+        _ <- enqueueToGroup job "b" (Ping "b1" 1)
+        result <- runJobWorkers IgnoreFailures 16 [jobProcessorWithContext tuning job handler]
+        case result of
+          Left err -> liftIO $ fail ("runJobWorkers failed: " <> show err)
+          Right app -> do
+            ok <- liftIO $ waitUntil do
+              messages <- readIORef observed
+              pure $
+                filter (Text.isPrefixOf "a") messages == ["a1", "a1", "a2"]
+                  && filter (Text.isPrefixOf "b") messages == ["b1"]
+            stopAppQuickly app
+            pure ok
+    processed `shouldBe` True
+    log' <- readIORef observed
+    filter (Text.isPrefixOf "a") log' `shouldBe` ["a1", "a1", "a2"]
+    filter (Text.isPrefixOf "b") log' `shouldBe` ["b1"]
     len <- runDb connStr (queueLen job.jobQueue.physicalName)
     len `shouldBe` 0
 

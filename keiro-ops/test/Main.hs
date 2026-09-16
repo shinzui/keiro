@@ -1409,6 +1409,7 @@ rawValueJob name =
     { jobName = name,
       jobQueue = queueRef name,
       jobCodec = aesonJobCodec,
+      jobOrdering = Unordered,
       jobPolicy = defaultRetryPolicy
     }
 

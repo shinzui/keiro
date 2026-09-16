@@ -78,11 +78,20 @@ and the current drain and `mkProcessor` handler paths are serial.
 - [x] 2026-09-16: Created
   `mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`
   and revised the parent MasterPlan's adapter boundary.
-- [ ] M1 remaining: Implement, benchmark, and release grouped-head polling support from the
-  upstream adapter plan.
-- [ ] M2: Add `FifoHeads`, make ordering a required `Job` field, validate every entry point, update all in-repository constructors and DSL surfaces, and consume the verified adapter release.
-- [ ] M3: Dispatch `FifoHeads` through grouped-head reads on both paths and add adversarial failure, delay, mismatch, batch-safety, and database-round-trip regressions.
-- [ ] M4: Run the performance matrix, update user documentation/changelogs/tracking, complete ADR distillation, and record final results here.
+- [x] 2026-09-16: Published `shibuya-pgmq-adapter-0.16.0.0` to Hackage with Haddocks,
+  pushed annotated tag `v0.16.0.0`, and published the matching GitHub release after all
+  adapter tests, builds, capability checks, package checks, Haddocks, and flake checks passed.
+- [x] 2026-09-16: Added `FifoHeads`, the required `Job.jobOrdering` contract, shared validation
+  before reads, complete in-repository constructor migration, and the `fifo-heads` DSL surface.
+- [x] 2026-09-16: Dispatched one-shot grouped-head reads directly and workers through adapter
+  `HeadPerGroup`; added retry, throw, delayed-head, dead-letter, mismatch, sixteen-group batch,
+  default-entry-point, legacy batch-one, and continuous-worker regressions. Seven focused
+  `FifoHeads` examples pass.
+- [x] 2026-09-16: Removed the local adapter overlay and completed Hackage-only validation.
+  Cabal's install plan selects `shibuya-pgmq-adapter-0.16.0.0` as a remote-repository tarball;
+  the full workspace build, 78-example PGMQ suite (0 failures, 2 pre-existing pending),
+  743-example DSL suite (0 failures), focused conformance/ops/example suites, strict 44-concept
+  ADR validation, formatting, flake checks, and `git diff --check` all pass.
 
 
 ## Surprises & Discoveries
@@ -119,6 +128,39 @@ and the current drain and `mkProcessor` handler paths are serial.
   does not establish that: `runJobOnceWithContext` uses `foldM`, and Shibuya's `mkProcessor`
   constructs `Unordered` plus `Serial`. The refreshed documentation must say that groups are
   independently eligible and may be claimed together, while handlers remain serial today.
+- Shared validation can run before either consumer constructs or invokes its adapter. Invalid
+  raw tuning, job/tuning ordering disagreement, and legacy FIFO batches larger than one now
+  raise `JobConsumptionConfigError` without emitting a receive span. `withOrdering` preserves
+  the requested batch size, so it cannot hide an unsafe legacy deployment.
+- Mutation evidence proves both grouped-head dispatch and quantity preservation. Routing
+  `FifoHeads` through legacy `readGrouped` made the thrown-head regression observe a same-group
+  successor. Forcing grouped-head quantity one made the sixteen-group trace test emit sixteen
+  receives instead of one. Restoring `readGroupedHead` and the caller's quantity makes the
+  focused suite pass.
+- The DSL suite's external GHC probes import `Keiki.Shape` directly. Under the temporary adapter
+  overlay, the package became hidden in Cabal's generated environment, so those probes now expose
+  their direct `keiki` dependency explicitly rather than relying on accidental environment state.
+  The two affected probes pass after the correction.
+- The adapter's three-sample matrix passed on an Apple M1 Max with 64 GB RAM and PostgreSQL
+  17.10 using only the conventional FIFO GIN index. For 10,000 messages in one group, grouped
+  heads at quantities 1/10/50 measured medians 14.794956/14.160436/21.275268 s versus the
+  29.953141 s legacy-safe baseline; every case used 10,000 reads because only one head was
+  eligible. Across 100 groups, quantities 1/10/50 measured medians
+  13.305524/1.595694/0.562668 s and 10,000/1,000/200 reads versus the 77.516639 s legacy
+  baseline. Ratios were 0.172/0.021/0.007.
+- For 100,000 messages across 10,000 groups, grouped-head quantity one was the safe baseline:
+  median 1,044.325426 s, p95 1,128.905983 s, 95.76 messages/s, and 100,000 reads. Quantity ten
+  measured median 120.252500 s, p95 127.456734 s, 831.58 messages/s, 10,000 reads, ratio 0.115.
+  Quantity fifty measured median 37.467157 s, p95 42.513543 s, 2,669.00 messages/s, 2,000 reads,
+  ratio 0.036. Both passed the 20 percent gate. The legacy query was excluded only from this
+  fixture after 123 reads took about 20 minutes; smaller fixtures retain the migration baseline.
+- A clean Hackage-only whole-workspace build exposed two generated conformance consumers that
+  imported both the generated queue policy and `Job(..)` unqualified. Qualifying the generated
+  policy fields removes the `jobOrdering` ambiguity and keeps the generated public field name.
+- The machine's pre-existing Cabal configuration redirects its insecure Hackage URL to an
+  unavailable mirror. Final validation used a temporary repository-local Cabal configuration
+  pointed directly at HTTPS Hackage; the global configuration was not changed, and the install
+  plan confirms the adapter source is a Hackage tarball rather than a local checkout.
 
 
 ## Decision Log
@@ -178,9 +220,13 @@ and the current drain and `mkProcessor` handler paths are serial.
 
 ## Outcomes & Retrospective
 
-Planning refresh complete. Implementation has not started. The previous silent-clamp design
-and the client-result-order release gate are superseded. The remaining work has one explicit
-cross-repository prerequisite: released grouped-head dispatch in the Shibuya PGMQ adapter.
+The plan is complete. Every job declares its ordering; unsafe legacy batches and mismatches fail
+before reads; `FifoHeads` preserves batching while admitting only one absolute head per group;
+and default entry points inherit the job contract. PostgreSQL regressions cover retry, exception,
+delay, dead-letter, batch, and worker behavior, including one receive for sixteen independent
+groups. The FIFO consumer-contract decision is recorded in ADR-44. The adapter's published
+0.16.0.0 release supplies grouped-head dispatch on both polling paths and passed the complete
+performance gate. Keiro then built and tested from the Hackage tarball with no source override.
 
 
 ## Context and Orientation
@@ -435,15 +481,16 @@ cabal test shibuya-pgmq-adapter-test --test-show-details=direct
 cabal build all --enable-tests --enable-benchmarks
 just process-up
 export PGHOST="$PWD/db"
-export PGDATABASE=shibuya
-export PG_CONNECTION_STRING="postgresql:///shibuya?host=$(jq -rn --arg x "$PGHOST" '$x|@uri')"
+export PGDATABASE=shibuya_pgmq_adapter
+export PG_CONNECTION_STRING="postgresql:///shibuya_pgmq_adapter?host=$(jq -rn --arg x "$PGHOST" '$x|@uri')"
 BENCH_MESSAGE_COUNT=10000 BENCH_BATCH_SIZES=1,10,50 \
   cabal bench shibuya-pgmq-adapter-bench --benchmark-options='-p safe-fifo-drain --stdev 10'
 ```
 
-The benchmark command is safe only against the disposable local `shibuya` database created by
-`just process-up`; never point it at a production queue. Add the `safe-fifo-drain` benchmark
-pattern as part of M1. Capture a CSV as well if the local tasty-bench version supports it.
+The benchmark command is safe only against the disposable local `shibuya_pgmq_adapter` database
+created by `just process-up`; never point it at a production queue. Add the `safe-fifo-drain`
+benchmark pattern as part of M1. Capture a CSV as well if the local tasty-bench version supports
+it.
 
 Before selecting the Keiro bound, verify the actual release independently of local source:
 
@@ -609,3 +656,11 @@ database performance gate.
 
 Revision note (2026-09-16): Began implementation by creating upstream adapter plan 7 and
 updating MasterPlan 17's boundary before any adapter source changes.
+
+Revision note (2026-09-16): Implemented the required job ordering contract, grouped-head worker
+and one-shot dispatch, runtime validation, DSL spelling and scaffolding, adversarial PostgreSQL
+coverage, mutation checks, documentation, changelogs, and ADR-44. Adapter release publication and
+final Hackage-only validation remain.
+
+Revision note (2026-09-16): Published adapter 0.16.0.0, validated Keiro against its Hackage
+tarball with the complete build and test matrix, and marked all milestones complete.

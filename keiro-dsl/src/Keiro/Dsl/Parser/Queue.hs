@@ -68,7 +68,8 @@ pWorkqueue context = do
       choice
         [ WqUnordered <$ symbol "unordered",
           WqFifoThroughput <$ symbol "fifo-throughput",
-          WqFifoRoundRobin <$ symbol "fifo-roundrobin"
+          WqFifoRoundRobin <$ symbol "fifo-roundrobin",
+          WqFifoHeads <$ symbol "fifo-heads"
         ]
     pGroupKey = do
       _ <- symbol "group" *> symbol "key" *> symbol "from"

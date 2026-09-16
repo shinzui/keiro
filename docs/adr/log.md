@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-16
+* **Decision**: Add ADR-44: jobs declare ordering, grouped heads are the strict FIFO failure barrier, and legacy FIFO strategies are restricted to batch size one (plan 116).
 * **Update**: Amend ADR-28 so destructive authorization does not bypass the typed visibility refusal for PGMQ DLQ purge (plan 117).
 * **Update**: Extend ADR-41 with input-only DSL guards, checked acceptance ownership, coordination fingerprints, and generated-versus-Hole ownership.
 

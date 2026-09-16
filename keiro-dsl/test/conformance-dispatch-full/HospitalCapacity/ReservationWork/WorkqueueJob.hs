@@ -13,7 +13,7 @@ import Generated.HospitalCapacity.ReservationWork.Queue (
     ReservationWorkItem,
  )
 import Generated.HospitalCapacity.ReservationWork.QueueCodec (reservationWorkJobCodec)
-import Generated.HospitalCapacity.ReservationWork.QueuePolicy (retryPolicy)
+import Generated.HospitalCapacity.ReservationWork.QueuePolicy qualified as QueuePolicy
 import Keiro.PGMQ.Job (Job (..), JobOutcome (..))
 import Keiro.PGMQ.Runtime (queueRef)
 
@@ -24,7 +24,8 @@ reservationWorkJob =
         { jobName = "reservation-work"
         , jobQueue = queueRef "hospital_capacity.reservation_work"
         , jobCodec = reservationWorkJobCodec
-        , jobPolicy = retryPolicy
+        , jobOrdering = QueuePolicy.jobOrdering
+        , jobPolicy = QueuePolicy.retryPolicy
         }
 
 {- | The worker hole, filled: process one work item, decide an outcome. (A real

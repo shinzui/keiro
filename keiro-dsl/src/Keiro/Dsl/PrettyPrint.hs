@@ -368,6 +368,7 @@ docWorkqueue w =
       WqUnordered -> []
       WqFifoThroughput -> [indent 2 "ordering fifo-throughput"]
       WqFifoRoundRobin -> [indent 2 "ordering fifo-roundrobin"]
+      WqFifoHeads -> [indent 2 "ordering fifo-heads"]
     groupKeyLines = case (.groupKey) w of
       Nothing -> []
       Just groupKey ->

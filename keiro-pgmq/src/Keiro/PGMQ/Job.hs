@@ -7,7 +7,7 @@
 -- Integration Points and depended on by the two consumer migrations), and it
 -- keeps the producer signatures uniform with the processor/runner ones. We
 -- therefore silence the otherwise-correct redundant-constraint warning here.
-{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints -Wno-partial-fields #-}
 
 -- | Layer 2 of @keiro-pgmq@: the typed-'Job' ergonomics built on top of
 -- 'Keiro.PGMQ.Runtime'. This is the payoff layer that absorbs the boilerplate two
@@ -81,6 +81,7 @@ module Keiro.PGMQ.Job
     JobOrdering (..),
     JobTuning (..),
     JobTuningConfigError (..),
+    JobConsumptionConfigError (..),
     mkJobTuning,
     defaultJobTuning,
     withOrdering,
@@ -157,7 +158,7 @@ import "pgmq-effectful" Pgmq.Effectful
     mergeTraceHeaders,
   )
 import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
-import "pgmq-effectful" Pgmq.Effectful.Effect (readGrouped, readGroupedRoundRobin)
+import "pgmq-effectful" Pgmq.Effectful.Effect (readGrouped, readGroupedHead, readGroupedRoundRobin)
 import "pgmq-hasql" Pgmq.Hasql.Statements.Types (ReadGrouped (..))
 import "shibuya-core" Shibuya.App
   ( AppConfig (..),
@@ -297,17 +298,22 @@ data JobPolling
 -- selection order (@msg_id@ ascending), with NO per-key delivery-order guarantee
 -- under concurrent workers, retries, or visibility-timeout expiry.
 --
--- 'FifoThroughput' and 'FifoRoundRobin' enable strict per-group ordering via PGMQ
--- message groups (the reserved @x-pgmq-group@ header). Within one group, messages
--- are delivered in strict send order; distinct groups proceed in parallel.
+-- 'FifoHeads' enables strict per-group ordering via PGMQ message groups (the
+-- reserved @x-pgmq-group@ header). It returns at most one absolute head per
+-- group, so a failed or delayed head blocks its successors while distinct groups
+-- stay independently eligible. Current Keiro handlers remain serial.
+--
 -- 'FifoThroughput' fills a batch from the oldest eligible group first (SQS-style,
 -- @read_grouped@); 'FifoRoundRobin' interleaves fairly across groups
--- (@read_grouped_rr@). Delivery is still at-least-once and there is no
--- deduplication, so handlers must be idempotent.
+-- (@read_grouped_rr@). Those legacy strategies may safely use only a batch size
+-- of one; larger batches can lease a successor before its predecessor settles.
+-- Delivery is still at-least-once and there is no deduplication, so handlers
+-- must be idempotent.
 data JobOrdering
   = Unordered
   | FifoThroughput
   | FifoRoundRobin
+  | FifoHeads
   deriving stock (Eq, Show)
 
 -- | How a consumer reads the queue.
@@ -356,6 +362,37 @@ validPolling (PollEvery interval) = interval > 0
 validPolling (LongPoll maxPollSeconds pollIntervalMs) =
   maxPollSeconds > 0 && pollIntervalMs > 0
 
+-- | Invalid or contradictory consumer configuration. These checks run before
+-- an adapter is constructed or a direct PGMQ read is issued, including when raw
+-- 'JobTuning' and 'Job' constructors are used.
+data JobConsumptionConfigError
+  = InvalidJobTuning !JobTuningConfigError
+  | JobOrderingMismatch
+      { jobOrderingDeclared :: !JobOrdering,
+        tuningOrderingGiven :: !JobOrdering
+      }
+  | UnsafeLegacyFifoBatch
+      { unsafeOrdering :: !JobOrdering,
+        unsafeBatchSize :: !Int32
+      }
+  deriving stock (Eq, Show)
+  deriving anyclass (Exception)
+
+validateJobConsumptionConfig :: Job p -> JobTuning -> Either JobConsumptionConfigError ()
+validateJobConsumptionConfig job tuning = do
+  case mkJobTuning tuning.visibilityTimeout tuning.batchSize tuning.polling of
+    Left err -> Left (InvalidJobTuning err)
+    Right _ -> Right ()
+  if job.jobOrdering == tuning.ordering
+    then Right ()
+    else Left JobOrderingMismatch {jobOrderingDeclared = job.jobOrdering, tuningOrderingGiven = tuning.ordering}
+  case tuning.ordering of
+    FifoThroughput | tuning.batchSize > 1 -> unsafe
+    FifoRoundRobin | tuning.batchSize > 1 -> unsafe
+    _ -> Right ()
+  where
+    unsafe = Left UnsafeLegacyFifoBatch {unsafeOrdering = tuning.ordering, unsafeBatchSize = tuning.batchSize}
+
 toPollingConfig :: JobPolling -> PollingConfig
 toPollingConfig (PollEvery interval) = StandardPolling interval
 toPollingConfig (LongPoll maxPollSeconds pollIntervalMs) = LongPolling maxPollSeconds pollIntervalMs
@@ -365,6 +402,7 @@ toFifoConfig :: JobOrdering -> Maybe FifoConfig
 toFifoConfig Unordered = Nothing
 toFifoConfig FifoThroughput = Just (FifoConfig ThroughputOptimized)
 toFifoConfig FifoRoundRobin = Just (FifoConfig RoundRobin)
+toFifoConfig FifoHeads = Just (FifoConfig HeadPerGroup)
 
 retryDelaySeconds :: RetryDelay -> NominalDiffTime
 retryDelaySeconds (RetryDelay seconds) = seconds
@@ -380,14 +418,16 @@ nominalToSeconds dt =
       clamped = max minSec (min maxSec seconds)
    in ceiling clamped
 
--- | A declarative job: a queue, a payload codec, and a retry policy, named for
--- telemetry. Construct one and pair it with a handler of type
+-- | A declarative job: a queue, a payload codec, an ordering contract, and a
+-- retry policy, named for telemetry. Construct one and pair it with a handler of type
 -- @p -> Eff es 'JobOutcome'@.
 data Job p = Job
   { -- | Used as the shibuya 'ProcessorId' and telemetry label.
     jobName :: !Text,
     jobQueue :: !QueueRef,
     jobCodec :: !(JobCodec p),
+    -- | Required consumption ordering. Explicit tuning must match this value.
+    jobOrdering :: !JobOrdering,
     jobPolicy :: !RetryPolicy
   }
 
@@ -529,9 +569,9 @@ enqueueTracedWithDelay provider job d extraHeaders p = do
 -- | Enqueue a payload into the FIFO group named by @groupKey@. The group key is
 -- written under the reserved @x-pgmq-group@ JSONB header, which PGMQ's grouped
 -- reads and the shibuya adapter use to order deliveries per group. Consume with an
--- ordered 'JobTuning' (see 'withOrdering') to honor the order; within one group,
--- messages are handled in strict send order while distinct groups proceed in
--- parallel.
+-- ordered 'JobTuning' (see 'withOrdering') to honor the order. With 'FifoHeads',
+-- messages are handled in strict send order within one group while distinct
+-- groups can be claimed together; current Keiro handlers remain serial.
 enqueueToGroup ::
   (Pgmq :> es, IOE :> es) => Job p -> Text -> p -> Eff es MessageId
 enqueueToGroup job groupKey p =
@@ -732,6 +772,7 @@ jobProcessorWithContext ::
   (JobContext es -> p -> Eff es JobOutcome) ->
   Eff es (ProcessorId, QueueProcessor es)
 jobProcessorWithContext tuning job handle = do
+  either (liftIO . throwIO) pure (validateJobConsumptionConfig job tuning)
   env <- ask
   adapter <-
     pgmqAdapter env (adapterConfigFor tuning job)
@@ -753,7 +794,7 @@ jobProcessor ::
   (p -> Eff es JobOutcome) ->
   Eff es (ProcessorId, QueueProcessor es)
 jobProcessor job handle =
-  jobProcessorWithContext defaultJobTuning job (\_context p -> handle p)
+  jobProcessorWithContext (withOrdering job.jobOrdering defaultJobTuning) job (\_context p -> handle p)
 
 -- | Continuous, multi-processor run (the @rei@ cadence): run a supervised app
 -- over several processors built with 'jobProcessor'. Returns the app handle; the
@@ -866,9 +907,9 @@ runJobOnceWithContext ::
   Job p ->
   (JobContext es -> p -> Eff es JobOutcome) ->
   Eff es Int
-runJobOnceWithContext tuning n job handle
-  | n <= 0 = pure 0
-  | otherwise = drain 0
+runJobOnceWithContext tuning n job handle = do
+  either (liftIO . throwIO) pure (validateJobConsumptionConfig job tuning)
+  if n <= 0 then pure 0 else drain 0
   where
     drain handled
       | handled >= n = pure handled
@@ -892,6 +933,13 @@ runJobOnceWithContext tuning n job handle
                   }
             FifoRoundRobin ->
               readGroupedRoundRobin
+                ReadGrouped
+                  { queueName = job.jobQueue.physicalName,
+                    visibilityTimeout = tuning.visibilityTimeout,
+                    qty = qty
+                  }
+            FifoHeads ->
+              readGroupedHead
                 ReadGrouped
                   { queueName = job.jobQueue.physicalName,
                     visibilityTimeout = tuning.visibilityTimeout,
@@ -1043,7 +1091,7 @@ runJobOnce ::
 runJobOnce n job handle =
   void $
     runJobOnceWithContext
-      defaultJobTuning
+      (withOrdering job.jobOrdering defaultJobTuning)
       n
       job
       (\_context p -> handle p)

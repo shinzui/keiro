@@ -3004,6 +3004,8 @@ main = hspec $ do
               "-fforce-recomp",
               "-package-id",
               keiroCorePackageId,
+              "-package",
+              "keiki",
               "-outputdir",
               ghcOutput,
               "-i" <> out,
@@ -7212,6 +7214,19 @@ main = hspec $ do
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
         Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
+    it "round-trips fifo-heads and lowers it to the grouped-head runtime strategy" $ do
+      input <- readTestText "test/fixtures/workqueue-fifo-heads.keiro"
+      case parseSpec "in" input of
+        Left err -> expectationFailure (T.unpack err)
+        Right parsed -> do
+          renderSpec parsed `shouldSatisfy` T.isInfixOf "ordering fifo-heads"
+          parseSpec "in" (renderSpec parsed) `shouldBe` Right parsed
+          case [workqueue | NWorkqueue workqueue <- (.nodes) parsed] of
+            [workqueue] -> do
+              let policy = generatedTextEndingIn "QueuePolicy.hs" (scaffoldWorkqueue (defaultContext (parsed.context)) workqueue)
+              policy `shouldSatisfy` T.isInfixOf "jobOrdering = FifoHeads"
+              policy `shouldSatisfy` T.isInfixOf "withFifoIndexProvision (standardProvision)"
+            queues -> expectationFailure ("unexpected fifo-heads workqueues: " <> show queues)
     it "accepts the reservation-work spec (physical matches, no inversions)" $ do
       codes <- errorCodesOf "test/fixtures/reservation-work.keiro"
       codes `shouldBe` []
@@ -8537,6 +8552,9 @@ main = hspec $ do
       [(.code) k | Breaking k <- cs] `shouldContain` [WqOrderingChanged]
       [(.detail) k | Breaking k <- cs, (.code) k == WqOrderingChanged]
         `shouldSatisfy` any (T.isInfixOf "delivery-order contract")
+      heads <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-fifo-heads.keiro"
+      [(.detail) k | Breaking k <- heads, (.code) k == WqOrderingChanged]
+        `shouldSatisfy` any (T.isInfixOf "fifo-throughput -> fifo-heads")
     it "classifies workqueue provision changes as operational migrations" $ do
       cs <- diffFixtures "test/fixtures/workqueue-policy-base.keiro" "test/fixtures/workqueue-provision-change.keiro"
       [(.code) k | Breaking k <- cs] `shouldContain` [WqProvisionChanged]
@@ -8992,6 +9010,8 @@ main = hspec $ do
               "-fforce-recomp",
               "-package-id",
               keiroCorePackageId,
+              "-package",
+              "keiki",
               "-outputdir",
               ghcOutput,
               "-i" <> out,
@@ -14803,7 +14823,7 @@ genWorkqueue =
     <*> genAdversarialText
     <*> genAdversarialText
     <*> genAdversarialText
-    <*> elements [WqUnordered, WqFifoThroughput, WqFifoRoundRobin]
+    <*> elements [WqUnordered, WqFifoThroughput, WqFifoRoundRobin, WqFifoHeads]
     <*> genMaybe (WqGroupKey <$> genName <*> genName <*> genMaybe genAdversarialText)
     <*> oneof [pure WqStandard, pure WqUnlogged, WqPartitioned <$> genAdversarialText <*> genAdversarialText]
     <*> genName

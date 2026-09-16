@@ -8,6 +8,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- Workqueues accept `ordering fifo-heads`; round trips preserve the spelling,
+  scaffolding emits `FifoHeads` and FIFO-index provisioning, and ordering diffs
+  remain breaking delivery-contract changes.
+
 - Candidate Language 6 adds `idempotence delegated` to intake declarations and
   generates a typed `runInboxIntake` wrapper over delegated runtime intake.
   Published Languages 1 through 5 and table-generated output remain unchanged.

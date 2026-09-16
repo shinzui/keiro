@@ -76,7 +76,7 @@ Promote actual consumer FIFO decisions into the local ADR corpus at implementati
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Enforce FIFO group ordering under failure and batched consumption | docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md | Adapter plan 7 release for Keiro M2-M4 | None | In Progress |
+| 1 | Enforce FIFO group ordering under failure and batched consumption | docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md | Adapter plan 7 release for Keiro M2-M4 | None | Complete |
 | 2 | Preserve headers on DLQ redrive and make archive and purge visibility-safe | docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md | None | None | Not Started |
 | 3 | Correct partitioned retention semantics and the FIFO index | docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md | None | EP-1 shared Job.hs coordination | Not Started |
 
@@ -124,13 +124,19 @@ its job/tuning contract before constructing the adapter.
 
 
 - [x] 2026-09-16: Started EP-1 and created the upstream grouped-head adapter plan with the shared intention.
-- [ ] EP-1: Release grouped-head adapter dispatch and performance evidence.
-- [ ] EP-1: Consumer batching/order-tuning decision implemented on drain and worker paths, with failure and legacy-mode regressions.
+- [x] 2026-09-16: EP-1 adapter 0.16.0.0 released to Hackage and GitHub with annotated tag
+  `v0.16.0.0`; grouped-head dispatch, integration tests, and the three-fixture performance
+  matrix passed.
+- [x] 2026-09-16: EP-1 consumer batching/order-tuning contract implemented on drain and worker
+  paths, with retry, throw, delay, dead-letter, worker, batch, mismatch, default-entry-point, and
+  legacy-mode regressions plus DSL, documentation, and ADR coverage.
 - [ ] EP-2: Header-preserving redrive and visibility-safe archive/purge plus operator tests.
 - [ ] EP-3: Accurate retention policy/Haddocks and scoped constructor guardrail.
 - [ ] EP-3: Accurate conventional GIN description and measured optional supplemental-index guidance, or explicit negative/pending result.
 - [x] 2026-09-12: Reconciled shared pgmq-hs guidance with the user's no-overrides/additive-index constraint.
-- [ ] Final integration: tests, changelogs and consumer ADR distillation complete.
+- [x] 2026-09-16: EP-1 final integration selected the Hackage 0.16.0.0 tarball without a local
+  package path. The full build, PGMQ (78/0/2 pending), DSL (743/0), focused conformance/ops/example,
+  strict ADR, formatting, and flake validations passed.
 
 ## Surprises & Discoveries
 
@@ -148,6 +154,11 @@ matter. Supplemental indexing can improve a workload without fixing FIFO process
 The adapter audit found released pgmq-hs 0.6.0.0 already provides grouped-head standard and
 long-poll effects, but released adapter 0.15.0.0 has no strategy that dispatches them. The
 missing boundary is now explicit in upstream plan 7 rather than hidden inside Keiro.
+
+EP-1's Keiro implementation proves that grouped-head selection, rather than result sorting,
+closes the batching failure hole. Mutating the drain back to legacy grouped reads exposed a
+same-group successor after a thrown head; forcing quantity one changed the sixteen-group trace
+from one receive to sixteen. Both mutations were restored before final validation.
 
 ## Decision Log
 
@@ -170,8 +181,12 @@ and failure-path proofs. Deterministic cross-group result order is explicitly no
 ## Outcomes & Retrospective
 
 
-Cross-repository plan consistency corrected. No Keiro source was changed or runtime suite run
-by this audit; consumer implementation remains pending.
+Cross-repository plan consistency is corrected and EP-1 is complete. Jobs now declare ordering,
+invalid or contradictory tuning fails before reads, grouped heads safely preserve multi-group
+batches, the DSL owns the `fifo-heads` contract, and ADR-44 records the consumer decision. The
+adapter 0.16.0.0 release is published and tagged, its benchmark met the release gate, and Keiro's
+final build and tests consumed the Hackage tarball without a local source path. The MasterPlan
+remains active for EP-2 and EP-3.
 
 Revision note (2026-09-12): Replaced obsolete downstream expectations of pgmq SQL migrations,
 automatic GIN conversion and shared bounds with the accepted client-only/additive-index contract.
@@ -179,3 +194,9 @@ automatic GIN conversion and shared bounds with the accepted client-only/additiv
 Revision note (2026-09-16): Started EP-1, registered the upstream grouped-head adapter plan,
 and replaced the prior unchanged-adapter/client-ordering assumptions with the released-head API
 and explicit adapter-release dependency.
+
+Revision note (2026-09-16): Implemented EP-1's Keiro runtime, DSL, adversarial tests,
+documentation, changelogs, and ADR; retained adapter publication as the final hard gate.
+
+Revision note (2026-09-16): Published the adapter release, completed Hackage-only integration
+and the final validation matrix, and marked EP-1 complete.

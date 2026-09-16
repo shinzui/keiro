@@ -14,13 +14,20 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
   still compile but must inspect `PurgeDlqBlocked` rather than assuming deletion.
 - Require the released `pgmq-config`, `pgmq-core`, `pgmq-effectful`,
   `pgmq-hasql`, and test-only `pgmq-migration` 0.6 family together with
-  `shibuya-pgmq-adapter ^>=0.15.0.0`. The re-exported `QueueMetrics` record now
+  `shibuya-pgmq-adapter ^>=0.16.0.0`. The re-exported `QueueMetrics` record now
   includes nullable `defaultPartitionLength`, so callers that construct it or
-  match it positionally must handle the new field. Keiro's job API is otherwise
-  unchanged, and partitioned provisioning deliberately passes `premake = Nothing`
-  to retain the PGMQ server default rather than exposing explicit premake control.
+  match it positionally must handle the new field. Partitioned provisioning
+  deliberately passes `premake = Nothing` to retain the PGMQ server default
+  rather than exposing explicit premake control.
+- `Job` gains the required `jobOrdering` field. Explicit tuning must match the
+  declaration; invalid raw tuning and legacy FIFO batches larger than one now
+  throw `JobConsumptionConfigError` before adapter construction or reads.
 
 ### New Features
+
+- Add `FifoHeads`, backed by PGMQ's grouped-head read in both worker and
+  one-shot paths. It safely batches independent absolute group heads while a
+  failed, invisible, or delayed head blocks successors in its own group.
 
 - DLQ redrive preserves the wrapper's original producer headers, including FIFO,
   trace, and application metadata. Missing and JSON-null legacy headers remain

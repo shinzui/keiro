@@ -21,10 +21,16 @@ Tracked item IDs, in collection order: 15, 16, 17, 18, 19, 20. `mina track show 
 | [265](plans/265-make-aggregate-transition-family-diffs-idempotent-and-order-independent.md) | Planned | Make transition-family comparison deterministic and order independent. Implement before 266. |
 | [266](plans/266-classify-guard-unions-by-replay-body-and-validate-replay-only-remedies.md) | Blocked by 265 | Classify same-body guard unions and validate replay-only remedies after the comparison foundation lands. |
 | [117](plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md) | Planned | Preserve DLQ redrive headers and make archive/purge visibility-safe; include failure-path tests. |
-| [116](plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md) | Blocked on upstream ordering | Local FIFO failure/batch tests can start; release acceptance also needs the upstream deterministic grouped-read contract. |
+| [116](plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md) | Delivered | Grouped-head FIFO consumption, validation, DSL/docs/ADR, adapter 0.16.0.0 release, and Hackage-only validation are complete. |
 | [118](plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md) | Planned | Ship retention semantics and constructor guardrails; make the index change conditional on measured benefit. |
 
-The upstream ordering gate for 116 is `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`. The optional FIFO index work is coordinated with `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`. A negative index result is an acceptable outcome for that optional optimization; it does not excuse the retention safety/documentation work.
+Plan 116 does not depend on deterministic cross-group result order: grouped-head reads return at
+most one member per group, and Keiro promises no order between groups. Its release dependency is
+`mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`.
+The optional FIFO index work is coordinated with
+`mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`.
+A negative index result is an acceptable outcome for that optional optimization; it does not
+excuse the retention safety/documentation work.
 
 ## Closed stale entries
 

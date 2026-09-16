@@ -18,12 +18,22 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   checkpoint cutover or an application-owned mapping before replay (ADR-42).
   No schema migration is required.
 - `keiro-pgmq`: adopt the released 0.6.0.0 family from mori://shinzui/pgmq-hs and
-  `shibuya-pgmq-adapter` 0.15.0.0 across PGMQ consumers, completing normal
+  `shibuya-pgmq-adapter` 0.16.0.0 across PGMQ consumers, completing normal
   Cabal solver support. The re-exported `QueueMetrics` record gains nullable
   `defaultPartitionLength`. Partitioned job provisioning explicitly retains the
   server's default premake with `Nothing`.
+- `keiro-pgmq`: every `Job` now requires `jobOrdering`. Explicit tuning must
+  match it, raw invalid tuning fails before consumption, and legacy
+  `FifoThroughput`/`FifoRoundRobin` modes reject batch sizes greater than one.
+  Default worker and drain wrappers inherit the job's ordering.
 
 ### New Features
+
+- `keiro-pgmq`: add `FifoHeads`, the strict per-group failure barrier backed by
+  PGMQ grouped-head reads. It safely batches one absolute head from each
+  independent group and requires `shibuya-pgmq-adapter ^>=0.16.0.0`.
+- `keiro-dsl`: add `ordering fifo-heads` parsing, pretty-printing, breaking diff
+  classification, and scaffolding to `FifoHeads` plus FIFO-index provisioning.
 
 - `keiro`: add `Keiro.ProcessManager.Reaction`, an additive typed process-manager
   API with explicit no-advance and accepted-only follow-ups, atomic saga/timer

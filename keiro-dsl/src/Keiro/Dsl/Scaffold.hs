@@ -3994,7 +3994,7 @@ emitQueuePolicy genPrefix w =
       "jobOrdering :: JobOrdering",
       "jobOrdering = " <> orderingCtor,
       "",
-      "-- Deployment owns visibility timeout, batch size, and polling; the spec owns ordering.",
+      "-- Deployment owns a positive batch size, visibility timeout, and polling; the spec owns ordering. Legacy FIFO modes reject batch sizes greater than one.",
       "jobTuningFor :: JobTuning -> JobTuning",
       "jobTuningFor = withOrdering jobOrdering",
       "",
@@ -4041,6 +4041,7 @@ emitQueuePolicy genPrefix w =
       WqUnordered -> "Unordered"
       WqFifoThroughput -> "FifoThroughput"
       WqFifoRoundRobin -> "FifoRoundRobin"
+      WqFifoHeads -> "FifoHeads"
     provisionExpr = fifoWrap baseProvision
     fifoWrap expression = case (.ordering) w of
       WqUnordered -> expression

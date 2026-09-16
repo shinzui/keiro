@@ -11,7 +11,8 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Generated.HospitalCapacity.ReservationWork.Queue (ReservationWorkItem (..), encodeReservationWorkItem, groupKeyFor, parseReservationWorkItem)
 import Generated.HospitalCapacity.ReservationWork.QueueCodec (reservationWorkJobCodec)
-import Generated.HospitalCapacity.ReservationWork.QueuePolicy (ReservationWorkOutcome (..), jobOrdering, jobOutcomeFor, jobTuningFor, queueProvision, retryPolicy)
+import Generated.HospitalCapacity.ReservationWork.QueuePolicy (ReservationWorkOutcome (..))
+import Generated.HospitalCapacity.ReservationWork.QueuePolicy qualified as QueuePolicy
 import Keiro.Dsl.Validate (derivedQueueTrio)
 import Keiro.PGMQ.Job (Job (..), JobOrdering (..), JobOutcome (..), JobTuning (..), RetryPolicy (..), defaultJobTuning, queueProvisionConfigs)
 import Keiro.PGMQ.Runtime (QueueRef (..), queueRef)
@@ -37,19 +38,20 @@ main = do
       decodeRejectionOk = case parseReservationWorkItem (object ["reservation_id" .= ("rsv-123" :: Text)]) of
         Left _ -> True
         Right _ -> False
-      storeOk = isRetry (jobOutcomeFor StoreFailure) -- transient: MUST retry
-      decodeOk = isDead (jobOutcomeFor DecodeFailure) -- poison: MUST dead-letter
-      ceilingOk = maxRetries retryPolicy == 3 && useDeadLetter retryPolicy
-      orderingOk = jobOrdering == FifoThroughput
-      tuningOk = ordering (jobTuningFor defaultJobTuning) == FifoThroughput
+      storeOk = isRetry (QueuePolicy.jobOutcomeFor StoreFailure) -- transient: MUST retry
+      decodeOk = isDead (QueuePolicy.jobOutcomeFor DecodeFailure) -- poison: MUST dead-letter
+      ceilingOk = maxRetries QueuePolicy.retryPolicy == 3 && useDeadLetter QueuePolicy.retryPolicy
+      orderingOk = QueuePolicy.jobOrdering == FifoThroughput
+      tuningOk = ordering (QueuePolicy.jobTuningFor defaultJobTuning) == FifoThroughput
       job =
         Job
           { jobName = "reservation-work",
             jobQueue = queueRef "hospital_capacity.reservation_work",
             jobCodec = reservationWorkJobCodec,
-            jobPolicy = retryPolicy
+            jobOrdering = QueuePolicy.jobOrdering,
+            jobPolicy = QueuePolicy.retryPolicy
           }
-      provisionOk = case queueProvisionConfigs queueProvision job of
+      provisionOk = case queueProvisionConfigs QueuePolicy.queueProvision job of
         [mainQueue, deadLetterQueue] ->
           Config.fifoIndex mainQueue
             && not (Config.fifoIndex deadLetterQueue)

@@ -2908,6 +2908,7 @@ renderWqOrdering :: WqOrdering -> Text
 renderWqOrdering WqUnordered = "unordered"
 renderWqOrdering WqFifoThroughput = "fifo-throughput"
 renderWqOrdering WqFifoRoundRobin = "fifo-roundrobin"
+renderWqOrdering WqFifoHeads = "fifo-heads"
 
 renderWqProvision :: WqProvision -> Text
 renderWqProvision WqStandard = "standard"

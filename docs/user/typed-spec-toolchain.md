@@ -1370,7 +1370,7 @@ workqueue reservation_work {
          dlq = "hospital_capacity_reservation_work_dlq"
          table = "pgmq.q_hospital_capacity_reservation_work"
 
-  ordering fifo-throughput
+  ordering fifo-heads
   group key from reservationId via raw
   provision standard
 
@@ -1424,8 +1424,10 @@ present-null behavior is explicit. The queue keeps its schema-version-1
 `{v,t,data}` envelope; incompatible queued jobs still require a drain or a
 declared transitional codec rather than an automatic upcaster.
 
-Ordering is `unordered` (the default), `fifo-throughput`, or
-`fifo-roundrobin`. FIFO requires a group key; unordered queues reject one.
+Ordering is `unordered` (the default), `fifo-throughput`, `fifo-roundrobin`, or
+`fifo-heads`. FIFO requires a group key; unordered queues reject one.
+`fifo-heads` is the strict failure barrier and safely batches independent group
+heads. The two legacy FIFO fill modes require a runtime batch size of one.
 `via raw` requires a `text` field. An opaque derivation uses:
 
 ```text
