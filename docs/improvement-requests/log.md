@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-16
+* **Addition**: IR-40 requests checked nominal TypeID references inside structural records, unions, and containers, preserving identity, codecs, coverage, and compatibility without an opaque workaround.
+
 ## 2026-09-15
 * **Implemented**: Implemented the accepted structural scope of Plans 265 and 266; semantic guard proofs remain deferred in the IR-33 review.
 * **Update**: Audit non-completed request statuses against their plans and the current tree. No
