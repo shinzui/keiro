@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-09-16
+* **Accepted**: IR-40 accepted after in-repository validation and linked to ExecPlan 287, which
+adds nominal leaves to the structural type graph under candidate Language 6.
+* **Review**: IR-40 records a Claude Code technical-accuracy review at Keiro `3da4d437`: the
+`MappedUnresolvedName` reproduction, the `mapped nominal` boundary, the Optional-opaque
+rejection, and the `CoverageOpaqueSurface` escalation all reproduce with keiro-dsl 0.16.0.0.
 * **Addition**: IR-40 requests checked nominal TypeID references inside structural records, unions, and containers, preserving identity, codecs, coverage, and compatibility without an opaque workaround.
 * **Completed**: Close IR-39 after Plans 279 and 273 deliver the reaction runtime, Language 6 checking and generation, conformance, evolution gates, and documentation.
 * **Review**: Refresh every request against Keiro `708aa215`. All 39 now carry the

@@ -5,10 +5,11 @@ description: >-
   Resolve and lower declared IDs inside structural records, unions, and containers with
   the same nominal identity and checked TypeID contract as direct aggregate fields,
   without requiring an opaque codec or a text-keyed replacement model.
-timestamp: 2026-09-16T22:10:35Z
+timestamp: 2026-09-16T23:18:13Z
 requestId: IR-40
-status: proposed
+status: accepted
 origin: mori://tan/notification-render-service
+plan: docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md
 reviews:
   - kind: model
     reviewer: codex-author
@@ -23,14 +24,40 @@ reviews:
       Author self-review against Keiro checkout 5b52b684a10c0368fdc00cffc0f131926cce4b10,
       the structural type graph, nominal resolver, TypeID-v7 codec contract, and a minimal
       checker reproduction. This is not independent review or implementation verification.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T23:18:13Z
+    document_timestamp: 2026-09-16T22:10:35Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-fable-5-1
+    effort: high
+    context: >-
+      Validation at Keiro `3da4d437` (the merge of pull request #1) with the built keiro-dsl
+      0.16.0.0. The request's specification fails `check` with `MappedUnresolvedName` at both
+      Language 5 and candidate Language 6, while the same ID checks as a direct aggregate field;
+      a `mapped nominal` scalar hits the same boundary; `Optional` of an opaque value fails
+      `MappedNonInjectiveNullability`; and `CoverageOpaqueSurface` fires on a persisted event
+      root and is escalated by `--deny-warnings`. The cited source locations (`resolveTypeGraph`
+      and `resolveExpr` in `Keiro.Dsl.TypeGraph`, `typeGraphDiagnostic` in
+      `Keiro.Dsl.Validate`, `Keiro.Dsl.NominalType`, `Keiro.Codec.IdDomain`) are exact. The
+      consumer's opaque-twin workaround was confirmed in its Language 5 specification. Accepted
+      and planned as ExecPlan 287.
 ---
 
 # Improvement Request: Support Nominal IDs Inside Structural Mapped Types
 
 ## Status
 
-Proposed. No compiler fix, language-version decision, or warning-policy exception is
-implemented by this request. Request ID allocated using `okf id next` with the repository's
+Accepted on 2026-09-16 after in-repository validation and planned as
+[ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md), which
+adds a nominal leaf to the resolved structural type graph, gates the capability on candidate
+Language 6, generates leaf codecs with Keiro-owned TypeID admission, and extends coverage,
+semantic diff, and conformance. The plan supports `id` declarations (generated and
+consumer-bound) and `mapped nominal` scalars as leaves and rejects nominal enums with a
+deliberate diagnostic. The request completes once the plan's milestones ship and release
+evidence is recorded. Request ID allocated using `okf id next` with the repository's
 `mori/improvement-requests-profile.dhall` profile.
 
 ## Context
