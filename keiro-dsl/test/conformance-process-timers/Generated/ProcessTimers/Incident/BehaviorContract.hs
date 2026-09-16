@@ -129,7 +129,19 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- IncidentOpen x RemindIncident: live transition
+  [ -- IncidentEscalatedState x EscalateIncident: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-48ce258ccf64ef4e"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = IncidentEscalatedState
+      , commandName = "EscalateIncident"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- IncidentOpen x RemindIncident: live transition
     BehaviorRequirement
       { key = BehaviorKey "behavior-v1-93455a87d5151176"
       , kind = LiveTransition
@@ -143,15 +155,27 @@ behaviorRequirements =
       }
   , -- IncidentOpen x EscalateIncident: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-f87ad8e553a0b610"
+      { key = BehaviorKey "behavior-v1-b944c85b616b9349"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardTotal
       , source = IncidentOpen
       , commandName = "EscalateIncident"
       , expectedEdge = (Just (K.EdgeRef IncidentOpen 0))
-      , target = Just IncidentOpen
+      , target = Just IncidentEscalatedState
       , eventKinds = ["IncidentEscalated"]
+      }
+  , -- IncidentEscalatedState x RemindIncident: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-d66d007f74139a07"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = IncidentEscalatedState
+      , commandName = "RemindIncident"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
       }
   ]
 

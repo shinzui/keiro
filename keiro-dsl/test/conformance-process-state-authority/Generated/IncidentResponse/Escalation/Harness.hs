@@ -17,11 +17,15 @@ harnessAssertions =
   -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: RaisedNoted", roundTrips sampleEventRaisedNoted)
   , ("golden round-trip: Acknowledged", roundTrips sampleEventAcknowledged)
+  , ("golden round-trip: DormantActivated", roundTrips sampleEventDormantActivated)
   , ("accepts NoteRaised from EscalationOpen", acceptNoteRaised)
   , ("accepts NoteAcknowledged from EscalationOpen", acceptNoteAcknowledged)
+  , ("accepts NoteIgnored from EscalationOpen", acceptNoteIgnored)
+  , ("accepts ActivateDormant from EscalationOpen", acceptActivateDormant)
   ]
   ++ forwardReplayNoteRaised
   ++ forwardReplayNoteAcknowledged
+  ++ forwardReplayActivateDormant
 
 roundTrips :: EscalationEvent -> Bool
 roundTrips e = parseEscalationEvent (eventType escalationCodec e) (encodeEscalationEvent e) == Right e
@@ -38,6 +42,9 @@ sampleEventRaisedNoted = RaisedNoted (RaisedNotedData sampleIncidentId)
 sampleEventAcknowledged :: EscalationEvent
 sampleEventAcknowledged = Acknowledged (AcknowledgedData sampleIncidentId)
 
+sampleEventDormantActivated :: EscalationEvent
+sampleEventDormantActivated = DormantActivated (DormantActivatedData sampleIncidentId)
+
 acceptNoteRaised :: Bool
 acceptNoteRaised =
   case step escalationTransducer (EscalationOpen, initialEscalationRegs) (NoteRaised (NoteRaisedData sampleIncidentId)) of
@@ -48,6 +55,18 @@ acceptNoteAcknowledged :: Bool
 acceptNoteAcknowledged =
   case step escalationTransducer (EscalationOpen, initialEscalationRegs) (NoteAcknowledged (NoteAcknowledgedData sampleIncidentId)) of
     Just (v, _, _) -> v == EscalationOpen
+    Nothing -> False
+
+acceptNoteIgnored :: Bool
+acceptNoteIgnored =
+  case step escalationTransducer (EscalationOpen, initialEscalationRegs) (NoteIgnored (NoteIgnoredData sampleIncidentId)) of
+    Just (v, _, _) -> v == EscalationOpen
+    Nothing -> False
+
+acceptActivateDormant :: Bool
+acceptActivateDormant =
+  case step escalationTransducer (EscalationOpen, initialEscalationRegs) (ActivateDormant (ActivateDormantData sampleIncidentId)) of
+    Just (v, _, _) -> v == EscalationDormant
     Nothing -> False
 
 -- forward/replay equality (plan 147): cross the persisted codec boundary,
@@ -85,3 +104,21 @@ forwardReplayNoteAcknowledged =
               ]
   where
     prefix = "forward/replay equality: NoteAcknowledged from EscalationOpen -- "
+
+-- forward/replay equality (plan 147): cross the persisted codec boundary,
+-- replay the emitted chain, and compare the final vertex and every register.
+forwardReplayActivateDormant :: [(String, Bool)]
+forwardReplayActivateDormant =
+  case step escalationTransducer (EscalationOpen, initialEscalationRegs) (ActivateDormant (ActivateDormantData sampleIncidentId)) of
+    Nothing -> [(prefix <> "forward step accepted", False)]
+    Just (forwardVertex, _forwardRegs, emitted) ->
+      case mapM (\event -> parseEscalationEvent (eventType escalationCodec event) (encodeEscalationEvent event)) emitted of
+        Left _ -> [(prefix <> "emitted chain decodes", False)]
+        Right decodedEvents ->
+          case applyEventsEither escalationTransducer (EscalationOpen, initialEscalationRegs) decodedEvents of
+            Left _ -> [(prefix <> "replay succeeds", False)]
+            Right (replayVertex, _replayRegs) ->
+              [ (prefix <> "final vertex", replayVertex == forwardVertex)
+              ]
+  where
+    prefix = "forward/replay equality: ActivateDormant from EscalationOpen -- "

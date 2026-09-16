@@ -7,7 +7,7 @@ import Keiki.Core (RegFile (..))
 import Generated.IncidentResponse.Nominals (IncidentId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
-data EscalationVertex = EscalationOpen
+data EscalationVertex = EscalationOpen | EscalationDormant
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data NoteRaisedData = NoteRaisedData
@@ -20,8 +20,20 @@ data NoteAcknowledgedData = NoteAcknowledgedData
   }
   deriving stock (Generic, Eq, Show)
 
+data NoteIgnoredData = NoteIgnoredData
+  { incidentId :: !IncidentId
+  }
+  deriving stock (Generic, Eq, Show)
+
+data ActivateDormantData = ActivateDormantData
+  { incidentId :: !IncidentId
+  }
+  deriving stock (Generic, Eq, Show)
+
 data EscalationCommand = NoteRaised !NoteRaisedData
   | NoteAcknowledged !NoteAcknowledgedData
+  | NoteIgnored !NoteIgnoredData
+  | ActivateDormant !ActivateDormantData
   deriving stock (Generic, Eq, Show)
 
 data RaisedNotedData = RaisedNotedData
@@ -34,8 +46,14 @@ data AcknowledgedData = AcknowledgedData
   }
   deriving stock (Generic, Eq, Show)
 
+data DormantActivatedData = DormantActivatedData
+  { incidentId :: !IncidentId
+  }
+  deriving stock (Generic, Eq, Show)
+
 data EscalationEvent = RaisedNoted !RaisedNotedData
   | Acknowledged !AcknowledgedData
+  | DormantActivated !DormantActivatedData
   deriving stock (Generic, Eq, Show)
 
 type EscalationRegs =

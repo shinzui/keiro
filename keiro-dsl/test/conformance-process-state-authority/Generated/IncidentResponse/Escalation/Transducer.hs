@@ -35,13 +35,21 @@ escalationTransducer =
           { incidentId = d.incidentId
           })
         B.goto EscalationOpen
+      B.onCmd inCtorNoteIgnored $ \_d -> B.do
+        B.noEmit
+        B.goto EscalationOpen
+      B.onCmd inCtorActivateDormant $ \d -> B.do
+        B.emit wireDormantActivated (DormantActivatedTermFields
+          { incidentId = d.incidentId
+          })
+        B.goto EscalationDormant
  where
   isTerminal = \case
 
     _ -> False
 
 escalationFoldFingerprint :: Text
-escalationFoldFingerprint = "695cbb4bc76b7c815774c9283e66ea30"
+escalationFoldFingerprint = "c698d1c8c31d347428f9798264dcb612"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)
@@ -52,6 +60,8 @@ escalationPredicateVerifications :: IO [(Text, BehaviorOwnership, S.PredicateVer
 escalationPredicateVerifications = sequence
   [ verifyTransition "transition1OpenNoteRaised" GeneratedOwned EscalationOpen 0
   , verifyTransition "transition2OpenNoteAcknowledged" GeneratedOwned EscalationOpen 1
+  , verifyTransition "transition3OpenNoteIgnored" GeneratedOwned EscalationOpen 2
+  , verifyTransition "transition4OpenActivateDormant" GeneratedOwned EscalationOpen 3
   ]
  where
   verifyTransition label owner source edgeIndex =

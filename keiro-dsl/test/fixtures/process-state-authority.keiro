@@ -3,12 +3,15 @@ context incident-response
 
 id IncidentId prefix=inc
 enum Severity { Sev1=sev1 Sev2=sev2 Sev3=sev3 }
+enum EscalationRejection { Invalid=invalid }
+enum EscalationNoOp { Ignored=ignored }
 
 process IncidentEscalation
   name "incident-escalation"
   reactions version 1
   input IncidentReported { incidentId:IncidentId severity:Severity raisedAt:Time }
   input ResponderAcked { incidentId:IncidentId ackedAt:Time }
+  input ResponderIgnored { incidentId:IncidentId }
   input IncidentNoted { incidentId:IncidentId }
   correlate input.incidentId via idText
   saga Escalation category "escalation"
@@ -25,6 +28,14 @@ process IncidentEscalation
 
   on ResponderAcked
     advance NoteAcknowledged { incidentId }
+      accepted
+        dispatch Incident@input.incidentId AcknowledgeIncident { incidentId }
+          on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+      silent no-action
+    cancel escalation
+
+  on ResponderIgnored
+    advance NoteIgnored { incidentId }
       accepted
         dispatch Incident@input.incidentId AcknowledgeIncident { incidentId }
           on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
@@ -49,14 +60,31 @@ process IncidentEscalation
     decode unknown-status => Cancelled
 
 aggregate Escalation
+  domain-outcomes rejection=EscalationRejection no-op=EscalationNoOp
   regs
-  states Open
+  states Open Dormant
   command NoteRaised { incidentId }
   command NoteAcknowledged { incidentId }
+  command NoteIgnored { incidentId }
+  command ActivateDormant { incidentId }
   event RaisedNoted = fields(NoteRaised)
   event Acknowledged = fields(NoteAcknowledged)
-  Open -- NoteRaised --> emit RaisedNoted ; goto Open
-  Open -- NoteAcknowledged --> emit Acknowledged ; goto Open
+  event DormantActivated = fields(ActivateDormant)
+  Open -- NoteRaised -->
+    outcome accepted
+    emit RaisedNoted
+    goto Open
+  Open -- NoteAcknowledged -->
+    outcome accepted
+    emit Acknowledged
+    goto Open
+  Open -- NoteIgnored -->
+    outcome no-op EscalationNoOp.Ignored
+    goto Open
+  Open -- ActivateDormant -->
+    outcome accepted
+    emit DormantActivated
+    goto Dormant
 
 aggregate Incident
   regs

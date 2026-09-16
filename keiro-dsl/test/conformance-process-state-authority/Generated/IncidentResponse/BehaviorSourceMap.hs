@@ -17,10 +17,16 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
-  "behavior-v1-0aad69728dee8fec" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 69 3)
-  "behavior-v1-36c541281e30554e" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 68 3)
-  "behavior-v1-3c9a2793ee857505" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 58 3)
-  "behavior-v1-bb2577aace70f171" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 59 3)
+  "behavior-v1-00b0b13023eea6f8" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 81 3)
+  "behavior-v1-0aad69728dee8fec" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 97 3)
+  "behavior-v1-16209316858bb8c3" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 65 15)
+  "behavior-v1-2144226ce8222855" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 73 3)
+  "behavior-v1-36c541281e30554e" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 96 3)
+  "behavior-v1-3d0e024503e32404" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 84 3)
+  "behavior-v1-65795e7a28345559" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 77 3)
+  "behavior-v1-75011409d18e29c3" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 65 15)
+  "behavior-v1-8f58f8301e7a66f3" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 65 15)
+  "behavior-v1-eecae8fa281fddcf" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-state-authority.keiro" 65 15)
   _ -> Nothing
 
 renderBehaviorSourceLocation :: Text -> Text

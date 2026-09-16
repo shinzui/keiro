@@ -55,8 +55,10 @@ generated Generated/ProcessTimers/Incident/Projection.hs
 generated Generated/ProcessTimers/Incident/Harness.hs
 id-domain id-domain|name=IncidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
 nominal-equality nominal-equality|name=IncidentId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:inc:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+behavior {"aggregate":"Incident","command":"EscalateIncident","evidence":"generated-authoritative","key":"behavior-v1-48ce258ccf64ef4e","kind":"required-rejection","outputs":[],"source":"EscalatedState"}
 behavior {"aggregate":"Incident","command":"RemindIncident","evidence":"generated-authoritative","key":"behavior-v1-93455a87d5151176","kind":"live-transition","outputs":[{"command":"RemindIncident","ownership":"generated-command-identity"}],"source":"Open"}
 behavior {"aggregate":"IncidentSaga","command":"RecordIncident","evidence":"generated-authoritative","key":"behavior-v1-af16dd42cbccd576","kind":"live-transition","outputs":[{"command":"RecordIncident","ownership":"generated-command-identity"}],"source":"Open"}
-behavior {"aggregate":"Incident","command":"EscalateIncident","evidence":"generated-authoritative","key":"behavior-v1-f87ad8e553a0b610","kind":"live-transition","outputs":[{"command":"EscalateIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Incident","command":"EscalateIncident","evidence":"generated-authoritative","key":"behavior-v1-b944c85b616b9349","kind":"live-transition","outputs":[{"command":"EscalateIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Incident","command":"RemindIncident","evidence":"generated-authoritative","key":"behavior-v1-d66d007f74139a07","kind":"required-rejection","outputs":[],"source":"EscalatedState"}
 process-reaction {"fingerprint":"a87210576bba6fd3eacc636e6c8d22dcf183b849cfc6886ed2136d93da90ee08","holeObligations":["decodeIncidentTimersInput :: RecordedEvent -> Maybe IncidentTimersInput"],"processName":"incident-timers","verification":"generated-declarative","version":1}
 semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

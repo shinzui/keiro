@@ -767,6 +767,17 @@ benchmark keiro-dsl-parser-bench
     tasty-bench >=0.5 && <0.6,
     text >=2.1 && <2.2,
 
+benchmark process-scaling
+  import: warnings, shared
+  type: exitcode-stdio-1.0
+  hs-source-dirs: bench/process-scaling
+  main-is: Main.hs
+  build-depends:
+    base >=4.21 && <5,
+    keiro-dsl,
+    tasty-bench >=0.5 && <0.6,
+    text >=2.1 && <2.2,
+
 -- EP-109 M2: snapshot-enabled aggregate scaffolding compiled against the live
 -- defaultStateCodec and stream-construction guards, with the captured codec
 -- identity checked against keiki's regFileShapeHash.
@@ -1327,8 +1338,11 @@ test-suite keiro-dsl-conformance-process-reactions
     Generated.ProcessReactions.IncidentSaga.Transducer
     Generated.ProcessReactions.Nominals
     Generated.ProcessReactions.Nominals.Internal
+    Generated.ProcessReactions.ScalingReaction.Input
+    Generated.ProcessReactions.ScalingReaction.Process
     ProcessReactions.AuditOnly.ProcessHoles
     ProcessReactions.IncidentReaction.ProcessHoles
+    ProcessReactions.ScalingReaction.ProcessHoles
 
   build-depends:
     aeson >=2.2 && <2.3,

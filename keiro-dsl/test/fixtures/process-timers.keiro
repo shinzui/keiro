@@ -52,10 +52,10 @@ aggregate IncidentSaga
 
 aggregate Incident
   regs
-  states Open
+  states Open EscalatedState
   command EscalateIncident { incidentId }
   command RemindIncident { incidentId }
   event IncidentEscalated = fields(EscalateIncident)
   event IncidentReminded = fields(RemindIncident)
-  Open -- EscalateIncident --> emit IncidentEscalated ; goto Open
+  Open -- EscalateIncident --> emit IncidentEscalated ; goto EscalatedState
   Open -- RemindIncident --> emit IncidentReminded ; goto Open

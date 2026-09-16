@@ -17,22 +17,26 @@ module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerNam
 module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction AuditOnly (line 32)","path":"Generated/ProcessReactions/AuditOnly/Process.hs"}
 module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder AuditOnly (line 32)","path":"ProcessReactions/AuditOnly/ProcessHoles.hs"}
 module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process AuditOnly (line 32)","path":"Generated/ProcessReactions/AuditOnly/ProcessHarness.hs"}
-module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/Domain.hs"}
-module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/Codec.hs"}
-module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/Transducer.hs"}
-module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/BehaviorContract.hs"}
-module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses IncidentSaga (line 46)","path":"ProcessReactions/IncidentSaga/BehaviorHoles.hs"}
-module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/EventStream.hs"}
-module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/Projection.hs"}
-module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessReactions/IncidentSaga/Harness.hs"}
-module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/Domain.hs"}
-module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/Codec.hs"}
-module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/Transducer.hs"}
-module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/BehaviorContract.hs"}
-module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Incident (line 56)","path":"ProcessReactions/Incident/BehaviorHoles.hs"}
-module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/EventStream.hs"}
-module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/Projection.hs"}
-module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 56)","path":"Generated/ProcessReactions/Incident/Harness.hs"}
+module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input ScalingReaction (line 46)","path":"Generated/ProcessReactions/ScalingReaction/Input.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction ScalingReaction (line 46)","path":"Generated/ProcessReactions/ScalingReaction/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder ScalingReaction (line 46)","path":"ProcessReactions/ScalingReaction/ProcessHoles.hs"}
+module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process ScalingReaction (line 46)","path":"Generated/ProcessReactions/ScalingReaction/ProcessHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses IncidentSaga (line 754)","path":"ProcessReactions/IncidentSaga/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 754)","path":"Generated/ProcessReactions/IncidentSaga/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Incident (line 764)","path":"ProcessReactions/Incident/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 764)","path":"Generated/ProcessReactions/Incident/Harness.hs"}
 generated Generated/ProcessReactions/BehaviorSourceMap.hs
 generated Generated/ProcessReactions/Nominals.hs
 generated Generated/ProcessReactions/Nominals/Internal.hs
@@ -45,6 +49,10 @@ generated Generated/ProcessReactions/AuditOnly/Input.hs
 generated Generated/ProcessReactions/AuditOnly/Process.hs
 hole ProcessReactions/AuditOnly/ProcessHoles.hs
 generated Generated/ProcessReactions/AuditOnly/ProcessHarness.hs
+generated Generated/ProcessReactions/ScalingReaction/Input.hs
+generated Generated/ProcessReactions/ScalingReaction/Process.hs
+hole ProcessReactions/ScalingReaction/ProcessHoles.hs
+generated Generated/ProcessReactions/ScalingReaction/ProcessHarness.hs
 generated Generated/ProcessReactions/IncidentSaga/Domain.hs
 generated Generated/ProcessReactions/IncidentSaga/Codec.hs
 generated Generated/ProcessReactions/IncidentSaga/Transducer.hs
@@ -69,4 +77,5 @@ behavior {"aggregate":"IncidentSaga","command":"RecordCritical","evidence":"gene
 behavior {"aggregate":"IncidentSaga","command":"RecordRoutine","evidence":"generated-authoritative","key":"behavior-v1-825e6c1709cb63b4","kind":"live-transition","outputs":[{"command":"RecordRoutine","ownership":"generated-command-identity"}],"source":"Open"}
 process-reaction {"fingerprint":"0f6646c8f7f0b2185200ae5a0c31502cf3c1a6b482f72e07ea16f95c6e4f2d41","holeObligations":["decodeIncidentReactionInput :: RecordedEvent -> Maybe IncidentReactionInput"],"processName":"incident-reaction","verification":"generated-declarative","version":1}
 process-reaction {"fingerprint":"9af0e65d73da0dc48e0939c34cbc230c608105a464c535a5712105ca7739505c","holeObligations":["decodeAuditOnlyInput :: RecordedEvent -> Maybe AuditOnlyInput"],"processName":"audit-only","verification":"generated-declarative","version":1}
+process-reaction {"fingerprint":"429b4baf4983072a9afb406762eadfc510d57344a3fabc664cf1a9839e2363f4","holeObligations":["decodeScalingReactionInput :: RecordedEvent -> Maybe ScalingReactionInput"],"processName":"scaling-reaction","verification":"generated-declarative","version":1}
 semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

@@ -3,19 +3,23 @@ module Main (main) where
 import Control.Monad (unless)
 import Data.Aeson (ToJSON)
 import Data.Aeson qualified as Aeson
+import Data.Aeson.Key qualified as Aeson.Key
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Text (Text)
+import Data.Text qualified as Text
 import Data.Time (UTCTime (..), secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
+import Data.UUID.V5 qualified as UUID.V5
 import Data.Vector qualified as Vector
 import Effectful (IOE, liftIO, (:>))
 import Generated.ProcessReactions.AuditOnly.Process qualified as Audit
 import Generated.ProcessReactions.Incident.Domain qualified as Target
 import Generated.ProcessReactions.IncidentReaction.Process
 import Generated.ProcessReactions.IncidentSaga.Domain qualified as Saga
-import Generated.ProcessReactions.Nominals (Severity (..), incidentIdText, mkIncidentId)
+import Generated.ProcessReactions.Nominals (IncidentId, Severity (..), incidentIdText, mkIncidentId)
+import Generated.ProcessReactions.ScalingReaction.Process qualified as Scaling
 import Keiro.Command (defaultRunCommandOptions)
 import Keiro.ProcessManager (PMCommand (..))
 import Keiro.ProcessManager.Reaction qualified as Reaction
@@ -28,9 +32,17 @@ import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Envelope (..))
 import Streamly.Data.Stream qualified as Streamly
+import System.Environment (getArgs)
+import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
-main =
+main = getArgs >>= \case
+  [] -> regularMain
+  ["--hydration-probe"] -> hydrationProbeMain
+  arguments -> fail ("unexpected arguments: " <> show arguments)
+
+regularMain :: IO ()
+regularMain =
   withMigratedSuite $ \fixture ->
     withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runStore) -> do
       incidentId <- either (fail . show) pure (mkIncidentId "inc_01h455vb4pex5vsknk084sn02q")
@@ -95,6 +107,67 @@ main =
           _ -> False
         Left _ -> False
       putStrLn "process reaction conformance: PASS"
+
+hydrationProbeMain :: IO ()
+hydrationProbeMain =
+  withMigratedSuite $ \fixture ->
+    withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runStore) -> do
+      emptyId <- either (fail . show) pure (mkIncidentId "inc_01h455vb4pex5vsknk084sn09z")
+      let noAdvance = IncidentNoted emptyId
+          noAdvanceSource = recorded sourceUuid2 2 "IncidentNoted" noAdvance
+          run input event = expectRight =<< (expectRight =<< runStore (Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions incidentReactionProcessManager event input))
+          runScaling input event = do
+            _ <- expectRight =<< (expectRight =<< runStore (Reaction.runReactiveProcessManagerOnce defaultRunCommandOptions Scaling.scalingReactionProcessManager event input))
+            pure ()
+          bracketCase label action = do
+            hPutStrLn stderr ("reaction-case-start " <> Text.unpack label)
+            result <- action
+            hPutStrLn stderr ("reaction-case-end " <> Text.unpack label)
+            pure result
+      mapM_ (probeFanOutCase bracketCase runScaling) [(8, False), (32, False), (128, False), (8, True), (32, True), (128, True)]
+      _ <- bracketCase "no-advance" (run noAdvance noAdvanceSource)
+      putStrLn "hydration probe conformance: PASS fan-out=8,32,128 shapes=same,distinct"
+
+probeFanOutCase :: (Text -> IO () -> IO ()) -> (Scaling.ScalingReactionInput -> RecordedEvent -> IO ()) -> (Int, Bool) -> IO ()
+probeFanOutCase bracketCase runScaling (count, distinct) = do
+  correlation <- scalingId (1000 + shapeOffset)
+  targets <- traverse scalingId [targetOffset + 1 .. targetOffset + count]
+  input <- scalingInput count distinct correlation targets
+  let shape = if distinct then "distinct" else "same"
+      coordinate = "fanout-" <> Text.pack (show count) <> "-" <> shape
+      source = recorded (probeSourceUuid coordinate) (3000 + shapeOffset) ("FanOut" <> Text.pack (show count) <> if distinct then "Distinct" else "Same") input
+  bracketCase (coordinate <> "-first-delivery") (runScaling input source)
+  bracketCase (coordinate <> "-accepted-redelivery") (runScaling input source)
+  where
+    shapeOffset = count + if distinct then 500 else 0
+    targetOffset = 10000 + shapeOffset * 200
+
+scalingInput :: Int -> Bool -> IncidentId -> [IncidentId] -> IO Scaling.ScalingReactionInput
+scalingInput count distinct correlation targets =
+  case Aeson.fromJSON encoded of
+    Aeson.Error problem -> fail problem
+    Aeson.Success input -> pure input
+  where
+    shape = if distinct then "Distinct" else "Same"
+    tag = "FanOut" <> Text.pack (show count) <> shape
+    targetFields =
+      if distinct
+        then zipWith (\index target -> Aeson.Key.fromText ("target" <> Text.justifyRight 3 '0' (Text.pack (show index))) Aeson..= target) [1 :: Int ..] targets
+        else []
+    encoded = Aeson.object (("tag" Aeson..= tag) : ("incidentId" Aeson..= correlation) : targetFields)
+
+scalingId :: Int -> IO IncidentId
+scalingId value = either (fail . show) pure (mkIncidentId ("inc_01h455vb4pex5vsknk084s" <> Text.justifyRight 4 '0' (base32 value)))
+
+base32 :: Int -> Text
+base32 value
+  | value < 32 = Text.singleton (Text.index alphabet value)
+  | otherwise = base32 (value `div` 32) <> Text.singleton (Text.index alphabet (value `mod` 32))
+  where
+    alphabet = "0123456789abcdefghjkmnpqrstvwxyz"
+
+probeSourceUuid :: Text -> UUID
+probeSourceUuid label = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (Text.unpack label))
 
 recorded :: (ToJSON input) => UUID -> Int -> Text -> input -> RecordedEvent
 recorded eventUuid position eventName input =

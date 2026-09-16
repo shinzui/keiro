@@ -6,17 +6,19 @@ keiro repository. Start with the stable Language-5 fixture for a Language-5-excl
 or the published-compatibility Language-4 fixture for an inherited surface, then use its negative
 or diff variants to see the exact guardrails.
 
-Candidate Language 6 adds `idempotence delegated` to inbox intake. Omission and
-explicit `table` retain the table-backed contract; Languages 1 through 5 reject
-the new clause. The candidate keeps Language 5's aggregate-fold fingerprint
-because receipt routing does not change aggregate replay semantics.
+Candidate Language 6 adds delegated inbox idempotence and first-class process-manager
+reactions. Reactions provide typed inputs, guarded arms, generated saga advancement,
+target fan-out, and typed timer scheduling/cancellation/firing while legacy process bodies
+remain available. Languages 1 through 5 reject both candidate surfaces. The candidate keeps
+Language 5's aggregate-fold fingerprint because neither receipt routing nor reaction
+coordination changes aggregate replay semantics.
 
 ## Published stable and compatibility lanes
 
 Language 5 is the published stable contract and authoring default. Language 4 remains a published,
 immutable compatibility contract. The machine-checked baseline contains the released fixture
 inventory plus the candidate delegated-intake source and its generated plan. It accounts for all
-40 compiled conformance components: one `candidate-primary` Language-6 suite, eight
+43 compiled conformance components: four `candidate-primary` Language-6 suites, eight
 `stable-primary` Language-5 suites, 27 `published-compatibility` Language-4 suites, three focused
 compatibility proofs, and one version-independent codec comparison.
 
@@ -29,9 +31,11 @@ The baseline checker loads each primary source or workspace, checks the selected
 compares fresh non-writing scaffold plans with the committed language-owned generated banners and
 exact module inventory. Skeleton coverage uses the union of all distinct published starters.
 
-The candidate suite exercises Language 6 syntax profile 5 and runtime semantics 5. It compiles
-the generated delegated runner and hand-filled command adapter, then proves fresh and duplicate
-delivery against the runtime. Its aggregate-fold segment remains equal to Language 5.
+The candidate suites exercise Language 6 syntax profile 5 and runtime semantics 5. They compile
+the delegated inbox runner plus generated reaction managers, workers, timer codecs, and timer
+firers. PostgreSQL-backed cases prove guarded/no-action delivery, duplicate recovery, rearm/once
+deadlines, cancellation, benign fire redelivery, accepted-only fan-out, and partial target-success
+recovery. Their aggregate-fold segment remains equal to Language 5.
 
 ## Historical source-language lane
 
@@ -116,6 +120,9 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/order.keiro` | minimal register-free aggregate smoke fixture |
 | `test/fixtures/process-bad-timer.keiro` | negative timer ceiling and dispatch field binding |
 | `test/fixtures/process-ghost-refs.keiro` | negative process command, timer, and projection references |
+| `test/fixtures/process-reactions.keiro` | candidate Language-6 guarded and no-action generated reaction managers |
+| `test/fixtures/process-timers.keiro` | candidate Language-6 typed reaction timers, schedule modes, cancellation, and firing |
+| `test/fixtures/process-state-authority.keiro` | candidate Language-6 accepted-only fan-out and partial-success recovery |
 | `test/fixtures/projection-catalog.keiro` | stable language-5 target/group/owner/query catalog with versioned external-read lowering plus inline, async, clear, preserve, aggregate, and category coverage |
 | `test/fixtures/readmodel-consistency-conflict.keiro` | negative projection/readmodel consistency conflict |
 | `test/fixtures/readmodel-dispatch-unresolved.keiro` | negative dispatch readmodel and column references |
@@ -198,7 +205,7 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 
 ## Primary compiled suites
 
-These 35 generated-primary components compile the published-compatibility Language-4 corpus plus
+These generated-primary components compile the published-compatibility Language-4 corpus plus
 the stable Language-5 feature lanes and form the primary product baseline.
 
 | Component | Proves |
@@ -230,6 +237,9 @@ the stable Language-5 feature lanes and form the primary product baseline.
 | `test/conformance-process-full/` (`keiro-dsl-conformance-process-full`) | generated saga/target aggregates plus filled process manager compile against live runtime |
 | `test/conformance-workflow-full/` (`keiro-dsl-conformance-workflow-full`) | filled ordered workflow body compiles against the live workflow effect |
 | `test/conformance-process-runtime/` (`keiro-dsl-conformance-process-runtime`) | process timer, category, worker policy, and fire disposition compile against live APIs |
+| `test/conformance-process-reactions/` (`keiro-dsl-conformance-process-reactions`) | generated guarded/no-action managers and workers acknowledge and deduplicate against PostgreSQL |
+| `test/conformance-process-timers/` (`keiro-dsl-conformance-process-timers`) | generated typed timer payloads, rearm/once/cancel effects, firing, and redelivery execute against PostgreSQL |
+| `test/conformance-process-state-authority/` (`keiro-dsl-conformance-process-state-authority`) | saga acceptance owns accepted-only fan-out and redelivery completes a pre-committed target write without duplication |
 | `test/conformance-router-runtime/` (`keiro-dsl-conformance-router-runtime`) | router policy lowering and target-keyed deterministic id contract compile against live runtime |
 | `test/conformance-router/` (`keiro-dsl-conformance-router`) | generated router facts match hand-written expectations |
 | `test/conformance-router-full/` (`keiro-dsl-conformance-router-full`) | filled resolver/router value and target aggregate compile against live APIs |

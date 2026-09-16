@@ -17,6 +17,9 @@ data IncidentEscalationInput
       { incidentId :: !N.IncidentId
       , ackedAt :: !UTCTime
       }
+  | ResponderIgnored
+      { incidentId :: !N.IncidentId
+      }
   | IncidentNoted
       { incidentId :: !N.IncidentId
       }

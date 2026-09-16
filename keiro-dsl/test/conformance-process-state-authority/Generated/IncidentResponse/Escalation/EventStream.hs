@@ -6,12 +6,16 @@ module Generated.IncidentResponse.Escalation.EventStream
   , escalationEventStreamDef
   , EscalationEventStream
   , EscalationEventStreamDef
+  , escalationDomainCommandHandler
   ) where
 
 import Generated.IncidentResponse.Escalation.Domain
 import Generated.IncidentResponse.Escalation.Codec (escalationCodec)
 import Generated.IncidentResponse.Escalation.Transducer (escalationTransducer)
-import Keiki.Core (HsPred)
+import Generated.IncidentResponse.Nominals (EscalationNoOp (..), EscalationRejection (..))
+import Keiki.Core (EdgeRef (..), HsPred)
+import Keiki.Core qualified as K
+import Keiro.Command (DomainCommandHandler (..), SilentCommandContext (..), SilentDomainDecision (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.Stream qualified as Stream
@@ -47,3 +51,31 @@ escalationEventStreamDef =
 escalationEventStream :: EscalationEventStream
 escalationEventStream =
   mkEventStreamOrThrow "Escalation" escalationEventStreamDef
+
+escalationDomainCommandHandler
+  :: DomainCommandHandler
+       (HsPred EscalationRegs EscalationCommand)
+       EscalationRegs
+       EscalationVertex
+       EscalationCommand
+       EscalationEvent
+       EscalationRejection
+       EscalationNoOp
+escalationDomainCommandHandler =
+  DomainCommandHandler escalationEventStream escalationSilentDecision
+
+escalationSilentDecision
+  :: SilentCommandContext EscalationRegs EscalationVertex EscalationCommand
+  -> SilentDomainDecision
+       EscalationRejection
+       EscalationNoOp
+escalationSilentDecision (SilentCommandContext _ registers command (EdgeRef edgeSource edgeIndex)) =
+  case edgeSource of
+    EscalationOpen ->
+      case edgeIndex of
+        2 -> SilentNoOp (K.evalTerm (K.lit Ignored) registers command)
+        _ -> outcomeInvariant edgeSource edgeIndex
+    _ -> outcomeInvariant edgeSource edgeIndex
+ where
+  outcomeInvariant source index =
+    error ("generated domain outcome invariant failed for aggregate Escalation edge " <> show source <> "#" <> show index)

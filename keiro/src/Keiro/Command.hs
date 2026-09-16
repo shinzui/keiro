@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- | The command side of the framework: hydrate an aggregate, transduce, append.
 --
 -- Running a command against an 'EventStream' follows one pipeline:
@@ -89,6 +91,9 @@ where
 import Control.Concurrent (threadDelay)
 import Control.Exception (displayException)
 import Data.Aeson qualified as Aeson
+#ifdef KEIRO_REACTION_HYDRATION_PROBE
+import Data.ByteString.Char8 qualified as ByteString.Char8
+#endif
 import Data.ByteString.Lazy.Char8 qualified as LazyByteString
 import Data.Functor (($>))
 import Data.Int (Int32)
@@ -409,7 +414,35 @@ hydrate ::
   EventStream phi rs s ci co ->
   Stream (EventStream phi rs s ci co) ->
   Eff es (Either CommandError (Hydrated rs s))
+#ifdef KEIRO_REACTION_HYDRATION_PROBE
 hydrate options eventStream targetStream =
+  liftIO
+    ( ByteString.Char8.hPutStrLn stderr
+        ( LazyByteString.toStrict
+            ( Aeson.encode
+                ( Aeson.object
+                    [ "marker" Aeson..= ("reaction-probe" :: Text),
+                      "operation" Aeson..= ("hydrate" :: Text),
+                      "stream" Aeson..= resolvedStreamName eventStream targetStream
+                    ]
+                )
+            )
+        )
+    )
+    >> hydrateAfterProbe options eventStream targetStream
+#else
+hydrate options eventStream targetStream =
+  hydrateAfterProbe options eventStream targetStream
+#endif
+
+hydrateAfterProbe ::
+  forall phi rs s ci co es.
+  (HasCallStack, IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  EventStream phi rs s ci co ->
+  Stream (EventStream phi rs s ci co) ->
+  Eff es (Either CommandError (Hydrated rs s))
+hydrateAfterProbe options eventStream targetStream =
   snapshotSeed >>= \case
     Nothing -> hydrateFull options eventStream targetStream
     Just seed -> do

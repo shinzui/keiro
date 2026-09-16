@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- | Additive process-manager reactions with explicit typed outcomes.
 --
 -- A reaction may advance a private saga stream, run timer SQL atomically with
@@ -38,6 +40,10 @@ module Keiro.ProcessManager.Reaction
 where
 
 import Control.Monad (foldM)
+#ifdef KEIRO_REACTION_HYDRATION_PROBE
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as LazyByteString
+#endif
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.Coerce (coerce)
@@ -101,6 +107,9 @@ import Shibuya.Core.Ingested (Ingested (..))
 import Shibuya.Core.Types (Attempt (..), Envelope (..))
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
+#ifdef KEIRO_REACTION_HYDRATION_PROBE
+import System.IO (stderr)
+#endif
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
 
@@ -506,12 +515,41 @@ runTimerPhaseTx = foldM step zeroTimerEffects
 -- The stream version captured after the positive point probe is a finite read
 -- ceiling, so a vanished witness cannot chase concurrent appends forever.
 recoverWitness ::
+  (IOE :> es, Store :> es) =>
+  ValidatedEventStream phi rs s ci co ->
+  StreamName ->
+  EventId ->
+  Eff es (Either ReactionError ())
+#ifdef KEIRO_REACTION_HYDRATION_PROBE
+recoverWitness validated streamName witnessId =
+  do
+    let probeStreamName = case streamName of StreamName name -> name
+    liftIO
+      ( ByteString.Char8.hPutStrLn stderr
+          ( LazyByteString.toStrict
+              ( Aeson.encode
+                  ( Aeson.object
+                      [ "marker" Aeson..= ("reaction-probe" :: Text.Text),
+                        "operation" Aeson..= ("witness" :: Text.Text),
+                        "stream" Aeson..= probeStreamName
+                      ]
+                  )
+              )
+          )
+      )
+    recoverWitnessAfterProbe validated streamName witnessId
+#else
+recoverWitness validated streamName witnessId =
+  recoverWitnessAfterProbe validated streamName witnessId
+#endif
+
+recoverWitnessAfterProbe ::
   (Store :> es) =>
   ValidatedEventStream phi rs s ci co ->
   StreamName ->
   EventId ->
   Eff es (Either ReactionError ())
-recoverWitness validated streamName witnessId = do
+recoverWitnessAfterProbe validated streamName witnessId = do
   streamInfo <- getStream streamName
   case streamInfo of
     Nothing -> pure (Left missing)

@@ -17,9 +17,11 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
+  "behavior-v1-48ce258ccf64ef4e" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-timers.keiro" 55 15)
   "behavior-v1-93455a87d5151176" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-timers.keiro" 61 3)
   "behavior-v1-af16dd42cbccd576" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-timers.keiro" 51 3)
-  "behavior-v1-f87ad8e553a0b610" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-timers.keiro" 60 3)
+  "behavior-v1-b944c85b616b9349" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-timers.keiro" 60 3)
+  "behavior-v1-d66d007f74139a07" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/process-timers.keiro" 55 15)
   _ -> Nothing
 
 renderBehaviorSourceLocation :: Text -> Text

@@ -21,7 +21,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 escalationEventTypes :: NonEmpty EventType
-escalationEventTypes = EventType "RaisedNoted" :| [EventType "Acknowledged"]
+escalationEventTypes = EventType "RaisedNoted" :| [EventType "Acknowledged", EventType "DormantActivated"]
 
 escalationCodec :: Codec EscalationEvent
 escalationCodec =
@@ -30,6 +30,7 @@ escalationCodec =
     , eventType = \case
         RaisedNoted{} -> EventType "RaisedNoted"
         Acknowledged{} -> EventType "Acknowledged"
+        DormantActivated{} -> EventType "DormantActivated"
     , schemaVersion = 1
     , encode = encodeEscalationEvent
     , decode = parseEscalationEvent
@@ -48,6 +49,11 @@ encodeEscalationEvent = \case
       [ "kind" .= ("Acknowledged" :: Text)
       , "incidentId" .= incidentIdText payload.incidentId
       ]
+  DormantActivated payload ->
+    object
+      [ "kind" .= ("DormantActivated" :: Text)
+      , "incidentId" .= incidentIdText payload.incidentId
+      ]
 
 parseEscalationEvent :: EventType -> Value -> Either Text EscalationEvent
 parseEscalationEvent (EventType tag) = mapLeftText . parseEither (withObject "EscalationEvent" go)
@@ -62,6 +68,11 @@ parseEscalationEvent (EventType tag) = mapLeftText . parseEither (withObject "Es
         "Acknowledged" ->
           Acknowledged
             <$> ( AcknowledgedData
+                    <$> (unsafeIncidentIdFromLegacyText <$> o .: "incidentId")
+                )
+        "DormantActivated" ->
+          DormantActivated
+            <$> ( DormantActivatedData
                     <$> (unsafeIncidentIdFromLegacyText <$> o .: "incidentId")
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes escalationEventTypes)

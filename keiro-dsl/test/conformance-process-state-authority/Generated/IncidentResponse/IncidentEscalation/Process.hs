@@ -88,12 +88,13 @@ incidentEscalationReactionVersion :: Natural
 incidentEscalationReactionVersion = 1
 
 incidentEscalationReactionFingerprint :: Text
-incidentEscalationReactionFingerprint = "32330547597f728abdb05b0e6d2f67f9e8b703256407acd272932c4af58b098b"
+incidentEscalationReactionFingerprint = "e9a5083c5083259dfc13773f7fed59992b6df13361d98d1e0362fa7531555e33"
 
 incidentEscalationCorrelate :: IncidentEscalationInput -> Text
 incidentEscalationCorrelate input = case input of
   IncidentReported { incidentId } -> (N.incidentIdText incidentId)
   ResponderAcked { incidentId } -> (N.incidentIdText incidentId)
+  ResponderIgnored { incidentId } -> (N.incidentIdText incidentId)
   IncidentNoted { incidentId } -> (N.incidentIdText incidentId)
 
 incidentEscalationReact :: IncidentEscalationInput -> Reaction.ReactionPlan Saga.EscalationCommand Target.IncidentCommand
@@ -103,6 +104,8 @@ incidentEscalationReact input = case input of
     | otherwise -> Reaction.AdvanceReaction { command = Saga.NoteRaised (Saga.NoteRaisedData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowSchedule Reaction.Rearm (incidentEscalationEscalationTimerRequest (N.incidentIdText incidentId) (addUTCTime 3600 raisedAt) incidentId severity)], onAccepted = [] }
   ResponderAcked { incidentId, ackedAt = _ackedAt }
     -> Reaction.AdvanceReaction { command = Saga.NoteAcknowledged (Saga.NoteAcknowledgedData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowCancel (TimerId (namedUuid ("incident-escalation-timer:" <> (N.incidentIdText incidentId))))], onAccepted = [Reaction.FollowDispatch (PMCommand (Stream.entityStream incidentCommandCategory (N.incidentIdText incidentId)) (Target.AcknowledgeIncident (Target.AcknowledgeIncidentData { Target.incidentId = incidentId })))] }
+  ResponderIgnored { incidentId }
+    -> Reaction.AdvanceReaction { command = Saga.NoteIgnored (Saga.NoteIgnoredData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowCancel (TimerId (namedUuid ("incident-escalation-timer:" <> (N.incidentIdText incidentId))))], onAccepted = [Reaction.FollowDispatch (PMCommand (Stream.entityStream incidentCommandCategory (N.incidentIdText incidentId)) (Target.AcknowledgeIncident (Target.AcknowledgeIncidentData { Target.incidentId = incidentId })))] }
   IncidentNoted {}
     -> Reaction.NoAdvance []
 

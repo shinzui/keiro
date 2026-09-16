@@ -24,6 +24,13 @@ source-repository head
   type: git
   location: https://github.com/shinzui/keiro.git
 
+flag reaction-hydration-probe
+  description:
+    Emit opt-in stderr markers for process-reaction saga hydration and witness recovery
+
+  manual: True
+  default: False
+
 common warnings
   ghc-options:
     -Wall
@@ -104,6 +111,8 @@ library
     Keiro.Workflow.Snapshot
     Keiro.Workflow.Types
 
+  if flag(reaction-hydration-probe)
+    cpp-options: -DKEIRO_REACTION_HYDRATION_PROBE
   other-modules:
     Keiro.Command.Domain
     Keiro.Outbox.Rejection

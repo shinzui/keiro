@@ -29,7 +29,7 @@ incidentTransducer =
         B.emit wireIncidentEscalated (IncidentEscalatedTermFields
           { incidentId = d.incidentId
           })
-        B.goto IncidentOpen
+        B.goto IncidentEscalatedState
       B.onCmd inCtorRemindIncident $ \d -> B.do
         B.emit wireIncidentReminded (IncidentRemindedTermFields
           { incidentId = d.incidentId
@@ -41,7 +41,7 @@ incidentTransducer =
     _ -> False
 
 incidentFoldFingerprint :: Text
-incidentFoldFingerprint = "5bb5a508b1a0a72b85570329c4673980"
+incidentFoldFingerprint = "02e08b4a7c1ca3151b93124ec044b785"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

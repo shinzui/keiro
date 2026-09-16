@@ -7,7 +7,7 @@ import Keiki.Core (RegFile (..))
 import Generated.ProcessTimers.Nominals (IncidentId)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
-data IncidentVertex = IncidentOpen
+data IncidentVertex = IncidentOpen | IncidentEscalatedState
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
 
 data EscalateIncidentData = EscalateIncidentData

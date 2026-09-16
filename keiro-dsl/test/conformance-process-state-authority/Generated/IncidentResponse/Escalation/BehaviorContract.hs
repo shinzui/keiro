@@ -22,6 +22,9 @@ import Generated.IncidentResponse.Escalation.Codec (encodeEscalationEvent, parse
 import Generated.IncidentResponse.Escalation.Domain
 import Generated.IncidentResponse.Escalation.Transducer (escalationTransducer)
 import Generated.IncidentResponse.BehaviorSourceMap qualified as BehaviorSourceMap
+import Generated.IncidentResponse.Escalation.EventStream (escalationDomainCommandHandler)
+import Generated.IncidentResponse.Nominals (EscalationNoOp, EscalationRejection)
+import Keiro.Command (DomainCommandHandler (..), SilentCommandContext (..), SilentDomainDecision (..))
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty)
@@ -66,6 +69,8 @@ data RejectionClass = RejectNoOutgoingEdges | RejectNoMatchingEdge
 data LiveExpectation
   = Emits (NonEmpty EscalationEvent)
   | Rejects RejectionClass
+  | RejectedWith EscalationRejection
+  | NoOpWith EscalationNoOp
   | NoOp
   deriving stock (Eq, Show)
 
@@ -129,9 +134,33 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- EscalationOpen x NoteRaised: live transition
+  [ -- EscalationOpen x NoteIgnored: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-3c9a2793ee857505"
+      { key = BehaviorKey "behavior-v1-00b0b13023eea6f8"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardTotal
+      , source = EscalationOpen
+      , commandName = "NoteIgnored"
+      , expectedEdge = (Just (K.EdgeRef EscalationOpen 2))
+      , target = Just EscalationOpen
+      , eventKinds = []
+      }
+  , -- EscalationDormant x NoteAcknowledged: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-16209316858bb8c3"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = EscalationDormant
+      , commandName = "NoteAcknowledged"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- EscalationOpen x NoteRaised: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-2144226ce8222855"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardTotal
@@ -141,9 +170,21 @@ behaviorRequirements =
       , target = Just EscalationOpen
       , eventKinds = ["RaisedNoted"]
       }
+  , -- EscalationOpen x ActivateDormant: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-3d0e024503e32404"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardTotal
+      , source = EscalationOpen
+      , commandName = "ActivateDormant"
+      , expectedEdge = (Just (K.EdgeRef EscalationOpen 3))
+      , target = Just EscalationDormant
+      , eventKinds = ["DormantActivated"]
+      }
   , -- EscalationOpen x NoteAcknowledged: live transition
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-bb2577aace70f171"
+      { key = BehaviorKey "behavior-v1-65795e7a28345559"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardTotal
@@ -152,6 +193,42 @@ behaviorRequirements =
       , expectedEdge = (Just (K.EdgeRef EscalationOpen 1))
       , target = Just EscalationOpen
       , eventKinds = ["Acknowledged"]
+      }
+  , -- EscalationDormant x NoteRaised: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-75011409d18e29c3"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = EscalationDormant
+      , commandName = "NoteRaised"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- EscalationDormant x ActivateDormant: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-8f58f8301e7a66f3"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = EscalationDormant
+      , commandName = "ActivateDormant"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- EscalationDormant x NoteIgnored: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-eecae8fa281fddcf"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = EscalationDormant
+      , commandName = "NoteIgnored"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
       }
   ]
 
@@ -225,6 +302,8 @@ runLive requirement history command expectation = do
 runRejection :: BehaviorRequirement -> (EscalationVertex, K.RegFile EscalationRegs) -> EscalationCommand -> LiveExpectation -> Either BehaviorFailure ()
 runRejection requirement seed command expectation = case expectation of
   Emits _ -> failure requirement "expectation-kind" "a rejection requirement cannot expect emitted events"
+  RejectedWith _ -> failure requirement "expectation-kind" "an unmatched-command rejection cannot expect a selected domain rejection"
+  NoOpWith _ -> failure requirement "expectation-kind" "an unmatched-command rejection cannot expect a selected domain no-op"
   NoOp -> failure requirement "expectation-kind" "a rejection requirement cannot expect an accepted no-op"
   Rejects expectedClass -> case K.stepDetailedEither escalationTransducer seed command of
     Left K.NoOutgoingEdges {} -> ensure requirement (expectedClass == RejectNoOutgoingEdges) "rejection-class" "expected NoMatchingEdge but runtime returned NoOutgoingEdges"
@@ -235,13 +314,17 @@ runRejection requirement seed command expectation = case expectation of
 runAcceptance :: BehaviorRequirement -> (EscalationVertex, K.RegFile EscalationRegs) -> EscalationCommand -> LiveExpectation -> Either BehaviorFailure ()
 runAcceptance requirement seed command expectation = case expectation of
   Rejects _ -> failure requirement "expectation-kind" "a live-transition requirement needs Emits or NoOp"
-  NoOp -> case K.stepDetailedEither escalationTransducer seed command of
-    Left stepFailure -> failure requirement "unexpected-rejection" (tshow stepFailure)
-    Right success -> do
-      checkAcceptedEnvelope requirement success
-      ensure requirement (null (K.stepSuccessOutputs success)) "noop-emitted" "NoOp emitted one or more events"
-      ensure requirement (K.stepSuccessState success == fst seed) "noop-vertex-change" "NoOp changed the control vertex"
-      ensure requirement (regsEqual (K.stepSuccessRegs success) (snd seed)) "noop-register-change" "NoOp changed one or more registers"
+  RejectedWith expectedReason -> do
+    decision <- runSilentDecision requirement seed command
+    case decision of
+      SilentRejected actualReason -> ensure requirement (actualReason == expectedReason) "domain-rejection-reason" ("selected rejection reason differs; actual=" <> tshow actualReason <> " expected=" <> tshow expectedReason)
+      SilentNoOp actualReason -> failure requirement "domain-outcome-kind" ("expected a selected rejection but classifier returned no-op " <> tshow actualReason)
+  NoOpWith expectedReason -> do
+    decision <- runSilentDecision requirement seed command
+    case decision of
+      SilentRejected actualReason -> failure requirement "domain-outcome-kind" ("expected a selected no-op but classifier returned rejection " <> tshow actualReason)
+      SilentNoOp actualReason -> ensure requirement (actualReason == expectedReason) "domain-noop-reason" ("selected no-op reason differs; actual=" <> tshow actualReason <> " expected=" <> tshow expectedReason)
+  NoOp -> failure requirement "expectation-kind" "an outcome-enabled transition requires RejectedWith or NoOpWith exact reason evidence"
   Emits expectedEvents -> case K.stepDetailedEither escalationTransducer seed command of
     Left stepFailure -> failure requirement "unexpected-rejection" (tshow stepFailure)
     Right success -> do
@@ -257,6 +340,22 @@ runAcceptance requirement seed command expectation = case expectation of
       ensure requirement (K.replaySuccessState replayed == K.stepSuccessState success) "forward-replay-vertex" "decoded emissions replay to a different vertex"
       ensure requirement (regsEqual (K.replaySuccessRegs replayed) (K.stepSuccessRegs success)) "forward-replay-registers" "decoded emissions replay to different registers"
       checkSingleAttribution requirement K.Live (length decoded) (K.replaySuccessTrace replayed)
+
+runSilentDecision
+  :: BehaviorRequirement
+  -> (EscalationVertex, K.RegFile EscalationRegs)
+  -> EscalationCommand
+  -> Either BehaviorFailure (SilentDomainDecision EscalationRejection EscalationNoOp)
+runSilentDecision requirement seed command = case K.stepDetailedEither escalationTransducer seed command of
+  Left stepFailure -> failure requirement "unexpected-rejection" (tshow stepFailure)
+  Right success -> do
+    checkAcceptedEnvelope requirement success
+    ensure requirement (null (K.stepSuccessOutputs success)) "silent-emitted" "typed silent outcome emitted one or more events"
+    ensure requirement (K.stepSuccessState success == fst seed) "silent-vertex-change" "typed silent outcome changed the control vertex"
+    ensure requirement (regsEqual (K.stepSuccessRegs success) (snd seed)) "silent-register-change" "typed silent outcome changed one or more registers"
+    case escalationDomainCommandHandler of
+      DomainCommandHandler _ classify ->
+        Right (classify (SilentCommandContext (fst seed) (snd seed) command (K.stepSuccessEdge success)))
 
 checkAcceptedEnvelope :: BehaviorRequirement -> K.StepSuccess EscalationRegs EscalationVertex EscalationEvent -> Either BehaviorFailure ()
 checkAcceptedEnvelope requirement success = do
@@ -302,6 +401,8 @@ commandKind :: EscalationCommand -> Text
 commandKind command = case command of
   NoteRaised _ -> "NoteRaised"
   NoteAcknowledged _ -> "NoteAcknowledged"
+  NoteIgnored _ -> "NoteIgnored"
+  ActivateDormant _ -> "ActivateDormant"
 
 eventKind :: EscalationEvent -> Text
 eventKind event = case Codec.eventType escalationCodec event of Codec.EventType tag -> tag

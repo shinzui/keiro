@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -49,6 +49,11 @@ corpus-regen:
 [group('meta')]
 conformance-corpus-policy:
     scripts/check-conformance-corpus.sh
+
+[group('meta')]
+process-reaction-proof:
+    bash keiro-dsl/test/process-reaction-mutation-test.sh
+    bash keiro-dsl/test/process-hydration-test.sh
 
 # Strict OKF enforcement for the research bundle (docs/research, registered as
 # OKF bundle "research" in mori.dhall). Stable RES-N handles and review

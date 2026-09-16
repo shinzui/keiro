@@ -41,7 +41,7 @@ sampleEventIncidentReminded = IncidentReminded (IncidentRemindedData sampleIncid
 acceptEscalateIncident :: Bool
 acceptEscalateIncident =
   case step incidentTransducer (IncidentOpen, initialIncidentRegs) (EscalateIncident (EscalateIncidentData sampleIncidentId)) of
-    Just (v, _, _) -> v == IncidentOpen
+    Just (v, _, _) -> v == IncidentEscalatedState
     Nothing -> False
 
 acceptRemindIncident :: Bool
