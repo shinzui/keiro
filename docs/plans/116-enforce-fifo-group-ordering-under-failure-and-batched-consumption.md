@@ -33,6 +33,11 @@ provenance:
       at: 2026-09-16T12:25:11Z
       mode: "update"
       note: "Replaced silent FIFO batch clamping with grouped-head batching, explicit unsafe-config rejection, and performance gates."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T12:51:21Z
+      mode: "implement"
+      note: "Started M1 by creating upstream adapter plan 7 and coordinating the MasterPlan boundary"
 ---
 
 # Enforce FIFO group ordering under failure and batched consumption
@@ -70,7 +75,11 @@ and the current drain and `mkProcessor` handler paths are serial.
 ## Progress
 
 - [x] 2026-09-16: Refreshed repository, dependency, release, and baseline evidence; `cabal test keiro-pgmq-test --test-show-details=direct` passed with 65 examples, 0 failures, and 2 pre-existing pending examples.
-- [ ] M1: Add and release grouped-head polling support in `mori://shinzui/shibuya-pgmq-adapter`, including dispatch tests, documentation, and performance evidence.
+- [x] 2026-09-16: Created
+  `mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`
+  and revised the parent MasterPlan's adapter boundary.
+- [ ] M1 remaining: Implement, benchmark, and release grouped-head polling support from the
+  upstream adapter plan.
 - [ ] M2: Add `FifoHeads`, make ordering a required `Job` field, validate every entry point, update all in-repository constructors and DSL surfaces, and consume the verified adapter release.
 - [ ] M3: Dispatch `FifoHeads` through grouped-head reads on both paths and add adversarial failure, delay, mismatch, batch-safety, and database-round-trip regressions.
 - [ ] M4: Run the performance matrix, update user documentation/changelogs/tracking, complete ADR distillation, and record final results here.
@@ -204,12 +213,13 @@ selected group. `mori://shinzui/pgmq-hs/packages/pgmq-hasql` and
 `readGroupedHead` and `readGroupedHeadWithPoll`, both using the existing `ReadGrouped` argument
 records. Keiro already bounds the pgmq-hs family to `>=0.6 && <0.7`.
 
-The worker prerequisite lives in `mori://shinzui/shibuya-pgmq-adapter`. The relevant files are
+The worker prerequisite is implemented under
+`mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`.
+The relevant files are
 project-relative `shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Config.hs`,
 `shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Internal.hs`, the adapter tests, and
-`shibuya-pgmq-adapter-bench/bench/Bench/Fifo.hs`. No upstream ExecPlan exists for this addition
-yet; create one before implementation and replace this project-level handoff with its canonical
-`mori://` plan URI once allocated.
+`shibuya-pgmq-adapter-bench/bench/Bench/Fifo.hs`. That plan owns the public constructor,
+dispatch tests, database semantics, safe-drain benchmark, documentation, and release.
 
 Adding `FifoHeads` also touches the Keiro DSL because workqueue ordering is a durable generated
 contract. `keiro-dsl/src/Keiro/Dsl/Grammar.hs` owns `WqOrdering`;
@@ -238,11 +248,11 @@ automatically install a supplemental index, or change Shibuya core scheduling.
 
 ### Milestone 1 — add grouped-head dispatch to the released adapter boundary
 
-First create an ExecPlan in the repository resolved by
-`mori path mori://shinzui/shibuya-pgmq-adapter`; record its canonical URI here and in the
-parent MasterPlan. Revise the parent MasterPlan's current "adapter is not changed" boundary
-before source implementation. The upstream plan must be self-contained and must preserve the
-adapter's polling, retry, prefetch, shutdown-release, finalization, and telemetry contracts.
+Implement
+`mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`,
+which was created with this plan's intention after revising the parent MasterPlan boundary.
+It preserves the adapter's polling, retry, prefetch, shutdown-release, finalization, and
+telemetry contracts.
 
 In the adapter, extend `FifoReadStrategy` with `HeadPerGroup`. In the standard-poll branch,
 dispatch it to `Pgmq.Effectful.readGroupedHead (mkReadGrouped config)`; in the long-poll
@@ -596,3 +606,6 @@ shibuya-pgmq-adapter 0.15.0.0. Replaced silent batch clamping and client-result 
 explicit `FifoHeads` mode, shared runtime rejection of unsafe legacy batches, a required job
 ordering contract, an adapter release prerequisite, deterministic read-count coverage, and a
 database performance gate.
+
+Revision note (2026-09-16): Began implementation by creating upstream adapter plan 7 and
+updating MasterPlan 17's boundary before any adapter source changes.

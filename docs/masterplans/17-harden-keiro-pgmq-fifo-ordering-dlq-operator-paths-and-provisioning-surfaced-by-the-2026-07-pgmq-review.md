@@ -22,6 +22,11 @@ provenance:
       at: 2026-09-12T17:28:45Z
       mode: "update"
       note: "Audited local downstream changes and aligned handoffs with client-only ordering, optional additive indexes, and no SQL overrides."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T12:51:21Z
+      mode: "implement"
+      note: "Started EP-1 and registered the grouped-head adapter release dependency"
 ---
 
 # Harden keiro-pgmq FIFO ordering, DLQ operator paths, and provisioning surfaced by the 2026-07 pgmq review
@@ -51,8 +56,10 @@ Hackage publication belongs to this plan. Historical migration bytes remain immu
 ## Decomposition Strategy
 
 
-EP-1 (116) owns batching/ordering validation and failure-path tests, plus optional consumption
-of the client-ordering fix. EP-2 (117) owns header-preserving DLQ redrive and visibility-safe
+EP-1 (116) owns batching/ordering validation and failure-path tests plus consumption of the
+grouped-head adapter release produced by
+`mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`.
+EP-2 (117) owns header-preserving DLQ redrive and visibility-safe
 operator actions. EP-3 (118) owns retention policy/Haddocks and truthful supplemental-index
 guidance. Preserve each child's existing consumer milestones; upstream constraints do not
 remove the need for those fixes.
@@ -69,15 +76,16 @@ Promote actual consumer FIFO decisions into the local ADR corpus at implementati
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Enforce FIFO group ordering under failure and batched consumption | docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md | None | None | Not Started |
+| 1 | Enforce FIFO group ordering under failure and batched consumption | docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md | Adapter plan 7 release for Keiro M2-M4 | None | In Progress |
 | 2 | Preserve headers on DLQ redrive and make archive and purge visibility-safe | docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md | None | None | Not Started |
 | 3 | Correct partitioned retention semantics and the FIFO index | docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md | None | EP-1 shared Job.hs coordination | Not Started |
 
 ## Dependency Graph
 
 
-All three consumer workstreams can proceed independently. EP-1's M4 waits only for a verified
-client release/candidate when observing that new client behavior; M1-M3 do not wait. EP-3's
+All three consumer workstreams can proceed independently. EP-1 now contains a cross-repository
+M1: the adapter plan can proceed immediately, while Keiro M2-M4 require its verified Hackage
+release and upstream tag. EP-3's
 index recommendation depends on measured supplemental-index evidence, not a pgmq-migration
 release. Its retention and inaccurate-GIN-claim corrections can proceed immediately. There
 is no shared 0007/0008 allocation or joint index/order package-bound bump.
@@ -93,11 +101,11 @@ without weakening telemetry or consumer failure tests.
 scoped expiry statement, documenting standard DLQs separately from partitioned queue/archive
 retention. Time and numeric retention differ; no exact per-row expiry timer is promised.
 
-**Client dependency.** `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`
-owns four client SELECT wrappers. If consumed, require the actual released pgmq-hasql client
-version through the library dependency, not merely a test-suite pgmq-migration bound. Verify
-Hackage and repository tags before selecting a bound; isolated candidates are not releases.
-Do not infer a promised 0.6.1.0 release from earlier plan drafts.
+**Client dependency.** Released pgmq-hs 0.6.0.0 already exposes grouped-head reads and remains
+the required client family. The pending deterministic-result-order plan
+`mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order` is not a
+dependency: grouped heads return at most one member per group and Keiro promises no order
+between groups.
 
 **Supplemental index.** `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`
 owns measurements and optional operator DDL. Keep q_<queue>_fifo_idx GIN and helpers intact.
@@ -105,17 +113,19 @@ The distinct group_lookup index is not installed by ensureFifoIndex, normal reco
 or startup. Presence reports still describe the conventional index. EP-3 may validate the
 measured procedure in a disposable queue without maintaining a duplicate benchmark subsystem.
 
-**Adapter boundary.** `mori://shinzui/shibuya-pgmq-adapter` is not changed by these plans.
-If EP-1 elects grouped heads on both consumer paths, verify available strategies through Mori
-and explicitly revise the adapter scope first. Do not silently claim a new head strategy or
-change the shared runner. Batch-size enforcement remains the existing bounded implementation
-proposal until that decision is resolved in EP-1.
+**Adapter boundary.**
+`mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`
+owns the exported `HeadPerGroup` strategy, standard/long-poll dispatch, adapter integration
+tests, safe-drain performance evidence, and adapter release. EP-1 consumes the actual release;
+it does not duplicate the polling runner or use a local source override. Keiro still validates
+its job/tuning contract before constructing the adapter.
 
 ## Progress
 
 
-- [ ] EP-1: Consumer batching/order-tuning decision implemented on drain and worker paths, with failure and round-robin regressions.
-- [ ] EP-1: Consume client result-order behavior when verified available; no SQL migration dependency.
+- [x] 2026-09-16: Started EP-1 and created the upstream grouped-head adapter plan with the shared intention.
+- [ ] EP-1: Release grouped-head adapter dispatch and performance evidence.
+- [ ] EP-1: Consumer batching/order-tuning decision implemented on drain and worker paths, with failure and legacy-mode regressions.
 - [ ] EP-2: Header-preserving redrive and visibility-safe archive/purge plus operator tests.
 - [ ] EP-3: Accurate retention policy/Haddocks and scoped constructor guardrail.
 - [ ] EP-3: Accurate conventional GIN description and measured optional supplemental-index guidance, or explicit negative/pending result.
@@ -135,6 +145,10 @@ The prior plan also treated head reads/batch clamping too broadly as a processin
 They constrain selection; lease expiry, acknowledgement discipline and other consumers still
 matter. Supplemental indexing can improve a workload without fixing FIFO processing semantics.
 
+The adapter audit found released pgmq-hs 0.6.0.0 already provides grouped-head standard and
+long-poll effects, but released adapter 0.15.0.0 has no strategy that dispatches them. The
+missing boundary is now explicit in upstream plan 7 rather than hidden inside Keiro.
+
 ## Decision Log
 
 
@@ -149,6 +163,10 @@ additive index evidence only. Existing GIN and name-based presence reports remai
 strategy expands scope and must be coordinated before implementation. Either route must retain
 consumer lease/failure/telemetry responsibilities, not claim unconditional processing success.
 
+2026-09-16: Resolve EP-1 in favor of a distinct grouped-head mode. The adapter owns
+`HeadPerGroup` and its release; Keiro owns `FifoHeads`, configuration rejection, drain dispatch,
+and failure-path proofs. Deterministic cross-group result order is explicitly not a dependency.
+
 ## Outcomes & Retrospective
 
 
@@ -157,3 +175,7 @@ by this audit; consumer implementation remains pending.
 
 Revision note (2026-09-12): Replaced obsolete downstream expectations of pgmq SQL migrations,
 automatic GIN conversion and shared bounds with the accepted client-only/additive-index contract.
+
+Revision note (2026-09-16): Started EP-1, registered the upstream grouped-head adapter plan,
+and replaced the prior unchanged-adapter/client-ordering assumptions with the released-head API
+and explicit adapter-release dependency.

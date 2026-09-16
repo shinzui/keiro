@@ -23,365 +23,431 @@ provenance:
       at: 2026-09-12T17:28:45Z
       mode: "update"
       note: "Audited local downstream changes and aligned handoffs with client-only ordering, optional additive indexes, and no SQL overrides."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T13:44:09Z
+      mode: "update"
+      note: "Refreshed current retention/index scope and added full-workload performance regression gates"
 ---
 
 # Correct partitioned retention semantics and the FIFO index
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
+This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log,
+and Outcomes & Retrospective current while implementing it. Promote durable conclusions to
+the ADR corpus before completion.
 
+**Current cross-repository contract (2026-09-16).**
+`mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`
+prohibits overriding extension-owned SQL on native and extension installations. Its index work
+may recommend only an optional, separately named `q_<queue>_group_lookup_idx` after full-query
+measurement. Upstream `q_<queue>_fifo_idx`, FIFO helpers, function bodies, and name-based
+presence reporting remain unchanged. No migration, automatic replacement, or startup DDL is
+planned. Existing historical migration bytes remain immutable.
 
-
-**Current cross-repository contract (2026-09-12).** `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts` prohibits overriding extension-owned SQL on both native and extension installs. The ordering work is four outer Haskell-client ORDER BY msg_id clauses, not changed PGMQ function bodies. The index work measures an optional, separately named `q_<queue>_group_lookup_idx`; upstream GIN, helpers and presence reporting remain unchanged. No new FIFO migration or automatic GIN replacement is planned. This supersedes earlier SQL-migration/release assumptions. Existing historical migration bytes remain immutable. Keiro consumer safety and retention policy remain local responsibilities; a sorted result, batch-size clamp or head read does not guarantee successful processing without valid leases and disciplined acknowledgement/side effects.
 
 ## Purpose / Big Picture
 
-`keiro-pgmq`'s provisioning surface makes two claims the 2026-07 pgmq review (master plan:
-`docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md`)
-proved false. First (PGQ-4, HIGH): a partitioned queue's `retentionInterval` reads like a
-harmless cleanup knob ("e.g. \"7 days\""), but upstream it configures pg_partman to
-permanently *drop whole partitions of the active queue table* once they age past the
-interval — processed or not. A consumer outage or backlog longer than the retention
-interval silently bulk-deletes unprocessed work, while the package's DLQ documentation
-tells operators PGMQ never expires rows on its own. Second (PGQ-5): the "FIFO index" that
-`ensureFifoIndex` creates and documents as "the index PGMQ's grouped/ordered reads match
-against" is a jsonb GIN index, which by definition serves the `@>`/`?` operator classes —
-not the `headers->>'x-pgmq-group'` extraction-equality and GROUP BY that `read_grouped` and
-`read_grouped_rr` actually execute. This does not prove every query node is a sequential scan; existing message-ID/visibility
-indexes may participate. A useful supplement must be demonstrated by full-query measurement.
+`keiro-pgmq` currently makes two unsafe or inaccurate provisioning claims. A partitioned
+queue's `retentionInterval` looks like a harmless cleanup preference, but PGMQ configures
+pg_partman to permanently drop whole old partitions from both the active queue and archive.
+Processing state does not protect an eligible active partition, so a backlog or consumer outage
+longer than the retention horizon can silently delete unprocessed work.
 
-After this plan, Keiro documents retention accurately, offers its explicitly scoped
-construction-time guardrail, and explains that ordinary FIFO provisioning still creates upstream
-GIN. Any measured group-expression index is an optional, independently owned supplement,
-installed explicitly by an operator. No upstream function or existing index is replaced.
-A sorted client result or an index is not a guarantee of successful FIFO processing.
+Keiro also describes upstream's JSONB GIN index on `headers` as the index that grouped reads
+match. The grouped reads instead group and compare
+`COALESCE(headers->>'x-pgmq-group', '_default_fifo_group')` and order by `msg_id`. The GIN
+operator class does not directly serve that expression equality or ordering. This mismatch does
+not prove a particular full query plan, and an expression B-tree can itself create write,
+storage, vacuum, DDL-lock, or polling regressions. Performance must be measured rather than
+inferred from one plan node.
+
+After this plan, Keiro documents partition deletion accurately and offers a deliberately bounded
+construction-time guardrail. Ordinary FIFO provisioning is described truthfully as upstream's
+conventional GIN. Keiro recommends no supplemental index unless measurements show a material
+win for the actual `read_grouped`, `read_grouped_rr`, and `read_grouped_head` workloads without
+an unacceptable polling, write, lease, storage, or lock regression. Any accepted expression
+index is optional operator-owned state installed through the owning pgmq project, not Keiro
+startup. No upstream function or existing index is replaced.
 
 
 ## Progress
 
-- [ ] M1: `PartitionSpec`/`partitionedProvision`/`QueueKind` haddocks state the drop-unprocessed semantics; partitioned provisioning labeled experimental; `Keiro.PGMQ.Dlq` haddock expiry claim scoped; `mkPartitionSpec` validating constructor added with pure tests.
-- [ ] M2: Review supplemental-index measurements and operator lifecycle; record useful or negative results without a migration/version dependency.
-- [ ] M3: Correct Keiro provisioning Haddocks and validate supplemental-index coexistence in a disposable fixture, without automatic provisioning or GIN replacement.
-- [ ] CHANGELOG entry (keiro-pgmq additive API + docs; the pgmq-hs entry belongs to the upstream plan); ADR distillation pass done (provisioning half of the master plan's FIFO-contract ADR candidate).
+- [x] (2026-09-16) Refreshed current Keiro, pgmq-hs, PGMQ, and Shibuya adapter evidence. `cabal test keiro-pgmq-test --test-show-details=direct` passed with 65 examples, 0 failures, and 2 pre-existing pending examples.
+- [ ] M1: Add and test the bounded `mkPartitionSpec` guardrail; correct `PartitionSpec`, `QueueKind`, and provisioning Haddocks. Preserve the already-corrected DLQ runbook.
+- [ ] M2: Require reproducible stock-GIN versus stock-GIN-plus-candidate measurements across every Keiro FIFO query shape, polling state, representative depth/cardinality, and write/lease workload. Record a useful, scoped result or no recommendation.
+- [ ] M3: Correct FIFO provisioning Haddocks and validate the accepted operator procedure's coexistence, lifecycle, lock behavior, and partition behavior without automatic provisioning or GIN replacement.
+- [ ] Update `keiro-pgmq/CHANGELOG.md`; run the ADR distillation pass against `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md` and `docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md`.
 
 
 ## Surprises & Discoveries
 
-The cross-repository audit found clean Keiro state at 14dd9036 and no new FIFO/index source
-implementation since 503475fa (only package formatting). `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use` now measures an optional
-supplemental index and forbids helper overrides/Gin replacement. Earlier migration names,
-release targets and automatic-conversion expectations are superseded. No benchmark or live
-partition test was run in this planning audit.
+- The current Keiro source still exports only the raw `PartitionSpec` constructor. Its Haddock
+  still presents retention as an example string, and its FIFO provisioning Haddocks still say
+  the stock GIN is the index grouped reads match. This plan's implementation is unstarted.
+- Plan 117 has already corrected `Keiro.PGMQ.Dlq` while implementing safe DLQ operations. The
+  current module says ordinary DLQ rows do not expire automatically and separately warns that a
+  partitioned archive follows partition maintenance. This plan must verify and preserve that
+  paragraph, not overwrite it with its July draft.
+- `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`
+  remains planning-only: no probe fixture, EXPLAIN evidence, or operator procedure exists yet.
+  Its initial candidate is a B-tree over the coalesced group expression and `msg_id`; that shape
+  may help group joins while still scanning the whole backlog to compute group minima.
+- The released pgmq-hs family remains 0.6.0.0 and vendors PGMQ 1.13.0; authoritative repository
+  tags still end at those versions. The pgmq-hs checkout has later unrelated effectful-core-bound
+  work but no index experiment or changed grouped-read SQL.
+- The current Mori registry resolves the owning pgmq-hs and adapter projects and packages but
+  not their plan or MasterPlan artifact kinds. The canonical plan URIs in this document are
+  retained intentionally; their files were verified through the project checkouts returned by
+  `mori path`.
+- Plan 116 now chooses a distinct `FifoHeads` mode backed by `read_grouped_head`, and
+  `mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`
+  owns adapter dispatch and safe-drain evidence. The adapter source has implemented and committed
+  `HeadPerGroup`, database semantics, and a 10k/100k safe FIFO drain matrix, including 100,000
+  messages across 10,000 groups; the latest authoritative adapter release remains 0.15.0.0 while
+  its full benchmark, documentation, and release milestone is in progress. Index evaluation must
+  include grouped heads and reuse that end-to-end harness rather than measure only the two legacy
+  grouped reads.
+- Empty and invisible-backlog polls are first-class performance cases. Standard workers repeat
+  an empty grouped read after their configured delay; long polling may repeat the same expensive
+  inner query every 100 ms for several seconds. A candidate that improves a visible batch but
+  worsens empty polling can increase steady-state database load.
+- PGMQ creates a `vt` index and every lease changes `vt`. Such updates cannot use PostgreSQL's
+  heap-only-tuple optimization, so an extra B-tree can add index writes and bloat even though its
+  own key columns are unchanged. Measure repeated claim/retry/visibility cycles, not only insert
+  latency and a single read.
+- PGMQ 1.13 classifies `partition_interval` by casting it to PostgreSQL `INTEGER`, a signed
+  32-bit value. The previous plan's proposed `Int64` classifier could disagree for values outside
+  that range and treated negative numeric text as a time interval. The constructor must mirror
+  the server boundary and describe the retention comparison as Keiro policy, not pg_partman
+  proof.
 
 
 ## Decision Log
 
-- Decision: PGQ-4 is fixed by truthful documentation plus a construction-time guardrail
-  (`mkPartitionSpec`), and partitioned provisioning is documented as experimental — not
-  production-validated — until the pending live test can run. No behavioral change to what
-  `create_partitioned` configures upstream.
-  Rationale: The dangerous behavior is pg_partman's, configured by pgmq's own
-  `create_partitioned` (it sets `retention`, `retention_keep_table = false`,
-  `automatic_maintenance = 'on'` on the active queue table — migration SQL lines 1329-1342
-  — and the same on the archive table, lines 1396-1409, so even archived audit rows
-  expire). Changing those semantics upstream would fork pgmq's documented behavior for all
-  consumers; what keiro owes its users is an API that cannot be configured into silent
-  message loss *by accident*. The only integration test is permanently pending
-  (`keiro-pgmq/test/Main.hs` lines 1095-1099: the suite's PostgreSQL has no pg_partman), so
-  "supported for production" cannot honestly be claimed either way — hence the experimental
-  label, revisited when a pg_partman-enabled CI database exists.
+- Decision: Fix the retention hazard with truthful documentation plus a bounded
+  `mkPartitionSpec` constructor, while retaining the raw constructor. Label partitioned
+  provisioning experimental until its live pg_partman example runs in CI.
+  Rationale: Keiro must prevent obvious configuration mistakes without pretending a local
+  parser can prove that an operator-selected retention horizon exceeds every future outage or
+  backlog.
+  Date: 2026-09-16
+
+- Decision: `mkPartitionSpec` validates trimmed non-empty values; positive, signed-32-bit
+  `partition_interval` for numeric/message-id partitioning; matching numeric-versus-time units;
+  and positive numeric retention not smaller than one configured id span. Parse numeric-looking
+  text through unbounded `Integer` first so overflow and negatives receive explicit errors.
+  Time strings such as `daily` and `7 days` remain opaque because duplicating PostgreSQL's
+  interval parser would drift.
+  Rationale: Mirror PGMQ's actual `INTEGER` classifier without claiming that construction proves
+  a safe retention horizon. Retention must still exceed application worst-case outage and
+  backlog age by an operator-chosen margin.
+  Date: 2026-09-16
+
+- Decision: Queue-kind drift remains outside this plan. Re-provisioning an existing queue with
+  a different `QueueKind` may be skipped by the additive reconciler.
+  Rationale: The parent master plan records this accepted boundary; fixing it would change the
+  reconciler contract rather than retention or index truthfulness.
   Date: 2026-07-23
 
-- Decision: `mkPartitionSpec` validates only what is classifiable from the two opaque
-  pg_partman strings: non-empty; both-numeric or both-non-numeric (pgmq derives the
-  partition column from whether `partition_interval` casts to an integer — SQL lines
-  1223-1236 — so a numeric/non-numeric mix configures an id-partitioned table with an
-  interval-typed retention, or vice versa, which pg_partman only rejects later at
-  maintenance time); and for the numeric (msg_id-range) kind, retention >= partition
-  interval as a conservative Keiro configuration policy, subject to validation against
-  pg_partman's actual boundary rules. This does not establish that a smaller retention
-  drops a currently filling partition or that the guard prevents message loss. Time-based strings ("daily", "7 days") are not
-  compared — Haskell-side interval parsing would drift from PostgreSQL's — that case
-  remains documentation. The raw `PartitionSpec` constructor stays exported as the escape
-  hatch, consistent with `JobTuning`/`RetryPolicy` precedent.
-  Rationale: distinguish local validation policy from database retention guarantees.
-  Date: 2026-07-23
-
-
-
-- Decision: The review's documented-accepted queue-kind drift caveat (re-provisioning an
-  existing queue with a different `QueueKind` is silently skipped by the reconciler, which
-  only creates what is missing) stays accepted; this plan does not add drift detection.
-  Rationale: master plan scope; recorded so the omission is legible.
-  Date: 2026-07-23
-
-
-- Decision: Follow `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`: only additive, separately named indexes are permitted; no upstream helper/Gin replacement or automatic conversion.
-  Rationale: Explicit user guidance and preservation of upstream compatibility/presence reporting.
+- Decision: Follow the upstream MasterPlan 5 boundary: only additive, separately named indexes
+  are permitted. Do not replace GIN, helper behavior, presence reporting, or SQL functions.
+  Rationale: Preserve upstream ownership and compatibility.
   Date: 2026-09-12
+
+- Decision: Do not publish a general supplemental-index recommendation from a candidate shape
+  or an EXPLAIN node. Compare the production baseline, stock GIN, with stock GIN plus candidate
+  and require a material benefit with bounded regressions.
+  Rationale: The three grouped reads have different plans, and an extra index affects inserts,
+  every non-HOT lease update, disk, vacuum, DDL locks, and repeated empty polls. A plan-node win
+  can still be an end-to-end loss.
+  Date: 2026-09-16
+
+- Decision: Keiro will not add a `keiro-ops` command or direct private-schema mutation for the
+  supplemental index. If the experiment succeeds, the pgmq-owning project publishes the tested
+  create/inspect/remove procedure or supported API; Keiro only documents the handoff.
+  Rationale: [ADR 28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md)
+  requires operator commands to respect library schema ownership.
+  Date: 2026-09-16
+
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The 2026-09-16 refresh found no shipped supplemental index and therefore no new production
+performance risk from this plan yet. It replaced inference-based acceptance with explicit read,
+poll, write, churn, storage, lock, partition, and end-to-end gates. Implementation remains.
 
 
 ## Context and Orientation
 
-This repository (`/Users/shinzui/Keikaku/bokuno/keiro`) contains `keiro-pgmq`, typed
-background jobs over PGMQ (queues as PostgreSQL tables `pgmq.q_<name>`, installed by the
-`pgmq-migration` package's SQL, not as an extension). The upstream SQL lives in
-`mori://shinzui/pgmq-hs` (resolve the checkout with `mori path mori://shinzui/pgmq-hs`); its
-install ledger is `pgmq-migration/migrations/` (`0001-install-v1.11.0.sql`,
-`0002-schema-management-comment.sql`, listed in `manifest`, embedded at compile time by
-`pgmq-migration/src/Pgmq/Migration/Internal/Definition.hs`). Historical migration bytes are immutable. This initiative adds no function override or FIFO migration.
+This repository contains `keiro-pgmq`, typed background jobs over PGMQ. The package currently
+bounds the pgmq-hs libraries to `>=0.6 && <0.7` in `keiro-pgmq/keiro-pgmq.cabal`. Resolve the
+dependency checkout with `mori path mori://shinzui/pgmq-hs`; it vendors PGMQ 1.13.0 in
+`vendor/pgmq/pgmq-extension/sql/pgmq.sql` and installs that native schema through
+`pgmq-migration`. Historical migration bytes are immutable. This plan adds no function override,
+FIFO migration, or package-bound change.
 
-The keiro provisioning surface is the queue-lifecycle section of
-`keiro-pgmq/src/Keiro/PGMQ/Job.hs`: `QueueKind` (lines 565-579) selects standard, unlogged,
-or partitioned storage; `PartitionSpec` (lines 581-589) carries the two pg_partman strings
-`partitionInterval` and `retentionInterval`; `partitionedProvision` (lines 609-612) wraps
-it into a `QueueProvision`; `queueProvisionConfigs` (lines 618-644) lowers a provision to
-`pgmq-config` `QueueConfig`s (pure, so partitioned lowering is testable without
-pg_partman); `ensureJobQueueWith` (lines 646-654) runs pgmq-config's additive reconciler
-(list existing queues, create only what is missing — the create path takes an advisory
-lock and inserts queue metadata with `ON CONFLICT DO NOTHING`, so concurrent startups are
-safe); `ensureFifoIndex` (lines 663-676) and `ensureOrderedJobQueue` (lines 678-686)
-request the conventional FIFO index; the current reconciler observes its name and skips
-creation when present. This existence report does not validate index performance. "pg_partman" is a PostgreSQL extension that manages time- or id-range table
-partitions and, when configured with a retention, drops partitions older than it during
-its scheduled maintenance.
+The Keiro provisioning surface is the queue-lifecycle section of
+`keiro-pgmq/src/Keiro/PGMQ/Job.hs`. `QueueKind` selects standard, unlogged, or partitioned
+storage. `PartitionSpec` carries opaque `partitionInterval` and `retentionInterval` text.
+`queueProvisionConfigs` lowers a provision to `pgmq-config` values and always creates the DLQ
+as a standard queue. `ensureJobQueueWith` invokes the additive reconciler. `ensureFifoIndex` and
+`ensureOrderedJobQueue` request upstream's conventional GIN index. Presence is inferred from its
+name; neither presence nor successful creation proves query use. `pg_partman` is the PostgreSQL
+extension that manages time- or message-id-range child tables and runs retention maintenance.
 
-The defects, re-verified on 2026-07-23:
+For PGQ-4, `pgmq.create_partitioned` updates pg_partman's `part_config` for the active queue
+with the requested retention, `retention_keep_table = false`, and automatic maintenance. It
+does the same for the archive table. Maintenance therefore drops eligible child tables rather
+than checking each message's acknowledgement state. Time-based active/archive parents use
+`enqueued_at`/`archived_at`; numeric parents use `msg_id`. A seven-day retention combined with
+an eight-day consumer outage can delete old unprocessed active work with no Keiro DLQ entry.
 
-PGQ-4 (HIGH; confirmed from SQL — live behavior untestable in this repo's CI).
-`pgmq.create_partitioned` (SQL lines 1264-1419 of
-`pgmq-migration/migrations/0001-install-v1.11.0.sql`) updates pg_partman's `part_config`
-for the ACTIVE queue table with `retention = <retentionInterval>`,
-`retention_keep_table = false`, `automatic_maintenance = 'on'` (lines 1329-1342): during
-maintenance pg_partman permanently drops (not detaches — `retention_keep_table = false`)
-every partition older than the interval, with no regard to whether its messages were ever
-read. The same configuration is applied to the archive table `pgmq.a_<name>` (lines
-1396-1409), so archive rows can also be removed. Time queues use enqueued_at and archives use archived_at; numeric parents use msg_id, so they do not share a single expiry clock. keiro's surface hides this:
-the `PartitionSpec` haddock (lines 581-584) says only "e.g. \"7 days\"", and the
-`Keiro.PGMQ.Dlq` module haddock states "PGMQ does not expire DLQ rows by itself"
-(`keiro-pgmq/src/Keiro/PGMQ/Dlq.hs` line 15). One nuance found on re-reading: that DLQ
-sentence is literally true for every keiro-provisioned DLQ *today*, because the DLQ is
-always created as a standard queue (`queueProvisionConfigs`, lines 642-644) — the
-correction is to scope the claim (true for standard queues, hence for keiro DLQs; false
-for partitioned queues) rather than delete it. The only live test is permanently pending:
-`keiro-pgmq/test/Main.hs` lines 1095-1099 (`pendingWith` — the suite's PostgreSQL installs
-only the PGMQ schema, no pg_partman). Failure scenario to keep in mind while writing docs:
-retention "7 days", consumer outage 8 days — successful maintenance can drop eligible old active partitions
-wholesale; no DLQ entry, no metric, no log line from keiro.
+For PGQ-5, `pgmq._create_fifo_index_if_not_exists` creates GIN on `headers`. The current
+`read_grouped`, `read_grouped_rr`, and `read_grouped_head` implementations all compute the
+coalesced group expression and group by it. Their later stages differ: throughput mode finds
+visible minima and performs per-group member probes, round-robin computes absolute heads and
+layers eligible members, while grouped-head selects one visible absolute head per group. The
+primary key and `vt` indexes may participate independently. Full current inner queries, not a
+PL/pgSQL call that hides nested plans, are the measurement unit.
 
-PGQ-5 (confirmed, definitional). `pgmq._create_fifo_index_if_not_exists` (SQL lines
-1428-1444) executes `CREATE INDEX IF NOT EXISTS <qtable>_fifo_idx ON pgmq.<qtable> USING
-GIN (headers)`. The grouped reads filter and group on
-`COALESCE(headers->>'x-pgmq-group', '_default_fifo_group')` — `read_grouped`'s
-`fifo_groups` aggregate (lines 305-313), its `NOT EXISTS` member probe (lines 335-345),
-its per-group lateral (lines 346-357), and `read_grouped_rr`'s equivalents (lines
-117-200). A jsonb GIN index accelerates containment/existence operators only; it cannot
-serve `->>` equality, GROUP BY, or ordering, so every poll aggregates the whole visible
-table. keiro documents the opposite: `ensureFifoIndex`'s haddock calls it "the index
-PGMQ's grouped/ordered reads (…) match against" (Job.hs lines 663-676), `QueueProvision`
-and `ensureOrderedJobQueue` say "FIFO GIN index" (lines 591-598, 678-686), and the
-promise dates to `docs/plans/76-add-partitioned-and-unlogged-queue-provisioning-with-fifo-indexes-to-keiro-pgmq.md`.
-Upstream, `pgmq-hasql/test/AdvancedOpsSpec.hs` `testCreateFifoIndex` (lines 271-289) only
-proves the function runs, not that any query uses the index.
+Relevant local ADRs are [ADR 1](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md),
+which requires the drain and worker span contract to remain unchanged, and
+[ADR 28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md),
+which prevents Keiro operator commands from mutating a dependency's private schema. This plan
+does not alter consumption telemetry and does not add a Keiro operator command.
 
-Verified-sound behavior this plan must not regress: provisioning idempotency and
-concurrent-startup safety (reconciler lists first; `pgmq.create*` take
-`pgmq.acquire_queue_lock`'s advisory lock, SQL lines 107-115, and `ON CONFLICT DO NOTHING`
-on the meta insert); conventional FIFO-index presence reporting remains stable; the pure
-partitioned lowering test (`test/Main.hs` lines 1080-1094) and index idempotence test
-(lines 1101-1113) stay green.
-
-Relevant ADR: `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md`. It constrains the drain and worker execution paths' span contract.
-This plan touches neither path — provisioning and DDL only — so the constraint reduces to:
-the seven captured-span examples in `keiro-pgmq/test/Main.hs` (lines 901-1060) must pass
-unmodified, which they will unless this plan strays from its scope.
-
-Sibling plans: `docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`
-owns the delivery-path fixes and any change to the tuning types (`JobTuning`,
-`JobOrdering`, `Job`) — this plan must not touch those types (master plan Integration
-Points). Neither plan writes pgmq SQL. Plan 116 may consume a client-ordering release; this index
-work is separately measured operator DDL and does not share a package-bound change. The DLQ operator path is
-`docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md`;
-it rewrites *other* paragraphs of the same `Dlq.hs` module haddock (the visibility-window
-runbook), while this plan owns only the expiry-claim sentence — keep the edits
-sentence-scoped to avoid conflicts.
+Sibling [Plan 116](116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md)
+owns `Job`, `JobOrdering`, `JobTuning`, `FifoHeads`, and the adapter release. It makes
+`read_grouped_head` part of Keiro's expected workload; this plan measures that query but does
+not edit those types. [Plan 117](117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md)
+has implemented the DLQ runbook changes. Preserve its paragraph. Both siblings share
+`keiro-pgmq/src/Keiro/PGMQ/Job.hs`, so re-read the file immediately before implementation and
+confine retention/provisioning edits to the queue-lifecycle declarations.
 
 
 ## Plan of Work
 
-### Milestone 1 — tell the truth about partitioned retention, and guard construction
+### Milestone 1 — tell the truth about partitioned retention and guard construction
 
-Scope: keiro-side only; no upstream change, no behavior change to provisioning itself. At
-the end, nobody can read the partitioned API top-to-bottom and come away believing
-retention is a cleanup knob, and the two provably-wrong spec shapes are rejected at
-construction.
+At the end of this milestone, a user reading the queue lifecycle API cannot mistake partition
+retention for per-row cleanup, and obvious malformed numeric configurations fail before database
+access. Provisioning behavior itself does not change.
 
-In `keiro-pgmq/src/Keiro/PGMQ/Job.hs`:
+In `keiro-pgmq/src/Keiro/PGMQ/Job.hs`, rewrite the `PartitionSpec` Haddock to explain both
+opaque pg_partman strings, whole-partition deletion of active and archived data, the outage or
+backlog failure mode, and the need to size retention above worst-case processing lag. Say that
+the raw constructor is unvalidated and prefer `mkPartitionSpec`. Update `PartitionedKind` and
+`partitionedProvision` with a short version of the warning and the experimental label.
 
-1. Rewrite the `PartitionSpec` haddock (lines 581-589). It must state, in this order: what
-   the two strings mean (pg_partman partition sizing and retention); that retention DROPS
-   whole partitions of the ACTIVE queue table on a timer — unprocessed messages included —
-   because `pgmq.create_partitioned` sets `retention_keep_table = false` with automatic
-   maintenance; that the archive table gets the same retention, so archived rows expire
-   too; the concrete failure mode (backlog or outage longer than `retentionInterval` means
-   permanent loss of unprocessed work, with no error anywhere); and the sizing rule that
-   follows (retention must comfortably exceed worst-case processing lag, not storage
-   preference). Prefer `mkPartitionSpec`.
-
-2. Add the validating constructor and its error type next to `PartitionSpec`, exported
-   from the module's queue-lifecycle section and re-exported by `Keiro.PGMQ`:
-
-   ```haskell
-   data PartitionSpecConfigError
-       = EmptyPartitionInterval
-       | EmptyRetentionInterval
-       | -- | One string is numeric (msg_id-range partitioning) and the other
-         -- is not; pg_partman would only fail at maintenance time, long after
-         -- provisioning appeared to succeed.
-         MixedPartitionUnits !Text !Text
-       | -- | Numeric kind: retention smaller than one partition's id-span
-         -- authorizes dropping the partition currently being filled.
-         RetentionBelowPartitionInterval !Int64 !Int64
-       deriving stock (Eq, Show)
-
-   mkPartitionSpec :: Text -> Text -> Either PartitionSpecConfigError PartitionSpec
-   ```
-
-   Implementation: trim both inputs; empty → the respective error; classify each with a
-   `Data.Text.Read.decimal`-style full parse to `Int64`; one numeric and one not →
-   `MixedPartitionUnits`; both numeric with retention < partition →
-   `RetentionBelowPartitionInterval`; otherwise `Right (PartitionSpec ...)`. Keep the raw
-   constructor exported (documented as the unvalidated escape hatch, mirroring
-   `JobTuning`).
-
-3. Update the `QueueKind` haddock's `PartitionedKind` arm (lines 571-573) and
-   `partitionedProvision` (lines 609-612): one-sentence version of the drop semantics plus
-   a pointer to `PartitionSpec`, and the experimental label — partitioned provisioning has
-   never run against a live pg_partman in this repo's CI (the pending example at
-   `test/Main.hs` lines 1095-1099); treat it as experimental until that example runs.
-
-4. In `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`, replace the sentence "PGMQ does not expire DLQ
-   rows by itself." (line 15) with a scoped version: standard queues — which every
-   keiro-provisioned DLQ is — never expire rows on their own; partitioned queues DO (see
-   `PartitionSpec`), so the archive-then-purge retention model described here applies to
-   the DLQ precisely because it is standard. Touch nothing else in that haddock (sibling
-   plan 117 owns the runbook paragraphs).
-
-New pure tests in `keiro-pgmq/test/Main.hs` (no database; place near the "validates job
-tuning" example at line 380): `mkPartitionSpec "daily" "7 days"` is `Right`;
-`mkPartitionSpec "10000" "100000"` is `Right`; `mkPartitionSpec "10000" "5000"` is
-`Left (RetentionBelowPartitionInterval 10000 5000)`; `mkPartitionSpec "daily" "100000"` is
-`Left (MixedPartitionUnits ...)`; empty cases. Also extend the existing pure lowering
-example (line 1080) to build its spec via `mkPartitionSpec` so the constructor is on the
-provisioning path of record.
-
-Acceptance: `cabal test keiro-pgmq-test` green with the new examples; `git diff` shows no
-change to any tuning type and no behavioral change outside `mkPartitionSpec`.
-
-### Milestone 2 — evaluate the optional supplemental index
-
-Read `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use` for the measured candidate, exact definition, supported queue types, lock
-cost and explicit create/inspect/remove procedure. If it is not yet measured, keep the
-recommendation pending; documentation correcting the GIN claim can proceed. No pgmq-migration
-release or Keiro dependency bump is required for independent operator DDL.
-
-The intended supplemental name is q_<queue>_group_lookup_idx. Keep upstream q_<queue>_fifo_idx
-GIN and all pgmq functions unchanged. Do not route the supplement through ensureFifoIndex,
-withFifoIndexProvision or normal startup. Record a negative experiment honestly rather than
-promising a scan node or universal speedup.
-
-### Milestone 3 — accurate provisioning prose and coexistence evidence
-
-Correct ensureFifoIndex, QueueProvision, withFifoIndexProvision, ensureOrderedJobQueue and
-provisionFifoIndex Haddocks: they request upstream's conventional GIN index. Its presence does
-not prove it accelerates grouped reads. If measured useful, link the separately owned operator
-index procedure and state that no automatic conversion takes place.
-
-Use a disposable queue to validate the supplied procedure on a representative Keiro workload.
-Provision normally, then explicitly add the supplement; compare GIN-only versus GIN-plus-index
-measurements with stable data/statistics. Use full-query timing/buffers and current query shapes;
-a particular scan node is diagnostic, not a brittle permanent CI assertion. Do not override
-functions or edit another repository's migration to make a benchmark pass.
-
-Verify upstream GIN and function definitions remain intact, repeated reconciliation still
-reports conventional index presence, and removing only the supplement restores the baseline.
-Use the owning experiment rather than maintaining a duplicate 100k-row benchmark in every
-ordinary Keiro test run. Record actual supported partition/lock limits. Acceptance is truthful
-Haddocks, existing provisioning tests passing, and reproducible coexistence evidence or an
-explicit negative/pending recommendation.
-
-## Concrete Steps
-
-Run from the Keiro root. M1's pure constructor and documentation changes use:
-
-```bash
-cabal build all
-cabal test keiro-pgmq-test
-```
-
-For M2/M3, locate `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use` with Mori and read its current evidence and operator procedure.
-Run that procedure only on a disposable queue using the existing test fixture. Record actual
-commands, server/queue type, measurements and outputs. A local index experiment requires no
-cabal update, migration-bound bump or extension function replacement. Preserve existing pending
-cases as reported by the current suite rather than inventing an exact example count.
-
-Use Conventional Commits and the parent/child trailers when implementation is committed.
-
-
-## Validation and Acceptance
-
-The retention constructor cases from M1 pass and Haddocks cover time/numeric retention,
-queue/archive controls and maintenance-time loss of unprocessed rows. Treat any minimum
-retention-versus-partition interval guard as Keiro policy, not proof of no loss; verify its
-server-semantics rationale before presenting it as a server restriction. Existing telemetry
-and provisioning tests remain green.
-
-Ordinary provisioning is accurately documented as upstream GIN, with name-based presence
-reporting. Any supplemental index is separately named and explicitly installed/removed;
-coexistence evidence preserves GIN and function definitions. No new migration, helper override,
-automatic conversion or version bump is required. Measurements support any performance claim;
-negative or pending results are explicit.
-
-
-## Idempotence and Recovery
-
-M1 is an additive constructor/documentation change with a retained raw constructor. The
-supplemental index is explicit operator state: inspect its definition and ownership before
-creation/removal, handle conflicting/invalid objects using the owning tested procedure, and
-never drop upstream GIN or replace a function. Build locks and partition constraints must be
-reported, not assumed harmless. Reverting Cabal bounds is not database rollback; this work
-introduces no migration or dependency bump.
-
-
-## Interfaces and Dependencies
-
-At the end of the plan, `keiro-pgmq/src/Keiro/PGMQ/Job.hs` additionally exports (module
-`Keiro.PGMQ.Job`, re-exported through `Keiro.PGMQ`):
+Add and export this interface next to `PartitionSpec`, re-exported through `Keiro.PGMQ`:
 
 ```haskell
 data PartitionSpecConfigError
     = EmptyPartitionInterval
     | EmptyRetentionInterval
+    | NonPositivePartitionInterval !Integer
+    | NonPositiveRetentionInterval !Integer
+    | PartitionIntervalOutsidePostgresInteger !Integer
     | MixedPartitionUnits !Text !Text
-    | RetentionBelowPartitionInterval !Int64 !Int64
+    | RetentionBelowPartitionInterval !Integer !Integer
+    deriving stock (Eq, Show)
+
+mkPartitionSpec :: Text -> Text -> Either PartitionSpecConfigError PartitionSpec
+```
+
+Trim both inputs and reject empties. Use `Data.Text.Read.signed Data.Text.Read.decimal` and
+accept only an empty remainder, parsing to unbounded `Integer`.
+A numeric partition interval must be positive and at most `2147483647`, because PGMQ casts it
+to PostgreSQL `INTEGER` to select `msg_id` partitioning. Numeric retention must be positive.
+Exactly one numeric value is `MixedPartitionUnits`. Two numeric values with retention smaller
+than the partition span are rejected as conservative Keiro policy. Two nonnumeric values pass
+through for PostgreSQL/pg_partman to validate. Store the trimmed values. Do not say this proves
+retention safe or that a smaller retention drops the currently filling partition.
+
+Add pure tests in `keiro-pgmq/test/Main.hs` near the other constructor validation. Cover time
+values, valid numeric values, trimming, both empty fields, zero and negative values, a partition
+value above `2147483647`, mixed units in both directions, retention below the numeric partition
+span, and the raw-constructor escape hatch. Update the existing pure partitioned lowering example
+to construct its spec through `mkPartitionSpec`. In `keiro-pgmq/src/Keiro/PGMQ/Dlq.hs`, make no
+planned prose rewrite; verify that its current ordinary-DLQ and partitioned-archive sentences
+remain accurate.
+
+Acceptance is a green `keiro-pgmq-test`, accurate rendered Haddocks, and no change to queue
+creation SQL or to the `Job`, `JobOrdering`, and `JobTuning` types owned by Plan 116.
+
+
+### Milestone 2 — prove that an optional supplement does not create a performance problem
+
+Read `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`
+for the candidate, supported queue types, lock cost, and explicit lifecycle. If that plan still
+has no results, leave Keiro's recommendation pending and proceed only with truthful GIN
+documentation. No pgmq-migration release or Keiro dependency bump is required for independent
+operator DDL.
+
+The production comparison is stock GIN versus stock GIN plus candidate. A no-FIFO-index case is
+diagnostic only because `ensureOrderedJobQueue` currently provisions stock GIN. Keep data and
+statistics identical between cases. Run at least three untimed warm-ups and ten timed repetitions,
+and capture median, p95, rows, shared/local buffers, temporary spill, and index sizes. Use planner
+defaults for acceptance; forced plan settings may explain a result but cannot justify a
+recommendation. Capture `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for the current inner SQL and
+wall-clock latency for the actual PGMQ function call; the copied inner query reveals the nested
+plan, while the function call includes dynamic SQL, locking, leasing, and result costs. Run
+leasing samples inside a rolled-back transaction or restore the same deterministic fixture
+before every sample so one candidate does not inherit consumed or newly invisible rows.
+
+The matrix covers `read_grouped`, `read_grouped_rr`, and `read_grouped_head`; quantities 1, 10,
+and 50; one, ten, one hundred, and 10,000 groups; and representative depths through 100,000
+rows. For each query, include an all-visible backlog, an invisible head per group, a
+fully invisible backlog, sparse visibility, and an empty queue. Exercise one and sixteen
+concurrent pollers. Measure a standard empty poll and the matching five-second long-poll call at
+a 100 ms inner interval so repeated-query amplification is visible.
+
+Measure inserts with group headers and repeated claim/retry/visibility cycles. Report throughput,
+WAL if available, table/index size before and after churn plus vacuum, and storage per row. Run
+the adapter's existing 10k/100k safe-drain matrix as end-to-end evidence for grouped heads and
+legacy quantity-one modes. Evaluate the group-expression/`msg_id` candidate separately from any
+variant that keys or includes `vt`; because every lease changes `vt`, the latter has a distinct
+write-amplification profile and cannot inherit the base candidate's result. Do not add this
+workload to ordinary Keiro CI.
+
+Predeclare the recommendation gate. The candidate must improve median latency or shared-buffer
+work by at least 20 percent in a named large-backlog Keiro workload without worsening the other
+measure by more than 10 percent. No relevant read/poll cell may regress by more than 10 percent
+in median or 20 percent at p95. Insert and repeated-lease throughput may not regress by more than
+10 percent. The adapter safe-drain gate must remain within its existing 20 percent limit. If
+results are noisy, strategy-specific, or outside these bounds, publish the data and make no
+general recommendation. A scan-node change alone never passes.
+
+The intended supplemental name is `q_<queue>_group_lookup_idx`. Keep upstream
+`q_<queue>_fifo_idx` GIN and all pgmq functions unchanged. Do not route the supplement through
+`ensureFifoIndex`, `withFifoIndexProvision`, normal startup, or `keiro-ops`.
+
+
+### Milestone 3 — publish accurate provisioning prose and lifecycle evidence
+
+Correct the Haddocks for `QueueProvision`, `provisionFifoIndex`, `withFifoIndexProvision`,
+`ensureFifoIndex`, and `ensureOrderedJobQueue`: they request upstream's conventional GIN index,
+and name-based presence does not prove grouped-read acceleration. If the Milestone 2 gate passes,
+link the separately owned operator procedure and state its precise supported strategy/workload.
+If it does not pass, say that no supplemental index is recommended.
+
+Use disposable standard, unlogged, and real-pg_partman partitioned queues to validate any
+accepted procedure. Verify identifier quoting, expected/conflicting/invalid definitions,
+ordinary and partitioned-parent build locks, existing child attachment, and a child created
+after the parent index. Do not advertise `CREATE INDEX CONCURRENTLY` for a partitioned parent
+unless the owning plan has a tested procedure. An unexpected object with the desired name is an
+error, not an `IF NOT EXISTS` success.
+
+Verify upstream GIN and function definitions remain intact, repeated reconciliation still
+reports conventional index presence, and removing only the supplement restores the stock
+baseline. Acceptance is truthful Haddocks, green provisioning tests, the performance gate
+recorded with reproducible evidence, and either a scoped operator handoff or an explicit
+negative/pending recommendation.
+
+
+## Concrete Steps
+
+Run Milestone 1 validation from the Keiro root:
+
+```bash
+cabal build all
+cabal test keiro-pgmq-test --test-show-details=direct
+```
+
+For Milestones 2 and 3, use Mori to resolve the owning checkouts and read their current plans and
+source before running anything:
+
+```bash
+mori path mori://shinzui/pgmq-hs
+mori path mori://shinzui/shibuya-pgmq-adapter
+```
+
+Run the pgmq-hs SQL probe only against a disposable database. It must emit machine-readable
+stock and candidate measurements and restore the starting index set. Record PostgreSQL and
+pg_partman versions, commit IDs, settings, queue type, data distribution, warm-ups, samples, and
+actual output. Do not invent a transcript when the required environment is unavailable.
+
+Run the existing end-to-end FIFO drain evidence from the adapter checkout after its Plan 7
+implementation, with `PG_CONNECTION_STRING` pointing at a disposable database:
+
+```bash
+BENCH_SAFE_FIFO_RUNS=3 nix develop -c cabal bench shibuya-pgmq-adapter-bench \
+  --benchmark-options='--stdev Infinity -p safe-fifo-drain'
+```
+
+Use Conventional Commits. Every implementation commit carries both active trailers:
+
+```text
+ExecPlan: docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md
+Intention: intention_01m2b1p3vhe179jtr5qz6ghqks
+```
+
+
+## Validation and Acceptance
+
+The retention constructor cases pass and Haddocks cover time/numeric retention, active/archive
+controls, and maintenance-time loss of unprocessed rows. The signed 32-bit partition classifier
+matches PGMQ 1.13, while time strings remain explicitly server-validated. The minimum
+retention-versus-partition span is described as Keiro policy, not proof of no loss. Existing
+telemetry, DLQ, ordering, and provisioning tests remain green.
+
+Ordinary provisioning is accurately documented as upstream GIN with name-based presence
+reporting. Any supplemental index is separately named and explicitly installed and removed by
+the owning project. Coexistence evidence preserves GIN and function definitions. The three query
+shapes, empty/hidden/visible polls, long-poll amplification, concurrency, insert/lease churn,
+storage, DDL locks, and partition lifecycle satisfy the predeclared gate. Otherwise the accepted
+outcome is no recommendation. No migration, helper override, automatic conversion, or version
+bump is introduced.
+
+
+## Idempotence and Recovery
+
+Milestone 1 is an additive constructor/documentation change with a retained raw constructor;
+its pure tests are repeatable. The supplemental index is explicit operator state. Inspect its
+definition and ownership before creation or removal, handle conflicting or invalid objects
+through the owning tested procedure, and never drop upstream GIN or replace a function. Failed
+concurrent builds on ordinary tables and interrupted partition-parent builds require the
+recovery documented by that procedure. Build locks, child-index state, storage, and vacuum
+effects must be reported rather than assumed harmless. This work introduces no migration or
+dependency bump.
+
+
+## Interfaces and Dependencies
+
+At completion, `Keiro.PGMQ.Job`, re-exported through `Keiro.PGMQ`, additionally exports:
+
+```haskell
+data PartitionSpecConfigError
+    = EmptyPartitionInterval
+    | EmptyRetentionInterval
+    | NonPositivePartitionInterval !Integer
+    | NonPositiveRetentionInterval !Integer
+    | PartitionIntervalOutsidePostgresInteger !Integer
+    | MixedPartitionUnits !Text !Text
+    | RetentionBelowPartitionInterval !Integer !Integer
 
 mkPartitionSpec :: Text -> Text -> Either PartitionSpecConfigError PartitionSpec
 ```
 
 `PartitionSpec`, `QueueKind`, `QueueProvision`, `partitionedProvision`,
 `withFifoIndexProvision`, `queueProvisionConfigs`, `ensureFifoIndex`, and
-`ensureOrderedJobQueue` keep their signatures (docs-only changes). This plan must not
-touch `JobTuning`, `JobOrdering`, or `Job` — those belong to
-`docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md`.
+`ensureOrderedJobQueue` keep their signatures. This plan must not edit `Job`, `JobOrdering`, or
+`JobTuning`; those belong to Plan 116.
 
-Index evidence and operator guidance are owned by `mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`. Upstream SQL and conventional
-FIFO provisioning remain unchanged; no migration package minimum is introduced. Plan 116's
-client-ordering release is independent. Retain existing pgmq family compatibility bounds unless
-an actual API change elsewhere requires a separately verified update.
+Index evidence and operator guidance are owned by
+`mori://shinzui/pgmq-hs/plans/20-replace-the-fifo-gin-index-with-one-the-grouped-reads-can-use`.
+Upstream SQL and conventional FIFO provisioning remain unchanged. Plan 116's `FifoHeads` and
+`mori://shinzui/shibuya-pgmq-adapter/plans/7-add-grouped-head-fifo-polling-to-the-pgmq-adapter`
+make grouped-head and adapter safe-drain measurements part of acceptance but do not make the
+supplemental index a release dependency. Retain existing pgmq family bounds unless an actual API
+change elsewhere requires a separately verified update.
 
-Revision note (2026-09-12): Removed replacement-index migration/release assumptions and brittle scan assertions; aligned M2/M3, interfaces and recovery with explicit supplemental-index ownership.
+Revision note (2026-09-12): Removed replacement-index migration/release assumptions and brittle
+scan assertions; aligned M2/M3, interfaces, and recovery with explicit supplemental-index
+ownership.
+
+Revision note (2026-09-16): Refreshed the plan against current Keiro, pgmq-hs, PGMQ 1.13, the
+implemented DLQ work, and the new grouped-head adapter path. Corrected the constructor's numeric
+classifier and added explicit full-workload performance, write-amplification, polling,
+concurrency, storage, lock, partition, and recommendation gates so an optional index cannot ship
+on plan-node evidence alone.
