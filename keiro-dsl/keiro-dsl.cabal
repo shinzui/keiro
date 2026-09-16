@@ -1340,6 +1340,7 @@ test-suite keiro-dsl-conformance-process-reactions
     Generated.ProcessReactions.Nominals.Internal
     Generated.ProcessReactions.ScalingReaction.Input
     Generated.ProcessReactions.ScalingReaction.Process
+    Generated.ProcessReactions.ScalingReaction.ProcessHarness
     ProcessReactions.AuditOnly.ProcessHoles
     ProcessReactions.IncidentReaction.ProcessHoles
     ProcessReactions.ScalingReaction.ProcessHoles
