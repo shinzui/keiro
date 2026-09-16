@@ -12,17 +12,37 @@
 -- treat metadata as optional so operators can still inspect legacy or hand-written
 -- rows.
 --
--- PGMQ does not expire DLQ rows by itself. The retention model is "archive-then-
--- purge": 'archiveDlq' retains dead letters by moving them into the archive table
--- @pgmq.a_<dlq>@ (preserving @enqueued_at@ / @read_ct@ and stamping @archived_at@)
--- for audit, while 'purgeDlq' deletes them permanently. An operator who needs an
--- audit trail runs 'archiveDlq' (retain) and may then 'purgeDlq' (clear the active
--- table); an operator who does not keeps using 'purgeDlq' alone. Either way, alert
--- on the DLQ's depth via 'Keiro.PGMQ.Metrics.jobDlqMetrics'.
+-- 'readDlq', 'redriveDlq', and count-based 'archiveDlq' read visible rows and hide
+-- each row they inspect for 30 seconds. To retain inspected rows without waiting,
+-- keep their 'dlqMessageId' values and pass them to 'archiveDlqEntries'. Verify
+-- that every requested id was returned before considering retention complete:
 --
--- Redrive is at-least-once: a crash after sending the original payload back to the
--- main queue but before deleting the DLQ row leaves the payload in both places.
--- Handlers must therefore be idempotent.
+-- @
+-- entries <- readDlq job 100
+-- let requested = fmap dlqMessageId entries
+-- archived <- archiveDlqEntries job requested
+-- if Set.fromList archived /= Set.fromList requested
+--   then stopAndInvestigate
+--   else purgeDlq job
+-- @
+--
+-- PGMQ does not expire ordinary DLQ rows by itself. Archiving moves active rows
+-- into @pgmq.a_<dlq>@ for audit. Partitioned archive retention remains subject to
+-- its configured partition maintenance; archiving does not promise indefinite
+-- retention. 'purgeDlq' deletes only after a metrics snapshot reports no hidden
+-- rows, returning 'PurgeDlqBlocked' otherwise. The snapshot and deletion are not
+-- atomic. For a full-queue audit, pause producers and other operators, inspect and
+-- archive every row that requires retention, verify the active depth is zero, and
+-- only then consider purge. A bounded read followed by purge can still delete
+-- uninspected visible rows. 'purgeDlqForce' is the explicitly unconditional escape
+-- hatch and permanently deletes hidden rows too. Alert on DLQ depth via
+-- 'Keiro.PGMQ.Metrics.jobDlqMetrics'.
+--
+-- Redrive preserves the wrapper's original producer headers, including FIFO group
+-- and trace metadata, but it sends a new main-queue row with a new id, a fresh read
+-- count, and a new position at the back of its group. Redrive is at-least-once: a
+-- crash after sending the original payload but before deleting the DLQ row leaves
+-- the payload in both places. Handlers must therefore be idempotent.
 module Keiro.PGMQ.Dlq
   ( DlqEntry (..),
     readDlq,
@@ -161,9 +181,10 @@ toEntry job message =
               rawBody = body
             }
 
--- | Move up to @n@ DLQ rows back to the main queue. Redriven messages start a
--- fresh PGMQ @read_ct@ on the main queue. Malformed DLQ wrappers are left in the
--- DLQ for inspection.
+-- | Move up to @n@ visible DLQ rows back to the main queue. Each read hides the
+-- DLQ row for 30 seconds. Redriven messages preserve wrapper producer headers but
+-- receive a new id, queue position, and fresh PGMQ @read_ct@. Malformed wrappers
+-- are left in the DLQ for inspection.
 redriveDlq :: (Pgmq :> es, IOE :> es) => Job p -> Int -> Eff es Int
 redriveDlq job n
   | n <= 0 = pure 0
@@ -241,7 +262,8 @@ purgeDlqForce :: (Pgmq :> es, IOE :> es) => Job p -> Eff es Int64
 purgeDlqForce job =
   Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
 
--- | Archive (retain) up to @n@ DLQ rows: move each out of the active DLQ table
+-- | Archive (retain) up to @n@ visible DLQ rows, hiding each inspected row for
+-- 30 seconds: move each out of the active DLQ table
 -- @pgmq.q_<dlq>@ into the archive table @pgmq.a_<dlq>@, preserving @enqueued_at@ /
 -- @read_ct@ and stamping @archived_at@. Returns the number archived. This is the
 -- audit-retention counterpart to the delete-only 'purgeDlq'. At-most-once per row

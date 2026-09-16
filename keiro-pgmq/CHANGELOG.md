@@ -8,6 +8,10 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ### Breaking Changes
 
+- `DlqEntry` now exposes `originalHeaders`; external record construction and
+  exhaustive positional matches must account for the new field. `purgeDlq` now
+  returns `PurgeDlqResult` instead of `()`. Callers that discard the result may
+  still compile but must inspect `PurgeDlqBlocked` rather than assuming deletion.
 - Require the released `pgmq-config`, `pgmq-core`, `pgmq-effectful`,
   `pgmq-hasql`, and test-only `pgmq-migration` 0.6 family together with
   `shibuya-pgmq-adapter ^>=0.15.0.0`. The re-exported `QueueMetrics` record now
@@ -15,6 +19,16 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
   match it positionally must handle the new field. Keiro's job API is otherwise
   unchanged, and partitioned provisioning deliberately passes `premake = Nothing`
   to retain the PGMQ server default rather than exposing explicit premake control.
+
+### New Features
+
+- DLQ redrive preserves the wrapper's original producer headers, including FIFO,
+  trace, and application metadata. Missing and JSON-null legacy headers remain
+  headerless and never fall back to the DLQ row's own headers.
+- `archiveDlqEntries` archives known message ids even while inspection has hidden
+  them. Ordinary `purgeDlq` refuses when metrics report hidden rows and returns
+  the deleted or blocked count; `purgeDlqForce` is the distinctly named
+  unconditional escape hatch.
 
 ## 0.16.0.0 — 2026-09-07
 

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-16
+* **Update**: Amend ADR-28 so destructive authorization does not bypass the typed visibility refusal for PGMQ DLQ purge (plan 117).
 * **Update**: Extend ADR-41 with input-only DSL guards, checked acceptance ownership, coordination fingerprints, and generated-versus-Hole ownership.
 
 ## 2026-09-15

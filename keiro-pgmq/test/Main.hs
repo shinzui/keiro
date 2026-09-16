@@ -1366,6 +1366,27 @@ spec = do
     retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)
     retained `shouldBe` 2
 
+  it "inspect archive-by-ids and guarded purge completes without waiting" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.dlq_no_wait_runbook"
+    (inspectedCount, inspectedIds, archivedIds, purgeResult, remaining) <-
+      runDb connStr $ do
+        ensureJobQueue job
+        _ <- enqueue job (Ping "first" 1)
+        _ <- enqueue job (Ping "second" 2)
+        runJobOnce 2 job (\_ -> pure (Dead "bad"))
+        entries <- readDlq job 2
+        let inspectedIds = map (.dlqMessageId) entries
+        archivedIds <- archiveDlqEntries job inspectedIds
+        purgeResult <- purgeDlq job
+        remaining <- queueLen job.jobQueue.dlqName
+        pure (length entries, inspectedIds, archivedIds, purgeResult, remaining)
+    inspectedCount `shouldBe` 2
+    archivedIds `shouldMatchList` inspectedIds
+    purgeResult `shouldBe` PurgeDlqPurged 0
+    remaining `shouldBe` 0
+    retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)
+    retained `shouldBe` 2
+
   -- EP-4 M3: end-to-end retention lifecycle.
   it "archived DLQ rows survive a purge" $ \connStr -> do
     let job = mkJob "keiro_pgmq_test.dlq_archive_purge"

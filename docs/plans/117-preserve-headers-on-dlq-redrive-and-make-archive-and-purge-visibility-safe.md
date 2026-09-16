@@ -44,11 +44,12 @@ Keiro's dead-letter queue (DLQ) stores messages whose processing failed. Operato
 `readDlq` to inspect them, `redriveDlq` to send them back for processing,
 `archiveDlq` to retain them for audit, and `purgeDlq` to delete them.
 
-Two defects remain after the pgmq-hs 0.6.0.0 upgrade. Redrive drops the original message
-headers, including the FIFO group (first-in, first-out ordering group), tenant metadata,
-and producer trace context. Inspection hides rows for 30 seconds; the count-based archive
-then skips those rows, while purge deletes them anyway. This plan preserves headers,
-adds archive-by-ids, and makes ordinary purge refuse when metrics report hidden rows.
+Two defects remained after the pgmq-hs 0.6.0.0 upgrade. Redrive dropped the original
+message headers, including the FIFO group (first-in, first-out ordering group), tenant
+metadata, and producer trace context. Inspection hid rows for 30 seconds; the count-based
+archive then skipped those rows, while purge deleted them anyway. This implementation
+preserves headers, adds archive-by-ids, and makes ordinary purge refuse when metrics report
+hidden rows.
 
 All remaining implementation belongs in keiro: principally `keiro-pgmq`, with a required
 `keiro-ops` caller update. The released pgmq-hs APIs already support these operations.
@@ -66,8 +67,8 @@ every row before purge.
 - [x] (2026-09-15) M1: Parsed and exposed original headers, preserved them on redrive, and passed header/legacy-wrapper regressions (`cabal test keiro-pgmq-test`: 61 examples, 0 failures, 2 pre-existing pending).
 - [x] (2026-09-15) M2: Added archive-by-ids, typed guarded purge, explicit force purge, and visibility regressions (`keiro-pgmq-test`: 64 examples, 0 failures, 2 pre-existing pending).
 - [x] (2026-09-15) M2: Updated keiro-ops purge result handling and tested refusal without deleting inspected rows (`keiro-ops-test`: 50 examples, 0 failures).
-- [ ] M3: Correct the operator runbook and compatibility notes; pass both affected suites and the no-wait inspect/archive/purge example.
-- [ ] Update both affected changelogs and complete ADR distillation before marking implementation complete.
+- [x] (2026-09-15) M3: Corrected the operator runbook and compatibility notes; passed the no-wait inspect/archive/purge example and both affected suites (`keiro-pgmq-test`: 65 examples, 0 failures, 2 pre-existing pending; `keiro-ops-test`: 50 examples, 0 failures).
+- [x] (2026-09-15) Updated both affected changelogs, amended ADR 28 and its bundle log, passed strict ADR validation (43 concepts), built all packages, and completed the final source/caller audit.
 
 
 ## Surprises & Discoveries
@@ -149,15 +150,31 @@ Decision (2026-09-15): keep keiro-ops mutation preview/confirmation behavior, ca
 The explicit unconditional escape hatch in this plan is the Haskell `purgeDlqForce`
 API; a new CLI bypass flag is outside this plan.
 
+Decision (2026-09-15): distill the operator policy into
+[ADR 28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md)
+rather than create a new record. The durable rule is that destructive authorization reaches
+the owning library operation but does not override its typed safety refusal. The telemetry
+contract in ADR 1 remains unchanged.
+
 
 ## Outcomes & Retrospective
 
 
-The plan refresh is complete; implementation remains outstanding. The dependency upgrade
-provides a usable baseline but does not fix either DLQ defect. Three implementation
-milestones remain, now including the keiro-ops caller and tests. No source code or
-dependency bounds were changed during this refresh. Record actual test results here
-during implementation rather than carrying forward the old fixed example counts.
+Implementation is complete. Redrive now restores only the wrapper's original headers;
+legacy missing/null wrappers remain headerless and conflicting DLQ-row headers are ignored.
+Operators can archive inspected ids immediately, ordinary purge returns a typed deleted or
+blocked count, and the distinctly named force API remains available only to Haskell callers.
+The keiro-ops execution flag reaches the guarded operation and reports hidden-row refusal
+without deleting inspected rows.
+
+The no-wait proof dead-lettered two rows, inspected both, archived both ids, observed
+`PurgeDlqPurged 0`, retained two archive rows, and left active depth zero. Final validation
+passed `cabal build all`, `cabal test keiro-pgmq-test keiro-ops-test`, strict ADR profile
+validation, and the source/caller audit. The pgmq suite reported 65 examples, zero failures,
+and its two pre-existing pending integration cases; the ops suite reported 50 examples and
+zero failures. No dependency bound, SQL function, schema migration, or upstream package was
+changed. The best-effort metrics-snapshot concurrency limitation remains deliberate and is
+now documented in the public runbook and ADR 28.
 
 
 ## Context and Orientation
@@ -471,3 +488,7 @@ headers while keeping missing, null, and malformed legacy wrappers headerless.
 Revision (2026-09-15): Completed Milestone 2 in the library and operator adapter. Added
 archive-by-id batches, typed guarded and explicit-force purge outcomes, operator refusal
 reporting, and visibility regressions with passing pgmq and ops suites.
+
+Revision (2026-09-15): Completed Milestone 3 and the plan. Added the no-wait operator
+workflow, public safety and compatibility documentation, both changelog entries, final
+validation evidence, and ADR 28 distillation for conditional destructive operations.

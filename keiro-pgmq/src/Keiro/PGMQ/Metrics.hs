@@ -7,8 +7,9 @@
 -- queue and its DEAD-LETTER queue without the caller deriving any physical name.
 --
 -- Use 'jobDlqMetrics' (its 'queueLength') for the depth alerting that
--- 'Keiro.PGMQ.Dlq' recommends; pair it with 'Keiro.PGMQ.Dlq.archiveDlq' /
--- 'Keiro.PGMQ.Dlq.purgeDlq' for retention.
+-- 'Keiro.PGMQ.Dlq' recommends; after inspection, pair it with
+-- 'Keiro.PGMQ.Dlq.archiveDlqEntries' and inspect the typed
+-- 'Keiro.PGMQ.Dlq.PurgeDlqResult' returned by 'Keiro.PGMQ.Dlq.purgeDlq'.
 module Keiro.PGMQ.Metrics
   ( QueueMetrics (..),
     jobQueueMetrics,

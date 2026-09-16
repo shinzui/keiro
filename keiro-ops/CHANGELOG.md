@@ -6,6 +6,13 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Forced `pgmq dlq purge` execution now calls the visibility-guarded library API,
+  reports the actual deleted count, and fails without deleting when metrics show
+  hidden rows from an inspection. The global `--force` flag still authorizes the
+  mutation after preview; it does not bypass this safety refusal.
+
 ### Other Changes
 
 - No user-facing library changes. The test-suite's `pgmq-migration` bound moves

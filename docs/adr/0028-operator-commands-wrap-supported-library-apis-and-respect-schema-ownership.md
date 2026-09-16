@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-09-10T03:35:00Z
+timestamp: 2026-09-16T04:51:52Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -74,6 +74,14 @@ prints the exact force-enabled re-invocation, and exits unsuccessfully without a
 mutation. With `--force`, it calls the supported mutation and reports the actual
 outcome, including idempotent no-ops and already-terminal states.
 
+Authorization to execute does not override a supported library safety refusal. In
+particular, forced PGMQ DLQ purge calls `Keiro.PGMQ.Dlq.purgeDlq` and reports either
+its deleted count or its typed hidden-row refusal. The command does not call the
+unconditional `purgeDlqForce` escape hatch. The library guard is a metrics snapshot
+followed by deletion, not a lock; an audit-safe full-queue procedure must quiesce
+concurrent readers and writers, archive every inspected id, and account for the
+remaining active depth before purge.
+
 The executable verifies the live Keiro schema with
 `Keiro.Migrations.SchemaCheck.verifyExpectedSchema` before opening the operational
 environment. Read-only commands may continue after rendering drift warnings.
@@ -125,6 +133,9 @@ must independently revalidate their guards; the read API does not reserve work.
   [ADR 27](0027-workflow-lifecycle-markers-are-append-only-and-first-writer-wins.md).
 - A command may need an upstream library change before it can ship. That dependency
   is deliberate evidence that the invariant has one owner.
+- A destructive execution flag authorizes reaching the owning library operation; it
+  does not turn a conditional operation into an unconditional one. PGMQ DLQ purge
+  therefore refuses hidden rows even under `--force`.
 - JSON and human table output are alternative renderings of the same structured
   handler result, so scripts do not depend on terminal formatting.
 - Destructive numeric parameters are validated before database access. A preview
@@ -161,6 +172,8 @@ must independently revalidate their guards; the read API does not reserve work.
 - [ExecPlan 214](../plans/214-adopt-kiroku-s-durable-subscription-checkpoint-inventory.md)
   adopts Kiroku's released durable inventory and defines the position-distance
   operator and telemetry surfaces.
+- [ExecPlan 117](../plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md)
+  defines visibility-safe DLQ archive and purge behavior.
 - [ADR 0032](0032-catalog-fingerprints-are-canonical-and-rebuild-lifecycle-identity-is-slice-scoped.md)
   defines the catalog adoption preview, transaction, and compiled-catalog
   capability boundary.
