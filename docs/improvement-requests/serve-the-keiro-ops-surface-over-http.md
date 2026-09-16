@@ -11,6 +11,24 @@ requestId: IR-26
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/276-serve-the-keiro-ops-surface-over-http.md
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `accepted` is correct and the plan link resolves. Plan
+      276 has 1 checked item (planning) and 5 open milestones, so nothing is implemented. The
+      request's premises hold: `keiro-ops-http` does not exist; `Keiro.Ops` exports only `main`,
+      `mainWithHooks`, `AppHooks`, `OpsAuditConfig`, `emptyAppHooks`, `OpsInvocation`,
+      `opsCommandTree`, and `runOpsInvocation`, so `Command`, `commandParser`, `isMutation`, and
+      `runCommand` are present internally but still unexported as the plan describes; and
+      `verifyExpectedSchemaSession` does not exist in `keiro-migrations`.
 ---
 
 # Improvement Request: Serve the keiro-ops Surface over HTTP

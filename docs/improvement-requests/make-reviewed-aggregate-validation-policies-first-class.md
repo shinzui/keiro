@@ -23,6 +23,22 @@ reviews:
       Reviewed against Keiro 0.10.0.0 EventStream validation, Language-4 aggregate grammar,
       generated aggregate harnesses, workspace service conformance, and Mori's exact two-warning
       Workflow policy.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-05T04:15:24Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `superseded` still holds. Hackage lists keiki 0.9.0.0
+      (and since, 0.9.1.0), so the release the supersession rests on is real. Mori still carries
+      the temporary `checkInversionAmbiguity = False` override in its Workflow aggregate, which
+      matches the document's forward-looking wording rather than contradicting it. The note
+      preserving IR-18 as a separate concern is still correct: IR-18 shipped through plan 191 on
+      its own terms.
 ---
 
 # Improvement Request: Make Reviewed Aggregate Validation Policies First-Class in Keiro DSL

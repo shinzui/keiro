@@ -45,6 +45,21 @@ reviews:
       fixture laws must run once at service scope rather than be deleted from or duplicated across
       aggregate harnesses; queue, public-contract, read-model, and projection consumers require a
       future typed-root design.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-10T03:36:12Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 222 is complete (5/5 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status.
+      `Keiro.Dsl.WorkspaceScaffold` continues to own source-stable semantic locality. Scope was
+      status, link integrity, and presence of the delivered capability in the current tree; the
+      shipped behavior was not re-derived from a test run.
 ---
 
 # Improvement Request: Make Workspace Scaffolding Semantically Local and Source-Stable

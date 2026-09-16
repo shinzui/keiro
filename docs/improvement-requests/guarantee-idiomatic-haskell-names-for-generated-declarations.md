@@ -23,6 +23,21 @@ reviews:
       In-repository review of the Language-4 parser, read-model scaffold naming helpers,
       skeleton output, generated conformance fixtures, and a Mori workspace scaffold that
       reproduced underscore-bearing module components.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-04T04:14:15Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 190 is complete (10/10 progress items checked,
+      none open) and its link resolves; `completed` is the accurate status.
+      `Keiro.Dsl.HaskellName` continues to guarantee idiomatic generated names. Scope was
+      status, link integrity, and presence of the delivered capability in the current tree; the
+      shipped behavior was not re-derived from a test run.
 ---
 
 # Improvement Request: Guarantee Idiomatic Haskell Names for Every Generated Declaration

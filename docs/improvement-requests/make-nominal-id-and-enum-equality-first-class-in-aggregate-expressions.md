@@ -22,6 +22,21 @@ reviews:
     context: >-
       In-repository review of AggregateType capabilities, expression validation, version-2
       transducers, nominal bindings, Keiki symbolic domains, and Mori's aggregate identity model.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-01T18:05:45Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 170 is complete (4/4 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. Nominal id and enum
+      equality remain first-class in `Keiro.Dsl.NominalType` and `Keiro.Dsl.Scaffold`. Scope was
+      status, link integrity, and presence of the delivered capability in the current tree; the
+      shipped behavior was not re-derived from a test run.
 ---
 
 # Improvement Request: Make Nominal ID and Enum Equality First-Class in Aggregate Expressions

@@ -11,6 +11,25 @@ requestId: IR-29
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/274-expose-process-manager-inspection-reads.md
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `accepted` is correct and the plan link resolves. Plan
+      274 has 1 checked item (planning) and 16 open, so nothing is implemented. The premises
+      hold: no pending-timer or manager-instance inspection read exists under `keiro/src`, and
+      the kiroku listing dependency is still unreleased — the kiroku checkout ships
+      `kiroku-store` 0.8.0.0 with no `listStreams`, and Hackage's newest release is 0.8.0.0. The
+      Planning section's reference to `listStreamsInCategory` is the name used in kiroku's IR-8;
+      plan 274 and IR-28 both describe the delivered shape as the prefix-filtered `listStreams`
+      of kiroku plan 88, which is the same primitive under the name kiroku settled on.
 ---
 
 # Improvement Request: Expose Process-Manager Inspection Reads

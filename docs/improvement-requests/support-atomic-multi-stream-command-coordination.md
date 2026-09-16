@@ -21,6 +21,20 @@ reviews:
     context: >-
       In-repository review of the single-stream Keiro command runner, Kiroku transactional append
       substrate, and router/process-manager fan-out, whose target appends are deliberately separate.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-07-31T15:03:56Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `proposed` with no implementing plan remains correct:
+      no multi-stream atomic command coordination API exists under `keiro/src` or
+      `keiro-dsl/src`, and no plan links this request. The scoping sentence distinguishing this
+      from ordinary router fan-out still holds now that IR-9 has shipped.
 ---
 
 # Improvement Request: Support Atomic Multi-Stream Command Coordination

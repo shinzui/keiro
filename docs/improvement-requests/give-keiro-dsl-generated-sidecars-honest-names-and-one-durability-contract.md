@@ -24,6 +24,21 @@ reviews:
       Reviewed against the implemented standalone, workspace, adoption, conformance-package,
       migration, corpus-regeneration, and CLI paths, including refusal atomicity, explicit apply,
       duplicate retirement, legacy conversion, extension tolerance, and full-suite evidence.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-05T21:32:35Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 198 is complete (6/6 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. `Keiro.Dsl.SidecarNames`
+      holds the explicit slot-ledger sidecar naming. Scope was status, link integrity, and
+      presence of the delivered capability in the current tree; the shipped behavior was not
+      re-derived from a test run.
 ---
 
 # Improvement Request: Give keiro-dsl Generated Sidecars Honest Names and One Durability Contract

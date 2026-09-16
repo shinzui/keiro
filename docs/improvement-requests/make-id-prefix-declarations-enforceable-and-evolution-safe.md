@@ -22,6 +22,21 @@ reviews:
     context: >-
       In-repository review of generated ID declarations/codecs, nominal bindings, validation,
       fingerprints, diff classification, language versions, and persisted-event compatibility.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-01T19:21:22Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 171 is complete (6/6 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. `Keiro.Dsl.IdDomain`
+      continues to enforce versioned id-prefix domains. Scope was status, link integrity, and
+      presence of the delivered capability in the current tree; the shipped behavior was not
+      re-derived from a test run.
 ---
 
 # Improvement Request: Make ID Prefix Declarations Enforceable and Evolution-Safe

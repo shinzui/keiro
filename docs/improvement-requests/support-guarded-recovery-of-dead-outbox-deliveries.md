@@ -5,10 +5,31 @@ description: >-
   Define a supported operator recovery path for one exhausted outbox delivery,
   preserving identity and retry history while preventing stale or competing
   recovery requests from authorizing unintended additional attempts.
-timestamp: 2026-09-09T02:57:38Z
+timestamp: 2026-09-16T04:45:00Z
 requestId: IR-38
 status: proposed
 origin: mori://shinzui/koyomi
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-16T04:45:00Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`; the document was corrected in this pass. `proposed`
+      with no implementing plan is correct, and the requested capability is still absent: no
+      dead-row recovery export exists in `keiro/src` or `keiro-ops/src`. The source anchor had
+      gone stale — unlike IR-37's, the outbox modules did change after commit `250d3007`, in
+      `3cdbe90a` (replay-safe producer identities, adding `Keiro.Outbox.Identity`) and
+      `844d3062` (replay allocation and enqueue cost work). Those commits were inspected: they
+      leave `lookupOutbox`, `listOutbox`, `claimOutboxBatch`, `requeueStuckOutbox`,
+      `OutboxDead`, and `OutboxRejected` untouched, so the described behavior and the reported
+      gap are unchanged. A re-confirmation anchor and a note naming the two commits were added
+      so the next reader is not misled.
 ---
 
 # Improvement Request: Support Guarded Recovery of Dead Outbox Deliveries
@@ -21,7 +42,8 @@ an operation. No particular compare-and-set field or state transition is mandate
 
 ## Existing library behavior
 
-Source inspected at commit `250d30079a7f4a40ff86610008b08f69f91f7bb6`:
+Source inspected at commit `250d30079a7f4a40ff86610008b08f69f91f7bb6` and re-confirmed at
+`708aa215` on 2026-09-16:
 
 - `lookupOutbox`/`listOutbox` expose delivery state for inspection.
 - `claimOutboxBatch` selects eligible `pending`/`failed` rows, transitions them to
@@ -34,6 +56,13 @@ Source inspected at commit `250d30079a7f4a40ff86610008b08f69f91f7bb6`:
 See `keiro/src/Keiro/Outbox.hs`, `keiro/src/Keiro/Outbox/Schema.hs` and
 `keiro/src/Keiro/Outbox/Types.hs`. The inspected facade has no dedicated dead-row
 recovery export; that does not rule out another supported procedure.
+
+The outbox modules have changed since the originally inspected commit — `3cdbe90a`
+(replay-safe producer identities and content-drift rejection, adding
+`keiro/src/Keiro/Outbox/Identity.hs`) and `844d3062` (replay allocation and producer
+enqueue cost work). Neither touches the claim, failure, dead-letter or stuck-requeue
+transitions enumerated above, and no dead-row recovery export was added, so the behavior
+this request describes and the gap it reports are unchanged.
 
 ## Requested library capability
 

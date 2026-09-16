@@ -16,6 +16,26 @@ resolution: >-
   atomic cutover), 254 (documented projection status relation), 255 (fenced sanctioned SQL read
   surface), and 257 (targeted per-stream reprojection), hardened by plan 259's adversarial
   release-safety review. Every child plan is complete and the work shipped in Keiro 0.12.0.0.
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. MasterPlan 41 is complete (18/18 progress items
+      checked, none open), its four child plans 254-257 and the plan 259 hardening review all
+      exist, and the keiro CHANGELOG dates 0.12.0.0 to 2026-08-14, matching `completedAt`. The
+      frozen relation `keiro_read.projection_group_status_v1` is present in
+      `Keiro.ReadModel.Rebuild.Status` and migration 0026. The repository-relative path to the
+      consuming service's MasterPlan 1 does not resolve inside keiro by design: it belongs to
+      `mori://tan/notification-render-service` and the document already states that an
+      artifact-level Mori URI for that repository is not yet defined, so the canonical project
+      URI and the repository-relative path are given together.
 ---
 
 # Improvement Request: Make Read Models Safely Readable by Out-of-Process Consumers

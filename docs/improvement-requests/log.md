@@ -2,6 +2,24 @@
 
 ## 2026-09-16
 * **Completed**: Close IR-39 after Plans 279 and 273 deliver the reaction runtime, Language 6 checking and generation, conformance, evolution gates, and documentation.
+* **Review**: Refresh every request against Keiro `708aa215`. All 39 now carry the
+profile-recommended `reviews` field; the 11 that lacked one (IR-22, IR-26 through IR-32, IR-37,
+IR-38, IR-39) were reviewed for the first time and the other 28 gained a current record.
+Every `plan`/`relatedPlans` link resolves and every status matches its plan's progress: the
+completed requests link fully checked plans, IR-7 matches plan 232's single open item, IR-33
+matches plans 265 and 266 with the semantic engine still deferred, and IR-26 through IR-31 and
+IR-34 match plans 267 and 274 through 278, none of which has started. IR-39's closure was
+in-flight when this refresh began and completed during it, when plan 273 closed M6 at commit
+`987f8f92`. No status changed by this refresh.
+* **Revision**: IR-5 corrected a stale CLI enumeration — `keiro-dsl` offers `parse`, `pretty`,
+`check`, `inspect`, `behavior-obligations`, `scaffold`, `diff`, and `new`, not four commands — and
+now names `scaffold --apply-name-migrations` and `--apply-generated-haskell-edition` to say why
+generated-Haskell migration does not overlap `.keiro` source rewriting; the request stands
+unimplemented. IR-38 gained a re-confirmation anchor at `708aa215` naming commits `3cdbe90a` and
+`844d3062`, which changed the outbox modules after its originally inspected commit without
+touching any behavior it cites. IR-34 pinned its reproduction to the `keiro-dsl` 0.14.0.0 it was
+reviewed against and re-confirmed the gap at the current 0.16.0.0 release. IR-37's anchor was
+re-verified as still exact: neither cited module has changed since commit `250d3007`.
 
 ## 2026-09-15
 * **Implemented**: Implemented the accepted structural scope of Plans 265 and 266; semantic guard proofs remain deferred in the IR-33 review.

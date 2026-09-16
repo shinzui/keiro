@@ -29,6 +29,22 @@ reviews:
       Revalidated against the current PublishOutcome constructors, publisher failure/dead path,
       ordering policies, outbox schema, telemetry, migrations, and downstream canonical origin
       before authoring plan 165.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 165 is complete (5/5 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. `OutboxRejected` is
+      exported from `Keiro.Outbox.Types`, and the Hackage `preferred` endpoint lists keiro
+      0.14.0.0, matching the recorded resolution. Scope was status, link integrity, and presence
+      of the delivered capability in the current tree; the shipped behavior was not re-derived
+      from a test run.
 ---
 
 # Improvement Request: Add an Explicit Terminal Outbox Rejection Outcome

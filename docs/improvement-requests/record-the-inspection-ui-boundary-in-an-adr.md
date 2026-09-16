@@ -10,6 +10,25 @@ timestamp: 2026-09-10T03:35:00Z
 requestId: IR-32
 status: completed
 origin: mori://shinzui/keiro-ui
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-10T03:35:00Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Every completion claim verifies:
+      `docs/adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md` exists
+      and `okf validate docs/adr --strict --profile-enforce --log-enforce` passes;
+      `docs/why-keiro.md`, `docs/user/operations.md`,
+      `docs/capabilities/operational-console.md`, and ADR 28 all link ADR 40. The dated evidence
+      section's "40 concepts" is the 2026-09-10 reading; the ADR bundle now holds 43 after ADR
+      41-43 landed, which does not affect the claim. The disposition of IR-26 through IR-31
+      still matches those requests' recorded statuses.
 ---
 
 # Improvement Request: Record the Inspection-UI Boundary in an ADR

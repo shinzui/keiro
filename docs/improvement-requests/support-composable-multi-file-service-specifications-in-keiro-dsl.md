@@ -23,6 +23,21 @@ reviews:
       Keiro 0.6.0.0 workspace check/scaffold exercise against Mori's two-aggregate service found
       that one resolved shared declaration is emitted as incompatible nominal types in both
       generated aggregate modules, failing IR-2 and ADR-0014 acceptance.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-01T15:50:45Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 168 is complete (4/4 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. `Keiro.Dsl.Workspace`
+      still owns shared workspace nominal declarations. Scope was status, link integrity, and
+      presence of the delivered capability in the current tree; the shipped behavior was not
+      re-derived from a test run.
 ---
 
 # Improvement Request: Support Composable Multi-File Service Specifications in `keiro-dsl`

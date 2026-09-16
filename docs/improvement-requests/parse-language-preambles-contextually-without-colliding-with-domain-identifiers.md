@@ -22,6 +22,22 @@ reviews:
     context: >-
       Reproduced with Mori's released-version workspace and traced to Keiro.Dsl.Parser's
       file-wide significant-line scans for preambles and version-gated body features.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-01T16:29:14Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 167 is complete (4/4 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. Preamble handling remains
+      contextual in `Keiro.Dsl.Syntax` and `Keiro.Dsl.Validate`, with the version registry in
+      `Keiro.Dsl.LanguageVersion`. Scope was status, link integrity, and presence of the
+      delivered capability in the current tree; the shipped behavior was not re-derived from a
+      test run.
 ---
 
 # Improvement Request: Parse Language Preambles Contextually Without Colliding With Domain Identifiers

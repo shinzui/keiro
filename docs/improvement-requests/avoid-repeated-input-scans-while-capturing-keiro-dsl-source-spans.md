@@ -23,6 +23,21 @@ reviews:
       In-repository review of the source-aware frontend after MasterPlan 28, including the stable
       parser facade, workspace loading path, located productions, compatibility suite, and fixture
       sizes. The concern is parse-time tooling scalability, not generated application runtime.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-10T14:50:32Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 229 is complete (11/11 progress items checked,
+      none open) and its link resolves; `completed` is the accurate status. Single-pass
+      source-span capture remains in `Keiro.Dsl.Source`. Scope was status, link integrity, and
+      presence of the delivered capability in the current tree; the shipped behavior was not
+      re-derived from a test run.
 ---
 
 # Improvement Request: Avoid Repeated Input Scans While Capturing Keiro DSL Source Spans

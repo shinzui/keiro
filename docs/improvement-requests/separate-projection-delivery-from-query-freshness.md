@@ -26,6 +26,21 @@ reviews:
       typed projection catalog. The request separates writer delivery from query waiting, keeps
       released Languages 1–4 unchanged, and requires a compatibility path for the released runtime
       API rather than treating a keyword rename as the whole fix.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-12T02:19:21Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. MasterPlan 38 is complete (14/14 progress items
+      checked, none open) and its link resolves; `completed` is the accurate status.
+      `QueryFreshness` in `Keiro.ReadModel` still separates delivery from query freshness. Scope
+      was status, link integrity, and presence of the delivered capability in the current tree;
+      the shipped behavior was not re-derived from a test run.
 ---
 
 # Improvement Request: Separate Projection Delivery from Query Freshness

@@ -28,6 +28,22 @@ reviews:
       groups, reset policy, and replay policy; scopes closed-world validation honestly; and requires
       captured-head replay completion rather than treating dedup presence as completeness proof.
       Kiroku IR-1 captures the useful dependency-side bounded-read primitive without gating Keiro.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-08T00:19:11Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. MasterPlan 32 is complete (10/10 progress items
+      checked, none open) and its link resolves; `completed` is the accurate status. Typed
+      projection catalogs and coordinated rebuilds remain in `Keiro.ReadModel.Rebuild` and
+      `Keiro.ReadModel.Rebuild.Group`. Scope was status, link integrity, and presence of the
+      delivered capability in the current tree; the shipped behavior was not re-derived from a
+      test run.
 ---
 
 # Improvement Request: Make Projection Ownership and Rebuild Catalogs One Typed Declaration

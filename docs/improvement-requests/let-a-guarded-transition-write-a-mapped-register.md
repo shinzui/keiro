@@ -5,7 +5,7 @@ description: >-
   Give a declared transition target-typed initial and mapped-lift register expressions without
   taking the whole edge into an implementation hole, so that a mapped-value construction can be
   one side of a guarded pair without weakening guard, replay, or ownership guarantees.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-16T04:45:00Z
 requestId: IR-34
 status: accepted
 origin: mori://shinzui/rei
@@ -26,6 +26,25 @@ reviews:
       and compiled structural conformance; ADRs 3, 4, 12, and 17; the released Keiki 0.9.1.0
       Term, Update, and EdgeBuilder APIs; and Rei's pre- and post-conversion Intention root,
       event-stream construction, legacy state fold, projection feed, and application reader.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-16T04:45:00Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`; the document was corrected in this pass. `accepted` is
+      correct — plan 267 has 0 checked items and 8 open, so nothing is implemented — and the
+      plan link resolves. The request said the review reproduced the failures against "the
+      current published `keiro-dsl` 0.14.0.0 binary", which is no longer current: Hackage's
+      newest release and the tree are both 0.16.0.0. The wording was pinned to the version
+      reviewed and a re-confirmation was added, because the gap is unchanged at 0.16.0.0: no
+      `write-lift` declaration exists anywhere in `keiro-dsl/src`, and `Keiro.Dsl.Scaffold`
+      still emits the `MappedRegisterInitialMissing` hole for a mapped register's initial
+      symbol.
 ---
 
 # Improvement Request: Let Declared Transitions Construct Mapped Register Values
@@ -39,8 +58,12 @@ yet implemented.** Raised from
 Milestone 7, after reproducing the problem with the published `keiro-dsl` 0.13.0.0 binary while
 declaring Rei's Intention root aggregate.
 
-The review reproduced the same failures with the current published `keiro-dsl` 0.14.0.0 binary
-and traced the generated path through the checker and scaffolder. This is not a runtime or Keiki
+The review reproduced the same failures with the then-current published `keiro-dsl` 0.14.0.0
+binary and traced the generated path through the checker and scaffolder. Re-confirmed on
+2026-09-16 against `keiro-dsl` 0.16.0.0 (the current Hackage release and the version in the
+tree): no `write-lift` declaration exists, `Keiro.Dsl.Scaffold` still emits the
+`MappedRegisterInitialMissing` hole for a mapped register's initial symbol, and Plan 267 has not
+started, so the gap is unchanged. This is not a runtime or Keiki
 defect, and it is not an operator error in Rei. It is a missing expression capability in
 `mori://shinzui/keiro/packages/keiro-dsl`.
 

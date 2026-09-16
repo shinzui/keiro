@@ -11,6 +11,24 @@ requestId: IR-27
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `accepted` is correct and the plan link resolves. Plan
+      277 has 1 checked item (planning) and 10 open, so nothing is implemented. The premises
+      hold: `Keiro.Timer.findPendingTimers` does not exist and is correctly described as new,
+      while the two reads the feeds wrap — `listWorkflowInstances` in `Keiro.Workflow.Instance`
+      and `listProjectionGroupStatuses` in `Keiro.ReadModel.Rebuild.Status` — both exist. The
+      dependency on plan 276's Milestones 1 through 3 is still unmet, consistent with the IR-26
+      review.
 ---
 
 # Improvement Request: Publish WebSocket Live Feeds over Keiro.Wake

@@ -22,6 +22,22 @@ reviews:
     context: >-
       In-repository review at mori://shinzui/keiro against Mori-resolved Keiki and Keiro source,
       deliberate Keiki constraints, and the Keiro runtime architecture principles.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-07-28T16:54:33Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. MasterPlan 25 is complete (22/22 progress items
+      checked, none open) and its link resolves; `completed` is the accurate status. Structural
+      consumer-owned types remain present in `Keiro.Dsl.MappedConsumer`,
+      `Keiro.Dsl.ConsumerTypePlan`, and `Keiro.Dsl.NominalType`. Scope was status, link
+      integrity, and presence of the delivered capability in the current tree; the shipped
+      behavior was not re-derived from a test run.
 ---
 
 # Improvement Request: Support Structural Consumer-Owned Types in `keiro-dsl`

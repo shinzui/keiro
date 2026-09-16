@@ -11,6 +11,27 @@ origin: mori://shinzui/keiro
 plan: docs/plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md
 relatedPlans:
   - docs/plans/279-harden-process-manager-reaction-apis-before-dsl-generation.md
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-16T03:46:23Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 279 is complete (8/8) and plan 273 has 14 checked
+      items with only M6 open. The delivered surface verifies in the tree:
+      `ProcessReactionSyntax` in `Keiro.Dsl.LanguageVersion` and
+      `Keiro.Dsl.Parser.Coordination`, the `ProcessBody` sum across `Keiro.Dsl.ProcessReaction`,
+      `Diff`, `CheckReport`, and `ScaffoldRecord`, the `custom-unverified` legacy branch, ADR
+      41, and the `process-reactions*`/`process-timers`/`process-state-authority` fixtures under
+      `keiro-dsl/test/fixtures`. When this review began, plan 273's M6 was still open with its
+      documentation and bundle-log changes uncommitted; M6 closed during the refresh at commit
+      `987f8f92`, which records `just verify` exiting 0. The `completed` status is accurate. This
+      review did not itself run the repository gate.
 ---
 
 # Improvement Request: Make Process-Manager Reactions First-Class in keiro-dsl

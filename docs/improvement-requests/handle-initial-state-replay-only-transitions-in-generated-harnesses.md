@@ -23,6 +23,21 @@ reviews:
     context: >-
       Reviewed against Keiro DSL 0.10.0.0 harness, transducer, predicate-verification, and behavior
       requirement generation using Mori's legacy zero-target WorkflowStarted reproducer.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-08-05T14:23:30Z
+    scope: completion-evidence
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. Plan 191 is complete (5/5 progress items checked, none
+      open) and its link resolves; `completed` is the accurate status. Replay-only transition
+      handling remains in `Keiro.Dsl.Diff` and `Keiro.Dsl.Scaffold`. Scope was status, link
+      integrity, and presence of the delivered capability in the current tree; the shipped
+      behavior was not re-derived from a test run.
 ---
 
 # Improvement Request: Handle Initial-State Replay-Only Transitions Correctly in Generated Harnesses

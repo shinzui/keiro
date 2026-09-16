@@ -25,6 +25,21 @@ reviews:
       In-repository review of Keiro.Command.CommandResult and CommandError after ambiguity and
       replay witnesses were hardened. Business rejection remains a generic constructor and no-op
       carries only zero append metadata.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `in-progress` is exact. Plan 231 is complete (9/9);
+      plan 232 has 7 checked items and one open, and that open item's own text records that
+      Milestone 3's functional work landed while "the committed baseline and `bench-regression`
+      wiring remain deferred with the prerequisite quiet-host evidence" — precisely the residue
+      the request names. Both plan links resolve.
 ---
 
 # Improvement Request: Return Typed Domain Command Outcomes and Rejection Details

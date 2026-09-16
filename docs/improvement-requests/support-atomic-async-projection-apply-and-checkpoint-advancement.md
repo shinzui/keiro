@@ -23,6 +23,21 @@ reviews:
       In-repository review of async projection application, Kiroku subscription checkpoints,
       shibuya adapter ownership, deduplication, rebuild fencing, and the explicitly documented
       future-facing exactly-once checkpoint/user-SQL transaction gap.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-11T14:30:01Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `proposed` is correct and the plan link resolves. Plan
+      271 is an evaluation, not an implementation: 2 of its 6 progress items are checked and the
+      remaining four are the baseline, prototype, measurement, and decision steps, so no
+      proceed, fencing-only, or defer decision has been recorded. The stated current contract —
+      at-least-once application with idempotent projection SQL and deduplication — is unchanged.
 ---
 
 # Improvement Request: Support Atomic Async Projection Apply and Checkpoint Advancement

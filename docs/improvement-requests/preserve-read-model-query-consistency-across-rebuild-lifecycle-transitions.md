@@ -8,6 +8,25 @@ timestamp: 2026-09-09T02:57:38Z
 requestId: IR-37
 status: proposed
 origin: mori://shinzui/koyomi
+reviews:
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-09T02:57:38Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `proposed` with no implementing plan is correct. The
+      document's source anchor is still exact: commit `250d3007` is the owner's revert of the
+      unauthorized implementation, and neither `keiro/src/Keiro/ReadModel.hs` nor
+      `keiro/src/Keiro/ReadModel/Rebuild/Group.hs` has changed between it and HEAD, so every
+      cited behavior — `runQuery`, `runQueryWithFreshness`, `runValidatedQuery`,
+      `ensureReadModel`, `ReadModelNotLive`, and `beginGroupRebuild` — reads exactly as
+      described. The investigation is still open and the request correctly asks for it to be
+      settled before any implementation.
 ---
 
 # Improvement Request: Preserve Read-Model Query Consistency Across Rebuild Lifecycle Transitions

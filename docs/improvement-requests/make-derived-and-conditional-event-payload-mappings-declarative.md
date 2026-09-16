@@ -25,6 +25,22 @@ reviews:
       OutTerm, static multi-event-edge, hidden-input, and recompute-and-verify contracts; and the
       notification renderer's authored-versus-rollback RevisionPublished payloads. The request
       does not introduce runtime-variable event arity or weaken replay inversion.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-09-16T04:45:00Z
+    document_timestamp: 2026-09-15T19:24:42Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-opus-5
+    effort: high
+    context: >-
+      Bundle refresh at Keiro `708aa215`. `proposed` with no implementing plan remains correct,
+      and the 2026-09-15 retargeting note verifies against the source:
+      `Keiro.Dsl.LanguageVersion` registers version 6 as the single `CandidateLanguage` with
+      version 5 stable, so gating the emit-site mapping and conditional value forms to Language
+      6 is the right target. Only the narrow `event Event = fields(Command)` identity case is
+      generated-owned today, as the request states.
 ---
 
 # Improvement Request: Make Derived and Conditional Event Payload Mappings Declarative
