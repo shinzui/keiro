@@ -12,7 +12,11 @@ module Keiro.Dsl.PrettyPrint
     renderExpr,
     renderTypeExpr,
     renderHandleSurface,
+    renderReactionArmBodySurface,
+    renderReactionArmGuardSurface,
+    renderReactionArmSurface,
     renderReactionSurface,
+    renderReactionTimerPayloadSurface,
     renderResolveSurface,
     renderRouterDispatchSurface,
     renderTimerPayloadSurface,
@@ -44,6 +48,22 @@ renderHandleSurface = renderDoc . docHandle
 
 renderReactionSurface :: ReactionBody -> Text
 renderReactionSurface = renderDoc . docReactionBody
+
+renderReactionArmSurface :: ReactionArm -> Text
+renderReactionArmSurface = renderDoc . docReactionArm
+
+renderReactionArmGuardSurface :: ReactionArm -> Text
+renderReactionArmGuardSurface arm = case (.guard) arm of
+  UnconditionalArm -> "unconditional"
+  WhenArm expression -> renderDoc ("when" <+> docExpr 0 expression)
+  OtherwiseArm -> "otherwise"
+
+renderReactionArmBodySurface :: ReactionArm -> Text
+renderReactionArmBodySurface = renderDoc . docArmBody . (.body)
+
+renderReactionTimerPayloadSurface :: ReactionTimerNode -> Text
+renderReactionTimerPayloadSurface timer =
+  renderDoc ("payload" <+> braced (map docPayloadField ((.payload) timer)))
 
 renderResolveSurface :: ResolveDecl -> Text
 renderResolveSurface = renderDoc . docResolve

@@ -12,10 +12,15 @@ module Keiro.Dsl.CoordinationImpact
     CoordinationReason (..),
     RouterSelectionSnapshot (..),
     RouterSelectionDrift (..),
+    ProcessReactionSnapshot (..),
+    ProcessReactionDrift (..),
     CoordinationImpact (..),
     routerSelectionSnapshots,
     routerSelectionDrift,
     renderRouterSelectionDrift,
+    processReactionSnapshots,
+    processReactionDrift,
+    renderProcessReactionDrift,
     coordinationImpact,
     renderCoordinationImpact,
   )
@@ -32,6 +37,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.ProcessReaction (CheckedProcessReaction (..), checkProcessReaction)
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta (..))
@@ -88,6 +94,24 @@ data RouterSelectionDrift = RouterSelectionDrift
   }
   deriving stock (Eq, Show, Generic)
 
+-- | Durable coordination metadata for a generated reaction body. Legacy
+-- handle bodies are retained as @custom-unverified@ without assigning a
+-- version or fingerprint that their source does not declare.
+data ProcessReactionSnapshot = ProcessReactionSnapshot
+  { process :: !Name,
+    verification :: !Text,
+    version :: !(Maybe Natural),
+    fingerprint :: !(Maybe Text)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data ProcessReactionDrift = ProcessReactionDrift
+  { process :: !Name,
+    previousReaction :: !(Maybe ProcessReactionSnapshot),
+    currentReaction :: !(Maybe ProcessReactionSnapshot)
+  }
+  deriving stock (Eq, Show, Generic)
+
 instance ToJSON SelectionVerification where
   toJSON = toJSON . verificationIdentity
 
@@ -108,6 +132,26 @@ instance ToJSON RouterSelectionSnapshot where
         "version" .= (.version) snapshot,
         "fingerprint" .= (.fingerprint) snapshot
       ]
+
+instance ToJSON ProcessReactionSnapshot where
+  toJSON snapshot =
+    object
+      [ "processName" .= (.process) snapshot,
+        "verification" .= (.verification) snapshot,
+        "version" .= (.version) snapshot,
+        "fingerprint" .= (.fingerprint) snapshot
+      ]
+
+instance FromJSON ProcessReactionSnapshot where
+  parseJSON = withObject "ProcessReactionSnapshot" $ \fields -> do
+    snapshot <-
+      ProcessReactionSnapshot
+        <$> fields .: "processName"
+        <*> fields .: "verification"
+        <*> fields .:? "version"
+        <*> fields .:? "fingerprint"
+    unless (processSnapshotValid snapshot) (fail "process reaction metadata does not match its verification boundary")
+    pure snapshot
 
 instance FromJSON RouterSelectionSnapshot where
   parseJSON = withObject "RouterSelectionSnapshot" $ \fields -> do
@@ -166,6 +210,58 @@ renderRouterSelectionDrift drifts = "router selection coordination metadata:" : 
     renderSnapshot snapshot =
       verificationIdentity ((.verification) snapshot)
         <> maybe "" (" identity=" <>) ((.identity) snapshot)
+        <> maybe "" ((" version=" <>) . T.pack . show) ((.version) snapshot)
+        <> maybe "" (" fingerprint=" <>) ((.fingerprint) snapshot)
+
+processReactionSnapshots :: CheckedService -> [ProcessReactionSnapshot]
+processReactionSnapshots service = sortOn (.process) (map snapshotFor processes)
+  where
+    spec = checkedSpec service
+    processes = [process | NProcess process <- (.nodes) spec]
+    snapshotFor process = case (.body) process of
+      LegacyProcessBody {} -> customSnapshot process
+      ReactionProcessBody {} -> case checkedTypeGraph service of
+        Left failures -> error ("checked service type graph did not resolve for process coordination: " <> show failures)
+        Right graph -> case checkProcessReaction (checkedLanguageContract service) graph spec process of
+          Left failures -> error ("validated process reaction did not check for coordination: " <> show failures)
+          Right checked ->
+            ProcessReactionSnapshot
+              { process = (.name) process,
+                verification = (.verification) checked,
+                version = Just ((.version) checked),
+                fingerprint = Just ((.fingerprint) checked)
+              }
+    customSnapshot process =
+      ProcessReactionSnapshot
+        { process = (.name) process,
+          verification = "custom-unverified",
+          version = Nothing,
+          fingerprint = Nothing
+        }
+
+processReactionDrift :: [ProcessReactionSnapshot] -> [ProcessReactionSnapshot] -> [ProcessReactionDrift]
+processReactionDrift previous current =
+  [ ProcessReactionDrift process old new
+  | process <- Set.toAscList (Map.keysSet oldByProcess <> Map.keysSet newByProcess),
+    let old = Map.lookup process oldByProcess,
+    let new = Map.lookup process newByProcess,
+    old /= new
+  ]
+  where
+    oldByProcess = Map.fromList [((.process) snapshot, snapshot) | snapshot <- previous]
+    newByProcess = Map.fromList [((.process) snapshot, snapshot) | snapshot <- current]
+
+renderProcessReactionDrift :: [ProcessReactionDrift] -> [Text]
+renderProcessReactionDrift [] = []
+renderProcessReactionDrift drifts = "process reaction coordination metadata:" : concatMap renderDrift drifts
+  where
+    renderDrift drift =
+      [ "  " <> (.process) drift,
+        "    previous: " <> maybe "(none)" renderSnapshot ((.previousReaction) drift),
+        "    current:  " <> maybe "(none)" renderSnapshot ((.currentReaction) drift)
+      ]
+    renderSnapshot snapshot =
+      (.verification) snapshot
         <> maybe "" ((" version=" <>) . T.pack . show) ((.version) snapshot)
         <> maybe "" (" fingerprint=" <>) ((.fingerprint) snapshot)
 
@@ -313,6 +409,16 @@ snapshotValid snapshot = case (.verification) snapshot of
   CustomUnverified -> allAbsent
   where
     fields = [() <$ (.identity) snapshot, () <$ (.version) snapshot, () <$ (.fingerprint) snapshot]
+    allPresent = all (/= Nothing) fields
+    allAbsent = all (== Nothing) fields
+
+processSnapshotValid :: ProcessReactionSnapshot -> Bool
+processSnapshotValid snapshot = case (.verification) snapshot of
+  "generated-declarative" -> allPresent
+  "custom-unverified" -> allPresent || allAbsent
+  _ -> False
+  where
+    fields = [() <$ (.version) snapshot, () <$ (.fingerprint) snapshot]
     allPresent = all (/= Nothing) fields
     allAbsent = all (== Nothing) fields
 

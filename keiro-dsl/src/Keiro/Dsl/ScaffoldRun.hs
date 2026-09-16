@@ -97,7 +97,7 @@ import Keiro.Dsl.ConformancePackage
     renderConformancePackageFailure,
     renderConformancePackageReport,
   )
-import Keiro.Dsl.CoordinationImpact (RouterSelectionDrift, renderRouterSelectionDrift, routerSelectionDrift, routerSelectionSnapshots)
+import Keiro.Dsl.CoordinationImpact (ProcessReactionDrift, ProcessReactionSnapshot (..), RouterSelectionDrift, processReactionDrift, processReactionSnapshots, renderProcessReactionDrift, renderRouterSelectionDrift, routerSelectionDrift, routerSelectionSnapshots)
 import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligationKind (..), bindingHolesForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService, renderFoldSurfaceError)
 import Keiro.Dsl.GeneratedHaskellLanguage (idiomaticV2LabelMigrations)
@@ -293,6 +293,7 @@ data ScaffoldReport = ScaffoldReport
     queryContractMigrations :: ![QueryContractMigration],
     semanticImpact :: !SemanticImpactReport,
     routerSelectionDrift :: ![RouterSelectionDrift],
+    processReactionCoordinationDrift :: ![ProcessReactionDrift],
     projectionMappedImpact :: !(Maybe ProjectionMappedImpact),
     generatedArtifactImpact :: ![GeneratedArtifactImpact],
     sourceLanguageDrift :: !(Maybe SourceLanguageDrift),
@@ -1154,6 +1155,8 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                                   semanticReport = semanticImpactForMappingDrift (previousRecord >>= (.semanticImpact)) currentSemanticImpact drift
                                   currentRouterSelections = routerSelectionSnapshots service
                                   selectionDrift = maybe [] (\previous -> routerSelectionDrift ((.routerSelections) previous) currentRouterSelections) previousRecord
+                                  currentProcessReactions = processReactionSnapshots service
+                                  reactionDrift = maybe [] (\previous -> processReactionDrift (map processRecordSnapshot ((.processReactions) previous)) currentProcessReactions) previousRecord
                                   languageDrift = do
                                     previous <- previousRecord
                                     if (.sourceLanguage) previous == sourceLanguage
@@ -1189,6 +1192,7 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                                       queryContractMigrations = queryMigrations,
                                       semanticImpact = semanticReport,
                                       routerSelectionDrift = selectionDrift,
+                                      processReactionCoordinationDrift = reactionDrift,
                                       projectionMappedImpact = projectionMappedImpactForService service,
                                       generatedArtifactImpact = generatedArtifactImpact dispositions,
                                       sourceLanguageDrift = languageDrift,
@@ -1575,6 +1579,15 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       semanticImpact = Just currentSemanticImpact
     }
 
+processRecordSnapshot :: ProcessReactionRecordRow -> ProcessReactionSnapshot
+processRecordSnapshot row =
+  ProcessReactionSnapshot
+    { process = (.processName) row,
+      verification = (.verification) row,
+      version = (.version) row,
+      fingerprint = (.fingerprint) row
+    }
+
 missingGeneratedBanners :: FilePath -> [ScaffoldModule] -> IO [FilePath]
 missingGeneratedBanners out modules = fmap concat $ mapM check generated
   where
@@ -1874,6 +1887,7 @@ renderScaffoldReport report =
     <> mappingDriftSection
     <> renderSemanticImpactReport ((.semanticImpact) report)
     <> renderRouterSelectionDrift ((.routerSelectionDrift) report)
+    <> renderProcessReactionDrift ((.processReactionCoordinationDrift) report)
     <> maybe [] renderProjectionMappedImpact ((.projectionMappedImpact) report)
     <> renderGeneratedArtifactImpact ((.semanticImpact) report) ((.generatedArtifactImpact) report)
     <> sourceLanguageDriftSection

@@ -402,6 +402,8 @@ remediationFor context code
         IdPrefixChanged,
         DedupeIdentityChanged,
         IntakeIdempotenceModeChanged,
+        ProcessDispatchIdentityModelChanged,
+        ProcessTimerIdentityChanged,
         RouterStableNameChanged,
         WorkflowStableNameChanged,
         ReadModelVersionDecreased,

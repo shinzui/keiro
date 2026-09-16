@@ -334,6 +334,19 @@ data DiagnosticCode
   | RouterDecideSurfaceChanged
   | ProcessDecideSurfaceChanged
   | ProcessTimerPayloadChanged
+  | ProcessReactionAdded
+  | ProcessReactionRemoved
+  | ProcessReactionFanOutChanged
+  | ProcessReactionGuardChanged
+  | ProcessReactionArmsReordered
+  | ProcessTimerAdded
+  | ProcessTimerRemoved
+  | ProcessTimerIdentityChanged
+  | ProcessTimerCeilingChanged
+  | ProcessReactionVersionDecreased
+  | ProcessReactionFingerprintChangedWithoutVersionBump
+  | ProcessReactionFingerprintChangedWithVersionBump
+  | ProcessDispatchIdentityModelChanged
   | -- MasterPlan 25 / EP-5: append-only codes for findings that were
     -- formerly additive but uncoded.
     DeclarationAdded
@@ -706,7 +719,20 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   OwnershipMoved -> DiffDiagnostic
   ProcessDecideSurfaceChanged -> DiffDiagnostic
   ProcessInputChanged -> DiffDiagnostic
+  ProcessDispatchIdentityModelChanged -> DiffDiagnostic
+  ProcessReactionAdded -> DiffDiagnostic
+  ProcessReactionArmsReordered -> DiffDiagnostic
+  ProcessReactionFanOutChanged -> DiffDiagnostic
+  ProcessReactionFingerprintChangedWithVersionBump -> DiffDiagnostic
+  ProcessReactionFingerprintChangedWithoutVersionBump -> DiffDiagnostic
+  ProcessReactionGuardChanged -> DiffDiagnostic
+  ProcessReactionRemoved -> DiffDiagnostic
+  ProcessReactionVersionDecreased -> DiffDiagnostic
+  ProcessTimerAdded -> DiffDiagnostic
+  ProcessTimerCeilingChanged -> DiffDiagnostic
+  ProcessTimerIdentityChanged -> DiffDiagnostic
   ProcessTimerPayloadChanged -> DiffDiagnostic
+  ProcessTimerRemoved -> DiffDiagnostic
   ProjectionChanged -> DiffDiagnostic
   PublisherPolicyChanged -> DiffDiagnostic
   QueueIdentityChanged -> DiffDiagnostic

@@ -78,8 +78,8 @@ data ScaffoldModuleRoleRow = ScaffoldModuleRoleRow
 data ProcessReactionRecordRow = ProcessReactionRecordRow
   { processName :: !Text,
     verification :: !Text,
-    version :: !Natural,
-    fingerprint :: !Text,
+    version :: !(Maybe Natural),
+    fingerprint :: !(Maybe Text),
     holeObligations :: ![Text]
   }
   deriving stock (Eq, Show)
@@ -99,8 +99,8 @@ instance Aeson.FromJSON ProcessReactionRecordRow where
     ProcessReactionRecordRow
       <$> fields .: "processName"
       <*> fields .: "verification"
-      <*> fields .: "version"
-      <*> fields .: "fingerprint"
+      <*> fields Aeson..:? "version"
+      <*> fields Aeson..:? "fingerprint"
       <*> fields .: "holeObligations"
 
 instance Aeson.ToJSON ScaffoldModuleRoleRow where
@@ -327,20 +327,30 @@ mappingRowPrefix _ = "mapping "
 
 processReactionRowsForService :: CheckedService -> [ProcessReactionRecordRow]
 processReactionRowsForService service =
-  [ ProcessReactionRecordRow
-      { processName = (.name) process,
-        verification = (.verification) checked,
-        version = (.version) checked,
-        fingerprint = (.fingerprint) checked,
-        holeObligations = decoderObligation process : (.holeObligations) checked
-      }
-  | NProcess process <- (.nodes) spec,
-    ReactionProcessBody {} <- [(.body) process],
-    Right graph <- [checkedTypeGraph service],
-    Right checked <- [checkProcessReaction (checkedLanguageContract service) graph spec process]
-  ]
+  map rowFor [process | NProcess process <- (.nodes) spec]
   where
     spec = checkedSpec service
+    rowFor process = case (.body) process of
+      LegacyProcessBody {} ->
+        ProcessReactionRecordRow
+          { processName = (.name) process,
+            verification = "custom-unverified",
+            version = Nothing,
+            fingerprint = Nothing,
+            holeObligations = []
+          }
+      ReactionProcessBody {} -> case checkedTypeGraph service of
+        Left failures -> error ("checked service type graph did not resolve for process ledger: " <> show failures)
+        Right graph -> case checkProcessReaction (checkedLanguageContract service) graph spec process of
+          Left failures -> error ("validated process reaction did not check for process ledger: " <> show failures)
+          Right checked ->
+            ProcessReactionRecordRow
+              { processName = (.name) process,
+                verification = (.verification) checked,
+                version = Just ((.version) checked),
+                fingerprint = Just ((.fingerprint) checked),
+                holeObligations = decoderObligation process : (.holeObligations) checked
+              }
     decoderObligation process =
       "decode"
         <> (.id) process

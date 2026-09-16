@@ -83,6 +83,10 @@ import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject
 import Keiro.Dsl.Parser (parseSource)
 import Keiro.Dsl.PrettyPrint
   ( renderHandleSurface,
+    renderReactionArmBodySurface,
+    renderReactionArmGuardSurface,
+    renderReactionArmSurface,
+    renderReactionTimerPayloadSurface,
     renderResolveSurface,
     renderRouterDispatchSurface,
     renderSource,
@@ -90,6 +94,7 @@ import Keiro.Dsl.PrettyPrint
     renderTransition,
     renderTypeExpr,
   )
+import Keiro.Dsl.ProcessReaction (processReactionFingerprintFrom)
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
@@ -446,6 +451,8 @@ classifyCompatibility context code
         IntakeIdempotenceModeChanged,
         QueueIdentityChanged,
         RouterStableNameChanged,
+        ProcessDispatchIdentityModelChanged,
+        ProcessTimerIdentityChanged,
         WorkflowStableNameChanged
       ]
     publicBreakingCodes =
@@ -2926,8 +2933,110 @@ processDiff env =
 processPairDiff :: ProcessNode -> ProcessNode -> [Change]
 processPairDiff oldProcess newProcess = case ((.body) oldProcess, (.body) newProcess) of
   (LegacyProcessBody {}, LegacyProcessBody {}) -> legacyProcessPairDiff oldProcess newProcess
-  (ReactionProcessBody {}, ReactionProcessBody {}) -> []
-  _ -> []
+  (ReactionProcessBody oldReaction, ReactionProcessBody newReaction) -> reactionProcessPairDiff oldProcess oldReaction newProcess newReaction
+  _ ->
+    [ breaking
+        ((.id) newProcess)
+        "dispatch-identity-model"
+        ((.id) newProcess)
+        ProcessDispatchIdentityModelChanged
+        "process changed between legacy positional dispatch identity and reaction target-keyed identity; drain or pause the process subscription before deploying and follow docs/user/deploy-ordering.md"
+    ]
+
+reactionProcessPairDiff :: ProcessNode -> ReactionBody -> ProcessNode -> ReactionBody -> [Change]
+reactionProcessPairDiff oldProcess oldReaction newProcess newReaction =
+  reactionIdentityDiff
+    ++ concatMap (uncurry (reactionNodeDiff processName)) ((.matched) reactions)
+    ++ map reactionAdded ((.added) reactions)
+    ++ map reactionRemoved ((.removed) reactions)
+    ++ concatMap (uncurry (reactionTimerDiff processName)) ((.matched) timers)
+    ++ map timerAdded ((.added) timers)
+    ++ map timerRemoved ((.removed) timers)
+    ++ timerCeilingDiff
+    ++ reactionVersionDiff
+  where
+    processName = (.id) newProcess
+    reactions = pairDeclarations (.on) (NE.toList ((.reactions) oldReaction)) (NE.toList ((.reactions) newReaction))
+    timers = pairDeclarations (.name) ((.timers) oldReaction) ((.timers) newReaction)
+    reactionIdentityDiff =
+      [ breaking processName "derived-identity" processName DerivedIdentityChanged "process name, correlation derivation, saga stream category, or target aggregate changed; replays and retries no longer derive the persisted reaction identity"
+      | reactionProcessIdentity oldProcess /= reactionProcessIdentity newProcess
+      ]
+    reactionAdded reaction =
+      additive processName "process-reaction" ((.on) reaction) ProcessReactionAdded "input variant gained a declarative reaction"
+    reactionRemoved reaction =
+      advisory processName "process-reaction" ((.on) reaction) ProcessReactionRemoved "input variant reaction was removed; drain or pause the process subscription before deploying so an old binary cannot acknowledge work the new graph no longer handles"
+    timerAdded timer =
+      additive processName "process-timer" ((.name) timer) ProcessTimerAdded "timer declaration added"
+    timerRemoved timer =
+      breaking processName "process-timer" ((.name) timer) ProcessTimerRemoved "timer declaration removed while scheduled rows may still fire; drain or migrate outstanding timer rows before deploying"
+    timerCeilingDiff =
+      [ advisory processName "process-timer-policy" processName ProcessTimerCeilingChanged ("timer max-attempts changed " <> tInt oldCeiling <> " -> " <> tInt newCeiling <> "; already-attempted rows keep their persisted attempt count")
+      | Just oldPolicy <- [(.timerPolicy) oldReaction],
+        Just newPolicy <- [(.timerPolicy) newReaction],
+        let oldCeiling = (.maxAttempts) oldPolicy,
+        let newCeiling = (.maxAttempts) newPolicy,
+        oldCeiling /= newCeiling
+      ]
+    oldVersion = (.version) oldReaction
+    newVersion = (.version) newReaction
+    oldFingerprint = processReactionFingerprintFrom oldReaction
+    newFingerprint = processReactionFingerprintFrom newReaction
+    reactionVersionDiff
+      | newVersion < oldVersion =
+          [breaking processName "process-reaction-version" processName ProcessReactionVersionDecreased ("reaction version decreased from " <> T.pack (show oldVersion) <> " to " <> T.pack (show newVersion))]
+      | oldFingerprint /= newFingerprint && newVersion == oldVersion =
+          [breaking processName "process-reaction-fingerprint" processName ProcessReactionFingerprintChangedWithoutVersionBump "reaction semantics changed without increasing reactions version; bump the version and coordinate the drain/redeploy"]
+      | oldFingerprint /= newFingerprint && newVersion > oldVersion =
+          [advisory processName "process-reaction-fingerprint" processName ProcessReactionFingerprintChangedWithVersionBump ("reaction semantics changed with version " <> T.pack (show oldVersion) <> " -> " <> T.pack (show newVersion) <> "; coordinate drain and redelivery around the new fingerprint")]
+      | otherwise = []
+
+reactionProcessIdentity :: ProcessNode -> (Text, Name, Name, Text, Name)
+reactionProcessIdentity process =
+  ( (.name) process,
+    (.field) ((.correlate) process),
+    (.via) ((.correlate) process),
+    (.category) ((.saga) process),
+    (.target) process
+  )
+
+reactionNodeDiff :: Name -> ReactionNode -> ReactionNode -> [Change]
+reactionNodeDiff processName oldReaction newReaction
+  | reordered =
+      [ advisory processName "process-reaction-arms" inputName ProcessReactionArmsReordered "reaction arms were reordered; ordinal dispatch occurrences and the chosen guarded branch changed"
+      ]
+  | otherwise = concat (zipWith armDiff [1 :: Int ..] pairedArms) ++ countDiff
+  where
+    inputName = (.on) newReaction
+    oldArms = NE.toList ((.arms) oldReaction)
+    newArms = NE.toList ((.arms) newReaction)
+    oldRendered = map renderReactionArmSurface oldArms
+    newRendered = map renderReactionArmSurface newArms
+    reordered = oldRendered /= newRendered && sort oldRendered == sort newRendered
+    pairedArms = zip oldArms newArms
+    armDiff ordinal (oldArm, newArm) =
+      [ advisory processName "process-reaction-guard" (inputName <> "#" <> tInt ordinal) ProcessReactionGuardChanged "reaction guard changed at this arm ordinal; a redelivered source may select a different branch"
+      | renderReactionArmGuardSurface oldArm /= renderReactionArmGuardSurface newArm
+      ]
+        ++ [ advisory processName "process-reaction-fan-out" (inputName <> "#" <> tInt ordinal) ProcessReactionFanOutChanged "reaction follow-ups changed at this arm ordinal; drain before deploy so redelivery cannot merge old and new target-keyed fan-out"
+           | renderReactionArmBodySurface oldArm /= renderReactionArmBodySurface newArm
+           ]
+    countDiff =
+      [ advisory processName "process-reaction-fan-out" inputName ProcessReactionFanOutChanged "reaction arm count changed; the guarded fan-out surface no longer has the same ordinals"
+      | length oldArms /= length newArms
+      ]
+
+reactionTimerDiff :: Name -> ReactionTimerNode -> ReactionTimerNode -> [Change]
+reactionTimerDiff processName oldTimer newTimer =
+  [ breaking processName "process-timer-identity" timerName ProcessTimerIdentityChanged "timer id or fired-event id prefix changed; scheduled rows and deterministic fire identities no longer address the same timer"
+  | timerPrefixes oldTimer /= timerPrefixes newTimer
+  ]
+    ++ [ advisory processName "timer-payload" timerName ProcessTimerPayloadChanged "timer payload shape changed: rows scheduled before the deploy carry the old shape and the fire decoder must accept every historically scheduled payload"
+       | renderReactionTimerPayloadSurface oldTimer /= renderReactionTimerPayloadSurface newTimer
+       ]
+  where
+    timerName = (.name) newTimer
+    timerPrefixes timer = ((.prefix) ((.id) timer), (.prefix) ((.firedEventId) ((.fire) timer)))
 
 legacyProcessPairDiff :: ProcessNode -> ProcessNode -> [Change]
 legacyProcessPairDiff oldProcess newProcess =
@@ -3435,6 +3544,8 @@ contextFor label root facet subject code =
       [ DerivedIdentityChanged,
         IdPrefixChanged,
         DedupeIdentityChanged,
+        ProcessDispatchIdentityModelChanged,
+        ProcessTimerIdentityChanged,
         RouterStableNameChanged,
         WorkflowStableNameChanged,
         ReadModelVersionDecreased,

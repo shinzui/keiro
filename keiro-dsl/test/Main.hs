@@ -8616,10 +8616,103 @@ main = hspec $ do
       cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-handle.keiro"
       any isBreaking cs `shouldBe` False
       [(.code) k | Advisory k <- cs] `shouldBe` [ProcessDecideSurfaceChanged]
+    it "refuses an unreviewed migration between positional and target-keyed process identities" $ do
+      forward <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-reactions.keiro"
+      backward <- diffFixtures "test/fixtures/hospital-surge-reactions.keiro" "test/fixtures/hospital-surge.keiro"
+      [(.code) kind | Breaking kind <- forward] `shouldContain` [ProcessDispatchIdentityModelChanged]
+      [(.code) kind | Breaking kind <- backward] `shouldContain` [ProcessDispatchIdentityModelChanged]
+      [(.detail) kind | Breaking kind <- forward, (.code) kind == ProcessDispatchIdentityModelChanged]
+        `shouldSatisfy` any (T.isInfixOf "docs/user/deploy-ordering.md")
     it "advises on unversioned timer payload changes without making them breaking" $ do
       cs <- diffFixtures "test/fixtures/hospital-surge.keiro" "test/fixtures/hospital-surge-payload.keiro"
       any isBreaking cs `shouldBe` False
       [(.code) k | Advisory k <- cs] `shouldBe` [ProcessTimerPayloadChanged]
+    it "classifies reaction fan-out, guard, timer, and version evolution" $ do
+      source <- readTestText "test/fixtures/process-timers.keiro"
+      stateSource <- readTestText "test/fixtures/process-state-authority.keiro"
+      payloadSource <- readTestText "test/fixtures/process-timers-payload-changed.keiro"
+      identitySource <- readTestText "test/fixtures/process-timers-identity-changed.keiro"
+      baseline <- checkedServiceFromText "process-reaction-diff-base.keiro" source
+      stateBaseline <- checkedServiceFromText "process-reaction-guard-base.keiro" stateSource
+      guardChanged <- checkedServiceFromText "process-reaction-guard-changed.keiro" (T.replace "input.severity == Severity.Sev1" "input.severity == Severity.Sev2" stateSource)
+      fanOutChanged <- checkedServiceFromText "process-reaction-diff-fanout.keiro" (T.replace "+ 5m" "+ 10m" source)
+      payloadChanged <- checkedServiceFromText "process-reaction-diff-payload.keiro" payloadSource
+      identityChanged <- checkedServiceFromText "process-reaction-diff-identity.keiro" identitySource
+      ceilingChanged <- checkedServiceFromText "process-reaction-diff-ceiling.keiro" (T.replace "max-attempts 5" "max-attempts 7" source)
+      versionedFanOut <- checkedServiceFromText "process-reaction-diff-versioned.keiro" (T.replace "reactions version 1" "reactions version 2" (T.replace "+ 5m" "+ 10m" source))
+      versionTwo <- checkedServiceFromText "process-reaction-diff-version-two.keiro" (T.replace "reactions version 1" "reactions version 2" source)
+      withoutAck <-
+        checkedServiceFromText
+          "process-reaction-diff-removed.keiro"
+          ( T.replace
+              "  input ResponderAcked { incidentId:IncidentId }\n"
+              ""
+              (T.replace "  on ResponderAcked\n    cancel reminder\n\n" "" source)
+          )
+      withoutReminder <-
+        checkedServiceFromText
+          "process-reaction-diff-timer-removed.keiro"
+          ( T.replace
+              "    schedule reminder once fireAt input.raisedAt + 60m { incidentId }\n"
+              ""
+              ( T.replace
+                  "  on ResponderAcked\n    cancel reminder\n"
+                  "  on ResponderAcked\n    no-action\n"
+                  (T.replace "\n  timer reminder\n    id uuidv5 \"incident-reminder-timer:\" <> correlationId\n    payload { kind=\"reminder\" incidentId:IncidentId }\n    fire dispatch Incident@correlationId RemindIncident { incidentId }\n      fired-event-id uuidv5 \"incident-reminder-fired:\" <> correlationId\n      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry\n    decode unknown-status => Cancelled\n" "" source)
+              )
+          )
+      let codes select old new = [(.code) kind | change <- resolvedFold (CheckedDiff.diffServices old new), kind <- [kindOfChange change], select change]
+      codes isAdvisory baseline fanOutChanged `shouldContain` [ProcessReactionFanOutChanged]
+      codes isAdvisory stateBaseline guardChanged `shouldContain` [ProcessReactionGuardChanged]
+      codes isBreaking baseline fanOutChanged `shouldContain` [ProcessReactionFingerprintChangedWithoutVersionBump]
+      codes isAdvisory baseline payloadChanged `shouldContain` [ProcessTimerPayloadChanged]
+      codes isBreaking baseline identityChanged `shouldContain` [ProcessTimerIdentityChanged]
+      codes isAdvisory baseline ceilingChanged `shouldContain` [ProcessTimerCeilingChanged]
+      codes isAdvisory baseline versionedFanOut `shouldContain` [ProcessReactionFingerprintChangedWithVersionBump]
+      codes isBreaking baseline versionedFanOut `shouldBe` []
+      codes isBreaking versionTwo baseline `shouldContain` [ProcessReactionVersionDecreased]
+      codes isAdvisory baseline withoutAck `shouldContain` [ProcessReactionRemoved]
+      codes isAdditiveChange withoutAck baseline `shouldContain` [ProcessReactionAdded]
+      codes isBreaking baseline withoutReminder `shouldContain` [ProcessTimerRemoved]
+      codes isAdditiveChange withoutReminder baseline `shouldContain` [ProcessTimerAdded]
+    it "classifies reaction arm reordering by ordinal and requires a version bump" $ do
+      baselineSource <- readTestText "test/fixtures/process-reactions-diff.keiro"
+      reorderedSource <- readTestText "test/fixtures/process-reactions-reordered.keiro"
+      unversionedSource <- readTestText "test/fixtures/process-reactions-reordered-unversioned.keiro"
+      fanOutSource <- readTestText "test/fixtures/process-reactions-fanout-changed.keiro"
+      baseline <- checkedServiceFromText "process-reaction-order-base.keiro" baselineSource
+      unversioned <- checkedServiceFromText "process-reaction-order-unversioned.keiro" unversionedSource
+      versioned <- checkedServiceFromText "process-reaction-order-versioned.keiro" reorderedSource
+      fanOutChanged <- checkedServiceFromText "process-reaction-order-fanout.keiro" fanOutSource
+      let unversionedChanges = resolvedFold (CheckedDiff.diffServices baseline unversioned)
+          versionedChanges = resolvedFold (CheckedDiff.diffServices baseline versioned)
+      [(.code) kind | Advisory kind <- unversionedChanges] `shouldContain` [ProcessReactionArmsReordered]
+      [(.code) kind | Breaking kind <- unversionedChanges] `shouldContain` [ProcessReactionFingerprintChangedWithoutVersionBump]
+      [(.code) kind | Advisory kind <- versionedChanges] `shouldContain` [ProcessReactionArmsReordered, ProcessReactionFingerprintChangedWithVersionBump]
+      any isBreaking versionedChanges `shouldBe` False
+      [(.code) kind | Advisory kind <- resolvedFold (CheckedDiff.diffServices baseline fanOutChanged)]
+        `shouldContain` [ProcessReactionFanOutChanged, ProcessReactionFingerprintChangedWithVersionBump]
+    it "persists reaction coordination snapshots without inventing legacy metadata" $ do
+      reactionSource <- readTestText "test/fixtures/process-timers.keiro"
+      legacySource <- readTestText "test/fixtures/hospital-surge.keiro"
+      reaction <- checkedServiceFromText "process-snapshot-reaction.keiro" reactionSource
+      versionTwo <- checkedServiceFromText "process-snapshot-v2.keiro" (T.replace "reactions version 1" "reactions version 2" reactionSource)
+      legacy <- checkedServiceFromText "process-snapshot-legacy.keiro" legacySource
+      case processReactionSnapshots reaction of
+        [snapshot] -> do
+          (.verification) snapshot `shouldBe` "generated-declarative"
+          (.version) snapshot `shouldBe` Just 1
+          fmap T.length ((.fingerprint) snapshot) `shouldBe` Just 64
+          Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
+        snapshots -> expectationFailure ("expected one process reaction snapshot, got " <> show snapshots)
+      case processReactionSnapshots legacy of
+        [snapshot] -> do
+          (.verification) snapshot `shouldBe` "custom-unverified"
+          (.version) snapshot `shouldBe` Nothing
+          (.fingerprint) snapshot `shouldBe` Nothing
+        snapshots -> expectationFailure ("expected one legacy process snapshot, got " <> show snapshots)
+      processReactionDrift (processReactionSnapshots reaction) (processReactionSnapshots versionTwo)
+        `shouldSatisfy` (not . null)
     it "ignores formatting-only process and timer surface rewrites" $ do
       original <- specOf "test/fixtures/hospital-surge.keiro"
       formatted <- shouldParseStableRenderedSpec "<formatted-process>" original

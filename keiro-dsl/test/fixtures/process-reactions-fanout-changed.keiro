@@ -1,0 +1,45 @@
+language keiro-dsl 6
+context process-reaction-diff
+
+id IncidentId prefix=inc
+enum Severity { Sev1=sev1 Sev2=sev2 Sev3=sev3 }
+
+process IncidentReaction
+  name "incident-reaction-diff"
+  reactions version 2
+  input IncidentReported { incidentId:IncidentId severity:Severity }
+  correlate input.incidentId via idText
+  saga IncidentSaga category "incidentReactionDiff"
+  target Incident
+  projections [ ]
+
+  on IncidentReported
+    when input.severity == Severity.Sev1
+      advance RecordCritical { incidentId }
+    when input.severity == Severity.Sev2
+      advance RecordRoutine { incidentId }
+      dispatch Incident@input.incidentId EscalateIncident { incidentId }
+        on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+    otherwise
+      no-action
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
+aggregate IncidentSaga
+  regs
+  states Open
+  command RecordCritical { incidentId }
+  command RecordRoutine { incidentId }
+  event CriticalRecorded = fields(RecordCritical)
+  event RoutineRecorded = fields(RecordRoutine)
+  Open -- RecordCritical --> emit CriticalRecorded ; goto Open
+  Open -- RecordRoutine --> emit RoutineRecorded ; goto Open
+
+aggregate Incident
+  regs
+  states Open
+  command EscalateIncident { incidentId }
+  event IncidentEscalated = fields(EscalateIncident)
+  Open -- EscalateIncident --> emit IncidentEscalated ; goto Open
