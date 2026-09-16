@@ -2528,7 +2528,6 @@ emitBehaviorContract aggregate =
            "import Data.List.NonEmpty qualified as NonEmpty",
            "import Data.Map.Strict qualified as Map",
            "import Data.Text (Text)",
-           "import Data.Text qualified as T",
            "import Keiki.Core qualified as K (" <> T.intercalate ", " behaviorCoreImports <> ")",
            "import Keiro.Codec qualified as Codec (Codec (eventType), EventType (..))",
            "",

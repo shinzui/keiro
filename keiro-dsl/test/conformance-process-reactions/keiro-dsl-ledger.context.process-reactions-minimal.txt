@@ -1,0 +1,58 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/process-reactions-minimal.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context process-reactions-minimal behavior source map","path":"Generated/ProcessReactionsMinimal/BehaviorSourceMap.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context process-reactions-minimal generated nominal declarations","path":"Generated/ProcessReactionsMinimal/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context process-reactions-minimal generated nominal ID internals","path":"Generated/ProcessReactionsMinimal/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context process-reactions-minimal replay-audit assembly","path":"Generated/ProcessReactionsMinimal/ReplayAudit.hs"}
+module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input IncidentReaction (line 6)","path":"Generated/ProcessReactionsMinimal/IncidentReaction/Input.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction IncidentReaction (line 6)","path":"Generated/ProcessReactionsMinimal/IncidentReaction/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder IncidentReaction (line 6)","path":"ProcessReactionsMinimal/IncidentReaction/ProcessHoles.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses IncidentSaga (line 24)","path":"ProcessReactionsMinimal/IncidentSaga/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 24)","path":"Generated/ProcessReactionsMinimal/IncidentSaga/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Incident (line 31)","path":"ProcessReactionsMinimal/Incident/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 31)","path":"Generated/ProcessReactionsMinimal/Incident/Harness.hs"}
+generated Generated/ProcessReactionsMinimal/BehaviorSourceMap.hs
+generated Generated/ProcessReactionsMinimal/Nominals.hs
+generated Generated/ProcessReactionsMinimal/Nominals/Internal.hs
+generated Generated/ProcessReactionsMinimal/ReplayAudit.hs
+generated Generated/ProcessReactionsMinimal/IncidentReaction/Input.hs
+generated Generated/ProcessReactionsMinimal/IncidentReaction/Process.hs
+hole ProcessReactionsMinimal/IncidentReaction/ProcessHoles.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/Domain.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/Codec.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/Transducer.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/BehaviorContract.hs
+hole ProcessReactionsMinimal/IncidentSaga/BehaviorHoles.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/EventStream.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/Projection.hs
+generated Generated/ProcessReactionsMinimal/IncidentSaga/Harness.hs
+generated Generated/ProcessReactionsMinimal/Incident/Domain.hs
+generated Generated/ProcessReactionsMinimal/Incident/Codec.hs
+generated Generated/ProcessReactionsMinimal/Incident/Transducer.hs
+generated Generated/ProcessReactionsMinimal/Incident/BehaviorContract.hs
+hole ProcessReactionsMinimal/Incident/BehaviorHoles.hs
+generated Generated/ProcessReactionsMinimal/Incident/EventStream.hs
+generated Generated/ProcessReactionsMinimal/Incident/Projection.hs
+generated Generated/ProcessReactionsMinimal/Incident/Harness.hs
+id-domain id-domain|name=IncidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=IncidentId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:inc:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+behavior {"aggregate":"Incident","command":"EscalateIncident","evidence":"generated-authoritative","key":"behavior-v1-b80bea9f8d7d40e8","kind":"live-transition","outputs":[{"command":"EscalateIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"IncidentSaga","command":"RecordIncident","evidence":"generated-authoritative","key":"behavior-v1-d8d2518bf8eda97e","kind":"live-transition","outputs":[{"command":"RecordIncident","ownership":"generated-command-identity"}],"source":"Open"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}
