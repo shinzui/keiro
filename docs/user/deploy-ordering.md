@@ -136,6 +136,17 @@ version or fingerprint may record review intent, but neither enters the runtime
 id seed. There is no version-number escape hatch and no automatic fallback to
 legacy positional or router identities.
 
+Language 6 makes that review explicit. Increase `reactions version` whenever
+the checked semantic fingerprint changes. An unchanged version produces the
+breaking `ProcessReactionFingerprintChangedWithoutVersionBump`; a decreased
+version produces `ProcessReactionVersionDecreased`. A bumped semantic change
+produces `ProcessReactionFingerprintChangedWithVersionBump`, but remains a
+drain-required advisory because the version does not alter dispatch identity.
+Guard, arm-order, and fan-out diagnostics identify the affected surface. Moving
+a legacy body to reactions produces the breaking
+`ProcessDispatchIdentityModelChanged`; drain before changing the body rather
+than treating the version bump as a migration mechanism.
+
 The deterministic-id behavior is implemented in
 [`Keiro.Router`](../../keiro/src/Keiro/Router.hs) and
 [`Keiro.ProcessManager`](../../keiro/src/Keiro/ProcessManager.hs), with the new
@@ -177,6 +188,17 @@ workers-before-producers rule as a queue, but without a version envelope to
 make skew self-describing. DSL changes to the timer `payload` block emit the
 `ProcessTimerPayloadChanged` advisory; hand-written payloads retain the same
 manual obligation.
+
+Removing a declared Language 6 timer is stronger than changing its payload:
+`ProcessTimerRemoved` is breaking because already-scheduled rows still carry
+the old deterministic timer id and may still be claimed. Keep the old firing
+decoder and route deployed until those rows have fired, been cancelled, or
+been migrated and verified. An absent `cancel` creates no tombstone, and
+deleting the declaration does not cancel a row. A timer-prefix or fired-event
+prefix change similarly produces `ProcessTimerIdentityChanged`; drain or
+migrate outstanding rows before deploying it. Changing `max-attempts` produces
+`ProcessTimerCeilingChanged`, and existing rows retain their accumulated
+attempt count.
 
 See [`TimerRequest`](../../keiro/src/Keiro/Timer/Types.hs) and
 [`TimerWorkerOptions`](../../keiro/src/Keiro/Timer.hs).

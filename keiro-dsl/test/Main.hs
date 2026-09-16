@@ -1765,6 +1765,7 @@ main = hspec $ do
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
             "domain-command-outcomes.keiro",
+            "hospital-surge-reactions.keiro",
             "id-domain-migration-v3.keiro",
             "intake-delegated.keiro",
             "language-duplicate.keiro",
@@ -1789,9 +1790,11 @@ main = hspec $ do
             "process-reactions-accepted-unverified.keiro",
             "process-reactions-badmapping.keiro",
             "process-reactions-cancel-unknown.keiro",
+            "process-reactions-diff.keiro",
             "process-reactions-duplicate-input-declaration.keiro",
             "process-reactions-duplicate-on.keiro",
             "process-reactions-duplicate-timer.keiro",
+            "process-reactions-fanout-changed.keiro",
             "process-reactions-guard-not-boolean.keiro",
             "process-reactions-input-unhandled.keiro",
             "process-reactions-language5.keiro",
@@ -1799,6 +1802,8 @@ main = hspec $ do
             "process-reactions-otherwise-missing.keiro",
             "process-reactions-otherwise-unreachable.keiro",
             "process-reactions-payload-incomplete.keiro",
+            "process-reactions-reordered-unversioned.keiro",
+            "process-reactions-reordered.keiro",
             "process-reactions-schedule-unknown.keiro",
             "process-reactions-silent-missing.keiro",
             "process-reactions-state-access.keiro",
@@ -1808,6 +1813,8 @@ main = hspec $ do
             "process-reactions-unknown-input.keiro",
             "process-reactions.keiro",
             "process-state-authority.keiro",
+            "process-timers-identity-changed.keiro",
+            "process-timers-payload-changed.keiro",
             "process-timers.keiro",
             "transition-family-additive.keiro",
             "transition-family-ambiguous-new.keiro",
@@ -6563,8 +6570,8 @@ main = hspec $ do
         [process] -> case (.body) process of
           ReactionProcessBody reaction -> do
             (.version) reaction `shouldBe` 1
-            length (NE.toList ((.inputs) reaction)) `shouldBe` 3
-            length (NE.toList ((.reactions) reaction)) `shouldBe` 3
+            length (NE.toList ((.inputs) reaction)) `shouldBe` 4
+            length (NE.toList ((.reactions) reaction)) `shouldBe` 4
             length ((.timers) reaction) `shouldBe` 1
           LegacyProcessBody {} -> expectationFailure "Language 6 reaction parsed as legacy process"
         processes -> expectationFailure ("expected one reaction process, got " <> show (length processes))

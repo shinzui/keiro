@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Process-manager reactions use accepted witnesses and target-keyed recovery
 description: Additive reactions separate saga-and-timer acceptance from target dispatch, recover through exact witnesses, and give target commands a new stable identity family.
-timestamp: 2026-09-14T20:20:17Z
+timestamp: 2026-09-16T03:46:23Z
 docId: ADR-41
 status: Accepted
 date: 2026-09-14
@@ -99,6 +99,39 @@ retry, rejection, dead-letter, acknowledgement, and telemetry policies.
 Manager failures use dispatch position -1; target failures use their overall
 declared dispatch position. Witness failures halt with bounded reason codes,
 and asynchronous cancellation escapes.
+
+Language 6 reactions are the checked declarative consumer of this runtime
+contract. Guards are pure, Boolean, ordered, and may read only the selected
+decoded input. They cannot read saga state. The saga command path remains the
+only hydrated decision authority and performs its ordinary optimistic retry;
+generation does not add a stale side read or a second state evaluator.
+
+The checked aggregate behavior owns acceptance eligibility. A DSL `accepted`
+block is permitted only when its saga command is verified to emit at least one
+event on acceptance, and it must carry an explicit `silent no-action`
+alternative for rejection, no-op, or eventless acceptance. The generator maps
+effects outside that block to unconditional `followUps` and effects inside it
+to `onAccepted`. It preserves order within those groups and places
+unconditional effects first. This makes the runtime witness boundary explicit
+without claiming durable silence.
+
+Every reaction body declares a positive coordination version and receives a
+SHA-256 fingerprint over its canonical checked semantics: typed inputs, arm
+order and guards, saga advancement, follow-ups, dispatch policy, timer policy,
+timer identities, payloads, and firing behavior. A semantic change without a
+version increase, or any version decrease, is breaking; a changed fingerprint
+with a version increase is advisory and still requires the applicable drain.
+Version and fingerprint are review metadata only and never enter dispatch,
+timer, or fired-event identity seeds.
+
+Generation owns the input sum, pure `ReactionPlan`, manager value, worker
+wrapper, typed timer payloads and requests, firing dispatcher, and conformance
+facts. The only create-once process Hole is the versioned typed decoder
+`RecordedEvent -> Maybe <Process>Input`, because the source envelope is outside
+the current DSL graph. The Hole may decode but must not reconstruct, override,
+or select reaction behavior. Legacy `handle` bodies remain
+`custom-unverified`; generated declarative bodies are
+`generated-declarative` in reports and ledgers.
 
 Adoption is an identity migration, never an automatic switch. Before an
 existing manager name moves to the reaction runner, operators drain source

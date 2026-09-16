@@ -272,43 +272,83 @@ remain hand-owned behavior and are intentionally absent from the notation.
 
 ## process + timer (EP-3)
 
+Language 6 reactions generate the process decision, manager, worker, timer
+payloads/builders, and firing dispatcher. The only process Hole is the typed
+source decoder `decode<Process>Input :: RecordedEvent -> Maybe <Process>Input`.
+
 ```text
-process HospitalSurge
-  name "hospital-surge"
-  input SurgeInput { hospitalId availableIcuBeds:Int observedAt:Time }
-  correlate input.hospitalId via idText
-  saga Surge category "hospitalSurge"
+process IncidentEscalation
+  name "incident-escalation"
+  reactions version 1
+  input IncidentReported { incidentId:IncidentId severity:Severity raisedAt:Time }
+  input ResponderAcked { incidentId:IncidentId ackedAt:Time }
+  input IncidentNoted { incidentId:IncidentId }
+  correlate input.incidentId via idText
+  saga Escalation category "escalation"
   target Hospital
-  projections [ hospitalReadiness ]
-  on SurgeInput
-    advance NoteSurgeThreshold { hospitalId timerId=timer.id }
-    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
-      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
-    schedule surgeFollowUp
-  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)   # runtime-owned; fixed
-  rejected => halt                                      # halt | deadLetter | skip; includes CommandAmbiguous
-  poison => halt                                        # halt | deadLetter | skip; callback supplied at runtime
-  timer surgeFollowUp
-    id uuidv5 "hospital-surge-timer:" <> correlationId
-    fireAt input.observedAt + 5m                          # TIME INJECTED, not sampled
-    payload { kind="hospital-surge-follow-up" hospitalId }
-    fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
-      fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId
+  projections [ ]
+
+  on IncidentReported
+    when input.severity == Severity.Sev1
+      advance NoteRaised { incidentId }
+      schedule escalation fireAt input.raisedAt + 5m { incidentId severity }
+    otherwise
+      advance NoteRaised { incidentId }
+      schedule escalation once fireAt input.raisedAt + 60m { incidentId severity }
+
+  on ResponderAcked
+    advance NoteAcknowledged { incidentId }
+      accepted
+        dispatch Hospital@input.incidentId AcknowledgeIncident { incidentId }
+          on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+      silent no-action
+    cancel escalation
+
+  on IncidentNoted
+    no-action
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
+  timers max-attempts 5 dead-letter "escalation timer exceeded ceiling"
+
+  timer escalation
+    id uuidv5 "incident-escalation-timer:" <> correlationId
+    payload { kind="escalation" incidentId:IncidentId severity:Severity }
+    fire dispatch Hospital@correlationId EscalateIncident { incidentId }
+      fired-event-id uuidv5 "incident-escalation-fired:" <> correlationId
       on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
     decode unknown-status => Cancelled
-    max-attempts 5 dead-letter "surge timer exceeded ceiling"   # forces the dangerous default OFF
 ```
 
-Checked: fireAt must reference a `:Time` input field; no user dispatch-id; saga/target/fire
-targets resolve; worker policies agree with disposition arms; `on-ambiguous Fired` is
-forbidden because ambiguity is an aggregate-definition bug. The generated `WorkerOptions`
-must be passed to `runProcessManagerWorkerWith`; `CommandAmbiguous` follows the node's
-`rejected` policy for ordinary dispatches. Holes: the `handle` body, the deadline window,
-the fire command, and SQL. An `on-duplicate AckOk` hand-written path must use
-`confirmBenignDuplicate` against the target stream before acknowledging the duplicate.
-See `TAXONOMY.md` for the full distinction: `CommandAmbiguous` is non-transient and never
-benign, while the timer's mandatory `on-ambiguous Retry` arm turns it into a ceiling-bounded
-dead-letter witness.
+Every declared input has exactly one `on`. Arms are first-match-wins; a `when`
+sequence ends in `otherwise`, and an unconditional arm stands alone. Guards are
+Boolean and input-only. Saga state access is rejected because the hydrated saga
+command is the decision authority. `no-action` has no saga receipt. Follow-ups
+beside `advance` are unconditional; those nested beneath `accepted` require a
+non-empty accepted append or recovery of its exact witness. An accepted block
+also requires the explicit `silent no-action` alternative.
+
+Timers are optional, so a timer-free process ends after the worker policies.
+With timers, one `timers` line supplies the process-wide ceiling. `schedule`
+defaults to rearm; `schedule <name> once` is insert-only; `cancel` uses the
+named timer's generated id. Every schedule supplies all dynamic payload fields.
+`fireAt` uses an injected `:Time`, never a sampled clock. Timer and fired-event
+prefixes are unique per process and end with `correlationId`. Cancellation does
+not revoke a claimed callback; make late firing benign.
+
+The target-keyed dispatch identity counts same-target occurrences in declared
+order. `reactions version` and the generated SHA-256 fingerprint are
+coordination metadata, not identity seed fields. Increase the version for every
+semantic fingerprint change and still follow the diff's drain instructions.
+Moving a legacy process body to reactions is a breaking identity migration.
+
+Language 5 and older retain the legacy one-input/one-timer form and its
+positional `emitIndex` identity. Do not mechanically rewrite one into the other.
+An `on-duplicate AckOk` hand-written legacy path must still use
+`confirmBenignDuplicate` against the target stream. See `TAXONOMY.md` for the
+full `CommandAmbiguous` distinction.
 
 The saga clause names a validated stream **category**, not a raw prefix. Categories are
 non-empty, contain no `-`, whitespace, control characters, or `:`, and may not be `$all`;

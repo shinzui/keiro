@@ -11,11 +11,25 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 - Candidate Language 6 adds `idempotence delegated` to intake declarations and
   generates a typed `runInboxIntake` wrapper over delegated runtime intake.
   Published Languages 1 through 5 and table-generated output remain unchanged.
+- Candidate Language 6 adds first-class process reactions: multiple typed
+  inputs, ordered input-only guards, optional saga advancement, explicit
+  accepted-only follow-ups, timer-free processes, and multiple typed timers
+  with rearm, once, cancellation, and generated firing behavior. Scaffolding
+  emits the input ADT, pure reaction, `ReactiveProcessManager`, worker wrapper,
+  timer payload codecs/builders, firing dispatcher, reaction version and
+  fingerprint; only the typed source-event decoder remains a create-once Hole.
 
 ### Breaking Changes
 
 - Changing an intake between table and delegated idempotence is classified as
   `IntakeIdempotenceModeChanged` on the persisted-identity compatibility axis.
+- Migrating a legacy process body to reactions is classified as
+  `ProcessDispatchIdentityModelChanged`. Reaction target ids use physical target
+  stream plus same-target occurrence instead of the legacy positional emit
+  index, so the migration requires an explicit drain.
+- Removing or changing the identity of a declared reaction timer is breaking
+  while old rows may remain scheduled. A semantic reaction change without a
+  `reactions version` increase, or a version decrease, is also breaking.
 
 ### Other Changes
 
@@ -45,6 +59,16 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `AggGuardRelationUnknown`.
 - No user-facing changes. The parser-scaling benchmark now uses the current
   scaffold `path` and `text` record fields.
+- Reaction checking reports total input ownership, Boolean/input-only guards,
+  explicit silence, acceptance evidence, typed mappings, timer payload
+  completeness, timer identity, and worker-policy errors at their source lines.
+  Diff and scaffold ledgers expose checked reaction fingerprints, versions,
+  verification mode, arm/fan-out changes, timer evolution, and coordination
+  drift without changing aggregate fold identity.
+- Generated PostgreSQL conformance covers guarded and no-action delivery,
+  accepted replay, partial fan-out recovery, typed silence, timer rearm/once/
+  cancel/fire/terminal/race behavior, mutation resistance, bounded fan-out
+  scaling, and opt-in hydration observations.
 
 ## 0.16.0.0 — 2026-09-07
 

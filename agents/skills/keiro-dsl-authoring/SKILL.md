@@ -23,10 +23,11 @@ edit a `-- @generated` module.
 ## The load-bearing rules (read these first)
 
 1. **Declare the chosen language contract.** The development authoring default and `new <kind>`
-   use unreleased candidate `language keiro-dsl 5`; projection catalogs require it. Language 4
-   remains the published stable contract for released-only services, while versions 1 through 3
-   and unversioned sources remain accepted compatibility contracts. Language 5 is amended in
-   place until publication—never allocate language 6 merely because candidate 5 changed. Released
+   use unreleased candidate `language keiro-dsl 6`; first-class process reactions and delegated
+   inboxes require it. Language 5 is the published stable contract for released-only services,
+   while versions 1 through 4 and unversioned sources remain accepted compatibility contracts.
+   Language 6 is amended in place until publication—never allocate language 7 merely because the
+   candidate changed. Released
    syntax and runtime behavior are owned by explicit immutable profiles, not numeric ordering.
 2. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
    Language 4 generates every transition whose guards, writes, emits, and target are completely
@@ -122,7 +123,7 @@ delete `generated` entries only after review, and treat `hole` entries as hand-o
 
 A workspace manifest lists complete same-context member specs with `spec <relative.keiro>`
 lines. Every member declares the same selected contract; new development work defaults to
-`language keiro-dsl 5`, while a released-only workspace may stay on stable language 4. Inspection
+`language keiro-dsl 6`, while a released-only workspace may stay on stable language 5. Inspection
 reports every member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
 when their text is identical, so resolve a conflict by moving the declaration to one owner,
 never by copying it. Workspace scaffold history uses

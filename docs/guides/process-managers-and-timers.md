@@ -80,6 +80,123 @@ Local tests schedule the timer with `scheduleTimerTx`, call
 workers usually loop around `runTimerWorker`, append or submit a command from
 the timer payload, and return the event id that represents successful firing.
 
+## Generated Language 6 Reactions
+
+Use the Language 6 reaction form when the process decision is a pure function
+of typed input and the DSL can describe its saga command and follow-ups. The
+scaffold generates the input sum, `ReactionPlan`, `ReactiveProcessManager`,
+worker wrapper, reaction fingerprint, and any timer payload/firing code. The
+only process-specific create-once hole decodes a `RecordedEvent` into the
+generated input:
+
+```haskell
+decodeIncidentReactionInput
+  :: RecordedEvent
+  -> Maybe IncidentReactionInput
+```
+
+Do not rebuild actions in that hole. Its job is source-envelope decoding only.
+The generated worker calls it and owns the checked reaction.
+
+### Timer-Free Process
+
+A reaction process needs no timer declaration. This complete process block
+advances its saga and dispatches only after durable acceptance:
+
+```text
+language keiro-dsl 6
+context incident-response
+
+process IncidentReaction
+  name "incident-reaction"
+  reactions version 1
+  input IncidentReported { incidentId:IncidentId }
+  correlate input.incidentId via idText
+  saga IncidentSaga category "incidentSaga"
+  target Incident
+  projections [ ]
+
+  on IncidentReported
+    advance RecordIncident { incidentId }
+      accepted
+        dispatch Incident@input.incidentId EscalateIncident { incidentId }
+          on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+      silent no-action
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+```
+
+Declare `IncidentSaga.RecordIncident` and `Incident.EscalateIncident` with the
+same typed fields elsewhere in the source. The `silent no-action` line records
+that a rejection, no-op, or eventless acceptance emits no accepted-only
+dispatch. On accepted redelivery, the worker recovers the exact saga witness
+and retries missing target work without repeating the saga append.
+
+### Multi-Reaction Escalation With A Timer
+
+Multiple inputs share the same correlation field but own independent reactions.
+Guards read only the selected input. Timer statements outside `accepted` are
+unconditional and may repeat after a silent decision; accepted-only dispatches
+require the durable saga witness.
+
+```text
+process IncidentEscalation
+  name "incident-escalation"
+  reactions version 1
+  input IncidentReported { incidentId:IncidentId severity:Severity raisedAt:Time }
+  input ResponderAcked { incidentId:IncidentId ackedAt:Time }
+  input IncidentNoted { incidentId:IncidentId }
+  correlate input.incidentId via idText
+  saga Escalation category "escalation"
+  target Incident
+  projections [ ]
+
+  on IncidentReported
+    when input.severity == Severity.Sev1
+      advance NoteRaised { incidentId }
+      schedule escalation fireAt input.raisedAt + 5m { incidentId severity }
+    otherwise
+      advance NoteRaised { incidentId }
+      schedule escalation fireAt input.raisedAt + 60m { incidentId severity }
+
+  on ResponderAcked
+    advance NoteAcknowledged { incidentId }
+      accepted
+        dispatch Incident@input.incidentId AcknowledgeIncident { incidentId }
+          on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+      silent no-action
+    cancel escalation
+
+  on IncidentNoted
+    no-action
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
+  timers max-attempts 5 dead-letter "escalation timer exceeded ceiling"
+
+  timer escalation
+    id uuidv5 "incident-escalation-timer:" <> correlationId
+    payload { kind="escalation" incidentId:IncidentId severity:Severity }
+    fire dispatch Incident@correlationId EscalateIncident { incidentId }
+      fired-event-id uuidv5 "incident-escalation-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+```
+
+The scaffold lowers the deadline from injected `raisedAt`, generates the typed
+payload codec and timer request, and routes firing through the target aggregate.
+`cancel escalation` becomes a transactional `FollowCancel`; it cannot revoke a
+callback that already claimed the timer, so `EscalateIncident` must make late
+firing benign. `schedule` rearms a still-scheduled row; add `once` after the
+timer name for insert-only behavior. The complete compile-checked sources are
+[`process-reactions-minimal.keiro`](../../keiro-dsl/test/fixtures/process-reactions-minimal.keiro)
+and
+[`process-state-authority.keiro`](../../keiro-dsl/test/fixtures/process-state-authority.keiro).
+
 ## Reactions With Optional Saga Advancement
 
 Import `Keiro.ProcessManager.Reaction` when one input may deliberately avoid a

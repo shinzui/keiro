@@ -67,7 +67,7 @@ General source/workspace upgrade automation remains deferred to
 This curated inventory covers the primary feature, negative, and evolution surfaces. Every
 ordinary source below declares Language 4; names such as `reservation-v2.keiro` describe event
 schema evolution or historical fixture naming, not the source-language version. The complete
-machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
+machine-checked fixture set contains 309 `.keiro` files as of 2026-09-16.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
@@ -121,7 +121,9 @@ machine-checked fixture set contains 245 `.keiro` files as of 2026-08-09.
 | `test/fixtures/process-bad-timer.keiro` | negative timer ceiling and dispatch field binding |
 | `test/fixtures/process-ghost-refs.keiro` | negative process command, timer, and projection references |
 | `test/fixtures/process-reactions.keiro` | candidate Language-6 guarded and no-action generated reaction managers |
+| `test/fixtures/process-reactions-*.keiro` | reaction input totality, guard, acceptance, mapping, timer-reference, fingerprint/version, arm-order, and fan-out validation/diff boundaries |
 | `test/fixtures/process-timers.keiro` | candidate Language-6 typed reaction timers, schedule modes, cancellation, and firing |
+| `test/fixtures/process-timers-{identity,payload}-changed.keiro` | timer identity and pending-payload evolution boundaries |
 | `test/fixtures/process-state-authority.keiro` | candidate Language-6 accepted-only fan-out and partial-success recovery |
 | `test/fixtures/projection-catalog.keiro` | stable language-5 target/group/owner/query catalog with versioned external-read lowering plus inline, async, clear, preserve, aggregate, and category coverage |
 | `test/fixtures/readmodel-consistency-conflict.keiro` | negative projection/readmodel consistency conflict |
@@ -265,6 +267,8 @@ the stable Language-5 feature lanes and form the primary product baseline.
 | `test/mutation-test.sh` | temporarily flipping the stable generated aggregate guard reddens a specific behavior assertion and restores the file |
 | `test/diff-test.sh` | unsafe evolution is BREAKING while versioned/upcast evolution is ADDITIVE |
 | `test/process-mutation-test.sh` | changing the timer rejection inversion reddens its process fact |
+| `test/process-reaction-mutation-test.sh` | changed guards, dropped dynamic timer payload fields, wrong commands, and wrong timer/dispatch identities redden generated reaction facts |
+| `test/process-hydration-test.sh` | isolated opt-in probes distinguish saga hydration, acceptance witnesses, and target hydration for same/distinct-target fan-out, replay, no-advance, and conflict retries |
 | `test/projection-supply-mutation-test.sh` | duplicating a shared owner's inline handler per query or retaining only the first resolved supplier reddens compiled projection-catalog conformance and restores exact bytes |
 | `test/replay-mutation-test.sh` | routing a generated emit through a dishonest wire constructor reddens only the forward/replay register assertion |
 | `test/router-mutation-test.sh` | changing target-keyed router identity reddens its router fact |
@@ -284,6 +288,10 @@ to those trees are the worked fills. The most useful starting points are:
   typed behavior-witness list spanning later states, terminal rejections, and replay-only history.
 - `test/conformance-process-full/SurgeDemo/SurgeFlow/Manager.hs` for category-safe process
   streams and process-manager assembly.
+- `test/conformance-process-reactions/ProcessReactions/IncidentReaction/ProcessHoles.hs` for
+  the sole typed decoder Hole beside a generated timer-free reaction manager and worker.
+- `test/conformance-process-timers/Generated/ProcessTimers/IncidentTimers/Process.hs` for
+  generated typed timer payloads, rearm/once/cancel lowering, and firing dispatch.
 - `test/conformance-router-full/IncidentPaging/PagingRouter/RouterValue.hs` for a stable
   resolver and target-keyed router.
 - `test/conformance-readmodel-runtime/HospitalCapacity/Transfer_decisions/ReadModelHoles.hs`

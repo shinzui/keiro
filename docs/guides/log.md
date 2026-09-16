@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-09-16
+* **Update**: Add generated Language 6 timer-free and multi-reaction escalation examples with the decoder-Hole and late-fire boundaries.
+
 ## 2026-09-15
 * **Update**: Add Kafka consumer guidance for candidate Language-6 delegated intake and downstream command receipts.
 

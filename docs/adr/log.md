@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-16
+* **Update**: Extend ADR-41 with input-only DSL guards, checked acceptance ownership, coordination fingerprints, and generated-versus-Hole ownership.
+
 ## 2026-09-15
 * **Update**: Share complete replay-body union classification between diff and replay impact without changing frozen fold bytes (plan 266).
 * **Update**: Gate replay-only remedies through candidate-language round trips and report unknown or unavailable remedies explicitly (plan 266).

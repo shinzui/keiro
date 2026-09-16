@@ -26,6 +26,11 @@ show Language 4 sources explicitly. New sources in this guide begin with:
 language keiro-dsl 5
 ```
 
+The active, unpublished Language 6 candidate extends this stable base with
+delegated inboxes and first-class process reactions. Candidate-only examples
+say so explicitly and begin with `language keiro-dsl 6`; released-only services
+should remain on Language 5 until that candidate is published.
+
 Use this page as both an introduction and a syntax reference. The shortest path
 is [Quick start](#quick-start), followed by the node family you need. The
 [command reference](#command-reference) and [authoring checklist](#authoring-checklist)
@@ -970,79 +975,126 @@ back to replay.
 
 ## Processes and timers
 
-A `process` coordinates a saga aggregate, target aggregates, command dispatches,
-and one durable timer.
+Language 5 retains the legacy single-input, single-timer process form. The
+unpublished Language 6 candidate adds a reaction form with multiple typed
+inputs, ordered guarded arms, optional advancement, timer-free processes, and
+multiple independently named timers. The following process is entirely
+generated except for decoding a `RecordedEvent` into `IncidentReactionInput`:
 
 ```text
-process HospitalSurge
-  name "hospital-surge"
-  input SurgeInput { hospitalId availableIcuBeds:Int observedAt:Time }
-  correlate input.hospitalId via idText
-  saga Surge category "hospitalSurge"
-  target Hospital
+language keiro-dsl 6
+context incident-response
+
+process IncidentReaction
+  name "incident-reaction"
+  reactions version 1
+  input IncidentReported { incidentId:IncidentId severity:Severity }
+  input IncidentNoted { incidentId:IncidentId }
+  correlate input.incidentId via idText
+  saga IncidentSaga category "incidentSaga"
+  target Incident
   projections [ ]
 
-  on SurgeInput
-    advance NoteSurgeThreshold { hospitalId timerId=timer.id }
-    dispatch Hospital@input.hospitalId ActivateSurge { hospitalId }
-      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
-    schedule surgeFollowUp
+  on IncidentReported
+    when input.severity == Severity.Sev1
+      advance RecordCritical { incidentId }
+      dispatch Incident@input.incidentId EscalateIncident { incidentId }
+        on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+    otherwise
+      advance RecordRoutine { incidentId }
 
-  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)
+  on IncidentNoted
+    no-action
+
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
   rejected => halt
   poison => halt
-
-  timer surgeFollowUp
-    id uuidv5 "hospital-surge-timer:" <> correlationId
-    fireAt input.observedAt + 5m
-    payload { kind="hospital-surge-follow-up" hospitalId }
-    fire dispatch Surge@correlationId MarkSurgeTimerFired { hospitalId timerId }
-      fired-event-id uuidv5 "hospital-surge-fired:" <> correlationId
-      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
-    decode unknown-status => Cancelled
-    max-attempts 5 dead-letter "surge timer exceeded ceiling"
 ```
 
-The block identifier (`HospitalSurge`) selects generated modules. `name` is a
-stable durable identity shared with the process runtime; it must be non-empty,
-must not be `$all`, whitespace, control characters, or contain `:`, and must be
-unique across all processes, routers, and workflows.
+Each input declaration has exactly one `on` block. Arms are tested top to bottom;
+an `on` block containing `when` must end in `otherwise`, while an unconditional
+arm stands alone. Guards may read only fields of the selected input and must be
+Boolean. Saga state is deliberately unavailable: the saga command handler is
+the checked, hydrated, optimistic-retry authority. `no-action` performs no saga
+read or append and has no durable receipt.
 
-`saga` and `target` resolve to aggregates. The saga category is a validated
-stream category: it must not contain `-`, whitespace, control characters, or
-`:`, and cannot be `$all`. Use camelCase for compound categories.
+An `advance` may place follow-ups directly after the command, making them
+unconditional, or under `accepted`, making them eligible only after a non-empty
+accepted saga append or recovery of its exact first-event witness. An
+`accepted` block requires `silent no-action` beside it because rejection, no-op,
+and eventless acceptance leave no receipt. Unconditional effects may repeat
+after a silent result. Selected unconditional effects precede accepted-only
+effects; timer statements execute before target dispatch attempts, but target
+commands still commit in separate transactions.
 
-Bindings are either bare input-field copies, `input.<field>` references, quoted
-literals, or the exact runtime-owned value `timer.id`; timer-fire bindings may
-also copy declared timer payload fields or bare `timerId`. Under Language 4,
-the correlate field, dispatch and fire keys, and all
-binding values must resolve within those scopes. Advance, dispatch, timer,
-command, target, field, projection, and scheduled-timer references are checked.
-Do not bind `commandId` or `id`; dispatch identities are runtime-owned.
+Timers are optional. When present, declare one process-wide worker policy and
+one block per timer:
 
-`fireAt` must reference an injected `:Time` input field. The notation has no
-clock-sampling form, and Language 4 rejects a duration whose unit-adjusted
-seconds do not fit in `Int`. The timer ID and fired-event ID expressions must
-end in `correlationId`; their parsed identifiers are not general field
-references.
-`decode unknown-status => Name` names the status an undecodable timer row is
-read as; it must be one the timer table actually stores — `Scheduled`, `Firing`,
-`Fired`, `Cancelled`, or `Dead`. The quoted `dead-letter` text is operator
-guidance rendered into the timer hole rather than a runtime category identity:
-`runTimerWorkerWith` composes its own message for the attempt ceiling, and an
-operator-written worker passes this text to `Keiro.Timer.deadLetterTimer`. It
-must therefore say something; a blank reason is refused. `max-attempts` is at
-least 1. `not-mine` must be `Retry`: the worker marks a timer `Fired` only when
-the fire action returns the id of an event it appended, and a dispatch that is
-not this timer's has none. `on-ambiguous` must be `Retry`:
-command ambiguity is an aggregate-definition defect, never benign success, and
-the ceiling provides a durable dead-letter witness.
+```text
+  on IncidentReported
+    advance RecordIncident { incidentId }
+    schedule escalation fireAt input.raisedAt + 5m { incidentId detail }
+    schedule reminder once fireAt input.raisedAt + 60m { incidentId }
 
-`rejected` and `poison` are each `halt`, `deadLetter`, or `skip`. Align the
-node-level rejected policy with every dispatch's `on-failed` action. Mapping a
-duplicate append to `AckOk` is an explicit benign inversion and produces a
-warning; generated runtime code confirms the attempted event ID against the
-target stream before acknowledging it.
+  on ResponderAcked
+    cancel reminder
+
+  timers max-attempts 5 dead-letter "incident timer exceeded ceiling"
+
+  timer escalation
+    id uuidv5 "incident-escalation-timer:" <> correlationId
+    payload { kind="escalation" incidentId:IncidentId detail:Text }
+    fire dispatch Incident@correlationId EscalateIncident { incidentId }
+      fired-event-id uuidv5 "incident-escalation-fired:" <> correlationId
+      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry
+    decode unknown-status => Cancelled
+```
+
+`schedule` defaults to rearm; `schedule ... once` is insert-only. `cancel`
+uses the named timer's deterministic id. A timer's constant and typed payload
+fields must be supplied exactly once by every schedule. Deadlines must derive
+from an injected `:Time` input field. Timer and fired-event prefixes must be
+unique within the process, and each id ends in `correlationId`. Cancellation
+does not create a tombstone, revive terminal rows, or revoke a callback that
+already claimed the timer.
+
+The reaction dispatch identity is target-keyed:
+`(name, correlationId, sourceEventId, targetStreamName, occurrence)`, where
+`occurrence` counts commands to the same physical target in declared order.
+The generated reaction version and SHA-256 semantic fingerprint are review and
+coordination metadata; neither changes runtime ids. The generated module owns
+the input ADT, pure reaction, `ReactiveProcessManager`, worker wrapper, typed
+timer payloads/builders, and firing dispatcher. The sole create-once process
+hole is `decode<Process>Input :: RecordedEvent -> Maybe <Process>Input`.
+
+Reaction validation adds these source-local errors:
+
+- `ProcessReactionUnknownInput`, `ProcessInputDuplicateDeclaration`,
+  `ProcessReactionInputUnhandled`, and `ProcessReactionDuplicateInput` enforce
+  total one-to-one input/reaction ownership.
+- `ProcessReactionGuardNotBoolean`, `ProcessStateAccessUnsupported`,
+  `ProcessReactionOtherwiseMissing`, and
+  `ProcessReactionOtherwiseUnreachable` enforce deterministic ordered guards.
+- `ProcessTimerDuplicateName`, `ProcessTimerPrefixCollision`,
+  `ProcessScheduleUnknownTimer`, `ProcessCancelUnknownTimer`,
+  `ProcessSchedulePayloadIncomplete`, `ProcessTimerPolicyMissing`, and
+  `ProcessTimerPolicyUnused` enforce timer identity, payload, and worker policy.
+- `ProcessAcceptedArmRequiresEvent`, `ProcessSilentArmMissing`, and
+  `ProcessAcceptedArmUnverified` enforce durable acceptance ownership.
+- `ProcessBindingTypeMismatch` rejects command, dispatch, and timer mappings
+  whose source and destination types differ.
+
+Reaction evolution adds `ProcessReactionAdded`, `ProcessReactionRemoved`,
+`ProcessReactionFanOutChanged`, `ProcessReactionGuardChanged`,
+`ProcessReactionArmsReordered`, `ProcessTimerAdded`, `ProcessTimerRemoved`,
+`ProcessTimerIdentityChanged`, `ProcessTimerCeilingChanged`,
+`ProcessReactionVersionDecreased`,
+`ProcessReactionFingerprintChangedWithoutVersionBump`,
+`ProcessReactionFingerprintChangedWithVersionBump`, and
+`ProcessDispatchIdentityModelChanged`. Timer payload changes continue to use
+`ProcessTimerPayloadChanged`. A semantic fingerprint change must increase
+`reactions version`, but the bump records intent only: drain/replay and timer
+compatibility obligations remain.
 
 ## Routers
 

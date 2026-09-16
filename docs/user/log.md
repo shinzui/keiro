@@ -1,5 +1,10 @@
 # Keiro User Documentation Log
 
+## 2026-09-16
+* **Update**: Document reaction version/fingerprint drain rules and timer removal, identity, payload, and ceiling rollout consequences.
+* **Update**: Document generated reaction-manager usage, the typed decoder Hole, runtime Reaction wiring, and transactional cancelTimerTx lowering.
+* **Update**: Document candidate Language 6 process reactions, generated ownership, timer semantics, and every reaction validation and evolution diagnostic.
+
 ## 2026-09-15
 * **Update**: Document delegated inbox receipt ownership, retry and DLQ obligations, cutover boundaries, and measured tradeoffs.
 

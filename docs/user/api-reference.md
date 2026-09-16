@@ -677,6 +677,30 @@ This is a new deterministic-id family. Existing managers do not switch to it
 automatically, and it has no positional-id or router-id fallback. Follow the
 reaction cutover procedure in [Deploy Ordering](deploy-ordering.md#4-drain-process-manager-and-router-decide-changes).
 
+Language 6 reaction processes generate this wiring. The generated
+`<Process>/Input` module owns the sum type for all declared inputs, and the
+generated `<Process>/Process` module exports the pure reaction, reaction version
+and fingerprint, `ReactiveProcessManager`, and a worker wrapper around
+`runReactiveProcessManagerWorkerWith`. Timer-bearing processes additionally
+export typed payloads, `TimerRequest` builders, one process-wide
+`TimerWorkerOptions`, and a firing dispatcher. Application code supplies only
+the create-once typed decoder:
+
+```haskell
+decodeIncidentReactionInput
+  :: RecordedEvent
+  -> Maybe IncidentReactionInput
+```
+
+Pass the generated worker its `RunCommandOptions` and source adapter; do not
+rebuild the `ReactionPlan` or manager in a hand-owned module. A generated
+`cancel timerName` lowers to `FollowCancel`; the reaction runner performs the
+corresponding [`cancelTimerTx`](#keirotimer) in the saga append transaction.
+Because a claimed callback cannot be revoked, generated timer targets must still
+make late firing benign. See
+[Process Managers And Timers](../guides/process-managers-and-timers.md#generated-language-6-reactions)
+for complete timer-free and multi-reaction source examples.
+
 ## `Keiro.Router`
 
 Types and functions:

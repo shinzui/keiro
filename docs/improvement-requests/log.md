@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-16
+* **Completed**: Close IR-39 after Plans 279 and 273 deliver the reaction runtime, Language 6 checking and generation, conformance, evolution gates, and documentation.
+
 ## 2026-09-15
 * **Implemented**: Implemented the accepted structural scope of Plans 265 and 266; semantic guard proofs remain deferred in the IR-33 review.
 * **Update**: Audit non-completed request statuses against their plans and the current tree. No

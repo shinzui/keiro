@@ -4,9 +4,9 @@ title: Make process-manager reactions first-class in keiro-dsl
 description: >-
   Support multiple typed and conditional process reactions, optional and multiple
   timers, and executable generated coordination behavior with explicit custom holes.
-timestamp: 2026-09-15T19:24:42Z
+timestamp: 2026-09-16T03:46:23Z
 requestId: IR-39
-status: in-progress
+status: completed
 origin: mori://shinzui/keiro
 plan: docs/plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md
 relatedPlans:
@@ -17,13 +17,18 @@ relatedPlans:
 
 ## Status
 
-In progress. The runtime prerequisite is complete:
-[Plan 279](../plans/279-harden-process-manager-reaction-apis-before-dsl-generation.md) delivered
-the hardened process-manager reaction APIs (identity primitives, once runner, and reaction worker,
-closed at `edd142c1`). [Plan 273](../plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md)
-delivers the DSL surface; its M0 accepted plan 279 and its sections were reconciled with the
-delivered runtime on 2026-09-15, but grammar, checking, and generation milestones M1–M6 have not
-started. The DSL half of this request remains unimplemented.
+Completed. [Plan 279](../plans/279-harden-process-manager-reaction-apis-before-dsl-generation.md)
+delivered the additive reaction runtime, accepted witnesses, target-keyed identity, transactional
+timer cancellation, shared worker, and recovery proofs. [Plan 273](../plans/273-make-process-manager-reactions-first-class-in-keiro-dsl.md)
+delivered the Language 6 grammar, checked reaction model, generated manager/worker/timer behavior,
+coordination fingerprints and evolution diagnostics, three PostgreSQL conformance packages,
+mutation and hydration proofs, bounded scaling evidence, and authoring/deployment documentation.
+
+All seven acceptance items are represented in the committed corpus. Generated behavior owns the
+reaction while a single typed source-event decoder remains hand-owned; legacy process bodies stay
+available as `custom-unverified`. Migration from positional legacy dispatch to target-keyed
+reaction dispatch is explicitly breaking and requires a drain. ADR-41 records the shared runtime
+and DSL contract.
 
 ## Context
 
