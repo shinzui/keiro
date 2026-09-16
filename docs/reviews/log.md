@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-16
+* **Addition**: REV-17 requests changes for the 0.17.0.0 release: the increment's runtime, PGMQ, and DSL changes review as correct and within approved performance guards, but `just verify` fails three ways at HEAD (store-ambiguous keiki in two tests, stale record-migration manifests, hand-edited frozen corpora), the 0.16 to 0.17 upgrade edge is missing, changelogs omit shipped and breaking surfaces, the DLQ user reference is stale, and `fifo-heads` widens the published languages.
+
 ## 2026-08-29
 * **Addition**: REV-16 approves the generated Haskell edition migration after every recorded pre-current edition became fail-closed, legacy name and edition adoption composed under both flags, and recovery gained commit-pinned coverage.
 
