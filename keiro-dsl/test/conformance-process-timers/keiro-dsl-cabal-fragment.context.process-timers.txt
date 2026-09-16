@@ -1,0 +1,47 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/process-timers.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.ProcessTimers.BehaviorSourceMap
+    Generated.ProcessTimers.Incident.BehaviorContract
+    Generated.ProcessTimers.Incident.Codec
+    Generated.ProcessTimers.Incident.Domain
+    Generated.ProcessTimers.Incident.EventStream
+    Generated.ProcessTimers.Incident.Harness
+    Generated.ProcessTimers.Incident.Projection
+    Generated.ProcessTimers.Incident.Transducer
+    Generated.ProcessTimers.IncidentSaga.BehaviorContract
+    Generated.ProcessTimers.IncidentSaga.Codec
+    Generated.ProcessTimers.IncidentSaga.Domain
+    Generated.ProcessTimers.IncidentSaga.EventStream
+    Generated.ProcessTimers.IncidentSaga.Harness
+    Generated.ProcessTimers.IncidentSaga.Projection
+    Generated.ProcessTimers.IncidentSaga.Transducer
+    Generated.ProcessTimers.IncidentTimers.Input
+    Generated.ProcessTimers.IncidentTimers.Process
+    Generated.ProcessTimers.IncidentTimers.ProcessHarness
+    Generated.ProcessTimers.Nominals
+    Generated.ProcessTimers.Nominals.Internal
+    Generated.ProcessTimers.ReplayAudit
+    ProcessTimers.Incident.BehaviorHoles
+    ProcessTimers.IncidentSaga.BehaviorHoles
+    ProcessTimers.IncidentTimers.ProcessHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , shibuya-core
+    , text
+    , time
+    , uuid

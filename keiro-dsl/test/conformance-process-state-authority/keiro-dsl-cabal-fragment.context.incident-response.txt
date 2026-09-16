@@ -1,0 +1,47 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/process-state-authority.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.IncidentResponse.BehaviorSourceMap
+    Generated.IncidentResponse.Escalation.BehaviorContract
+    Generated.IncidentResponse.Escalation.Codec
+    Generated.IncidentResponse.Escalation.Domain
+    Generated.IncidentResponse.Escalation.EventStream
+    Generated.IncidentResponse.Escalation.Harness
+    Generated.IncidentResponse.Escalation.Projection
+    Generated.IncidentResponse.Escalation.Transducer
+    Generated.IncidentResponse.Incident.BehaviorContract
+    Generated.IncidentResponse.Incident.Codec
+    Generated.IncidentResponse.Incident.Domain
+    Generated.IncidentResponse.Incident.EventStream
+    Generated.IncidentResponse.Incident.Harness
+    Generated.IncidentResponse.Incident.Projection
+    Generated.IncidentResponse.Incident.Transducer
+    Generated.IncidentResponse.IncidentEscalation.Input
+    Generated.IncidentResponse.IncidentEscalation.Process
+    Generated.IncidentResponse.IncidentEscalation.ProcessHarness
+    Generated.IncidentResponse.Nominals
+    Generated.IncidentResponse.Nominals.Internal
+    Generated.IncidentResponse.ReplayAudit
+    IncidentResponse.Escalation.BehaviorHoles
+    IncidentResponse.Incident.BehaviorHoles
+    IncidentResponse.IncidentEscalation.ProcessHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , shibuya-core
+    , text
+    , time
+    , uuid

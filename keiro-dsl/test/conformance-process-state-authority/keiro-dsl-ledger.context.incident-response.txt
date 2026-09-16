@@ -1,0 +1,64 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/process-state-authority.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context incident-response behavior source map","path":"Generated/IncidentResponse/BehaviorSourceMap.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context incident-response generated nominal declarations","path":"Generated/IncidentResponse/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context incident-response generated nominal ID internals","path":"Generated/IncidentResponse/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context incident-response replay-audit assembly","path":"Generated/IncidentResponse/ReplayAudit.hs"}
+module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input IncidentEscalation (line 7)","path":"Generated/IncidentResponse/IncidentEscalation/Input.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction IncidentEscalation (line 7)","path":"Generated/IncidentResponse/IncidentEscalation/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder IncidentEscalation (line 7)","path":"IncidentResponse/IncidentEscalation/ProcessHoles.hs"}
+module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process IncidentEscalation (line 7)","path":"Generated/IncidentResponse/IncidentEscalation/ProcessHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Escalation (line 51)","path":"IncidentResponse/Escalation/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Escalation (line 51)","path":"Generated/IncidentResponse/Escalation/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Incident (line 61)","path":"IncidentResponse/Incident/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 61)","path":"Generated/IncidentResponse/Incident/Harness.hs"}
+generated Generated/IncidentResponse/BehaviorSourceMap.hs
+generated Generated/IncidentResponse/Nominals.hs
+generated Generated/IncidentResponse/Nominals/Internal.hs
+generated Generated/IncidentResponse/ReplayAudit.hs
+generated Generated/IncidentResponse/IncidentEscalation/Input.hs
+generated Generated/IncidentResponse/IncidentEscalation/Process.hs
+hole IncidentResponse/IncidentEscalation/ProcessHoles.hs
+generated Generated/IncidentResponse/IncidentEscalation/ProcessHarness.hs
+generated Generated/IncidentResponse/Escalation/Domain.hs
+generated Generated/IncidentResponse/Escalation/Codec.hs
+generated Generated/IncidentResponse/Escalation/Transducer.hs
+generated Generated/IncidentResponse/Escalation/BehaviorContract.hs
+hole IncidentResponse/Escalation/BehaviorHoles.hs
+generated Generated/IncidentResponse/Escalation/EventStream.hs
+generated Generated/IncidentResponse/Escalation/Projection.hs
+generated Generated/IncidentResponse/Escalation/Harness.hs
+generated Generated/IncidentResponse/Incident/Domain.hs
+generated Generated/IncidentResponse/Incident/Codec.hs
+generated Generated/IncidentResponse/Incident/Transducer.hs
+generated Generated/IncidentResponse/Incident/BehaviorContract.hs
+hole IncidentResponse/Incident/BehaviorHoles.hs
+generated Generated/IncidentResponse/Incident/EventStream.hs
+generated Generated/IncidentResponse/Incident/Projection.hs
+generated Generated/IncidentResponse/Incident/Harness.hs
+id-domain id-domain|name=IncidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=IncidentId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:inc:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+nominal-equality nominal-equality|name=Severity|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:sev1,sev2,sev3|owner=generated
+behavior {"aggregate":"Incident","command":"EscalateIncident","evidence":"generated-authoritative","key":"behavior-v1-0aad69728dee8fec","kind":"live-transition","outputs":[{"command":"EscalateIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Incident","command":"AcknowledgeIncident","evidence":"generated-authoritative","key":"behavior-v1-36c541281e30554e","kind":"live-transition","outputs":[{"command":"AcknowledgeIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Escalation","command":"NoteRaised","evidence":"generated-authoritative","key":"behavior-v1-3c9a2793ee857505","kind":"live-transition","outputs":[{"command":"NoteRaised","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Escalation","command":"NoteAcknowledged","evidence":"generated-authoritative","key":"behavior-v1-bb2577aace70f171","kind":"live-transition","outputs":[{"command":"NoteAcknowledged","ownership":"generated-command-identity"}],"source":"Open"}
+process-reaction {"fingerprint":"32330547597f728abdb05b0e6d2f67f9e8b703256407acd272932c4af58b098b","holeObligations":["decodeIncidentEscalationInput :: RecordedEvent -> Maybe IncidentEscalationInput"],"processName":"incident-escalation","verification":"generated-declarative","version":1}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

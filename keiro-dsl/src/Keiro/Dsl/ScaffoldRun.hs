@@ -116,7 +116,7 @@ import Keiro.Dsl.ProjectionMappedImpact (ProjectionMappedImpact, projectionMappe
 import Keiro.Dsl.ReadModelQueryContract
 import Keiro.Dsl.RuntimePackage (RuntimePackageName)
 import Keiro.Dsl.Scaffold
-import Keiro.Dsl.ScaffoldRecord (ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFactsForService, recordFileName, renderRecord)
+import Keiro.Dsl.ScaffoldRecord (ProcessReactionRecordRow (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, processReactionRowsForService, projectionCatalogFactsForService, recordFileName, renderRecord)
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedService, checkedSpec, checkedTypeGraph, effectiveLanguageContract, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
   ( MappedImpactDelta (..),
@@ -156,6 +156,7 @@ data Refusal
   | FirewallBreach ![(FilePath, Text, Int)]
   | LoweringRefusal ![Text]
   | MissingGeneratedBanner ![FilePath]
+  | HoleContractDrift ![(FilePath, Text, Text)]
   | ImportCycle ![Text]
   | BehaviorRefusal ![BehaviorDerivationError]
   | BehaviorSourceRefusal ![BehaviorSourceFailure]
@@ -296,6 +297,7 @@ data ScaffoldReport = ScaffoldReport
     generatedArtifactImpact :: ![GeneratedArtifactImpact],
     sourceLanguageDrift :: !(Maybe SourceLanguageDrift),
     newHoles :: ![BindingHole],
+    processReactionRows :: ![ProcessReactionRecordRow],
     addedBehavior :: ![BehaviorRecordRow],
     removedBehavior :: ![BehaviorRecordRow],
     obsoleteOutputHooks :: ![(Text, Text)],
@@ -1107,96 +1109,101 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
           if not (null bannerless)
             then pure (Left [MissingGeneratedBanner bannerless])
             else do
-              let recordPath = out </> recordFileName ((.context) spec)
-              previousRead <- readRecord recordPath
-              let previousRecord = ledgerToMaybe previousRead
-              case (ledgerReadRefusals previousRead, planRecordedSourceMoves previousRecord modules) of
-                (refusals@(_ : _), _) -> pure (Left refusals)
-                (_, Left moveErrors) -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
-                (_, Right moves) -> do
-                  preparedMoves <- preflightSourceMoves out moves
-                  case preparedMoves of
-                    Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
-                    Right prepared
-                      | Just edition <- editionWithMoves,
-                        (not (null prepared) || not (null sidecarMoves)),
-                        not (applyNameMigrations && applyGeneratedHaskellEdition) ->
-                          pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired ((.impact) edition)])
-                      | Just edition <- editionWithMoves,
-                        not applyGeneratedHaskellEdition ->
-                          pure (Left [GeneratedHaskellEditionRequired ((.impact) edition)])
-                      | not (null prepared) && not applyNameMigrations ->
-                          pure (Left [NameMigrationRequired sourceMoves])
-                      | otherwise -> do
-                          applyPreparedGeneratedHaskellEditionMigration out editionWithMoves
-                          applyPreparedSourceMoves out prepared
-                          stale <- maybe (pure []) (existingStale out modules) previousRecord
-                          queryMigrations <- queryContractMigrations out modules
-                          let currentConsumerPlan = consumerPlanForService service
-                              drift = maybe [] (mappingDrift ((.mappings) currentConsumerPlan) . (.mappings)) previousRecord
-                              currentQueryContracts = either (const []) id (queryContractIdentitiesForService service)
-                              queryHistoryBaseline =
-                                not (null currentQueryContracts)
-                                  || maybe False (.queryContractBaseline) previousRecord
-                              queryBaselineUnavailable =
-                                not (null currentQueryContracts)
-                                  && maybe False (not . (.queryContractBaseline)) previousRecord
-                              queryDrift = case previousRecord of
-                                Just previous | (.queryContractBaseline) previous -> queryContractDrift currentQueryContracts ((.queryContracts) previous)
-                                _ -> []
-                              currentSemanticImpact = checkedSemanticImpactSnapshot service
-                              semanticReport = semanticImpactForMappingDrift (previousRecord >>= (.semanticImpact)) currentSemanticImpact drift
-                              currentRouterSelections = routerSelectionSnapshots service
-                              selectionDrift = maybe [] (\previous -> routerSelectionDrift ((.routerSelections) previous) currentRouterSelections) previousRecord
-                              languageDrift = do
-                                previous <- previousRecord
-                                if (.sourceLanguage) previous == sourceLanguage
-                                  then Nothing
-                                  else Just (SourceLanguageDrift ((.sourceLanguage) previous) sourceLanguage)
-                              currentObligations = either (const []) id (bindingHolesForService service)
-                              newHoles = maybe [] (newBindingObligations currentObligations . (.bindingObligations)) previousRecord
-                              currentBehavior = behaviorRecordRows requirements
-                              (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . (.behaviorRequirements)) previousRecord
-                          createDirectoryIfMissing True out
-                          dispositions <- mapM (writeModule out) modules
-                          let manifestPath = out </> contextCabalFragmentFileName ((.context) spec)
-                          TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
-                          TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact))
-                          packageReport <- traverse executePreparedConformancePackage preparedPackage
-                          pure $
-                            Right
-                              ScaffoldReport
-                                { specPath = specPath,
-                                  outDir = out,
-                                  context = ctx,
-                                  dispositions = dispositions,
-                                  inertNodes = inertNodesOf spec,
-                                  manifestPath = manifestPath,
-                                  recordPath = recordPath,
-                                  previousSpecPath = (.specPath) <$> previousRecord,
-                                  stale = stale,
-                                  consumerPlan = currentConsumerPlan,
-                                  constraintPlan = constraintPlanForService service currentConsumerPlan,
-                                  mappingDrift = drift,
-                                  queryContractBaselineUnavailable = queryBaselineUnavailable,
-                                  queryContractDrift = queryDrift,
-                                  queryContractMigrations = queryMigrations,
-                                  semanticImpact = semanticReport,
-                                  routerSelectionDrift = selectionDrift,
-                                  projectionMappedImpact = projectionMappedImpactForService service,
-                                  generatedArtifactImpact = generatedArtifactImpact dispositions,
-                                  sourceLanguageDrift = languageDrift,
-                                  newHoles = newHoles,
-                                  addedBehavior = addedBehavior,
-                                  removedBehavior = removedBehavior,
-                                  obsoleteOutputHooks = obsoleteGeneratedOutputHooksForService service,
-                                  conformancePackage = packageReport,
-                                  nameMoves = map preparedSourceMove prepared,
-                                  sidecarMoves = sidecarMoves
-                                }
-                      where
-                        sourceMoves = map preparedSourceMove prepared
-                        editionWithMoves = withGeneratedHaskellEditionSourceMoves sourceMoves editionMigration
+              holeDrifts <- processHoleContractDrift out modules
+              if not (null holeDrifts)
+                then pure (Left [HoleContractDrift holeDrifts])
+                else do
+                  let recordPath = out </> recordFileName ((.context) spec)
+                  previousRead <- readRecord recordPath
+                  let previousRecord = ledgerToMaybe previousRead
+                  case (ledgerReadRefusals previousRead, planRecordedSourceMoves previousRecord modules) of
+                    (refusals@(_ : _), _) -> pure (Left refusals)
+                    (_, Left moveErrors) -> pure (Left [NameMigrationRefusal [T.pack (show moveError) | moveError <- NE.toList moveErrors]])
+                    (_, Right moves) -> do
+                      preparedMoves <- preflightSourceMoves out moves
+                      case preparedMoves of
+                        Left moveErrors -> pure (Left [NameMigrationRefusal moveErrors])
+                        Right prepared
+                          | Just edition <- editionWithMoves,
+                            (not (null prepared) || not (null sidecarMoves)),
+                            not (applyNameMigrations && applyGeneratedHaskellEdition) ->
+                              pure (Left [NameMigrationRequired sourceMoves, GeneratedHaskellEditionRequired ((.impact) edition)])
+                          | Just edition <- editionWithMoves,
+                            not applyGeneratedHaskellEdition ->
+                              pure (Left [GeneratedHaskellEditionRequired ((.impact) edition)])
+                          | not (null prepared) && not applyNameMigrations ->
+                              pure (Left [NameMigrationRequired sourceMoves])
+                          | otherwise -> do
+                              applyPreparedGeneratedHaskellEditionMigration out editionWithMoves
+                              applyPreparedSourceMoves out prepared
+                              stale <- maybe (pure []) (existingStale out modules) previousRecord
+                              queryMigrations <- queryContractMigrations out modules
+                              let currentConsumerPlan = consumerPlanForService service
+                                  drift = maybe [] (mappingDrift ((.mappings) currentConsumerPlan) . (.mappings)) previousRecord
+                                  currentQueryContracts = either (const []) id (queryContractIdentitiesForService service)
+                                  queryHistoryBaseline =
+                                    not (null currentQueryContracts)
+                                      || maybe False (.queryContractBaseline) previousRecord
+                                  queryBaselineUnavailable =
+                                    not (null currentQueryContracts)
+                                      && maybe False (not . (.queryContractBaseline)) previousRecord
+                                  queryDrift = case previousRecord of
+                                    Just previous | (.queryContractBaseline) previous -> queryContractDrift currentQueryContracts ((.queryContracts) previous)
+                                    _ -> []
+                                  currentSemanticImpact = checkedSemanticImpactSnapshot service
+                                  semanticReport = semanticImpactForMappingDrift (previousRecord >>= (.semanticImpact)) currentSemanticImpact drift
+                                  currentRouterSelections = routerSelectionSnapshots service
+                                  selectionDrift = maybe [] (\previous -> routerSelectionDrift ((.routerSelections) previous) currentRouterSelections) previousRecord
+                                  languageDrift = do
+                                    previous <- previousRecord
+                                    if (.sourceLanguage) previous == sourceLanguage
+                                      then Nothing
+                                      else Just (SourceLanguageDrift ((.sourceLanguage) previous) sourceLanguage)
+                                  currentObligations = either (const []) id (bindingHolesForService service)
+                                  newHoles = maybe [] (newBindingObligations currentObligations . (.bindingObligations)) previousRecord
+                                  currentBehavior = behaviorRecordRows requirements
+                                  (addedBehavior, removedBehavior) = maybe (currentBehavior, []) (behaviorDrift currentBehavior . (.behaviorRequirements)) previousRecord
+                              createDirectoryIfMissing True out
+                              dispositions <- mapM (writeModule out) modules
+                              let manifestPath = out </> contextCabalFragmentFileName ((.context) spec)
+                              TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
+                              TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact))
+                              packageReport <- traverse executePreparedConformancePackage preparedPackage
+                              pure $
+                                Right
+                                  ScaffoldReport
+                                    { specPath = specPath,
+                                      outDir = out,
+                                      context = ctx,
+                                      dispositions = dispositions,
+                                      inertNodes = inertNodesOf spec,
+                                      manifestPath = manifestPath,
+                                      recordPath = recordPath,
+                                      previousSpecPath = (.specPath) <$> previousRecord,
+                                      stale = stale,
+                                      consumerPlan = currentConsumerPlan,
+                                      constraintPlan = constraintPlanForService service currentConsumerPlan,
+                                      mappingDrift = drift,
+                                      queryContractBaselineUnavailable = queryBaselineUnavailable,
+                                      queryContractDrift = queryDrift,
+                                      queryContractMigrations = queryMigrations,
+                                      semanticImpact = semanticReport,
+                                      routerSelectionDrift = selectionDrift,
+                                      projectionMappedImpact = projectionMappedImpactForService service,
+                                      generatedArtifactImpact = generatedArtifactImpact dispositions,
+                                      sourceLanguageDrift = languageDrift,
+                                      newHoles = newHoles,
+                                      processReactionRows = processReactionRowsForService service,
+                                      addedBehavior = addedBehavior,
+                                      removedBehavior = removedBehavior,
+                                      obsoleteOutputHooks = obsoleteGeneratedOutputHooksForService service,
+                                      conformancePackage = packageReport,
+                                      nameMoves = map preparedSourceMove prepared,
+                                      sidecarMoves = sidecarMoves
+                                    }
+                          where
+                            sourceMoves = map preparedSourceMove prepared
+                            editionWithMoves = withGeneratedHaskellEditionSourceMoves sourceMoves editionMigration
 
 planRecordedSourceMoves :: Maybe ScaffoldRecord -> [ScaffoldModule] -> Either (NE.NonEmpty SourceMoveError) [SourceMove]
 planRecordedSourceMoves Nothing _ = Right []
@@ -1564,6 +1571,7 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       queryContractBaseline = queryHistoryBaseline,
       queryContracts = either (const []) id (queryContractIdentitiesForService service),
       routerSelections = routerSelectionSnapshots service,
+      processReactions = processReactionRowsForService service,
       semanticImpact = Just currentSemanticImpact
     }
 
@@ -1579,6 +1587,26 @@ missingGeneratedBanners out modules = fmap concat $ mapM check generated
         else do
           contents <- TIO.readFile path
           pure [(.path) m | not (any isGeneratedBannerLine (T.lines contents))]
+
+processHoleContractDrift :: FilePath -> [ScaffoldModule] -> IO [(FilePath, Text, Text)]
+processHoleContractDrift out = fmap concat . mapM check . filter isVersionedProcessHole
+  where
+    isVersionedProcessHole module_ =
+      (.kind) module_ == HoleStub
+        && maybe False ("-- keiro-dsl process-hole contract " `T.isPrefixOf`) (firstLine ((.text) module_))
+    check module_ = do
+      let path = out </> (.path) module_
+          expected = maybe "(missing)" id (firstLine ((.text) module_))
+      exists <- doesFileExist path
+      if not exists
+        then pure []
+        else do
+          existing <- TIO.readFile path
+          let actual = maybe "(missing)" id (firstLine existing)
+          pure [((.path) module_, expected, actual) | actual /= expected]
+    firstLine contents = case T.lines contents of
+      line : _ -> Just line
+      [] -> Nothing
 
 writeModule :: FilePath -> ScaffoldModule -> IO (ScaffoldModule, WriteDisposition)
 writeModule out m = do
@@ -1625,6 +1653,11 @@ renderRefusals allRefusals =
     requiresEditionMigration = \case
       GeneratedHaskellEditionRequired _ -> True
       _ -> False
+    renderHoleDrift (path, expected, actual) =
+      [ "  " <> T.pack path,
+        "    expected: " <> expected,
+        "    actual:   " <> actual
+      ]
     render (PathCollision path origins) =
       [ "error: module path collision -- refusing to scaffold; nothing was written",
         "  " <> T.pack path
@@ -1643,6 +1676,9 @@ renderRefusals allRefusals =
       ]
         <> map ("  " <>) (map T.pack paths)
         <> ["  (adopted as hand code? move it, or re-run with --force-generated-overwrite)", "nothing was written"]
+    render (HoleContractDrift drifts) =
+      ["error: hole contract drift -- refusing to scaffold; nothing was written"]
+        <> concatMap renderHoleDrift drifts
     render (ImportCycle path) =
       [ "error: generated/consumer import cycle -- refusing to scaffold; nothing was written",
         "  " <> T.intercalate " -> " path,
@@ -1832,6 +1868,7 @@ renderScaffoldReport report =
     <> previousSpecNote
     <> constraintSection
     <> newHolesSection
+    <> processReactionHoleSection
     <> queryContractSection
     <> queryContractMigrationSection
     <> mappingDriftSection
@@ -1891,6 +1928,13 @@ renderScaffoldReport report =
       [ "  " <> (.moduleName) hole,
         "    " <> (.signature) hole <> " (" <> obligationKindLabel ((.kind) hole) <> ")"
       ]
+    processReactionHoleSection =
+      concatMap renderProcessReactionHoles ((.processReactionRows) report)
+    renderProcessReactionHoles row = case (.holeObligations) row of
+      [] -> []
+      obligations ->
+        ["process reaction holes: " <> (.processName) row]
+          <> map ("  " <>) obligations
     queryContractSection =
       [ "query contract history: baseline unavailable in the previous ledger; no legacy `()` API was inferred"
       | (.queryContractBaselineUnavailable) report

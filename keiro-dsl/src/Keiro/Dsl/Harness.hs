@@ -56,6 +56,8 @@ import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
+import Keiro.Dsl.PrettyPrint (renderExpr)
+import Keiro.Dsl.ProcessReaction (processReactionFingerprintFrom)
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor)
 import Keiro.Dsl.RouterSelection
@@ -114,12 +116,7 @@ harnessForCheckedWithGoldens goldens ctx service agg =
 -- runs without the effectful\/hasql runtime. (Behavioural conformance of the
 -- /filled/ ProcessManager against the live runtime is the M5 step.)
 harnessProcess :: Context -> ProcessNode -> [ScaffoldModule]
-harnessProcess ctx p = case (.body) p of
-  ReactionProcessBody {} -> []
-  LegacyProcessBody {} -> harnessLegacyProcess ctx p
-
-harnessLegacyProcess :: Context -> ProcessNode -> [ScaffoldModule]
-harnessLegacyProcess ctx p =
+harnessProcess ctx p =
   [ ScaffoldModule
       { path = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs"),
         text = emitProcessHarness genPrefix p,
@@ -481,9 +478,65 @@ emitProcessHarness genPrefix p =
 
 processHarnessFactValues :: ProcessNode -> [(Text, Text)]
 processHarnessFactValues p = case (.body) p of
-  ReactionProcessBody {} -> []
+  ReactionProcessBody reaction -> reactionFacts reaction
   LegacyProcessBody _ handle timer -> legacyFacts handle timer
   where
+    reactionFacts reaction =
+      [ ("reactionOwnership", "generated-declarative"),
+        ("reactionVersion", T.pack (show ((.version) reaction))),
+        ("reactionFingerprint", processReactionFingerprintFrom reaction)
+      ]
+        <> concatMap reactionNodeFacts (NE.toList ((.reactions) reaction))
+        <> map timerFact ((.timers) reaction)
+    reactionNodeFacts node =
+      [ ( "reaction." <> (.on) node <> "." <> T.pack (show ordinal),
+          T.intercalate
+            ";"
+            [ "guard=" <> renderArmGuard ((.guard) arm),
+              "advance=" <> renderAdvance ((.body) arm),
+              "followUps=" <> T.intercalate "," (map renderFollowUpFact (armFollowUps ((.body) arm))),
+              "accepted=" <> T.intercalate "," (map renderFollowUpFact (armAccepted ((.body) arm)))
+            ]
+        )
+      | (ordinal, arm) <- zip [0 :: Int ..] (NE.toList ((.arms) node))
+      ]
+    timerFact timer =
+      ( "timer." <> (.name) timer,
+        T.intercalate
+          ";"
+          [ "idPrefix=" <> (.prefix) ((.id) timer),
+            "payload=" <> T.intercalate "," (map payloadName ((.payload) timer)),
+            "fire=" <> (.target) ((.fire) timer) <> "." <> (.command) ((.fire) timer),
+            "firedEventPrefix=" <> (.prefix) ((.firedEventId) ((.fire) timer))
+          ]
+      )
+    payloadName = \case
+      PayloadConstant name _ -> name
+      PayloadTyped name _ -> name
+    renderArmGuard = \case
+      UnconditionalArm -> "always"
+      OtherwiseArm -> "otherwise"
+      WhenArm expression -> renderExpr expression
+    renderAdvance = \case
+      NoAction -> "none"
+      ArmActions {advance = Nothing} -> "none"
+      ArmActions {advance = Just value} -> (.command) value
+    armFollowUps = \case
+      NoAction -> []
+      ArmActions {followUps} -> followUps
+    armAccepted = \case
+      ArmActions {advance = Just value} -> fromMaybe [] ((.accepted) value)
+      _ -> []
+    renderFollowUpFact = \case
+      FollowDispatch dispatch -> "dispatch:" <> (.target) dispatch <> "." <> (.command) dispatch
+      FollowSchedule schedule ->
+        "schedule:"
+          <> (.timer) schedule
+          <> ":"
+          <> case (.mode) schedule of
+            ScheduleRearm -> "rearm"
+            ScheduleOnce -> "once"
+      FollowCancel timerName _ -> "cancel:" <> timerName
     legacyFacts handle timer =
       [ ("fireAtField", (.field) ((.fireAt) timer)),
         ("timerIdPrefix", (.prefix) ((.id) timer)),

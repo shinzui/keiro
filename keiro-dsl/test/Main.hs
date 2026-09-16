@@ -514,6 +514,7 @@ main = hspec $ do
                   queryContractBaseline = False,
                   queryContracts = [],
                   routerSelections = [],
+                  processReactions = [],
                   semanticImpact = Nothing
                 }
           )
@@ -3870,6 +3871,7 @@ main = hspec $ do
                 queryContractBaseline = True,
                 queryContracts = [],
                 routerSelections = [],
+                processReactions = [],
                 semanticImpact = Nothing
               }
       T.count "behavior " (renderRecord singleRecord) `shouldBe` 19
@@ -4067,6 +4069,7 @@ main = hspec $ do
                 queryContractBaseline = True,
                 queryContracts = [],
                 routerSelections = [],
+                processReactions = [],
                 semanticImpact = Nothing
               }
           encoded = renderRecord record
@@ -4696,6 +4699,7 @@ main = hspec $ do
                 queryContractBaseline = True,
                 queryContracts = either (const []) id (queryContractIdentities spec),
                 routerSelections = [],
+                processReactions = [],
                 semanticImpact = Just snapshot
               }
           encoded = renderRecord singleRecord
@@ -5228,6 +5232,7 @@ main = hspec $ do
                   queryContractBaseline = False,
                   queryContracts = [],
                   routerSelections = [],
+                  processReactions = [],
                   semanticImpact = Nothing
                 }
             recordPath = out </> recordFileName (spec.context)
@@ -10256,6 +10261,36 @@ main = hspec $ do
               forced `shouldSatisfy` isSuccessfulScaffold
               TIO.readFile target `shouldReturn` (.text) generated
             [] -> expectationFailure "reservation scaffold has no Generated module"
+    it "records reaction identity and refuses decoder hole contract drift" $
+      withTempDirectory "keiro-dsl-process-hole-contract" $ \out -> do
+        parsed <- parsedSourceOf "test/fixtures/process-reactions-minimal.keiro"
+        let service = checkedSource parsed
+            spec = checkedSpec service
+            ctx = defaultContext (spec.context)
+        modules <- case planTestServiceScaffold ctx service of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right planned -> pure planned
+        firstResult <- executeServiceScaffold out False "test/fixtures/process-reactions-minimal.keiro" ((.sourceLanguage) parsed) ctx service modules
+        first <- case firstResult of
+          Left refusals -> expectationFailure (show refusals) >> fail "unreachable"
+          Right report -> pure report
+        ledger <- TIO.readFile ((.recordPath) first)
+        ledger `shouldSatisfy` T.isInfixOf "process-reaction {"
+        renderScaffoldReport first `shouldSatisfy` any (T.isInfixOf "decodeIncidentReactionInput :: RecordedEvent -> Maybe IncidentReactionInput")
+        case [out </> (.path) module_ | module_ <- modules, "ProcessHoles.hs" `T.isSuffixOf` T.pack ((.path) module_)] of
+          [holePath] -> do
+            original <- TIO.readFile holePath
+            let drifted = T.replace "-- keiro-dsl process-hole contract v1" "-- keiro-dsl process-hole contract v999" original
+            TIO.writeFile holePath drifted
+            second <- executeServiceScaffold out False "test/fixtures/process-reactions-minimal.keiro" ((.sourceLanguage) parsed) ctx service modules
+            second `shouldSatisfy` \case
+              Left [HoleContractDrift [(path, expected, actual)]] ->
+                "ProcessHoles.hs" `T.isSuffixOf` T.pack path
+                  && expected == "-- keiro-dsl process-hole contract v1"
+                  && actual == "-- keiro-dsl process-hole contract v999"
+              _ -> False
+            TIO.readFile holePath `shouldReturn` drifted
+          paths -> expectationFailure ("expected one process decoder hole, got " <> show paths)
     it "reports renamed-node modules as stale without deleting them" $
       withTempDirectory "keiro-dsl-stale-rename" $ \out -> do
         spec <- parseInlineSpec "<stale-rename>" loweringAggregateSpec
@@ -10333,6 +10368,7 @@ main = hspec $ do
                   queryContractBaseline = False,
                   queryContracts = either (const []) id (queryContractIdentities spec),
                   routerSelections = [],
+                  processReactions = [],
                   semanticImpact = Just (semanticImpactSnapshotForSpec spec)
                 }
             sourceRows = filter ("source-language " `T.isPrefixOf`) (T.lines contents)
@@ -12847,6 +12883,7 @@ representativeRecordMigrationContracts = do
             queryContractBaseline = True,
             queryContracts = [queryIdentity],
             routerSelections = [],
+            processReactions = [],
             semanticImpact = impact
           }
       workspaceRecord =
@@ -13175,6 +13212,7 @@ scaffoldRecordWithEdition edition record = case record of
     recordQueryContractBaseline
     recordQueryContracts
     recordRouterSelections
+    recordProcessReactions
     recordSemanticImpact ->
       ScaffoldRecord
         recordSpecPath
@@ -13194,6 +13232,7 @@ scaffoldRecordWithEdition edition record = case record of
         recordQueryContractBaseline
         recordQueryContracts
         recordRouterSelections
+        recordProcessReactions
         recordSemanticImpact
 
 copyTextTree :: FilePath -> FilePath -> IO ()

@@ -98,8 +98,9 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-09-16 01:10Z) M1: commit the positive fixtures `process-reactions.keiro`, `process-timers.keiro`, and `process-state-authority.keiro`; parser round trips and the exact Language 5 feature gate pass.
 - [x] (2026-09-16 01:10Z) M2: add `Keiro.Dsl.ProcessReaction` with typed binding/guard/totality/identity checking, the SHA-256 reaction fingerprint, all specified diagnostic codes and negative fixtures, exact reaction source subjects, and check-report rows.
 - [x] (2026-09-16 01:25Z) M3: implement the timer-free generator, typed create-once decoder hole, manager and worker wrapper; the PostgreSQL conformance proves acceptance, acknowledged redelivery, one saga append, one target append, and the public duplicate result, and `just conformance-corpus-policy` passes with all 41 scaffold invocations.
-- [ ] M4: extend M3's generator and conformance to guarded variants, timer payload codecs, timer fire functions, harness facts, and ledger rows.
-- [ ] M4: add the timers and state-authority conformance packages, mutation coverage, baseline roles, and scaling evidence using the specified opt-in hydration probe.
+- [x] (2026-09-16 02:28Z) M4 core: extend M3's generator to guarded variants, typed timer payload codecs/builders, schedule/cancel lowering, explicit timer worker ceilings, deterministic timer fire functions, reaction harness facts, versioned ledger rows, decoder obligations, and hole-contract drift refusal.
+- [x] (2026-09-16 02:28Z) M4 conformance corpus: expand the reactions package to the full guarded/no-action fixture and add PostgreSQL-backed timer and state-authority packages, including rearm/once/cancel accounting, fire redelivery, accepted-only fan-out, and partial target-success recovery.
+- [ ] M4: complete the mutation script, remaining timer/state edge cases, scaling bench, baseline documentation, and the specified opt-in hydration probe.
 - [ ] M5: add reaction and timer diff codes, process coordination impact, migration diagnostics, and diff fixtures.
 - [ ] M6: update user documentation, guides, the authoring skill, changelogs, OKF logs, the prerequisite runtime ADR with DSL-specific decisions, and the IR-39 record, then run the full repository gate.
 

@@ -5548,7 +5548,10 @@ emitReactionInput ctx genPrefix process reaction =
       ]
 
 renderReactionFieldType :: Field -> Text
-renderReactionFieldType field = case (.valueType) field of
+renderReactionFieldType field = renderReactionTypeName ((.valueType) field)
+
+renderReactionTypeName :: Maybe Name -> Text
+renderReactionTypeName = \case
   Nothing -> "Text"
   Just "Text" -> "Text"
   Just "Int" -> "Int"
@@ -5577,7 +5580,7 @@ emitReactionProcessHoles genPrefix holePrefix process =
 emitReactionProcessGen :: Context -> Text -> Text -> ProcessNode -> ReactionBody -> Text
 emitReactionProcessGen ctx genPrefix holePrefix process reaction =
   nl $
-    renderGeneratedLanguagePragmas [ExtDuplicateRecordFields, ExtOverloadedRecordDot]
+    renderGeneratedLanguagePragmas ([ExtDuplicateRecordFields, ExtOverloadedRecordDot] <> [ExtDeriveAnyClass | hasTimers])
       <> [ "{-# OPTIONS_GHC -Wno-missing-signatures #-}",
            generatedBanner,
            "module " <> genPrefix <> ".Process",
@@ -5589,27 +5592,41 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
            "  , " <> lo <> "ReactionFingerprint",
            "  , " <> lo <> "React",
            "  , " <> lo <> "ProcessManager",
-           "  , " <> lo <> "RunProcessWorker",
-           "  ) where",
+           "  , " <> lo <> "RunProcessWorker"
+         ]
+      <> concatMap timerExports timers
+      <> (if hasTimers then ["  , " <> lo <> "TimerWorkerOptions", "  , " <> lo <> "FireTimer"] else [])
+      <> [ "  ) where",
            "",
            "import Data.Text (Text)"
          ]
+      <> ["import Data.Aeson (FromJSON, ToJSON)" | hasTimers]
+      <> ["import Data.Aeson qualified as Aeson" | hasTimers]
       <> ["import Data.Text qualified as T" | processNeedsTextPack]
+      <> ["import Data.Time (UTCTime, addUTCTime)" | hasTimers]
+      <> ["import Data.UUID (UUID)" | hasTimers]
+      <> ["import Data.UUID.V5 qualified as UUID.V5" | hasTimers]
+      <> ["import GHC.Generics (Generic)" | hasTimers]
       <> [ "import Numeric.Natural (Natural)",
            "import " <> genPrefix <> ".Input (" <> inputType <> " (..))",
            "import " <> holePrefix <> ".ProcessHoles (decode" <> processType <> "Input)",
            "import " <> sagaPrefix <> ".Domain qualified as Saga",
            "import " <> sagaPrefix <> ".EventStream (" <> sagaStreamValue <> ", " <> sagaStreamType <> ")",
            "import " <> targetPrefix <> ".Domain qualified as Target",
-           "import " <> targetPrefix <> ".EventStream (" <> targetCategory <> ", " <> targetStreamValue <> ")"
+           "import " <> targetPrefix <> ".EventStream (" <> T.intercalate ", " ([targetEventCategory | hasTimers] <> [targetCategory | hasDispatches] <> [targetStreamValue]) <> ")"
          ]
       <> ["import " <> contextGeneratedPrefix ctx <> ".Nominals qualified as N" | processNeedsNominals]
-      <> [ "import Keiro.Command (DomainCommandHandler (..), SilentDomainDecision (..))",
-           "import Keiro.ProcessManager (PMCommand (..))",
-           "import Keiro.ProcessManager.Reaction qualified as Reaction",
+      <> [ "import Keiro.Command (DomainCommandHandler (..), SilentDomainDecision (..))"
+         ]
+      <> ["import Keiro.Command (CommandError (..), RunCommandOptions (..), runCommand)" | hasTimers]
+      <> ["import Keiro.ProcessManager (" <> T.intercalate ", " (["PMCommand (..)" | hasDispatches] <> ["confirmBenignDuplicate" | hasTimers]) <> ")" | hasDispatches || hasTimers]
+      <> [ "import Keiro.ProcessManager.Reaction qualified as Reaction",
            "import Keiro.Stream qualified as Stream"
          ]
+      <> ["import Keiro.Timer (TimerId (..), TimerRequest (..), TimerWorkerOptions (..))" | hasTimers]
+      <> ["import Kiroku.Store.Types (EventId (..))" | hasTimers]
       <> workerPolicyImports ((.poison) process)
+      <> concatMap renderTimerPayload timers
       <> [ "",
            lo <> "ProcessName :: Text",
            lo <> "ProcessName = " <> tshow ((.name) process),
@@ -5619,6 +5636,7 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
            ""
          ]
       <> workerOptionsLines (lo <> "ProcessWorkerOptions") ((.rejected) process) ((.poison) process)
+      <> renderTimerWorkerOptions
       <> [ "",
            lo <> "ReactionVersion :: Natural",
            lo <> "ReactionVersion = " <> T.pack (show ((.version) reaction)),
@@ -5655,6 +5673,7 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
            "    adapter",
            "    (\\event -> case decode" <> processType <> "Input event of Nothing -> Nothing; Just input -> Just (event, input))"
          ]
+      <> renderFireTimer
   where
     processType = pascal ((.id) process)
     inputType = processType <> "Input"
@@ -5666,13 +5685,159 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
     sagaStreamValue = lowerFirst sagaName <> "EventStream"
     sagaStreamType = sagaName <> "EventStreamDef"
     targetStreamValue = lowerFirst targetName <> "EventStream"
+    targetEventCategory = lowerFirst targetName <> "Category"
     targetCategory = lowerFirst targetName <> "CommandCategory"
     sagaCommandType = sagaName <> "Command"
     targetCommandType = targetName <> "Command"
+    timers = (.timers) reaction
+    hasTimers = not (null timers)
+    hasDispatches = any reactionNodeHasDispatch (NE.toList ((.reactions) reaction))
+    reactionNodeHasDispatch node = any armHasDispatch (NE.toList ((.arms) node))
+    armHasDispatch arm = case (.body) arm of
+      NoAction -> False
+      ArmActions {advance, followUps} -> any isDispatch followUps || maybe False (any isDispatch . fromMaybe [] . (.accepted)) advance
+    isDispatch FollowDispatch {} = True
+    isDispatch _ = False
     correlationInput = NE.head ((.inputs) reaction)
     correlationType = find ((== (.field) ((.correlate) process)) . (.name)) ((.fields) correlationInput) >>= (.valueType)
-    processNeedsTextPack = maybe False (`elem` ["Int", "Integer", "Bool", "Natural", "Time"]) correlationType
-    processNeedsNominals = maybe False (`notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"]) correlationType || any reactionHasQualifiedLiteral (NE.toList ((.reactions) reaction))
+    processNeedsTextPack = hasTimers || maybe False (`elem` ["Int", "Integer", "Bool", "Natural", "Time"]) correlationType
+    processNeedsNominals =
+      maybe False (`notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"]) correlationType
+        || any reactionHasQualifiedLiteral (NE.toList ((.reactions) reaction))
+        || any timerUsesNominal timers
+
+    timerExports timer =
+      [ "  , " <> timerPayloadType timer <> " (..)",
+        "  , " <> timerRequestBuilder timer
+      ]
+
+    timerPayloadType timer = pascal ((.name) timer) <> "Payload"
+    timerRequestBuilder timer = lo <> pascal ((.name) timer) <> "TimerRequest"
+    payloadArgument field = "payload" <> pascal (payloadFieldName field)
+    payloadFieldName = \case
+      PayloadConstant name _ -> name
+      PayloadTyped name _ -> name
+    payloadFieldType = \case
+      PayloadConstant {} -> "Text"
+      PayloadTyped _ valueType -> renderReactionTypeName valueType
+    timerUsesNominal timer = any payloadUsesNominal ((.payload) timer)
+    payloadUsesNominal = \case
+      PayloadConstant {} -> False
+      PayloadTyped _ Nothing -> False
+      PayloadTyped _ (Just valueType) -> valueType `notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"]
+
+    renderTimerPayload timer =
+      [ "",
+        "data " <> timerPayloadType timer <> " = " <> timerPayloadType timer,
+        "  { " <> T.intercalate "\n  , " [payloadFieldName field <> " :: !" <> payloadFieldType field | field <- (.payload) timer],
+        "  }",
+        "  deriving stock (Generic, Eq, Show)",
+        "  deriving anyclass (FromJSON, ToJSON)",
+        "",
+        timerRequestBuilder timer <> " :: " <> T.intercalate " -> " (["Text", "UTCTime"] <> map payloadFieldType dynamicFields <> ["TimerRequest"]),
+        timerRequestBuilder timer <> " correlationId fireAtTime " <> T.unwords (map payloadArgument dynamicFields) <> " =",
+        "  TimerRequest",
+        "    { timerId = " <> timerIdExpression timer "correlationId",
+        "    , processManagerName = " <> lo <> "ProcessName",
+        "    , correlationId = correlationId",
+        "    , fireAt = fireAtTime",
+        "    , payload = Aeson.toJSON (" <> timerPayloadType timer <> " { " <> T.intercalate ", " (map payloadAssignment ((.payload) timer)) <> " })",
+        "    }"
+      ]
+      where
+        dynamicFields = [field | field@PayloadTyped {} <- (.payload) timer]
+        payloadAssignment field = case field of
+          PayloadConstant name value -> name <> " = " <> tshow value
+          PayloadTyped name _ -> name <> " = " <> payloadArgument field
+
+    renderTimerWorkerOptions = case (.timerPolicy) reaction of
+      Nothing -> []
+      Just policy ->
+        [ "",
+          lo <> "TimerWorkerOptions :: TimerWorkerOptions",
+          lo <> "TimerWorkerOptions =",
+          "  TimerWorkerOptions",
+          "    { maxAttempts = Just " <> T.pack (show ((.maxAttempts) policy)),
+          "    , requeueStuckAfter = Just 300",
+          "    }",
+          "-- Operator dead-letter guidance: " <> tshow ((.deadLetter) policy)
+        ]
+
+    renderFireTimer
+      | not hasTimers = []
+      | otherwise =
+          [ "",
+            lo <> "FireTimer options timer"
+          ]
+            <> [ "  | timer.timerId == " <> timerIdExpression timer "timer.correlationId" <> " = " <> timerFireFunction timer <> " options timer"
+               | timer <- timers
+               ]
+            <> [ "  | otherwise = pure Nothing"
+               ]
+            <> concatMap renderTimerFire timers
+            <> [ "",
+                 "namedUuid :: Text -> UUID",
+                 "namedUuid value = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack value))"
+               ]
+
+    timerFireFunction timer = lo <> pascal ((.name) timer) <> "Fire"
+    timerIdExpression timer correlation = "TimerId (namedUuid (" <> tshow ((.prefix) ((.id) timer)) <> " <> " <> correlation <> "))"
+
+    renderTimerFire timer =
+      [ "",
+        timerFireFunction timer <> " options timer",
+        "  | timer.processManagerName /= " <> lo <> "ProcessName = pure Nothing",
+        "  | otherwise =",
+        "      case (Aeson.fromJSON timer.payload :: Aeson.Result " <> timerPayloadType timer <> ") of",
+        "        Aeson.Error _ -> pure Nothing",
+        "        Aeson.Success decoded -> do",
+        "          let firedId = EventId (namedUuid (" <> tshow ((.prefix) ((.firedEventId) ((.fire) timer))) <> " <> timer.correlationId))",
+        "              target = Stream.entityStream " <> targetEventCategory <> " " <> renderFireKey ((.key) ((.fire) timer)),
+        "          result <-",
+        "            runCommand",
+        "              (options { eventIds = [firedId] })",
+        "              " <> targetStreamValue,
+        "              target",
+        "              (" <> renderFireCommand timer <> ")",
+        "          case result of",
+        "            Right {} -> pure (" <> renderFireOutcome "firedId" ((.onOk) disposition) <> ")",
+        "            Left err -> do",
+        "              benign <- confirmBenignDuplicate (Stream.streamName target) firedId err",
+        "              pure $ if benign then Just firedId else case err of",
+        "                CommandRejected -> " <> renderFireOutcome "firedId" ((.onReject) disposition),
+        "                CommandAmbiguous _ -> " <> renderFireOutcome "firedId" ((.onAmbiguous) disposition),
+        "                _ -> " <> renderFireOutcome "firedId" ((.onError) disposition)
+      ]
+      where
+        disposition = (.disposition) ((.fire) timer)
+
+    renderFireKey key
+      | key == "correlationId" = "timer.correlationId"
+      | otherwise = tshow key
+
+    renderFireCommand timer =
+      "Target."
+        <> (.command) fire
+        <> " (Target."
+        <> (.command) fire
+        <> "Data { "
+        <> T.intercalate ", " ["Target." <> (.name) binding <> " = " <> renderFireBinding binding | binding <- (.fields) fire]
+        <> " })"
+      where
+        fire = (.fire) timer
+
+    renderFireBinding binding = case (.value) binding of
+      Nothing -> "decoded." <> (.name) binding
+      Just "timer.id" -> "timer.timerId"
+      Just "timerId" -> "timer.timerId"
+      Just "correlationId" -> "timer.correlationId"
+      Just value -> case T.stripPrefix "input." value of
+        Just fieldName -> "decoded." <> fieldName
+        Nothing -> "decoded." <> value
+
+    renderFireOutcome firedId = \case
+      OFired -> "Just " <> firedId
+      ORetry -> "Nothing"
 
     renderCorrelation input =
       (.name) input <> " { " <> fieldName <> " } -> " <> renderTextField input fieldName
@@ -5683,9 +5848,17 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
       case find ((== (.on) reactionNode) . (.name)) (NE.toList ((.inputs) reaction)) of
         Nothing -> error "checked reaction input disappeared during generation"
         Just input ->
-          [ "  " <> (.name) input <> " { " <> T.intercalate ", " (map (.name) ((.fields) input)) <> " }"
-          ]
-            <> renderArms input (NE.toList ((.arms) reactionNode))
+          let armLines = renderArms input (NE.toList ((.arms) reactionNode))
+           in ["  " <> renderReactionPattern input reactionNode armLines] <> armLines
+
+    renderReactionPattern input reactionNode armLines
+      | all ((== NoAction) . (.body)) (NE.toList ((.arms) reactionNode)) = (.name) input <> " {}"
+      | otherwise = (.name) input <> " { " <> T.intercalate ", " (map renderField ((.fields) input)) <> " }"
+      where
+        usedNames = T.split (\character -> not (isAlphaNum character || character == '_')) (T.unlines armLines)
+        renderField field
+          | (.name) field `elem` usedNames = (.name) field
+          | otherwise = (.name) field <> " = _" <> (.name) field
 
     renderArms input [arm] | (.guard) arm == UnconditionalArm = ["    -> " <> renderPlan input ((.body) arm)]
     renderArms input arms =
@@ -5714,8 +5887,35 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
           <> ") ("
           <> renderCommand "Target" ((.command) dispatch) ((.fields) dispatch)
           <> "))"
-      FollowSchedule {} -> error "timer follow-up reached timer-free reaction generator"
-      FollowCancel {} -> error "timer cancellation reached timer-free reaction generator"
+      FollowSchedule schedule ->
+        case find ((== (.timer) schedule) . (.name)) timers of
+          Nothing -> error "checked reaction schedule disappeared during generation"
+          Just timer ->
+            "Reaction.FollowSchedule Reaction."
+              <> (case (.mode) schedule of ScheduleRearm -> "Rearm"; ScheduleOnce -> "Once")
+              <> " ("
+              <> timerRequestBuilder timer
+              <> " "
+              <> renderTextField input ((.field) ((.correlate) process))
+              <> " (addUTCTime "
+              <> windowText ((.window) ((.fireAt) schedule))
+              <> " "
+              <> (.field) ((.fireAt) schedule)
+              <> ")"
+              <> T.concat [" " <> renderScheduleBinding schedule field | field@PayloadTyped {} <- (.payload) timer]
+              <> ")"
+      FollowCancel timerName _ ->
+        case find ((== timerName) . (.name)) timers of
+          Nothing -> error "checked reaction cancellation disappeared during generation"
+          Just timer ->
+            "Reaction.FollowCancel ("
+              <> timerIdExpression timer (renderTextField input ((.field) ((.correlate) process)))
+              <> ")"
+
+    renderScheduleBinding schedule payloadField =
+      case find ((== payloadFieldName payloadField) . (.name)) ((.bindings) schedule) of
+        Nothing -> error "checked timer payload binding disappeared during generation"
+        Just binding -> renderReactionBinding binding
 
     renderCommand qualifier command bindings =
       qualifier

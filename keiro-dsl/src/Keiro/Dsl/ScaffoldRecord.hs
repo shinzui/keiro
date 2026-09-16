@@ -5,12 +5,14 @@
 module Keiro.Dsl.ScaffoldRecord
   ( ScaffoldRecord (..),
     ScaffoldModuleRoleRow (..),
+    ProcessReactionRecordRow (..),
     GeneratedHaskellNamingEdition (..),
     renderRecord,
     parseRecord,
     recordFileName,
     projectionCatalogFacts,
     projectionCatalogFactsForService,
+    processReactionRowsForService,
   )
 where
 
@@ -30,12 +32,14 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (GeneratedHaskellNamingEdition (..), parseGeneratedHaskellNamingEdition, renderGeneratedHaskellNamingEdition)
 import Keiro.Dsl.LanguageVersion (SourceLanguage (..))
 import Keiro.Dsl.MappedConsumer (MappingIdentity (..))
+import Keiro.Dsl.ProcessReaction (CheckedProcessReaction (..), checkProcessReaction)
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractIdentity, queryContractIdentityKey)
 import Keiro.Dsl.Scaffold (ModuleKind (..), ModuleRole (..))
-import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedProjectionSupplies, checkedSpec, effectiveLanguageContract)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, effectiveLanguageContract)
 import Keiro.Dsl.SemanticImpact (SemanticImpactSnapshot)
 import Keiro.Dsl.SidecarNames (contextLedgerFileName)
+import Numeric.Natural (Natural)
 import System.FilePath (isAbsolute, splitDirectories)
 
 data ScaffoldRecord = ScaffoldRecord
@@ -56,6 +60,7 @@ data ScaffoldRecord = ScaffoldRecord
     queryContractBaseline :: !Bool,
     queryContracts :: ![QueryContractIdentity],
     routerSelections :: ![RouterSelectionSnapshot],
+    processReactions :: ![ProcessReactionRecordRow],
     semanticImpact :: !(Maybe SemanticImpactSnapshot)
   }
   deriving stock (Eq, Show)
@@ -66,6 +71,37 @@ data ScaffoldModuleRoleRow = ScaffoldModuleRoleRow
     path :: !FilePath
   }
   deriving stock (Eq, Show)
+
+-- | Checked process-reaction identity retained by the scaffold ledger. The
+-- prefixed JSON row is forward-compatible with older readers, which ignore
+-- unknown row kinds.
+data ProcessReactionRecordRow = ProcessReactionRecordRow
+  { processName :: !Text,
+    verification :: !Text,
+    version :: !Natural,
+    fingerprint :: !Text,
+    holeObligations :: ![Text]
+  }
+  deriving stock (Eq, Show)
+
+instance Aeson.ToJSON ProcessReactionRecordRow where
+  toJSON row =
+    Aeson.object
+      [ "processName" .= (.processName) row,
+        "verification" .= (.verification) row,
+        "version" .= (.version) row,
+        "fingerprint" .= (.fingerprint) row,
+        "holeObligations" .= (.holeObligations) row
+      ]
+
+instance Aeson.FromJSON ProcessReactionRecordRow where
+  parseJSON = Aeson.withObject "ProcessReactionRecordRow" $ \fields ->
+    ProcessReactionRecordRow
+      <$> fields .: "processName"
+      <*> fields .: "verification"
+      <*> fields .: "version"
+      <*> fields .: "fingerprint"
+      <*> fields .: "holeObligations"
 
 instance Aeson.ToJSON ScaffoldModuleRoleRow where
   toJSON row =
@@ -119,6 +155,7 @@ renderRecord record =
       <> ["query-contract-baseline v1" | (.queryContractBaseline) record]
       <> map ("query-contract " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) ((.queryContracts) record))
       <> map ("router-selection " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) ((.routerSelections) record))
+      <> map ("process-reaction " <>) (map (Text.decodeUtf8 . BL.toStrict . Aeson.encode) ((.processReactions) record))
       <> ["semantic-impact " <> Text.decodeUtf8 (BL.toStrict (Aeson.encode snapshot)) | Just snapshot <- [(.semanticImpact) record]]
   where
     rootLabel = if T.null ((.moduleRoot) record) then "(none)" else (.moduleRoot) record
@@ -157,8 +194,9 @@ parseRecord contents = case T.lines contents of
         queryContractBaseline <- parseQueryContractBaseline rows
         queryContracts <- traverse parseQueryContract (filter ("query-contract " `T.isPrefixOf`) rows)
         routerSelections <- traverse parseRouterSelection (filter ("router-selection " `T.isPrefixOf`) rows)
+        processReactions <- traverse parseProcessReaction (filter ("process-reaction " `T.isPrefixOf`) rows)
         semanticImpact <- parseSemanticImpact rows
-        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map (.router) routerSelections)
+        if hasDuplicateMappingNames mappings || hasDuplicates idDomains || hasDuplicates nominalEqualities || hasDuplicateBindingObligations bindingEntries || hasDuplicateBehaviorRequirements behaviorEntries || hasDuplicates catalogFacts || hasDuplicates (map queryContractIdentityKey queryContracts) || hasDuplicates (map (.router) routerSelections) || hasDuplicates (map (.processName) processReactions)
           then Nothing
           else
             pure
@@ -180,6 +218,7 @@ parseRecord contents = case T.lines contents of
                   queryContractBaseline = queryContractBaseline,
                   queryContracts = queryContracts,
                   routerSelections = routerSelections,
+                  processReactions = processReactions,
                   semanticImpact = semanticImpact
                 }
   _ -> Nothing
@@ -211,6 +250,9 @@ parseRecord contents = case T.lines contents of
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
     parseRouterSelection row = do
       payload <- T.stripPrefix "router-selection " row
+      Aeson.decodeStrict' (Text.encodeUtf8 payload)
+    parseProcessReaction row = do
+      payload <- T.stripPrefix "process-reaction " row
       Aeson.decodeStrict' (Text.encodeUtf8 payload)
     parseQueryContractBaseline rows = case filter ("query-contract-baseline " `T.isPrefixOf`) rows of
       [] -> Just False
@@ -282,6 +324,29 @@ recordFileName = contextLedgerFileName
 mappingRowPrefix :: MappingIdentity -> Text
 mappingRowPrefix NominalMapping {} = "nominal-mapping "
 mappingRowPrefix _ = "mapping "
+
+processReactionRowsForService :: CheckedService -> [ProcessReactionRecordRow]
+processReactionRowsForService service =
+  [ ProcessReactionRecordRow
+      { processName = (.name) process,
+        verification = (.verification) checked,
+        version = (.version) checked,
+        fingerprint = (.fingerprint) checked,
+        holeObligations = decoderObligation process : (.holeObligations) checked
+      }
+  | NProcess process <- (.nodes) spec,
+    ReactionProcessBody {} <- [(.body) process],
+    Right graph <- [checkedTypeGraph service],
+    Right checked <- [checkProcessReaction (checkedLanguageContract service) graph spec process]
+  ]
+  where
+    spec = checkedSpec service
+    decoderObligation process =
+      "decode"
+        <> (.id) process
+        <> "Input :: RecordedEvent -> Maybe "
+        <> (.id) process
+        <> "Input"
 
 -- | Canonical durable catalog identities used when a declaration disappears
 -- from the next graph. Source lines remain part of the attribution evidence.

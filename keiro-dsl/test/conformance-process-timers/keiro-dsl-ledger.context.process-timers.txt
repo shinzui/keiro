@@ -1,0 +1,62 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/process-timers.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context process-timers behavior source map","path":"Generated/ProcessTimers/BehaviorSourceMap.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context process-timers generated nominal declarations","path":"Generated/ProcessTimers/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context process-timers generated nominal ID internals","path":"Generated/ProcessTimers/Nominals/Internal.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context process-timers replay-audit assembly","path":"Generated/ProcessTimers/ReplayAudit.hs"}
+module-role {"family":"Input","kind":"generated","ownerKind":"process","ownerName":"process input IncidentTimers (line 6)","path":"Generated/ProcessTimers/IncidentTimers/Input.hs"}
+module-role {"family":"Process","kind":"generated","ownerKind":"process","ownerName":"process reaction IncidentTimers (line 6)","path":"Generated/ProcessTimers/IncidentTimers/Process.hs"}
+module-role {"family":"ProcessHoles","kind":"hole","ownerKind":"process","ownerName":"process decoder IncidentTimers (line 6)","path":"ProcessTimers/IncidentTimers/ProcessHoles.hs"}
+module-role {"family":"ProcessHarness","kind":"generated","ownerKind":"process","ownerName":"process IncidentTimers (line 6)","path":"Generated/ProcessTimers/IncidentTimers/ProcessHarness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses IncidentSaga (line 46)","path":"ProcessTimers/IncidentSaga/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate IncidentSaga (line 46)","path":"Generated/ProcessTimers/IncidentSaga/Harness.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Incident (line 53)","path":"ProcessTimers/Incident/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Incident (line 53)","path":"Generated/ProcessTimers/Incident/Harness.hs"}
+generated Generated/ProcessTimers/BehaviorSourceMap.hs
+generated Generated/ProcessTimers/Nominals.hs
+generated Generated/ProcessTimers/Nominals/Internal.hs
+generated Generated/ProcessTimers/ReplayAudit.hs
+generated Generated/ProcessTimers/IncidentTimers/Input.hs
+generated Generated/ProcessTimers/IncidentTimers/Process.hs
+hole ProcessTimers/IncidentTimers/ProcessHoles.hs
+generated Generated/ProcessTimers/IncidentTimers/ProcessHarness.hs
+generated Generated/ProcessTimers/IncidentSaga/Domain.hs
+generated Generated/ProcessTimers/IncidentSaga/Codec.hs
+generated Generated/ProcessTimers/IncidentSaga/Transducer.hs
+generated Generated/ProcessTimers/IncidentSaga/BehaviorContract.hs
+hole ProcessTimers/IncidentSaga/BehaviorHoles.hs
+generated Generated/ProcessTimers/IncidentSaga/EventStream.hs
+generated Generated/ProcessTimers/IncidentSaga/Projection.hs
+generated Generated/ProcessTimers/IncidentSaga/Harness.hs
+generated Generated/ProcessTimers/Incident/Domain.hs
+generated Generated/ProcessTimers/Incident/Codec.hs
+generated Generated/ProcessTimers/Incident/Transducer.hs
+generated Generated/ProcessTimers/Incident/BehaviorContract.hs
+hole ProcessTimers/Incident/BehaviorHoles.hs
+generated Generated/ProcessTimers/Incident/EventStream.hs
+generated Generated/ProcessTimers/Incident/Projection.hs
+generated Generated/ProcessTimers/Incident/Harness.hs
+id-domain id-domain|name=IncidentId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=inc|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=IncidentId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:inc:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+behavior {"aggregate":"Incident","command":"RemindIncident","evidence":"generated-authoritative","key":"behavior-v1-93455a87d5151176","kind":"live-transition","outputs":[{"command":"RemindIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"IncidentSaga","command":"RecordIncident","evidence":"generated-authoritative","key":"behavior-v1-af16dd42cbccd576","kind":"live-transition","outputs":[{"command":"RecordIncident","ownership":"generated-command-identity"}],"source":"Open"}
+behavior {"aggregate":"Incident","command":"EscalateIncident","evidence":"generated-authoritative","key":"behavior-v1-f87ad8e553a0b610","kind":"live-transition","outputs":[{"command":"EscalateIncident","ownership":"generated-command-identity"}],"source":"Open"}
+process-reaction {"fingerprint":"a87210576bba6fd3eacc636e6c8d22dcf183b849cfc6886ed2136d93da90ee08","holeObligations":["decodeIncidentTimersInput :: RecordedEvent -> Maybe IncidentTimersInput"],"processName":"incident-timers","verification":"generated-declarative","version":1}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}
