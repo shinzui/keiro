@@ -28,626 +28,571 @@ provenance:
       at: 2026-09-12T19:57:40Z
       mode: "update"
       note: "Decoupled 116/118 bounds: client-ordering pgmq-hasql bound vs version-free supplemental index"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T12:25:11Z
+      mode: "update"
+      note: "Replaced silent FIFO batch clamping with grouped-head batching, explicit unsafe-config rejection, and performance gates."
 ---
 
 # Enforce FIFO group ordering under failure and batched consumption
 
-This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
-If durable project context changes, update or create ADRs in docs/adr/ in the same change.
+This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Decision Log,
+and Outcomes & Retrospective current while implementing it. Promote durable conclusions to
+the ADR corpus before completion.
 
-
-
-**Current cross-repository contract (2026-09-12).** `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts` prohibits overriding extension-owned SQL on both native and extension installs. The ordering work is four outer Haskell-client ORDER BY msg_id clauses, not changed PGMQ function bodies. The index work measures an optional, separately named `q_<queue>_group_lookup_idx`; upstream GIN, helpers and presence reporting remain unchanged. No new FIFO migration or automatic GIN replacement is planned. This supersedes earlier SQL-migration/release assumptions. Existing historical migration bytes remain immutable. Keiro consumer safety and retention policy remain local responsibilities; a sorted result, batch-size clamp or head read does not guarantee successful processing without valid leases and disciplined acknowledgement/side effects.
 
 ## Purpose / Big Picture
 
-`keiro-pgmq` documents strict per-group FIFO delivery: when a producer calls
-`enqueueToGroup job "customer-42" payload`, every message in group `customer-42` is promised
-to be handled in send order, one completing before the next begins. The 2026-07 pgmq review
-(master plan: `docs/masterplans/17-harden-keiro-pgmq-fifo-ordering-dlq-operator-paths-and-provisioning-surfaced-by-the-2026-07-pgmq-review.md`)
-confirmed adversarially that this promise only actually holds when the consumer reads one
-message at a time (`batchSize = 1`). Nothing enforces that, nothing documents it, and a
-consumer that opts into `batchSize > 1` silently degrades to best-effort ordering: PGMQ's
-`read_grouped` deliberately fills a batch with several messages of the same group, all of
-them become claimed simultaneously, and neither consumer path stops handling the rest of a
-batch when an earlier member fails. Additionally, an operator script that drains a FIFO
-queue with `runJobOnce` (which hardcodes unordered tuning) claims mid-group messages with
-plain `pgmq.read`, voiding ordering for every consumer of that queue with no error and no
-telemetry. Finally, `read_grouped`'s SQL returns its batch in plan-dependent order because
-its final `UPDATE ... RETURNING` has no `ORDER BY`.
+`keiro-pgmq` promises that messages sent to the same FIFO group are handled in send order.
+That promise is currently false when `FifoThroughput` or `FifoRoundRobin` is combined with a
+batch larger than one: PGMQ may lease several members of one group in one read, and both Keiro
+consumer paths continue through the leased batch after an earlier member retries or throws.
+`runJobOnce` also silently uses unordered reads because ordering lives only in `JobTuning`.
 
-After this plan, the FIFO promise is real under every configuration the API accepts:
-`withOrdering` pins the batch size to 1 for FIFO orderings and both consumer paths enforce
-that floor even against hand-built tuning records; the ordering requirement travels on the
-`Job` value itself, so `runJobOnce` on a FIFO job performs grouped reads and an explicit
-tuning that contradicts the job's declared ordering fails loudly; the previously untested
-failure branches (retry at group head, thrown handler at head, dead-letter at head) and the
-never-tested `FifoRoundRobin` strategy are pinned by regression tests on both consumer
-paths; and M4 observes ascending msg_id in the pgmq-hs client as defense-in-depth, without
-changing upstream read_grouped. These guarantees assume live leases and correct acknowledgement;
-neither batch-size enforcement nor client sorting independently guarantees processing success.
-You can see it working by running `cabal test keiro-pgmq-test` from the repository root and
-reading the new FIFO examples, and by writing a three-message group whose head fails and
-observing that the successors never run before the head is settled.
+After this work, every accepted configuration has an honest contract. A `Job` declares its
+ordering, default entry points adopt it, and explicit tuning that contradicts it is rejected
+before the first read. The existing batch-filling FIFO strategies remain available only with
+`batchSize = 1`; an unsafe larger value fails loudly instead of being silently clamped. A new
+`FifoHeads` strategy uses PGMQ 1.12's `read_grouped_head` operation, which leases at most one
+absolute head from each group, so one database call can safely return work from many groups.
+This preserves batching without exposing a successor before its group head settles.
+
+The feature is observable in two ways. Correctness tests show that retry, handler exception,
+dead-letter, and delayed-head branches never deliver a same-group successor early on either
+consumer path. A deterministic trace assertion shows that sixteen distinct groups can be
+claimed by one grouped-head read rather than sixteen batch-one reads, and a database benchmark
+compares end-to-end safe drains before the new mode is recommended. The plan does not promise
+exactly-once processing or parallel handlers: leases can expire, handlers must be idempotent,
+and the current drain and `mkProcessor` handler paths are serial.
 
 
 ## Progress
 
-- [ ] M1: `withOrdering` clamps batch size to 1 for FIFO orderings; `adapterConfigFor` and the drain's `nextBatchSize` enforce the same floor against raw `JobTuning` records; `JobOrdering` haddock rewritten to state the enforced precondition and delayed-send semantics.
-- [ ] M1: New pure examples for the clamp; existing suite green (58 baseline examples still pass).
-- [ ] M2: `Job` gains a required `jobOrdering :: JobOrdering` field; all in-repo `Job` record constructions updated (`keiro-pgmq/test/Main.hs`, `keiro-dsl/test/conformance-queue-runtime/Main.hs`, `keiro-dsl/test/conformance-dispatch-full/HospitalCapacity/ReservationWork/WorkqueueJob.hs`).
-- [ ] M2: `runJobOnce`/`jobProcessor` adopt the job's declared ordering; `runJobOnceWithContext`/`jobProcessorWithContext` throw `JobOrderingMismatch` on a conflicting explicit tuning; discriminating tests added.
-- [ ] M3: Drain-path FIFO failure-branch tests (retry at head, throw at head, dead-letter at head) pass.
-- [ ] M3: Worker-path FIFO failure-branch test passes; first `FifoRoundRobin` tests (drain interleave and worker within-group order) pass; delayed-group-send blocking test passes.
-- [ ] M4: Consume the verified pgmq-hasql client-ordering release/candidate and observe ascending IDs without a new pgmq-migration requirement.
-- [ ] CHANGELOG entry written for keiro-pgmq (breaking `Job` field); pgmq-hs owns its own entry; ADR distillation pass done (FIFO delivery contract promoted per the master plan's Integration Points).
+- [x] 2026-09-16: Refreshed repository, dependency, release, and baseline evidence; `cabal test keiro-pgmq-test --test-show-details=direct` passed with 65 examples, 0 failures, and 2 pre-existing pending examples.
+- [ ] M1: Add and release grouped-head polling support in `mori://shinzui/shibuya-pgmq-adapter`, including dispatch tests, documentation, and performance evidence.
+- [ ] M2: Add `FifoHeads`, make ordering a required `Job` field, validate every entry point, update all in-repository constructors and DSL surfaces, and consume the verified adapter release.
+- [ ] M3: Dispatch `FifoHeads` through grouped-head reads on both paths and add adversarial failure, delay, mismatch, batch-safety, and database-round-trip regressions.
+- [ ] M4: Run the performance matrix, update user documentation/changelogs/tracking, complete ADR distillation, and record final results here.
 
 
 ## Surprises & Discoveries
 
-The 2026-09-12 cross-repository audit found the Keiro worktree clean at 14dd9036.
-Since baseline 503475fa, the affected packages changed only through Cabal formatting, not
-FIFO/index implementation. Earlier relocation notes still described a native SQL fix and are
-superseded by `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order`'s client-only contract. No runtime regression was executed in this audit.
-The consumer batch-size/order-mismatch gaps remain implementation work. Grouped heads are an
-available alternative, but choosing them for both paths may require adapter work and does not
-remove lease/acknowledgement obligations.
+- The released `pgmq-hasql-0.6.0.0` and `pgmq-effectful-0.6.0.0` APIs already export
+  `readGroupedHead` and `readGroupedHeadWithPoll`. Hackage lists 0.6.0.0 and the upstream
+  repository has tag `v0.6.0.0`. No pgmq-hs source change or SQL override is needed.
+- The latest released `shibuya-pgmq-adapter-0.15.0.0` has only `ThroughputOptimized` and
+  `RoundRobin`. Its standard and long-poll branches call `readGrouped` or
+  `readGroupedRoundRobin`; there is no grouped-head strategy. Hackage and upstream tag
+  `v0.15.0.0` agree. The worker path therefore needs an upstream adapter addition before
+  Keiro can use safe multi-group batching.
+- Silently clamping every FIFO batch to one would close the correctness hole but introduce a
+  database-round-trip regression proportional to message count. It would also erase the
+  operator's requested batch size without reporting it. This plan supersedes that design.
+- `read_grouped_head` chooses the absolute lowest `msg_id` of each group regardless of
+  visibility, then leases only visible heads. An invisible or delayed head blocks its group.
+  Messages without `x-pgmq-group` share one implicit group. This is the required selection
+  behavior, but the query groups the queue table and must be measured at realistic depths.
+- The pending client-side result-order plan
+  `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order` is not
+  a correctness dependency here. `FifoHeads` returns at most one message per group, and Keiro
+  promises no processing order between different groups. Legacy grouped modes are restricted
+  to one returned message, so vector order cannot reorder members of one group.
+- The current Mori registry resolves the pgmq-hs project and package URIs but not its plan or
+  MasterPlan artifact kinds. The canonical plan URIs in this document are retained intentionally;
+  their files were verified through the checkout resolved by `mori path mori://shinzui/pgmq-hs`.
+- The complete current set of `Job` record constructions is larger than the prior plan listed:
+  `keiro-pgmq/test/Main.hs`, `keiro-ops/src/Keiro/Ops/Pgmq.hs`, `keiro-ops/test/Main.hs`,
+  `jitsurei/src/Jitsurei/ShipmentNotices.hs`,
+  `keiro-dsl/test/conformance-queue-runtime/Main.hs`, and
+  `keiro-dsl/test/conformance-dispatch-full/HospitalCapacity/ReservationWork/WorkqueueJob.hs`.
+- Current documentation says distinct FIFO groups proceed in parallel. The implementation
+  does not establish that: `runJobOnceWithContext` uses `foldM`, and Shibuya's `mkProcessor`
+  constructs `Unordered` plus `Serial`. The refreshed documentation must say that groups are
+  independently eligible and may be claimed together, while handlers remain serial today.
 
 
 ## Decision Log
 
-- Decision: Close the batched-consumption ordering hole (PGQ-1) by enforcing `batchSize = 1`
-  as a precondition of FIFO ordering, not by implementing group-abort-on-failure.
-  Rationale: Group-abort needs cooperation keiro cannot reach — shibuya's `mkProcessor`
-  hardcodes the `Unordered`/`Serial` policies (`shibuya-core/src/Shibuya/Internal/App.hs`
-  lines 45-46 in the shibuya repo), its supervised runner substitutes `AckRetry (RetryDelay 0)`
-  for a thrown handler and continues (`shibuya-core/src/Shibuya/Internal/Runner/Supervised.hs`
-  around lines 601-614), and the adapter flattens each batch into independent messages —
-  and the master plan's Decision Log puts shibuya-core runner changes out of scope. Defaults
-  are already `batchSize = 1` everywhere, so the clamp changes no currently-correct
-  deployment, and a FIFO group's throughput is inherently head-of-line limited anyway.
-  Date: 2026-07-23
+- Decision: Preserve the requested batch size and reject unsafe legacy FIFO batching rather
+  than silently clamping it.
+  Rationale: `FifoThroughput` and `FifoRoundRobin` may lease multiple members of one group.
+  They are correct only at batch one in Keiro's continue-on-failure consumers. A startup/drain
+  exception is visible and actionable; a clamp hides a potentially severe throughput change.
+  Date: 2026-09-16
 
-- Decision: `withOrdering` stays a total function and clamps (with a loud haddock) rather
-  than becoming a validating `Either`.
-  Rationale: `withOrdering` is called from generated code — keiro-dsl's scaffolded
-  `QueuePolicy` modules emit `jobTuningFor = withOrdering jobOrdering` (see
-  `keiro-dsl/test/conformance-queue-runtime/Generated/HospitalCapacity/Reservation_work/QueuePolicy.hs`
-  lines 15-21) — and an `Either` return would force error plumbing through every generated
-  and hand-written call site for a condition the function can simply make true. The raw
-  `JobTuning` constructor remains an escape hatch, which is why both consumption sites also
-  enforce the floor (defense-in-depth).
-  Date: 2026-07-23
+- Decision: Add a distinct `FifoHeads` ordering instead of changing the meaning of
+  `FifoRoundRobin`.
+  Rationale: Grouped heads lease at most one message from each group, while round-robin reads
+  may return several layers from each group. Reusing the old constructor would be an API lie
+  and could change query performance for existing correct batch-one deployments. A new
+  constructor makes the PGMQ 1.12 requirement and performance choice explicit.
+  Date: 2026-09-16
 
-- Decision: The ordering requirement is carried as a new required field
-  `jobOrdering :: !JobOrdering` on `Job` (PGQ-7). Default-tuning entry points
-  (`runJobOnce`, `jobProcessor`) adopt it; explicit-tuning entry points
-  (`runJobOnceWithContext`, `jobProcessorWithContext`) validate the tuning against it and
-  throw a new `JobOrderingMismatch` exception on conflict.
-  Rationale: The master plan's vision requires the ordering to "travel with the `Job` so an
-  ops script cannot silently void it". A required record field makes every existing `Job`
-  construction a compile error, which is the loud, greppable migration; a `Maybe` field or a
-  smart-constructor default would let stale code keep compiling with the unsafe meaning.
-  Adopting (rather than rejecting) on the default-tuning paths turns the dangerous case —
-  `runJobOnce` against a FIFO queue — into correct behavior instead of a new failure mode.
-  Date: 2026-07-23
+- Decision: Add `HeadPerGroup` to the adapter's exported `FifoReadStrategy` and consume an
+  actual release before raising Keiro's bound.
+  Rationale: The worker path should continue using the maintained adapter for polling,
+  finalization, shutdown, and telemetry. Reimplementing an adapter inside Keiro would duplicate
+  reliability logic. The adapter addition is a PVP-significant public sum-type change, so do
+  not assume a release number; verify Hackage and the upstream tag at integration time.
+  Date: 2026-09-16
 
+- Decision: Carry `jobOrdering :: !JobOrdering` on every `Job`. Default-tuning entry points
+  adopt it; explicit-tuning entry points require exact equality.
+  Rationale: Ordering is a durable queue contract in the Keiro DSL, not an incidental worker
+  preference. A required field makes every old constructor fail to compile until its contract
+  is stated. Exact equality also prevents a generated `fifo-heads` contract from being run
+  accidentally through a legacy batch-filling operation.
+  Date: 2026-09-16
 
-- Decision: Delayed sends into FIFO groups (`enqueueToGroupWithDelay`) are documented, not
-  forbidden.
-  Rationale: Re-reading `read_grouped`'s guard (`filtered_groups`, migration SQL lines
-  335-345) shows that at the enforced `batchSize = 1` a delayed mid-group member correctly
-  blocks its successors: once earlier members are consumed, the delayed message is the
-  group's earliest in-flight row below the visible head and the `NOT EXISTS` filter excludes
-  the group until the delay expires. The skip-a-delayed-member hole the review found
-  (PGQ-2's staggered-visibility case) requires a batch to take multiple members in one read,
-  which the clamp forbids. A test pins the blocking behavior so an upstream change would
-  surface.
-  Date: 2026-07-23
+- Decision: Keep `withOrdering` total and make it only replace the ordering field.
+  Rationale: Generated `jobTuningFor = withOrdering jobOrdering` remains ergonomic, while a
+  shared runtime validator checks positive tuning, job/tuning agreement, and the legacy
+  FIFO batch-one rule on both consumption paths. A total setter must not silently alter the
+  independent deployment-owned batch-size field.
+  Date: 2026-09-16
 
+- Decision: Do not depend on deterministic multirow result ordering or alter PGMQ SQL.
+  Rationale: At most one member per group makes cross-group vector order irrelevant to the
+  per-group contract. This follows the no-extension-override boundary in
+  `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`.
+  Optional index work remains in `docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`.
+  Date: 2026-09-16
 
-- Decision: The 2026-07-23 clamp decision is held
-  open pending the `read_grouped_head` evaluation recorded in Surprises & Discoveries.
-  Rationale: The clamp's stated reason — group-abort needs shibuya cooperation keiro cannot reach —
-  is still true, but it was taken without the option of a server-side head read, which needs no
-  runner cooperation at all on the drain path. The master plan's 2026-09-12 Decision Log entry defers
-  the choice to implementation time; do not treat the clamp as settled when starting M1.
-  Date: 2026-09-12
+- Decision: Gate the new mode with deterministic statement-count evidence and a same-machine
+  database benchmark; do not gate ordinary CI on wall-clock timings.
+  Rationale: Trace counts catch accidental query-per-message regressions without flakiness.
+  The benchmark catches expensive grouped-head plans at realistic queue depths and group
+  cardinalities, while remaining an explicit release artifact rather than a noisy CI test.
+  Date: 2026-09-16
 
-
-- Decision: Follow `mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`: no extension function override; M4 consumes client query ordering only. Index work is an independent supplement, not a shared migration/release.
-  Rationale: User's no-override/additive-index constraint supersedes prior SQL rank-order recommendations.
-  Date: 2026-09-12
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Planning refresh complete. Implementation has not started. The previous silent-clamp design
+and the client-result-order release gate are superseded. The remaining work has one explicit
+cross-repository prerequisite: released grouped-head dispatch in the Shibuya PGMQ adapter.
 
 
 ## Context and Orientation
 
-This repository (`/Users/shinzui/Keikaku/bokuno/keiro`) contains `keiro-pgmq`, a Haskell
-package that gives applications typed background jobs on top of PGMQ. PGMQ is a PostgreSQL
-extension-style schema (installed here as plain SQL, no extension) that stores each queue as
-a table `pgmq.q_<name>`; "reading" a message means claiming it by setting its `vt`
-(visibility timeout — a timestamp before which no other reader will see the row) into the
-future and returning the row. Deleting the row acknowledges it; letting `vt` expire
-redelivers it.
+This repository's `keiro-pgmq/src/Keiro/PGMQ/Job.hs` defines typed jobs, producer functions,
+queue provisioning, worker construction, and the bounded drain. PGMQ stores messages in
+PostgreSQL. Reading a row advances its `vt` visibility timestamp so other readers cannot see
+it until the lease expires; deleting or archiving the row advances the group. Delivery is
+at-least-once because a lease can expire before settlement.
 
-The package's central module is `keiro-pgmq/src/Keiro/PGMQ/Job.hs`. An application declares
-a `Job p` record (name, queue reference, payload codec, retry policy — lines 391-397) and
-consumes it one of two ways. The continuous worker path (`runJobWorkers`, lines 796-804)
-builds a shibuya processor (`jobProcessorWithContext`, lines 749-765) whose PGMQ adapter
-config is derived by `adapterConfigFor` (lines 700-712) and hands it to the shibuya
-supervised runtime, which owns polling, an inbox, and finalization. The bounded drain path
-(`runJobOnceWithContext`, lines 899-1067) reads PGMQ directly in a loop and settles each
-message itself; `runJobOnce` (lines 1075-1087) is its wrapper and currently hardcodes
-`defaultJobTuning`. "Tuning" is the `JobTuning` record (lines 320-326): visibility timeout,
-batch size, polling cadence, and a `JobOrdering` (lines 309-313) that selects between
-`Unordered` (plain `pgmq.read`), `FifoThroughput` (PGMQ's `read_grouped`), and
-`FifoRoundRobin` (`read_grouped_rr`). FIFO grouping keys on the reserved JSONB header
-`x-pgmq-group`, written by `enqueueToGroup` (lines 550-553) via `groupHeader` (lines
-561-563).
+`JobTuning` currently contains `visibilityTimeout`, `batchSize`, `polling`, and `ordering`.
+`JobOrdering` has `Unordered`, `FifoThroughput`, and `FifoRoundRobin`. `adapterConfigFor`
+maps tuning into a Shibuya adapter configuration for `jobProcessorWithContext`; the adapter
+polls and flattens each returned vector into independent deliveries. `runJobOnceWithContext`
+implements its own loop, chooses a PGMQ read from `tuning.ordering`, folds the returned vector
+serially, and settles each message. `jobProcessor` and `runJobOnce` currently inject
+`defaultJobTuning`, whose ordering is `Unordered`.
 
-The defects this plan fixes, with the evidence locations re-verified on 2026-07-23:
+The unsafe shape is a same-group batch. Suppose `a1` and `a2` share a group and one grouped
+read leases both. If handling `a1` returns `Retry` or throws, the drain still handles `a2`;
+the supervised worker similarly finalizes a thrown handler as an immediate retry and moves
+to the next delivery. A later database read would be blocked by the invisible head, but that
+guard cannot retract `a2` from an already leased vector.
 
-PGQ-1 (HIGH, confirmed). The `JobOrdering` haddock (Job.hs lines 295-307) promises "strict
-send order" per group unconditionally, but the guarantee only holds at `batchSize = 1`.
-The upstream SQL lives in the pgmq-hs repository at
-`mori://shinzui/pgmq-hs`, file `pgmq-migration/migrations/0001-install-v1.11.0.sql` (resolve the
-checkout with `mori path mori://shinzui/pgmq-hs`):
-`read_grouped` (lines 293-388) is documented to "return as many messages as possible from
-the same message group" (line 292), and its `available_messages` CTE takes up to the full
-batch quantity per group in a lateral `LIMIT $1` (lines 346-357) ranked by
-`batch_selection`'s `ROW_NUMBER() OVER (ORDER BY group_priority, msg_rank_in_group)` (lines
-360-366). The DB-side ordering guard — `filtered_groups`'s `NOT EXISTS` over in-flight
-members below the visible head (lines 335-345) — protects only *subsequent* reads; members
-returned together in one batch all receive the same new `vt` in one final `UPDATE` (lines
-375-382). Once a multi-member batch is out, no consumer layer aborts the group on failure:
-the drain fold (`foldM step` at Job.hs line 940) records a thrown handler and continues
-(lines 973-979), settles `AckRetry` and continues (lines 980-986 and 1016-1023), and
-`outcomeToAck` (lines 1004-1007) can never produce `AckHalt`; the worker path hardcodes the
-`Unordered`/`Serial` shibuya policies (`mkProcessor`, shibuya repo
-`shibuya-core/src/Shibuya/Internal/App.hs` lines 45-46), substitutes `AckRetry (RetryDelay 0)`
-for a throw and continues (`shibuya-core/src/Shibuya/Internal/Runner/Supervised.hs` around
-lines 601-614), and the adapter flattens the batch into a stream of independent messages in
-returned order (`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq.hs` lines 228-233 and
-`.../Pgmq/Internal.hs` lines 527-538, both `Unfold.unfoldr Vector.uncons`), releasing
-unhandled ones only at shutdown (`releaseMessages`, called from `Pgmq.hs` line 248). No
-layer restricts batch size for FIFO: `mkJobTuning` (Job.hs lines 344-349) rejects only
-`< 1`, `withOrdering` (lines 351-356) is an unvalidated record update, `adapterConfigFor`
-passes `batchSize` straight through, the drain's `nextBatchSize` (lines 943-944) is
-`min remaining batchSize`, and the adapter's `validateConfig`
-(`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Config.hs` lines 123-136) checks nothing
-about `fifoConfig` against `batchSize`. Defaults are `batchSize = 1` everywhere
-(`defaultJobTuning`, lines 328-336), so the bug needs explicit opt-in — but the two existing
-FIFO tests (`keiro-pgmq/test/Main.hs` lines 1139-1191) both use batch size 1 with
-all-success handlers, and `FifoRoundRobin` has zero tests.
+PGMQ 1.12 added `read_grouped_head(queue, vt, qty)`. Its `qty` is a number of groups rather
+than a number of same-group members: the function computes the absolute lowest message ID in
+each group, filters to visible heads, locks with `SKIP LOCKED`, and leases at most one head per
+selected group. `mori://shinzui/pgmq-hs/packages/pgmq-hasql` and
+`mori://shinzui/pgmq-hs/packages/pgmq-effectful` expose this in released version 0.6.0.0 as
+`readGroupedHead` and `readGroupedHeadWithPoll`, both using the existing `ReadGrouped` argument
+records. Keiro already bounds the pgmq-hs family to `>=0.6 && <0.7`.
 
-PGQ-2 (partially confirmed, latent). `read_grouped`'s final `UPDATE ... RETURNING` (SQL
-lines 375-382) has no `ORDER BY` — the `selected_messages` CTE drops `overall_rank`, and a
-CTE's internal `ORDER BY` governs only lock acquisition, not the outer statement's output —
-so the returned order is query-plan-dependent. Its sibling `read_grouped_rr` already does
-this correctly: it carries `selection_order` through and ends with
-`SELECT ... ORDER BY selection_order` (SQL lines 190-194). Nothing downstream restores
-order: pgmq-hasql decodes with `D.rowVector` in wire order, the adapter unconses in vector
-order, the drain folds in list order; there is no `sortOn` anywhere on the path
-(grep-verified). Exploiting it needs `batchSize > 1` *and* a plan that diverges from heap
-order, which is why it is an amplifier of PGQ-1 rather than an independent bug — but it
-makes the documented order unprovable, so M4 observes the client-layer correction; raw SQL remains upstream-owned. The related
-staggered-visibility hole (a group in state "member 1 visible, member 2 in-flight or
-delayed, member 3 visible" returns members 1 and 3 together, skipping 2) is likewise only
-reachable with a multi-member batch, because the guard's `min_msg_id` is computed over
-visible rows only (SQL line 311) and blocks only in-flight members below the visible head
-(lines 341-343); at batch size 1 the lateral `LIMIT 1` can only take the head.
+The worker prerequisite lives in `mori://shinzui/shibuya-pgmq-adapter`. The relevant files are
+project-relative `shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Config.hs`,
+`shibuya-pgmq-adapter/src/Shibuya/Adapter/Pgmq/Internal.hs`, the adapter tests, and
+`shibuya-pgmq-adapter-bench/bench/Bench/Fifo.hs`. No upstream ExecPlan exists for this addition
+yet; create one before implementation and replace this project-level handoff with its canonical
+`mori://` plan URI once allocated.
 
-PGQ-7 (confirmed). Ordering is a property of `JobTuning`, not `Job`. `runJobOnce` (Job.hs
-lines 1075-1087) hardcodes `defaultJobTuning`, whose ordering is `Unordered`, so an ops
-script or a stale-tuned worker pointed at a FIFO queue issues plain `pgmq.read`, which
-happily claims mid-group messages while earlier members are in flight — silently voiding
-ordering for all consumers of the queue.
+Adding `FifoHeads` also touches the Keiro DSL because workqueue ordering is a durable generated
+contract. `keiro-dsl/src/Keiro/Dsl/Grammar.hs` owns `WqOrdering`;
+`keiro-dsl/src/Keiro/Dsl/Parser/Queue.hs` parses the spellings;
+`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs` renders them;
+`keiro-dsl/src/Keiro/Dsl/Diff.hs` classifies changes; and
+`keiro-dsl/src/Keiro/Dsl/Scaffold.hs` emits `JobOrdering` constructors and `jobTuningFor`.
+Use the spelling `fifo-heads`. Existing `fifo-throughput` and `fifo-roundrobin` syntax remains
+source-compatible.
 
-Verified-sound behavior this plan must not regress (the master plan records these as
-regression-protected ground truth): batch-size-1 cross-read group blocking including
-dead-letter-at-head resume; retry/attempt accounting coherence; DLQ move atomicity (the
-worker path is transactional; the drain path's send-then-delete duplicate window is
-documented); batch enqueue atomicity with input-order ids; header propagation including
-`x-pgmq-group` never being stripped and `mergeTraceHeaders` letting user keys win;
-provisioning idempotency; and the one-shot trace contract's seven captured-span examples
-(`keiro-pgmq/test/Main.hs` lines 901-1060).
+The ADR filenames and headings were re-scanned on 2026-09-16. The directly relevant record is
+`docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md`: each delivery on both paths has
+exactly one Consumer span, acknowledgement attributes appear only after settlement, and a
+thrown drain handler has no acknowledgement attribute. Preserve those tests unchanged.
+`docs/adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md` was considered but this
+plan creates no schema or migration. No existing ADR records the FIFO consumption contract;
+create one during M4 if implementation confirms these decisions.
 
-Relevant ADR: `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md` (the only ADR
-in `docs/adr/`). It fixes the telemetry contract this plan must preserve: every delivery on
-either path runs inside exactly one Consumer-kind span named `<jobName> process` continuing
-the producer's W3C trace; `shibuya.ack.decision` is recorded only after the finalizing PGMQ
-statement returns; the bounded path records no ack decision for a thrown handler and no
-`shibuya.inflight.*` attributes. This plan edits `runJobOnceWithContext` (read-shape and
-validation only) and adds tests around the drain — it must not add, remove, split, or
-reorder spans, and the seven captured-span examples must stay green unmodified.
-
-Sibling plans (do not duplicate their work): the DLQ operator path is
-`docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md`;
-provisioning and the FIFO index are
-`docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md`. Neither plan writes
-pgmq SQL, and under the 2026-09-12 cross-repository contract they no longer share a release either:
-this plan's M4 may raise a `pgmq-hasql` bound to pick up the client's outer `ORDER BY msg_id`, while
-118's supplemental-index work carries no migration or version dependency at all. Do not couple their
-bounds.
+Sibling plan `docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md`
+owns DLQ operator behavior. Sibling plan 118 owns optional index measurements and provisioning
+claims. This plan must not add or replace PGMQ functions, edit historical migration bytes,
+automatically install a supplemental index, or change Shibuya core scheduling.
 
 
 ## Plan of Work
 
-### Milestone 1 — enforce batch size 1 for FIFO orderings and tell the truth in the docs
+### Milestone 1 — add grouped-head dispatch to the released adapter boundary
 
-Scope: make `batchSize = 1` an enforced precondition of FIFO ordering on every layer keiro
-controls, without changing any currently-correct configuration (all defaults are already 1).
-At the end of this milestone a consumer physically cannot get a multi-member FIFO batch
-through keiro-pgmq, even by building a raw `JobTuning`, and the haddocks say exactly what is
-guaranteed and why.
+First create an ExecPlan in the repository resolved by
+`mori path mori://shinzui/shibuya-pgmq-adapter`; record its canonical URI here and in the
+parent MasterPlan. Revise the parent MasterPlan's current "adapter is not changed" boundary
+before source implementation. The upstream plan must be self-contained and must preserve the
+adapter's polling, retry, prefetch, shutdown-release, finalization, and telemetry contracts.
 
-In `keiro-pgmq/src/Keiro/PGMQ/Job.hs`:
+In the adapter, extend `FifoReadStrategy` with `HeadPerGroup`. In the standard-poll branch,
+dispatch it to `Pgmq.Effectful.readGroupedHead (mkReadGrouped config)`; in the long-poll
+branch, dispatch it to `readGroupedHeadWithPoll (mkReadGroupedWithPoll config ...)`. Keep
+`ThroughputOptimized` and `RoundRobin` unchanged. Update public exports, Haddocks, the advanced
+user guide, capability evidence, root/package changelogs, and every exhaustive pattern match.
 
-1. Rewrite the `JobOrdering` haddock (lines 295-307). State that per-group strict send-order
-   delivery is guaranteed *because* keiro enforces one-at-a-time consumption for FIFO
-   orderings: `withOrdering` pins the batch size to 1, and both consumer paths floor the
-   read quantity to 1 for FIFO orderings even if a raw `JobTuning` says otherwise. Explain
-   the mechanism a maintainer needs to preserve it: PGMQ's grouped reads deliberately fill a
-   batch from one group, and once several members of a group are claimed together nothing
-   aborts the group when an earlier member fails, so multi-member batches would break
-   ordering. Document delayed sends into a group (`enqueueToGroupWithDelay`): a delayed
-   member does not lose its place — successors sent later are blocked by the database guard
-   until the delayed member becomes visible and is consumed (M3 pins this with a test).
-   Keep the existing at-least-once/idempotency sentence.
+Add pure/internal tests showing that all three strategies select the intended effect operation
+for standard and long polling. Add database integration cases with groups `a` and `b`: a poll
+with quantity greater than one returns at most `a1` and `b1`, never `a2` or `b2`; hiding `a1`
+blocks only group `a`; deleting `a1` makes `a2` eligible. Assert selection by message IDs and
+group subsequences, not cross-group vector order.
 
-2. Change `withOrdering` (lines 351-356) so that choosing `FifoThroughput` or
-   `FifoRoundRobin` also sets `batchSize = 1`:
+Extend `shibuya-pgmq-adapter-bench/bench/Bench/Fifo.hs` with safe end-to-end drain cases. On
+the same database and binary, compare legacy grouped quantity one with grouped-head quantities
+1, 10, and 50 for these fixtures: 10,000 messages in one group; 10,000 messages across 100
+groups; and 100,000 messages across 10,000 groups. Include delete/ack work so the measurement
+represents a drain, record read-statement count, throughput, median, and p95, and run with the
+conventional FIFO GIN only. An optional supplemental-index run may be reported separately but
+must not be required for correctness or silently change plan 118's ownership.
 
-   ```haskell
-   -- | Set the FIFO read strategy on an existing tuning. Selecting
-   -- 'FifoThroughput' or 'FifoRoundRobin' also clamps 'batchSize' to 1:
-   -- one-at-a-time consumption is the precondition of the strict per-group
-   -- ordering guarantee (see 'JobOrdering'), and both consumer paths enforce
-   -- the same floor at the read site. Selecting 'Unordered' leaves the batch
-   -- size untouched.
-   withOrdering :: JobOrdering -> JobTuning -> JobTuning
-   withOrdering Unordered tuning = tuning{ordering = Unordered}
-   withOrdering o tuning = tuning{ordering = o, batchSize = 1}
-   ```
+Acceptance for M1 is: adapter tests pass; all components build with tests and benchmarks;
+grouped-head quantity N never leases two members of one group; the 100-group fixture uses
+materially fewer reads than the quantity-one baseline; and no grouped-head workload is more
+than 20 percent slower end-to-end than the safe quantity-one baseline on the same machine.
+If the 20 percent gate fails, investigate and record `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`
+evidence before release. Do not weaken the threshold or make `FifoHeads` the recommended mode
+without documenting the resolved cause.
 
-3. Add a small internal helper next to `adapterConfigFor` and use it in both consumption
-   sites (the raw `JobTuning` constructor is exported and unvalidated, so the clamp in
-   `withOrdering` alone is insufficient):
+Release the adapter under the repository's PVP policy. Because adding an exported constructor
+can break exhaustive downstream matches, treat it as a breaking API change. Do not write a
+guessed version into Keiro. Verify the actual Hackage version and upstream tag, then use that
+version in M2.
 
-   ```haskell
-   -- | The read quantity actually used for a tuning: FIFO orderings are floored
-   -- to one message per read, the precondition of the ordering guarantee.
-   effectiveBatchSize :: JobTuning -> Int32
-   effectiveBatchSize tuning = case tuning.ordering of
-       Unordered -> tuning.batchSize
-       FifoThroughput -> 1
-       FifoRoundRobin -> 1
-   ```
 
-   In `adapterConfigFor` (lines 700-712), set `batchSize = effectiveBatchSize tuning`. In
-   `runJobOnceWithContext`'s `nextBatchSize` (lines 943-944), replace `tuning.batchSize`
-   with `effectiveBatchSize tuning`. Note the drain's FIFO reads pass `qty` (lines 923-936),
-   which comes from `nextBatchSize`, so this single change covers both grouped read calls.
+### Milestone 2 — make the Keiro API reject contradictions and preserve safe batches
 
-In `keiro-pgmq/test/Main.hs`, extend the existing "validates job tuning" example (around
-line 380) or add sibling pure examples: `withOrdering FifoThroughput` on a tuning with
-`batchSize = 8` yields `batchSize = 1`; `withOrdering FifoRoundRobin` likewise;
-`withOrdering Unordered` leaves `batchSize` untouched. These need no database.
+In `keiro-pgmq/src/Keiro/PGMQ/Job.hs`, add `FifoHeads` to `JobOrdering` and add the required
+field `jobOrdering :: !JobOrdering` to `Job`. Document `FifoHeads` as PGMQ 1.12+ grouped-head
+selection: `batchSize` bounds groups claimed per read, not messages from one group. Document
+that legacy `FifoThroughput` and `FifoRoundRobin` are accepted only at batch one. Remove every
+claim that Keiro currently runs handlers from different groups in parallel.
 
-Acceptance: `cabal test keiro-pgmq-test` from the repository root is green with the new
-examples added and no existing example changed. This milestone is deliberately free of
-behavior change for every configuration that was previously correct.
+Add and export one exception type that covers all consumption-time configuration failures:
 
-### Milestone 2 — carry the ordering on the Job and validate every entry point (PGQ-7)
+```haskell
+data JobConsumptionConfigError
+  = InvalidJobTuning !JobTuningConfigError
+  | JobOrderingMismatch
+      { jobOrderingDeclared :: !JobOrdering,
+        tuningOrderingGiven :: !JobOrdering
+      }
+  | UnsafeLegacyFifoBatch
+      { unsafeOrdering :: !JobOrdering,
+        unsafeBatchSize :: !Int32
+      }
+  deriving stock (Eq, Show)
+  deriving anyclass (Exception)
+```
 
-Scope: after this milestone a `Job` value states its queue's consumption ordering, the
-default-tuning entry points honor it, and an explicit tuning that contradicts it fails
-loudly instead of silently voiding FIFO. This is a deliberate breaking API change (compile
-error at every `Job` construction), which is the migration mechanism: every consumer must
-state an ordering once.
+Implement one internal pure validator and call it at the start of both
+`jobProcessorWithContext` and `runJobOnceWithContext`, before adapter construction or a PGMQ
+read. It must reject non-positive visibility timeout, batch size, or polling values using the
+same rules as `mkJobTuning`; reject tuning whose ordering differs from `job.jobOrdering`; and
+reject `batchSize /= 1` for `FifoThroughput` or `FifoRoundRobin`. `Unordered` and `FifoHeads`
+accept every positive batch size. Reuse shared predicates so constructor-time and runtime
+validation cannot drift. `withOrdering` remains a plain record update and preserves batch size.
 
-In `keiro-pgmq/src/Keiro/PGMQ/Job.hs`:
+Change `jobProcessor` and `runJobOnce` to call their explicit-tuning counterparts with
+`withOrdering job.jobOrdering defaultJobTuning`. A FIFO job can no longer be consumed through
+plain `pgmq.read` merely because the caller selected the convenience wrapper.
 
-1. Add the field to `Job` (lines 391-397), documented as the queue's contract rather than a
-   consumer preference:
+Map `FifoHeads` to `FifoConfig HeadPerGroup` in `toFifoConfig`. Raise
+`shibuya-pgmq-adapter`'s lower bound only after M1's version is visible on Hackage and its tag
+resolves upstream. Keep the released pgmq-hs 0.6 family bound; no pgmq-hasql result-order bump
+or pgmq-migration change is required.
 
-   ```haskell
-   data Job p = Job
-       { jobName :: !Text
-       , jobQueue :: !QueueRef
-       , jobCodec :: !(JobCodec p)
-       , jobPolicy :: !RetryPolicy
-       , jobOrdering :: !JobOrdering
-       -- ^ How this queue must be consumed. 'Unordered' for plain queues.
-       -- For FIFO queues this must match the ordering producers assume when
-       -- they call 'enqueueToGroup': every consumer entry point either adopts
-       -- it ('runJobOnce', 'jobProcessor') or validates an explicit tuning
-       -- against it and throws 'JobOrderingMismatch' on conflict.
-       }
-   ```
+Update all six `Job` construction sites listed in Surprises & Discoveries. General raw jobs in
+Keiro Ops and the default test helper declare `Unordered`. Generated FIFO conformance jobs use
+their generated `QueuePolicy.jobOrdering`. The shipment-notice example declares the same FIFO
+ordering as `shipmentNoticeTuning`. Add a separate FIFO test helper rather than changing the
+meaning of the existing unordered `mkJob` helper.
 
-2. Add the exception and export it:
+Extend the DSL with `WqFifoHeads` and the spelling `fifo-heads`. Update parser, pretty-printer,
+diff rendering, scaffolder output, fixtures, golden/captured generated modules, user reference,
+and tests. Ordering changes remain breaking in `keiro-dsl diff`. The generated comment must say
+that deployment owns the positive batch size, while the runtime rejects a batch greater than
+one for the two legacy batch-filling modes.
 
-   ```haskell
-   -- | An explicit 'JobTuning' contradicted the ordering declared on the 'Job'.
-   -- Consuming a FIFO queue with unordered reads (or vice versa) silently
-   -- destroys the per-group ordering guarantee for every consumer of the
-   -- queue, so the mismatch is refused loudly instead.
-   data JobOrderingMismatch = JobOrderingMismatch
-       { jobOrderingDeclared :: !JobOrdering
-       , tuningOrderingGiven :: !JobOrdering
-       }
-       deriving stock (Show)
-       deriving anyclass (Exception)
-   ```
+Acceptance for M2 is a whole-repository build plus focused pure tests proving: `withOrdering`
+does not change the batch; legacy FIFO batch eight is rejected rather than clamped; `FifoHeads`
+batch eight is accepted; invalid raw tuning is rejected on both paths; exact job/tuning
+ordering mismatches are rejected; and default wrappers adopt the job field.
 
-3. In `runJobOnceWithContext` and `jobProcessorWithContext`, before any read or adapter
-   construction, compare `tuning.ordering` with `job.jobOrdering` and
-   `liftIO (throwIO (JobOrderingMismatch job.jobOrdering tuning.ordering))` when they
-   differ (`jobProcessorWithContext` already throws `JobAdapterConfigInvalid` via `throwIO`,
-   so this matches the module's existing error style; both functions carry `IOE :> es`).
 
-4. Make the default-tuning wrappers adopt the declared ordering instead of hardcoding
-   `Unordered`: `runJobOnce` (lines 1075-1087) and `jobProcessor` (lines 772-783) pass
-   `withOrdering job.jobOrdering defaultJobTuning` instead of `defaultJobTuning`. Because
-   M1's `withOrdering` clamps, this is automatically batch-size-safe. Update both haddocks:
-   `runJobOnce` no longer means "unordered drain", it means "drain this job the way the job
-   declares".
+### Milestone 3 — dispatch heads and pin every failure branch
 
-5. Update every in-repo `Job` construction (the compiler will list them; these are the known
-   sites): `keiro-pgmq/test/Main.hs` `mkJob` (lines 131-138) gains
-   `jobOrdering = Unordered`, and the FIFO examples need jobs with
-   `jobOrdering = FifoThroughput` (add a `mkFifoJob` helper next to `mkJob` rather than
-   editing `mkJob`'s meaning); `keiro-dsl/test/conformance-queue-runtime/Main.hs` (line 37)
-   sets `jobOrdering = QueuePolicy.jobOrdering` — the scaffolded policy module already
-   exports exactly this value (`Generated/HospitalCapacity/Reservation_work/QueuePolicy.hs`
-   lines 15-16), which is the intended wiring for DSL-generated services;
-   `keiro-dsl/test/conformance-dispatch-full/HospitalCapacity/ReservationWork/WorkqueueJob.hs`
-   (lines 25-34) likewise imports `jobOrdering` from its `QueuePolicy` module. No keiro-dsl
-   scaffolder (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`) change is needed: the generator does
-   not emit `Job` records, only the policy pieces users assemble; verify this by building
-   `cabal build all` and running the keiro-dsl conformance suites.
+In the drain's read case, dispatch `FifoHeads` to `readGroupedHead` using the existing
+`ReadGrouped` record and `nextBatchSize`. Leave the legacy cases on `readGrouped` and
+`readGroupedRoundRobin`; the shared validator guarantees their quantity is one. Do not sort
+the returned vector. Cross-group order is not part of the contract, and sorting cannot repair
+an unsafe same-group lease.
 
-New tests in `keiro-pgmq/test/Main.hs`:
+Add these database-backed examples to `keiro-pgmq/test/Main.hs` using fresh databases and the
+existing tracing fixture where stated:
 
-- "runJobOnce on a FIFO job performs grouped reads". This discriminates old from new
-  behavior deterministically: enqueue `a1` then `a2` into one group on a FIFO job; call
-  `runJobOnce 2 job` with a handler that answers `Retry (RetryDelay 5)`. The first read
-  claims the group head `a1` and hides it; the second loop iteration's *grouped* read finds
-  the group blocked (in-flight head) and the drain returns 1 having handled only `a1`, with
-  queue length still 2. Under the old hardcoded-unordered behavior the second read would
-  have delivered `a2`. Assert the handler saw exactly `["a1"]`.
-- "an explicit tuning that contradicts the job's ordering is refused": call
-  `runJobOnceWithContext defaultJobTuning 1 fifoJob ...` and assert it throws
-  `JobOrderingMismatch` (use `shouldThrow` with a predicate on the two fields); same for
-  `jobProcessorWithContext`.
+- A `FifoHeads` batch over sixteen groups, with `batchSize = 16` and `n = 16`, handles all
+  sixteen heads and emits exactly one PGMQ grouped-head receive span. This is the deterministic
+  no-query-per-message performance guard.
+- With `a1,a2` in group `a` and `b1,b2` in group `b`, a large head batch contains no more than
+  one member per group. Assert per-group subsequences only; do not assert cross-group order.
+- If `a1` returns `Retry`, throws, or remains delayed, `a2` is never observed. Work from group
+  `b` may continue; that independence is correct. The throw case must retain ADR-1's exception
+  and no-ack span behavior.
+- If `a1` is dead-lettered, `a2` becomes the next eligible member and is then handled. Assert
+  the main-queue and DLQ depths.
+- A delayed `a2` blocks `a3` until its visibility time, after which `a2` then `a3` are observed.
+- `runJobOnce` on a `FifoHeads` job uses grouped-head reads without explicit tuning. Both
+  explicit-tuning entry points throw `JobConsumptionConfigError` before any receive span on a
+  mismatch or unsafe legacy batch.
+- The continuous worker retries a failed `a1` before observing `a2`. Add a multi-group
+  `FifoHeads` worker case to prove the adapter release is actually selected, not merely compiled.
+- Preserve batch-one regression coverage for both `FifoThroughput` and `FifoRoundRobin` so a
+  future refactor cannot accidentally route them through unordered reads.
 
-Acceptance: `cabal build all` compiles the whole repository; `cabal test keiro-pgmq-test`
-is green including the two new examples; the keiro-dsl conformance suites still pass
-(`cabal test keiro-dsl-test` — use the test-suite names from `keiro-dsl/keiro-dsl.cabal` if
-they differ).
+Make the tests bite. Temporarily route `FifoHeads` to `readGrouped` and verify the retry/throw
+case observes a successor or the at-most-one-per-group assertion fails. Temporarily force its
+quantity to one and verify the grouped-head receive-span count assertion fails. Restore both
+mutations before committing and record the results in Surprises & Discoveries.
 
-### Milestone 3 — pin the failure branches and FifoRoundRobin on both paths
+Acceptance for M3 is the expanded `keiro-pgmq-test` suite with zero failures and the same two
+pre-existing pending examples, plus unchanged ADR-1 span tests. Record the new example count
+in Progress rather than retaining an estimate.
 
-Scope: the missing regression tests. Every ordering-relevant failure branch and the
-never-tested round-robin strategy get an example that fails on any future regression of the
-cross-read group blocking or of the M1/M2 enforcement. All tests use the suite's existing
-fixtures (`Postgres.withFreshDatabase`, `runDb`, `mkFifoJob` from M2, `waitUntil` and
-`stopAppQuickly` for the worker path — all already present in `keiro-pgmq/test/Main.hs`).
 
-Drain-path examples (each: `ensureOrderedJobQueue`, enqueue `a1`,`a2` — plus `b1` where
-noted — via `enqueueToGroup`, then `runJobOnceWithContext` with
-`withOrdering FifoThroughput defaultJobTuning`):
+### Milestone 4 — performance, documentation, rollout, and durable context
 
-- "FIFO drain does not deliver successors while the head retries": handler returns
-  `Retry (RetryDelay 5)` for `a1`. Drain with `n = 2` returns 1; the observation log is
-  exactly `["a1"]`; queue length is still 2 (head hidden, successor blocked).
-- "FIFO drain leaves the group blocked after a thrown handler at the head": handler throws
-  for `a1`. Drain returns 0 (thrown deliveries are not counted); log is `["a1"]`; queue
-  length 2. This also re-pins the ADR-0001 branch: the throw records an exception and no
-  acknowledgement (the existing captured-span example at test line 1005 already asserts the
-  span side; this example asserts the ordering side).
-- "FIFO drain resumes the group after dead-lettering the head": handler answers
-  `Dead "poison"` for `a1` and `Done` otherwise. Drain with `n = 2` returns 2; log is
-  `["a1", "a2"]` in order; DLQ length 1; main queue empty. This is the
-  dead-letter-at-head-resume behavior the review verified sound at batch size 1 — now
-  test-pinned.
+Run M1's benchmark on the release candidate and retain the command, machine/PostgreSQL details,
+fixture sizes, statement counts, median, p95, and throughput in both plans. The deterministic
+Keiro trace test must show one receive for sixteen groups. The benchmark must meet the 20 percent
+gate and demonstrate fewer statements for multi-group drains. If it does not, leave
+`FifoHeads` unrecommended and the plan incomplete until the cause is resolved; do not hide a
+regression behind a larger tolerance.
 
-Worker-path example: "worker path holds back FIFO successors until the head succeeds".
-Start `runJobWorkers` on a FIFO job whose handler fails `a1` with `Retry (RetryDelay 1)` on
-its first delivery (track with an `IORef`) and succeeds on redelivery. `waitUntil` the log
-contains three entries, stop the app, and assert the log is `["a1", "a1", "a2"]` — `a2`
-never runs before `a1` succeeds. Follow the shape of the existing worker FIFO test (lines
-1160-1191), including `mkJobTuning 30 1 (PollEvery 0.1)`.
+Update `keiro-pgmq/CHANGELOG.md`, `keiro-dsl/CHANGELOG.md`,
+`docs/user/work-queues.md`, `docs/guides/work-queues.md`, the DSL reference, and the shipment
+notice example. Explain the three distinct facts: legacy FIFO modes require batch one;
+`FifoHeads` batches across groups on PGMQ 1.12+; and Keiro's current handlers are serial even
+when one read claims several independent group heads. State the rolling deployment order:
+deploy consumers that understand the new required `Job` field and `FifoHeads` before changing
+generated queue policy or producer assumptions.
 
-FifoRoundRobin examples (first coverage ever):
+Update the parent MasterPlan and `docs/backlog.md` so plan 116 is no longer described as blocked
+on deterministic grouped-result ordering. Its actual release dependency is the grouped-head
+adapter release. Preserve canonical cross-repository references.
 
-- "FifoRoundRobin drain interleaves groups and preserves within-group order": enqueue
-  `a1`, `a2` to group `a` and `b1`, `b2` to group `b` (in the order a1, a2, b1, b2), drain 4
-  with `withOrdering FifoRoundRobin defaultJobTuning`, all-`Done`. Assert full drain and
-  that the per-group subsequences are `["a1","a2"]` and `["b1","b2"]`. Do not pin the exact
-  interleaving: at batch size 1 the observed sequence is a1, b1, a2, b2 with the current
-  SQL, but the round-robin layering across groups is an upstream fairness detail, not part
-  of keiro's ordering contract — asserting only per-group order keeps the example stable.
-- "FifoRoundRobin worker path preserves within-group order": mirror of the existing
-  `FifoThroughput` worker test with `FifoRoundRobin`, three messages in one group.
+Finally, review this plan's Decision Log, discoveries, and benchmark evidence. Create a FIFO
+consumer-contract ADR under the profiled `docs/adr` bundle, allocate its stable ID with `okf id
+next`, add its log entry, and run strict validation. The ADR should record accepted read shapes,
+runtime validation, PGMQ 1.12 requirement, serial-handler limitation, and why result sorting is
+not a correctness mechanism.
 
-Delayed-send example: "a delayed FIFO member blocks its successors until it becomes
-visible": `enqueueToGroup a1`, `enqueueToGroupWithDelay job 2 "a" a2`, `enqueueToGroup a3`.
-First drain (n = 3, all-`Done`): returns 1 and the log is `["a1"]` — `a3` is blocked by the
-guard because the delayed `a2` is the earliest in-flight member below the visible head.
-Sleep past the delay (`threadDelay 2_500_000`), drain again: log becomes
-`["a1","a2","a3"]`. This pins the semantics decision recorded in the Decision Log.
-
-Acceptance: `cabal test keiro-pgmq-test` green; deliberately breaking the M1 floor (for
-example, temporarily reverting `nextBatchSize` to `tuning.batchSize` and running the retry
-example with a raw `JobTuning{batchSize = 8, ordering = FifoThroughput, ...}`) makes the
-retry-at-head example fail, demonstrating the tests bite.
-
-### Milestone 4 — consume the client result-order contract
-
-Read `mori://shinzui/pgmq-hs/plans/19-give-the-grouped-reads-a-deterministic-return-order` Outcomes for the actual implemented/released client behavior. This is outer
-ORDER BY msg_id on grouped/head client calls, with upstream functions and the native ledger
-unchanged. It does not promise group contiguity or alter round-robin layering. M1-M3 do not
-wait for a SQL migration or this client defense-in-depth change.
-
-Before selecting dependency bounds, verify the released pgmq-hasql version on Hackage and its
-upstream repository tag. Raise the library pgmq-hasql lower bound that supplies the changed
-statements, keeping compatible family bounds and transitive effect/adapter resolution. Raising
-only the test-suite pgmq-migration bound cannot require a client fix and is incorrect. Do not
-choose an unverified 0.6.1.0 target. An isolated candidate project may validate local changes
-before release, but must not be committed as machine-local dependency paths or called released.
-
-Add a direct pgmq effect/session test with interleaved groups, asserting ascending message IDs
-in the returned vector without sorting the result. Under the job batch-size clamp, a multirow
-read is intentionally not reachable through the job API; the direct client test observes the
-separate contract. Keep round-robin layering and job failure tests separate. Record actual
-stock/native fixture coverage. Do not require this assertion to fail on every older executor:
-unspecified order can happen to be sorted.
-
-Run cabal build all and cabal test keiro-pgmq-test from the Keiro root. Acceptance is verified
-client dependency selection and observed ordered vectors with no changed extension SQL,
-migration filename or server-order claim. If not yet released, keep this milestone pending
-while M1-M3 can complete; do not implement pgmq SQL locally.
 
 ## Concrete Steps
 
-All keiro commands run from the repository root `/Users/shinzui/Keikaku/bokuno/keiro`; all
-the few read-only pgmq-hs commands run from `$(mori path mori://shinzui/pgmq-hs)`.
-
-Baseline before any edit (the suite starts its own PostgreSQL via keiro-test-support; no
-external database is needed):
+Resolve dependency sources through Mori before editing them:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
-cabal test keiro-pgmq-test
+mori registry show shinzui/pgmq-hs --full
+mori registry show shinzui/shibuya-pgmq-adapter --full
+mori path mori://shinzui/shibuya-pgmq-adapter
 ```
 
-Expected tail of the baseline transcript:
+In the adapter checkout, create its ExecPlan, implement M1, and run:
+
+```bash
+cd /Users/shinzui/Keikaku/bokuno/shibuya-project/shibuya-pgmq-adapter
+cabal test shibuya-pgmq-adapter-test --test-show-details=direct
+cabal build all --enable-tests --enable-benchmarks
+just process-up
+export PGHOST="$PWD/db"
+export PGDATABASE=shibuya
+export PG_CONNECTION_STRING="postgresql:///shibuya?host=$(jq -rn --arg x "$PGHOST" '$x|@uri')"
+BENCH_MESSAGE_COUNT=10000 BENCH_BATCH_SIZES=1,10,50 \
+  cabal bench shibuya-pgmq-adapter-bench --benchmark-options='-p safe-fifo-drain --stdev 10'
+```
+
+The benchmark command is safe only against the disposable local `shibuya` database created by
+`just process-up`; never point it at a production queue. Add the `safe-fifo-drain` benchmark
+pattern as part of M1. Capture a CSV as well if the local tasty-bench version supports it.
+
+Before selecting the Keiro bound, verify the actual release independently of local source:
+
+```bash
+curl -fsSL https://hackage.haskell.org/package/shibuya-pgmq-adapter.json
+git ls-remote --tags https://github.com/shinzui/shibuya-pgmq-adapter.git
+```
+
+Run the Keiro baseline and focused validations from the Keiro root:
+
+```bash
+cd /Users/shinzui/Keikaku/bokuno/keiro
+cabal build all --enable-tests --enable-benchmarks
+cabal test keiro-pgmq-test --test-show-details=direct
+cabal test keiro-dsl-test \
+  keiro-dsl-conformance-queue \
+  keiro-dsl-conformance-queue-runtime \
+  keiro-dsl-conformance-dispatch-full \
+  keiro-ops-test \
+  jitsurei-test \
+  --test-show-details=direct
+```
+
+The 2026-09-16 baseline is:
 
 ```text
-58 examples, 0 failures, 2 pending
+65 examples, 0 failures, 2 pending
 Test suite keiro-pgmq-test: PASS
 ```
 
-The two pending examples are pre-existing (`test/Main.hs` lines 645 and 1096: a shibuya
-fault-injection placeholder and the pg_partman live-provisioning example) and stay pending
-throughout this plan.
+The pending cases are the existing transient-poll fault-injection placeholder and the live
+pg_partman provisioning case. New FIFO cases must not be pending.
 
-Per milestone: make the edits described above, then re-run the same command. After M2 also
-run the whole-repo build and the keiro-dsl suites, because the `Job` field is a breaking
-change:
+When creating the ADR, follow the profiled bundle contract:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
-cabal build all
-cabal test keiro-pgmq-test
+okf id list docs/adr --profile docs/adr/profile.dhall
+okf id next docs/adr --profile docs/adr/profile.dhall ADR
+okf validate docs/adr \
+  --strict \
+  --profile docs/adr/profile.dhall \
+  --profile-enforce \
+  --log-enforce
 ```
 
-For M4, inspect the client implementation and its actual release evidence:
-
-```bash
-cd "$(mori path mori://shinzui/pgmq-hs)"
-rg -n 'order by msg_id' pgmq-hasql/src/Pgmq/Hasql/Statements/Message.hs
-rg -n 'version:' pgmq-hasql/pgmq-hasql.cabal
-```
-
-then in keiro, after raising the bounds:
-
-```bash
-cd /Users/shinzui/Keikaku/bokuno/keiro
-cabal update
-cabal test keiro-pgmq-test
-```
-
-Commit at every green milestone using Conventional Commits, for example:
+Commit each green milestone with Conventional Commits. Every Keiro commit includes both active
+trailers; cross-repository adapter commits cite the upstream plan and the same intention if its
+frontmatter inherits it:
 
 ```text
-feat(keiro-pgmq)!: carry consumption ordering on Job and enforce FIFO batch-size-1
-```
+feat(keiro-pgmq)!: enforce declared FIFO consumption contracts
 
-(the `!` belongs on the M2 commit; M1 and M3 are non-breaking `fix(keiro-pgmq)`/
-`test(keiro-pgmq)` commits; M4 client work is owned by pgmq-hs plus a
-`chore(deps)` bump commit in keiro; after the 2026-09-12 relocation M4 is the `chore(deps)` bump plus its observing test, with no pgmq-hs commit from this plan).
+ExecPlan: docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md
+Intention: intention_01m2b1p3vhe179jtr5qz6ghqks
+```
 
 
 ## Validation and Acceptance
 
-The plan is done when all of the following are observable:
+The plan is complete only when all of these are observable:
 
-1. From the repo root, `cabal test keiro-pgmq-test` prints `0 failures, 2 pending` with the
-   example count grown from 58 by the new examples (M1 clamp examples, M2's two entry-point
-   examples, M3's seven ordering examples — final count recorded in Progress when known).
-2. Constructing FIFO tuning can no longer express a multi-member batch:
-   `withOrdering FifoThroughput (defaultJobTuning{batchSize = 8})` evaluates with
-   `batchSize == 1` (pinned by an M1 example).
-3. A three-message FIFO group whose head fails behaves observably correctly on both paths:
-   with a retrying head, successors are not delivered (drain returns 1, queue length intact);
-   with a dead-lettered head, the successor is delivered next and in order. These are the M3
-   examples; each fails against the pre-plan code if the enforcement or the DB guard is
-   broken.
-4. `runJobOnce n fifoJob handler` demonstrably uses grouped reads (the M2 discriminator
-   example), and `runJobOnceWithContext defaultJobTuning n fifoJob handler` throws
-   `JobOrderingMismatch`.
-5. The seven ADR-0001 captured-span examples (`test/Main.hs` lines 901-1060) pass
-   *unmodified* — the plan's constraint is that no drain change touches span count, names,
-   attributes, or the ack-after-settle rule.
-6. The verified pgmq-hasql client release/candidate supplies outer ordering; Keiro observes ascending IDs through the client. No SQL migration or raw-function ordering claim is required.
+1. The released adapter has `HeadPerGroup` standard and long-poll dispatch, Hackage and the
+   upstream tag agree on the version, and Keiro's bound selects it without a local source path.
+2. Every `Job` declares `jobOrdering`. Default entry points adopt it. Explicit entry points
+   reject invalid tuning, mismatches, and legacy FIFO batches larger than one before any read.
+3. `FifoHeads` preserves the caller's positive batch size and a sixteen-group drain produces
+   one grouped-head receive span, not sixteen receives.
+4. Retry, throw, delayed visibility, and dead-letter cases never process a same-group successor
+   before its absolute head is settled. Dead-lettering or deleting the head advances the group.
+5. Both legacy FIFO strategies retain batch-one correctness tests. Their larger batches fail
+   loudly; no code path silently clamps them.
+6. The adapter benchmark meets the stated 20 percent end-to-end gate and shows reduced statement
+   count for multi-group drains. Results identify machine, PostgreSQL version, queue depth, group
+   count, batch size, indexes, median, p95, and throughput.
+7. `cabal build all --enable-tests --enable-benchmarks` and all focused suites pass. The final
+   `keiro-pgmq-test` count is recorded with zero failures and only the two known pending cases.
+8. ADR-1's existing telemetry tests pass unchanged; the new FIFO ADR validates under the strict
+   profile; user docs no longer promise parallel handlers or depend on client result sorting.
+9. No PGMQ function body, historical migration, automatic supplemental index, or Shibuya core
+   scheduling policy changes as part of this plan.
 
 
 ## Idempotence and Recovery
 
-Every keiro-side edit is an ordinary source change guarded by the test suite; re-running any
-milestone's steps is safe. The test suite provisions a fresh cloned database per example, so
-no state leaks between runs or between failed and successful attempts.
+Source edits, builds, tests, and Hackage/tag checks are repeatable. Keiro and adapter integration
+tests use disposable PostgreSQL fixtures. The benchmark creates and purges named benchmark
+queues in a disposable local database; if interrupted, drop only those explicit benchmark
+queues or recreate that disposable database through the adapter repository's normal process
+workflow.
 
-The M2 breaking change is self-announcing: any missed `Job` construction site fails to
-compile, and `cabal build all` enumerates them; there is no way to end up half-migrated at
-runtime.
+The required `Job` field makes a partial source migration fail at compile time. Runtime
+validation happens before reads, so an unsafe legacy batch or ordering mismatch does not lease
+rows before failing. If the adapter release is unavailable, keep Keiro's dependency bound and
+M2-M4 pending; do not commit a machine-local `source-repository-package` or package path.
 
-M4 changes client dependency selection and tests only. Reverting a client bound does not roll back a database migration, and no new migration is involved. If the client fix is not released, keep M4 pending while consumer-safety work proceeds.
+`FifoHeads` requires PGMQ 1.12 or later. Native pgmq-hs 0.6 installs a compatible schema, but
+extension-managed deployments must upgrade before selecting the mode. An undefined-function
+failure is not recoverable by retrying the same worker against an older server; roll back the
+job policy to a batch-one legacy mode or upgrade the server. No database migration is rolled
+back because this plan adds none.
 
 
 ## Interfaces and Dependencies
 
-At the end of the plan, `keiro-pgmq/src/Keiro/PGMQ/Job.hs` exports (new or changed surface
-only; module is `Keiro.PGMQ.Job`, re-exported through `Keiro.PGMQ`):
+The intended Keiro surface is:
 
 ```haskell
+data JobOrdering
+  = Unordered
+  | FifoThroughput
+  | FifoRoundRobin
+  | FifoHeads
+
 data Job p = Job
-    { jobName :: !Text
-    , jobQueue :: !QueueRef
-    , jobCodec :: !(JobCodec p)
-    , jobPolicy :: !RetryPolicy
-    , jobOrdering :: !JobOrdering  -- new, required
-    }
+  { jobName :: !Text,
+    jobQueue :: !QueueRef,
+    jobCodec :: !(JobCodec p),
+    jobPolicy :: !RetryPolicy,
+    jobOrdering :: !JobOrdering
+  }
 
-data JobOrderingMismatch = JobOrderingMismatch
-    { jobOrderingDeclared :: !JobOrdering
-    , tuningOrderingGiven :: !JobOrdering
-    }  -- instance Exception; thrown by the explicit-tuning entry points
+data JobConsumptionConfigError
+  = InvalidJobTuning !JobTuningConfigError
+  | JobOrderingMismatch
+      { jobOrderingDeclared :: !JobOrdering,
+        tuningOrderingGiven :: !JobOrdering
+      }
+  | UnsafeLegacyFifoBatch
+      { unsafeOrdering :: !JobOrdering,
+        unsafeBatchSize :: !Int32
+      }
 
-withOrdering :: JobOrdering -> JobTuning -> JobTuning  -- clamps batchSize to 1 for Fifo*
+withOrdering :: JobOrdering -> JobTuning -> JobTuning
 ```
 
-`runJobOnce`, `jobProcessor`, `runJobOnceWithContext`, `jobProcessorWithContext` keep their
-signatures; their ordering behavior changes as described in M2. `effectiveBatchSize` stays
-internal.
+`runJobOnce`, `jobProcessor`, `runJobOnceWithContext`, and `jobProcessorWithContext` retain
+their signatures. They may throw `JobConsumptionConfigError` through their existing `IOE`
+capability. `FifoHeads` maps to the adapter's new `HeadPerGroup`; the drain calls released
+`pgmq-effectful-0.6.0.0`'s `readGroupedHead` directly.
 
-Dependencies: `pgmq-effectful`/`pgmq-hasql` (the `readGrouped`/`readGroupedRoundRobin`
-operations and `ReadGrouped` record the drain already uses), `shibuya-core` and
-`shibuya-pgmq-adapter` (unchanged — this plan deliberately requires no shibuya release; the
-worker path becomes safe purely because keiro never hands the adapter a FIFO config with
-`batchSize > 1`), and, for M4, whichever released pgmq-hs version carries the upstream
-client return-order fix (the checkout family baseline is 0.6.0.0 and `keiro-pgmq.cabal` already declares `>=0.6 && <0.7`;
-read the upstream plan's Outcomes for the shipped version rather than the superseded 0.4.1.0 this plan
-originally assumed). The keiro-dsl package participates only as a
-consumer whose conformance fixtures gain the `jobOrdering` field wiring from their generated
-`QueuePolicy` modules.
+The adapter surface adds:
 
-Revision note (2026-09-12): Reconciled cross-repository guidance; removed server-migration assumptions and corrected M4 to require the client library rather than a test migration package.
+```haskell
+data FifoReadStrategy
+  = ThroughputOptimized
+  | RoundRobin
+  | HeadPerGroup
+```
+
+The precise adapter version is intentionally not predicted. At refresh time the authoritative
+latest releases are pgmq-hs 0.6.0.0 and shibuya-pgmq-adapter 0.15.0.0; only the former already
+contains grouped heads. Verify the new adapter release before changing bounds.
+
+Revision note (2026-09-12): Reconciled cross-repository guidance; removed server-migration
+assumptions and corrected the client dependency boundary.
+
+Revision note (2026-09-16): Re-audited current Keiro, pgmq-hs 0.6.0.0, Shibuya core, and
+shibuya-pgmq-adapter 0.15.0.0. Replaced silent batch clamping and client-result sorting with an
+explicit `FifoHeads` mode, shared runtime rejection of unsafe legacy batches, a required job
+ordering contract, an adapter release prerequisite, deterministic read-count coverage, and a
+database performance gate.
