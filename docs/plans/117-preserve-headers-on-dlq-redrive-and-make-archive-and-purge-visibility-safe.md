@@ -64,8 +64,8 @@ every row before purge.
 
 - [x] (2026-09-15) Refreshed against keiro source, Mori-discovered dependency source, Hackage versions, and upstream release tag v0.6.0.0; established keiro versus pgmq-hs ownership.
 - [x] (2026-09-15) M1: Parsed and exposed original headers, preserved them on redrive, and passed header/legacy-wrapper regressions (`cabal test keiro-pgmq-test`: 61 examples, 0 failures, 2 pre-existing pending).
-- [ ] M2: Add archive-by-ids, typed guarded purge, explicit force purge, and visibility regressions.
-- [ ] M2: Update keiro-ops purge result handling and test refusal without deleting inspected rows.
+- [x] (2026-09-15) M2: Added archive-by-ids, typed guarded purge, explicit force purge, and visibility regressions (`keiro-pgmq-test`: 64 examples, 0 failures, 2 pre-existing pending).
+- [x] (2026-09-15) M2: Updated keiro-ops purge result handling and tested refusal without deleting inspected rows (`keiro-ops-test`: 50 examples, 0 failures).
 - [ ] M3: Correct the operator runbook and compatibility notes; pass both affected suites and the no-wait inspect/archive/purge example.
 - [ ] Update both affected changelogs and complete ADR distillation before marking implementation complete.
 
@@ -108,6 +108,13 @@ the main-queue row had `headers = Nothing` instead of the wrapper's group, fixed
 `traceparent`, and tenant metadata. With wrapper parsing and header-aware resend in place,
 the full pgmq suite passed with 61 examples, zero failures, and the same two pending
 integration cases.
+
+The M2 regressions confirm that a count-based archive sees zero rows immediately after
+inspection, while `archiveDlqEntries` moves those same hidden ids without waiting and
+returns no ids on empty, repeated, or unknown requests. A guarded purge reports one
+hidden row and leaves the complete DLQ depth unchanged; `purgeDlqForce` remains the
+explicit unconditional path. The operator's ordinary `--force` execution flag reaches
+the guard and surfaces its refusal rather than bypassing it.
 
 
 ## Decision Log
@@ -460,3 +467,7 @@ clarified best-effort purge, compatibility, and complete-audit limitations.
 Revision (2026-09-15): Began implementation and completed Milestone 1. Recorded the
 observed header-loss regression and the passing full-suite result after preserving wrapper
 headers while keeping missing, null, and malformed legacy wrappers headerless.
+
+Revision (2026-09-15): Completed Milestone 2 in the library and operator adapter. Added
+archive-by-id batches, typed guarded and explicit-force purge outcomes, operator refusal
+reporting, and visibility regressions with passing pgmq and ops suites.

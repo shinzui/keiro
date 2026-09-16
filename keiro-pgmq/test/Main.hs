@@ -801,15 +801,47 @@ spec = do
     map (.headers) missingMessages `shouldBe` [Nothing]
     map (.headers) nullMessages `shouldBe` [Nothing]
 
-  it "purgeDlq empties the DLQ" $ \connStr -> do
+  it "purgeDlq empties a fully visible DLQ and reports the deleted count" $ \connStr -> do
     let job = mkJob "keiro_pgmq_test.dlq_purge"
-    runDb connStr $ do
+    result <- runDb connStr $ do
       ensureJobQueue job
       _ <- enqueue job (Ping "purge" 1)
       runJobOnce 1 job (\_ -> pure (Dead "bad"))
       purgeDlq job
+    result `shouldBe` PurgeDlqPurged 1
     dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
     dlqLen `shouldBe` 0
+
+  it "purgeDlq refuses when inspection has hidden a row and deletes nothing" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.dlq_purge_blocked"
+    (result, remaining) <-
+      runDb connStr $ do
+        ensureJobQueue job
+        _ <- enqueue job (Ping "hidden" 1)
+        _ <- enqueue job (Ping "visible" 2)
+        runJobOnce 2 job (\_ -> pure (Dead "bad"))
+        inspected <- readDlq job 1
+        liftIO (length inspected `shouldBe` 1)
+        result <- purgeDlq job
+        remaining <- queueLen job.jobQueue.dlqName
+        pure (result, remaining)
+    result `shouldBe` PurgeDlqBlocked 1
+    remaining `shouldBe` 2
+
+  it "purgeDlqForce deletes hidden rows" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.dlq_purge_force"
+    (purged, remaining) <-
+      runDb connStr $ do
+        ensureJobQueue job
+        _ <- enqueue job (Ping "hidden" 1)
+        runJobOnce 1 job (\_ -> pure (Dead "bad"))
+        inspected <- readDlq job 1
+        liftIO (length inspected `shouldBe` 1)
+        purged <- purgeDlqForce job
+        remaining <- queueLen job.jobQueue.dlqName
+        pure (purged, remaining)
+    purged `shouldBe` 1
+    remaining `shouldBe` 0
 
   it "readDlq preserves malformed DLQ wrappers as malformed entries" $ \connStr -> do
     let job = mkJob "keiro_pgmq_test.dlq_malformed"
@@ -1306,18 +1338,47 @@ spec = do
     retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)
     retained `shouldBe` 1
 
+  it "archiveDlqEntries archives inspected rows immediately and is idempotent" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.dlq_archive_entries"
+        unknownId = Pgmq.MessageId 999999
+    (entryIds, countArchived, moved, repeated, unknown, remaining) <-
+      runDb connStr $ do
+        ensureJobQueue job
+        _ <- enqueue job (Ping "first" 1)
+        _ <- enqueue job (Ping "second" 2)
+        runJobOnce 2 job (\_ -> pure (Dead "bad"))
+        entries <- readDlq job 2
+        let entryIds = map (.dlqMessageId) entries
+        countArchived <- archiveDlq job 10
+        empty <- archiveDlqEntries job []
+        liftIO (empty `shouldBe` [])
+        moved <- archiveDlqEntries job entryIds
+        repeated <- archiveDlqEntries job entryIds
+        unknown <- archiveDlqEntries job [unknownId]
+        remaining <- queueLen job.jobQueue.dlqName
+        pure (entryIds, countArchived, moved, repeated, unknown, remaining)
+    length entryIds `shouldBe` 2
+    countArchived `shouldBe` 0
+    moved `shouldMatchList` entryIds
+    repeated `shouldBe` []
+    unknown `shouldBe` []
+    remaining `shouldBe` 0
+    retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)
+    retained `shouldBe` 2
+
   -- EP-4 M3: end-to-end retention lifecycle.
   it "archived DLQ rows survive a purge" $ \connStr -> do
     let job = mkJob "keiro_pgmq_test.dlq_archive_purge"
-    archived <-
+    (archived, purged) <-
       runDb connStr $ do
         ensureJobQueue job
         _ <- enqueue job (Ping "poison" 1)
         runJobOnce 1 job (\_ -> pure (Dead "bad"))
         archived <- archiveDlq job 10
-        purgeDlq job
-        pure archived
+        purged <- purgeDlq job
+        pure (archived, purged)
     archived `shouldBe` 1
+    purged `shouldBe` PurgeDlqPurged 0
     dlqLen <- runDb connStr (queueLen job.jobQueue.dlqName)
     dlqLen `shouldBe` 0
     retained <- archiveCount connStr (queueNameToText job.jobQueue.dlqName)

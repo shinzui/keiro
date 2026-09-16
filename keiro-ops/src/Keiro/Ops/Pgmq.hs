@@ -127,8 +127,15 @@ runPurge env queue
   | env.force = do
       confirmed <- confirmPurge env queue
       if confirmed
-        then handlePgmq (runJobEff (pgmqRuntime env) (purgeDlq (rawJob queue))) $ \() ->
-          Succeeded (messageResult ("purged DLQ for " <> queue))
+        then handlePgmq (runJobEff (pgmqRuntime env) (purgeDlq (rawJob queue))) \case
+          PurgeDlqBlocked hiddenCount ->
+            Failed
+              ( "DLQ purge refused because "
+                  <> showText hiddenCount
+                  <> " row(s) are hidden; archive inspected ids or wait for visibility to expire"
+              )
+          PurgeDlqPurged purged ->
+            Succeeded (mutationCountResult "purge" queue purged)
         else pure (Failed "queue-name confirmation did not match; DLQ purge cancelled")
   | otherwise = previewFromDepth env "purge" queue Nothing ["pgmq", "dlq", "purge", "--queue", queue]
 
@@ -206,10 +213,11 @@ dlqJson queue entry =
       "original_message_id" .= entry.originalMessageId,
       "original_enqueued_at" .= entry.originalEnqueuedAt,
       "read_count" .= entry.readCount,
+      "original_headers" .= entry.originalHeaders,
       "raw_body" .= entry.rawBody
     ]
 
-mutationCountResult :: Text -> Text -> Int -> OpsResult
+mutationCountResult :: (Show count, Aeson.ToJSON count) => Text -> Text -> count -> OpsResult
 mutationCountResult operation queue count =
   OpsResult
     { headers = ["operation", "queue", "affected"],

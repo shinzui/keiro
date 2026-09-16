@@ -1159,8 +1159,57 @@ spec fixture = do
 
       purged <- OpsPgmq.runCommand (opsEnv True store) (OpsPgmq.Dlq (OpsPgmq.Purge queue))
       purged `shouldSatisfy` isSucceeded
+      jsonInteger "affected" purged `shouldBe` Just 1
       (_, dlqAfterPurge) <- depths
       dlqAfterPurge `shouldBe` 0
+
+    it "refuses purge after inspection and leaves the DLQ unchanged" $ \store -> do
+      let queue = "keiro_ops_test.purge_hidden"
+          job = rawValueJob queue
+          runPgmqUnit action = do
+            result <- runJobEff (JobRuntime store.pool Nothing) action
+            either (fail . show) pure result
+          dlqDepth = do
+            result <- runJobEff (JobRuntime store.pool Nothing) (jobDlqMetrics job)
+            metrics <- either (fail . show) pure result
+            pure metrics.queueLength
+      inspectedCount <- runPgmqUnit $ do
+        ensureJobQueue job
+        _ <- enqueue job (object ["kind" .= ("inspect-first" :: Text)])
+        _ <- runJobOnce 1 job (\_ -> pure (Dead "bad"))
+        inspected <- readDlq job 1
+        pure (length inspected)
+      inspectedCount `shouldBe` 1
+
+      outcome <- OpsPgmq.runCommand (opsEnv True store) (OpsPgmq.Dlq (OpsPgmq.Purge queue))
+      case outcome of
+        Failed detail -> do
+          detail `shouldSatisfy` Text.isInfixOf "1 row(s) are hidden"
+          detail `shouldSatisfy` Text.isInfixOf "archive inspected ids"
+        other -> expectationFailure ("expected guarded purge refusal, got " <> show other)
+      dlqDepth `shouldReturn` 1
+
+    it "archives an inspected entry by id while it remains hidden" $ \store -> do
+      let queue = "keiro_ops_test.archive_hidden"
+          job = rawValueJob queue
+          runPgmqUnit action = do
+            result <- runJobEff (JobRuntime store.pool Nothing) action
+            either (fail . show) pure result
+          dlqDepth = do
+            result <- runJobEff (JobRuntime store.pool Nothing) (jobDlqMetrics job)
+            metrics <- either (fail . show) pure result
+            pure metrics.queueLength
+      inspectedCount <- runPgmqUnit $ do
+        ensureJobQueue job
+        _ <- enqueue job (object ["kind" .= ("retain" :: Text)])
+        _ <- runJobOnce 1 job (\_ -> pure (Dead "bad"))
+        inspected <- readDlq job 1
+        pure (length inspected)
+      inspectedCount `shouldBe` 1
+
+      archived <- OpsPgmq.runCommand (opsEnv True store) (OpsPgmq.Dlq (OpsPgmq.Archive queue (Just 1) 100))
+      archived `shouldSatisfy` isSucceeded
+      dlqDepth `shouldReturn` 0
 
   describe "projection handlers" $ around (withFreshStore fixture) do
     it "prunes only the named dedup rows" $ \store -> do

@@ -27,8 +27,11 @@ module Keiro.PGMQ.Dlq
   ( DlqEntry (..),
     readDlq,
     redriveDlq,
+    PurgeDlqResult (..),
     purgeDlq,
+    purgeDlqForce,
     archiveDlq,
+    archiveDlqEntries,
     archiveDlqEntry,
     archiveDlqEntryById,
   )
@@ -44,12 +47,14 @@ import "base" Data.Foldable (toList)
 import "base" Data.Int (Int32, Int64)
 import "effectful-core" Effectful (Eff, IOE, (:>))
 import "pgmq-effectful" Pgmq.Effectful
-  ( Message (..),
+  ( BatchMessageQuery (..),
+    Message (..),
     MessageBody (..),
     MessageHeaders (..),
     MessageId (..),
     MessageQuery (..),
     Pgmq,
+    QueueMetrics (..),
     ReadMessage (..),
     SendMessage (..),
     SendMessageWithHeaders (..),
@@ -212,10 +217,29 @@ redriveDlq job n
                 }
           pure (count + 1)
 
--- | Delete all rows currently in the DLQ.
-purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es ()
-purgeDlq job =
-  void (Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName)
+-- | Result of a visibility-safe DLQ purge attempt.
+data PurgeDlqResult
+  = -- | The DLQ had no hidden rows at the metrics snapshot and was purged.
+    PurgeDlqPurged !Int64
+  | -- | Purge was refused because this many rows were hidden at the snapshot.
+    PurgeDlqBlocked !Int64
+  deriving stock (Eq, Show)
+
+-- | Delete all rows currently in the DLQ only when none are hidden by a prior
+-- read. The metrics check and deletion are separate operations, so callers that
+-- need a full-queue audit must also quiesce concurrent readers and writers.
+purgeDlq :: (Pgmq :> es, IOE :> es) => Job p -> Eff es PurgeDlqResult
+purgeDlq job = do
+  metrics <- Pgmq.queueMetrics job.jobQueue.dlqName
+  let invisible = metrics.queueLength - metrics.queueVisibleLength
+  if invisible > 0
+    then pure (PurgeDlqBlocked invisible)
+    else PurgeDlqPurged <$> Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
+
+-- | Unconditionally delete every active DLQ row, including hidden rows.
+purgeDlqForce :: (Pgmq :> es, IOE :> es) => Job p -> Eff es Int64
+purgeDlqForce job =
+  Pgmq.deleteAllMessagesFromQueue job.jobQueue.dlqName
 
 -- | Archive (retain) up to @n@ DLQ rows: move each out of the active DLQ table
 -- @pgmq.q_<dlq>@ into the archive table @pgmq.a_<dlq>@, preserving @enqueued_at@ /
@@ -249,6 +273,17 @@ archiveDlq job n
     archiveOne count message = do
       moved <- archiveDlqEntry job message.messageId
       pure (if moved then count + 1 else count)
+
+-- | Archive the specified DLQ rows, including rows hidden by a prior read.
+-- Returns only ids that were present and moved; returned order is unspecified.
+archiveDlqEntries :: (Pgmq :> es, IOE :> es) => Job p -> [MessageId] -> Eff es [MessageId]
+archiveDlqEntries _job [] = pure []
+archiveDlqEntries job messageIds =
+  Pgmq.batchArchiveMessages
+    BatchMessageQuery
+      { queueName = job.jobQueue.dlqName,
+        messageIds
+      }
 
 -- | Archive one specific DLQ row by message id. 'True' if a row was moved.
 archiveDlqEntry :: (Pgmq :> es, IOE :> es) => Job p -> MessageId -> Eff es Bool
