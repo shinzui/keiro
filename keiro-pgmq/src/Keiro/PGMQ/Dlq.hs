@@ -46,11 +46,13 @@ import "effectful-core" Effectful (Eff, IOE, (:>))
 import "pgmq-effectful" Pgmq.Effectful
   ( Message (..),
     MessageBody (..),
+    MessageHeaders (..),
     MessageId (..),
     MessageQuery (..),
     Pgmq,
     ReadMessage (..),
     SendMessage (..),
+    SendMessageWithHeaders (..),
   )
 import "pgmq-effectful" Pgmq.Effectful qualified as Pgmq
 import "text" Data.Text (Text)
@@ -68,6 +70,8 @@ data DlqEntry p = DlqEntry
     originalMessageId :: !(Maybe Int64),
     originalEnqueuedAt :: !(Maybe UTCTime),
     readCount :: !(Maybe Int64),
+    -- | The producer headers preserved in the DLQ wrapper, when present.
+    originalHeaders :: !(Maybe Value),
     -- | Full DLQ wrapper for forensics.
     rawBody :: !Value
   }
@@ -78,7 +82,8 @@ data DlqEnvelope = DlqEnvelope
     deadLetterReason :: !Text,
     envelopeOriginalMessageId :: !(Maybe Int64),
     envelopeOriginalEnqueuedAt :: !(Maybe UTCTime),
-    envelopeReadCount :: !(Maybe Int64)
+    envelopeReadCount :: !(Maybe Int64),
+    envelopeOriginalHeaders :: !(Maybe Value)
   }
 
 parseDlqEnvelope :: Value -> Either Text DlqEnvelope
@@ -93,13 +98,15 @@ parseDlqEnvelope =
         envelopeOriginalMessageId <- obj .:? "original_message_id"
         envelopeOriginalEnqueuedAt <- obj .:? "original_enqueued_at"
         envelopeReadCount <- obj .:? "read_count"
+        envelopeOriginalHeaders <- obj .:? "original_headers"
         pure
           DlqEnvelope
             { originalMessage,
               deadLetterReason,
               envelopeOriginalMessageId,
               envelopeOriginalEnqueuedAt,
-              envelopeReadCount
+              envelopeReadCount,
+              envelopeOriginalHeaders
             }
 
     firstText = \case
@@ -134,6 +141,7 @@ toEntry job message =
               originalMessageId = Nothing,
               originalEnqueuedAt = Nothing,
               readCount = Nothing,
+              originalHeaders = Nothing,
               rawBody = body
             }
         Right envelope ->
@@ -144,6 +152,7 @@ toEntry job message =
               originalMessageId = envelope.envelopeOriginalMessageId,
               originalEnqueuedAt = envelope.envelopeOriginalEnqueuedAt,
               readCount = envelope.envelopeReadCount,
+              originalHeaders = envelope.envelopeOriginalHeaders,
               rawBody = body
             }
 
@@ -179,13 +188,22 @@ redriveDlq job n
         Left _err ->
           pure count
         Right envelope -> do
-          _ <-
-            Pgmq.sendMessage
-              SendMessage
-                { queueName = job.jobQueue.physicalName,
-                  messageBody = MessageBody envelope.originalMessage,
-                  delay = Nothing
-                }
+          _ <- case envelope.envelopeOriginalHeaders of
+            Just headers ->
+              Pgmq.sendMessageWithHeaders
+                SendMessageWithHeaders
+                  { queueName = job.jobQueue.physicalName,
+                    messageBody = MessageBody envelope.originalMessage,
+                    messageHeaders = MessageHeaders headers,
+                    delay = Nothing
+                  }
+            Nothing ->
+              Pgmq.sendMessage
+                SendMessage
+                  { queueName = job.jobQueue.physicalName,
+                    messageBody = MessageBody envelope.originalMessage,
+                    delay = Nothing
+                  }
           void $
             Pgmq.deleteMessage
               MessageQuery

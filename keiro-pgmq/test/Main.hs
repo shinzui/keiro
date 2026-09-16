@@ -688,10 +688,11 @@ spec = do
   it "readDlq decodes the original dead-lettered payload" $ \connStr -> do
     let job = mkJob "keiro_pgmq_test.dlq_read"
         payload = Ping "poison" 3
+        headers = object ["tenant" .= ("acme" :: Text)]
     entries <-
       runDb connStr $ do
         ensureJobQueue job
-        _ <- enqueue job payload
+        _ <- enqueueWithHeaders job (MessageHeaders headers) payload
         runJobOnce 1 job (\_ -> pure (Dead "bad"))
         readDlq job 1
     case entries of
@@ -700,6 +701,7 @@ spec = do
         entry.originalPayload `shouldBe` Right payload
         entry.originalMessageId `shouldSatisfy` (/= Nothing)
         entry.readCount `shouldBe` Just 1
+        entry.originalHeaders `shouldBe` Just headers
       _ -> expectationFailure ("expected one DLQ entry, got " <> show (length entries))
 
   it "redriveDlq moves dead-lettered payloads back to the main queue" $ \connStr -> do
@@ -719,6 +721,85 @@ spec = do
       runJobOnce 1 job (\_ -> pure Done)
     finalMainLen <- runDb connStr (queueLen job.jobQueue.physicalName)
     finalMainLen `shouldBe` 0
+
+  it "redriveDlq preserves the wrapper's original headers" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.dlq_redrive_headers"
+        originalHeaders =
+          object
+            [ "x-pgmq-group" .= ("orders" :: Text),
+              "traceparent" .= ("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" :: Text),
+              "tenant" .= ("acme" :: Text)
+            ]
+    messages <-
+      runDb connStr $ do
+        ensureJobQueue job
+        _ <- enqueueWithHeaders job (MessageHeaders originalHeaders) (Ping "redrive-headers" 1)
+        runJobOnce 1 job (\_ -> pure (Dead "bad"))
+        redriven <- redriveDlq job 1
+        liftIO (redriven `shouldBe` 1)
+        readMessages job.jobQueue.physicalName 1
+    case messages of
+      [message] -> message.headers `shouldBe` Just originalHeaders
+      _ -> expectationFailure ("expected one redriven message, got " <> show (length messages))
+
+  it "redriveDlq uses wrapper headers instead of the DLQ row's headers" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.dlq_redrive_wrapper_headers"
+        originalHeaders = object ["tenant" .= ("original" :: Text)]
+        dlqRowHeaders = object ["tenant" .= ("dlq-row" :: Text)]
+        wrapper =
+          object
+            [ "original_message" .= Ping "wrapper-headers" 1,
+              "dead_letter_reason" .= ("poison_pill: bad" :: Text),
+              "original_headers" .= originalHeaders
+            ]
+    messages <-
+      runDb connStr $ do
+        ensureJobQueue job
+        _ <-
+          Pgmq.sendMessageWithHeaders
+            Pgmq.SendMessageWithHeaders
+              { queueName = job.jobQueue.dlqName,
+                messageBody = MessageBody wrapper,
+                messageHeaders = MessageHeaders dlqRowHeaders,
+                delay = Nothing
+              }
+        _ <- redriveDlq job 1
+        readMessages job.jobQueue.physicalName 1
+    case messages of
+      [message] -> message.headers `shouldBe` Just originalHeaders
+      _ -> expectationFailure ("expected one redriven message, got " <> show (length messages))
+
+  it "redriveDlq keeps missing and null wrapper headers headerless" $ \connStr -> do
+    let rowHeaders = MessageHeaders (object ["tenant" .= ("dlq-row" :: Text)])
+        redriveLegacy queue wrapper = do
+          let job = mkJob queue
+          runDb connStr $ do
+            ensureJobQueue job
+            _ <-
+              Pgmq.sendMessageWithHeaders
+                Pgmq.SendMessageWithHeaders
+                  { queueName = job.jobQueue.dlqName,
+                    messageBody = MessageBody wrapper,
+                    messageHeaders = rowHeaders,
+                    delay = Nothing
+                  }
+            _ <- redriveDlq job 1
+            readMessages job.jobQueue.physicalName 1
+        missingHeaders =
+          object
+            [ "original_message" .= Ping "missing-headers" 1,
+              "dead_letter_reason" .= ("poison_pill: bad" :: Text)
+            ]
+        nullHeaders =
+          object
+            [ "original_message" .= Ping "null-headers" 1,
+              "dead_letter_reason" .= ("poison_pill: bad" :: Text),
+              "original_headers" .= Null
+            ]
+    missingMessages <- redriveLegacy "keiro_pgmq_test.dlq_redrive_missing_headers" missingHeaders
+    nullMessages <- redriveLegacy "keiro_pgmq_test.dlq_redrive_null_headers" nullHeaders
+    map (.headers) missingMessages `shouldBe` [Nothing]
+    map (.headers) nullMessages `shouldBe` [Nothing]
 
   it "purgeDlq empties the DLQ" $ \connStr -> do
     let job = mkJob "keiro_pgmq_test.dlq_purge"
@@ -749,6 +830,7 @@ spec = do
         entry.originalPayload `shouldSatisfy` \case
           Left (JobPayloadMalformed _) -> True
           _ -> False
+        entry.originalHeaders `shouldBe` Nothing
       _ -> expectationFailure ("expected one malformed DLQ entry, got " <> show (length entries))
 
   it "undecodable payload routes to the DLQ" $ \connStr -> do

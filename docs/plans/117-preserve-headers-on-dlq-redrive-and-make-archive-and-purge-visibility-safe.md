@@ -23,6 +23,11 @@ provenance:
       at: 2026-09-15T19:58:38Z
       mode: "update"
       note: "Refresh released pgmq-hs 0.6 ownership, keiro-ops caller coverage, and purge safety limitations."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T04:45:20Z
+      mode: "implement"
+      note: "Implemented and validated DLQ header preservation, then continued through visibility-safe archive and purge work"
 ---
 
 # Preserve headers on DLQ redrive and make archive and purge visibility-safe
@@ -58,7 +63,7 @@ every row before purge.
 
 
 - [x] (2026-09-15) Refreshed against keiro source, Mori-discovered dependency source, Hackage versions, and upstream release tag v0.6.0.0; established keiro versus pgmq-hs ownership.
-- [ ] M1: Parse and expose original headers, preserve them on redrive, and pass header/legacy-wrapper regressions.
+- [x] (2026-09-15) M1: Parsed and exposed original headers, preserved them on redrive, and passed header/legacy-wrapper regressions (`cabal test keiro-pgmq-test`: 61 examples, 0 failures, 2 pre-existing pending).
 - [ ] M2: Add archive-by-ids, typed guarded purge, explicit force purge, and visibility regressions.
 - [ ] M2: Update keiro-ops purge result handling and test refusal without deleting inspected rows.
 - [ ] M3: Correct the operator runbook and compatibility notes; pass both affected suites and the no-wait inspect/archive/purge example.
@@ -97,6 +102,12 @@ Adding a field to exported `DlqEntry (..)` can break external constructors, and 
 `purgeDlq`'s result does not force every caller to inspect it: callers using `void` or
 discarding a do-block result can still compile. A source search and migration guidance
 are required in addition to compilation.
+
+The first M1 regression reproduced the header loss before implementation: after redrive,
+the main-queue row had `headers = Nothing` instead of the wrapper's group, fixed
+`traceparent`, and tenant metadata. With wrapper parsing and header-aware resend in place,
+the full pgmq suite passed with 61 examples, zero failures, and the same two pending
+integration cases.
 
 
 ## Decision Log
@@ -445,3 +456,7 @@ Revision (2026-09-15): Refreshed against released pgmq-hs 0.6.0.0 and current ke
 Corrected dependency/migration premises, made repository ownership explicit, added the
 keiro-ops caller and regressions, removed stale line numbers and fixed test counts, and
 clarified best-effort purge, compatibility, and complete-audit limitations.
+
+Revision (2026-09-15): Began implementation and completed Milestone 1. Recorded the
+observed header-loss regression and the passing full-suite result after preserving wrapper
+headers while keeping missing, null, and malformed legacy wrappers headerless.
