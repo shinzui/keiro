@@ -28,6 +28,11 @@ provenance:
       at: 2026-09-16T13:44:09Z
       mode: "update"
       note: "Refreshed current retention/index scope and added full-workload performance regression gates"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T16:49:37Z
+      mode: "implement"
+      note: "Started retention guardrail and truthful FIFO provisioning documentation"
 ---
 
 # Correct partitioned retention semantics and the FIFO index
@@ -73,10 +78,10 @@ startup. No upstream function or existing index is replaced.
 ## Progress
 
 - [x] (2026-09-16) Refreshed current Keiro, pgmq-hs, PGMQ, and Shibuya adapter evidence. `cabal test keiro-pgmq-test --test-show-details=direct` passed with 65 examples, 0 failures, and 2 pre-existing pending examples.
-- [ ] M1: Add and test the bounded `mkPartitionSpec` guardrail; correct `PartitionSpec`, `QueueKind`, and provisioning Haddocks. Preserve the already-corrected DLQ runbook.
-- [ ] M2: Require reproducible stock-GIN versus stock-GIN-plus-candidate measurements across every Keiro FIFO query shape, polling state, representative depth/cardinality, and write/lease workload. Record a useful, scoped result or no recommendation.
-- [ ] M3: Correct FIFO provisioning Haddocks and validate the accepted operator procedure's coexistence, lifecycle, lock behavior, and partition behavior without automatic provisioning or GIN replacement.
-- [ ] Update `keiro-pgmq/CHANGELOG.md`; run the ADR distillation pass against `docs/adr/0001-keiro-pgmq-job-processing-telemetry-contract.md` and `docs/adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md`.
+- [x] (2026-09-16) M1: Added and tested the bounded `mkPartitionSpec` guardrail; corrected `PartitionSpec`, `QueueKind`, and provisioning Haddocks while preserving the DLQ runbook. Haddocks rendered successfully and `keiro-pgmq-test` passed with 79 examples, 0 failures, and 2 pre-existing pending examples.
+- [x] (2026-09-16) M2: Audited the owning pgmq-hs plan and current source. It still contains no probe, measurements, or operator procedure, so the accepted result is an explicit pending/no-recommendation outcome rather than invented performance evidence.
+- [x] (2026-09-16) M3: Corrected FIFO provisioning Haddocks and user guidance to describe the conventional name-detected GIN accurately. Existing reconciliation tests passed; supplemental-index lifecycle, lock, and partition validation is not applicable because no procedure was accepted.
+- [x] (2026-09-16) Updated `keiro-pgmq/CHANGELOG.md`, completed ADR distillation into new ADR 45, passed strict validation for 45 ADR concepts, built all packages, passed the native flake checks, and completed the final source audit.
 
 
 ## Surprises & Discoveries
@@ -120,6 +125,13 @@ startup. No upstream function or existing index is replaced.
   that range and treated negative numeric text as a time interval. The constructor must mirror
   the server boundary and describe the retention comparison as Keiro policy, not pg_partman
   proof.
+- The refreshed pgmq-hs plan 20 remains entirely unchecked and the checkout contains no
+  `fifo-index-probe.sql`, measurements, or supported supplemental-index procedure. The plan's
+  negative/pending branch is therefore the only evidence-based completion available in Keiro;
+  procedure-specific lock and partition tests would be fictional without an accepted procedure.
+- The adapter checkout and authoritative remote tag now contain released 0.16.0.0 at annotated
+  tag `v0.16.0.0`, superseding this plan's refresh-time statement that 0.15.0.0 was latest. This
+  resolves the grouped-head workload dependency but does not supply supplemental-index evidence.
 
 
 ## Decision Log
@@ -169,12 +181,37 @@ startup. No upstream function or existing index is replaced.
   requires operator commands to respect library schema ownership.
   Date: 2026-09-16
 
+- Decision: Complete the index-evidence milestone with an explicit pending/no-recommendation
+  result because the owning pgmq-hs plan has not produced a probe, measurements, or procedure.
+  Do not perform lifecycle tests against a hypothetical index definition or copy candidate DDL
+  into Keiro.
+  Rationale: The plan expressly accepts a negative or pending result, while reproducible owning-
+  project evidence is a prerequisite for any recommendation.
+  Date: 2026-09-16
+
+- Decision: Record the partition guardrail and upstream-SQL/index boundary in
+  [ADR 45](../adr/0045-pgmq-provisioning-preserves-upstream-sql-and-bounds-local-retention-validation.md).
+  ADR 1 is unchanged because processing telemetry did not change; ADR 28 remains the supporting
+  schema-ownership rule rather than the primary home for partition-retention semantics.
+  Rationale: Whole-partition deletion, bounded local validation, and the no-unmeasured-index rule
+  are durable public provisioning constraints.
+  Date: 2026-09-16
+
 
 ## Outcomes & Retrospective
 
-The 2026-09-16 refresh found no shipped supplemental index and therefore no new production
-performance risk from this plan yet. It replaced inference-based acceptance with explicit read,
-poll, write, churn, storage, lock, partition, and end-to-end gates. Implementation remains.
+Implementation is complete. `mkPartitionSpec` trims inputs and rejects empty, mixed-unit,
+non-positive, signed-32-bit-overflowing partition, and too-short numeric retention settings while
+leaving paired time syntax server-validated and retaining the raw constructor escape hatch.
+Haddocks, user documentation, and the changelog now state that retention drops whole active and
+archive partitions and that the conventional FIFO GIN's name-based presence is not proof of
+grouped-read acceleration.
+
+The owning pgmq-hs plan has not produced the required full-workload measurements or an operator
+procedure, so Keiro deliberately recommends no supplemental index and installs no experimental
+DDL. `cabal build all`, rendered `keiro-pgmq` Haddocks, `keiro-pgmq-test` (79 examples, 0
+failures, 2 pre-existing pending), strict ADR validation (45 concepts), formatting, and the final
+native flake and diff/source audits passed. ADR 45 preserves the durable provisioning boundary.
 
 
 ## Context and Orientation
@@ -451,3 +488,7 @@ implemented DLQ work, and the new grouped-head adapter path. Corrected the const
 classifier and added explicit full-workload performance, write-amplification, polling,
 concurrency, storage, lock, partition, and recommendation gates so an optional index cannot ship
 on plan-node evidence alone.
+
+Revision note (2026-09-16): Implemented the bounded partition constructor and truthful public
+provisioning documentation, recorded the upstream plan's lack of evidence as an explicit
+no-recommendation outcome, added ADR 45, and completed validation.

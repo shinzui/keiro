@@ -105,6 +105,8 @@ module Keiro.PGMQ.Job
     -- * Queue lifecycle
     QueueKind (..),
     PartitionSpec (..),
+    PartitionSpecConfigError (..),
+    mkPartitionSpec,
     QueueProvision (..),
     standardProvision,
     unloggedProvision,
@@ -226,6 +228,7 @@ import "shibuya-pgmq-adapter" Shibuya.Adapter.Pgmq.Convert
   )
 import "text" Data.Text (Text)
 import "text" Data.Text qualified as Text
+import "text" Data.Text.Read qualified as TextRead
 import "time" Data.Time (NominalDiffTime, nominalDiffTimeToSeconds)
 
 -- | What a job handler decides. Never exposes shibuya/PGMQ wire types to the caller.
@@ -594,25 +597,92 @@ groupHeader k = MessageHeaders (object ["x-pgmq-group" .= k])
 --     table is truncated to empty on a database crash. For transient, regenerable
 --     work.
 --   * 'PartitionedKind' — storage split across child tables by time or message-id
---     range, managed by the PostgreSQL extension @pg_partman@. Requires a
---     @pg_partman@-enabled server (see 'partitionedProvision').
+--     range, managed by the PostgreSQL extension @pg_partman@. This mode is
+--     experimental and requires a @pg_partman@-enabled server. Retention drops
+--     whole old partitions, including unprocessed active rows (see
+--     'partitionedProvision').
 data QueueKind
   = StandardKind
   | UnloggedKind
   | PartitionedKind !PartitionSpec
   deriving stock (Eq, Show)
 
--- | Partition interval + retention interval for a partitioned queue. Both are
--- PostgreSQL/@pg_partman@ duration or integer strings — e.g. @"daily"@ or
--- @"10000"@ for the interval, @"7 days"@ or @"100000"@ for the retention.
+-- | Partition interval and retention policy for a partitioned queue. PGMQ passes
+-- both values to PostgreSQL/@pg_partman@: time values are opaque strings such as
+-- @"daily"@ and @"7 days"@, while positive PostgreSQL @INTEGER@ text selects
+-- message-id-range partitioning.
+--
+-- Retention is not per-message expiry. Maintenance permanently drops whole old
+-- partitions from both the active queue and its archive without checking whether
+-- an active message was processed. Size retention above the worst expected
+-- consumer outage and backlog age, with an operator-chosen safety margin.
+--
+-- The raw constructor is intentionally available for server-specific values but
+-- is unvalidated. Prefer 'mkPartitionSpec' for the bounded checks Keiro can make
+-- without duplicating PostgreSQL's interval parser.
 data PartitionSpec = PartitionSpec
   { partitionInterval :: !Text,
     retentionInterval :: !Text
   }
   deriving stock (Eq, Show)
 
+-- | Why 'mkPartitionSpec' rejected a partition configuration.
+data PartitionSpecConfigError
+  = EmptyPartitionInterval
+  | EmptyRetentionInterval
+  | NonPositivePartitionInterval !Integer
+  | NonPositiveRetentionInterval !Integer
+  | PartitionIntervalOutsidePostgresInteger !Integer
+  | MixedPartitionUnits !Text !Text
+  | RetentionBelowPartitionInterval !Integer !Integer
+  deriving stock (Eq, Show)
+
+-- | Construct a partition specification after applying Keiro's bounded
+-- preflight checks. Inputs are trimmed. Fully numeric values must use matching
+-- message-id units; the partition span must fit PostgreSQL's positive signed
+-- 32-bit @INTEGER@ classifier, and numeric retention must cover at least one
+-- configured span. Nonnumeric pairs remain opaque for PostgreSQL/@pg_partman@ to
+-- validate.
+--
+-- These checks reject obvious mistakes; they do not prove a safe retention
+-- horizon. Operators must still account for worst-case outage and backlog age.
+mkPartitionSpec :: Text -> Text -> Either PartitionSpecConfigError PartitionSpec
+mkPartitionSpec rawPartition rawRetention
+  | Text.null partition = Left EmptyPartitionInterval
+  | Text.null retention = Left EmptyRetentionInterval
+  | otherwise =
+      case (completeInteger partition, completeInteger retention) of
+        (Just partitionValue, Just retentionValue)
+          | partitionValue <= 0 -> Left (NonPositivePartitionInterval partitionValue)
+          | partitionValue > toInteger (maxBound :: Int32) ->
+              Left (PartitionIntervalOutsidePostgresInteger partitionValue)
+          | retentionValue <= 0 -> Left (NonPositiveRetentionInterval retentionValue)
+          | retentionValue < partitionValue ->
+              Left (RetentionBelowPartitionInterval partitionValue retentionValue)
+          | otherwise -> Right spec
+        (Just partitionValue, Nothing)
+          | partitionValue <= 0 -> Left (NonPositivePartitionInterval partitionValue)
+          | partitionValue > toInteger (maxBound :: Int32) ->
+              Left (PartitionIntervalOutsidePostgresInteger partitionValue)
+          | otherwise -> Left (MixedPartitionUnits partition retention)
+        (Nothing, Just retentionValue)
+          | retentionValue <= 0 -> Left (NonPositiveRetentionInterval retentionValue)
+          | otherwise -> Left (MixedPartitionUnits partition retention)
+        (Nothing, Nothing) -> Right spec
+  where
+    partition = Text.strip rawPartition
+    retention = Text.strip rawRetention
+    spec = PartitionSpec {partitionInterval = partition, retentionInterval = retention}
+
+    completeInteger value =
+      case TextRead.signed TextRead.decimal value of
+        Right (parsed, remainder) | Text.null remainder -> Just parsed
+        _ -> Nothing
+
 -- | The provisioning choice for a job's /main/ queue: which storage shape, and
--- whether to create the FIFO GIN index. The DLQ (when the policy enables one) is
+-- whether to create PGMQ's conventional FIFO GIN index on @headers@. Presence is
+-- reported by the upstream index name; it does not prove that PostgreSQL uses the
+-- index for grouped-read expressions. The DLQ (when the policy enables one) is
 -- always a plain standard queue with no FIFO index.
 data QueueProvision = QueueProvision
   { provisionKind :: !QueueKind,
@@ -628,12 +698,17 @@ standardProvision = QueueProvision {provisionKind = StandardKind, provisionFifoI
 unloggedProvision :: QueueProvision
 unloggedProvision = QueueProvision {provisionKind = UnloggedKind, provisionFifoIndex = False}
 
--- | A partitioned main queue (no FIFO index) with the given interval/retention.
+-- | An experimental partitioned main queue (no FIFO index) with the given
+-- interval and retention. Maintenance drops whole old active and archive
+-- partitions, so unprocessed work can be lost when retention is shorter than an
+-- outage or backlog. Prefer a value built by 'mkPartitionSpec'.
 partitionedProvision :: PartitionSpec -> QueueProvision
 partitionedProvision spec =
   QueueProvision {provisionKind = PartitionedKind spec, provisionFifoIndex = False}
 
--- | Turn on FIFO-index creation for a provisioning choice.
+-- | Request PGMQ's conventional FIFO GIN index for a provisioning choice. This
+-- preserves upstream provisioning and presence-reporting behavior; it is not a
+-- claim that the index accelerates every grouped-read query.
 withFifoIndexProvision :: QueueProvision -> QueueProvision
 withFifoIndexProvision provision = provision {provisionFifoIndex = True}
 
@@ -680,13 +755,18 @@ ensureJobQueueWith provision job =
 ensureJobQueue :: (Pgmq :> es) => Job p -> Eff es ()
 ensureJobQueue = ensureJobQueueWith standardProvision
 
--- | Create the FIFO GIN index on the job's /main/ queue's @headers@ column —
--- the index PGMQ's grouped/ordered reads (@read_grouped@/@read_grouped_rr@) match
--- against. Idempotent: the index step is always re-applied and the underlying SQL
--- is @CREATE INDEX IF NOT EXISTS@, so a second call is a harmless no-op. Routing
+-- | Request PGMQ's conventional FIFO GIN index on the job's /main/ queue's
+-- @headers@ column. PGMQ reports presence by the conventional index name; neither
+-- presence nor successful creation proves that PostgreSQL uses it for the group
+-- expression in @read_grouped@, @read_grouped_rr@, or @read_grouped_head@. No
+-- supplemental expression index is currently recommended without reproducible
+-- workload measurements.
+--
+-- Idempotent: the index step is always re-applied and the underlying SQL is
+-- @CREATE INDEX IF NOT EXISTS@, so a second call is a harmless no-op. Routing
 -- through @pgmq-config@'s reconciler (which lists existing queues first) means
 -- calling this on an already-provisioned queue does not recreate the queue. This
--- is the artifact the FIFO ordered-delivery plan
+-- is the conventional provisioning artifact the FIFO ordered-delivery plan
 -- (@docs/plans/77-add-fifo-ordered-delivery-via-message-groups-to-keiro-pgmq.md@)
 -- consumes for ordered jobs.
 ensureFifoIndex :: (Pgmq :> es) => Job p -> Eff es ()
@@ -695,9 +775,10 @@ ensureFifoIndex job =
     [Config.withFifoIndex (Config.standardQueue job.jobQueue.physicalName)]
 
 -- | Provision an ordered job's queue: create the main queue (and the DLQ when
--- the policy uses one) plus the FIFO GIN index that grouped reads need. Composes
--- 'ensureJobQueue' and 'ensureFifoIndex'; both are idempotent, so this is safe to
--- call at every startup.
+-- the policy uses one) plus PGMQ's conventional FIFO GIN index. This preserves
+-- upstream's ordered-queue setup but does not claim grouped-read acceleration.
+-- Composes 'ensureJobQueue' and 'ensureFifoIndex'; both are idempotent, so this is
+-- safe to call at every startup.
 ensureOrderedJobQueue :: (Pgmq :> es) => Job p -> Eff es ()
 ensureOrderedJobQueue job = do
   ensureJobQueue job

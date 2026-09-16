@@ -27,6 +27,11 @@ provenance:
       at: 2026-09-16T12:51:21Z
       mode: "implement"
       note: "Started EP-1 and registered the grouped-head adapter release dependency"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T16:49:37Z
+      mode: "implement"
+      note: "Reconciled completed EP-2 and started EP-3"
 ---
 
 # Harden keiro-pgmq FIFO ordering, DLQ operator paths, and provisioning surfaced by the 2026-07 pgmq review
@@ -77,8 +82,8 @@ Promote actual consumer FIFO decisions into the local ADR corpus at implementati
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Enforce FIFO group ordering under failure and batched consumption | docs/plans/116-enforce-fifo-group-ordering-under-failure-and-batched-consumption.md | Adapter plan 7 release for Keiro M2-M4 | None | Complete |
-| 2 | Preserve headers on DLQ redrive and make archive and purge visibility-safe | docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md | None | None | Not Started |
-| 3 | Correct partitioned retention semantics and the FIFO index | docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md | None | EP-1 shared Job.hs coordination | Not Started |
+| 2 | Preserve headers on DLQ redrive and make archive and purge visibility-safe | docs/plans/117-preserve-headers-on-dlq-redrive-and-make-archive-and-purge-visibility-safe.md | None | None | Complete |
+| 3 | Correct partitioned retention semantics and the FIFO index | docs/plans/118-correct-partitioned-retention-semantics-and-the-fifo-index.md | None | EP-1 shared Job.hs coordination | Complete |
 
 ## Dependency Graph
 
@@ -130,9 +135,9 @@ its job/tuning contract before constructing the adapter.
 - [x] 2026-09-16: EP-1 consumer batching/order-tuning contract implemented on drain and worker
   paths, with retry, throw, delay, dead-letter, worker, batch, mismatch, default-entry-point, and
   legacy-mode regressions plus DSL, documentation, and ADR coverage.
-- [ ] EP-2: Header-preserving redrive and visibility-safe archive/purge plus operator tests.
-- [ ] EP-3: Accurate retention policy/Haddocks and scoped constructor guardrail.
-- [ ] EP-3: Accurate conventional GIN description and measured optional supplemental-index guidance, or explicit negative/pending result.
+- [x] 2026-09-16: EP-2 header-preserving redrive and visibility-safe archive/purge completed with operator tests, documentation, changelog, and ADR coverage.
+- [x] 2026-09-16: EP-3 added the bounded partition constructor and accurate whole-partition retention policy/Haddocks.
+- [x] 2026-09-16: EP-3 corrected the conventional GIN description and recorded an explicit no-recommendation result because upstream produced no supplemental-index measurements or procedure.
 - [x] 2026-09-12: Reconciled shared pgmq-hs guidance with the user's no-overrides/additive-index constraint.
 - [x] 2026-09-16: EP-1 final integration selected the Hackage 0.16.0.0 tarball without a local
   package path. The full build, PGMQ (78/0/2 pending), DSL (743/0), focused conformance/ops/example,
@@ -160,6 +165,11 @@ closes the batching failure hole. Mutating the drain back to legacy grouped read
 same-group successor after a thrown head; forcing quantity one changed the sixteen-group trace
 from one receive to sixteen. Both mutations were restored before final validation.
 
+EP-3 found the owning pgmq-hs index plan still entirely unimplemented: no probe fixture,
+measurements, or operator procedure exists. The evidence-based result is therefore no
+supplemental-index recommendation. Keiro now documents that boundary explicitly and keeps all
+experimental DDL out of startup, migrations, and operator commands.
+
 ## Decision Log
 
 
@@ -178,15 +188,23 @@ consumer lease/failure/telemetry responsibilities, not claim unconditional proce
 `HeadPerGroup` and its release; Keiro owns `FifoHeads`, configuration rejection, drain dispatch,
 and failure-path proofs. Deterministic cross-group result order is explicitly not a dependency.
 
+2026-09-16: Complete EP-3 without supplemental-index DDL. Keiro owns bounded partition input
+validation and truthful provisioning prose; pgmq-hs continues to own the measurement and any
+future separately named operator procedure. ADR 45 records this durable boundary.
+
 ## Outcomes & Retrospective
 
 
-Cross-repository plan consistency is corrected and EP-1 is complete. Jobs now declare ordering,
+The initiative is complete. Cross-repository plan consistency is corrected. Jobs now declare ordering,
 invalid or contradictory tuning fails before reads, grouped heads safely preserve multi-group
 batches, the DSL owns the `fifo-heads` contract, and ADR-44 records the consumer decision. The
 adapter 0.16.0.0 release is published and tagged, its benchmark met the release gate, and Keiro's
-final build and tests consumed the Hackage tarball without a local source path. The MasterPlan
-remains active for EP-2 and EP-3.
+final build and tests consumed the Hackage tarball without a local source path. DLQ redrive now
+preserves producer headers, archive-by-id remains visibility-safe, and guarded purge refuses
+hidden rows. Partitioned retention now has a bounded smart constructor and truthful whole-
+partition deletion guidance. Conventional FIFO GIN provisioning is described without an
+unmeasured acceleration claim, and no supplemental index is recommended pending owning-project
+evidence. ADRs 44 and 45 retain the durable consumer and provisioning decisions.
 
 Revision note (2026-09-12): Replaced obsolete downstream expectations of pgmq SQL migrations,
 automatic GIN conversion and shared bounds with the accepted client-only/additive-index contract.
@@ -200,3 +218,7 @@ documentation, changelogs, and ADR; retained adapter publication as the final ha
 
 Revision note (2026-09-16): Published the adapter release, completed Hackage-only integration
 and the final validation matrix, and marked EP-1 complete.
+
+Revision note (2026-09-16): Reconciled the already-complete EP-2, implemented EP-3's retention
+guardrail and truthful provisioning contract, recorded the evidence-based no-index-recommendation
+outcome, and completed the MasterPlan.

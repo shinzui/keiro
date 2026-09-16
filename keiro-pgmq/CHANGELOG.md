@@ -28,6 +28,10 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 - Add `FifoHeads`, backed by PGMQ's grouped-head read in both worker and
   one-shot paths. It safely batches independent absolute group heads while a
   failed, invisible, or delayed head blocks successors in its own group.
+- Add `mkPartitionSpec` and `PartitionSpecConfigError` to reject obvious empty,
+  mixed-unit, non-positive, out-of-range, and too-short numeric partition
+  settings before database access. The raw constructor remains available for
+  server-specific values.
 
 - DLQ redrive preserves the wrapper's original producer headers, including FIFO,
   trace, and application metadata. Missing and JSON-null legacy headers remain
@@ -36,6 +40,14 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
   them. Ordinary `purgeDlq` refuses when metrics report hidden rows and returns
   the deleted or blocked count; `purgeDlqForce` is the distinctly named
   unconditional escape hatch.
+
+### Documentation
+
+- Clarify that partition retention drops whole active and archive partitions and
+  can remove unprocessed work after a sufficiently long outage or backlog.
+- Describe FIFO provisioning as PGMQ's conventional name-detected GIN index.
+  No supplemental grouped-read index is recommended pending reproducible
+  full-workload measurements, and Keiro installs no experimental startup DDL.
 
 ## 0.16.0.0 — 2026-09-07
 

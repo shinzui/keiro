@@ -341,8 +341,10 @@ ordering contract. An older consumer must not be left to interpret the queue as
 unordered or through a legacy batch-filling read.
 
 Delivery is still at-least-once and there is still no deduplication — ordering
-is not exactly-once. Ordered reads also require the FIFO GIN index on the
-queue's `headers` column; provision it (below) or grouped reads will not match.
+is not exactly-once. Ordered queue setup requests PGMQ's conventional FIFO GIN
+index on the queue's `headers` column. PGMQ detects that index by name; its
+presence does not prove that PostgreSQL uses it for the group expression in the
+grouped-read queries.
 
 ## Queue provisioning and migrations
 
@@ -380,17 +382,37 @@ and creates only what is missing, so it is safe to call at every worker startup.
 |---|---|
 | `standardProvision` | a normal write-ahead-logged queue table (the default) |
 | `unloggedProvision` | an *unlogged* table: writes skip the WAL, but the table is **truncated on a database crash**. Only for transient, regenerable work. |
-| `partitionedProvision (PartitionSpec interval retention)` | storage split across child tables by time or id range, managed by `pg_partman`. Requires a `pg_partman`-enabled server. |
+| `partitionedProvision spec` | experimental storage split across child tables by time or id range, managed by `pg_partman`. Requires a `pg_partman`-enabled server. |
+
+Build `spec` with `mkPartitionSpec interval retention` when possible. It trims
+the values and rejects empty fields, mixed numeric/time units, non-positive
+numeric spans, message-id partition spans outside PostgreSQL's signed 32-bit
+integer range, and numeric retention shorter than one partition span. The raw
+`PartitionSpec` constructor remains available for server-specific values and is
+unvalidated. Time strings stay opaque for PostgreSQL and `pg_partman` to parse.
+
+Partition retention is not per-message expiry. `pg_partman` maintenance drops
+whole old partitions from both the active queue and its archive without checking
+whether an active message was processed. Size retention above the worst expected
+consumer outage and backlog age, with an operator-chosen safety margin. The
+constructor catches obvious configuration errors; it cannot prove that a chosen
+retention horizon is operationally safe.
 
 For partitioned queues, Keiro passes `premake = Nothing` to `pgmq-config` so
 PGMQ retains the server's default number of pre-created partitions (currently
 four). Keiro does not expose explicit premake control; that newer PGMQ 1.13
 option would need a separate public feature decision.
 
-`withFifoIndexProvision` turns on the FIFO GIN index for any of them. The DLQ is
-always a plain standard queue with no FIFO index. `ensureOrderedJobQueue` is the
-convenience composition for ordered jobs (queue + DLQ + index), and
-`ensureFifoIndex` adds just the index to an already-provisioned queue.
+`withFifoIndexProvision` requests PGMQ's conventional FIFO GIN index for any of
+them. The DLQ is always a plain standard queue with no FIFO index.
+`ensureOrderedJobQueue` is the convenience composition for ordered jobs (queue
++ DLQ + conventional index), and `ensureFifoIndex` adds just that index to an
+already-provisioned queue. The grouped reads use a coalesced group expression
+and `msg_id`; the GIN operator class does not directly serve that expression or
+ordering. No supplemental index is currently recommended because the required
+full-workload read, polling, write, lease, storage, lock, and partition-lifecycle
+measurements have not been published. Keiro does not install an experimental
+index at startup or replace PGMQ-owned SQL.
 `queueProvisionConfigs` exposes the resulting configuration list, so the
 partitioned path is testable without a `pg_partman` server.
 

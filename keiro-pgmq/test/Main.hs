@@ -378,6 +378,33 @@ spec = do
     mkJobTuning 30 1 (PollEvery 1)
       `shouldBe` Right defaultJobTuning
 
+  it "validates partition specifications without parsing time intervals" $ \_connStr -> do
+    mkPartitionSpec " daily " " 7 days "
+      `shouldBe` Right (PartitionSpec "daily" "7 days")
+    mkPartitionSpec " 10000 " " 100000 "
+      `shouldBe` Right (PartitionSpec "10000" "100000")
+    mkPartitionSpec "" "7 days"
+      `shouldBe` Left EmptyPartitionInterval
+    mkPartitionSpec "daily" "   "
+      `shouldBe` Left EmptyRetentionInterval
+    mkPartitionSpec "0" "100"
+      `shouldBe` Left (NonPositivePartitionInterval 0)
+    mkPartitionSpec "-1" "100"
+      `shouldBe` Left (NonPositivePartitionInterval (-1))
+    mkPartitionSpec "100" "0"
+      `shouldBe` Left (NonPositiveRetentionInterval 0)
+    mkPartitionSpec "100" "-1"
+      `shouldBe` Left (NonPositiveRetentionInterval (-1))
+    mkPartitionSpec "2147483648" "2147483648"
+      `shouldBe` Left (PartitionIntervalOutsidePostgresInteger 2147483648)
+    mkPartitionSpec "100" "7 days"
+      `shouldBe` Left (MixedPartitionUnits "100" "7 days")
+    mkPartitionSpec "daily" "100"
+      `shouldBe` Left (MixedPartitionUnits "daily" "100")
+    mkPartitionSpec "100" "99"
+      `shouldBe` Left (RetentionBelowPartitionInterval 100 99)
+    PartitionSpec "" "" `shouldBe` PartitionSpec "" ""
+
   it "derives distinct physical names for long logical queue names" $ \_connStr -> do
     let commonPrefix = Text.replicate 43 "a"
         first = queueRef (commonPrefix <> "x")
@@ -1182,8 +1209,8 @@ spec = do
   -- EP-2 M2: partitioned config shape (pure) + pending live test.
   it "ensureJobQueueWith partitioned builds a partitioned QueueConfig" $ \_connStr -> do
     let job = mkJob "keiro_pgmq_test.partitioned"
-        spec = PartitionSpec {partitionInterval = "daily", retentionInterval = "7 days"}
-    case queueProvisionConfigs (partitionedProvision spec) job of
+        partitionSpec = either (error . show) id (mkPartitionSpec "daily" "7 days")
+    case queueProvisionConfigs (partitionedProvision partitionSpec) job of
       (mainCfg : _) ->
         case mainCfg.queueType of
           Config.PartitionedQueue pc -> do
