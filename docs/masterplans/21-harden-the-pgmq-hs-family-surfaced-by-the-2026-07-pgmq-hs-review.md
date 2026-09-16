@@ -4,182 +4,237 @@ slug: harden-the-pgmq-hs-family-surfaced-by-the-2026-07-pgmq-hs-review
 title: "Harden the pgmq-hs family surfaced by the 2026-07 pgmq-hs review"
 kind: master-plan
 created_at: 2026-07-23T04:18:29Z
+provenance:
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-16T13:25:58Z
+      mode: "update"
+      note: "Reconciled upstream ownership, 0.6 adoption, current verification, and remaining work"
 ---
 
 # Superseded: Harden the pgmq-hs family surfaced by the 2026-07 pgmq-hs review
 
-This MasterPlan's pgmq-hs implementation scope is superseded and must not be reimplemented
-from the keiro repository. This redirect also records Keiro's local consumer-adoption status,
-because the initiative is not operationally closed for Keiro until its released dependency
-bounds and consumer suites have moved together.
+This MasterPlan is an archival coordination record. The implementation scope was relocated to
+the official pgmq-hs repository, completed there, and released. Keiro's consumer-adoption tail
+is also complete. Do not reimplement any of the original findings in this repository.
 
-The authoritative MasterPlan now lives in the official pgmq-hs repository:
 
-`mori://shinzui/pgmq-hs/masterplans/3-harden-the-pgmq-hs-family-surfaced-by-the-2026-07-review`
+## Vision & Scope
 
-Its child plans are:
+The 2026-07 review found eleven defects in the five-package pgmq-hs family: incorrect SQL
+`NULL` handling, notification crash and startup races, queue-name aliasing, incomplete error
+classification, and related public-contract gaps. Those defects belong with the owner of the
+affected APIs, SQL, migrations, and tests, so the authoritative coordination document is
+`mori://shinzui/pgmq-hs/masterplans/3-harden-the-pgmq-hs-family-surfaced-by-the-2026-07-review`.
 
-- NULL semantics: `mori://shinzui/pgmq-hs/plans/13-fix-null-parameter-semantics-across-pop-read-and-notify-statements`
-- Notification crash safety: `mori://shinzui/pgmq-hs/plans/14-make-insert-notifications-survive-crashes-and-document-the-channel-contract`
-- Queue validation and error classification: `mori://shinzui/pgmq-hs/plans/15-validate-queue-names-and-classify-transient-errors-across-the-pgmq-layers`
+Keiro's scope is deliberately narrower. Keiro consumes the released package family through
+`keiro-pgmq`, `keiro-ops`, `keiro-dsl`, and `jitsurei`; it owns compatible dependency bounds,
+source adaptation where public records change, focused regression coverage, and verification
+that all consumers resolve one coherent released family. It does not own pgmq-hs statements,
+migrations, validation rules, notification functions, or release notes.
 
-The pgmq-hs repository owns implementation progress, migration numbering, shared-file
-coordination, release prerequisites, and plan revisions. Keiro remains an in-scope consumer,
-but its bounds and compatibility validation are coordinated by
-`mori://shinzui/pgmq-hs/plans/12-expose-grouped-reads-on-the-umbrella-api-and-release-0-5-0-0`.
+This refresh also distinguishes later work from the original review. PGMQ 1.12/1.13 grouped
+reads and partition controls were released through
+`mori://shinzui/pgmq-hs/plans/12-expose-grouped-reads-on-the-umbrella-api-and-release-0-5-0-0`
+(the stable path now describes release 0.6.0.0), with Keiro adoption tracked locally in
+[ExecPlan 280](../plans/280-complete-the-pgmq-hs-0-6-0-0-upgrade.md). The still-active FIFO
+ordering, index, and retention initiative at
+`mori://shinzui/pgmq-hs/masterplans/5-correct-the-fifo-grouped-read-ordering-index-and-partition-retention-contracts`
+is separate work and does not reopen this MasterPlan.
+
+
+## Decomposition Strategy
+
+There are no executable child plans left in Keiro. The original implementation was divided in
+the owner repository by functional concern, while release and consumer adoption were kept as
+separate integration tails:
+
+- `mori://shinzui/pgmq-hs/plans/13-fix-null-parameter-semantics-across-pop-read-and-notify-statements`
+  owns SQL optional-parameter semantics and missing-row visibility-timeout results.
+- `mori://shinzui/pgmq-hs/plans/14-make-insert-notifications-survive-crashes-and-document-the-channel-contract`
+  owns notification recovery, advisory locking, re-entry, and the public channel contract.
+- `mori://shinzui/pgmq-hs/plans/15-validate-queue-names-and-classify-transient-errors-across-the-pgmq-layers`
+  owns queue-name validation, transient SQLSTATE classification, and SQL `NULL` body decoding.
+- The upstream release plan owns public exports, coherent package versions, source archives,
+  compatibility documentation, and candidate validation.
+- Keiro ExecPlan 280 owns only Keiro's final 0.6-family and adapter-0.15 adoption, documentation,
+  regression assertions, and consumer validation.
+
+
+## Exec-Plan Registry
+
+| ID | Title | Path | Dependencies | Status |
+|---:|---|---|---|---|
+| U-13 | Fix NULL parameter semantics across pop, read, and notify statements | `mori://shinzui/pgmq-hs/plans/13-fix-null-parameter-semantics-across-pop-read-and-notify-statements` | None | Complete; released in 0.5.0.0 |
+| U-14 | Make insert notifications survive crashes and document the channel contract | `mori://shinzui/pgmq-hs/plans/14-make-insert-notifications-survive-crashes-and-document-the-channel-contract` | None | Complete; released in 0.5.0.0 |
+| U-15 | Validate queue names and classify transient errors across the pgmq layers | `mori://shinzui/pgmq-hs/plans/15-validate-queue-names-and-classify-transient-errors-across-the-pgmq-layers` | None | Complete; released in 0.5.0.0 |
+| U-12 | Expose the complete API and prepare the 0.6.0.0 release | `mori://shinzui/pgmq-hs/plans/12-expose-grouped-reads-on-the-umbrella-api-and-release-0-5-0-0` | Upstream PGMQ 1.12/1.13 implementation plans | Complete; released in 0.6.0.0 |
+| K-280 | Complete the pgmq-hs 0.6.0.0 upgrade | [docs/plans/280-complete-the-pgmq-hs-0-6-0-0-upgrade.md](../plans/280-complete-the-pgmq-hs-0-6-0-0-upgrade.md) | pgmq-hs 0.6.0.0 and shibuya-pgmq-adapter 0.15.0.0 releases | Complete |
+
+
+## Dependency Graph
+
+The three original upstream hardening plans were independent implementation streams and all
+landed before the 0.5.0.0 family release. The later 0.6.0.0 release preserved those fixes while
+adding PGMQ 1.12/1.13 capabilities. Keiro could complete its 0.6 adoption only after both the
+pgmq-hs family and a compatible shibuya adapter were published:
+
+```text
+U-13 + U-14 + U-15 -> pgmq-hs 0.5.0.0
+completed PGMQ 1.12/1.13 plans -> U-12 -> pgmq-hs 0.6.0.0
+pgmq-hs 0.6.0.0 + shibuya-pgmq-adapter 0.15.0.0 -> K-280 -> Keiro adoption complete
+```
+
+No remaining hard dependency blocks this MasterPlan. The unchecked external-follow-through
+item still present in upstream MasterPlan 3 is stale coordination text: upstream plan 12 is
+complete, Hackage publishes the five-package 0.6.0.0 family, tag `v0.6.0.0` resolves to release
+commit `7269f4de0a6e4e6f138c849758c18c7324410ac2`, and Keiro adoption is committed.
+
+
+## Integration Points
+
+The pgmq-hs repository owns the `Pgmq` and `Pgmq.Effectful` public APIs, Hasql statements,
+Effectful interpreter, declarative queue configuration, native schema migration ledger, and
+all compatibility claims about PGMQ server versions. Keiro consumes those artifacts through
+the canonical package family rooted at `mori://shinzui/pgmq-hs`.
+
+`mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter` is the second release
+boundary. Its 0.15.0.0 release admits the pgmq-hs 0.6 family without changing the adapter API
+used by Keiro. Keiro must move the pgmq family and adapter together whenever their declared
+bounds require it; overrides such as `allow-newer` are not acceptable completion evidence.
+
+Within Keiro, `keiro-pgmq/keiro-pgmq.cabal` is the central bounded consumer. The direct bounds
+in `keiro-pgmq`, `keiro-ops`, and `jitsurei` require the pgmq 0.6 family, and adapter consumers
+require 0.15.0.0. `keiro-dsl` participates through its queue-runtime conformance components.
+The generated Cabal plan selects exactly one copy of every shared `QueueName`, `Message`,
+configuration, and metrics type.
+
+[ADR 1](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md) remains the relevant local
+behavioral constraint: dependency adoption must preserve one truthful process span per delivery
+on both Keiro execution paths. This refresh changes no API ownership or telemetry contract, so
+no ADR update is required.
+
 
 ## Progress
 
-- [x] (2026-08-09) Confirmed all three authoritative child plans are Complete and their
-  retrospective states that all eleven catalogued findings are fixed and pinned by tests.
-- [x] (2026-08-09) Confirmed the fixes shipped in pgmq-hs `0.5.0.0` on 2026-08-06. Hackage
-  reports `0.5.0.0` as the newest normal version of
-  `mori://shinzui/pgmq-hs/packages/pgmq-core`,
-  `mori://shinzui/pgmq-hs/packages/pgmq-config`,
-  `mori://shinzui/pgmq-hs/packages/pgmq-effectful`,
-  `mori://shinzui/pgmq-hs/packages/pgmq-hasql`, and
-  `mori://shinzui/pgmq-hs/packages/pgmq-migration`; tag `v0.5.0.0` of
-  `mori://shinzui/pgmq-hs/repos/pgmq-hs` resolves to release commit
-  `fc13d7a432dbc0cf0ad4cd3616e5d7d28fdf5abe`.
-- [x] (2026-08-09) Confirmed
-  `mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter` `0.13.0.0` is published
-  on Hackage, tag `v0.13.0.0` resolves to commit
-  `7cfdf04ab707e0f6d4fd38bc03256fdfc9b03120`, and its released Cabal metadata requires the
-  pgmq `0.5` family.
-- [x] (2026-08-09) Upgraded Keiro atomically to the pgmq `0.5` family and
-  `mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter` `0.13`. The resolved
-  build plan contains pgmq `0.5.0.0` across all five packages and adapter `0.13.0.0`; no
-  bounded Keiro component retains the pgmq `0.4` or adapter `0.12` lines.
-- [x] (2026-08-09) Validated the library, integration, migration, operator,
-  DSL-conformance, and jitsurei consumers with `cabal build all` and the five targeted test
-  suites recorded in Outcomes & Retrospective.
+- [x] (2026-08-05) Upstream plans 13, 14, and 15 implemented all eleven original findings and
+  pinned the fixes with focused tests.
+- [x] (2026-08-06) The original hardening shipped in pgmq-hs 0.5.0.0.
+- [x] (2026-09-10) Upstream plan 12 completed the PGMQ 1.12/1.13 follow-through and produced
+  the coherent pgmq-hs 0.6.0.0 family. All five Hackage package-version documents list 0.6.0.0
+  as a normal version, and the upstream release tag resolves to commit `7269f4de`.
+- [x] (2026-09-14) `shibuya-pgmq-adapter` 0.15.0.0 was published with pgmq 0.6 bounds; tag
+  `v0.15.0.0` resolves to release commit `22f5c4dae97722727f2f2ed47d1bf2ed9603d4ed`.
+- [x] (2026-09-14) Keiro ExecPlan 280 completed the consumer rollout at commit `9b595352`.
+  Every bounded consumer now requires pgmq `>=0.6 && <0.7`, and every direct adapter consumer
+  requires `^>=0.15.0.0`.
+- [x] (2026-09-16) Re-verified current released versions, upstream tags, checked-in bounds,
+  the resolved Cabal graph, the full build, and all affected Keiro consumer suites.
+
 
 ## Surprises & Discoveries
 
-- Validation (2026-08-09): Keiro's consumer rollout is not complete. Thirteen direct
-  pgmq-family bounds across `keiro-pgmq/keiro-pgmq.cabal`, `jitsurei/jitsurei.cabal`, and
-  `keiro-ops/keiro-ops.cabal` still require `>=0.4 && <0.5`. Widening those bounds alone is
-  not safe because Keiro also depends on
-  `mori://shinzui/shibuya-pgmq-adapter/packages/shibuya-pgmq-adapter` at
-  `>=0.12 && <0.13`, and its newest release, `0.12.0.0`, requires the pgmq `0.4` family.
-- Validation (2026-08-09): a forced compatibility build against all five pgmq `0.5.0.0`
-  packages gets through the pgmq libraries and then fails while compiling
-  `shibuya-pgmq-adapter-0.12.0.0`:
+- The August snapshot in this file was no longer current. Keiro has since moved from pgmq
+  0.5.0.0 and adapter 0.13.0.0 to pgmq 0.6.0.0 and adapter 0.15.0.0. Local ExecPlan 280 records
+  the intervening solver gate, source-visible record changes, documentation, and complete
+  validation evidence.
+- Upstream MasterPlan 3 still shows its external plan-12 follow-through as unchecked even
+  though plan 12 marks every milestone complete, upstream tag `v0.6.0.0` exists, and all five
+  packages are normal Hackage releases. This is upstream documentation drift, not missing code
+  or a Keiro blocker. The only in-scope upstream follow-up is to reconcile that checkbox and
+  close its retrospective.
+- Mori currently discovers `mori://shinzui/pgmq-hs`, all five package handles, the repository
+  path, and curated documentation, but this registry snapshot cannot resolve the plan-level
+  URIs with `mori path`. The canonical intended URIs remain the durable references; source
+  verification used the repository Mori located.
+- The separate upstream FIFO/index/retention MasterPlan 5 remains Not Started. Its three child
+  plans concern deterministic grouped-read return order, a supplemental usable FIFO index, and
+  truthful FIFO/retention documentation. None is one of this MasterPlan's eleven original
+  findings, so they remain separate rather than making this archival plan In Progress again.
+- Current verification increased the test counts recorded in the older adoption evidence. On
+  2026-09-16, `keiro-pgmq-test` ran 65 examples with zero failures and the same two documented
+  environment/fault-injection pending cases; `keiro-ops-test` ran 50, `keiro-migrations-test`
+  ran 36, and `jitsurei-test` ran 25, all with zero failures. The queue-runtime conformance
+  executable also passed.
 
-  ```bash
-  cabal build keiro-pgmq \
-    --allow-newer='all:pgmq-core,all:pgmq-config,all:pgmq-effectful,all:pgmq-hasql,all:pgmq-migration' \
-    --constraint='pgmq-core == 0.5.0.0' \
-    --constraint='pgmq-config == 0.5.0.0' \
-    --constraint='pgmq-effectful == 0.5.0.0' \
-    --constraint='pgmq-hasql == 0.5.0.0' \
-    --constraint='pgmq-migration == 0.5.0.0'
-  ```
-
-  ```text
-  src/Shibuya/Adapter/Pgmq/Internal.hs:205:41: error: [GHC-39999]
-      Could not deduce HasField "visibilityTime" (Maybe Pgmq.Message) UTCTime
-  ```
-
-  This is the expected source break from the hardening release: `setVisibilityTimeoutAt` now
-  returns `Maybe Message`, but adapter `0.12.0.0` still treats the result as an unconditional
-  `Message`. Keiro's own one-shot visibility-timeout calls discard the result and are
-  source-compatible. A released adapter version that handles the missing-row case and admits
-  pgmq `0.5` is therefore a hard prerequisite for the Keiro upgrade. Until it exists,
-  retaining Keiro's `0.4` bounds preserves a coherent build; changing only the direct bounds
-  would make dependency resolution or compilation fail. Re-running `cabal build keiro-pgmq`
-  without the forced constraints succeeds against the retained pgmq `0.4` family.
-- Validation (2026-08-09): adapter `0.13.0.0` clears that blocker without changing the
-  adapter's public records or functions. Its lease extension now treats a raced-away message
-  as a successful no-op, its released bounds require pgmq `0.5`, and both Hackage and the
-  upstream Git tag identify it as the current release.
-- Validation (2026-08-09): the first ordinary solver run still rejected adapter `0.13`
-  because the local Cabal index was timestamped before the release. `cabal update` advanced
-  the index state to `2026-08-09T13:59:06Z`; the next dry run selected `0.13.0.0`. This was a
-  stale local package-index cache, not a compatibility failure.
 
 ## Decision Log
 
-- Decision: Supersede keiro MasterPlan 21 with pgmq-hs MasterPlan 3 and preserve this file as
-  a redirect for historical links.
-  Rationale: The work changes pgmq-hs APIs, migrations, tests, and release artifacts; its
-  source-of-truth plans belong beside that code. The relocated plans also incorporate the
-  2026-07-23 validation findings.
+- Decision: Supersede Keiro MasterPlan 21 with pgmq-hs MasterPlan 3 and preserve this file as
+  a redirect and consumer-status record.
+  Rationale: The findings change pgmq-hs APIs, migrations, tests, and release artifacts; the
+  source-of-truth plans belong beside that code. Keiro only owns adoption and compatibility.
   Date: 2026-07-23
 
-- Decision: Do not widen Keiro's pgmq-family bounds to `0.5` until a compatible
-  `shibuya-pgmq-adapter` release is available.
-  Rationale: A forced build proves the latest released adapter is source-incompatible with
-  the intentional `Maybe Message` result introduced by pgmq-hs `0.5.0.0`; a bounds-only edit
-  would leave Keiro unable to build.
-  Date: 2026-08-09
+- Decision: Move the pgmq family and `shibuya-pgmq-adapter` together whenever the adapter's
+  released bounds require the matching family.
+  Rationale: The pgmq 0.5 rollout proved that a direct-bound-only edit can leave the adapter
+  uncompilable. The same release-first rule was applied successfully to the 0.6/0.15 rollout.
+  Date: 2026-08-09; reaffirmed 2026-09-16
 
-- Decision: Upgrade the pgmq family and `shibuya-pgmq-adapter` as one Keiro dependency-graph
-  change now that adapter `0.13.0.0` is released.
-  Rationale: Adapter `0.13.0.0` both admits pgmq `0.5` and handles the breaking
-  `Maybe Message` lease result. Moving only one side would recreate the solver or compile
-  failure captured above, while the paired change preserves one coherent `QueueName` and
-  `Message` type family throughout `keiro-pgmq`.
-  Date: 2026-08-09
+- Decision: Treat upstream plan 12 and Keiro plan 280 as completed integration tails, not as
+  new children of this superseded MasterPlan.
+  Rationale: They extend release and consumer compatibility beyond the original defects while
+  preserving the ownership boundary. Referencing them gives a restartable history without
+  pretending their broader PGMQ 1.12/1.13 scope originated here.
+  Date: 2026-09-16
+
+- Decision: Leave the newer upstream FIFO/index/retention initiative outside this plan.
+  Rationale: It was discovered by a separate FIFO review, has its own upstream MasterPlan and
+  acceptance criteria, and is still executable work. Folding it into this completed archive
+  would obscure both initiatives' status.
+  Date: 2026-09-16
+
 
 ## Outcomes & Retrospective
 
-The authoritative upstream finding-remediation scope is Complete, both required releases are
-available, and Keiro's consumer-adoption tail is Complete. The paired upgrade changed thirteen
-pgmq-family bounds and three adapter bounds across `keiro-pgmq/keiro-pgmq.cabal`,
-`keiro-ops/keiro-ops.cabal`, and `jitsurei/jitsurei.cabal`. Cabal resolved one coherent graph:
+This initiative is complete in both repositories. Upstream owns and has shipped all original
+correctness fixes. It subsequently published the 0.6.0.0 family, preserving the hardening while
+adding its PGMQ 1.12/1.13 feature set. Keiro consumes that released family together with
+`shibuya-pgmq-adapter` 0.15.0.0 and needs no source override, relaxed bound, or local dependency
+checkout.
+
+The 2026-09-16 generated Cabal plan contains:
 
 ```text
-pgmq-config             0.5.0.0
-pgmq-core               0.5.0.0
-pgmq-effectful          0.5.0.0
-pgmq-hasql              0.5.0.0
-pgmq-migration          0.5.0.0
-shibuya-pgmq-adapter    0.13.0.0
+pgmq-config             0.6.0.0
+pgmq-core               0.6.0.0
+pgmq-effectful          0.6.0.0
+pgmq-hasql              0.6.0.0
+pgmq-migration          0.6.0.0
+shibuya-pgmq-adapter    0.15.0.0
 ```
 
-Validation ran from the repository root:
-
-```bash
-cabal build all
-cabal test keiro-pgmq-test keiro-ops-test keiro-migrations-test \
-  keiro-dsl-conformance-queue-runtime jitsurei-test --test-show-details=direct
-```
+Validation from the Keiro repository root produced:
 
 ```text
 cabal build all:                              PASS
-keiro-pgmq-test:                 58 examples, 0 failures, 2 pending
-keiro-ops-test:                  27 examples, 0 failures
-keiro-migrations-test:           28 examples, 0 failures
+keiro-pgmq-test:                 65 examples, 0 failures, 2 pending
+keiro-ops-test:                  50 examples, 0 failures
+keiro-migrations-test:           36 examples, 0 failures
 keiro-dsl-conformance-queue-runtime:          PASS
-jitsurei-test:                   22 examples, 0 failures
+jitsurei-test:                   25 examples, 0 failures
 ```
 
-The two pending PGMQ examples are unchanged environment/fault-injection limitations: one
-needs a deterministic transient-poll fault injector and one needs pg_partman. The upgrade
-introduced no new pending or failing behavior. The pgmq-hs implementation remains owned by
-the upstream plans; the local tail owned only Keiro's dependency declarations and
-compatibility evidence. No new ADR is required because the rollout preserves the ownership
-and telemetry boundaries already recorded in
-[ADR 1](../adr/0001-keiro-pgmq-job-processing-telemetry-contract.md).
+Therefore nothing remains to implement in Keiro for this MasterPlan, and nothing remains to
+implement upstream for its original findings. The only in-scope upstream cleanup is to update
+MasterPlan 3's stale external-follow-through checkbox and retrospective to match the already
+published 0.6.0.0 release and completed Keiro rollout. Upstream MasterPlan 5 remains real but
+separate future work.
+
 
 ## Revision Note
 
 2026-07-23: Replaced the executable plan with this supersession record after relocating and
 updating it in the official pgmq-hs repository.
 
-2026-08-09: Validated all upstream findings as fixed and released in pgmq-hs `0.5.0.0`,
-replaced absolute cross-repository paths with canonical `mori://` references, and recorded
-that Keiro adoption remains blocked by the latest released `shibuya-pgmq-adapter` retaining
-the pgmq `0.4` API and bounds.
+2026-08-09: Validated all original findings as fixed and released in pgmq-hs 0.5.0.0, then
+completed Keiro's paired pgmq-0.5 and adapter-0.13 adoption with focused consumer validation.
 
-2026-08-09 (second): Reopened only Keiro's consumer-adoption tail after
-`shibuya-pgmq-adapter` `0.13.0.0` cleared the compatibility blocker. Expanded the rollout to
-upgrade pgmq `0.5` and adapter `0.13` atomically and made successful consumer-suite validation
-the condition for recording the final local status.
-
-2026-08-09 (third): Completed Keiro's consumer-adoption tail. Updated all bounded consumers
-to pgmq `>=0.5 && <0.6` and adapter `>=0.13 && <0.14`, verified the exact resolved package
-graph, and recorded the successful full build plus targeted PGMQ, migration, operator,
-queue-runtime conformance, and jitsurei test results. The MasterPlan remains a supersession
-record for upstream implementation, with its local adoption status now Complete.
+2026-09-16: Refreshed the entire coordination boundary against Mori-located source,
+authoritative Hackage version documents, upstream release tags, current Keiro dependency
+bounds, local ExecPlan 280, the generated Cabal plan, and a new full build plus affected-suite
+run. Recorded pgmq-hs 0.6.0.0 and adapter 0.15.0.0 adoption as complete, identified upstream
+MasterPlan 3's remaining checkbox as documentation drift only, and explicitly excluded the
+separate active FIFO/index/retention initiative.
