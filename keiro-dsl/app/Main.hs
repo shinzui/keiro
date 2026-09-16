@@ -484,7 +484,7 @@ writeSourceCheckReport subject parsedSource service options diagnostics =
     ( CheckReport.checkReport
         subject
         ((.sourceLanguage) parsedSource)
-        (checkedLanguageContract service)
+        service
         enforcement
         diagnostics
         (CheckReport.effectiveDenyCodes enforcement)
@@ -499,7 +499,7 @@ writeWorkspaceCheckReport subject workspace service options diagnostics =
     ( CheckReport.workspaceCheckReport
         subject
         workspace
-        (checkedLanguageContract service)
+        service
         enforcement
         diagnostics
         (CheckReport.effectiveDenyCodes enforcement)

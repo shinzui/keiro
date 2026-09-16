@@ -1742,7 +1742,7 @@ main = hspec $ do
       stableOut `shouldContain` "\"effectiveLanguageVersion\":5"
       stableOut `shouldContain` "\"languageSupport\":\"stable\""
 
-    it "keeps only the named source-version fixtures outside published Language 4" $ do
+    it "keeps only the named source-version and candidate fixtures outside published Language 4" $ do
       fixtureTree <- treeSnapshot "test/fixtures"
       let outsideStableV4 =
             sort
@@ -1784,6 +1784,30 @@ main = hspec $ do
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
             "projection-owner-multi-query.keiro",
+            "process-reactions-accepted-requires-event.keiro",
+            "process-reactions-accepted-unverified.keiro",
+            "process-reactions-badmapping.keiro",
+            "process-reactions-cancel-unknown.keiro",
+            "process-reactions-duplicate-input-declaration.keiro",
+            "process-reactions-duplicate-on.keiro",
+            "process-reactions-duplicate-timer.keiro",
+            "process-reactions-guard-not-boolean.keiro",
+            "process-reactions-input-unhandled.keiro",
+            "process-reactions-language5.keiro",
+            "process-reactions-minimal.keiro",
+            "process-reactions-otherwise-missing.keiro",
+            "process-reactions-otherwise-unreachable.keiro",
+            "process-reactions-payload-incomplete.keiro",
+            "process-reactions-schedule-unknown.keiro",
+            "process-reactions-silent-missing.keiro",
+            "process-reactions-state-access.keiro",
+            "process-reactions-timer-policy-missing.keiro",
+            "process-reactions-timer-policy-unused.keiro",
+            "process-reactions-timer-prefix-collision.keiro",
+            "process-reactions-unknown-input.keiro",
+            "process-reactions.keiro",
+            "process-state-authority.keiro",
+            "process-timers.keiro",
             "transition-family-additive.keiro",
             "transition-family-ambiguous-new.keiro",
             "transition-family-ambiguous-old.keiro",
@@ -6003,7 +6027,7 @@ main = hspec $ do
           processFireAt =
             modifyProcess
               "HospitalSurge"
-              (\process -> processWithTimer (timerWithFireAt (fireAtWithWindow huge process.timer.fireAt) process.timer) process)
+              (\process -> let timer = legacyProcessTimer process in processWithTimer (timerWithFireAt (fireAtWithWindow huge timer.fireAt) timer) process)
               processSpec
           cases =
             [ (unknownPayload, WqPayloadTypeUnknown),
@@ -6039,9 +6063,9 @@ main = hspec $ do
                     ( handleWithDispatch
                         ( updateFirst
                             (\d -> dispatchNodeWithDisposition (dispatchDispositionWithOnAppended DRetry d.disposition) d)
-                            process.handle.dispatch
+                            (legacyProcessHandle process).dispatch
                         )
-                        process.handle
+                        (legacyProcessHandle process)
                     )
                     process
               )
@@ -6050,7 +6074,7 @@ main = hspec $ do
             modifyProcess
               "HospitalSurge"
               ( \process ->
-                  let timer = process.timer
+                  let timer = legacyProcessTimer process
                       fire = timer.fire
                    in processWithTimer
                         ( timerWithFire
@@ -6101,12 +6125,12 @@ main = hspec $ do
       let unknownStatus =
             modifyProcess
               "HospitalSurge"
-              (\process -> processWithTimer (timerWithDecodeUnknown "Abandoned" process.timer) process)
+              (\process -> processWithTimer (timerWithDecodeUnknown "Abandoned" (legacyProcessTimer process)) process)
               processSpec
           blankDeadLetter =
             modifyProcess
               "HospitalSurge"
-              (\process -> processWithTimer (timerWithDeadLetter "   " process.timer) process)
+              (\process -> processWithTimer (timerWithDeadLetter "   " (legacyProcessTimer process)) process)
               processSpec
           phantomDedupeKey =
             mapPgmqDispatch (pgmqDispatchWithDedupKey "ghostKey") dispatchSpec
@@ -6127,7 +6151,7 @@ main = hspec $ do
       forM_ ["Scheduled", "Firing", "Fired", "Cancelled", "Dead"] $ \status ->
         serviceErrorCodes
           4
-          (modifyProcess "HospitalSurge" (\p -> processWithTimer (timerWithDecodeUnknown status p.timer) p) processSpec)
+          (modifyProcess "HospitalSurge" (\p -> processWithTimer (timerWithDecodeUnknown status (legacyProcessTimer p)) p) processSpec)
           `shouldNotContain` [TimerDecodeStatusUnknown]
 
       serviceErrorCodes 4 processSpec `shouldNotContain` [TimerDecodeStatusUnknown, TimerDeadLetterTextInvalid]
@@ -6166,7 +6190,7 @@ main = hspec $ do
             modifyProcess
               "HospitalSurge"
               ( \process ->
-                  let timer = process.timer
+                  let timer = legacyProcessTimer process
                       fire = timer.fire
                    in processWithTimer
                         ( timerWithIdAndFire
@@ -6507,16 +6531,69 @@ main = hspec $ do
             (.rejected) p `shouldBe` PolHalt
             (.poison) p `shouldBe` PolHalt
             (.category) ((.saga) p) `shouldBe` "hospitalSurge"
-            (.name) ((.timer) p) `shouldBe` "surgeFollowUp"
-            (.onReject) ((.disposition) ((.fire) ((.timer) p))) `shouldBe` OFired
-            (.onAmbiguous) ((.disposition) ((.fire) ((.timer) p))) `shouldBe` ORetry
-            (.maxAttempts) ((.timer) p) `shouldBe` 5
+            (.name) (legacyProcessTimer p) `shouldBe` "surgeFollowUp"
+            (.onReject) ((.disposition) ((.fire) (legacyProcessTimer p))) `shouldBe` OFired
+            (.onAmbiguous) ((.disposition) ((.fire) (legacyProcessTimer p))) `shouldBe` ORetry
+            (.maxAttempts) (legacyProcessTimer p) `shouldBe` 5
           [] -> expectationFailure "no process node parsed"
     it "round-trips the hospital-surge spec through parse . pretty" $ do
       input <- readTestText "test/fixtures/hospital-surge.keiro"
       case parseSpec "in" input of
         Left err -> expectationFailure (T.unpack err)
         Right spec -> parseLanguage4RenderedSpec "in" spec `shouldBe` Right spec
+    it "parses and round-trips Language 6 reaction processes" $ do
+      forM_
+        [ "test/fixtures/process-reactions.keiro",
+          "test/fixtures/process-timers.keiro",
+          "test/fixtures/process-state-authority.keiro"
+        ]
+        $ \path -> do
+          source <- readTestText path
+          parsed <- case parseSource path source of
+            Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+            Right value -> pure value
+          parseSource (path <> ".roundtrip") (renderSource parsed) `shouldBe` Right parsed
+      stateAuthority <- specOf "test/fixtures/process-state-authority.keiro"
+      case [process | NProcess process <- (.nodes) stateAuthority] of
+        [process] -> case (.body) process of
+          ReactionProcessBody reaction -> do
+            (.version) reaction `shouldBe` 1
+            length (NE.toList ((.inputs) reaction)) `shouldBe` 3
+            length (NE.toList ((.reactions) reaction)) `shouldBe` 3
+            length ((.timers) reaction) `shouldBe` 1
+          LegacyProcessBody {} -> expectationFailure "Language 6 reaction parsed as legacy process"
+        processes -> expectationFailure ("expected one reaction process, got " <> show (length processes))
+    it "gates reaction syntax at the reactions marker before Language 6" $ do
+      source <- readTestText "test/fixtures/process-reactions-language5.keiro"
+      case parseSurfaceSource "process-reactions-language5.keiro" source of
+        Left FrontendFailure {code = SourceLanguageError LanguageFeatureRequiresVersion, span = SourceSpan {start = SourcePoint {offset = startOffset}, end = SourcePoint {offset = endOffset}}} ->
+          T.take (endOffset - startOffset) (T.drop startOffset source) `shouldBe` "reactions"
+        Left failure -> expectationFailure (show failure)
+        Right _ -> expectationFailure "Language 5 unexpectedly accepted process reactions"
+    it "rejects every process-reaction validation fixture with its stable diagnostic code" $ do
+      let cases =
+            [ ("unknown-input", ProcessReactionUnknownInput),
+              ("duplicate-input-declaration", ProcessInputDuplicateDeclaration),
+              ("duplicate-timer", ProcessTimerDuplicateName),
+              ("guard-not-boolean", ProcessReactionGuardNotBoolean),
+              ("state-access", ProcessStateAccessUnsupported),
+              ("input-unhandled", ProcessReactionInputUnhandled),
+              ("duplicate-on", ProcessReactionDuplicateInput),
+              ("otherwise-missing", ProcessReactionOtherwiseMissing),
+              ("otherwise-unreachable", ProcessReactionOtherwiseUnreachable),
+              ("timer-prefix-collision", ProcessTimerPrefixCollision),
+              ("schedule-unknown", ProcessScheduleUnknownTimer),
+              ("cancel-unknown", ProcessCancelUnknownTimer),
+              ("payload-incomplete", ProcessSchedulePayloadIncomplete),
+              ("timer-policy-missing", ProcessTimerPolicyMissing),
+              ("timer-policy-unused", ProcessTimerPolicyUnused),
+              ("accepted-requires-event", ProcessAcceptedArmRequiresEvent),
+              ("silent-missing", ProcessSilentArmMissing),
+              ("accepted-unverified", ProcessAcceptedArmUnverified),
+              ("badmapping", ProcessBindingTypeMismatch)
+            ]
+      forM_ cases $ \(suffix, expected) ->
+        errorCodesOf ("test/fixtures/process-reactions-" <> suffix <> ".keiro") `shouldReturn` [expected]
     it "accepts the hospital-surge spec (no errors; benign-inversion warnings only)" $ do
       codes <- errorCodesOf "test/fixtures/hospital-surge.keiro"
       codes `shouldBe` []
@@ -6555,7 +6632,7 @@ main = hspec $ do
             modifyProcess
               "HospitalSurge"
               ( \process ->
-                  let handle = process.handle
+                  let handle = legacyProcessHandle process
                    in processWithHandle (handleWithDispatch (updateFirst (dispatchNodeWithKey "input.ghost") handle.dispatch) handle) process
               )
               spec
@@ -6563,7 +6640,7 @@ main = hspec $ do
             modifyProcess
               "HospitalSurge"
               ( \process ->
-                  let handle = process.handle
+                  let handle = legacyProcessHandle process
                       advance = handle.advance
                    in processWithHandle
                         (handleWithAdvance (advanceNodeWithFields (updateFirst (fieldBindingWithValue (Just "ghost.value")) advance.advFields) advance) handle)
@@ -6796,7 +6873,7 @@ main = hspec $ do
             specWithNodes
               [ case node of
                   NProcess process ->
-                    let timer = process.timer
+                    let timer = legacyProcessTimer process
                         fire = timer.fire
                         disposition = fire.disposition
                      in NProcess
@@ -7676,7 +7753,7 @@ main = hspec $ do
           aOrB = EOr a b
           edge guardExpression = emitting {guard = Just guardExpression, outcome = Nothing, outcomeDuplicateLocs = [], loc = noLoc}
           replayEdge guardExpression =
-            (edge guardExpression)
+            ((edge guardExpression) :: Transition)
               { mode = TmReplayOnly,
                 loc = noLoc
               }
@@ -10305,8 +10382,8 @@ main = hspec $ do
       spec <- specOf "test/fixtures/hospital-surge.keiro"
       case [process | NProcess process <- (.nodes) spec] of
         process : _ -> do
-          let timer = timerNodeWithPayload [FieldBinding "kind" (Just "\"follow-up\\\"")] process.timer
-              modules = scaffoldProcess (defaultContext (spec.context)) process {timer = timer}
+          let timer = timerNodeWithPayload [FieldBinding "kind" (Just "\"follow-up\\\"")] (legacyProcessTimer process)
+              modules = scaffoldProcess (defaultContext (spec.context)) (processWithTimer timer process)
           generatedTextEndingIn "Process.hs" modules
             `shouldSatisfy` T.isInfixOf "\"kind\" .= (\"follow-up\\\\\" :: Value)"
         [] -> expectationFailure "hospital-surge fixture has no process"
@@ -14226,40 +14303,42 @@ processWithLiteral value =
   ProcessNode
     { id = "Process",
       name = "process",
-      input = InputDecl "Input" [] Nothing noLoc,
       correlate = CorrelateDecl "key" "idText",
       saga = SagaRef "Saga" "saga",
       target = "Target",
       projections = [],
-      handle =
-        HandleNode
-          { on = "Input",
-            advance = AdvanceNode "Advance" [FieldBinding "literal" (Just ("\"" <> value <> "\""))],
-            dispatch = [],
-            schedule = "timer"
-          },
+      body =
+        LegacyProcessBody
+          (InputDecl "Input" [] Nothing noLoc)
+          ( HandleNode
+              { on = "Input",
+                advance = AdvanceNode "Advance" [FieldBinding "literal" (Just ("\"" <> value <> "\""))],
+                dispatch = [],
+                schedule = "timer"
+              }
+          )
+          ( TimerNode
+              { name = "timer",
+                id = IdExpr UuidV5Id "timer:" "correlationId",
+                fireAt = FireAtExpr "observedAt" "5m",
+                payload = [],
+                fire =
+                  FireNode
+                    { target = "Target",
+                      key = "correlationId",
+                      command = "Fire",
+                      fields = [],
+                      firedEventId = IdExpr UuidV5Id "fired:" "correlationId",
+                      disposition = FireDisposition OFired OFired ORetry ORetry ORetry
+                    },
+                decodeUnknown = "Cancelled",
+                maxAttempts = 5,
+                deadLetter = "exhausted",
+                loc = noLoc
+              }
+          ),
       rejected = PolHalt,
       poison = PolHalt,
-      timer =
-        TimerNode
-          { name = "timer",
-            id = IdExpr UuidV5Id "timer:" "correlationId",
-            fireAt = FireAtExpr "observedAt" "5m",
-            payload = [],
-            fire =
-              FireNode
-                { target = "Target",
-                  key = "correlationId",
-                  command = "Fire",
-                  fields = [],
-                  firedEventId = IdExpr UuidV5Id "fired:" "correlationId",
-                  disposition = FireDisposition OFired OFired ORetry ORetry ORetry
-                },
-            decodeUnknown = "Cancelled",
-            maxAttempts = 5,
-            deadLetter = "exhausted",
-            loc = noLoc
-          },
       loc = noLoc
     }
 
@@ -14463,15 +14542,17 @@ genProcess =
   ProcessNode
     <$> genName
     <*> genAdversarialText
-    <*> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure noLoc)
     <*> (CorrelateDecl <$> genName <*> genName)
     <*> (SagaRef <$> genName <*> genAdversarialText)
     <*> genName
     <*> smallList genName
-    <*> (HandleNode <$> genName <*> (AdvanceNode <$> genName <*> smallList genFieldBinding) <*> smallList genDispatchNode <*> genName)
+    <*> ( LegacyProcessBody
+            <$> (InputDecl <$> genName <*> smallList genField <*> pure Nothing <*> pure noLoc)
+            <*> (HandleNode <$> genName <*> (AdvanceNode <$> genName <*> smallList genFieldBinding) <*> smallList genDispatchNode <*> genName)
+            <*> genTimerNode
+        )
     <*> elements [PolHalt, PolDeadLetter, PolSkip]
     <*> elements [PolHalt, PolDeadLetter, PolSkip]
-    <*> genTimerNode
     <*> pure noLoc
 
 genResolveSource :: Gen ResolveSource
@@ -15289,20 +15370,30 @@ readModelQueryTypesWithResult result (ReadModelQueryTypes input _ inputLoc resul
   ReadModelQueryTypes input result inputLoc resultLoc
 
 processWithTimer :: TimerNode -> ProcessNode -> ProcessNode
-processWithTimer timer (ProcessNode nodeId name input correlate saga target projections handle rejected poison _ loc) =
-  ProcessNode nodeId name input correlate saga target projections handle rejected poison timer loc
+processWithTimer timer process = case (.body) process of
+  LegacyProcessBody input handle _ -> process {body = LegacyProcessBody input handle timer}
+  ReactionProcessBody {} -> process
 
 processWithHandle :: HandleNode -> ProcessNode -> ProcessNode
-processWithHandle handle (ProcessNode nodeId name input correlate saga target projections _ rejected poison timer loc) =
-  ProcessNode nodeId name input correlate saga target projections handle rejected poison timer loc
+processWithHandle handle process = case (.body) process of
+  LegacyProcessBody input _ timer -> process {body = LegacyProcessBody input handle timer}
+  ReactionProcessBody {} -> process
 
 processWithSaga :: SagaRef -> ProcessNode -> ProcessNode
-processWithSaga saga (ProcessNode nodeId name input correlate _ target projections handle rejected poison timer loc) =
-  ProcessNode nodeId name input correlate saga target projections handle rejected poison timer loc
+processWithSaga saga process = process {saga = saga}
 
 processWithCorrelate :: CorrelateDecl -> ProcessNode -> ProcessNode
-processWithCorrelate correlate (ProcessNode nodeId name input _ saga target projections handle rejected poison timer loc) =
-  ProcessNode nodeId name input correlate saga target projections handle rejected poison timer loc
+processWithCorrelate correlate process = process {correlate = correlate}
+
+legacyProcessHandle :: ProcessNode -> HandleNode
+legacyProcessHandle process = case (.body) process of
+  LegacyProcessBody _ handle _ -> handle
+  ReactionProcessBody {} -> error "test invariant: expected legacy process handle"
+
+legacyProcessTimer :: ProcessNode -> TimerNode
+legacyProcessTimer process = case (.body) process of
+  LegacyProcessBody _ _ timer -> timer
+  ReactionProcessBody {} -> error "test invariant: expected legacy process timer"
 
 sagaRefWithCategory :: T.Text -> SagaRef -> SagaRef
 sagaRefWithCategory category (SagaRef agg _) = SagaRef agg category

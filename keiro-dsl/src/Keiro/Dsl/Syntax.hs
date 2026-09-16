@@ -67,4 +67,5 @@ data SurfaceElement
   | SurfaceExpression !Expr
   | SurfaceAggregateState !Name !Name
   | SurfaceAggregateTransition !Name !Int
+  | SurfaceProcessReaction !Name !Name !Int
   deriving stock (Eq, Show, Generic)

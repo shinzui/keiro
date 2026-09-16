@@ -216,6 +216,8 @@ surfaceSourceEntries SurfaceSource {spec = Located {value = SurfaceSpec {element
         [(AggregateStateSubject aggregateName stateName, sourceSpan)]
       SurfaceAggregateTransition aggregateName ordinal ->
         [(AggregateTransitionSubject aggregateName (TransitionOrdinal ordinal), sourceSpan)]
+      SurfaceProcessReaction processName inputName ordinal ->
+        [(ProcessReactionSubject processName inputName ordinal, sourceSpan)]
       SurfaceField {} -> []
       SurfaceExpression {} -> []
 
@@ -279,8 +281,7 @@ setNodeLoc :: Loc -> Node -> Node
 setNodeLoc loc = \case
   NAggregate (Aggregate name regs states commands events transitions domainOutcomeTypes domainOutcomeDuplicateLocs wire projection snapshot _) ->
     NAggregate (Aggregate name regs states commands events transitions domainOutcomeTypes domainOutcomeDuplicateLocs wire projection snapshot loc)
-  NProcess (ProcessNode nodeId name input correlate saga target projections handle rejected poison timer _) ->
-    NProcess (ProcessNode nodeId name input correlate saga target projections handle rejected poison timer loc)
+  NProcess process -> NProcess process {loc = loc}
   NRouter (RouterNode nodeId name input key resolve target projections dispatch rejected poison _) ->
     NRouter (RouterNode nodeId name input key resolve target projections dispatch rejected poison loc)
   NContract (ContractNode name schemaVersion discriminator topics events _) ->

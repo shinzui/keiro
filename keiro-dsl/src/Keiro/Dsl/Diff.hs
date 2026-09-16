@@ -2924,7 +2924,13 @@ processDiff env =
     paired = pairByName nodeProcess (.id) env
 
 processPairDiff :: ProcessNode -> ProcessNode -> [Change]
-processPairDiff oldProcess newProcess =
+processPairDiff oldProcess newProcess = case ((.body) oldProcess, (.body) newProcess) of
+  (LegacyProcessBody {}, LegacyProcessBody {}) -> legacyProcessPairDiff oldProcess newProcess
+  (ReactionProcessBody {}, ReactionProcessBody {}) -> []
+  _ -> []
+
+legacyProcessPairDiff :: ProcessNode -> ProcessNode -> [Change]
+legacyProcessPairDiff oldProcess newProcess =
   concatMap pairedFieldDiff ((.matched) fields)
     ++ map (fieldChange "field added; source events at the old shape cannot populate it") ((.added) fields)
     ++ map (fieldChange "field removed; the generated process input decoder changed") ((.removed) fields)
@@ -2934,7 +2940,7 @@ processPairDiff oldProcess newProcess =
     ++ processTimerPayloadDiff oldProcess newProcess
   where
     -- inName is a generated Haskell type name; the wire shape is inFields.
-    fields = pairDeclarations (.name) ((.fields) ((.input) oldProcess)) ((.fields) ((.input) newProcess))
+    fields = pairDeclarations (.name) ((.fields) (legacyProcessInput oldProcess)) ((.fields) (legacyProcessInput newProcess))
     pairedFieldDiff (oldField, newField)
       | (.valueType) oldField /= (.valueType) newField = [fieldChange ("type changed " <> renderFieldType ((.valueType) oldField) <> " -> " <> renderFieldType ((.valueType) newField)) newField]
       | otherwise = []
@@ -2942,11 +2948,11 @@ processPairDiff oldProcess newProcess =
 
 addedProcessDiff :: ProcessNode -> [Change]
 addedProcessDiff process =
-  [additive ((.id) process) "input-field" ((.name) field) DeclarationAdded "field belongs to a new process input" | field <- (.fields) ((.input) process)]
+  [additive ((.id) process) "input-field" ((.name) field) DeclarationAdded "field belongs to a new process input" | input <- processInputs process, field <- (.fields) input]
 
 removedProcessDiff :: ProcessNode -> [Change]
 removedProcessDiff process =
-  [breaking ((.id) process) "input-field" ((.name) field) ProcessInputChanged "process removed while persisted source events may still require this input decoder" | field <- (.fields) ((.input) process)]
+  [breaking ((.id) process) "input-field" ((.name) field) ProcessInputChanged "process removed while persisted source events may still require this input decoder" | input <- processInputs process, field <- (.fields) input]
     ++ [breaking ((.id) process) "derived-identity" ((.id) process) DerivedIdentityChanged "process removed while persisted saga, dispatch, and timer identities may still exist"]
 
 processIdentityDiff :: ProcessNode -> ProcessNode -> [Change]
@@ -2966,10 +2972,10 @@ processIdentity process =
     (.field) ((.correlate) process),
     (.via) ((.correlate) process),
     (.category) ((.saga) process),
-    (.prefix) ((.id) ((.timer) process)),
-    (.field) ((.id) ((.timer) process)),
-    (.prefix) ((.firedEventId) ((.fire) ((.timer) process))),
-    (.field) ((.firedEventId) ((.fire) ((.timer) process)))
+    (.prefix) ((.id) (legacyProcessTimer process)),
+    (.field) ((.id) (legacyProcessTimer process)),
+    (.prefix) ((.firedEventId) ((.fire) (legacyProcessTimer process))),
+    (.field) ((.firedEventId) ((.fire) (legacyProcessTimer process)))
   )
 
 processTimerWindowDiff :: ProcessNode -> ProcessNode -> [Change]
@@ -2977,15 +2983,15 @@ processTimerWindowDiff oldProcess newProcess =
   [ advisory
       ((.id) newProcess)
       "timer"
-      ((.name) ((.timer) newProcess))
+      ((.name) (legacyProcessTimer newProcess))
       TimerWindowChanged
       ( "fireAt source/window changed "
-          <> renderFireAt ((.fireAt) ((.timer) oldProcess))
+          <> renderFireAt ((.fireAt) (legacyProcessTimer oldProcess))
           <> " -> "
-          <> renderFireAt ((.fireAt) ((.timer) newProcess))
+          <> renderFireAt ((.fireAt) (legacyProcessTimer newProcess))
           <> "; already-scheduled timers keep their persisted deadline"
       )
-  | (.fireAt) ((.timer) oldProcess) /= (.fireAt) ((.timer) newProcess)
+  | (.fireAt) (legacyProcessTimer oldProcess) /= (.fireAt) (legacyProcessTimer newProcess)
   ]
 
 processDecideSurfaceDiff :: ProcessNode -> ProcessNode -> [Change]
@@ -2996,8 +3002,8 @@ processDecideSurfaceDiff oldProcess newProcess =
       ((.id) newProcess)
       ProcessDecideSurfaceChanged
       "process dispatch surface changed: a source event redelivered across the deploy dispatches under the same deterministic ids, so half-old/half-new fan-out merges silently. Drain or pause the process subscription and replay or discard dead letters before deploying; see docs/user/deploy-ordering.md. Hole-only decide changes are not visible to diff; the same drain rule applies to those too."
-  | renderHandleSurface ((.handle) oldProcess)
-      /= renderHandleSurface ((.handle) newProcess)
+  | renderHandleSurface (legacyProcessHandle oldProcess)
+      /= renderHandleSurface (legacyProcessHandle newProcess)
   ]
 
 processTimerPayloadDiff :: ProcessNode -> ProcessNode -> [Change]
@@ -3005,12 +3011,32 @@ processTimerPayloadDiff oldProcess newProcess =
   [ advisory
       ((.id) newProcess)
       "timer-payload"
-      ((.name) ((.timer) newProcess))
+      ((.name) (legacyProcessTimer newProcess))
       ProcessTimerPayloadChanged
       "timer payload shape changed: rows scheduled before the deploy carry the old shape, unversioned, and fire under new code — the fire decoder must accept every historically scheduled shape or the timer dead-letters after maxAttempts. Hole-only timer-decoder changes are not visible to diff; the same drain rule applies to those too."
-  | renderTimerPayloadSurface ((.timer) oldProcess)
-      /= renderTimerPayloadSurface ((.timer) newProcess)
+  | renderTimerPayloadSurface (legacyProcessTimer oldProcess)
+      /= renderTimerPayloadSurface (legacyProcessTimer newProcess)
   ]
+
+processInputs :: ProcessNode -> [InputDecl]
+processInputs process = case (.body) process of
+  LegacyProcessBody input _ _ -> [input]
+  ReactionProcessBody reaction -> NE.toList ((.inputs) reaction)
+
+legacyProcessInput :: ProcessNode -> InputDecl
+legacyProcessInput process = case (.body) process of
+  LegacyProcessBody input _ _ -> input
+  ReactionProcessBody {} -> error "keiro-dsl internal invariant: reaction process used as legacy input"
+
+legacyProcessHandle :: ProcessNode -> HandleNode
+legacyProcessHandle process = case (.body) process of
+  LegacyProcessBody _ handle _ -> handle
+  ReactionProcessBody {} -> error "keiro-dsl internal invariant: reaction process used as legacy handle"
+
+legacyProcessTimer :: ProcessNode -> TimerNode
+legacyProcessTimer process = case (.body) process of
+  LegacyProcessBody _ _ timer -> timer
+  ReactionProcessBody {} -> error "keiro-dsl internal invariant: reaction process used as legacy timer"
 
 renderFireAt :: FireAtExpr -> Text
 renderFireAt expression = "input." <> (.field) expression <> " + " <> (.window) expression

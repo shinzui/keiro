@@ -6,28 +6,52 @@ module Keiro.Dsl.Parser.Coordination
 where
 
 import Data.List (intersperse)
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax, ProcessReactionSyntax))
 import Keiro.Dsl.Parser.Core
 import Keiro.Dsl.Parser.Expression (pExpr)
 import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
-import Keiro.Dsl.Source (SourceSpan)
+import Keiro.Dsl.Source (Located (..), SourceSpan)
+import Keiro.Dsl.Syntax (SurfaceElement (..))
 import Text.Megaparsec
 import Text.Megaparsec.Char (char)
 
 -- Process manager + durable timer (EP-3)
 --------------------------------------------------------------------------------
 
-pProcess :: P ProcessNode
-pProcess = do
+pProcess :: FrontendContext -> P (ProcessNode, [Located SurfaceElement])
+pProcess context = do
   loc <- getLoc
   keyword "process"
   pid <- ident
   keyword "name"
   nm <- stringLit
+  (processBody, corr, saga, tgt, projs, rejected, poison, reactionSpans) <- try (pReactionProcessBody context) <|> pLegacyProcessBody
+  let processNode =
+        ProcessNode
+          { id = pid,
+            name = nm,
+            correlate = corr,
+            saga = saga,
+            target = tgt,
+            projections = projs,
+            body = processBody,
+            rejected = rejected,
+            poison = poison,
+            loc = loc
+          }
+      elements =
+        [ Located {span = sourceSpan, value = SurfaceProcessReaction pid inputName ordinal}
+        | (inputName, ordinal, sourceSpan) <- reactionSpans
+        ]
+  pure (processNode, elements)
+
+pLegacyProcessBody :: P (ProcessBody, CorrelateDecl, SagaRef, Name, [Name], PolicyChoice, PolicyChoice, [(Name, Int, SourceSpan)])
+pLegacyProcessBody = do
   inp <- pInputDecl
   corr <- pCorrelate
   saga <- pSaga
@@ -39,21 +63,161 @@ pProcess = do
   rejected <- pPolicyLine "rejected"
   poison <- pPolicyLine "poison"
   timer <- pTimerNode
+  pure (LegacyProcessBody inp handle timer, corr, saga, tgt, projs, rejected, poison, [])
+
+pReactionProcessBody :: FrontendContext -> P (ProcessBody, CorrelateDecl, SagaRef, Name, [Name], PolicyChoice, PolicyChoice, [(Name, Int, SourceSpan)])
+pReactionProcessBody context = do
+  marker <- withOwnedSpan (keyword "reactions")
+  requireLanguageFeatureAt context ProcessReactionSyntax (spanOf marker)
+  versionLoc <- getLoc
+  keyword "version"
+  reactionVersion <- fromIntegral <$> boundedDecimal
+  inputs <- NE.fromList <$> some pInputDecl
+  corr <- pCorrelate
+  saga <- pSaga
+  keyword "target"
+  tgt <- ident
+  projs <- keyword "projections" *> brackets (many ident)
+  parsedReactions <- some (pReactionNode context)
+  let reactions = NE.fromList (map fst parsedReactions)
+      reactionSpans = numberReactionSpans (concatMap snd parsedReactions)
+  pFixedDispatchIdLine ["name", "correlationId", "sourceEventId", "targetStreamName", "occurrence"]
+  rejected <- pPolicyLine "rejected"
+  poison <- pPolicyLine "poison"
+  policy <- optional pTimerPolicy
+  timers <- many pReactionTimerNode
   pure
-    ProcessNode
-      { id = pid,
-        name = nm,
-        input = inp,
-        correlate = corr,
-        saga = saga,
-        target = tgt,
-        projections = projs,
-        handle = handle,
-        rejected = rejected,
-        poison = poison,
-        timer = timer,
+    ( ReactionProcessBody
+        ReactionBody
+          { version = reactionVersion,
+            versionLoc = versionLoc,
+            inputs = inputs,
+            reactions = reactions,
+            timerPolicy = policy,
+            timers = timers
+          },
+      corr,
+      saga,
+      tgt,
+      projs,
+      rejected,
+      poison,
+      reactionSpans
+    )
+  where
+    numberReactionSpans raw =
+      [ (inputName, length [() | (priorName, _, _) <- take index raw, priorName == inputName], sourceSpan)
+      | (index, (inputName, _, sourceSpan)) <- zip [0 ..] raw
+      ]
+
+pReactionNode :: FrontendContext -> P (ReactionNode, [(Name, Int, SourceSpan)])
+pReactionNode context = do
+  loc <- getLoc
+  keyword "on"
+  inputName <- ident
+  firstIsGuarded <- optional (lookAhead (keyword "when" <|> keyword "otherwise"))
+  locatedArms <- case firstIsGuarded of
+    Just _ -> some (withOwnedSpan (pGuardedReactionArm context))
+    Nothing -> (: []) <$> withOwnedSpan pUnconditionalReactionArm
+  let arms = NE.fromList [arm | Located {value = arm} <- locatedArms]
+      spans = [(inputName, ordinal, spanOf arm) | (ordinal, arm) <- zip [0 ..] locatedArms]
+  pure (ReactionNode {on = inputName, arms = arms, loc = loc}, spans)
+
+pGuardedReactionArm :: FrontendContext -> P ReactionArm
+pGuardedReactionArm context = do
+  loc <- getLoc
+  armGuard <-
+    (WhenArm <$> (keyword "when" *> pExpr context))
+      <|> (OtherwiseArm <$ keyword "otherwise")
+  armBody <- pReactionArmBody
+  pure ReactionArm {guard = armGuard, body = armBody, loc = loc}
+
+pUnconditionalReactionArm :: P ReactionArm
+pUnconditionalReactionArm = do
+  loc <- getLoc
+  armBody <- pReactionArmBody
+  pure ReactionArm {guard = UnconditionalArm, body = armBody, loc = loc}
+
+pReactionArmBody :: P ArmBody
+pReactionArmBody =
+  (NoAction <$ (keyword "no-action"))
+    <|> do
+      advance <- optional pAdvanceReaction
+      followUps <- many pFollowUp
+      case (advance, followUps) of
+        (Nothing, []) -> fail "reaction arm must declare advance, a follow-up, or no-action"
+        _ -> pure ArmActions {advance = advance, followUps = followUps}
+
+pAdvanceReaction :: P AdvanceReaction
+pAdvanceReaction = do
+  loc <- getLoc
+  keyword "advance"
+  command <- ident
+  fields <- braces (many pFieldBinding)
+  acceptedBlock <- optional $ do
+    keyword "accepted"
+    acceptedFollowUps <- many pFollowUp
+    silent <- optional (keyword "silent" *> keyword "no-action")
+    pure (acceptedFollowUps, maybe False (const True) silent)
+  pure
+    AdvanceReaction
+      { command = command,
+        fields = fields,
+        accepted = fst <$> acceptedBlock,
+        silentNoAction = maybe False snd acceptedBlock,
         loc = loc
       }
+
+pFollowUp :: P FollowUp
+pFollowUp =
+  choice
+    [ FollowDispatch <$> try pDispatch,
+      FollowSchedule <$> try pSchedule,
+      do
+        loc <- getLoc
+        keyword "cancel"
+        FollowCancel <$> ident <*> pure loc
+    ]
+
+pSchedule :: P ScheduleNode
+pSchedule = do
+  loc <- getLoc
+  keyword "schedule"
+  timer <- ident
+  mode <- maybe ScheduleRearm (const ScheduleOnce) <$> optional (keyword "once")
+  fireAt <- keyword "fireAt" *> pFireAt
+  bindings <- braces (many pFieldBinding)
+  pure ScheduleNode {timer = timer, mode = mode, fireAt = fireAt, bindings = bindings, loc = loc}
+
+pTimerPolicy :: P TimerPolicy
+pTimerPolicy = do
+  loc <- getLoc
+  keyword "timers"
+  keyword "max-attempts"
+  maxAttempts <- boundedDecimal
+  keyword "dead-letter"
+  deadLetter <- stringLit
+  pure TimerPolicy {maxAttempts = maxAttempts, deadLetter = deadLetter, loc = loc}
+
+pReactionTimerNode :: P ReactionTimerNode
+pReactionTimerNode = do
+  loc <- getLoc
+  keyword "timer"
+  name <- ident
+  timerId <- keyword "id" *> pIdExpr
+  payload <- keyword "payload" *> braces (many pPayloadField)
+  fire <- pFire
+  _ <- keyword "decode" *> keyword "unknown-status" *> symbol "=>"
+  decodeUnknown <- ident
+  pure ReactionTimerNode {name = name, id = timerId, payload = payload, fire = fire, decodeUnknown = decodeUnknown, loc = loc}
+
+pPayloadField :: P PayloadField
+pPayloadField = do
+  name <- ident
+  choice
+    [ PayloadConstant name <$> (symbol "=" *> stringLit),
+      PayloadTyped name <$> optional (symbol ":" *> ident)
+    ]
 
 pRouter :: FrontendContext -> P RouterNode
 pRouter context = do

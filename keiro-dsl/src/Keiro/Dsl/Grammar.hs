@@ -83,6 +83,19 @@ module Keiro.Dsl.Grammar
     FireDisposition (..),
     FireNode (..),
     TimerNode (..),
+    ProcessBody (..),
+    ReactionBody (..),
+    ReactionNode (..),
+    ReactionArm (..),
+    ArmGuard (..),
+    ArmBody (..),
+    AdvanceReaction (..),
+    FollowUp (..),
+    ScheduleNode (..),
+    ScheduleMode (..),
+    TimerPolicy (..),
+    ReactionTimerNode (..),
+    PayloadField (..),
     PolicyChoice (..),
     ProcessNode (..),
 
@@ -172,6 +185,7 @@ module Keiro.Dsl.Grammar
   )
 where
 
+import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
@@ -820,6 +834,101 @@ data TimerNode = TimerNode
   }
   deriving stock (Eq, Show, Generic)
 
+-- | The frozen Languages 1-5 process form or the declarative Language 6
+-- reaction form. Keeping the constructors distinct makes every consumer choose
+-- deliberately between positional legacy dispatch and target-keyed reactions.
+data ProcessBody
+  = LegacyProcessBody !InputDecl !HandleNode !TimerNode
+  | ReactionProcessBody !ReactionBody
+  deriving stock (Eq, Show, Generic)
+
+data ReactionBody = ReactionBody
+  { version :: !Natural,
+    versionLoc :: !Loc,
+    inputs :: !(NonEmpty InputDecl),
+    reactions :: !(NonEmpty ReactionNode),
+    timerPolicy :: !(Maybe TimerPolicy),
+    timers :: ![ReactionTimerNode]
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ReactionNode = ReactionNode
+  { on :: !Name,
+    arms :: !(NonEmpty ReactionArm),
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ReactionArm = ReactionArm
+  { guard :: !ArmGuard,
+    body :: !ArmBody,
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ArmGuard
+  = UnconditionalArm
+  | WhenArm !Expr
+  | OtherwiseArm
+  deriving stock (Eq, Show, Generic)
+
+data ArmBody
+  = NoAction
+  | ArmActions
+      { advance :: !(Maybe AdvanceReaction),
+        followUps :: ![FollowUp]
+      }
+  deriving stock (Eq, Show, Generic)
+
+data AdvanceReaction = AdvanceReaction
+  { command :: !Name,
+    fields :: ![FieldBinding],
+    accepted :: !(Maybe [FollowUp]),
+    silentNoAction :: !Bool,
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data FollowUp
+  = FollowDispatch !DispatchNode
+  | FollowSchedule !ScheduleNode
+  | FollowCancel !Name !Loc
+  deriving stock (Eq, Show, Generic)
+
+data ScheduleNode = ScheduleNode
+  { timer :: !Name,
+    mode :: !ScheduleMode,
+    fireAt :: !FireAtExpr,
+    bindings :: ![FieldBinding],
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ScheduleMode = ScheduleRearm | ScheduleOnce
+  deriving stock (Eq, Show, Generic)
+
+data TimerPolicy = TimerPolicy
+  { maxAttempts :: !Int,
+    deadLetter :: !Text,
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data ReactionTimerNode = ReactionTimerNode
+  { name :: !Name,
+    id :: !IdExpr,
+    payload :: ![PayloadField],
+    fire :: !FireNode,
+    decodeUnknown :: !Name,
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data PayloadField
+  = PayloadConstant !Name !Text
+  | PayloadTyped !Name !(Maybe Name)
+  deriving stock (Eq, Show, Generic)
+
 -- | A node-level worker policy lowered to the runtime worker options.
 data PolicyChoice = PolHalt | PolDeadLetter | PolSkip
   deriving stock (Eq, Show, Generic)
@@ -831,15 +940,13 @@ data ProcessNode = ProcessNode
     id :: !Name,
     -- | The define-once ProcessManager @name@ (@name \"hospital-surge\"@).
     name :: !Text,
-    input :: !InputDecl,
     correlate :: !CorrelateDecl,
     saga :: !SagaRef,
     target :: !Name,
     projections :: ![Name],
-    handle :: !HandleNode,
+    body :: !ProcessBody,
     rejected :: !PolicyChoice,
     poison :: !PolicyChoice,
-    timer :: !TimerNode,
     loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)

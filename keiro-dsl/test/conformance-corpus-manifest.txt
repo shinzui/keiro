@@ -51,6 +51,14 @@ uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/Hospit
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Harness.hs
 uncompiled-generated keiro-dsl/test/conformance-process-runtime/Generated/HospitalCapacity/Surge/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/BehaviorSourceMap.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/Incident/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/Incident/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/Incident/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/IncidentSaga/BehaviorContract.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/IncidentSaga/Harness.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/IncidentSaga/Projection.hs
+uncompiled-generated keiro-dsl/test/conformance-process-reactions/Generated/ProcessReactionsMinimal/ReplayAudit.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/BehaviorContract.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Codec.hs
 uncompiled-generated keiro-dsl/test/conformance-process/Generated/HospitalCapacity/Hospital/Domain.hs

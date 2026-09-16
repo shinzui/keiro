@@ -50,6 +50,7 @@ import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
 import Keiro.Dsl.LanguageVersion (LanguageVersion, RuntimeCapability (..), SourceLanguage (..), effectiveLanguageVersion, languageVersionText, runtimeProfileHasCapability, sourceFormText)
 import Keiro.Dsl.NominalType qualified as Nominal
+import Keiro.Dsl.ProcessReaction qualified as ProcessReaction
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (deriveShapeHash)
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
@@ -99,6 +100,25 @@ data DiagnosticCode
   | ProcessUnresolvedRef
   | ProcessBenignInversion
   | SagaCategoryIllegal
+  | ProcessReactionUnknownInput
+  | ProcessInputDuplicateDeclaration
+  | ProcessTimerDuplicateName
+  | ProcessReactionGuardNotBoolean
+  | ProcessStateAccessUnsupported
+  | ProcessReactionInputUnhandled
+  | ProcessReactionDuplicateInput
+  | ProcessReactionOtherwiseMissing
+  | ProcessReactionOtherwiseUnreachable
+  | ProcessTimerPrefixCollision
+  | ProcessScheduleUnknownTimer
+  | ProcessCancelUnknownTimer
+  | ProcessSchedulePayloadIncomplete
+  | ProcessTimerPolicyMissing
+  | ProcessTimerPolicyUnused
+  | ProcessAcceptedArmRequiresEvent
+  | ProcessSilentArmMissing
+  | ProcessAcceptedArmUnverified
+  | ProcessBindingTypeMismatch
   | -- EP-4 (integration intake / inbox disposition).
     DispositionIncomplete
   | DispositionDuplicateRetry
@@ -1599,16 +1619,19 @@ validateNames languageContract typeGraphResult spec =
 
     processNames process =
       constructorName "process name" ((.id) process) ((.loc) process)
-        ++ constructorName "process input name" ((.name) input) ((.loc) process)
-        ++ concatMap (\field -> fieldNameRule "process input field" ((.name) field) ((.loc) process)) ((.fields) input)
-        ++ concatMap (bindingName "advance field binding" ((.loc) process)) ((.advFields) ((.advance) handle))
-        ++ concatMap dispatchBindings ((.dispatch) handle)
-        ++ concatMap (bindingName "timer payload field binding" ((.loc) timer)) ((.payload) timer)
-        ++ concatMap (bindingName "timer fire field binding" ((.loc) timer)) ((.fields) ((.fire) timer))
+        ++ case (.body) process of
+          LegacyProcessBody input handle timer ->
+            constructorName "process input name" ((.name) input) ((.loc) process)
+              ++ concatMap (\field -> fieldNameRule "process input field" ((.name) field) ((.loc) process)) ((.fields) input)
+              ++ concatMap (bindingName "advance field binding" ((.loc) process)) ((.advFields) ((.advance) handle))
+              ++ concatMap dispatchBindings ((.dispatch) handle)
+              ++ concatMap (bindingName "timer payload field binding" ((.loc) timer)) ((.payload) timer)
+              ++ concatMap (bindingName "timer fire field binding" ((.loc) timer)) ((.fields) ((.fire) timer))
+          ReactionProcessBody reaction ->
+            concatMap
+              (\input -> constructorName "process input name" ((.name) input) ((.loc) input) ++ concatMap (\field -> fieldNameRule "process input field" ((.name) field) ((.loc) input)) ((.fields) input))
+              (NE.toList ((.inputs) reaction))
       where
-        input = (.input) process
-        handle = (.handle) process
-        timer = (.timer) process
         dispatchBindings dispatch = concatMap (bindingName "dispatch field binding" ((.loc) dispatch)) ((.fields) dispatch)
 
     routerNames router =
@@ -2093,7 +2116,7 @@ nodeIdentity (NOperation o) = ("operation", (.name) o, (.loc) o)
 
 validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> Node -> [Diagnostic]
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
-validateNode languageContract _typeGraphResult _supplyAnalysis spec (NProcess p) = validateProcess languageContract spec p
+validateNode languageContract typeGraphResult _supplyAnalysis spec (NProcess p) = validateProcess languageContract typeGraphResult spec p
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NRouter router) = validateRouter languageContract typeGraphResult spec router
 validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NContract contract) = validateContract languageContract contract
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
@@ -3621,8 +3644,43 @@ canonicalIntakeEnvelopeFields =
     ]
 
 -- | EP-3 rules for a process manager + its nested timer.
-validateProcess :: EffectiveLanguageContract -> Spec -> ProcessNode -> [Diagnostic]
-validateProcess languageContract spec p =
+validateProcess :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> ProcessNode -> [Diagnostic]
+validateProcess languageContract typeGraphResult spec p = case (.body) p of
+  LegacyProcessBody input handle timer -> validateLegacyProcess languageContract spec p input handle timer
+  ReactionProcessBody _ -> case typeGraphResult of
+    Left _ -> []
+    Right graph -> case ProcessReaction.checkProcessReaction languageContract graph spec p of
+      Right _ -> []
+      Left diagnostics -> map processReactionDiagnostic (NE.toList diagnostics)
+
+processReactionDiagnostic :: ProcessReaction.ProcessReactionDiagnostic -> Diagnostic
+processReactionDiagnostic diagnostic =
+  mkErr (locLine ((.loc) diagnostic)) (processReactionDiagnosticCode ((.code) diagnostic)) ((.message) diagnostic)
+
+processReactionDiagnosticCode :: ProcessReaction.ProcessReactionDiagnosticCode -> DiagnosticCode
+processReactionDiagnosticCode = \case
+  ProcessReaction.ProcessReactionUnknownInput -> ProcessReactionUnknownInput
+  ProcessReaction.ProcessInputDuplicateDeclaration -> ProcessInputDuplicateDeclaration
+  ProcessReaction.ProcessTimerDuplicateName -> ProcessTimerDuplicateName
+  ProcessReaction.ProcessReactionGuardNotBoolean -> ProcessReactionGuardNotBoolean
+  ProcessReaction.ProcessStateAccessUnsupported -> ProcessStateAccessUnsupported
+  ProcessReaction.ProcessReactionInputUnhandled -> ProcessReactionInputUnhandled
+  ProcessReaction.ProcessReactionDuplicateInput -> ProcessReactionDuplicateInput
+  ProcessReaction.ProcessReactionOtherwiseMissing -> ProcessReactionOtherwiseMissing
+  ProcessReaction.ProcessReactionOtherwiseUnreachable -> ProcessReactionOtherwiseUnreachable
+  ProcessReaction.ProcessTimerPrefixCollision -> ProcessTimerPrefixCollision
+  ProcessReaction.ProcessScheduleUnknownTimer -> ProcessScheduleUnknownTimer
+  ProcessReaction.ProcessCancelUnknownTimer -> ProcessCancelUnknownTimer
+  ProcessReaction.ProcessSchedulePayloadIncomplete -> ProcessSchedulePayloadIncomplete
+  ProcessReaction.ProcessTimerPolicyMissing -> ProcessTimerPolicyMissing
+  ProcessReaction.ProcessTimerPolicyUnused -> ProcessTimerPolicyUnused
+  ProcessReaction.ProcessAcceptedArmRequiresEvent -> ProcessAcceptedArmRequiresEvent
+  ProcessReaction.ProcessSilentArmMissing -> ProcessSilentArmMissing
+  ProcessReaction.ProcessAcceptedArmUnverified -> ProcessAcceptedArmUnverified
+  ProcessReaction.ProcessBindingTypeMismatch -> ProcessBindingTypeMismatch
+
+validateLegacyProcess :: EffectiveLanguageContract -> Spec -> ProcessNode -> InputDecl -> HandleNode -> TimerNode -> [Diagnostic]
+validateLegacyProcess languageContract spec p input handle timer =
   concat [sagaCategoryRule, noWallClock, runtimeOwnedDispatchId, crossNodeCoupling, strictSurfaceResolution, timerCeiling, policyRules, ambiguityRule, benignInversions, onAppendedArms, notMineArm, decodeUnknownStatus, deadLetterText]
   where
     -- Generated dispatch code appends and then acks; `Keiro.ProcessManager` has
@@ -3635,7 +3693,7 @@ validateProcess languageContract spec p =
             <> "' maps on-appended => "
             <> dispText ((.onAppended) ((.disposition) d))
             <> ", but a successful append is always acked: no runtime path retries or dead-letters an event it just appended. Write 'on-appended AckOk'"
-      | d <- (.dispatch) ((.handle) p),
+      | d <- (.dispatch) handle,
         (.onAppended) ((.disposition) d) /= DAckOk
       ]
 
@@ -3679,9 +3737,8 @@ validateProcess languageContract spec p =
     aggregates = [a | NAggregate a <- (.nodes) spec]
     aggNames = map (.name) aggregates
     projectionTables = [(.table) projection | aggregate <- aggregates, Just projection <- [(.projection) aggregate]]
-    inputFields = map (.name) ((.fields) ((.input) p))
-    timeFields = [(.name) f | f <- (.fields) ((.input) p), (.valueType) f == Just "Time"]
-    timer = (.timer) p
+    inputFields = map (.name) ((.fields) input)
+    timeFields = [(.name) f | f <- (.fields) input, (.valueType) f == Just "Time"]
     pl = locLine ((.loc) p)
 
     sagaCategoryRule =
@@ -3698,11 +3755,11 @@ validateProcess languageContract spec p =
        in if f `notElem` inputFields
             then
               [ mkErr (locLine ((.loc) timer)) ProcessFireAtNotInjected $
-                  "timer '" <> (.name) timer <> "' fireAt field '" <> f <> "' is not a field of input '" <> (.name) ((.input) p) <> "'"
+                  "timer '" <> (.name) timer <> "' fireAt field '" <> f <> "' is not a field of input '" <> (.name) input <> "'"
               ]
             else
               [ mkErr (locLine ((.loc) timer)) ProcessFireAtNotInjected $
-                  "timer '" <> (.name) timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> (.name) ((.input) p) <> "'"
+                  "timer '" <> (.name) timer <> "' fireAt references '" <> f <> "', which is not a declared :Time field of input '" <> (.name) input <> "'"
               | f `notElem` timeFields
               ]
 
@@ -3711,13 +3768,13 @@ validateProcess languageContract spec p =
     runtimeOwnedDispatchId =
       [ mkErr pl ProcessDispatchIdSupplied $
           "advance command '" <> (.advCommand) advance <> "' supplies a runtime-owned id field '" <> (.name) binding <> "'; remove it"
-      | let advance = (.advance) ((.handle) p),
+      | let advance = (.advance) handle,
         binding <- (.advFields) advance,
         (.name) binding `elem` (["commandId", "id"] :: [Name])
       ]
         ++ [ mkErr (locLine ((.loc) d)) ProcessDispatchIdSupplied $
                "dispatch to '" <> (.target) d <> "' supplies a runtime-owned id field '" <> (.name) b <> "'; remove it"
-           | d <- (.dispatch) ((.handle) p),
+           | d <- (.dispatch) handle,
              b <- (.fields) d,
              (.name) b `elem` (["commandId", "id"] :: [Name])
            ]
@@ -3739,11 +3796,11 @@ validateProcess languageContract spec p =
            | (.target) ((.fire) timer) `notElem` [(.agg) ((.saga) p), (.target) p]
            ]
         ++ resolveCommand pl "advance" ((.agg) ((.saga) p)) ((.advCommand) advance) ((.advFields) advance)
-        ++ concatMap resolveDispatch ((.dispatch) ((.handle) p))
+        ++ concatMap resolveDispatch ((.dispatch) handle)
         ++ resolveCommand (locLine ((.loc) timer)) "timer fire" ((.target) fire) ((.command) fire) ((.fields) fire)
         ++ [ mkErr pl ProcessUnresolvedRef $
-               "process '" <> (.id) p <> "' schedules undeclared timer '" <> (.schedule) ((.handle) p) <> "'; declared timer is '" <> (.name) timer <> "'"
-           | (.schedule) ((.handle) p) /= (.name) timer
+               "process '" <> (.id) p <> "' schedules undeclared timer '" <> (.schedule) handle <> "'; declared timer is '" <> (.name) timer <> "'"
+           | (.schedule) handle /= (.name) timer
            ]
         ++ [ mkErr pl ProcessUnresolvedRef $
                "process '" <> (.id) p <> "' references undeclared projection table '" <> projection <> "'"
@@ -3751,7 +3808,7 @@ validateProcess languageContract spec p =
              projection `notElem` projectionTables
            ]
       where
-        advance = (.advance) ((.handle) p)
+        advance = (.advance) handle
         fire = (.fire) timer
         resolveDispatch dispatch =
           resolveCommand
@@ -3783,14 +3840,14 @@ validateProcess languageContract spec p =
 
     correlateFieldRule =
       [ mkErr pl ProcessKeyFieldUnknown $
-          "correlate references 'input." <> (.field) ((.correlate) p) <> "' but input '" <> (.name) ((.input) p) <> "' does not declare that field"
+          "correlate references 'input." <> (.field) ((.correlate) p) <> "' but input '" <> (.name) input <> "' does not declare that field"
       | (.field) ((.correlate) p) `notElem` inputFields
       ]
 
     dispatchKeyRules =
       [ mkErr (locLine ((.loc) dispatch)) ProcessDispatchKeyUnresolved $
           "dispatch to '" <> (.target) dispatch <> "' uses unresolved key '" <> (.key) dispatch <> "'; expected correlationId or input.<declared-field>"
-      | dispatch <- (.dispatch) ((.handle) p),
+      | dispatch <- (.dispatch) handle,
         not (processKeyInScope ((.key) dispatch))
       ]
         ++ [ mkErr (locLine ((.loc) timer)) ProcessDispatchKeyUnresolved $
@@ -3805,10 +3862,10 @@ validateProcess languageContract spec p =
           Nothing -> False
 
     bindingScopeRules =
-      bindingRules pl "advance" inputFields ((.advFields) ((.advance) ((.handle) p)))
+      bindingRules pl "advance" inputFields ((.advFields) ((.advance) handle))
         ++ concatMap
           (\dispatch -> bindingRules (locLine ((.loc) dispatch)) "dispatch" inputFields ((.fields) dispatch))
-          ((.dispatch) ((.handle) p))
+          ((.dispatch) handle)
         ++ bindingRules
           (locLine ((.loc) timer))
           "timer fire"
@@ -3854,7 +3911,7 @@ validateProcess languageContract spec p =
         ((.loc) p)
         ((.rejected) p)
         [ ((.command) dispatch, (.loc) dispatch, (.disposition) dispatch)
-        | dispatch <- (.dispatch) ((.handle) p)
+        | dispatch <- (.dispatch) handle
         ]
 
     ambiguityRule =
@@ -3871,7 +3928,7 @@ validateProcess languageContract spec p =
       ]
         ++ [ Diagnostic (locLine ((.loc) d)) Warning ProcessBenignInversion [] $
                "dispatch to '" <> (.target) d <> "' maps on-duplicate => AckOk (a duplicate is treated as benign success)"
-           | d <- (.dispatch) ((.handle) p),
+           | d <- (.dispatch) handle,
              (.onDuplicate) ((.disposition) d) == DAckOk
            ]
 

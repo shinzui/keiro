@@ -498,6 +498,9 @@ instance HasLocs Text where
 instance (HasLocs a) => HasLocs [a] where
   traverseLocs f = traverse (traverseLocs f)
 
+instance (HasLocs a) => HasLocs (NonEmpty a) where
+  traverseLocs f (value :| values) = (:|) <$> traverseLocs f value <*> traverse (traverseLocs f) values
+
 instance (HasLocs a) => HasLocs (Maybe a) where
   traverseLocs f = traverse (traverseLocs f)
 
@@ -1491,6 +1494,32 @@ instance HasLocs Placement
 instance HasLocs PolicyChoice
 
 instance HasLocs Presence
+
+instance HasLocs ProcessBody
+
+instance HasLocs ReactionBody
+
+instance HasLocs ReactionNode
+
+instance HasLocs ReactionArm
+
+instance HasLocs ArmGuard
+
+instance HasLocs ArmBody
+
+instance HasLocs AdvanceReaction
+
+instance HasLocs FollowUp
+
+instance HasLocs ScheduleNode
+
+instance HasLocs ScheduleMode
+
+instance HasLocs TimerPolicy
+
+instance HasLocs ReactionTimerNode
+
+instance HasLocs PayloadField
 
 instance HasLocs ProcessNode
 

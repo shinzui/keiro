@@ -19,6 +19,7 @@ module Keiro.Dsl.CheckReport
     CheckReportEntry (..),
     CheckReportSummary (..),
     CheckReportMember (..),
+    CheckReportProcessReaction (..),
     CheckReport,
     effectiveDenyCodes,
     checkReport,
@@ -32,10 +33,13 @@ import Data.List.NonEmpty qualified as NE
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Keiro.Dsl.Grammar (Node (..), ProcessBody (..), ProcessNode (..), Spec (..))
 import Keiro.Dsl.LanguageVersion (LanguageSupport (..), LanguageVersion, SourceLanguage, declaredLanguageVersionMaybe, languageSupportText, sourceFormText)
-import Keiro.Dsl.SemanticContract (EffectiveLanguageContract (..), effectiveLanguageSupport, effectiveRuntimeSemantics)
+import Keiro.Dsl.ProcessReaction (CheckedProcessReaction (..), checkProcessReaction)
+import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec, checkedTypeGraph, effectiveLanguageSupport, effectiveRuntimeSemantics)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode, Severity (..), diagnosticCodeText)
 import Keiro.Dsl.Workspace (WorkspaceDiagnostic (..), WorkspaceLocation (..), WorkspaceMember (..), WorkspaceSpec (..), workspaceDisplayPath)
+import Numeric.Natural (Natural)
 
 data CheckReportLanguage = CheckReportLanguage
   { sourceForm :: !Text,
@@ -86,6 +90,15 @@ data CheckReportMember = CheckReportMember
   }
   deriving stock (Eq, Show)
 
+data CheckReportProcessReaction = CheckReportProcessReaction
+  { process :: !Text,
+    verification :: !Text,
+    version :: !Natural,
+    fingerprint :: !Text,
+    holeObligations :: ![Text]
+  }
+  deriving stock (Eq, Show)
+
 data CheckReportKind = SourceReport | WorkspaceReport
   deriving stock (Eq, Show)
 
@@ -100,7 +113,8 @@ data CheckReport = CheckReport
     diagnostics :: ![CheckReportEntry],
     summary :: !CheckReportSummary,
     ok :: !Bool,
-    members :: ![CheckReportMember]
+    members :: ![CheckReportMember],
+    processReactions :: ![CheckReportProcessReaction]
   }
   deriving stock (Eq, Show)
 
@@ -114,12 +128,12 @@ effectiveDenyCodes enforcement
 checkReport ::
   FilePath ->
   SourceLanguage ->
-  EffectiveLanguageContract ->
+  CheckedService ->
   CheckReportEnforcement ->
   [Diagnostic] ->
   Set DiagnosticCode ->
   CheckReport
-checkReport subject sourceLanguage contract enforcement diagnostics deniedCodes =
+checkReport subject sourceLanguage service enforcement diagnostics deniedCodes =
   buildReport
     SourceReport
     subject
@@ -127,16 +141,19 @@ checkReport subject sourceLanguage contract enforcement diagnostics deniedCodes 
     enforcement
     (map (sourceEntry subject deniedCodes) diagnostics)
     []
+    (reactionRows service)
+  where
+    contract = checkedLanguageContract service
 
 workspaceCheckReport ::
   FilePath ->
   WorkspaceSpec ->
-  EffectiveLanguageContract ->
+  CheckedService ->
   CheckReportEnforcement ->
   [WorkspaceDiagnostic] ->
   Set DiagnosticCode ->
   CheckReport
-workspaceCheckReport subject workspace contract enforcement diagnostics deniedCodes =
+workspaceCheckReport subject workspace service enforcement diagnostics deniedCodes =
   buildReport
     WorkspaceReport
     subject
@@ -144,6 +161,9 @@ workspaceCheckReport subject workspace contract enforcement diagnostics deniedCo
     enforcement
     (map (workspaceEntry subject deniedCodes) diagnostics)
     (map memberValue ((.members) workspace))
+    (reactionRows service)
+  where
+    contract = checkedLanguageContract service
 
 -- | The report for a workspace refused during composition, before any service
 -- graph exists. Composition refusals are coded diagnostics, so they belong in
@@ -164,6 +184,7 @@ workspaceRefusalReport subject enforcement diagnostics deniedCodes =
     enforcement
     (map (workspaceEntry subject deniedCodes) (NE.toList diagnostics))
     []
+    []
 
 buildReport ::
   CheckReportKind ->
@@ -172,8 +193,9 @@ buildReport ::
   CheckReportEnforcement ->
   [CheckReportEntry] ->
   [CheckReportMember] ->
+  [CheckReportProcessReaction] ->
   CheckReport
-buildReport kind subject language enforcement entries members =
+buildReport kind subject language enforcement entries members processReactions =
   CheckReport
     { kind = kind,
       subject = subject,
@@ -182,7 +204,8 @@ buildReport kind subject language enforcement entries members =
       diagnostics = entries,
       summary = summary,
       ok = (.errors) summary == 0 && (.deniedWarnings) summary == 0,
-      members = members
+      members = members,
+      processReactions = processReactions
     }
   where
     summary =
@@ -191,6 +214,23 @@ buildReport kind subject language enforcement entries members =
           warnings = length [() | entry <- entries, (.severity) entry == Warning],
           deniedWarnings = length [() | entry <- entries, (.denied) entry]
         }
+
+reactionRows :: CheckedService -> [CheckReportProcessReaction]
+reactionRows service =
+  [ CheckReportProcessReaction
+      { process = (.id) process,
+        verification = (.verification) checked,
+        version = (.version) checked,
+        fingerprint = (.fingerprint) checked,
+        holeObligations = (.holeObligations) checked
+      }
+  | NProcess process <- (.nodes) spec,
+    ReactionProcessBody {} <- [(.body) process],
+    Right graph <- [checkedTypeGraph service],
+    Right checked <- [checkProcessReaction (checkedLanguageContract service) graph spec process]
+  ]
+  where
+    spec = checkedSpec service
 
 sourceLanguageValue :: SourceLanguage -> EffectiveLanguageContract -> CheckReportLanguage
 sourceLanguageValue sourceLanguage contract =
@@ -271,6 +311,7 @@ instance ToJSON CheckReport where
           "language" .= fmap languageJson ((.language) report),
           "enforcement" .= enforcementJson ((.enforcement) report),
           "diagnostics" .= map entryJson ((.diagnostics) report),
+          "processReactions" .= map processReactionJson ((.processReactions) report),
           "summary" .= summaryJson ((.summary) report),
           "ok" .= (.ok) report
         ]
@@ -334,6 +375,16 @@ memberJson member =
     [ "path" .= (.path) member,
       "sourceForm" .= (.sourceForm) member,
       "declaredLanguageVersion" .= (.declaredLanguageVersion) member
+    ]
+
+processReactionJson :: CheckReportProcessReaction -> Value
+processReactionJson reaction =
+  object
+    [ "process" .= (.process) reaction,
+      "verification" .= (.verification) reaction,
+      "version" .= (.version) reaction,
+      "fingerprint" .= (.fingerprint) reaction,
+      "holeObligations" .= (.holeObligations) reaction
     ]
 
 severityText :: Severity -> Text

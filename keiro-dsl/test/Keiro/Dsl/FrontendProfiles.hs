@@ -77,6 +77,7 @@ frontendProfilesSpec = do
               DeclarativeRouterSelectionSyntax -> version 5
               SeparatedProjectionQueryPolicySyntax -> version 5
               DelegatedInboxSyntax -> version 6
+              ProcessReactionSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -193,7 +194,8 @@ featureCases =
     FeatureCase MappedConsumerSurfaceSyntax "query" mappedQueryFeatureBody,
     FeatureCase DeclarativeRouterSelectionSyntax "declarative" declarativeRouterFeatureBody,
     FeatureCase SeparatedProjectionQueryPolicySyntax "freshness" separatedProjectionQueryPolicyBody,
-    FeatureCase DelegatedInboxSyntax "idempotence" delegatedInboxFeatureBody
+    FeatureCase DelegatedInboxSyntax "idempotence" delegatedInboxFeatureBody,
+    FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -262,9 +264,29 @@ featureBody = \case
   DeclarativeRouterSelectionSyntax -> declarativeRouterFeatureBody
   SeparatedProjectionQueryPolicySyntax -> separatedProjectionQueryPolicyBody
   DelegatedInboxSyntax -> delegatedInboxFeatureBody
+  ProcessReactionSyntax -> processReactionFeatureBody
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax]
+
+processReactionFeatureBody :: Text
+processReactionFeatureBody =
+  T.unlines
+    [ "context profile",
+      "process ProfileReaction",
+      "  name \"profile-reaction\"",
+      "  reactions version 1",
+      "  input ProfileChanged { profileId:Text }",
+      "  correlate input.profileId via idText",
+      "  saga ProfileSaga category \"profileSaga\"",
+      "  target Profile",
+      "  projections [ ]",
+      "  on ProfileChanged",
+      "    no-action",
+      "  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)",
+      "  rejected => halt",
+      "  poison => halt"
+    ]
 
 delegatedInboxFeatureBody :: Text
 delegatedInboxFeatureBody =

@@ -135,6 +135,7 @@ import Keiro.Dsl.LanguageVersion (SourceLanguage (LegacyUnversioned), languageVe
 import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
+import Keiro.Dsl.ProcessReaction (processReactionFingerprintFrom)
 import Keiro.Dsl.ProjectionMappedImpact (projectionAggregateSourceFingerprint, projectionAggregateSourceFingerprintForService)
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (fnv1a64, registryNameFor, subscriptionNameFor)
@@ -3367,6 +3368,7 @@ emitIntakeGen genPrefix i =
            "  ) where",
            "",
            "import Data.Text (Text)",
+           "import Data.Text qualified as T",
            modeImport,
            "",
            "-- The dedupe policy (hole-kind 4), lowered to the live InboxDedupePolicy.",
@@ -5485,7 +5487,319 @@ workerOptionsLines valueName rejected poison =
 -- holds. The timer worker uses the spec's @max-attempts@ ceiling, never the
 -- dangerous @defaultTimerWorkerOptions@ (@Nothing@) default.
 scaffoldProcess :: Context -> ProcessNode -> [ScaffoldModule]
-scaffoldProcess ctx p =
+scaffoldProcess ctx p = case (.body) p of
+  ReactionProcessBody reaction -> scaffoldReactionProcess ctx p reaction
+  LegacyProcessBody {} -> scaffoldLegacyProcess ctx p
+
+scaffoldReactionProcess :: Context -> ProcessNode -> ReactionBody -> [ScaffoldModule]
+scaffoldReactionProcess ctx process reaction =
+  [ ScaffoldModule
+      { path = modulePath inputPrefix "Input",
+        text = emitReactionInput ctx inputPrefix process reaction,
+        kind = Generated,
+        origin = nodeOrigin "process input" ((.id) process) ((.loc) process)
+      },
+    ScaffoldModule
+      { path = modulePath inputPrefix "Process",
+        text = emitReactionProcessGen ctx inputPrefix holePrefix process reaction,
+        kind = Generated,
+        origin = nodeOrigin "process reaction" ((.id) process) ((.loc) process)
+      },
+    ScaffoldModule
+      { path = T.unpack (T.replace "." "/" holePrefix <> "/ProcessHoles.hs"),
+        text = emitReactionProcessHoles inputPrefix holePrefix process,
+        kind = HoleStub,
+        origin = nodeOrigin "process decoder" ((.id) process) ((.loc) process)
+      }
+  ]
+  where
+    inputPrefix = genPrefixFor ctx ((.id) process)
+    holePrefix = holePrefixFor ctx ((.id) process)
+    modulePath prefix leaf = T.unpack (T.replace "." "/" prefix <> "/" <> leaf <> ".hs")
+
+emitReactionInput :: Context -> Text -> ProcessNode -> ReactionBody -> Text
+emitReactionInput ctx genPrefix process reaction =
+  nl $
+    renderGeneratedLanguagePragmas [ExtDeriveAnyClass, ExtDuplicateRecordFields]
+      <> [ generatedBanner,
+           "module " <> genPrefix <> ".Input (" <> inputType <> " (..)) where",
+           "",
+           "import Data.Aeson (FromJSON, ToJSON)"
+         ]
+      <> ["import Data.Text (Text)" | usesType [Nothing, Just "Text"]]
+      <> ["import Data.Time (UTCTime)" | usesType [Just "Time"]]
+      <> [ "import GHC.Generics (Generic)"
+         ]
+      <> ["import Numeric.Natural (Natural)" | usesType [Just "Natural"]]
+      <> ["import " <> contextGeneratedPrefix ctx <> ".Nominals qualified as N" | usesNominal]
+      <> [ "",
+           "data " <> inputType
+         ]
+      <> concat (zipWith renderCtor [0 :: Int ..] (NE.toList ((.inputs) reaction)))
+      <> ["  deriving stock (Generic, Eq, Show)", "  deriving anyclass (FromJSON, ToJSON)"]
+  where
+    inputType = pascal ((.id) process) <> "Input"
+    inputFields = concatMap (.fields) (NE.toList ((.inputs) reaction))
+    usesType candidates = any ((`elem` candidates) . (.valueType)) inputFields
+    usesNominal = any (\field -> maybe False (`notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"]) ((.valueType) field)) inputFields
+    renderCtor index input =
+      [ (if index == 0 then "  = " else "  | ") <> (.name) input,
+        "      { " <> T.intercalate "\n      , " [(.name) field <> " :: !" <> renderReactionFieldType field | field <- (.fields) input],
+        "      }"
+      ]
+
+renderReactionFieldType :: Field -> Text
+renderReactionFieldType field = case (.valueType) field of
+  Nothing -> "Text"
+  Just "Text" -> "Text"
+  Just "Int" -> "Int"
+  Just "Integer" -> "Integer"
+  Just "Bool" -> "Bool"
+  Just "Natural" -> "Natural"
+  Just "Time" -> "UTCTime"
+  Just name -> "N." <> name
+
+emitReactionProcessHoles :: Text -> Text -> ProcessNode -> Text
+emitReactionProcessHoles genPrefix holePrefix process =
+  nl
+    [ "-- keiro-dsl process-hole contract v1",
+      "-- HAND-OWNED typed decoder; created once and never overwritten.",
+      "module " <> holePrefix <> ".ProcessHoles (decode" <> processType <> "Input) where",
+      "",
+      "import " <> genPrefix <> ".Input (" <> processType <> "Input)",
+      "import Kiroku.Store.Types (RecordedEvent)",
+      "",
+      "decode" <> processType <> "Input :: RecordedEvent -> Maybe " <> processType <> "Input",
+      "decode" <> processType <> "Input = error \"fill decode" <> processType <> "Input\""
+    ]
+  where
+    processType = pascal ((.id) process)
+
+emitReactionProcessGen :: Context -> Text -> Text -> ProcessNode -> ReactionBody -> Text
+emitReactionProcessGen ctx genPrefix holePrefix process reaction =
+  nl $
+    renderGeneratedLanguagePragmas [ExtDuplicateRecordFields, ExtOverloadedRecordDot]
+      <> [ "{-# OPTIONS_GHC -Wno-missing-signatures #-}",
+           generatedBanner,
+           "module " <> genPrefix <> ".Process",
+           "  ( " <> inputType <> " (..)",
+           "  , " <> lo <> "ProcessName",
+           "  , " <> lo <> "Category",
+           "  , " <> lo <> "ProcessWorkerOptions",
+           "  , " <> lo <> "ReactionVersion",
+           "  , " <> lo <> "ReactionFingerprint",
+           "  , " <> lo <> "React",
+           "  , " <> lo <> "ProcessManager",
+           "  , " <> lo <> "RunProcessWorker",
+           "  ) where",
+           "",
+           "import Data.Text (Text)"
+         ]
+      <> ["import Data.Text qualified as T" | processNeedsTextPack]
+      <> [ "import Numeric.Natural (Natural)",
+           "import " <> genPrefix <> ".Input (" <> inputType <> " (..))",
+           "import " <> holePrefix <> ".ProcessHoles (decode" <> processType <> "Input)",
+           "import " <> sagaPrefix <> ".Domain qualified as Saga",
+           "import " <> sagaPrefix <> ".EventStream (" <> sagaStreamValue <> ", " <> sagaStreamType <> ")",
+           "import " <> targetPrefix <> ".Domain qualified as Target",
+           "import " <> targetPrefix <> ".EventStream (" <> targetCategory <> ", " <> targetStreamValue <> ")"
+         ]
+      <> ["import " <> contextGeneratedPrefix ctx <> ".Nominals qualified as N" | processNeedsNominals]
+      <> [ "import Keiro.Command (DomainCommandHandler (..), SilentDomainDecision (..))",
+           "import Keiro.ProcessManager (PMCommand (..))",
+           "import Keiro.ProcessManager.Reaction qualified as Reaction",
+           "import Keiro.Stream qualified as Stream"
+         ]
+      <> workerPolicyImports ((.poison) process)
+      <> [ "",
+           lo <> "ProcessName :: Text",
+           lo <> "ProcessName = " <> tshow ((.name) process),
+           "",
+           lo <> "Category :: Stream.StreamCategory " <> sagaStreamType,
+           lo <> "Category = Stream.categoryUnsafe " <> tshow ((.category) ((.saga) process)),
+           ""
+         ]
+      <> workerOptionsLines (lo <> "ProcessWorkerOptions") ((.rejected) process) ((.poison) process)
+      <> [ "",
+           lo <> "ReactionVersion :: Natural",
+           lo <> "ReactionVersion = " <> T.pack (show ((.version) reaction)),
+           "",
+           lo <> "ReactionFingerprint :: Text",
+           lo <> "ReactionFingerprint = " <> tshow (processReactionFingerprintFrom reaction),
+           "",
+           lo <> "Correlate :: " <> inputType <> " -> Text",
+           lo <> "Correlate input = case input of"
+         ]
+      <> map ("  " <>) (map renderCorrelation (NE.toList ((.inputs) reaction)))
+      <> [ "",
+           lo <> "React :: " <> inputType <> " -> Reaction.ReactionPlan Saga." <> sagaCommandType <> " Target." <> targetCommandType,
+           lo <> "React input = case input of"
+         ]
+      <> concatMap renderReaction (NE.toList ((.reactions) reaction))
+      <> [ "",
+           lo <> "ProcessManager =",
+           "  Reaction.ReactiveProcessManager",
+           "    { name = " <> lo <> "ProcessName",
+           "    , correlate = " <> lo <> "Correlate",
+           "    , sagaHandler = DomainCommandHandler { eventStream = " <> sagaStreamValue <> ", classifySilent = \\_ -> SilentNoOp () }",
+           "    , streamFor = Stream.entityStream " <> lo <> "Category",
+           "    , targetEventStream = " <> targetStreamValue,
+           "    , targetProjections = const []",
+           "    , react = " <> lo <> "React",
+           "    }",
+           "",
+           lo <> "RunProcessWorker options adapter =",
+           "  Reaction.runReactiveProcessManagerWorkerWith",
+           "    " <> lo <> "ProcessWorkerOptions",
+           "    options",
+           "    " <> lo <> "ProcessManager",
+           "    adapter",
+           "    (\\event -> case decode" <> processType <> "Input event of Nothing -> Nothing; Just input -> Just (event, input))"
+         ]
+  where
+    processType = pascal ((.id) process)
+    inputType = processType <> "Input"
+    lo = lowerFirst ((.id) process)
+    sagaName = pascal ((.agg) ((.saga) process))
+    targetName = pascal ((.target) process)
+    sagaPrefix = genPrefixFor ctx sagaName
+    targetPrefix = genPrefixFor ctx targetName
+    sagaStreamValue = lowerFirst sagaName <> "EventStream"
+    sagaStreamType = sagaName <> "EventStreamDef"
+    targetStreamValue = lowerFirst targetName <> "EventStream"
+    targetCategory = lowerFirst targetName <> "CommandCategory"
+    sagaCommandType = sagaName <> "Command"
+    targetCommandType = targetName <> "Command"
+    correlationInput = NE.head ((.inputs) reaction)
+    correlationType = find ((== (.field) ((.correlate) process)) . (.name)) ((.fields) correlationInput) >>= (.valueType)
+    processNeedsTextPack = maybe False (`elem` ["Int", "Integer", "Bool", "Natural", "Time"]) correlationType
+    processNeedsNominals = maybe False (`notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"]) correlationType || any reactionHasQualifiedLiteral (NE.toList ((.reactions) reaction))
+
+    renderCorrelation input =
+      (.name) input <> " { " <> fieldName <> " } -> " <> renderTextField input fieldName
+      where
+        fieldName = (.field) ((.correlate) process)
+
+    renderReaction reactionNode =
+      case find ((== (.on) reactionNode) . (.name)) (NE.toList ((.inputs) reaction)) of
+        Nothing -> error "checked reaction input disappeared during generation"
+        Just input ->
+          [ "  " <> (.name) input <> " { " <> T.intercalate ", " (map (.name) ((.fields) input)) <> " }"
+          ]
+            <> renderArms input (NE.toList ((.arms) reactionNode))
+
+    renderArms input [arm] | (.guard) arm == UnconditionalArm = ["    -> " <> renderPlan input ((.body) arm)]
+    renderArms input arms =
+      [ "    | " <> renderReactionGuard ((.guard) arm) <> " -> " <> renderPlan input ((.body) arm)
+      | arm <- arms
+      ]
+
+    renderPlan _ NoAction = "Reaction.NoAdvance []"
+    renderPlan input ArmActions {advance = Nothing, followUps} = "Reaction.NoAdvance " <> renderFollowUps input followUps
+    renderPlan input ArmActions {advance = Just advance, followUps} =
+      "Reaction.AdvanceReaction { command = "
+        <> renderCommand "Saga" ((.command) advance) ((.fields) advance)
+        <> ", followUps = "
+        <> renderFollowUps input followUps
+        <> ", onAccepted = "
+        <> renderFollowUps input (fromMaybe [] ((.accepted) advance))
+        <> " }"
+
+    renderFollowUps input = listText . map (renderFollowUp input)
+    renderFollowUp input = \case
+      FollowDispatch dispatch ->
+        "Reaction.FollowDispatch (PMCommand (Stream.entityStream "
+          <> targetCategory
+          <> " "
+          <> renderDispatchKey input ((.key) dispatch)
+          <> ") ("
+          <> renderCommand "Target" ((.command) dispatch) ((.fields) dispatch)
+          <> "))"
+      FollowSchedule {} -> error "timer follow-up reached timer-free reaction generator"
+      FollowCancel {} -> error "timer cancellation reached timer-free reaction generator"
+
+    renderCommand qualifier command bindings =
+      qualifier
+        <> "."
+        <> command
+        <> " ("
+        <> qualifier
+        <> "."
+        <> command
+        <> "Data { "
+        <> T.intercalate ", " [qualifier <> "." <> (.name) binding <> " = " <> renderReactionBinding binding | binding <- bindings]
+        <> " })"
+
+    renderReactionBinding binding = case (.value) binding of
+      Nothing -> (.name) binding
+      Just value -> fromMaybe value (T.stripPrefix "input." value)
+
+    renderDispatchKey input key = case T.stripPrefix "input." key of
+      Just fieldName -> renderTextField input fieldName
+      Nothing -> key
+
+    renderTextField input fieldName = case find ((== fieldName) . (.name)) ((.fields) input) >>= (.valueType) of
+      Nothing -> fieldName
+      Just "Text" -> fieldName
+      Just typeName | typeName `elem` ["Int", "Integer", "Bool", "Natural", "Time"] -> "T.pack (show " <> fieldName <> ")"
+      Just typeName -> "(N." <> lowerFirst typeName <> "Text " <> fieldName <> ")"
+
+renderReactionGuard :: ArmGuard -> Text
+renderReactionGuard UnconditionalArm = "otherwise"
+renderReactionGuard OtherwiseArm = "otherwise"
+renderReactionGuard (WhenArm expression) = renderGuardExpr expression
+
+reactionHasQualifiedLiteral :: ReactionNode -> Bool
+reactionHasQualifiedLiteral reactionNode = any armHasQualified (NE.toList ((.arms) reactionNode))
+  where
+    armHasQualified arm = case (.guard) arm of
+      WhenArm expression -> exprHasQualified expression
+      _ -> False
+    exprHasQualified = \case
+      EOr left right -> exprHasQualified left || exprHasQualified right
+      EAnd left right -> exprHasQualified left || exprHasQualified right
+      ECmp _ left right -> exprHasQualified left || exprHasQualified right
+      EAdd _ left right -> exprHasQualified left || exprHasQualified right
+      ESubtract _ left right -> exprHasQualified left || exprHasQualified right
+      EMultiply _ left right -> exprHasQualified left || exprHasQualified right
+      ELiteral _ LiteralQualified {} -> True
+      _ -> False
+
+renderGuardExpr :: Expr -> Text
+renderGuardExpr = \case
+  EOr left right -> binary "||" left right
+  EAnd left right -> binary "&&" left right
+  ECmp operator left right -> binary (renderCmp operator) left right
+  EAdd _ left right -> binary "+" left right
+  ESubtract _ left right -> binary "-" left right
+  EMultiply _ left right -> binary "*" left right
+  EPath _ UnqualifiedRoot ["input", field] -> field
+  EPath _ _ path -> T.intercalate "." path
+  ELiteral _ literal -> case literal of
+    LiteralText value -> tshow value
+    LiteralIntegral value -> T.pack (show value)
+    LiteralBool True -> "True"
+    LiteralBool False -> "False"
+    LiteralQualified _ constructor -> "N." <> constructor
+    LiteralId typeName value -> "N.parse" <> typeName <> " " <> tshow value
+  EAtom (AName name) -> name
+  EAtom (ABool True) -> "True"
+  EAtom (ABool False) -> "False"
+  where
+    binary operator left right = "(" <> renderGuardExpr left <> " " <> operator <> " " <> renderGuardExpr right <> ")"
+    renderCmp = \case
+      OpEq -> "=="
+      OpNeq -> "/="
+      OpLt -> "<"
+      OpLe -> "<="
+      OpGt -> ">"
+      OpGe -> ">="
+
+listText :: [Text] -> Text
+listText values = "[" <> T.intercalate ", " values <> "]"
+
+scaffoldLegacyProcess :: Context -> ProcessNode -> [ScaffoldModule]
+scaffoldLegacyProcess ctx p =
   [ ScaffoldModule
       { path = T.unpack (T.replace "." "/" genPrefix <> "/Process.hs"),
         text = emitProcessGen sagaGenPrefix genPrefix holePrefix p,
@@ -5582,7 +5896,7 @@ emitProcessGen sagaGenPrefix genPrefix _holePrefix p =
     lo = lowerFirst ((.id) p)
     sagaEventStreamType = pascal ((.agg) ((.saga) p)) <> "EventStreamDef"
     categoryName = staticCategory ("process " <> (.id) p) ((.category) ((.saga) p))
-    timer = (.timer) p
+    timer = legacyProcessTimer p
     fd = (.disposition) ((.fire) timer)
 
 -- | The timer payload, restricted to the spec's literal (@name=\"value\"@)
@@ -5613,14 +5927,14 @@ emitProcessHoles _genPrefix holePrefix p =
       "module " <> holePrefix <> ".ProcessHoles () where",
       "",
       "-- HOLE handle: build the ProcessManagerAction (the self-advance",
-      "--   '" <> (.advCommand) ((.advance) ((.handle) p)) <> "', the dispatch(es), and the timer) from the input.",
+      "--   '" <> (.advCommand) ((.advance) (legacyProcessHandle p)) <> "', the dispatch(es), and the timer) from the input.",
       "-- HOLE streams: build streamFor with entityStream " <> lowerFirst ((.id) p) <> "Category;",
       "--   build target streams with entityStream " <> lowerFirst ((.target) p) <> "CommandCategory. Never concatenate raw stream names.",
       "-- HOLE window: the deadline policy, e.g. surgeWindow :: NominalDiffTime;",
       "--   surgeDeadline observedAt = addUTCTime surgeWindow observedAt  (TIME INJECTED).",
-      "-- HOLE fire command: construct " <> (.command) ((.fire) ((.timer) p)) <> " for the timer fire,",
+      "-- HOLE fire command: construct " <> (.command) ((.fire) (legacyProcessTimer p)) <> " for the timer fire,",
       "--   keyed by correlationId; the fired-event-id is the deterministic uuidv5 of",
-      "--   " <> tshow ((.prefix) ((.firedEventId) ((.fire) ((.timer) p)))) <> " <> correlationId.",
+      "--   " <> tshow ((.prefix) ((.firedEventId) ((.fire) (legacyProcessTimer p)))) <> " <> correlationId.",
       "-- NOTE on-duplicate AckOk is sound because the runtime confirms a duplicate",
       "--   event id against the TARGET stream via confirmBenignDuplicate before",
       "--   returning PMCommandDuplicate. Its effective signature is:",
@@ -5629,6 +5943,16 @@ emitProcessHoles _genPrefix holePrefix p =
       "--   fold True into the duplicate result, and surface False as the original failure.",
       "--   Never pattern-match DuplicateEvent as success: event ids are globally unique."
     ]
+
+legacyProcessHandle :: ProcessNode -> HandleNode
+legacyProcessHandle process = case (.body) process of
+  LegacyProcessBody _ handle _ -> handle
+  ReactionProcessBody {} -> error "keiro-dsl internal invariant: reaction process used by legacy generator"
+
+legacyProcessTimer :: ProcessNode -> TimerNode
+legacyProcessTimer process = case (.body) process of
+  LegacyProcessBody _ _ timer -> timer
+  ReactionProcessBody {} -> error "keiro-dsl internal invariant: reaction process used by legacy generator"
 
 --------------------------------------------------------------------------------
 -- Domain module

@@ -114,7 +114,12 @@ harnessForCheckedWithGoldens goldens ctx service agg =
 -- runs without the effectful\/hasql runtime. (Behavioural conformance of the
 -- /filled/ ProcessManager against the live runtime is the M5 step.)
 harnessProcess :: Context -> ProcessNode -> [ScaffoldModule]
-harnessProcess ctx p =
+harnessProcess ctx p = case (.body) p of
+  ReactionProcessBody {} -> []
+  LegacyProcessBody {} -> harnessLegacyProcess ctx p
+
+harnessLegacyProcess :: Context -> ProcessNode -> [ScaffoldModule]
+harnessLegacyProcess ctx p =
   [ ScaffoldModule
       { path = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs"),
         text = emitProcessHarness genPrefix p,
@@ -475,25 +480,28 @@ emitProcessHarness genPrefix p =
       <> renderFactValues (processHarnessFactValues p)
 
 processHarnessFactValues :: ProcessNode -> [(Text, Text)]
-processHarnessFactValues p =
-  [ ("fireAtField", (.field) ((.fireAt) timer)),
-    ("timerIdPrefix", (.prefix) ((.id) timer)),
-    ("firedEventIdPrefix", (.prefix) ((.firedEventId) timer')),
-    ("dispatchIdUserField", "none"),
-    ("onReject", showFireOutcome ((.onReject) fd)),
-    ("onAmbiguous", showFireOutcome ((.onAmbiguous) fd)),
-    ("onFailed", showDisp ((.onFailed) (firstDispDisposition p))),
-    ("rejectedPolicy", showPolicy ((.rejected) p)),
-    ("poisonPolicy", showPolicy ((.poison) p)),
-    ("maxAttempts", tInt ((.maxAttempts) timer))
-  ]
+processHarnessFactValues p = case (.body) p of
+  ReactionProcessBody {} -> []
+  LegacyProcessBody _ handle timer -> legacyFacts handle timer
   where
-    timer = (.timer) p
-    timer' = (.fire) timer
-    fd = (.disposition) timer'
+    legacyFacts handle timer =
+      [ ("fireAtField", (.field) ((.fireAt) timer)),
+        ("timerIdPrefix", (.prefix) ((.id) timer)),
+        ("firedEventIdPrefix", (.prefix) ((.firedEventId) timer')),
+        ("dispatchIdUserField", "none"),
+        ("onReject", showFireOutcome ((.onReject) fd)),
+        ("onAmbiguous", showFireOutcome ((.onAmbiguous) fd)),
+        ("onFailed", showDisp ((.onFailed) (firstDispDisposition handle))),
+        ("rejectedPolicy", showPolicy ((.rejected) p)),
+        ("poisonPolicy", showPolicy ((.poison) p)),
+        ("maxAttempts", tInt ((.maxAttempts) timer))
+      ]
+      where
+        timer' = (.fire) timer
+        fd = (.disposition) timer'
 
-firstDispDisposition :: ProcessNode -> DispatchDisposition
-firstDispDisposition p = case (.dispatch) ((.handle) p) of
+firstDispDisposition :: HandleNode -> DispatchDisposition
+firstDispDisposition handle = case (.dispatch) handle of
   (d : _) -> (.disposition) d
   [] -> DispatchDisposition DAckOk DAckOk DRetry
 

@@ -12,12 +12,14 @@ module Keiro.Dsl.PrettyPrint
     renderExpr,
     renderTypeExpr,
     renderHandleSurface,
+    renderReactionSurface,
     renderResolveSurface,
     renderRouterDispatchSurface,
     renderTimerPayloadSurface,
   )
 where
 
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
@@ -39,6 +41,9 @@ renderSource ParsedSource {sourceLanguage = sourceLanguage, spec = spec} =
 
 renderHandleSurface :: HandleNode -> Text
 renderHandleSurface = renderDoc . docHandle
+
+renderReactionSurface :: ReactionBody -> Text
+renderReactionSurface = renderDoc . docReactionBody
 
 renderResolveSurface :: ResolveDecl -> Text
 renderResolveSurface = renderDoc . docResolve
@@ -635,24 +640,118 @@ docContract c =
 --------------------------------------------------------------------------------
 
 docProcess :: ProcessNode -> Doc ann
-docProcess p =
+docProcess p = case (.body) p of
+  LegacyProcessBody input handle timer ->
+    vsep
+      [ "process" <+> pretty ((.id) p),
+        indent 2 ("name" <+> dquoted ((.name) p)),
+        indent 2 (docInput input),
+        indent 2 (docCorrelate ((.correlate) p)),
+        indent 2 (docSaga ((.saga) p)),
+        indent 2 ("target" <+> pretty ((.target) p)),
+        indent 2 ("projections" <+> bracketed (map pretty ((.projections) p))),
+        mempty,
+        indent 2 (docHandle handle),
+        mempty,
+        indent 2 "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)",
+        indent 2 ("rejected =>" <+> docPolicyChoice ((.rejected) p)),
+        indent 2 ("poison =>" <+> docPolicyChoice ((.poison) p)),
+        mempty,
+        indent 2 (docTimer timer)
+      ]
+  ReactionProcessBody reaction ->
+    vsep
+      ( [ "process" <+> pretty ((.id) p),
+          indent 2 ("name" <+> dquoted ((.name) p)),
+          indent 2 ("reactions version" <+> pretty ((.version) reaction))
+        ]
+          ++ map (indent 2 . docInput) (NE.toList ((.inputs) reaction))
+          ++ [ indent 2 (docCorrelate ((.correlate) p)),
+               indent 2 (docSaga ((.saga) p)),
+               indent 2 ("target" <+> pretty ((.target) p)),
+               indent 2 ("projections" <+> bracketed (map pretty ((.projections) p))),
+               mempty
+             ]
+          ++ concatMap (\node -> [indent 2 (docReactionNode node), mempty]) (NE.toList ((.reactions) reaction))
+          ++ [ indent 2 "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)",
+               indent 2 ("rejected =>" <+> docPolicyChoice ((.rejected) p)),
+               indent 2 ("poison =>" <+> docPolicyChoice ((.poison) p))
+             ]
+          ++ maybe [] (\policy -> [mempty, indent 2 (docTimerPolicy policy)]) ((.timerPolicy) reaction)
+          ++ concatMap (\timer -> [mempty, indent 2 (docReactionTimer timer)]) ((.timers) reaction)
+      )
+
+docReactionBody :: ReactionBody -> Doc ann
+docReactionBody reaction =
   vsep
-    [ "process" <+> pretty ((.id) p),
-      indent 2 ("name" <+> dquoted ((.name) p)),
-      indent 2 (docInput ((.input) p)),
-      indent 2 (docCorrelate ((.correlate) p)),
-      indent 2 (docSaga ((.saga) p)),
-      indent 2 ("target" <+> pretty ((.target) p)),
-      indent 2 ("projections" <+> bracketed (map pretty ((.projections) p))),
-      mempty,
-      indent 2 (docHandle ((.handle) p)),
-      mempty,
-      indent 2 "dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, emitIndex)",
-      indent 2 ("rejected =>" <+> docPolicyChoice ((.rejected) p)),
-      indent 2 ("poison =>" <+> docPolicyChoice ((.poison) p)),
-      mempty,
-      indent 2 (docTimer ((.timer) p))
+    ( ["reactions version" <+> pretty ((.version) reaction)]
+        ++ map docInput (NE.toList ((.inputs) reaction))
+        ++ concatMap (\node -> [docReactionNode node]) (NE.toList ((.reactions) reaction))
+        ++ maybe [] (\policy -> [docTimerPolicy policy]) ((.timerPolicy) reaction)
+        ++ map docReactionTimer ((.timers) reaction)
+    )
+
+docReactionNode :: ReactionNode -> Doc ann
+docReactionNode node =
+  vsep
+    ( ("on" <+> pretty ((.on) node))
+        : map (indent 2 . docReactionArm) (NE.toList ((.arms) node))
+    )
+
+docReactionArm :: ReactionArm -> Doc ann
+docReactionArm arm = case (.guard) arm of
+  UnconditionalArm -> docArmBody ((.body) arm)
+  WhenArm expression -> vsep ["when" <+> docExpr 0 expression, indent 2 (docArmBody ((.body) arm))]
+  OtherwiseArm -> vsep ["otherwise", indent 2 (docArmBody ((.body) arm))]
+
+docArmBody :: ArmBody -> Doc ann
+docArmBody NoAction = "no-action"
+docArmBody ArmActions {advance, followUps} =
+  vsep (maybe [] docAdvanceReaction advance ++ map docFollowUp followUps)
+
+docAdvanceReaction :: AdvanceReaction -> [Doc ann]
+docAdvanceReaction advance =
+  ["advance" <+> pretty ((.command) advance) <+> braced (map docFieldBinding ((.fields) advance))]
+    ++ case (.accepted) advance of
+      Nothing -> []
+      Just followUps ->
+        [ indent 2 "accepted",
+          indent 4 (vsep (map docFollowUp followUps)),
+          indent 2 "silent no-action"
+        ]
+
+docFollowUp :: FollowUp -> Doc ann
+docFollowUp (FollowDispatch dispatch) = docDispatch dispatch
+docFollowUp (FollowSchedule schedule) = case (.mode) schedule of
+  ScheduleRearm -> scheduleLine mempty
+  ScheduleOnce -> scheduleLine "once"
+  where
+    scheduleLine modeDoc =
+      hsep
+        ( ["schedule", pretty ((.timer) schedule)]
+            ++ [modeDoc | (.mode) schedule == ScheduleOnce]
+            ++ ["fireAt", docFireAt ((.fireAt) schedule), braced (map docFieldBinding ((.bindings) schedule))]
+        )
+docFollowUp (FollowCancel timer _) = "cancel" <+> pretty timer
+
+docTimerPolicy :: TimerPolicy -> Doc ann
+docTimerPolicy policy =
+  "timers max-attempts" <+> pretty ((.maxAttempts) policy) <+> "dead-letter" <+> dquoted ((.deadLetter) policy)
+
+docReactionTimer :: ReactionTimerNode -> Doc ann
+docReactionTimer timer =
+  vsep
+    [ "timer" <+> pretty ((.name) timer),
+      indent 2 ("id" <+> docIdExpr ((.id) timer)),
+      indent 2 ("payload" <+> braced (map docPayloadField ((.payload) timer))),
+      indent 2 (docFire ((.fire) timer)),
+      indent 2 ("decode unknown-status =>" <+> pretty ((.decodeUnknown) timer))
     ]
+
+docPayloadField :: PayloadField -> Doc ann
+docPayloadField (PayloadConstant name value) = pretty name <> "=" <> dquoted value
+docPayloadField (PayloadTyped name valueType) =
+  pretty name <> maybe mempty (\typeName -> ":" <> pretty typeName) valueType
 
 docRouter :: RouterNode -> Doc ann
 docRouter r =

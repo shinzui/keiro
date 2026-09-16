@@ -23,6 +23,7 @@ module Keiro.Dsl.SourceIndex
 where
 
 import Data.List (find, sort)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -33,6 +34,11 @@ import Keiro.Dsl.Grammar
     Loc (..),
     Name,
     Node (..),
+    ProcessBody (..),
+    ProcessNode (..),
+    ReactionArm (..),
+    ReactionBody (..),
+    ReactionNode (..),
     Spec (..),
     StateDecl (..),
     Transition (..),
@@ -47,6 +53,7 @@ newtype TransitionOrdinal = TransitionOrdinal Int
 data SourceSubject
   = AggregateStateSubject !Name !Name
   | AggregateTransitionSubject !Name !TransitionOrdinal
+  | ProcessReactionSubject !Name !Name !Int
   deriving stock (Eq, Ord, Show, Generic)
 
 -- | Whether a position came from exact parsing or from a compatibility
@@ -92,9 +99,10 @@ data SourceIndexFailure = SourceIndexFailure
 -- | The complete aggregate state and transition subject inventory of a
 -- semantic graph, in semantic source order.
 semanticSourceSubjects :: Spec -> [SourceSubject]
-semanticSourceSubjects spec = concatMap aggregateSubjects aggregates
+semanticSourceSubjects spec = concatMap aggregateSubjects aggregates <> concatMap processSubjects processes
   where
     aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    processes = [process | NProcess process <- (.nodes) spec]
     aggregateSubjects aggregate =
       [ AggregateStateSubject ((.name) aggregate) ((.name) state)
       | state <- (.states) aggregate
@@ -102,6 +110,25 @@ semanticSourceSubjects spec = concatMap aggregateSubjects aggregates
         <> [ AggregateTransitionSubject ((.name) aggregate) (TransitionOrdinal ordinal)
            | (ordinal, _) <- zip [0 ..] ((.transitions) aggregate)
            ]
+    processSubjects :: ProcessNode -> [SourceSubject]
+    processSubjects process = case (.body) process of
+      LegacyProcessBody {} -> []
+      ReactionProcessBody reaction ->
+        [ ProcessReactionSubject ((.id) process) inputName ordinal
+        | (inputName, ordinal, _) <- numberedReactionArms reaction
+        ]
+
+numberedReactionArms :: ReactionBody -> [(Name, Int, ReactionArm)]
+numberedReactionArms reaction =
+  [ (inputName, length [() | (priorName, _) <- take index raw, priorName == inputName], arm)
+  | (index, (inputName, arm)) <- zip [0 ..] raw
+  ]
+  where
+    raw =
+      [ ((.on) reactionNode, arm)
+      | reactionNode <- NE.toList ((.reactions) reaction),
+        arm <- NE.toList ((.arms) reactionNode)
+      ]
 
 -- | Construct a complete exact index for one parsed file. The expected
 -- inventory comes from the just-lowered semantic graph, so missing and stale
@@ -133,7 +160,9 @@ compatibilitySemanticSourceIndex source spec =
   checkedIndex CompatibilityLineOnly expected entries
   where
     expected = semanticSourceSubjects spec
-    entries = concatMap aggregateEntries [aggregate | NAggregate aggregate <- (.nodes) spec]
+    entries =
+      concatMap aggregateEntries [aggregate | NAggregate aggregate <- (.nodes) spec]
+        <> concatMap processEntries [process | NProcess process <- (.nodes) spec]
     aggregateEntries aggregate =
       [ (AggregateStateSubject ((.name) aggregate) ((.name) state), lineSpan ((.loc) state))
       | state <- (.states) aggregate
@@ -149,6 +178,13 @@ compatibilitySemanticSourceIndex source spec =
         }
       where
         point = SourcePoint {offset = 0, line = max 1 lineNumber, column = 1}
+    processEntries :: ProcessNode -> [(SourceSubject, SourceSpan)]
+    processEntries process = case (.body) process of
+      LegacyProcessBody {} -> []
+      ReactionProcessBody reaction ->
+        [ (ProcessReactionSubject ((.id) process) inputName ordinal, lineSpan ((.loc) arm))
+        | (inputName, ordinal, arm) <- numberedReactionArms reaction
+        ]
 
 -- | Replace the one source name in an index after checking the caller's
 -- expected name. Workspace composition uses this to turn loader paths into
