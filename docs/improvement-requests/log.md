@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-16
+* **Addition**: IR-40 requests checked nominal TypeID references inside structural records, unions, and containers, preserving identity, codecs, coverage, and compatibility without an opaque workaround.
 * **Completed**: Close IR-39 after Plans 279 and 273 deliver the reaction runtime, Language 6 checking and generation, conformance, evolution gates, and documentation.
 * **Review**: Refresh every request against Keiro `708aa215`. All 39 now carry the
 profile-recommended `reviews` field; the 11 that lacked one (IR-22, IR-26 through IR-32, IR-37,
