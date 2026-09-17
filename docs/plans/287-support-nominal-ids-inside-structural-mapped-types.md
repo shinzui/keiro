@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T23:02:46Z
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-17T03:43:16Z
+      mode: "update"
+      note: "Widened scope to workqueue payload rows and read-model query expressions"
 ---
 
 # Support nominal IDs inside structural mapped types
@@ -79,7 +85,10 @@ is. `Optional TemplateId`, `List TemplateState`, `List (Optional TemplateId)`, u
 carrying an ID, and `Map TemplateId` (a text-keyed map whose values are IDs) all work the same
 way. Consumer-bound IDs (`id ... using { ... }`) and `mapped nominal` scalars are supported as
 the same kind of leaf. Nominal enums are deliberately rejected with a diagnostic that names
-the limitation, so nothing is silently lowered to text or mislabelled as opaque.
+the limitation, so nothing is silently lowered to text or mislabelled as opaque. The same
+leaves are accepted at the two other consumer roots that resolve through the structural type
+graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) and read-model
+`query input` and `query result` expressions (`query result = List TemplateId`).
 
 
 ## Progress
@@ -87,7 +96,7 @@ the limitation, so nothing is silently lowered to text or mislabelled as opaque.
 - [ ] M1. Add the nominal leaf to the resolved type graph, resolve `id` and `mapped nominal`
       names inside structural declarations, and gate the capability on candidate Language 6.
 - [ ] M1. Classify nullability, `on-missing` defaults, wire fingerprint token, use paths,
-      nominal reachability, and consumer-root exclusion for nominal leaves.
+      nominal reachability, and nominal root sites at workqueue and read-model roots.
 - [ ] M1. Add the `MappedNominalLeafRequiresLanguage` and `MappedNominalLeafUnsupported`
       diagnostics with fixtures, and extend the stable code table in `keiro-dsl/test/Main.hs`.
 - [ ] M1. `cabal test keiro-dsl:test:keiro-dsl-test` is green and the IR-40 reproduction
@@ -100,8 +109,11 @@ the limitation, so nothing is silently lowered to text or mislabelled as opaque.
 - [ ] M2. Add the `keiro-dsl-conformance-structural-nominals` corpus with positive round
       trips, negative decoders with located errors, and a mutation script that turns the
       suite red when admission is bypassed.
-- [ ] M3. Coverage reports nominal boundaries as structural; the strict gate passes on the
-      fully structural fixture.
+- [ ] M2. The corpus also compiles a workqueue payload and a read-model query pair typed by
+      nominal leaves; the queue codec round-trips TypeID text and rejects a wrong prefix at
+      the payload path.
+- [ ] M3. Coverage reports nominal boundaries as structural, including workqueue payload
+      roots; the strict gate passes on the fully structural fixture.
 - [ ] M3. `MappedDiff` compares nominal leaves; `Diff.nominalUses` includes structural use
       paths; mutants for prefix, binding-version, opaque-to-nominal, and text-to-nominal are
       classified and golden-tested; `CodecCompare` branch schema handles the leaf.
@@ -138,7 +150,7 @@ the limitation, so nothing is silently lowered to text or mislabelled as opaque.
   module inside shapes. IR-40 requires nested TypeIDs and allows enum composition to be
   tracked separately as long as it is not silently erased.
   Date: 2026-09-16
-- Decision: A nominal leaf is accepted only inside a structural declaration (record field,
+- Decision (superseded by the next entry): A nominal leaf is accepted only inside a structural declaration (record field,
   union arm payload, and containers within those). A nominal leaf reached directly from a
   workqueue field or a read-model query input/result without passing through a structural
   declaration is rejected with `MappedNominalLeafUnsupported` naming the surface.
@@ -146,6 +158,16 @@ the limitation, so nothing is silently lowered to text or mislabelled as opaque.
   envelope and conformance suites, and are outside the request's scope. A deliberate
   diagnostic is better than today's misleading `MappedUnresolvedName`.
   Date: 2026-09-16
+- Decision: Accept nominal leaves at workqueue payload rows and read-model query input and
+  result expressions, with or without a structural declaration in between. This supersedes
+  the previous entry.
+  Rationale: both surfaces were verified on 2026-09-16 to fail with the same
+  `MappedUnresolvedName` as records (`maybeJob -> "maybe_job" : Optional TemplateId` in a
+  workqueue payload; `query result = List TemplateId` on a read model) for the same root
+  cause. `ConsumerTypePlan` and `MappedCodecPlan` already serve these roots, so the marginal
+  work is a nominal root-site inventory beside the mapped use sites; excluding them would
+  leave the consumer's next specification in today's situation.
+  Date: 2026-09-17
 - Decision: Gate the capability on the unpublished candidate Language 6 through a new
   `RuntimeCapability` named `StructuralNominalLeaves` on runtime profile 5, with
   `capabilityFoldSegment` returning `Nothing`. Published Languages 1 through 5 keep rejecting
@@ -335,6 +357,15 @@ byte. The closest existing suites are `keiro-dsl-conformance-structural`
 and `keiro-dsl-conformance-workspace-nominals` (fixture directory
 `keiro-dsl/test/fixtures/workspace-nominals/`).
 
+Typed workqueue payload rows (`field -> "key" : <expression>`) and read-model `query input`
+and `query result` clauses are Language 5 consumer roots resolved through the same graph by
+`resolveTypeExpression`; on 2026-09-16 both were verified to fail with the same
+`MappedUnresolvedName` when typed by a declared `id`. Their generation paths are the
+workqueue payload codec and the generated `QueryContract` aliases, exercised today by
+`keiro-dsl-conformance-mapped-queue` (fixture `keiro-dsl/test/fixtures/mapped-workqueue.keiro`)
+and `keiro-dsl-conformance-mapped-readmodel` (`mapped-readmodel.keiro`), both on published
+Language 5 and therefore left untouched by this plan.
+
 Relevant ADRs, all under `docs/adr/`:
 
 - [ADR 12](../adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md)
@@ -402,12 +433,17 @@ first, then nominal leaf, then (for a name in `spec.enums`) the new error
 `resolveTypeExpression` must use the graph's `nominalLeaves` so both entry points agree.
 
 Set the conservative positions in the same module: `rootReference` returns `Nothing` for
-`RNominal`; in `collectUseSites`, a consumer root (workqueue field, read-model query input or
-result) whose resolved expression contains a nominal leaf but no mapped root produces
-`TGNominalLeafAtConsumerRoot owner name loc`; `refsInExpr` contributes nothing for a nominal
+`RNominal`; in `collectUseSites`, every consumer root (workqueue field, read-model query input or
+result) whose resolved expression contains a nominal leaf is recorded in a new
+`nominalRootSites` inventory on the graph, whether or not a mapped root is also present. To
+do that without giving `UseSite` a second key, factor the root identity that its six
+constructors currently repeat (root kind, owner, field) into a `RootRef` record, so a
+`UseSite` pairs a `RootRef` with a `MappedKey` and a `NominalRootSite` pairs a `RootRef` with a
+nominal name and its outer container segments; `siteKey` stays total; `refsInExpr` contributes nothing for a nominal
 leaf, while a new `nominalRefsInExpr` populates `nominalReachability`; `pathsInExpr` ends a
 path at `SegNominal name`, and a new `nominalUsePaths :: TypeGraph -> Name -> [UsePath]`
-returns every root path reaching that nominal through structural declarations;
+returns every root path reaching that nominal, whether through structural declarations or
+directly from a nominal root site;
 `renderUsePath` renders `SegNominal name` as `" : " <> name` exactly like `SegDecl` (names are
 unambiguous because `ambiguityErrors` already forbids a nominal and a mapped declaration
 sharing a spelling); `wireExpr` renders `nominal-id(<prefix>,keiro-dsl/id-domain/typeid-v7/1)`
@@ -426,9 +462,8 @@ when the effective language contract (obtain it the same way `nominalEqualityCon
 in `NominalType.hs` receives the checked service) lacks `StructuralNominalLeaves` and any
 declaration contains an `RNominal`, emit `MappedNominalLeafRequiresLanguage` at each field or
 arm location, naming the nominal and stating that candidate Language 6 is required. Render
-`TGUnsupportedNominalLeaf` and `TGNominalLeafAtConsumerRoot` as
-`MappedNominalLeafUnsupported` with messages that name the category (`enum`) or the surface
-(`workqueue field`, `read-model query input`). In `typeGraphDiagnostic`, when a
+`TGUnsupportedNominalLeaf` as `MappedNominalLeafUnsupported` with a message that names the
+category (`enum`). In `typeGraphDiagnostic`, when a
 `TGUnresolvedRef` names a declared but malformed nominal, say so in the message. Set
 `hasNonInjectiveOptional`'s `onNominal` to non-null, so `Optional TemplateId` is legal, and make
 `referencedDefaultType` return a `DefaultNominal` that matches no literal, so a bare nominal
@@ -450,11 +485,12 @@ invariant failure).
 
 Fixtures under `keiro-dsl/test/fixtures/`: `mapped-nominal-leaf.keiro` (Language 6, a
 generated ID, a consumer-bound ID, and a nominal scalar used as a record field, a union arm
-payload, `Optional`, `List (Optional ...)`, and `Map` values, all of which must check `OK`),
+payload, `Optional`, `List (Optional ...)`, and `Map` values, plus a workqueue payload row
+`: Optional TemplateId` and a read model with `query result = List TemplateId`, all of which
+must check `OK`),
 `mapped-nominal-leaf-language.keiro` (the same at `language keiro-dsl 5`, expecting
 `MappedNominalLeafRequiresLanguage`), `mapped-nominal-leaf-enum.keiro` (an `enum` used as a
-leaf, expecting `MappedNominalLeafUnsupported`), `mapped-nominal-leaf-root.keiro` (a
-workqueue field typed `List TemplateId`, expecting `MappedNominalLeafUnsupported`), and
+leaf, expecting `MappedNominalLeafUnsupported`), and
 `mapped-nominal-leaf-default.keiro` (a bare nominal field with a literal `on-missing`,
 expecting `MappedDefaultIllTyped`). Register the negative fixtures in the stable
 diagnostic-code table in `keiro-dsl/test/Main.hs` (around lines 4367 to 4394) and add
@@ -503,7 +539,10 @@ this milestone's acceptance.
 In `keiro-dsl/src/Keiro/Dsl/ConsumerTypePlan.hs`, `planConsumerType` renders the nominal
 domain type, adds its `ImportRequirement`, and records nominal dependencies so aggregate
 harnesses import consumer nominal fixture symbols for nominals reached through structural
-records. In `keiro-dsl/src/Keiro/Dsl/SemanticImpact.hs`, include nominal names from
+records. The workqueue payload codec emitter and the read-model `QueryContract` alias emitter
+already obtain their field expressions through these two plans; confirm that a nominal root
+site makes the queue codec import the `NominalLeaves` module and the query aliases import the
+nominal type modules. In `keiro-dsl/src/Keiro/Dsl/SemanticImpact.hs`, include nominal names from
 `nominalReachability` in each consumer's declaration closure, so the ledger's
 `semantic-impact` rows name them and scaffold locality regenerates the `NominalLeaves`
 module and the consumers that reach a changed nominal. In `ExplainBindings.hs`, compute a
@@ -529,7 +568,9 @@ a union `TemplateRef` with arms `ById : TemplateId`, `ByAccount : AccountNumber`
 payload-less `Unknown`, a record `TemplateBook` with `templates : List TemplateState`,
 `holders : List (Optional ClaimId)`, and `byKey : Map TemplateId`, and an aggregate with a
 register `book TemplateBook = initial`, snapshots enabled, and commands and events carrying
-`TemplateState` and `TemplateRef`. Scaffold it once into
+`TemplateState` and `TemplateRef`. Add a workqueue `template_work` whose payload has
+`templateId -> "template_id" : TemplateId` and `holder -> "holder" : Optional ClaimId`, and a
+read model with `query input = TemplateState` and `query result = List TemplateId`. Scaffold it once into
 `keiro-dsl/test/conformance-structural-nominals/`, fill the create-once
 `Conformance/StructuralNominals/Bindings.hs` and `Domain.hs` (consumer types with a `ClaimId`
 newtype over `KindID "claim"` and an `AccountNumber` newtype over `Text`), force-add the
@@ -541,7 +582,9 @@ TypeID text; a snapshot of a `TemplateBook` holding two `TemplateState` values r
 and replay reproduces it; decoding rejects a `claim_` prefix where `template_` is expected, a
 non-canonical suffix, a UUID whose version nibble is not 7, and JSON `null` where an ID is
 required, with each error message containing the field path; and `holder` distinguishes
-`null` from a present ID. Add `keiro-dsl/test/structural-nominal-mutation-test.sh`, modelled
+`null` from a present ID. A queued payload round-trips through the generated queue codec with
+TypeID text and a wrong prefix is rejected at `$.template_id`; the generated `QueryContract`
+aliases are asserted at the type level to equal `TemplateState` and `[TemplateId]`. Add `keiro-dsl/test/structural-nominal-mutation-test.sh`, modelled
 on `keiro-dsl/test/structural-mutation-test.sh`, that rewrites the generated
 `parseTemplateIdLeaf` to accept any text and asserts the suite fails, then restores the file.
 
@@ -549,7 +592,7 @@ Acceptance: `cabal test keiro-dsl:test:keiro-dsl-conformance-structural-nominals
 the mutation script exits non-zero on the mutated tree and zero after restore;
 `cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/structural-nominal-leaves.keiro
 --explain-bindings` lists `TemplateState`, `TemplateRef`, `TemplateBook`, `ClaimId`, and
-`AccountNumber` obligations, with `ClaimId`'s use sites including the structural paths;
+`AccountNumber` obligations, with `ClaimId`'s use sites including the structural paths and the queue payload row;
 `scripts/check-conformance-corpus.sh` passes from a clean tree.
 
 ### Milestone 3: Coverage, semantic diff, and compatibility for nested nominals
@@ -562,7 +605,8 @@ codec comparison can prove parity for the opaque-to-nominal migration.
 In `keiro-dsl/src/Keiro/Dsl/Coverage.hs`, add a `nominalBoundaries` inventory to the report
 (each row: `path`, `root`, `nominal`, `kind` as `id` or `scalar`, `prefix` and
 `domainVersion` for IDs, `canonicalType` and `ownership` for consumer-bound leaves) computed
-from `nominalUsePaths` filtered by `isWireSite`; leave `structuralRoots`, `opaqueRoots`, and
+from `nominalUsePaths` filtered by `isWireSite`, which includes nominal root sites at workqueue
+payload rows; leave `structuralRoots`, `opaqueRoots`, and
 `jsonBoundaries` semantics unchanged so a root that contains only nominal leaves is a
 structural root with no opaque boundary. Keep the schema tag `keiro-dsl/coverage-report/1`;
 the addition is a new array that old readers ignore. Confirm `snapshotBoundaryInventory`
@@ -574,8 +618,9 @@ nominal views with equal names are equal, and any other pairing involving a nomi
 `MappedFieldTypeChanged`. In `keiro-dsl/src/Keiro/Dsl/Diff.hs`, extend `NominalUse` with a
 structural use carrying the declaration name and the root path, populate it from
 `nominalUsePaths` on both graphs in `nominalUses`, and map it in `nominalUseChange` to
-`ContextPrivateEvent` for event and workqueue roots, `ContextSnapshot` for register roots, and
-`ContextConsumerBuild` for command and query roots, so `IdPrefixChanged`,
+`ContextPrivateEvent` for event roots, the context the mapped-declaration diff already assigns
+to a workqueue payload root, `ContextSnapshot` for register roots, and `ContextConsumerBuild`
+for command and read-model query roots, so `IdPrefixChanged`,
 `NominalBindingChanged`, `NominalFixturesChanged`, `NominalCanonicalTypeChanged`,
 `NominalInitialChanged`, `NominalRepresentationChanged`, and `IdDomainContractChanged` carry
 the nested paths in their contexts and `--explain` output. In
@@ -593,7 +638,7 @@ contexts.
 
 Acceptance: `cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/structural-nominal-leaves.keiro
 --deny-warnings --coverage-report /tmp/cov.json --fail-on-opaque` exits 0 and the report has
-`opaqueRoots` 0 with three or more `nominalBoundaries`; `diff` between the fixture and the
+`opaqueRoots` 0 with three or more `nominalBoundaries`, one of them the workqueue payload row; `diff` between the fixture and the
 prefix mutant reports `IdPrefixChanged` with a private-event context for the `TemplateState`
 event path and a snapshot context for the `book` register; the binding mutant reports
 `NominalBindingChanged` on the same paths; the two type-change mutants report
@@ -754,6 +799,10 @@ The check with `--deny-warnings --coverage-report ... --fail-on-opaque` on the f
 0, and the report lists the nominal leaves under `nominalBoundaries` with zero opaque roots.
 This is the consumer's production gate shape from IR-40 passing without an exception.
 
+The same fixture's workqueue payload row and read-model query pair check, scaffold, and
+compile; the queue codec round-trips TypeID text and rejects a wrong prefix at the payload
+path.
+
 `keiro-dsl diff` classifies the prefix, binding-version, text-to-nominal, and
 opaque-to-nominal mutants as described in Milestone 3, with contexts naming the nested paths,
 and the compatibility-vector golden matches.
@@ -814,12 +863,16 @@ data ResolvedTypeExpr = RText | RInt | RInteger | RBool | RNatural | RTime | RJs
 
 data PathSeg = {- existing segments -} | SegNominal !Name
 
-data TypeGraphError = {- existing -} | TGUnsupportedNominalLeaf !Name !Name !Text !Loc | TGNominalLeafAtConsumerRoot !Name !Name !Loc
+data TypeGraphError = {- existing -} | TGUnsupportedNominalLeaf !Name !Name !Text !Loc
+
+data RootRef = {- the root kind, owner, and field identity currently repeated across the UseSite constructors -}
+data NominalRootSite = NominalRootSite { root :: !RootRef, nominal :: !Name, segments :: ![PathSeg] }
 
 checkIdLeaf :: IdDecl -> Either NominalLeafError NominalLeaf
 checkScalarLeaf :: NominalScalarDecl -> Either NominalLeafError NominalLeaf
 nominalUsePaths :: TypeGraph -> Name -> [UsePath]
--- TypeGraph gains: nominalLeaves :: Map Name NominalLeaf, nominalReachability :: Map MappedKey (Set Name)
+-- TypeGraph gains: nominalLeaves :: Map Name NominalLeaf, nominalReachability :: Map MappedKey (Set Name),
+--                  nominalRootSites :: [NominalRootSite]
 -- TypeExprAlgebra gains: onNominal :: NominalLeaf -> r
 ```
 
@@ -847,3 +900,15 @@ Runtime dependencies are already in `keiro-dsl`'s and the generated code's build
 `nominalToRepresentation`, `nominalFromRepresentation`), and `Keiro.Codec.Structural`
 (`StructuralBinding`, `bindingToShape`, `bindingFromShape`). No new package dependency is
 introduced.
+
+
+## Revision Notes
+
+- 2026-09-17: Widened the scope to accept nominal leaves at workqueue payload rows and read-model
+  query expressions after verifying that both fail with the same `MappedUnresolvedName` as
+  records. Replaced the consumer-root rejection with a nominal root-site inventory (and the
+  `RootRef` factoring of `UseSite`), dropped the `mapped-nominal-leaf-root.keiro` negative
+  fixture, extended the corpus, coverage, diff contexts, and acceptance accordingly, and
+  superseded the corresponding Decision Log entry. The remaining gaps (nested enums, contract
+  references to declared IDs, expressions and router selection over nested nominals, and the
+  direct optional-ID diagnostic) are planned in `docs/plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md`.
