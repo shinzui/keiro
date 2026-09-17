@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-17
+* **Implementation**: Record repository implementation complete while supported Language 6 publication and consumer adoption/replay evidence remain pending.
 * **Status**: Implementation began under ExecPlan 287 after reproducing the nested nominal resolver failure.
 
 ## 2026-09-16

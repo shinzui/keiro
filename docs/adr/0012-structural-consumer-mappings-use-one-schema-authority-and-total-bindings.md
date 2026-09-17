@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-08-10T04:36:00Z
+timestamp: 2026-09-17T17:16:09Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -421,3 +421,7 @@ the totality and ownership requirements above.
   turn their owning gate red. The generated structural codec remained within 1.04x of a
   policy-equivalent hand-written Aeson baseline in the representative benchmark matrix, so the
   sanctioned fusion optimization is not required for this implementation.
+
+## Related decisions
+
+- [ADR-46](0046-nominal-declarations-are-structural-leaves-with-keiro-owned-admission.md) makes IDs and nominal scalars structural leaves while preserving this ADR's single wire authority.

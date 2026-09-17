@@ -6,7 +6,7 @@ docId: DOC-12
 tags: [keiro, dsl, mappings, adoption]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-17T17:16:09Z
 ---
 
 # Adopting Mapped Consumer Surfaces
@@ -84,6 +84,12 @@ bytes.
 
 Treat semantic-impact consequences independently:
 
+- A candidate-Language-6 nominal leaf keeps its declared domain type and
+  Keiro-owned admission inside every structural path. Prefix, domain,
+  representation, binding, and canonical-type changes inherit the event,
+  snapshot, workqueue, or build-only query consequence of each named root;
+  fixture-only changes remain evidence-only.
+
 - `private-event-history`: bump the event schema and add/test a contiguous
   upcaster when old event JSON is incompatible. Run the real-log replay audit.
 - `snapshot-hydration`: expect old snapshots to miss and full-replay; budget the
@@ -102,6 +108,13 @@ Treat semantic-impact consequences independently:
   runtime fence.
 - `consumer-build`: rebuild the exact named consumer even when no persisted
   history consequence applies.
+
+An opaque-or-`Text` to nominal migration is a `MappedFieldTypeChanged`, not an
+automatic no-op. Run the generated historical codec comparison over committed
+old-codec samples to establish valid-byte parity and malformed-ID rejection,
+then follow the consequence above for every reported root. Parity can justify a
+reviewed migration strategy, but it does not erase event versioning, queued-job
+drain, snapshot rebuild, or consumer rollout ownership.
 
 Application teams continue to own queue-drain timing, query caller rollout,
 projection verification, read-model DDL and SQL migrations, and release

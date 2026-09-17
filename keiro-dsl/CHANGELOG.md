@@ -8,6 +8,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- Candidate Language 6 adds the `StructuralNominalLeaves` capability: generated
+  and consumer-bound `id` declarations plus `mapped nominal` scalars may appear
+  inside structural records, unions, containers, typed workqueue fields, and
+  read-model query input/results. Generated leaf codecs preserve the nominal
+  Haskell type and apply Keiro-owned ID/scalar admission; nominal enums remain
+  deliberately excluded in favor of `mapped structural enum`.
+
 - Workqueues accept `ordering fifo-heads`; round trips preserve the spelling,
   scaffolding emits `FifoHeads` and FIFO-index provisioning, and ordering diffs
   remain breaking delivery-contract changes.
@@ -36,6 +43,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `reactions version` increase, or a version decrease, is also breaking.
 
 ### Other Changes
+
+- Coverage report schema 1 now appends `nominalBoundaries`, including
+  nominal-only workqueue and query roots classified as structural rather than
+  opaque.
+- Nominal prefix, domain, representation, binding, fixture, and canonical-type
+  diffs now carry every affected structural event, snapshot, workqueue,
+  command, and query path with its surface-specific compatibility context.
 
 - Aggregate transition diffs now partition live and replay-only transitions by
   source and command, then cancel byte-identical canonical transitions as a

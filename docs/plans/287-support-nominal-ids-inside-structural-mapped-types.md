@@ -180,10 +180,10 @@ maps are a separate expansion and should not delay this delivery.
 - [x] 2026-09-17: M3. `MappedDiff` compares nominal leaves; `Diff.nominalUses` includes structural use
       paths; mutants for prefix, binding-version, opaque-to-nominal, and text-to-nominal are
       classified and golden-tested; `CodecCompare` branch schema handles the leaf.
-- [ ] M4. Workspace fixture proves one shared ID owner reachable from two members' records
+- [x] 2026-09-17: M4. Workspace fixture proves one shared ID owner reachable from two members' records
       without duplicate declarations or import cycles; corpus regeneration is byte-stable.
-- [ ] M4. User documentation, changelog, a new ADR, and IR-40 status updates are written
-      and validated by `just verify`.
+- [x] 2026-09-17: M4. User documentation, changelog, ADR 46, and IR-40 status updates are
+      written; generated API migration inventories are refreshed; `just verify` passes.
 
 
 ## Surprises & Discoveries
@@ -230,6 +230,13 @@ maps are a separate expansion and should not delay this delivery.
   were planned for all nominal reachability even though canonical-text assertions exist only
   for generated IDs. Restricting those imports to generated ID names preserves the assertions
   and keeps consumer-only conformance modules warning-clean.
+- Implementation, 2026-09-17: Upgrading the workspace nominal proof from published Language 4
+  to candidate Language 6 also required changing its conformance-baseline ownership row; the
+  broad suite rejects a generated corpus whose declared language and baseline role disagree.
+- Implementation, 2026-09-17: The public record inventory and idiomatic-v2 API inventory are
+  generated policy artifacts. Adding nominal dependency and coverage records made
+  `record-migration-policy` fail until both inventories were regenerated with
+  `scripts/generate-record-migration-manifests.py`.
 
 
 ## Decision Log
@@ -365,12 +372,24 @@ maps are a separate expansion and should not delay this delivery.
 ## Outcomes & Retrospective
 
 
-Correctness review and plan revision completed on 2026-09-17. Implementation has not
-started. The milestones now address direct-root completeness, actual snapshot identity,
-all nominal diff producers, and reuse of the existing cross-surface qualification gates.
-Runtime acceptance remains to be demonstrated during implementation. The final value assessment
-recommends implementation first in the next feature cycle; it does not approve a release or
-claim that candidate Language 6 is production-supported.
+Implementation completed on 2026-09-17. Candidate Language 6 now resolves generated and
+consumer-owned IDs plus mapped nominal scalars inside structural declarations, workqueue
+payload rows, and read-model query expressions. Generated shape modules retain the nominal
+domain type, while one context-owned `Structural.NominalLeaves` module owns encoding and
+admission. Enums remain explicitly unsupported. Coverage, semantic impact, fold and wire
+fingerprints, diff classification, binding explanations, scaffold planning, and historical
+codec comparison all follow the new leaf.
+
+The committed conformance corpus proves canonical and malformed TypeID handling, optional and
+container composition, event/snapshot/queue/query paths, opaque-to-nominal parity, mutation
+sensitivity, exact locality, and one shared consumer-owned ID across two workspace members.
+The corpus regenerates byte-identically, and `just verify` passes the complete runtime, DSL,
+Jitsurei, policy, documentation, and generated-artifact gates.
+
+This completes the repository implementation, not the production rollout. Language 6 is still
+candidate-only; IR-40 remains in progress until a supported published language contains the
+capability and the downstream consumer records migration and replay evidence. Plan 285 remains
+the publication prerequisite described above.
 
 
 ## Context and Orientation

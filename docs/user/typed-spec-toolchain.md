@@ -6,7 +6,7 @@ docId: DOC-23
 tags: [keiro, dsl, language-5, reference]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-17T17:16:09Z
 ---
 
 # Keiro DSL Language 5 Reference
@@ -27,9 +27,10 @@ language keiro-dsl 5
 ```
 
 The active, unpublished Language 6 candidate extends this stable base with
-delegated inboxes and first-class process reactions. Candidate-only examples
-say so explicitly and begin with `language keiro-dsl 6`; released-only services
-should remain on Language 5 until that candidate is published.
+delegated inboxes, first-class process reactions, and nominal declarations as
+structural leaves. Candidate-only examples say so explicitly and begin with
+`language keiro-dsl 6`; released-only services should remain on Language 5
+until that candidate is published.
 
 Use this page as both an introduction and a syntax reference. The shortest path
 is [Quick start](#quick-start), followed by the node family you need. The
@@ -360,6 +361,16 @@ The first scaffold creates a binding skeleton. Fill it and its fixture cases;
 do not duplicate wire spellings or defaults in the binding. Those remain owned
 by the `.keiro` declaration.
 
+Candidate Language 6 also permits an `id` or `mapped nominal` declaration as a
+leaf inside a structural mapping, typed workqueue field, or read-model query
+input/result. The generated private shape contains the nominal domain type, not
+its `KindID` or primitive representation. One context-owned
+`Structural.NominalLeaves` module applies the declared binding and Keiro-owned
+admission policy wherever a generated JSON codec needs the leaf. Query-only
+aliases reuse the checked nominal type and import plan without emitting that
+helper. Nominal enums are deliberately not structural leaves; use
+`mapped structural enum` for a nested enumeration.
+
 ## Types
 
 ### Direct aggregate types
@@ -418,9 +429,17 @@ List Text
 List (Optional Text)
 Map Text
 OtherMappedType
+DeclaredId
+MappedNominalScalar
 ```
 
 `Map T` means a JSON object with text keys and values of type `T`.
+`DeclaredId` and `MappedNominalScalar` stand for the names of existing `id`
+and `mapped nominal` declarations and require candidate Language 6. They may
+occur beneath `Optional`, `List`, and `Map` and at typed workqueue and read-model
+query roots. Generated and consumer-bound IDs and nominal scalars are supported;
+nominal enums receive `MappedNominalLeafUnsupported` and must be declared as a
+structural enum when nested.
 
 ## Consumer-owned mapped types
 
@@ -439,6 +458,8 @@ mapped structural record ArtifactInfo {
   fixtures = "Example.Artifact.KeiroBindings.artifactInfoCases"
   initial = "Example.Artifact.KeiroBindings.emptyArtifactInfo"
   wire object constructor=ArtifactInfo unknown-fields=reject {
+    artifactId   as "artifactId"   : ArtifactId    required
+    claimId      as "claimId"      : Optional ClaimId optional on-missing=null
     key         as "key"         : Text          required
     description as "description" : Optional Text optional on-missing=null
     active      as "active"      : Bool          optional on-missing=false
@@ -539,10 +560,56 @@ snapshot/register behavior, and forward/replay agreement for declarations in
 their checked semantic closure. Fixtures are finite evidence, not proof for all
 consumer values.
 
+When structural declarations reach nominal leaves, scaffolding also emits one
+context-owned `Structural.NominalLeaves` module. Generated shape, event,
+and workqueue codecs share its leaf encoders and parsers, so a consumer ID
+binding cannot become a second JSON authority. Query aliases share the checked
+domain type and import authority without inventing a codec. `StructuralConformance`
+adds the consumer nominal domain/representation round-trip and canonical-identity
+laws; generated IDs receive canonical-text assertions at every structural fixture
+path. The Cabal fragment records the nominal owner and binding modules once,
+including across workspace members.
+
 This ownership split changes generated source layout once when adopting the
 release: regenerate the service output, add `StructuralConformance` from the
 Cabal fragment, and remove declaration-law expectations from aggregate-specific
 inventories. Do not hand-move assertions between generated files.
+
+### Migrating from an opaque ID workaround
+
+Before candidate Language 6, an application could preserve its Haskell ID type
+only by declaring a `mapped opaque` twin of the consumer-bound ID and, for an
+optional field, another opaque wrapper around `Maybe ClaimId`. That workaround
+made the consumer Aeson instance authoritative and caused persisted roots to
+remain visible as opaque coverage.
+
+Replace the opaque twin with the nominal declaration name directly:
+
+```text
+id ClaimId prefix=claim using {
+  haskell package=claims-domain module=Claims.Id type=ClaimId
+  binding = "Claims.KeiroBindings.claimIdBinding"
+  binding-version = "1"
+  canonical-type = "claims.ClaimId.v1"
+  fixtures = "Claims.KeiroBindings.claimIdFixtures"
+}
+
+mapped structural record TemplateState {
+  # binding metadata omitted
+  wire object constructor=TemplateState unknown-fields=reject {
+    templateId as "templateId" : TemplateId required
+    holder as "holder" : Optional ClaimId optional on-missing=null
+  }
+}
+```
+
+`diff` conservatively reports the opaque-or-`Text` to nominal replacement as
+`MappedFieldTypeChanged` at every affected root. Generate a historical codec
+comparison for the structural declaration, run the old codec against committed
+missing/null/present samples, and require byte parity plus rejection of
+malformed IDs. That comparison is migration evidence, not permission by itself
+to bypass event versioning, queue drain, or snapshot rules; apply the decisions
+in [Codecs And Event Evolution](codecs-and-event-evolution.md#structural-consumer-owned-payloads).
 
 ### Adopting semantically local regeneration
 
@@ -2190,8 +2257,11 @@ keys are append-only; readers must ignore unknown keys. A parse failure and an
 unreadable or unparseable workspace manifest occur before any coded diagnostic
 exists and therefore write no report; a *composed* workspace refusal does write
 one, with `"language": null` because no service graph was formed.
-`--coverage-report` inventories structural, opaque, explicit-`Json`, and
-consumer-JSON register boundaries. `--fail-on-opaque` turns named private
+`--coverage-report` inventories structural, opaque, explicit-`Json`,
+consumer-JSON register, and nominal boundaries. Each `nominalBoundaries` row
+names its complete path and root, ID/scalar kind, ID prefix/domain version or
+consumer canonical type/ownership. Nominal-only queue and query roots count as
+structural rather than opaque. `--fail-on-opaque` turns named private
 persisted opaque boundaries into a CI gate. Coverage findings are part of this
 invocation's diagnostic surface: they are subject to the same warning policy and
 appear in the check report as line-0 entries, so the report's `ok` covers them.
@@ -2317,6 +2387,14 @@ the detailed compatibility findings, rollout constraints, or replay report.
 `--report-out` appends the same sorted projection under
 `semanticImpact` while keeping schema `keiro-dsl/diff-report/1`. Source-only or
 ownership-only movement has no mapped semantic-impact entries.
+
+Changes to a nominal prefix, domain contract, representation, binding,
+fixtures, or canonical type are reported at every direct or structural use.
+Nested event paths use the private-event context, register paths use the
+snapshot context, workqueue fields retain queue rollout consequences, and
+command and query paths use consumer-build context; query consequences remain
+build-only. Fixture changes are evidence-only, and a nominal `initial` symbol
+is not attributed to a nominal nested inside a structural register.
 
 Declarative router changes also receive a separate `coordination impact` block.
 It reports old/current verification, identity, version, fingerprint, and mapped

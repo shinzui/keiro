@@ -1,5 +1,10 @@
 # Keiro User Documentation Log
 
+## 2026-09-17
+* **Update**: Document surface-specific nominal leaf consequences and historical parity evidence during mapped adoption.
+* **Update**: Document nominal leaf codec authority and compatibility duties for opaque-or-Text migrations.
+* **Update**: Document candidate Language 6 nominal structural leaves, generated admission and conformance, coverage and diff contexts, and opaque-ID migration.
+
 ## 2026-09-16
 * **Update**: Document reaction version/fingerprint drain rules and timer removal, identity, payload, and ceiling rollout consequences.
 * **Update**: Document generated reaction-manager usage, the typed decoder Hole, runtime Reaction wiring, and transactional cancelTimerTx lowering.

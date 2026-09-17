@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-09-17
+* **Update**: Link ADR-12 single structural schema authority to ADR-46 nominal leaf decision (plan 287).
+* **Decision**: Add ADR-46: nominal declarations are structural leaves with Keiro-owned admission (plan 287).
+
 ## 2026-09-16
 * **Decision**: Add ADR-45: preserve PGMQ-owned provisioning, bound local partition validation, and withhold supplemental-index guidance pending full-workload evidence (plan 118).
 * **Decision**: Add ADR-44: jobs declare ordering, grouped heads are the strict FIFO failure barrier, and legacy FIFO strategies are restricted to batch size one (plan 116).

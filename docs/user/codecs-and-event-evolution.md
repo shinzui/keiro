@@ -6,7 +6,7 @@ docId: DOC-3
 tags: [keiro, codecs, events, evolution]
 generated:
   by: human:nadeem
-  at: 2026-07-29T02:56:16Z
+  at: 2026-09-17T17:16:09Z
 ---
 
 # Codecs And Event Evolution
@@ -62,6 +62,14 @@ defaults, and unknown-field policy; generated code executes that declaration.
 A total `StructuralBinding` only converts between the consumer value and the
 generated private shape.
 
+Candidate Language 6 permits generated or consumer-bound `id` declarations and
+consumer-bound `mapped nominal` scalars as leaves of structural mappings. The
+private shape retains the nominal domain type. A generated
+`Structural.NominalLeaves` parser applies canonical TypeID-v7 prefix admission
+or the declared scalar representation before the total nominal binding runs;
+it never delegates that leaf to an arbitrary consumer Aeson instance. Nominal
+enums remain excluded from this leaf form and use `mapped structural enum`.
+
 Use `mapped opaque` when the consumer codec must remain authoritative or the
 conversion from every declared shape cannot be total. Keiro delegates to the
 consumer `ToJSON`/`FromJSON` instances exactly at that boundary and makes no
@@ -75,6 +83,14 @@ For an existing codec, capture historical JSON and follow the finite
 [shadow-comparison workflow](../guides/brownfield-migration-and-transducer-modeling.md#shadow-comparison-of-old-and-new-codecs)
 before cutover. A passing comparison is migration evidence, not a runtime
 fallback or a transfer of wire authority.
+
+Replacing an opaque or `Text` field with a nominal leaf is reported as
+`MappedFieldTypeChanged`, even when a historical comparison proves identical
+valid bytes. Use explicit old-codec samples for missing, null, and present
+values and require both codecs to reject malformed IDs. Then apply the ordinary
+surface rule: version and upcast incompatible private events, drain or provide
+a transitional workqueue decoder, allow nominal-driven snapshot discriminator
+changes to rebuild cache state, and recompile command/query consumers.
 
 ## Decoding
 

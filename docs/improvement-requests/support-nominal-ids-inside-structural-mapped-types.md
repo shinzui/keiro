@@ -5,7 +5,7 @@ description: >-
   Resolve and lower declared IDs inside structural records, unions, and containers with
   the same nominal identity and checked TypeID contract as direct aggregate fields,
   without requiring an opaque codec or a text-keyed replacement model.
-timestamp: 2026-09-17T14:08:31Z
+timestamp: 2026-09-17T17:16:09Z
 requestId: IR-40
 status: in-progress
 origin: mori://tan/notification-render-service
@@ -50,16 +50,20 @@ reviews:
 
 ## Status
 
-Implementation began on 2026-09-17 after the baseline refusal was reproduced at the current
-repository head. The request was accepted on 2026-09-16 after in-repository validation and planned as
-[ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md), which
-adds a nominal leaf to the resolved structural type graph, gates the capability on candidate
-Language 6, generates leaf codecs with Keiro-owned TypeID admission, and extends coverage,
-semantic diff, and conformance. The plan supports `id` declarations (generated and
-consumer-bound) and `mapped nominal` scalars as leaves and rejects nominal enums with a
-deliberate diagnostic. The request completes once the plan's milestones ship and release
-evidence is recorded. Request ID allocated using `okf id next` with the repository's
-`mori/improvement-requests-profile.dhall` profile.
+Repository implementation and conformance evidence completed on 2026-09-17 under
+[ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md). Candidate
+Language 6 now resolves generated and consumer-bound IDs plus `mapped nominal` scalars as
+structural leaves, preserves nominal Haskell types, applies Keiro-owned TypeID/scalar admission,
+and carries their paths through coverage, snapshot identity, semantic diff, compiled single-spec
+and workspace corpora, and historical codec comparison. Nominal enums receive a deliberate
+unsupported diagnostic and continue to use `mapped structural enum`.
+
+The request remains **in progress** because implementation is available only through the
+unpublished Language 6 candidate. Supported-language publication and downstream consumer
+migration/replay evidence are still pending; no package delivery or candidate check alone closes
+the production need. Record those two pieces of evidence before changing this request to
+`completed` or adding `completedAt` and `resolution`. Request ID was allocated with `okf id next`
+using `mori/improvement-requests-profile.dhall`.
 
 ## Context
 
