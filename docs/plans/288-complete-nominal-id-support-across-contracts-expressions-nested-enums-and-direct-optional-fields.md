@@ -16,6 +16,12 @@ provenance:
       at: 2026-09-17T13:27:35Z
       mode: "update"
       note: "Added identifier-keyed maps as Milestone 4; contract containers postponed to a research note"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-17T13:40:55Z
+      verdict: "changes-requested"
+      note: "Validated diff producers, fingerprint propagation, CLI syntax and ADR links; fix keyed-map parsing ambiguity, consumer-bound enum default conversion, and branch-schema admission conflation."
 ---
 
 # Complete nominal ID support across contracts, expressions, nested enums, and direct optional fields
