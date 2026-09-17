@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-17T03:43:16Z
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-17T13:27:35Z
+      mode: "update"
+      note: "Added identifier-keyed maps as Milestone 4; contract containers postponed to a research note"
 ---
 
 # Complete nominal ID support across contracts, expressions, nested enums, and direct optional fields
@@ -25,7 +31,8 @@ Plan 287 (`docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md`
 `id` or `mapped nominal` declaration appear inside structural records, unions, containers,
 workqueue payload rows, and read-model query expressions. On 2026-09-17 an audit of every other
 place a `.keiro` author can write an identifier found four remaining gaps, each verified
-against the built keiro-dsl 0.16.0.0 compiler. This plan closes them so that one `id`
+against the built keiro-dsl 0.16.0.0 compiler, plus one shape that IR-40 had marked as not
+required: a map keyed by an identifier. This plan closes all of them so that one `id`
 declaration is usable everywhere an identifier is meaningful, with one admission contract and
 one diff story.
 
@@ -36,8 +43,10 @@ After this plan an author can do the following. Use a declared `enum` as a struc
 `typeid "template"`, so that a prefix change on the shared declaration is reported on the
 public contract too. Compare a nested identifier in a guard
 (`guard cmd.template.templateId == reg.activeTemplateId`) and select router recipients by an
-identifier column, with the same nominal equality that direct fields already have. And, when
-a command needs an optional identifier, get a diagnostic that names the exact working pattern
+identifier column, with the same nominal equality that direct fields already have. Key a map
+by a declared identifier (`byTemplate as "by_template" : Map TemplateId Text`) so the checked
+key domain survives at the one place a model naturally indexes by ID. And, when a command
+needs an optional identifier, get a diagnostic that names the exact working pattern
 rather than advice that leads to another failure.
 
 One thing this plan deliberately does not do: it does not make `Optional TemplateId` a legal
@@ -63,7 +72,12 @@ so the fix here is precise guidance, not a new direct shape.
       existing nominal equality contract.
 - [ ] M3. Declarative router selection accepts nominal ID columns as recipient, key, and
       comparison operands; projection witnesses exist for nested nominal leaves.
-- [ ] M4. `AggregateTypeUnsupportedAtUse` for `Optional <nominal>` names the one-field
+- [ ] M4. `Map <Id> V` parses and pretty-prints under a Language 6 syntax feature, resolves
+      as a keyed map whose key is a nominal ID leaf, and generates a shape keyed by the ID's
+      Haskell type with admission on every key.
+- [ ] M4. Consumer-bound key types carry an ordering obligation that conformance checks
+      against canonical TypeID text order; coverage, diff, and the corpus cover keyed maps.
+- [ ] M5. `AggregateTypeUnsupportedAtUse` for `Optional <nominal>` names the one-field
       structural record pattern; documentation, changelog, and the ADR are updated; the plan
       287 corpus and goldens are regenerated once.
 
@@ -126,12 +140,43 @@ so the fix here is precise guidance, not a new direct shape.
   structural boundary; with plan 287 that boundary now carries identifiers, so the remaining
   defect is that the current message sends authors to a pattern that used to fail.
   Date: 2026-09-17
-- Decision: Exclude identifier-keyed maps (`Map` keyed by an `id`) and containers inside
+- Decision (superseded by the next two entries): Exclude identifier-keyed maps (`Map` keyed by an `id`) and containers inside
   contract fields from this plan.
   Rationale: IR-40 states typed map keys are not required; a keyed map needs new grammar for
   the key type and a JSON-object-key admission story, and no consumer has asked for it.
   Contract containers belong to the separately owned contract grammar. Both are recorded as
   deliberate exclusions rather than silent omissions.
+  Date: 2026-09-17
+- Decision: Deliver identifier-keyed maps in this plan as Milestone 4. The spelling is
+  `Map <Id> <Value>`: when `Map` is followed by a declared `id` name and then a second type
+  argument, the map is keyed by that ID; `Map <Value>` alone keeps meaning a text-keyed map.
+  Keys may be declared IDs only (not enums or nominal scalars). The form is gated by a new
+  `KeyedMapSyntax` language feature on candidate Language 6. The resolved graph gets a
+  distinct `RKeyedMap` constructor rather than a key field on `RMap`.
+  Rationale: the case is legitimate and recurs (a model indexes templates or claims by their
+  own identifier), and it does not weaken any Keiki guarantee: `Map` is not an expression
+  path leaf, so nothing symbolic changes. Today `Map` takes exactly one type argument
+  (`pMappedTypeExpr`, `keiro-dsl/src/Keiro/Dsl/Parser/Mapped.hs:263`), so `Map TemplateId Text`
+  is a parse error and the keyed form is a purely additive extension; a distinct constructor
+  forces every algebra to take a position on keys instead of silently treating them as text.
+  Date: 2026-09-17
+- Decision: A keyed map's shape is a Haskell `Map` keyed by the ID's domain type. Generated
+  IDs already derive `Ord` over their text. A consumer-bound key type carries an explicit
+  ordering obligation, listed by `--explain-bindings` and asserted by generated conformance
+  as agreement with canonical TypeID text order over the fixture keys. Keys are encoded and
+  decoded through the ID's leaf codec, never through `ToJSONKey`/`FromJSONKey` instances.
+  Rationale: `Data.Map` needs `Ord`; if a consumer's `Ord` disagreed with text order, encoded
+  key order and byte goldens would drift with consumer code. Making the agreement a checked
+  law keeps encoding deterministic without depending on an unverifiable instance, and routing
+  keys through the leaf codec keeps Keiro the single admission authority (ADR 12).
+  Date: 2026-09-17
+- Decision: Postpone containers (`Optional`, `List`, `Map`) inside contract fields. The
+  options, costs, and prerequisites are recorded in the research note
+  `docs/research/15-containers-in-public-contract-fields.md`; this plan only adds declared-ID
+  references to contracts (Milestone 2).
+  Rationale: contracts are a public, cross-language surface with a separately owned grammar
+  and evolution rules (ADR 13); containers there are a policy decision about the public
+  promise, not an engineering gap, and no producer needs them yet.
   Date: 2026-09-17
 
 
@@ -193,6 +238,17 @@ structural roots are planned by `projectionsForRoot` (`Scaffold.hs:2190` to 2230
 `SelectionScalarType` (line 71) has `SelectionText` and siblings, `resolvePath` (line 448)
 walks row and input paths, and `requireScalarType` (line 482) demands `SelectionText` for the
 router key and recipient (lines 218 and 222).
+
+*Keyed maps.* `pMappedTypeExpr` (`keiro-dsl/src/Keiro/Dsl/Parser/Mapped.hs:263` to 281)
+parses `Map` with exactly one `pTypeArgument` (a parenthesised expression or an atom), so
+`Map TemplateId Text` is a parse error today. The pretty-printer (`docTypeExpr`,
+`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs:267` to 275) prints `Map` with one argument and
+parenthesises compound arguments. `Keiro.Dsl.MappedCodecPlan` encodes a map as
+`toJSON (Map.map encode m)` (line 91) and decodes it as `parseJSON :: Parser (Map Text Value)`
+followed by `traverse` (line 125), so keys are `Text` and never pass through admission.
+Generated ID newtypes derive `Ord` (`Scaffold.hs:1498`); consumer-bound IDs have no ordering
+obligation today. `Map` is rejected as an expression path leaf (`Expression.hs`, `resolvedLeaf`)
+and as a projection scalar, so keyed maps cannot touch Keiki projections.
 
 *Direct optional fields.* `resolveAggregateType` in `keiro-dsl/src/Keiro/Dsl/AggregateType.hs`
 (lines 127 to 150) rejects `TOptional`, `TList`, `TMap`, and `TJson` with
@@ -354,7 +410,68 @@ Acceptance: `cabal test keiro-dsl:test:keiro-dsl-test` covers the new typing cas
 corpus passes with the guard, router, and witness assertions; `check` on the negative
 fixtures prints `AggregateGuardTypeMismatch` and `AggregateGuardCapabilityUnsupported`.
 
-### Milestone 4: Direct optional identifiers, guidance, documentation, and closure
+### Milestone 4: Identifier-keyed maps
+
+Scope: after this milestone a structural record or union may declare `Map <Id> <Value>`,
+the generated shape is keyed by the identifier's Haskell type, every key is admitted through
+the ID's leaf codec on decode, the consumer's key ordering is a checked obligation, and
+coverage and `diff` treat the key as a nominal use.
+
+In `keiro-dsl/src/Keiro/Dsl/Grammar.hs`, add `TKeyedMap !Name !TypeExpr` to `TypeExpr`. In
+`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`, add `KeyedMapSyntax` to `LanguageFeature`,
+present only in syntax profile 5. In `pMappedTypeExpr`, after `keyword "Map"`, first `try` an
+identifier followed by a `pTypeArgument` (calling `requireLanguageFeatureAt` with
+`KeyedMapSyntax`), and otherwise fall back to the existing single-argument form; extend
+`docTypeExpr` to print `Map <Key> <Value>` with `docTypeArgument` on the value, and add
+parse/pretty round-trip cases. In `TypeGraph.hs`, add `RKeyedMap !NominalLeaf !ResolvedTypeExpr`
+to `ResolvedTypeExpr`, `onKeyedMap :: NominalLeaf -> r -> r` to `TypeExprAlgebra`, and
+`SegMapKey` to `PathSeg`; `resolveExpr` requires the key name to resolve to a `NominalIdLeaf`
+and otherwise fails with `TGUnsupportedNominalLeaf` carrying the category (`enum`,
+`nominal scalar`, or `mapped`) so `Validate` renders `MappedNominalLeafUnsupported` with
+"map keys must be declared ids"; `pathsInExpr` and `nominalUsePaths` record the key as a
+nominal use at `SegMapKey` and recurse into the value at `SegMapValue`; `rootReference`
+follows the value; `refsInExpr` follows the value; the wire token is
+`map(key=nominal-id(<prefix>,<domain>);<value token>)`. In `Validate.hs`, a keyed map is
+non-null for `hasNonInjectiveOptional`, and `on-missing={}` types it like a text-keyed map.
+
+In `Scaffold.hs`, `renderShapeType` renders `Map <IdHaskellType> <valueShape>` and
+`exprRequirements` adds the ID's reference. In `MappedCodecPlan.hs`, `renderMappedEncode`
+builds an Aeson object from `Map.toList` with each key rendered by the ID's text encoder
+(`<x>Text` or `KindID.toText (nominalToRepresentation ...)`) and each value by the value
+encoder; `renderMappedParse` uses `withObject`, parses each key with `parse<X>Leaf` applied to
+the key text under a `Key` context so a bad key reports `$.by_template.<key>`, decodes each
+value, and builds the map with `Map.fromList` (distinct canonical keys are distinct IDs, so no
+post-admission collision is possible). In `ExplainBindings.hs`, list an ordering obligation
+for every consumer-bound ID used as a map key: "`Ord <ConsumerType>` must agree with canonical
+TypeID text order". In `StructuralConformance.hs`, for each such ID assert, over every pair of
+fixture domain values, `compare a b == compare (toText a') (toText b')` where `a'` and `b'`
+are the representations from the nominal binding. In `Coverage.hs`, add `position: key` to
+`nominalBoundaries` rows produced from `SegMapKey`. In `MappedDiff.hs`, add
+`ExprKeyedMap !Name !ExprView`; a text-keyed map becoming ID-keyed or the key declaration
+changing is `MappedFieldTypeChanged`; a key ID's prefix or binding change reaches the map's
+paths through `nominalUses` automatically. In `CodecCompare.hs`, add the keyed map to the
+branch schema as a map whose key branch carries the ID domain. Expressions, router
+selection, and projection witnesses keep rejecting maps, unchanged.
+
+Extend `structural-nominal-leaves.keiro`: `TemplateBook` gains
+`byTemplate as "by_template" : Map TemplateId Text required` and
+`claims as "claims" : Map ClaimId TemplateState optional on-missing={}`. Regenerate the
+corpus and assert in `Main.hs`: both maps round-trip with canonical TypeID keys; a key with
+the wrong prefix is rejected at `$.by_template.<key>`; a missing `claims` decodes to an empty
+map; the ordering law holds for `ClaimId`'s fixtures, and the mutation script additionally
+flips the consumer `Ord` on `ClaimId` and asserts the suite goes red. Add
+`structural-nominal-leaves-keyed-map-key-change.keiro` (`Map ClaimId` becomes
+`Map TemplateId`) expecting `MappedFieldTypeChanged`, `mapped-keyed-map-enum-key.keiro`
+(`Map Channel Text`) expecting `MappedNominalLeafUnsupported`, and a Language 5 copy expecting
+`LanguageFeatureRequiresVersion`. Document the form in `### Mapped type expressions` and
+`### Structural records` of `docs/user/typed-spec-toolchain.md`.
+
+Acceptance: the fixture checks `OK` and pretty-prints back to the same text; the corpus
+passes with the map assertions and the ordering mutation turns it red; the three negative
+fixtures print their codes; `diff` against the key-change mutant reports
+`MappedFieldTypeChanged` on the `TemplateBook` paths.
+
+### Milestone 5: Direct optional identifiers, guidance, documentation, and closure
 
 Scope: after this milestone the `Optional <nominal>` diagnostic names the working pattern,
 the user documentation covers every surface this plan and plan 287 added, the changelog and
@@ -390,7 +507,7 @@ cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/contract-declared-id.ke
 cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/direct-optional-id.keiro
 ```
 
-Expected after Milestones 1, 2, and 4 respectively:
+Expected after Milestones 1, 2, and 5 respectively:
 
 ```text
 OK
@@ -417,6 +534,18 @@ cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/contract-declared-id.kei
 
 Check the `diff` invocation form against `cabal run -v0 keiro-dsl -- diff --help`; the
 `### diff` section of `docs/user/typed-spec-toolchain.md` is authoritative.
+
+Keyed-map classification for Milestone 4:
+
+```bash
+cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/structural-nominal-leaves.keiro \
+  keiro-dsl/test/fixtures/structural-nominal-leaves-keyed-map-key-change.keiro --explain
+cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/mapped-keyed-map-enum-key.keiro
+```
+
+```text
+mapped-keyed-map-enum-key.keiro:N: error[MappedNominalLeafUnsupported]: mapped declaration 'TemplateBook' field 'byChannel' uses enum 'Channel' as a map key; map keys must be declared ids
+```
 
 Closing gate:
 
@@ -455,6 +584,11 @@ is `AggregateGuardTypeMismatch`; ordering a nominal path is
 `AggregateGuardCapabilityUnsupported`; a declarative router with `recipient = row.templateId`
 compiles and dispatches; projection witness assertions for nested nominal leaves pass.
 
+A record field `Map TemplateId Text` checks, pretty-prints back to itself, and round-trips
+with canonical TypeID keys; a wrong-prefix key is rejected at its object-key path; an ID-keyed
+map over a consumer-bound ID whose `Ord` disagrees with text order fails conformance; a
+Text-keyed map becoming ID-keyed is reported by `diff` as `MappedFieldTypeChanged`.
+
 `Optional TemplateId` as a direct command field prints the guidance message with the exact
 one-field record pattern, and that pattern checks `OK`.
 
@@ -472,7 +606,10 @@ and no published-language corpus may change bytes; drift in any corpus other tha
 this plan extends is a regression. If `SelectionNominal` proves too disruptive to the
 declarative router's selection identity, the recorded fallback is to accept nominal ID
 columns only as `recipient` and `key` in this plan and leave `where` comparisons for a
-follow-up; note the change in the Decision Log first.
+follow-up; note the change in the Decision Log first. If the `try`-based keyed `Map` parse
+turns out to conflict with an existing spelling in the corpus, the recorded fallback is an
+explicit bracketed key (`Map[TemplateId] Text`); record the change in the Decision Log and
+update the pretty-printer and documentation together.
 
 
 ## Interfaces and Dependencies
@@ -486,7 +623,16 @@ data NominalLeafKind
   | NominalEnumLeaf !(NonEmpty (Name, Text))
 
 checkEnumLeaf :: EnumDecl -> Either NominalLeafError NominalLeaf
+
+data ResolvedTypeExpr = {- plan 287 constructors -} | RKeyedMap !NominalLeaf !ResolvedTypeExpr
+data PathSeg = {- existing segments -} | SegMapKey
+-- TypeExprAlgebra gains: onKeyedMap :: NominalLeaf -> r -> r
 ```
+
+`keiro-dsl/src/Keiro/Dsl/Grammar.hs`: `TypeExpr` gains `TKeyedMap !Name !TypeExpr`.
+`keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`: `LanguageFeature` gains `KeyedMapSyntax`,
+present only in syntax profile 5. `keiro-dsl/src/Keiro/Dsl/MappedDiff.hs`: `ExprView` gains
+`ExprKeyedMap !Name !ExprView`.
 
 `keiro-dsl/src/Keiro/Dsl/Grammar.hs`: the contract field type gains `CDeclaredId !Name`.
 `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`: `LanguageFeature` gains
@@ -503,3 +649,14 @@ returns `AggregateNominal` for a nominal leaf. The generated `NominalLeaves` mod
 `parse<X>Leaf :: Value -> Parser X`). No new package dependency is introduced; `aeson`,
 `mmzk-typeid`, `keiki` (projection witnesses), and `keiro-core` already provide every runtime
 symbol used.
+
+
+## Revision Notes
+
+- 2026-09-17: Added identifier-keyed maps as Milestone 4 (the closure milestone became 5) after
+  deciding the case is legitimate, recurring, and neutral to Keiki guarantees because `Map`
+  is never an expression path leaf. Superseded the exclusion decision, recorded the keyed
+  syntax, the distinct `RKeyedMap` constructor, the `KeyedMapSyntax` gate, and the
+  consumer-bound ordering law. Containers inside contract fields remain postponed and are
+  captured in `docs/research/15-containers-in-public-contract-fields.md`. The plan title is
+  unchanged to keep its path stable.
