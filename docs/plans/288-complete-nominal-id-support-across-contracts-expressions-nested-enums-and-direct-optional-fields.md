@@ -21,6 +21,11 @@ provenance:
       at: 2026-09-17T13:54:12Z
       mode: "update"
       note: "Stage release priorities and fix prior parser, bound-enum default, branch schema, contract-only emission, and router fixture findings"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-17T17:57:28Z
+      mode: "update"
+      note: "Refresh against completed Plan 287 and start Milestone 1 with landed resolver, default, contract, and router authorities"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -45,7 +50,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 
-Plan 287 (`docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md`) lets an
+Completed plan 287 (`docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md`) lets an
 `id` or `mapped nominal` declaration appear inside structural records, unions, containers,
 workqueue payload rows, and read-model query expressions. On 2026-09-17 an audit of every other
 place a `.keiro` author can write an identifier found four remaining gaps, each verified
@@ -75,8 +80,8 @@ so the fix here is precise guidance, not a new direct shape.
 ### Release recommendation (2026-09-17)
 
 
-This work improves the DSL by making existing declarations compose consistently. Deliver
-Plan 287 through its workspace/documentation milestone first. Then prioritize the optional-ID
+This work improves the DSL by making existing declarations compose consistently. Plan 287's
+workspace/documentation milestone is complete at `539a0580`. Prioritize the optional-ID
 guidance from Milestone 5, nested enums (Milestone 1), and declared contract IDs (Milestone 2).
 Milestone 3 is valuable when consumers need nested IDs in guards or routing, but must preserve
 required-path totality and existing nominal equality restrictions. Milestone 4's keyed maps
@@ -98,6 +103,10 @@ that milestone rather than amending the frozen profile.
 
 
 - [x] 2026-09-17: Final release assessment and prior-review corrections; staged release priorities, explicit keyed-map syntax, bound-enum defaults, and branch-schema separation.
+- [x] 2026-09-17: Refreshed after plan 287 completed at `539a0580`; reconciled the plan with
+      the landed `NominalLeaf`, `collectNominalLeaves`, `RootRef`, `nominalUsePaths`, and
+      `RNominal` authorities and corrected enum defaults, codecs, contract reachability, and
+      router literal/projection work before implementation.
 - [ ] M1. Nominal enums (generated and consumer-bound) resolve as structural leaves with
       constructor defaults, leaf codecs, wire token, coverage, and diff contexts.
 - [ ] M1. The structural-nominals corpus carries an enum leaf with an `on-missing`
@@ -126,6 +135,17 @@ that milestone rather than amending the frozen profile.
 ## Surprises & Discoveries
 
 
+- 2026-09-17 implementation refresh: Plan 287 landed a single `NominalLeaf` authority rather
+  than the earlier hypothetical `nominalByName`: `collectNominalLeaves` currently admits IDs
+  and nominal scalars, `resolveTypeGraph` carries the result, `RNominal` preserves the leaf,
+  and `RootRef` plus `nominalUsePaths` carries nested contexts. Enum support must extend those
+  exhaustive matches rather than introduce a parallel lookup.
+- 2026-09-17 implementation refresh: `Harness.missingExpectedValue` compares JSON, so an enum
+  default there must be the declared wire spelling. Only `Scaffold.renderMissingDefault`
+  constructs the generated domain value or converts a consumer representation constructor
+  with `nominalFromRepresentation`. Generated enum Aeson instances are generic and are not
+  the declared spelling authority; leaf codecs must use the generated `<name>Text` function
+  and explicit spelling parsers.
 - 2026-09-17 final check: The preceding review's three blockers remained in the text.
   `Parser/Mapped.hs` parses one argument followed by presence or enclosing grammar;
   speculative consumption of a second identifier can steal those tokens. Consumer-bound
@@ -160,8 +180,8 @@ that milestone rather than amending the frozen profile.
   Rationale: A delimiter makes arity unambiguous even before declarations are resolved and
   prevents consuming presence markers or tokens from the next enclosing clause.
   Date: 2026-09-17
-- Decision: Depend on plan 287 as a hard prerequisite; do not start any milestone here before
-  plan 287's Milestone 4 is complete.
+- Decision: Depend on plan 287 as a hard prerequisite; this prerequisite was fulfilled by its
+  completed Milestone 4 and closing documentation commit `539a0580` on 2026-09-17.
   Rationale: every milestone builds on the `RNominal` leaf, the per-context `NominalLeaves`
   codec module, `nominalUsePaths`, and the `StructuralNominalLeaves` capability that plan 287
   introduces. Milestone 4 also supplies the workspace evidence and ADR this plan amends.
@@ -255,10 +275,10 @@ that milestone rather than amending the frozen profile.
 ## Outcomes & Retrospective
 
 
-Final value/release assessment completed on 2026-09-17. Implementation has not started.
-The recommendation is staged delivery after Plan 287, with keyed maps remaining optional
-for the next feature release. Prior correctness findings have been applied to the plan;
-compiled behavior and release readiness remain unverified.
+Plan 287 completed on 2026-09-17 and this plan was refreshed against its landed resolver,
+context, codec, conformance, and fingerprint authorities before Milestone 1 implementation.
+The recommendation remains staged delivery, with keyed maps optional for the next feature
+release. Plan 288 compiled behavior and release readiness remain unverified.
 
 
 ## Context and Orientation
@@ -270,7 +290,7 @@ structural mapped type, resolved type graph, leaf, `TypeExprAlgebra`, conformanc
 language candidate, runtime capability) without repeating every definition. The facts below
 are the ones specific to this plan's five areas, verified on 2026-09-17.
 
-Plan 287 leaves these behaviours in place, each with a deliberate diagnostic: a declared
+The completed plan 287 leaves these behaviours in place, each with a deliberate diagnostic: a declared
 `enum` used as a structural leaf is `MappedNominalLeafUnsupported`; an expression path that
 ends at a nominal leaf is `ScalarPathInvalid`; a nominal leaf in router selection is rejected
 with the existing "must be a mapped structural record" message; and `projectionScalar` in
@@ -342,9 +362,10 @@ bindings and Keiro-owned ID admission), [ADR 13](../adr/0013-structural-coverage
 prefix change must surface in `diff`), [ADR 18](../adr/0018-runtime-semantics-use-capability-profiles-and-frozen-fold-identity.md)
 (explicit capabilities and fold-segment decisions), and
 [ADR 21](../adr/0021-direct-fields-have-independent-dsl-selector-and-wire-identities.md)
-(contract fields have selector and wire-key identities that this plan does not change). Plan
-287's Milestone 4 adds an ADR stating that nominal declarations are structural leaves; this
-plan amends it rather than adding a second one. Prior plans: 149 to 152 (IR-1 structural
+(contract fields have selector and wire-key identities that this plan does not change), and
+[ADR 46](../adr/0046-nominal-declarations-are-structural-leaves-with-keiro-owned-admission.md)
+(nominal declarations are structural leaves with Keiro-owned admission). This plan amends
+ADR 46 rather than adding a second nominal-leaf decision. Prior plans: 149 to 152 (IR-1 structural
 types; IR-1 asked for nested "existing DSL IDs and enums" and plan 149 deferred them on
 2026-07-28 because of a generated-module import cycle that plans 158 and 171 later removed),
 158 (consumer-bound nominals), 171 (TypeID-v7 domains, including `ContractIdDomainTypeIdV7`),
@@ -364,27 +385,36 @@ allowed on optional-presence fields, and `diff` reports a spelling or binding ch
 enum at every structural path that reaches it.
 
 In `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs`, add `NominalEnumLeaf !(NonEmpty (Name, Text))` to
-`NominalLeafKind`, add `checkEnumLeaf :: EnumDecl -> Either NominalLeafError NominalLeaf`
-beside the ID and scalar checkers from plan 287, include enum leaves in `nominalByName`, and
-delete the `TGUnsupportedNominalLeaf` path for enums (keep the constructor for any future
-category). Render the wire token `nominal-enum(<tag>;<tag>;...)` over the sorted wire
-spellings, matching how `wireShape` hashes a structural enum. In `Validate.hs`, make
-`referencedDefaultType`'s nominal arm return `DefaultEnum` with the leaf's constructor names
-for an enum leaf, so `kind as "kind" : TemplateKind optional on-missing=Draft` type-checks,
-while ID and scalar leaves keep the no-literal rule from plan 287. Leave
+`NominalLeafKind`, add `LeafEmptyEnum` and
+`checkEnumLeaf :: EnumDecl -> Either NominalLeafIssue NominalLeaf` beside plan 287's ID and
+scalar checkers, and have `NominalType.resolveNominalTypes` use it so ownership and binding
+validation stay centralized. Include enum leaves in `collectNominalLeaves` and stop placing
+ordinary enum references in `unsupportedNominalLeafKinds`; retain `TGUnsupportedNominalLeaf`
+because Milestone 4 uses it for enum map keys. Render the wire token
+`nominal-enum(<tag>;<tag>;...)` over the sorted wire spellings, matching how `wireShape` hashes
+a structural enum. Update every exhaustive `NominalLeafKind` match, including
+`Goldens.sampleNominalLeaf`, `Coverage.nominalBoundaryInventory`,
+`FoldFingerprint.nominalLeafRepresentationSegment`, `Scaffold` leaf generation/import
+planning, and `NominalType.resolvedFromLeaf`. In `Validate.hs`, make `defaultType`'s
+`TypeExprAlgebra.onNominal` arm return `DefaultEnum` with an enum leaf's constructor names,
+so `kind as "kind" : TemplateKind optional on-missing=Draft` type-checks. Do not change
+`referencedDefaultType`, which handles mapped declaration references rather than `RNominal`
+leaves. ID and scalar leaves keep the no-literal rule from plan 287. Leave
 `StructuralConformance.coverageExpression` without a new obligation for enum leaves and say
 why in a comment; the nominal declaration's own fixtures cover the arms. In `Harness.hs`,
-resolve a constructor default for an enum leaf through the leaf's constructors and the nominal
-module (generated) or representation module (consumer-bound) rather than a structural shape
-module. For a consumer-bound enum, both `Harness.missingExpectedValue` and
-`Scaffold.renderMissingDefault` must apply `nominalFromRepresentation <binding>` to that
-qualified representation constructor, producing the consumer domain value expected by the
-shape. Generated enum defaults use their domain constructor directly. Add the required
-binding and representation imports through the shared import planner, and the `NominalLeaves` module gains `encode<X>Leaf`/`parse<X>Leaf` for enums:
-a generated enum delegates to its generated `ToJSON`/`FromJSON` spelling table; a
-consumer-bound enum decodes the representation and applies `nominalFromRepresentation`, and
-encodes with `nominalToRepresentation` then the spelling table. Coverage lists the leaf with
-`kind: enum`. In `Diff.hs`, update the enum producer `enumDiff` (spelling added, removed,
+make `missingExpectedValue` emit the declared JSON string for an enum constructor because the
+harness compares re-encoded JSON. In `Scaffold.renderMissingDefault`, generated enum defaults
+use their domain constructor directly; consumer-bound defaults qualify the representation
+constructor and apply `nominalFromRepresentation <binding>` to produce the consumer domain
+value expected by the shape. Add the required nominal, binding, and representation imports
+through the shared import planner. The `NominalLeaves` module gains
+`encode<X>Leaf`/`parse<X>Leaf` for enums: a generated enum encodes with its generated
+`<lowerName>Text` function and decodes through explicit declared-wire-spelling cases; a
+consumer-bound enum encodes by applying `nominalToRepresentation` then the generated
+representation encoder and decodes through explicit representation spelling cases before
+applying `nominalFromRepresentation`. Do not delegate either case to generic derived Aeson,
+which is not the declared spelling authority. Coverage lists the leaf with `kind: enum`. In
+`Diff.hs`, update the enum producer `enumDiff` (spelling added, removed,
 renamed, binding changed) the same way plan 287 updates `idPairDiff` and `nominalScalarDiff`:
 derive nested contexts from the common root authority (`nominalUsePaths` over the key-free
 `RootRef`) rather than from `nominalUses`, keep existing direct-use classifications, and add a
@@ -436,9 +466,15 @@ selector and wire-key rules. In `emitContractGen` (`Scaffold.hs:3157` onward), l
 `CDeclaredId` to the declaration's Haskell type (generated module type or consumer type),
 encode with `<x>Text` or `KindID.toText (nominalToRepresentation ...)`, and decode through
 the same admission expression the `NominalLeaves` module uses for that declaration, importing
-that module from the contract module. Extend helper emission, type/import/package planning,
+that module from the contract module. The current `scaffoldContractWithLanguage` and
+`emitContractGen` path receives only a `Context` and `EffectiveLanguageContract`; thread the
+checked `Spec` or resolved graph through `scaffoldContractForService` and the service emit path
+so declared-ID lowering cannot rebuild nominal truth. Preserve the legacy wrapper's behavior
+for callers without a checked service. Extend helper emission, type/import/package planning,
 workspace attribution, binding explanations, and nominal conformance reachability to contract
-roots, including a contract-only fixture with no aggregates, queues, or mapped declarations.
+roots, including a contract-only fixture with no aggregates, queues, or mapped declarations;
+that fixture must still make its nominal leaf helper reachable even though no structural root
+otherwise references it.
 The prefix comes from the declaration, so
 `contractIdDomainContractFor` is consulted with it. Contract fields still may not be
 `Optional` or containers.
@@ -483,18 +519,25 @@ treats the path exactly as a direct nominal operand: equality against another op
 same declaration or a `LiteralId` of that declaration type-checks; a different declaration is
 `AggregateGuardTypeMismatch`; ordering is `AggregateGuardCapabilityUnsupported`. The
 `ResolvedScalarProjection` pointer already carries the wire keys; in `Scaffold.hs` extend
-`projectionScalar` and `projectionsForRoot` to emit a witness for a nominal leaf using the
-nominal's exact text domain (`idDomainTextPattern (typeIdV7Domain prefix)` for IDs, the
-finite spelling set for enums, the representation for scalars), reusing the projection
-rendering of `emitGeneratedNominalEquality`, and make `StructuralConformance`'s
+`projectionScalar`, `StructuralProjection`, and `projectionsForRoot` so a nominal projection
+stores and applies terminal encoder metadata rather than pretending the leaf is already
+primitive `Text`. Emit a witness over the nominal's exact text domain
+(`idDomainTextPattern (typeIdV7Domain prefix)` for IDs, the finite spelling set for enums,
+the representation for scalars), reusing the projection rendering of
+`emitGeneratedNominalEquality`, and make `StructuralConformance`'s
 `projectionAssertionDecls` assert `fieldWitnessAgrees` for it. In `RouterSelection.hs`, add
-`SelectionNominal !Name` to `SelectionScalarType`; `selectionTypeFromResolved` maps an ID leaf to it; router recipient/key validation accepts
-that ID-specific nominal type and renders canonical TypeID text. Keep nominal scalars and
-enums unsupported in router selection in this milestone; they do not all have ID text
-semantics. Update direct input nominal resolution consistently with nested row resolution; comparisons require both sides to be
-the same `SelectionNominal name` or an ID literal of that declaration. `RouterSelection`'s
-`canonicalResolvedType` includes the nominal name so the selection identity changes when a
-column's declaration changes.
+`SelectionNominal !Name` to `SelectionScalarType`; `selectionTypeFromResolved` maps an ID
+leaf to it, and `requireScalarType` accepts that ID-specific nominal type for recipient and
+key rather than demanding `SelectionText`. Render those values with the structural nominal
+leaf encoder's canonical text conversion. Keep nominal scalars and enums unsupported in
+router selection in this milestone; they do not all have ID text semantics. The checked
+router scalar AST currently has path, text, integral, and boolean cases but rejects
+`LiteralId`; add an ID-literal case carrying the declaration identity and literal text (or an
+equivalent checked parsed form), and cover its canonicalization, fingerprint, rendering, and
+imports. Update direct input nominal resolution consistently with nested row resolution;
+comparisons require both sides to be the same `SelectionNominal name` or an ID literal of that
+declaration. `RouterSelection`'s `canonicalResolvedType` includes the nominal name so the
+selection identity changes when a column's declaration changes.
 
 Extend `structural-nominal-leaves.keiro` with a register `activeTemplateId TemplateId =
 placeholder`, a transition guarded by `cmd.template.templateId == reg.activeTemplateId`, and
@@ -787,6 +830,11 @@ symbol used.
 ## Revision Notes
 
 
+- 2026-09-17: Refreshed after plan 287 completed at `539a0580` and began Milestone 1.
+  Replaced hypothetical resolver names with the landed `NominalLeaf`,
+  `collectNominalLeaves`, `RootRef`, `nominalUsePaths`, and `RNominal` authorities; corrected
+  enum default JSON/domain responsibilities and declared-spelling codecs; and made the later
+  contract checked-graph threading plus router ID-literal/projection work explicit.
 - 2026-09-17: Added identifier-keyed maps as Milestone 4 (the closure milestone became 5) after
   deciding the case is legitimate, recurring, and neutral to Keiki guarantees because `Map`
   is never an expression path leaf. Superseded the exclusion decision, recorded the keyed
