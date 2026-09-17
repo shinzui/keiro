@@ -21,15 +21,26 @@ provenance:
       at: 2026-09-17T13:21:18Z
       mode: "update"
       note: "Correct root-only nominal support, snapshot fingerprints, diff routing, qualification reuse, and validation commands"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-17T13:54:12Z
+      mode: "update"
+      note: "Final value and release assessment; prioritize nominal composition and distinguish candidate implementation from production closure"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
       at: 2026-09-17T13:22:03Z
       verdict: "changes-requested"
       note: "Original plan omitted root-only gating/emission, actual nested snapshot fingerprints, and independent diff producers; findings applied in this update"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-17T13:55:00Z
+      verdict: "comments"
+      note: "Final value/release assessment recommends Plan 287 first; reproduced existing refusal; runtime and publication gates remain pending"
 ---
 
 # Support nominal IDs inside structural mapped types
+
 
 This ExecPlan is a living document. The sections Progress, Surprises & Discoveries,
 Decision Log, and Outcomes & Retrospective must be kept up to date as work proceeds.
@@ -37,6 +48,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 
 
 ## Purpose / Big Picture
+
 
 Today a `.keiro` author can declare an identifier type once, for example
 `id TemplateId prefix=template`, and use it as a direct field of an aggregate command or
@@ -102,8 +114,34 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 `query input` and `query result` expressions (`query result = List TemplateId`).
 
 
+### Release recommendation (2026-09-17)
+
+
+Implement this plan first, through Milestone 4. It removes an observed consumer blocker
+while preserving the DSL's existing nominal types, total bindings, admission policy, and
+structural coverage. Queue/query roots belong in the same delivery because they use the
+same resolver and otherwise immediately recreate the composition gap. This is a substantial
+compiler change, so checker acceptance alone is insufficient: codec rejection tests,
+snapshot invalidation, exact impact locality, and workspace compilation are release gates.
+
+Do not make this feature a new prerequisite for the already scoped 0.17.0.0 remediation in
+[MasterPlan 43](../masterplans/43-address-the-rev-17-keiro-0-17-0-0-release-readiness-findings.md).
+Target the next feature release after that remediation. Package delivery and language
+publication are separate: code delivered while Language 6 remains `Candidate` is preview
+support. Claiming that IR-40's production need is delivered also requires a supported
+published language containing this capability and consumer migration/replay evidence.
+[Plan 285](285-harden-the-language-6-reaction-candidate-before-it-is-published.md) remains a
+prerequisite to publishing Language 6. If Language 6 publishes before implementation,
+allocate a successor capability/profile instead of editing its published entry.
+
+Plan 288 is useful follow-through, not a prerequisite to this plan. Its nested enums,
+declared contract IDs, and required-path expression support improve consistency; its keyed
+maps are a separate expansion and should not delay this delivery.
+
 ## Progress
 
+
+- [x] 2026-09-17: Final value/release assessment; reproduced the current nested-ID refusal and separated feature completion from production-language publication.
 - [x] 2026-09-17: Review graph, generator, diff, fingerprints, and completed Plan 228;
       revise missing paths and validation instructions.
 - [ ] M1–M3. Qualify isolated queue/query roots, nested binding fingerprint changes,
@@ -140,6 +178,11 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 
 ## Surprises & Discoveries
 
+
+- Final assessment, 2026-09-17: The existing built CLI still rejects the Purpose example
+  with `MappedUnresolvedName` at line 13 and `AggregateTypeUnknown` at line 20 (exit 1).
+  MasterPlan 43 explicitly excludes Language 6 publication; a package release alone cannot
+  establish supported production availability for this candidate-only feature.
 - Correctness review, 2026-09-17: `UsePath.root` requires a mapped-key-bearing `UseSite`,
   and `SemanticImpact` inventories are keyed by `MappedKey`. Direct queue/query nominal
   roots need a common key-free root identity and separate nominal dependency inventories.
@@ -153,6 +196,13 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 
 ## Decision Log
 
+
+- Decision: Recommend full Plan 287 delivery before Plan 288, without adding it to the
+  existing 0.17.0.0 tag prerequisites. Track production publication separately from
+  implementation completion and keep IR-40 open until its release evidence exists.
+  Rationale: The consumer blocker is concrete; candidate availability alone does not meet
+  the request for a supported strict production specification.
+  Date: 2026-09-17
 - Decision: Reuse the completed Plan 228 qualification infrastructure for nominal roots,
   retaining queue/query support here as assumed by Plan 288. Add isolated roots with no
   structural declarations to expose missing language gates, helpers, and dependency facts.
@@ -263,13 +313,17 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 
 ## Outcomes & Retrospective
 
+
 Correctness review and plan revision completed on 2026-09-17. Implementation has not
 started. The milestones now address direct-root completeness, actual snapshot identity,
 all nominal diff producers, and reuse of the existing cross-surface qualification gates.
-Runtime acceptance remains to be demonstrated during implementation.
+Runtime acceptance remains to be demonstrated during implementation. The final value assessment
+recommends implementation first in the next feature cycle; it does not approve a release or
+claim that candidate Language 6 is production-supported.
 
 
 ## Context and Orientation
+
 
 Keiro is a Haskell event-sourcing runtime. `keiro-dsl` is its specification language and
 compiler: an author writes a `.keiro` file, `keiro-dsl check` validates it, and
@@ -449,7 +503,9 @@ evidence that the current mutation script is healthy.
 
 ## Plan of Work
 
+
 ### Milestone 1: Resolve nominal leaves in the type graph and check them
+
 
 Scope: after this milestone, `keiro-dsl check` accepts `id` and `mapped nominal` names as
 leaves of structural type expressions at Language 6, rejects them with precise diagnostics
@@ -557,6 +613,7 @@ language diagnostic at Language 5; each negative fixture prints exactly its expe
 check still passes because no generated byte changed.
 
 ### Milestone 2: Generate shapes, codecs, bindings, and conformance for nominal leaves
+
 
 Scope: after this milestone, `keiro-dsl scaffold` produces compiling Haskell for a
 specification with nominal leaves, the generated codecs apply Keiro's admission at every
@@ -666,6 +723,7 @@ the combined fixture is not hiding absent helpers or type imports.
 
 ### Milestone 3: Coverage, semantic diff, and compatibility for nested nominals
 
+
 Scope: after this milestone, the coverage report and the strict production gate treat nominal
 leaves as structural, `diff` reports nested prefix, binding, and representation changes at
 every affected persisted path, snapshot invalidation follows nested IDs, and the historical
@@ -735,10 +793,11 @@ event path and a snapshot context for the `book` register; the binding mutant re
 
 ### Milestone 4: Workspace composition, documentation, changelog, and request closure
 
+
 Scope: after this milestone, a shared consumer-bound ID owned by one workspace member is
 usable in another member's structural record, regeneration is deterministic, the user
 documentation and changelog describe the capability and the migration from the opaque
-workaround, an ADR records the decision, and IR-40 is closed.
+workaround, an ADR records the decision, and IR-40 records implementation evidence and its remaining publication status.
 
 Extend `keiro-dsl/test/fixtures/workspace-nominals/` so that a structural record in each of the
 two member specs references the shared consumer-bound ID, regenerate the
@@ -772,7 +831,9 @@ structural leaves with Keiro-owned admission", recording the leaf representation
 type inside shapes, the wire token, the enum exclusion, supported queue/query roots, and the migration
 classification; add a one-line pointer under ADR 12's related decisions with a timestamp
 advance and `okf log add`. Set IR-40's frontmatter `status` to `in-progress` when Milestone 1
-starts and to `completed` with `completedAt` and a `resolution` line when this milestone ends,
+starts and to `completed` with `completedAt` and a `resolution` line only once this milestone and
+the supported-language release and consumer migration evidence are available. Otherwise retain
+`in-progress` and explicitly record implementation complete, publication/adoption pending;
 update its `## Status` section, and add `docs/improvement-requests/log.md` entries.
 
 Acceptance: `just verify` passes, which covers the Haskell build and all test suites, the
@@ -781,6 +842,7 @@ policies, and the conformance-corpus check.
 
 
 ## Concrete Steps
+
 
 Run everything from the repository root. The repository's development shell is
 `nix develop`; prefix commands with `nix develop -c` if `cabal` is not already on the path.
@@ -887,6 +949,7 @@ Intention: intention_01m2p79tjte5ftry3pdmgbqtjw
 
 ## Validation and Acceptance
 
+
 The plan is complete when all of the following are observable.
 
 The specification in the Purpose section, saved to a file, prints `OK` from
@@ -927,10 +990,14 @@ The workspace corpus compiles with one `ClaimId` owner reachable from two member
 structural records, and `cabal run -v0 keiro-dsl-corpus-regen -- check` reports no drift on
 two consecutive runs.
 
-`just verify` passes, IR-40 reads `completed`, and the new ADR validates strictly.
+`just verify` passes and the new ADR validates strictly. IR-40 records implementation evidence;
+it reads `completed` only with supported-language publication and consumer migration/replay
+evidence. Pending publication does not prevent this implementation plan completing, but does
+prevent claiming the production request is closed.
 
 
 ## Idempotence and Recovery
+
 
 All fixture, test, documentation, and changelog additions are additive and can be re-applied.
 The corpus driver refuses to run over a dirty corpus directory. Preserve existing changes
@@ -956,6 +1023,7 @@ Decision Log before switching.
 
 
 ## Interfaces and Dependencies
+
 
 `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs` must export, in addition to today's surface:
 
@@ -1024,6 +1092,7 @@ introduced.
 
 ## Revision Notes
 
+
 - 2026-09-17: Correctness review applied. Completed direct queue/query language gates,
   helper emission, key-free root paths, and nominal impact planning; added real nested
   binding fingerprint validation and all nominal diff producers. Reused completed Plan
@@ -1037,3 +1106,7 @@ introduced.
   superseded the corresponding Decision Log entry. The remaining gaps (nested enums, contract
   references to declared IDs, expressions and router selection over nested nominals, and the
   direct optional-ID diagnostic) are planned in `docs/plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md`.
+
+- 2026-09-17: Final value/release assessment recommends Plan 287 first, preserves the
+  existing 0.17 remediation scope, and separates implementation acceptance from supported
+  Language 6 publication and IR-40 production closure.
