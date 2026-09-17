@@ -13,6 +13,7 @@ default-extensions:
 other-modules:
     Conformance.StructuralNominals.Bindings
     Generated.StructuralNominalLeaves.BehaviorSourceMap
+    Generated.StructuralNominalLeaves.Nominal.Shape.Channel
     Generated.StructuralNominalLeaves.Nominals
     Generated.StructuralNominalLeaves.Nominals.Internal
     Generated.StructuralNominalLeaves.ProjectionCatalog

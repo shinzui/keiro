@@ -8,7 +8,8 @@ import Data.Text qualified as T
 import Keiro.Codec.IdDomain (parseKindIdV7Text)
 import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
 import Conformance.StructuralNominals.Bindings qualified as Bindings
-import Conformance.StructuralNominals.Domain (AccountNumber, ClaimId)
+import Conformance.StructuralNominals.Domain (AccountNumber, Channel, ClaimId)
+import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as ShapeChannel
 import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 
 encodeAccountNumberLeaf :: AccountNumber -> Value
@@ -18,6 +19,17 @@ encodeAccountNumberLeaf = toJSON . nominalToRepresentation Bindings.accountNumbe
 parseAccountNumberLeaf :: Value -> Parser AccountNumber
 parseAccountNumberLeaf value = nominalFromRepresentation Bindings.accountNumberBinding <$> parseJSON value
 {-# NOINLINE parseAccountNumberLeaf #-}
+
+encodeChannelLeaf :: Channel -> Value
+encodeChannelLeaf = String . ShapeChannel.channelRepresentationText . nominalToRepresentation Bindings.channelBinding
+{-# NOINLINE encodeChannelLeaf #-}
+
+parseChannelLeaf :: Value -> Parser Channel
+parseChannelLeaf = withText "Channel" $ \input -> case input of
+  "email" -> pure (nominalFromRepresentation Bindings.channelBinding ShapeChannel.Email)
+  "sms" -> pure (nominalFromRepresentation Bindings.channelBinding ShapeChannel.Sms)
+  unknown -> fail ("unknown Channel wire value " <> show unknown <> "; expected one of: email, sms")
+{-# NOINLINE parseChannelLeaf #-}
 
 encodeClaimIdLeaf :: ClaimId -> Value
 encodeClaimIdLeaf = String . KindID.toText . nominalToRepresentation Bindings.claimIdBinding
@@ -37,3 +49,14 @@ encodeTemplateIdLeaf = String . Nominals.templateIdText
 parseTemplateIdLeaf :: Value -> Parser Nominals.TemplateId
 parseTemplateIdLeaf = withText "TemplateId" (either (fail . T.unpack) pure . Nominals.parseTemplateId)
 {-# NOINLINE parseTemplateIdLeaf #-}
+
+encodeTemplateKindLeaf :: Nominals.TemplateKind -> Value
+encodeTemplateKindLeaf = String . Nominals.templateKindText
+{-# NOINLINE encodeTemplateKindLeaf #-}
+
+parseTemplateKindLeaf :: Value -> Parser Nominals.TemplateKind
+parseTemplateKindLeaf = withText "TemplateKind" $ \input -> case input of
+  "draft" -> pure Nominals.Draft
+  "published" -> pure Nominals.Published
+  unknown -> fail ("unknown TemplateKind wire value " <> show unknown <> "; expected one of: draft, published")
+{-# NOINLINE parseTemplateKindLeaf #-}

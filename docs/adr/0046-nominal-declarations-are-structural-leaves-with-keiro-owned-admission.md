@@ -1,7 +1,7 @@
 ---
 type: Architecture Decision Record
 title: Nominal declarations are structural leaves with Keiro-owned admission
-description: Candidate Language 6 preserves declared nominal domain types inside structural shapes while generated leaf codecs retain TypeID and scalar admission authority across aggregate, queue, and query roots.
+description: Candidate Language 6 preserves declared nominal domain types inside structural shapes while generated leaf codecs retain TypeID, scalar, and declared-enum spelling authority across aggregate, queue, and query roots.
 timestamp: 2026-09-17T17:16:09Z
 docId: ADR-46
 status: Accepted
@@ -28,7 +28,7 @@ coverage, fold identity, and compatibility reports must all observe the same nom
 ## Decision
 
 Candidate Language 6 adds the `StructuralNominalLeaves` runtime capability. A checked structural
-type expression may resolve a generated or consumer-bound `id`, or a consumer-bound
+type expression may resolve a generated or consumer-bound `id` or `enum`, or a consumer-bound
 `mapped nominal` scalar, as a nominal leaf. The resolved leaf carries its declaration name,
 representation, canonical identity, ownership, binding provenance, and ID-domain facts. The
 generated structural shape uses the nominal domain type itself: for example, a field declared
@@ -38,12 +38,16 @@ One context-owned generated `Structural.NominalLeaves` module supplies leaf enco
 to generated structural, aggregate, and queue codecs. Generated IDs use their existing checked
 API. Consumer-bound IDs parse through Keiro's canonical TypeID-v7 admission before their total
 nominal binding runs. Nominal scalars convert through their declared exact representation
-binding. Consumer JSON instances never become the leaf wire authority. Query contracts reuse
+binding. Generated enums encode through their generated declared-spelling function and parse
+only their declared wire spellings. Consumer-bound enums convert through their nominal binding
+and a generated representation whose parser and encoder own those same spellings. Consumer JSON
+instances never become the leaf wire authority. Query contracts reuse
 the checked nominal type and import authority but emit no JSON codec or leaf helper when they
 are the leaf's only consumer.
 
 The structural wire fingerprint token is `nominal-id(<prefix>,<domain>)` for an ID and
-`nominal-scalar(<representation>)` for a scalar. Binding symbols, binding versions, and Haskell
+`nominal-scalar(<representation>)` for a scalar; enums use
+`nominal-enum(<sorted-wire-spellings>)`. Binding symbols, binding versions, and Haskell
 source names remain build and snapshot provenance rather than wire identity. Nested event and
 register fold surfaces include representation, canonical identity, and consumer-binding facts;
 fixture-only changes remain outside fold identity.
@@ -55,10 +59,12 @@ rollout semantics. A nominal nested in a structural register does not acquire th
 declaration's `initial` obligation because the structural register's own initial constructs the
 complete value.
 
-Generated and consumer-bound nominal enums are excluded. A nested enumeration must use
-`mapped structural enum`, whose constructor/default and branch-coverage contract is already
-explicit. Refined scalars, typed map keys, and arbitrary expression projection through nested
-nominals remain outside this decision.
+An optional nominal enum leaf may name a constructor as its `on-missing` default. Generated
+defaults construct the domain enum directly; consumer-bound defaults construct the generated
+representation and cross the declared nominal binding. Nominal fixtures already cover the enum
+arms, so embedding the enum in a structural declaration does not create a duplicate per-field
+branch-coverage obligation. Refined scalars, typed map keys, and arbitrary expression projection
+through nested nominals remain outside this decision.
 
 Replacing `Text` or an opaque twin with a nominal leaf is conservatively
 `MappedFieldTypeChanged` at every affected root. A historical codec comparison over explicit
@@ -69,11 +75,11 @@ changes retain their existing nominal finding codes and now carry complete struc
 
 ## Consequences
 
-Natural consumer records can retain nominal IDs through nested records, unions, `Optional`,
-`List`, and text-keyed `Map` values without an opaque boundary. Optional absence remains JSON
-null while every present ID remains canonical non-null text. Shared workspace declarations have
-one consumer owner and one context codec authority even when member-owned structural records use
-the ID independently.
+Natural consumer records can retain nominal IDs and enums through nested records, unions,
+`Optional`, `List`, and text-keyed `Map` values without an opaque boundary. Optional absence
+remains JSON null while every present ID remains canonical non-null text and every enum uses its
+declared wire spelling. Shared workspace declarations have one consumer owner and one context
+codec authority even when member-owned structural records use the nominal independently.
 
 Coverage report schema 1 gains an append-only `nominalBoundaries` inventory. Nominal-only queue
 and query roots count as structural and do not fabricate opaque boundaries. Structural
@@ -89,3 +95,4 @@ not make IR-40 a supported production capability.
 - [ADR-12](0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md)
 - [IR-40](../improvement-requests/support-nominal-ids-inside-structural-mapped-types.md)
 - [ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md)
+- [ExecPlan 288](../plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md)

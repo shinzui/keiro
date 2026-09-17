@@ -154,6 +154,8 @@ nestedNominalUseSegment path leaf =
 nominalLeafRepresentationSegment :: NominalLeafKind -> Text
 nominalLeafRepresentationSegment = \case
   NominalIdLeaf prefix -> "id:" <> prefix
+  NominalEnumLeaf constructors ->
+    "enum:" <> T.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
   NominalScalarLeaf representation -> case representation of
     NominalText -> "Text"
     NominalInt -> "Int"

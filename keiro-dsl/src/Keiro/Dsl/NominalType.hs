@@ -27,7 +27,6 @@ module Keiro.Dsl.NominalType
   )
 where
 
-import Data.Char (isAscii, isDigit, isLower, isUpper, ord)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
@@ -37,7 +36,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.HaskellName (haskellKeywords)
 import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec)
@@ -208,15 +206,9 @@ resolveNominalTypes spec = do
       Left leafError -> (map leafIssueToNominalError (NE.toList ((.nominalLeafIssues) leafError)), Nothing)
       Right leaf -> ([], Just (resolvedFromLeaf leaf))
 
-    resolveEnum declaration =
-      let name = (.name) declaration
-          loc = (.loc) declaration
-          representation = NE.nonEmpty ((.ctors) declaration)
-          representationErrors = [NominalEmptyEnum name loc | representation == Nothing]
-          (bindingErrors, ownership) = resolveOwnership name loc ((.binding) declaration)
-          errors = representationErrors <> bindingErrors
-          value = ResolvedNominalType name <$> (EnumRepresentation <$> representation) <*> ownership <*> pure loc
-       in (errors, value <* guardNoErrors errors)
+    resolveEnum declaration = case checkEnumLeaf declaration of
+      Left leafError -> (map leafIssueToNominalError (NE.toList ((.nominalLeafIssues) leafError)), Nothing)
+      Right leaf -> ([], Just (resolvedFromLeaf leaf))
 
     resolveScalar declaration = case checkScalarLeaf declaration of
       Left leafError -> (map leafIssueToNominalError (NE.toList ((.nominalLeafIssues) leafError)), Nothing)
@@ -248,75 +240,13 @@ resolveNominalTypes spec = do
         (.initial) binding == Nothing
       ]
 
-resolveOwnership :: Name -> Loc -> Maybe NominalBindingDecl -> ([NominalTypeError], Maybe NominalOwnership)
-resolveOwnership _ _ Nothing = ([], Just GeneratedNominal)
-resolveOwnership name loc (Just binding) = resolveRequiredOwnership name loc binding
-
-resolveRequiredOwnership :: Name -> Loc -> NominalBindingDecl -> ([NominalTypeError], Maybe NominalOwnership)
-resolveRequiredOwnership name loc binding =
-  (errors, ConsumerNominal <$> checkedBinding <* guardNoErrors errors)
-  where
-    requiredErrors =
-      [NominalMissingIngredient name loc label | (label, missing) <- missingFacts, missing]
-    missingFacts =
-      [ ("haskell", (.haskell) binding == Nothing),
-        ("binding", (.binding) binding == Nothing),
-        ("binding-version", (.bindingVersion) binding == Nothing),
-        ("canonical-type", (.canonicalType) binding == Nothing),
-        ("fixtures", (.fixtures) binding == Nothing)
-      ]
-    haskellErrors = maybe [] (validateHaskellSource name loc) ((.haskell) binding)
-    (bindingErrors, checkedBindingName) = validateQualified name loc "binding" ((.binding) binding)
-    (fixtureErrors, checkedFixtures) = validateQualified name loc "fixtures" ((.fixtures) binding)
-    (initialErrors, checkedInitial) = validateOptionalQualified name loc "initial" ((.initial) binding)
-    (bindingVersionErrors, checkedBindingVersion) = validateBindingVersion name loc ((.bindingVersion) binding)
-    (canonicalErrors, checkedCanonical) = validateCanonical name loc ((.canonicalType) binding)
-    errors = requiredErrors <> haskellErrors <> bindingErrors <> fixtureErrors <> initialErrors <> bindingVersionErrors <> canonicalErrors
-    checkedBinding =
-      ConsumerNominalBinding
-        <$> (.haskell) binding
-        <*> checkedBindingName
-        <*> checkedBindingVersion
-        <*> checkedCanonical
-        <*> checkedFixtures
-        <*> pure checkedInitial
-
-validateHaskellSource :: Name -> Loc -> HaskellSource -> [NominalTypeError]
-validateHaskellSource name loc source =
-  [NominalInvalidHaskellSource name loc "package" | not (cabalPackageName ((.package) source))]
-    <> [NominalInvalidHaskellSource name loc "module" | not (moduleNameSafe ((.moduleName) source))]
-    <> [NominalInvalidHaskellSource name loc "type" | not (constructorSafe ((.valueType) source))]
-
-validateQualified :: Name -> Loc -> Text -> Maybe Text -> ([NominalTypeError], Maybe QualifiedValueName)
-validateQualified _ _ _ Nothing = ([], Nothing)
-validateQualified name loc category (Just value) =
-  case mkQualifiedValueName value of
-    Right checked | qualifiedValueSafe value -> ([], Just checked)
-    _ -> ([NominalInvalidQualifiedValue name loc category value], Nothing)
-
-validateOptionalQualified :: Name -> Loc -> Text -> Maybe Text -> ([NominalTypeError], Maybe QualifiedValueName)
-validateOptionalQualified = validateQualified
-
-validateBindingVersion :: Name -> Loc -> Maybe Text -> ([NominalTypeError], Maybe BindingVersion)
-validateBindingVersion _ _ Nothing = ([], Nothing)
-validateBindingVersion name loc (Just value) =
-  case mkBindingVersion value of
-    Right checked | identitySafe value -> ([], Just checked)
-    _ -> ([NominalInvalidIdentity name loc "binding-version" value], Nothing)
-
-validateCanonical :: Name -> Loc -> Maybe Text -> ([NominalTypeError], Maybe CanonicalTypeId)
-validateCanonical _ _ Nothing = ([], Nothing)
-validateCanonical name loc (Just value) =
-  case mkCanonicalTypeId value of
-    Right checked | identitySafe value -> ([], Just checked)
-    _ -> ([NominalInvalidIdentity name loc "canonical-type" value], Nothing)
-
 resolvedFromLeaf :: NominalLeaf -> ResolvedNominalType
 resolvedFromLeaf leaf =
   ResolvedNominalType
     { name = (.name) leaf,
       representation = case (.kind) leaf of
         NominalIdLeaf prefix -> IdRepresentation prefix
+        NominalEnumLeaf constructors -> EnumRepresentation constructors
         NominalScalarLeaf representation -> ScalarRepresentation representation,
       ownership = case (.ownership) leaf of
         GeneratedLeaf -> GeneratedNominal
@@ -331,6 +261,7 @@ leafIssueToNominalError = \case
   LeafInvalidQualifiedValue name loc category value -> NominalInvalidQualifiedValue name loc category value
   LeafInvalidIdentity name loc category value -> NominalInvalidIdentity name loc category value
   LeafInvalidIdPrefix name loc prefix reason -> NominalInvalidIdPrefix name loc prefix reason
+  LeafEmptyEnum name loc -> NominalEmptyEnum name loc
   LeafUnsupportedScalar name loc representation -> NominalUnsupportedScalar name loc representation
 
 rejectErrors :: [e] -> [a] -> Either (NonEmpty e) [a]
@@ -338,10 +269,6 @@ rejectErrors errors values = maybe (Right values) Left (NE.nonEmpty errors)
 
 rejectMany :: [e] -> Either (NonEmpty e) ()
 rejectMany errors = maybe (Right ()) Left (NE.nonEmpty errors)
-
-guardNoErrors :: [e] -> Maybe ()
-guardNoErrors [] = Just ()
-guardNoErrors _ = Nothing
 
 mappedName :: MappedDecl -> Name
 mappedName MappedStructural {msName = name} = name
@@ -370,40 +297,3 @@ nodeIdentityLocal = \case
   NProjectionOwner value -> ("projection-owner", (.name) value, (.loc) value)
   NWorkflow value -> ("workflow", (.id) value, workflowNodeLoc value)
   NOperation value -> ("operation", (.name) value, (.loc) value)
-
-cabalPackageName :: Text -> Bool
-cabalPackageName packageName = not (null components) && all validComponent components
-  where
-    components = T.splitOn "-" packageName
-    validComponent component = not (T.null component) && T.all asciiAlphaNum component && T.any asciiLetter component
-
-moduleNameSafe :: Text -> Bool
-moduleNameSafe moduleName = not (null components) && all constructorSafe components
-  where
-    components = T.splitOn "." moduleName
-
-qualifiedValueSafe :: Text -> Bool
-qualifiedValueSafe qualified = case reverse (T.splitOn "." qualified) of
-  value : reversedModule -> not (null reversedModule) && lowerIdentifierSafe value && all constructorSafe reversedModule
-  [] -> False
-
-constructorSafe :: Text -> Bool
-constructorSafe name = case T.uncons name of
-  Just (first, rest) -> asciiUpper first && T.all asciiAlphaNumOrUnderscore rest
-  Nothing -> False
-
-lowerIdentifierSafe :: Text -> Bool
-lowerIdentifierSafe name = case T.uncons name of
-  Just (first, rest) -> asciiLower first && T.all asciiAlphaNumOrUnderscore rest && name `Set.notMember` haskellKeywords
-  Nothing -> False
-
-identitySafe :: Text -> Bool
-identitySafe value = not (T.null (T.strip value)) && not (T.any asciiControl value)
-
-asciiUpper, asciiLower, asciiLetter, asciiAlphaNum, asciiAlphaNumOrUnderscore, asciiControl :: Char -> Bool
-asciiUpper c = isAscii c && isUpper c
-asciiLower c = isAscii c && isLower c
-asciiLetter c = asciiUpper c || asciiLower c
-asciiAlphaNum c = asciiLetter c || (isAscii c && isDigit c)
-asciiAlphaNumOrUnderscore c = asciiAlphaNum c || c == '_'
-asciiControl c = ord c < 32 || ord c == 127

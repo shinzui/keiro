@@ -1464,7 +1464,7 @@ emitStructuralNominalLeaves ctx leaves =
     aesonImports =
       ["Value (..)"]
         <> (if any isConsumerScalar leaves then ["parseJSON", "toJSON"] else [])
-        <> ["withText" | any isId leaves]
+        <> ["withText" | any (\leaf -> isId leaf || isEnum leaf) leaves]
     leafReferences leaf =
       nominalLeafTypeReference ctx leaf
         : case ((.kind) leaf, (.ownership) leaf) of
@@ -1472,13 +1472,26 @@ emitStructuralNominalLeaves ctx leaves =
             [ generatedNominalValueReference ("parse" <> (.name) leaf),
               generatedNominalValueReference (lowerFirst ((.name) leaf) <> "Text")
             ]
+          (NominalEnumLeaf constructors, GeneratedLeaf) ->
+            generatedNominalValueReference (lowerFirst ((.name) leaf) <> "Text")
+              : [generatedNominalConstructorReference constructor | (constructor, _) <- NE.toList constructors]
+          (NominalEnumLeaf constructors, ConsumerLeaf binding) ->
+            qualifiedValueReference ((.binding) binding)
+              : nominalRepresentationEncoderReference ctx (resolvedNominalFromLeaf leaf)
+              : [ nominalRepresentationConstructorReference ctx (resolvedNominalFromLeaf leaf) constructor
+                | (constructor, _) <- NE.toList constructors
+                ]
           (_, ConsumerLeaf binding) -> [qualifiedValueReference ((.binding) binding)]
           (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural leaf emission"
     generatedNominalValueReference occurrence =
       HaskellReference (generatedNominalModule ctx) occurrence ValueNamespace RequireQualified
+    generatedNominalConstructorReference occurrence =
+      HaskellReference (generatedNominalModule ctx) occurrence ConstructorNamespace RequireQualified
     emitLeaf leaf = case ((.kind) leaf, (.ownership) leaf) of
       (NominalIdLeaf _, GeneratedLeaf) -> emitGeneratedId leaf
       (NominalIdLeaf prefix, ConsumerLeaf binding) -> emitConsumerId leaf prefix binding
+      (NominalEnumLeaf constructors, GeneratedLeaf) -> emitGeneratedEnum leaf constructors
+      (NominalEnumLeaf constructors, ConsumerLeaf binding) -> emitConsumerEnum leaf constructors binding
       (NominalScalarLeaf _, ConsumerLeaf binding) -> emitConsumerScalar leaf binding
       (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural leaf emission"
     emitGeneratedId leaf =
@@ -1504,6 +1517,40 @@ emitStructuralNominalLeaves ctx leaves =
           "    Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
           "{-# NOINLINE " <> parseName leaf <> " #-}"
         ]
+    emitGeneratedEnum leaf constructors =
+      nl $
+        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+          encodeName leaf <> " = String . " <> generatedText leaf,
+          "{-# NOINLINE " <> encodeName leaf <> " #-}",
+          "",
+          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+          parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " $ \\input -> case input of"
+        ]
+          <> ["  " <> tshow wire <> " -> pure " <> generatedConstructor constructor | (constructor, wire) <- NE.toList constructors]
+          <> [ "  unknown -> " <> renderUnknownFailure ((.name) leaf <> " wire value") "unknown" (map snd (NE.toList constructors)),
+               "{-# NOINLINE " <> parseName leaf <> " #-}"
+             ]
+    emitConsumerEnum leaf constructors binding =
+      nl $
+        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+          encodeName leaf <> " = String . " <> representationEncoder leaf <> " . nominalToRepresentation " <> bindingValue binding,
+          "{-# NOINLINE " <> encodeName leaf <> " #-}",
+          "",
+          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+          parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " $ \\input -> case input of"
+        ]
+          <> [ "  "
+                 <> tshow wire
+                 <> " -> pure (nominalFromRepresentation "
+                 <> bindingValue binding
+                 <> " "
+                 <> representationConstructor leaf constructor
+                 <> ")"
+             | (constructor, wire) <- NE.toList constructors
+             ]
+          <> [ "  unknown -> " <> renderUnknownFailure ((.name) leaf <> " wire value") "unknown" (map snd (NE.toList constructors)),
+               "{-# NOINLINE " <> parseName leaf <> " #-}"
+             ]
     emitConsumerScalar leaf binding =
       nl
         [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
@@ -1517,6 +1564,9 @@ emitStructuralNominalLeaves ctx leaves =
     leafType = renderReferenceOrDie importPlan . nominalLeafTypeReference ctx
     generatedParser leaf = renderReferenceOrDie importPlan (generatedNominalValueReference ("parse" <> (.name) leaf))
     generatedText leaf = renderReferenceOrDie importPlan (generatedNominalValueReference (lowerFirst ((.name) leaf) <> "Text"))
+    generatedConstructor = renderReferenceOrDie importPlan . generatedNominalConstructorReference
+    representationEncoder = renderReferenceOrDie importPlan . nominalRepresentationEncoderReference ctx . resolvedNominalFromLeaf
+    representationConstructor leaf = renderReferenceOrDie importPlan . nominalRepresentationConstructorReference ctx (resolvedNominalFromLeaf leaf)
     bindingValue = renderReferenceOrDie importPlan . qualifiedValueReference . (.binding)
     encodeName leaf = "encode" <> (.name) leaf <> "Leaf"
     parseName leaf = "parse" <> (.name) leaf <> "Leaf"
@@ -1524,7 +1574,8 @@ emitStructuralNominalLeaves ctx leaves =
     isGeneratedId leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalIdLeaf {}, GeneratedLeaf) -> True; _ -> False
     isConsumerId leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalIdLeaf {}, ConsumerLeaf {}) -> True; _ -> False
     isConsumerScalar leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalScalarLeaf {}, ConsumerLeaf {}) -> True; _ -> False
-    isId leaf = case (.kind) leaf of NominalIdLeaf {} -> True; NominalScalarLeaf {} -> False
+    isId leaf = case (.kind) leaf of NominalIdLeaf {} -> True; NominalEnumLeaf {} -> False; NominalScalarLeaf {} -> False
+    isEnum leaf = case (.kind) leaf of NominalEnumLeaf {} -> True; NominalIdLeaf {} -> False; NominalScalarLeaf {} -> False
 
 generatedNominalInternalModule :: Context -> Text
 generatedNominalInternalModule ctx = generatedNominalModule ctx <> ".Internal"
@@ -2301,6 +2352,20 @@ nominalLeafTypeReference :: Context -> NominalLeaf -> HaskellReference
 nominalLeafTypeReference ctx leaf = case (.ownership) leaf of
   GeneratedLeaf -> HaskellReference (generatedNominalModule ctx) ((.name) leaf) TypeNamespace RequireQualified
   ConsumerLeaf binding -> haskellTypeReference ((.haskell) binding)
+
+resolvedNominalFromLeaf :: NominalLeaf -> ResolvedNominalType
+resolvedNominalFromLeaf leaf =
+  ResolvedNominalType
+    { name = (.name) leaf,
+      representation = case (.kind) leaf of
+        NominalIdLeaf prefix -> IdRepresentation prefix
+        NominalEnumLeaf constructors -> EnumRepresentation constructors
+        NominalScalarLeaf representation -> ScalarRepresentation representation,
+      ownership = case (.ownership) leaf of
+        GeneratedLeaf -> GeneratedNominal
+        ConsumerLeaf binding -> ConsumerNominal binding,
+      loc = (.loc) leaf
+    }
 
 consumerNominalLeafTypeReference :: Context -> NominalLeaf -> HaskellReference
 consumerNominalLeafTypeReference ctx leaf = case (.ownership) leaf of
@@ -5020,9 +5085,8 @@ emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPai
       Set.unions (map consumerTypeReferences plans)
         <> Set.fromList
           [ consumerNominalLeafTypeReference ctx leaf
-          | planValue <- plans,
-            name <- Set.toAscList ((.nominalDependencies) planValue),
-            Just leaf@NominalLeaf {ownership = GeneratedLeaf} <- [Map.lookup name ((.nominalLeaves) graph)]
+          | expression <- expressions,
+            leaf@NominalLeaf {ownership = GeneratedLeaf} <- directNominalLeaves expression
           ]
     reservedNames = Set.fromList [queryInputType, queryResultType, "Map", "Natural", "Text", "UTCTime", "Value"]
     importPlan = planImportsOrDie queryContractModule reservedNames references
@@ -5045,6 +5109,22 @@ emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPai
         (error . ("validated read-model consumer type planning failed: " <>) . show)
         id
         (planConsumerType graph expression)
+    directNominalLeaves =
+      foldTypeExpr
+        TypeExprAlgebra
+          { onText = [],
+            onInt = [],
+            onInteger = [],
+            onBool = [],
+            onNatural = [],
+            onTime = [],
+            onJson = [],
+            onOptional = id,
+            onList = id,
+            onMap = id,
+            onRef = const [],
+            onNominal = pure
+          }
     renderType expression =
       unHaskellTypeOccurrence $
         either
@@ -6632,7 +6712,7 @@ emitCodec a =
          ]
       ++ ["import Data.KindID qualified as KindID" | hasConsumerNominalIdCodec a]
       ++ ["import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)" | hasEnforcedConsumerNominalIdCodec a]
-      ++ ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | hasConsumerNominalCodec a]
+      ++ codecNominalRuntimeImports a
       ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructuralMappedCodec a]
       ++ [ "import Keiro.Codec (Codec (..), EventType (..))",
            upcasterImport a
@@ -6914,6 +6994,25 @@ codecUsesOptionalFieldHelper aggregate =
 
 hasConsumerNominalCodec :: Agg -> Bool
 hasConsumerNominalCodec = not . null . codecConsumerNominals
+
+codecNominalRuntimeImports :: Agg -> [Text]
+codecNominalRuntimeImports aggregate = case (hasConsumerNominalCodec aggregate, hasConsumerNominalDefault aggregate) of
+  (True, _) -> ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)"]
+  (False, True) -> ["import Keiro.Codec.Nominal (nominalFromRepresentation)"]
+  (False, False) -> []
+
+hasConsumerNominalDefault :: Agg -> Bool
+hasConsumerNominalDefault aggregate =
+  any
+    hasDefault
+    [ field
+    | ResolvedStructural _ (RRecord _ _ fields) <- codecMappedDeclarations aggregate,
+      field <- fields
+    ]
+  where
+    hasDefault field = case ((.valueType) field, (.onMissing) field) of
+      (RNominal NominalLeaf {kind = NominalEnumLeaf {}, ownership = ConsumerLeaf {}}, Just OmCtor {}) -> True
+      _ -> False
 
 hasConsumerNominalIdCodec :: Agg -> Bool
 hasConsumerNominalIdCodec aggregate =
@@ -7208,7 +7307,7 @@ codecImportPlan aggregate =
   planImportsOrDie
     ((.genPrefix) aggregate <> ".Codec")
     (Set.fromList [(.name) aggregate <> "Event"])
-    (Set.fromList (nominalReferences <> mappedReferences <> nominalRepresentationReferences <> shapeReferences))
+    (Set.fromList (nominalReferences <> mappedReferences <> nominalRepresentationReferences <> nominalDefaultReferences <> shapeReferences))
   where
     nominalReferences =
       [ reference
@@ -7238,6 +7337,27 @@ codecImportPlan aggregate =
               | (constructor, _) <- NE.toList constructors
               ]
       ]
+    nominalDefaultReferences =
+      [ reference
+      | ResolvedStructural _ shape <- codecMappedDeclarations aggregate,
+        field <- case shape of RRecord _ _ fields -> fields; REnum {} -> []; RUnion {} -> [],
+        Just (leaf, constructor) <- [nominalConstructorDefault field],
+        reference <- case (.ownership) leaf of
+          GeneratedLeaf ->
+            [ HaskellReference
+                (generatedNominalModule ((.context) aggregate))
+                constructor
+                ConstructorNamespace
+                RequireQualified
+            ]
+          ConsumerLeaf binding ->
+            [ qualifiedValueReference ((.binding) binding),
+              nominalRepresentationConstructorReference ((.context) aggregate) (resolvedNominalFromLeaf leaf) constructor
+            ]
+      ]
+    nominalConstructorDefault field = case ((.valueType) field, (.onMissing) field) of
+      (RNominal leaf@NominalLeaf {kind = NominalEnumLeaf {}}, Just (OmCtor constructor)) -> Just (leaf, constructor)
+      _ -> Nothing
     shapeReferences =
       [ reference
       | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate,
@@ -7493,6 +7613,17 @@ renderMissingDefault importPlan ctx graph expression = \case
     RRef key -> case Map.lookup key ((.declarations) graph) of
       Just (ResolvedStructural declaration _) -> renderReferenceOrDie importPlan (constructorReference (structuralShapeModule ctx ((.name) declaration)) constructor)
       _ -> constructor
+    RNominal leaf@NominalLeaf {kind = NominalEnumLeaf {}} -> case (.ownership) leaf of
+      GeneratedLeaf ->
+        renderReferenceOrDie
+          importPlan
+          (HaskellReference (generatedNominalModule ctx) constructor ConstructorNamespace RequireQualified)
+      ConsumerLeaf binding ->
+        "(nominalFromRepresentation "
+          <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) binding))
+          <> " "
+          <> renderReferenceOrDie importPlan (nominalRepresentationConstructorReference ctx (resolvedNominalFromLeaf leaf) constructor)
+          <> ")"
     _ -> constructor
 
 objectEntries :: [Text] -> [Text]

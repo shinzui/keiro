@@ -11,7 +11,8 @@ import Data.KindID qualified as KindID
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
-import Generated.StructuralNominalLeaves.Nominals (TemplateId, parseTemplateId)
+import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as ChannelRepresentation
+import Generated.StructuralNominalLeaves.Nominals (TemplateId, TemplateKind (..), parseTemplateId)
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef qualified as ShapeTemplateRef
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState qualified as ShapeTemplateState
@@ -35,9 +36,27 @@ claimId = case KindID.parseText @"claim" claimIdText of
 accountNumber :: AccountNumber
 accountNumber = AccountNumber "account-007"
 
+channelBinding :: NominalBinding Channel ChannelRepresentation.ChannelRepresentation
+channelBinding =
+  NominalBinding
+    { nominalToRepresentation = \case
+        EmailChannel -> ChannelRepresentation.Email
+        SmsChannel -> ChannelRepresentation.Sms,
+      nominalFromRepresentation = \case
+        ChannelRepresentation.Email -> EmailChannel
+        ChannelRepresentation.Sms -> SmsChannel
+    }
+
+channelFixtures :: NominalFixtureCases Channel
+channelFixtures =
+  NominalFixtureCases
+    ( NominalFixture "email" (String "email") EmailChannel
+        :| [NominalFixture "sms" (String "sms") SmsChannel]
+    )
+
 stateWithoutHolder, stateWithHolder :: TemplateState
-stateWithoutHolder = TemplateState templateId1 Nothing accountNumber
-stateWithHolder = TemplateState templateId2 (Just claimId) (AccountNumber "account-008")
+stateWithoutHolder = TemplateState templateId1 Nothing accountNumber EmailChannel Draft EmailChannel
+stateWithHolder = TemplateState templateId2 (Just claimId) (AccountNumber "account-008") SmsChannel Published SmsChannel
 
 templateStateFixtures :: FixtureCases TemplateState
 templateStateFixtures =
@@ -49,8 +68,10 @@ templateStateFixtures =
 templateStateBinding :: StructuralBinding TemplateState ShapeTemplateState.TemplateStateShape
 templateStateBinding =
   StructuralBinding
-    { bindingToShape = \(TemplateState templateId holder account) -> ShapeTemplateState.TemplateState templateId holder account,
-      bindingFromShape = \(ShapeTemplateState.TemplateState templateId holder account) -> TemplateState templateId holder account
+    { bindingToShape = \(TemplateState templateId holder account channel kind fallbackChannel) ->
+        ShapeTemplateState.TemplateState templateId holder account channel kind fallbackChannel,
+      bindingFromShape = \(ShapeTemplateState.TemplateState templateId holder account channel kind fallbackChannel) ->
+        TemplateState templateId holder account channel kind fallbackChannel
     }
 
 templateRefFixtures :: FixtureCases TemplateRef
@@ -58,6 +79,7 @@ templateRefFixtures =
   FixtureCases
     ( ("by-id", ById templateId1)
         :| [ ("by-account", ByAccount accountNumber),
+             ("by-channel", ByChannel EmailChannel),
              ("unknown", Unknown)
            ]
     )
@@ -68,10 +90,12 @@ templateRefBinding =
     { bindingToShape = \case
         ById value -> ShapeTemplateRef.ById value
         ByAccount value -> ShapeTemplateRef.ByAccount value
+        ByChannel value -> ShapeTemplateRef.ByChannel value
         Unknown -> ShapeTemplateRef.Unknown,
       bindingFromShape = \case
         ShapeTemplateRef.ById value -> ById value
         ShapeTemplateRef.ByAccount value -> ByAccount value
+        ShapeTemplateRef.ByChannel value -> ByChannel value
         ShapeTemplateRef.Unknown -> Unknown
     }
 

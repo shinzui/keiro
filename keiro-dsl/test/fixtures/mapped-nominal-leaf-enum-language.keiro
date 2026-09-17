@@ -1,0 +1,15 @@
+language keiro-dsl 5
+context mapped-nominal-leaf-enum-language
+
+enum TemplateKind { Draft=draft Published=published }
+
+mapped structural record TemplateState {
+  haskell package=example-core module=Example.Domain type=TemplateState
+  binding = "Example.Bindings.templateStateBinding"
+  binding-version = "1"
+  canonical-type = "example.TemplateState.v1"
+  fixtures = "Example.Bindings.templateStateFixtures"
+  wire object constructor=TemplateState unknown-fields=reject {
+    kind as "kind" : TemplateKind required
+  }
+}

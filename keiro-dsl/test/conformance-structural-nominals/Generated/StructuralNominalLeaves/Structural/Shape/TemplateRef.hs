@@ -2,10 +2,11 @@
 module Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef (TemplateRefShape (..)) where
 
 import GHC.Generics (Generic)
-import Conformance.StructuralNominals.Domain (AccountNumber)
+import Conformance.StructuralNominals.Domain (AccountNumber, Channel)
 import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 
 data TemplateRefShape = ById !Nominals.TemplateId
   | ByAccount !AccountNumber
+  | ByChannel !Channel
   | Unknown
   deriving stock (Eq, Generic, Show)

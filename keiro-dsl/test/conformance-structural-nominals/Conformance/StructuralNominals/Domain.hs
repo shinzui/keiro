@@ -12,7 +12,7 @@ import Data.Map.Strict (Map)
 import Data.Proxy (Proxy)
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Generated.StructuralNominalLeaves.Nominals (TemplateId)
+import Generated.StructuralNominalLeaves.Nominals (TemplateId, TemplateKind)
 import Keiki.Shape (CanonicalTypeName (..))
 
 newtype ClaimId = ClaimId {unClaimId :: KindID "claim"}
@@ -37,10 +37,21 @@ instance CanonicalTypeName AccountNumber where
   canonicalTypeName :: Proxy AccountNumber -> Text
   canonicalTypeName _ = "conformance.structural-nominals.AccountNumber.v1"
 
+data Channel = EmailChannel | SmsChannel
+  deriving stock (Eq, Generic, Ord, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalTypeName Channel where
+  canonicalTypeName :: Proxy Channel -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.Channel.v1"
+
 data TemplateState = TemplateState
   { templateId :: !TemplateId,
     holder :: !(Maybe ClaimId),
-    account :: !AccountNumber
+    account :: !AccountNumber,
+    channel :: !Channel,
+    kind :: !TemplateKind,
+    fallbackChannel :: !Channel
   }
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)
@@ -52,6 +63,7 @@ instance CanonicalTypeName TemplateState where
 data TemplateRef
   = ById !TemplateId
   | ByAccount !AccountNumber
+  | ByChannel !Channel
   | Unknown
   deriving stock (Eq, Generic, Show)
   deriving anyclass (FromJSON, ToJSON)

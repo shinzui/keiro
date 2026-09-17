@@ -13,7 +13,7 @@ id ClaimId prefix=claim using {
 
 enum TemplateKind { Draft=draft Published=published }
 
-enum Channel { Email=email Sms=sms } using {
+enum Channel { Email=electronic_mail Sms=sms } using {
   haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=Channel
   binding = "Conformance.StructuralNominals.Bindings.channelBinding"
   binding-version = "1"

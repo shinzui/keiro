@@ -1602,7 +1602,10 @@ missingExpectedValue aggregate field = case (.onMissing) field of
         Just entry -> "Aeson.String " <> tshow ((.tag) entry)
         Nothing -> error "Keiro.Dsl.Harness: checked enum default constructor is missing"
       _ -> error "Keiro.Dsl.Harness: checked constructor default does not target an enum"
-    _ -> error "Keiro.Dsl.Harness: checked constructor default does not target a reference"
+    (_, RNominal NominalLeaf {kind = NominalEnumLeaf constructors}) -> case lookup constructor (NE.toList constructors) of
+      Just wire -> "Aeson.String " <> tshow wire
+      Nothing -> error "Keiro.Dsl.Harness: checked nominal enum default constructor is missing"
+    _ -> error "Keiro.Dsl.Harness: checked constructor default does not target an enum"
   Nothing -> error "Keiro.Dsl.Harness: checked optional field lacks an on-missing policy"
 
 unknownFieldAssertion :: Agg -> StructuralDecl -> UnknownFields -> Text

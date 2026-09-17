@@ -62,13 +62,14 @@ defaults, and unknown-field policy; generated code executes that declaration.
 A total `StructuralBinding` only converts between the consumer value and the
 generated private shape.
 
-Candidate Language 6 permits generated or consumer-bound `id` declarations and
-consumer-bound `mapped nominal` scalars as leaves of structural mappings. The
-private shape retains the nominal domain type. A generated
+Candidate Language 6 permits generated or consumer-bound `id` and `enum`
+declarations and consumer-bound `mapped nominal` scalars as leaves of structural
+mappings. The private shape retains the nominal domain type. A generated
 `Structural.NominalLeaves` parser applies canonical TypeID-v7 prefix admission
-or the declared scalar representation before the total nominal binding runs;
-it never delegates that leaf to an arbitrary consumer Aeson instance. Nominal
-enums remain excluded from this leaf form and use `mapped structural enum`.
+or the declared scalar/enum representation before the total nominal binding
+runs. Enum encoders and parsers use the declaration's exact wire spellings, and
+optional enum leaves may use a declared constructor as their missing-field
+default. No leaf delegates to an arbitrary consumer Aeson instance.
 
 Use `mapped opaque` when the consumer codec must remain authoritative or the
 conversion from every declared shape cannot be total. Keiro delegates to the

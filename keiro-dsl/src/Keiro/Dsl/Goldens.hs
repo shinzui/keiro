@@ -254,6 +254,7 @@ sampleMappedExpression graph =
 sampleNominalLeaf :: NominalLeaf -> Value
 sampleNominalLeaf leaf = case (.kind) leaf of
   NominalIdLeaf prefix -> String (prefix <> "_01h455vb4pex5vsknk084sn02q")
+  NominalEnumLeaf constructors -> String (snd (NE.head constructors))
   NominalScalarLeaf NominalText -> String "sample"
   NominalScalarLeaf NominalInt -> Number 1
   NominalScalarLeaf NominalNatural -> Number 1

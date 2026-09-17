@@ -55,8 +55,9 @@ Repository implementation and conformance evidence completed on 2026-09-17 under
 Language 6 now resolves generated and consumer-bound IDs plus `mapped nominal` scalars as
 structural leaves, preserves nominal Haskell types, applies Keiro-owned TypeID/scalar admission,
 and carries their paths through coverage, snapshot identity, semantic diff, compiled single-spec
-and workspace corpora, and historical codec comparison. Nominal enums receive a deliberate
-unsupported diagnostic and continue to use `mapped structural enum`.
+and workspace corpora, and historical codec comparison. ExecPlan 288 Milestone 1 extends the
+same structural-leaf authority to generated and consumer-bound nominal enums, including declared
+wire spellings and constructor defaults.
 
 The request remains **in progress** because implementation is available only through the
 unpublished Language 6 candidate. Supported-language publication and downstream consumer

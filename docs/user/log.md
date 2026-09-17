@@ -1,6 +1,8 @@
 # Keiro User Documentation Log
 
 ## 2026-09-17
+* **Update**: Document generated and consumer-bound enum structural leaves, exact declared
+wire spellings, constructor defaults, and declaration-scoped arm coverage.
 * **Update**: Document surface-specific nominal leaf consequences and historical parity evidence during mapped adoption.
 * **Update**: Document nominal leaf codec authority and compatibility duties for opaque-or-Text migrations.
 * **Update**: Document candidate Language 6 nominal structural leaves, generated admission and conformance, coverage and diff contexts, and opaque-ID migration.

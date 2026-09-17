@@ -9,6 +9,9 @@ requestId: IR-1
 status: completed
 origin: mori://shinzui/mori
 plan: docs/masterplans/25-structural-consumer-type-ergonomics-and-soundness-preserving-adoption-for-keiro-dsl.md
+relatedPlans:
+  - docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md
+  - docs/plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md
 reviews:
   - kind: model
     reviewer: codex
@@ -49,6 +52,11 @@ and its completed child plans delivered the resolved structural/opaque type grap
 generated codecs, conformance harness, usage-aware diffing, binding ergonomics, and documentation.
 Keiro/keiro-core/keiro-dsl 0.4.0.1 and Keiki 0.4.0.0 supplied the first authoritative published
 line with matching upstream tags.
+
+Plans 287 and 288 subsequently delivered the nominal-composition item that this request had
+deferred: generated and consumer-bound IDs, enums, and nominal scalars now remain typed leaves
+inside structural declarations under candidate Language 6, with Keiro-owned admission and wire
+spelling authority. This is preview capability until a language containing it is published.
 
 Mori's historical
 `mori://shinzui/mori/plans/171-extend-keiro-dsl-for-structural-mori-domain-contracts` was cancelled

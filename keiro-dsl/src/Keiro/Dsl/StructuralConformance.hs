@@ -550,6 +550,10 @@ recordFieldObligation _rendering _shapeModule field = case (.valueType) field of
     [ "any (isNothing . " <> selector <> ") shapes",
       "any (isJust . " <> selector <> ") shapes"
     ]
+  -- A nominal enum's own NominalFixtureCases prove every representation arm.
+  -- Requiring each enclosing structural fixture set to repeat those arms adds
+  -- no new binding evidence and scales fixture burden with every embedding.
+  RNominal NominalLeaf {kind = NominalEnumLeaf {}} -> []
   _ -> []
   where
     selector = "(." <> (.haskell) field <> ")"

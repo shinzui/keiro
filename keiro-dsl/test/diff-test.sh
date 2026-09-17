@@ -474,6 +474,20 @@ else
   echo "FAIL: binding change omitted a nested structural nominal path"; exit 1
 fi
 
+cp "$FIX/structural-nominal-leaves-enum-spelling.keiro" "$NOMINAL/service.keiro"
+if output="$("$EXE" diff --since HEAD --explain "$NOMINAL/service.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: nested nominal enum spelling change did not block"; exit 1
+elif [[ "$output" == *"[EnumWireSpellingChanged]"* \
+    && "$output" == *"TemplateCatalog event TemplateRecorded .state : TemplateState .channel : Channel"* \
+    && "$output" == *"TemplateCatalog register book : TemplateBook .templates [] : TemplateState .channel : Channel"* ]]; then
+  echo "$output"
+  echo "ok: enum spelling change carries nested persisted paths"
+else
+  echo "$output"
+  echo "FAIL: enum spelling change omitted a nested structural nominal path"; exit 1
+fi
+
 TEXT_MIGRATION="$DEMO/structural-nominal-text-migration"
 OPAQUE_MIGRATION="$DEMO/structural-nominal-opaque-migration"
 mkdir -p "$TEXT_MIGRATION" "$OPAQUE_MIGRATION"

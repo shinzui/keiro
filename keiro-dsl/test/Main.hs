@@ -1779,6 +1779,7 @@ main = hspec $ do
             "language-zero.keiro",
             "mapped-nominal-leaf-default.keiro",
             "mapped-nominal-leaf-enum.keiro",
+            "mapped-nominal-leaf-enum-language.keiro",
             "mapped-nominal-leaf-language.keiro",
             "mapped-nominal-leaf.keiro",
             "mapped-nominal-query-only-enum.keiro",
@@ -1797,6 +1798,7 @@ main = hspec $ do
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
             "projection-owner-multi-query.keiro",
+            "structural-nominal-leaves-enum-spelling.keiro",
             "structural-nominal-leaves-binding-change.keiro",
             "structural-nominal-leaves-opaque-to-nominal.keiro",
             "structural-nominal-leaves-prefix-change.keiro",
@@ -4261,6 +4263,8 @@ main = hspec $ do
         `shouldContain` ["workqueue template_work payload .templateId : TemplateId"]
       map (.ownership) ((.nominalBoundaries) report)
         `shouldContain` ["generated", "consumer"]
+      map (.kind) ((.nominalBoundaries) report)
+        `shouldContain` ["enum"]
       map (.canonicalType) [boundary | boundary <- (.nominalBoundaries) report, (.nominal) boundary == "ClaimId"]
         `shouldSatisfy` all (== Just "conformance.structural-nominals.ClaimId.v1")
     it "reports mapped private-event roots and consumer-json register boundaries without a percentage" $ do
@@ -4441,18 +4445,18 @@ main = hspec $ do
               ("mapped-import-conflict.keiro", MappedImportConflict),
               ("mapped-illtyped-default.keiro", MappedDefaultIllTyped),
               ("mapped-nominal-leaf-language.keiro", MappedNominalLeafRequiresLanguage),
-              ("mapped-nominal-leaf-enum.keiro", MappedNominalLeafUnsupported),
+              ("mapped-nominal-leaf-enum-language.keiro", MappedNominalLeafRequiresLanguage),
               ("mapped-nominal-leaf-default.keiro", MappedDefaultIllTyped),
               ("mapped-nominal-queue-only-language.keiro", MappedNominalLeafRequiresLanguage),
-              ("mapped-nominal-queue-only-enum.keiro", MappedNominalLeafUnsupported),
               ("mapped-guard.keiro", AggregateExpressionOperatorUnsupported)
             ]
       forM_ cases $ \(fixture, expected) ->
         errorCodesOf ("test/fixtures/" <> fixture) `shouldReturn` [expected]
       errorCodesOf "test/fixtures/mapped-nominal-query-only-language.keiro"
         `shouldReturn` replicate 2 MappedNominalLeafRequiresLanguage
-      errorCodesOf "test/fixtures/mapped-nominal-query-only-enum.keiro"
-        `shouldReturn` replicate 2 MappedNominalLeafUnsupported
+      errorCodesOf "test/fixtures/mapped-nominal-leaf-enum.keiro" `shouldReturn` []
+      errorCodesOf "test/fixtures/mapped-nominal-queue-only-enum.keiro" `shouldReturn` []
+      errorCodesOf "test/fixtures/mapped-nominal-query-only-enum.keiro" `shouldReturn` []
       errorCodesOf "test/fixtures/mapped-nominal-queue-only.keiro" `shouldReturn` []
       errorCodesOf "test/fixtures/mapped-nominal-query-only.keiro" `shouldReturn` []
     it "keeps Time and Natural in Keiki's curated comparison set" $ do
@@ -4655,7 +4659,7 @@ main = hspec $ do
           throughArm = mappedSpec [completeStructural "A" (ShapeUnion (TaggedObject "tag" "contents" RejectUnknown) [WireArm "Again" "again" (Just (TRef "A")) noLoc])]
       map (hasTypeGraphError isRecursive . resolveTypeGraph) [direct, mutual, wrapped, throughArm]
         `shouldBe` replicate 4 True
-    it "resolves existing ids as nominal leaves while keeping enums unsupported" $ do
+    it "resolves existing ids and enums as nominal leaves" $ do
       let withId =
             (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingId"])])
               { ids = [IdDecl "ExistingId" "id" Nothing noLoc]
@@ -4666,7 +4670,10 @@ main = hspec $ do
               }
       graph <- shouldResolveTypeGraph withId
       Map.lookup (MappedKey "A") ((.nominalReachability) graph) `shouldBe` Just (Set.singleton "ExistingId")
-      resolveTypeGraph withEnum `shouldSatisfy` hasTypeGraphError isUnsupportedNominal
+      enumGraph <- shouldResolveTypeGraph withEnum
+      Map.lookup (MappedKey "A") ((.nominalReachability) enumGraph) `shouldBe` Just (Set.singleton "ExistingEnum")
+      ((.kind) <$> Map.lookup "ExistingEnum" ((.nominalLeaves) enumGraph))
+        `shouldBe` Just (NominalEnumLeaf (("One", "one") :| []))
     it "fingerprints wire identity while ignoring Haskell selector names" $ do
       source <- TIO.readFile "test/fixtures/consumer-types.keiro"
       base <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
@@ -6606,6 +6613,7 @@ main = hspec $ do
       base <- checkedServiceFromText "structural-nominal-leaves.keiro" baseSource
       prefixChanged <- checkedServiceOf "test/fixtures/structural-nominal-leaves-prefix-change.keiro"
       bindingChanged <- checkedServiceOf "test/fixtures/structural-nominal-leaves-binding-change.keiro"
+      enumSpellingChanged <- checkedServiceOf "test/fixtures/structural-nominal-leaves-enum-spelling.keiro"
       canonicalChanged <-
         checkedServiceFromText
           "structural-nominal-leaves-canonical-change.keiro"
@@ -6627,7 +6635,7 @@ main = hspec $ do
       surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId"
       surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog register book : TemplateBook .holders [] optional : ClaimId"
       generatedTransducer `shouldSatisfy` T.isInfixOf (fingerprint base)
-      map fingerprint [prefixChanged, bindingChanged, canonicalChanged]
+      map fingerprint [prefixChanged, bindingChanged, canonicalChanged, enumSpellingChanged]
         `shouldSatisfy` all (/= fingerprint base)
       map fingerprint [fixturesChanged, unrelated]
         `shouldSatisfy` all (== fingerprint base)
@@ -8298,6 +8306,16 @@ main = hspec $ do
           "workqueue template_work payload .holder : ClaimId optional"
         ]
         $ \subject -> map (.subject) bindingFindings `shouldContain` [subject]
+
+      enumChanges <-
+        diffFixtures
+          "test/fixtures/structural-nominal-leaves.keiro"
+          "test/fixtures/structural-nominal-leaves-enum-spelling.keiro"
+      let spellingFindings = [kindOfChange change | change <- enumChanges, changeCode change == EnumWireSpellingChanged]
+      forM_ ["nominal-structural-event", "nominal-structural-register", "nominal-query-input"] $ \facet ->
+        map (.facet) spellingFindings `shouldContain` [facet]
+      map (.subject) [finding | finding <- spellingFindings, (.facet) finding == "nominal-structural-event"]
+        `shouldContain` ["TemplateCatalog event TemplateRecorded .state : TemplateState .channel : Channel via TemplateState"]
 
       textChanges <-
         diffFixtures
@@ -13963,10 +13981,6 @@ hasTypeGraphError predicate = \case
 isRecursive :: TypeGraphError -> Bool
 isRecursive TGRecursive {} = True
 isRecursive _ = False
-
-isUnsupportedNominal :: TypeGraphError -> Bool
-isUnsupportedNominal TGUnsupportedNominalLeaf {} = True
-isUnsupportedNominal _ = False
 
 mappedSpec :: [MappedDecl] -> Spec
 mappedSpec declarations = Spec "mapped-test" Nothing Nothing [] [] [] [] declarations []

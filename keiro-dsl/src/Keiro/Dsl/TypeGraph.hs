@@ -28,6 +28,7 @@ module Keiro.Dsl.TypeGraph
     NominalLeafIssue (..),
     NominalLeafError (..),
     checkIdLeaf,
+    checkEnumLeaf,
     checkScalarLeaf,
     MappedDeclError (..),
     CheckedMappedDecl (..),
@@ -178,6 +179,7 @@ data ConsumerNominalBinding = ConsumerNominalBinding
 
 data NominalLeafKind
   = NominalIdLeaf !Text
+  | NominalEnumLeaf !(NonEmpty (Name, Text))
   | NominalScalarLeaf !NominalScalarRepresentation
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -200,6 +202,7 @@ data NominalLeafIssue
   | LeafInvalidQualifiedValue !Name !Loc !Text !Text
   | LeafInvalidIdentity !Name !Loc !Text !Text
   | LeafInvalidIdPrefix !Name !Loc !Text !Text
+  | LeafEmptyEnum !Name !Loc
   | LeafUnsupportedScalar !Name !Loc !Name
   deriving stock (Eq, Show, Generic)
 
@@ -223,6 +226,20 @@ checkIdLeaf declaration = do
             ownership = ownership,
             loc = (.loc) declaration
           }
+
+checkEnumLeaf :: EnumDecl -> Either NominalLeafError NominalLeaf
+checkEnumLeaf declaration = do
+  ownership <- checkLeafOwnership ((.name) declaration) ((.loc) declaration) ((.binding) declaration)
+  constructors <- case NE.nonEmpty ((.ctors) declaration) of
+    Nothing -> Left (NominalLeafError (LeafEmptyEnum ((.name) declaration) ((.loc) declaration) :| []))
+    Just values -> Right values
+  Right
+    NominalLeaf
+      { name = (.name) declaration,
+        kind = NominalEnumLeaf constructors,
+        ownership = ownership,
+        loc = (.loc) declaration
+      }
 
 checkScalarLeaf :: NominalScalarDecl -> Either NominalLeafError NominalLeaf
 checkScalarLeaf declaration = do
@@ -508,7 +525,7 @@ resolveTypeGraph spec = do
   rejectMany (ambiguityErrors spec checked)
   let keyByName = Map.fromList [(checkedName decl, MappedKey (checkedName decl)) | decl <- checked]
       nominalLeaves = collectNominalLeaves spec
-      enumNames = Set.fromList [(.name) declaration | declaration <- (.enums) spec]
+      enumNames = Set.empty
       (resolveErrors, resolvedPairs) = partitionEithers (map (resolveCheckedDecl keyByName nominalLeaves enumNames) checked)
   rejectMany resolveErrors
   let declarations = Map.fromList resolvedPairs
@@ -524,7 +541,7 @@ resolveTypeGraph spec = do
       { declarations = declarations,
         reachability = reachability,
         nominalLeaves = nominalLeaves,
-        unsupportedNominalLeafKinds = Map.fromSet (const "enum") enumNames,
+        unsupportedNominalLeafKinds = Map.empty,
         nominalReachability = nominalReachability,
         useSites = map fst mappedRootSites,
         nominalRootSites = nominalRootSites,
@@ -539,7 +556,7 @@ collectNominalLeaves :: Spec -> Map Name NominalLeaf
 collectNominalLeaves spec =
   Map.fromList
     [ ((.name) leaf, leaf)
-    | result <- map checkIdLeaf ((.ids) spec) <> map checkScalarLeaf ((.nominalScalars) spec),
+    | result <- map checkIdLeaf ((.ids) spec) <> map checkEnumLeaf ((.enums) spec) <> map checkScalarLeaf ((.nominalScalars) spec),
       Right leaf <- [result]
     ]
 
@@ -1201,7 +1218,11 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
           Just (ResolvedStructural _ (REnum entries)) ->
             maybe ("ctor:" <> atom constructor) ("enum:" <>) (lookup constructor [((.ctor) entry, atom ((.tag) entry)) | entry <- entries])
           _ -> "ctor:" <> atom constructor
-        RNominal _ -> "ctor:" <> atom constructor
+        RNominal leaf -> case (.kind) leaf of
+          NominalEnumLeaf constructors ->
+            maybe ("ctor:" <> atom constructor) ("enum:" <>) (lookup constructor [(constructorName, atom wire) | (constructorName, wire) <- NE.toList constructors])
+          NominalIdLeaf {} -> "ctor:" <> atom constructor
+          NominalScalarLeaf {} -> "ctor:" <> atom constructor
         _ -> "ctor:" <> atom constructor
     renderDefault _ value = T.pack (show value)
 
@@ -1217,6 +1238,8 @@ nominalWireFingerprint = fnv1a64 . nominalWireToken
 nominalWireToken :: NominalLeaf -> Text
 nominalWireToken leaf = case (.kind) leaf of
   NominalIdLeaf prefix -> "nominal-id(" <> prefix <> "," <> nominalIdDomainVersion <> ")"
+  NominalEnumLeaf constructors ->
+    "nominal-enum(" <> T.intercalate ";" (sort (map snd (NE.toList constructors))) <> ")"
   NominalScalarLeaf representation -> "nominal-scalar(" <> scalarToken representation <> ")"
   where
     scalarToken = \case

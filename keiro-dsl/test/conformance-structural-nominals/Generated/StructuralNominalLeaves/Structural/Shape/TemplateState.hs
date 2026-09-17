@@ -2,12 +2,15 @@
 module Generated.StructuralNominalLeaves.Structural.Shape.TemplateState (TemplateStateShape (..)) where
 
 import GHC.Generics (Generic)
-import Conformance.StructuralNominals.Domain (AccountNumber, ClaimId)
+import Conformance.StructuralNominals.Domain (AccountNumber, Channel, ClaimId)
 import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 
 data TemplateStateShape = TemplateState
   { templateId :: !Nominals.TemplateId
   , holder :: !(Maybe ClaimId)
   , account :: !AccountNumber
+  , channel :: !Channel
+  , kind :: !Nominals.TemplateKind
+  , fallbackChannel :: !Channel
   }
   deriving stock (Eq, Generic, Show)

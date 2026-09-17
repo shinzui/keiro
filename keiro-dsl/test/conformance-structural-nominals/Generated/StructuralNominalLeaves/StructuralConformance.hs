@@ -15,7 +15,7 @@ import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominal
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState (TemplateStateShape(holder))
 import Conformance.StructuralNominals.Bindings qualified as Bindings
-import Conformance.StructuralNominals.Domain (AccountNumber, ClaimId, TemplateBook, TemplateRef, TemplateState)
+import Conformance.StructuralNominals.Domain (AccountNumber, Channel, ClaimId, TemplateBook, TemplateRef, TemplateState)
 import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 import Generated.StructuralNominalLeaves.Structural.NominalLeaves qualified as NominalLeaves
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
@@ -29,10 +29,11 @@ structuralConformanceAssertions =
     , templateRefBindingAssertions
     , templateStateBindingAssertions
     , accountNumberNominalAssertions
+    , channelNominalAssertions
     , claimIdNominalAssertions
-    , [("generated nominal canonical text: conformance.structural-nominals.TemplateBook.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateBookBinding value of ShapeTemplateBook.TemplateBook field0_0 _ field0_2 -> (all (\item1 -> (case item1 of ShapeTemplateState.TemplateState field2_0 _ _ -> ((NominalLeaves.encodeTemplateIdLeaf (field2_0) == Aeson.String (Nominals.templateIdText (field2_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field2_0)) == Right (field2_0))))) (field0_0)) && (all (\item1 -> (NominalLeaves.encodeTemplateIdLeaf (item1) == Aeson.String (Nominals.templateIdText (item1)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (item1)) == Right (item1))) (field0_2)))) (NonEmpty.toList (fixtureCases Bindings.templateBookFixtures)))]
-    , [("generated nominal canonical text: conformance.structural-nominals.TemplateRef.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateRefBinding value of ShapeTemplateRef.ById payload0 -> (NominalLeaves.encodeTemplateIdLeaf (payload0) == Aeson.String (Nominals.templateIdText (payload0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (payload0)) == Right (payload0)); ShapeTemplateRef.ByAccount _ -> True; ShapeTemplateRef.Unknown -> True)) (NonEmpty.toList (fixtureCases Bindings.templateRefFixtures)))]
-    , [("generated nominal canonical text: conformance.structural-nominals.TemplateState.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateStateBinding value of ShapeTemplateState.TemplateState field0_0 _ _ -> ((NominalLeaves.encodeTemplateIdLeaf (field0_0) == Aeson.String (Nominals.templateIdText (field0_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field0_0)) == Right (field0_0))))) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures)))]
+    , [("generated nominal canonical text: conformance.structural-nominals.TemplateBook.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateBookBinding value of ShapeTemplateBook.TemplateBook field0_0 _ field0_2 -> (all (\item1 -> (case item1 of ShapeTemplateState.TemplateState field2_0 _ _ _ _ _ -> ((NominalLeaves.encodeTemplateIdLeaf (field2_0) == Aeson.String (Nominals.templateIdText (field2_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field2_0)) == Right (field2_0))))) (field0_0)) && (all (\item1 -> (NominalLeaves.encodeTemplateIdLeaf (item1) == Aeson.String (Nominals.templateIdText (item1)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (item1)) == Right (item1))) (field0_2)))) (NonEmpty.toList (fixtureCases Bindings.templateBookFixtures)))]
+    , [("generated nominal canonical text: conformance.structural-nominals.TemplateRef.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateRefBinding value of ShapeTemplateRef.ById payload0 -> (NominalLeaves.encodeTemplateIdLeaf (payload0) == Aeson.String (Nominals.templateIdText (payload0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (payload0)) == Right (payload0)); ShapeTemplateRef.ByAccount _ -> True; ShapeTemplateRef.ByChannel _ -> True; ShapeTemplateRef.Unknown -> True)) (NonEmpty.toList (fixtureCases Bindings.templateRefFixtures)))]
+    , [("generated nominal canonical text: conformance.structural-nominals.TemplateState.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateStateBinding value of ShapeTemplateState.TemplateState field0_0 _ _ _ _ _ -> ((NominalLeaves.encodeTemplateIdLeaf (field0_0) == Aeson.String (Nominals.templateIdText (field0_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field0_0)) == Right (field0_0))))) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures)))]
     , [("fixture coverage: conformance.structural-nominals.TemplateBook.v1", coverageTemplateBook)]
     , [("fixture coverage: conformance.structural-nominals.TemplateRef.v1", coverageTemplateRef)]
     , [("fixture coverage: conformance.structural-nominals.TemplateState.v1", coverageTemplateState)]
@@ -92,6 +93,15 @@ accountNumberNominalAssertions =
   where
     cases = NonEmpty.toList (nominalFixtureCases Bindings.accountNumberFixtures)
 
+channelNominalAssertions :: [(String, Bool)]
+channelNominalAssertions =
+  [ ("nominal domain law: Channel", all (nominalDomainRoundTrip Bindings.channelBinding . nominalFixtureDomain) cases)
+  , ("nominal representation law: Channel", all (\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip Bindings.channelBinding (nominalToRepresentation Bindings.channelBinding domainValue)) cases)
+  , ("nominal canonical identity: Channel", canonicalTypeName (Proxy @Channel) == "conformance.structural-nominals.Channel.v1")
+  ]
+  where
+    cases = NonEmpty.toList (nominalFixtureCases Bindings.channelFixtures)
+
 claimIdNominalAssertions :: [(String, Bool)]
 claimIdNominalAssertions =
   [ ("nominal domain law: ClaimId", all (nominalDomainRoundTrip Bindings.claimIdBinding . nominalFixtureDomain) cases)
@@ -105,7 +115,7 @@ coverageTemplateBook :: Bool
 coverageTemplateBook = True
 
 coverageTemplateRef :: Bool
-coverageTemplateRef = any (\case ShapeTemplateRef.ById{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.ByAccount{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.Unknown -> True; _ -> False) shapes
+coverageTemplateRef = any (\case ShapeTemplateRef.ById{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.ByAccount{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.ByChannel{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.Unknown -> True; _ -> False) shapes
   where
     shapes = map (bindingToShape Bindings.templateRefBinding . snd) (NonEmpty.toList (fixtureCases Bindings.templateRefFixtures))
 

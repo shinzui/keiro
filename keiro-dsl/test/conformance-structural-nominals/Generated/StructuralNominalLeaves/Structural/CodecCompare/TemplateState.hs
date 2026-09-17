@@ -48,7 +48,7 @@ compareWithHistorical historicalCodec goldenDirectory = do
           , canonicalType = CanonicalTypeId "conformance.structural-nominals.TemplateState.v1"
           , bindingSymbol = QualifiedValueName "Conformance.StructuralNominals.Bindings.templateStateBinding"
           , bindingVersion = BindingVersion "1"
-          , wireFingerprint = "4a42d68c2d277d3c"
+          , wireFingerprint = "ecd3e1365fd5975c"
           }
   pure (compareReport provenance inputIssues (encodeObservations <> decodeObservations) declared (typedObserved <> historicalObserved))
 
@@ -74,4 +74,4 @@ fromString :: String -> Text
 fromString = Data.Text.pack
 
 branchSchema :: BranchSchema
-branchSchema = BranchRecord [BranchField "templateId" False (BranchScalar), BranchField "holder" True (BranchOptional (BranchScalar)), BranchField "account" False (BranchScalar)]
+branchSchema = BranchRecord [BranchField "templateId" False (BranchScalar), BranchField "holder" True (BranchOptional (BranchScalar)), BranchField "account" False (BranchScalar), BranchField "channel" False (BranchScalar), BranchField "kind" True (BranchScalar), BranchField "fallbackChannel" True (BranchScalar)]

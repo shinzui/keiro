@@ -2391,21 +2391,35 @@ enumDiff env =
 
 enumPairDiff :: Spec -> Spec -> EnumDecl -> EnumDecl -> [Change]
 enumPairDiff oldSpec newSpec oldEnum newEnum =
-  [ breaking ((.name) newEnum) "enum-constructor" ctor EnumCtorRemoved ("constructor removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec ((.name) oldEnum))
-  | (ctor, wire) <- (.ctors) oldEnum,
-    isNothing (lookup ctor ((.ctors) newEnum))
-  ]
-    ++ [ breaking ((.name) newEnum) "enum-constructor" ctor EnumWireSpellingChanged ("wire spelling changed '" <> oldWire <> "' -> '" <> newWire <> "'; stored values using the old spelling no longer decode" <> enumUsageSuffix oldSpec ((.name) oldEnum))
-       | (ctor, oldWire) <- (.ctors) oldEnum,
-         Just newWire <- [lookup ctor ((.ctors) newEnum)],
-         oldWire /= newWire
-       ]
+  concat
+    [ breaking ((.name) newEnum) "enum-constructor" ctor EnumCtorRemoved detail
+        : [nominalUseChange use EnumCtorRemoved detail | use <- nestedUses]
+    | (ctor, wire) <- (.ctors) oldEnum,
+      isNothing (lookup ctor ((.ctors) newEnum)),
+      let detail = "constructor removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec ((.name) oldEnum)
+    ]
+    ++ concat
+      [ breaking ((.name) newEnum) "enum-constructor" ctor EnumWireSpellingChanged detail
+          : [nominalUseChange use EnumWireSpellingChanged detail | use <- nestedUses]
+      | (ctor, oldWire) <- (.ctors) oldEnum,
+        Just newWire <- [lookup ctor ((.ctors) newEnum)],
+        oldWire /= newWire,
+        let detail = "wire spelling changed '" <> oldWire <> "' -> '" <> newWire <> "'; stored values using the old spelling no longer decode" <> enumUsageSuffix oldSpec ((.name) oldEnum)
+      ]
     ++ concat
       [ enumAdditionDiff oldSpec newEnum ctor wire
+          <> [ nominalUseChange
+                 use
+                 EnumCtorAdded
+                 ("new constructor with wire spelling '" <> wire <> "'; deploy consumers before producers emit the new arm")
+             | use <- nestedUses
+             ]
       | (ctor, wire) <- (.ctors) newEnum,
         isNothing (lookup ctor ((.ctors) oldEnum))
       ]
       <> nominalBindingDeclDiff oldSpec newSpec "enum" ((.name) newEnum) ((.binding) oldEnum) ((.binding) newEnum)
+  where
+    nestedUses = nominalBoundaryUses oldSpec newSpec ((.name) oldEnum)
 
 nominalScalarDiff :: DiffEnv -> [Change]
 nominalScalarDiff env =

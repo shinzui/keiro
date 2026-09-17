@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-09-17
+* **Update**: Extend ADR-46's nominal-leaf decision to generated and consumer-bound enums with
+declared-spelling codec authority and constructor defaults (plan 288).
 * **Update**: Link ADR-12 single structural schema authority to ADR-46 nominal leaf decision (plan 287).
 * **Decision**: Add ADR-46: nominal declarations are structural leaves with Keiro-owned admission (plan 287).
 

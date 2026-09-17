@@ -9,11 +9,12 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 ### New Features
 
 - Candidate Language 6 adds the `StructuralNominalLeaves` capability: generated
-  and consumer-bound `id` declarations plus `mapped nominal` scalars may appear
+  and consumer-bound `id` and `enum` declarations plus `mapped nominal` scalars may appear
   inside structural records, unions, containers, typed workqueue fields, and
   read-model query input/results. Generated leaf codecs preserve the nominal
-  Haskell type and apply Keiro-owned ID/scalar admission; nominal enums remain
-  deliberately excluded in favor of `mapped structural enum`.
+  Haskell type and apply Keiro-owned ID/scalar admission or the enum's exact
+  declared wire spellings. Optional enum leaves accept constructor defaults for
+  both generated and consumer-bound domain types.
 
 - Workqueues accept `ordering fifo-heads`; round trips preserve the spelling,
   scaffolding emits `FifoHeads` and FIFO-index provisioning, and ordering diffs

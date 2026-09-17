@@ -23,13 +23,16 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import qualified Data.Text as T
+import Keiro.Codec.Nominal (nominalFromRepresentation)
 import Keiro.Codec.Structural (bindingFromShape, bindingToShape)
 import Keiro.Codec (Codec (..), EventType (..))
 
 
-import Generated.StructuralNominalLeaves.Structural.NominalLeaves (encodeAccountNumberLeaf, parseAccountNumberLeaf, encodeClaimIdLeaf, parseClaimIdLeaf, encodeTemplateIdLeaf, parseTemplateIdLeaf)
+import Generated.StructuralNominalLeaves.Structural.NominalLeaves (encodeAccountNumberLeaf, parseAccountNumberLeaf, encodeChannelLeaf, parseChannelLeaf, encodeClaimIdLeaf, parseClaimIdLeaf, encodeTemplateIdLeaf, parseTemplateIdLeaf, encodeTemplateKindLeaf, parseTemplateKindLeaf)
 import Conformance.StructuralNominals.Bindings qualified as Bindings
 import Conformance.StructuralNominals.Domain (TemplateBook, TemplateRef, TemplateState)
+import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as Channel
+import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef qualified as ShapeTemplateRef
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState qualified as ShapeTemplateState
@@ -82,6 +85,11 @@ encodeTemplateRefShape = \case
       [ "tag" .= ("by_account" :: Text)
       , "contents" .= encodeAccountNumberLeaf payload
       ]
+  ShapeTemplateRef.ByChannel payload ->
+    object
+      [ "tag" .= ("by_channel" :: Text)
+      , "contents" .= encodeChannelLeaf payload
+      ]
   ShapeTemplateRef.Unknown ->
     object
       [ "tag" .= ("unknown" :: Text)
@@ -97,6 +105,9 @@ parseTemplateRefShape = withObject "TemplateRefShape" $ \objectValue -> do
     "by_account" -> do
       rejectUnknownFields "TemplateRef" ["tag", "contents"] objectValue
       ShapeTemplateRef.ByAccount <$> explicitParseField (parseAccountNumberLeaf) objectValue "contents"
+    "by_channel" -> do
+      rejectUnknownFields "TemplateRef" ["tag", "contents"] objectValue
+      ShapeTemplateRef.ByChannel <$> explicitParseField (parseChannelLeaf) objectValue "contents"
     "unknown" -> do
       rejectUnknownFields "TemplateRef" ["tag"] objectValue
       pure ShapeTemplateRef.Unknown
@@ -104,8 +115,8 @@ parseTemplateRefShape = withObject "TemplateRefShape" $ \objectValue -> do
 
 validateTemplateRefTag :: Text -> Parser Text
 validateTemplateRefTag tag
-  | tag `elem` ["by_id", "by_account", "unknown"] = pure tag
-  | otherwise = fail ("unknown TemplateRef union tag " <> show tag <> "; expected one of: by_id, by_account, unknown")
+  | tag `elem` ["by_id", "by_account", "by_channel", "unknown"] = pure tag
+  | otherwise = fail ("unknown TemplateRef union tag " <> show tag <> "; expected one of: by_id, by_account, by_channel, unknown")
 
 encodeTemplateStateMapped :: TemplateState -> Value
 encodeTemplateStateMapped = encodeTemplateStateShape . bindingToShape Bindings.templateStateBinding
@@ -122,15 +133,21 @@ encodeTemplateStateShape shape =
       [ "templateId" .= encodeTemplateIdLeaf shape.templateId
       , "holder" .= maybe Null (\item0 -> encodeClaimIdLeaf item0) (shape.holder)
       , "account" .= encodeAccountNumberLeaf shape.account
+      , "channel" .= encodeChannelLeaf shape.channel
+      , "kind" .= encodeTemplateKindLeaf shape.kind
+      , "fallbackChannel" .= encodeChannelLeaf shape.fallbackChannel
       ]
 
 parseTemplateStateShape :: Value -> Parser ShapeTemplateState.TemplateStateShape
 parseTemplateStateShape = withObject "TemplateStateShape" $ \objectValue -> do
-  rejectUnknownFields "TemplateState" ["templateId", "holder", "account"] objectValue
+  rejectUnknownFields "TemplateState" ["templateId", "holder", "account", "channel", "kind", "fallbackChannel"] objectValue
   ShapeTemplateState.TemplateState
     <$> explicitParseField (parseTemplateIdLeaf) objectValue "templateId"
     <*> parseOptionalField (pure Nothing) (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseClaimIdLeaf) other0) objectValue "holder"
     <*> explicitParseField (parseAccountNumberLeaf) objectValue "account"
+    <*> explicitParseField (parseChannelLeaf) objectValue "channel"
+    <*> parseOptionalField (pure Nominals.Draft) (parseTemplateKindLeaf) objectValue "kind"
+    <*> parseOptionalField (pure (nominalFromRepresentation Bindings.channelBinding Channel.Email)) (parseChannelLeaf) objectValue "fallbackChannel"
 
 templateCatalogEventTypes :: NonEmpty EventType
 templateCatalogEventTypes = EventType "TemplateRecorded" :| []

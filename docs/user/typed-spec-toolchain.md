@@ -361,15 +361,16 @@ The first scaffold creates a binding skeleton. Fill it and its fixture cases;
 do not duplicate wire spellings or defaults in the binding. Those remain owned
 by the `.keiro` declaration.
 
-Candidate Language 6 also permits an `id` or `mapped nominal` declaration as a
+Candidate Language 6 also permits an `id`, `enum`, or `mapped nominal` declaration as a
 leaf inside a structural mapping, typed workqueue field, or read-model query
 input/result. The generated private shape contains the nominal domain type, not
 its `KindID` or primitive representation. One context-owned
 `Structural.NominalLeaves` module applies the declared binding and Keiro-owned
 admission policy wherever a generated JSON codec needs the leaf. Query-only
 aliases reuse the checked nominal type and import plan without emitting that
-helper. Nominal enums are deliberately not structural leaves; use
-`mapped structural enum` for a nested enumeration.
+helper. Nominal enum leaf codecs accept and emit only the declaration's exact
+wire spellings. An optional enum leaf may use one of its declared constructors
+as an `on-missing` default.
 
 ## Types
 
@@ -430,16 +431,15 @@ List (Optional Text)
 Map Text
 OtherMappedType
 DeclaredId
+DeclaredEnum
 MappedNominalScalar
 ```
 
 `Map T` means a JSON object with text keys and values of type `T`.
-`DeclaredId` and `MappedNominalScalar` stand for the names of existing `id`
-and `mapped nominal` declarations and require candidate Language 6. They may
+`DeclaredId`, `DeclaredEnum`, and `MappedNominalScalar` stand for the names of existing `id`,
+`enum`, and `mapped nominal` declarations and require candidate Language 6. They may
 occur beneath `Optional`, `List`, and `Map` and at typed workqueue and read-model
-query roots. Generated and consumer-bound IDs and nominal scalars are supported;
-nominal enums receive `MappedNominalLeafUnsupported` and must be declared as a
-structural enum when nested.
+query roots. Generated and consumer-bound IDs, enums, and nominal scalars are supported.
 
 ## Consumer-owned mapped types
 
@@ -567,7 +567,8 @@ binding cannot become a second JSON authority. Query aliases share the checked
 domain type and import authority without inventing a codec. `StructuralConformance`
 adds the consumer nominal domain/representation round-trip and canonical-identity
 laws; generated IDs receive canonical-text assertions at every structural fixture
-path. The Cabal fragment records the nominal owner and binding modules once,
+path. Enum declaration fixtures cover every declared arm once, so embedding the enum
+does not create a duplicate per-field arm-coverage obligation. The Cabal fragment records the nominal owner and binding modules once,
 including across workspace members.
 
 This ownership split changes generated source layout once when adopting the

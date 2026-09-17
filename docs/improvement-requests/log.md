@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-09-17
+* **Implementation**: ExecPlan 288 Milestone 1 adds generated and consumer-bound nominal enums
+as structural leaves with declared-spelling codecs, constructor defaults, coverage, fold identity,
+and nested diff contexts, delivering IR-1's deferred nested-enum composition under candidate Language 6.
 * **Implementation**: Record repository implementation complete while supported Language 6 publication and consumer adoption/replay evidence remain pending.
 * **Status**: Implementation began under ExecPlan 287 after reproducing the nested nominal resolver failure.
 

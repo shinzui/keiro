@@ -1596,7 +1596,10 @@ defaultType graph =
         onList = const DefaultList,
         onMap = const DefaultMap,
         onRef = referencedDefaultType graph,
-        onNominal = const DefaultNominal
+        onNominal = \leaf -> case (.kind) leaf of
+          NominalEnumLeaf constructors -> DefaultEnum (Set.fromList (map fst (NE.toList constructors)))
+          NominalIdLeaf {} -> DefaultNominal
+          NominalScalarLeaf {} -> DefaultNominal
       }
 
 referencedDefaultType :: TypeGraph -> MappedKey -> DefaultType

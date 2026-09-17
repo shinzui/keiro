@@ -470,9 +470,9 @@ nominalBoundaryInventory graph =
         { root = rootText ((.root) path),
           path = renderUsePath path,
           nominal = (.name) leaf,
-          kind = case (.kind) leaf of NominalIdLeaf {} -> "id"; NominalScalarLeaf {} -> "scalar",
-          prefix = case (.kind) leaf of NominalIdLeaf value -> Just value; NominalScalarLeaf {} -> Nothing,
-          domainVersion = case (.kind) leaf of NominalIdLeaf {} -> Just "keiro-dsl/id-domain/typeid-v7/1"; NominalScalarLeaf {} -> Nothing,
+          kind = case (.kind) leaf of NominalIdLeaf {} -> "id"; NominalEnumLeaf {} -> "enum"; NominalScalarLeaf {} -> "scalar",
+          prefix = case (.kind) leaf of NominalIdLeaf value -> Just value; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
+          domainVersion = case (.kind) leaf of NominalIdLeaf {} -> Just "keiro-dsl/id-domain/typeid-v7/1"; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
           canonicalType = case (.ownership) leaf of GeneratedLeaf -> Nothing; ConsumerLeaf binding -> Just (unCanonicalTypeId ((.canonical) binding)),
           ownership = case (.ownership) leaf of GeneratedLeaf -> "generated"; ConsumerLeaf {} -> "consumer"
         }

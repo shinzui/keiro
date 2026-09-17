@@ -47,6 +47,9 @@ main = do
                ("generated TemplateId admission rejects non-v7 UUID at nested path", rejectedAt nestedPath (badBook (String "template_01h455vb4p8x5vsknk084sn02q"))),
                ("generated TemplateId admission rejects null at nested path", rejectedAt nestedPath (badBook Null)),
                ("optional ClaimId distinguishes null from a present ID", optionalHolderRoundTrip),
+               ("generated and consumer enum leaves round-trip declared spellings", nominalEnumRoundTrip),
+               ("omitted enum leaves use domain defaults and re-encode declared spellings", enumDefaultRoundTrip),
+               ("unknown consumer enum spelling is rejected at its field path", rejectedAt "$.channel" unknownChannel),
                ("queue nominal leaves round-trip canonically", queueRoundTrip),
                ("queue generated ID rejection is located", rejectedAt "$['template_id']" badQueue),
                ("query aliases preserve nominal domain types", queryAliasAgreement),
@@ -122,6 +125,27 @@ optionalHolderRoundTrip =
   decodeTemplateStateMapped (encodeTemplateStateMapped Bindings.stateWithoutHolder) == Right Bindings.stateWithoutHolder
     && decodeTemplateStateMapped (encodeTemplateStateMapped Bindings.stateWithHolder) == Right Bindings.stateWithHolder
 
+nominalEnumRoundTrip :: Bool
+nominalEnumRoundTrip =
+  decodeTemplateStateMapped (encodeTemplateStateMapped Bindings.stateWithoutHolder) == Right Bindings.stateWithoutHolder
+    && decodeTemplateStateMapped (encodeTemplateStateMapped Bindings.stateWithHolder) == Right Bindings.stateWithHolder
+    && decodeTemplateRefMapped (encodeTemplateRefMapped (ByChannel EmailChannel)) == Right (ByChannel EmailChannel)
+
+enumDefaultRoundTrip :: Bool
+enumDefaultRoundTrip = case decodeTemplateStateMapped withoutDefaults of
+  Left _ -> False
+  Right decoded ->
+    decoded == Bindings.stateWithoutHolder
+      && containsString "draft" (encodeTemplateStateMapped decoded)
+      && containsString "email" (encodeTemplateStateMapped decoded)
+  where
+    withoutDefaults = deleteObjectFields ["kind", "fallbackChannel"] (encodeTemplateStateMapped Bindings.stateWithoutHolder)
+
+unknownChannel :: Either Text TemplateState
+unknownChannel =
+  decodeTemplateStateMapped
+    (replaceObjectField "channel" (String "pager") (encodeTemplateStateMapped Bindings.stateWithoutHolder))
+
 queueRoundTrip :: Bool
 queueRoundTrip =
   parseTemplateWork encoded == Right payload
@@ -180,6 +204,11 @@ replaceObjectField :: Text -> Value -> Value -> Value
 replaceObjectField field replacement (Object fields) =
   Object (KeyMap.insert (Key.fromText field) replacement fields)
 replaceObjectField _ _ value = value
+
+deleteObjectFields :: [Text] -> Value -> Value
+deleteObjectFields fields (Object values) =
+  Object (foldr (KeyMap.delete . Key.fromText) values fields)
+deleteObjectFields _ value = value
 
 containsString :: Text -> Value -> Bool
 containsString expected = \case
