@@ -125,7 +125,9 @@ that milestone rather than amending the frozen profile.
       prefix change to the public contract.
 - [x] 2026-09-17: M2. The candidate-language contract corpus covers generated and
       consumer-bound declared IDs, byte-identical literal migration, field-local
-      wrong-prefix refusal, and contract-only nominal helper reachability.
+      wrong-prefix refusal, and contract-only nominal helper reachability. Evidence:
+      commit `6effec8d`; focused contract/diff tests pass and all 47 clean-tree corpus
+      invocations are byte-stable with consistent records and Cabal inventory.
 - [ ] M3. Expression paths ending at a nominal leaf type-check as that nominal; equality
       between two paths or a path and an ID literal is checked and projected with the
       existing nominal equality contract.
