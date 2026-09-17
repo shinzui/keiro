@@ -437,4 +437,63 @@ else
   echo "FAIL: unavailable-remedy denial failed for the wrong reason"; exit 1
 fi
 
+echo "== 21) structural nominal evolution names every persisted and build boundary =="
+NOMINAL="$DEMO/structural-nominals"
+mkdir -p "$NOMINAL"
+cp "$FIX/structural-nominal-leaves.keiro" "$NOMINAL/service.keiro"
+git -C "$DEMO" add structural-nominals/service.keiro
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "structural nominal baseline"
+cp "$FIX/structural-nominal-leaves-prefix-change.keiro" "$NOMINAL/service.keiro"
+if output="$("$EXE" diff --since HEAD --explain "$NOMINAL/service.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: nested nominal prefix change did not block"; exit 1
+elif [[ "$output" == *"[IdPrefixChanged]"* \
+    && "$output" == *"TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId"* \
+    && "$output" == *"TemplateCatalog register book : TemplateBook .byKey {} : TemplateId"* \
+    && "$output" == *"workqueue template_work payload .templateId : TemplateId"* \
+    && "$output" == *"readmodel template_lookup query result : TemplateId []"* ]]; then
+  echo "$output"
+  echo "ok: prefix change carries event, snapshot, queue, and query paths"
+else
+  echo "$output"
+  echo "FAIL: prefix change omitted a structural nominal path"; exit 1
+fi
+
+cp "$FIX/structural-nominal-leaves-binding-change.keiro" "$NOMINAL/service.keiro"
+if output="$("$EXE" diff --since HEAD --explain "$NOMINAL/service.keiro" 2>&1)"; then
+  echo "$output"
+  echo "FAIL: queued nested nominal binding change did not block"; exit 1
+elif [[ "$output" == *"[NominalBindingChanged]"* \
+    && "$output" == *"TemplateCatalog event TemplateRecorded .state : TemplateState .holder optional : ClaimId"* \
+    && "$output" == *"TemplateCatalog register book : TemplateBook .holders [] optional : ClaimId"* \
+    && "$output" == *"workqueue template_work payload .holder : ClaimId optional"* ]]; then
+  echo "$output"
+  echo "ok: binding change carries nested persisted paths"
+else
+  echo "$output"
+  echo "FAIL: binding change omitted a nested structural nominal path"; exit 1
+fi
+
+TEXT_MIGRATION="$DEMO/structural-nominal-text-migration"
+OPAQUE_MIGRATION="$DEMO/structural-nominal-opaque-migration"
+mkdir -p "$TEXT_MIGRATION" "$OPAQUE_MIGRATION"
+cp "$FIX/structural-nominal-leaves-text-to-nominal.keiro" "$TEXT_MIGRATION/service.keiro"
+cp "$FIX/structural-nominal-leaves-opaque-to-nominal.keiro" "$OPAQUE_MIGRATION/service.keiro"
+git -C "$DEMO" add structural-nominal-text-migration structural-nominal-opaque-migration
+git -C "$DEMO" -c user.email=t@t -c user.name=t commit -qm "structural nominal migration baselines"
+cp "$FIX/structural-nominal-leaves.keiro" "$TEXT_MIGRATION/service.keiro"
+cp "$FIX/structural-nominal-leaves.keiro" "$OPAQUE_MIGRATION/service.keiro"
+for migration in "$TEXT_MIGRATION/service.keiro" "$OPAQUE_MIGRATION/service.keiro"; do
+  if output="$("$EXE" diff --since HEAD "$migration" 2>&1)"; then
+    echo "$output"
+    echo "FAIL: nominal leaf type migration did not block"; exit 1
+  elif [[ "$output" == *"[MappedFieldTypeChanged]"* ]]; then
+    echo "$output"
+    echo "ok: nominal leaf migration is an explicit mapped field type change"
+  else
+    echo "$output"
+    echo "FAIL: nominal leaf migration used the wrong classification"; exit 1
+  fi
+done
+
 echo "PASS: diff --since gates single specs and whole workspaces with owned unified reports"

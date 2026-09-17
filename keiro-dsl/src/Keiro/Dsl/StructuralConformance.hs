@@ -112,7 +112,17 @@ conformanceNominalLeaves graph =
   where
     names =
       Set.unions (Map.elems ((.nominalReachability) graph))
-        <> Set.fromList [(.nominal) site | site <- (.nominalRootSites) graph]
+        <> Set.fromList
+          [ (.nominal) site
+          | site <- (.nominalRootSites) graph,
+            case (.root) site of
+              RootWorkqueueField {} -> True
+              RootReadModelQueryInput {} -> True
+              RootReadModelQueryResult {} -> True
+              RootCommandField {} -> False
+              RootEventField {} -> False
+              RootRegister {} -> False
+          ]
 
 renderStructuralConformance :: ConformanceRendering -> Text
 renderStructuralConformance rendering =

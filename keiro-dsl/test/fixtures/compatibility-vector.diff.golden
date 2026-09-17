@@ -6,3 +6,12 @@ WARNING: Reservation transitions Reservation: aggregate fold surface changed: re
     vector: private-history-read=advisory old-binary-read-new-events=compatible snapshot-hydration=advisory
 BREAKING: emergency contract-field IncidentTransferNeedDeclared.incidentNote: field added without a schemaVersion bump; older in-flight messages do not contain it [ContractFieldChanged]
     vector: public-consumer=breaking rollout=producer-last
+BREAKING: TemplateCatalog nominal-structural-event TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId via TemplateState: prefix changed 'template' -> 'tmpl'; stored and newly minted ids no longer share an identity domain [IdPrefixChanged]
+    vector: private-history-read=breaking old-binary-read-new-events=breaking rollout=stop-the-world
+WARNING: TemplateCatalog nominal-structural-register TemplateCatalog register book : TemplateBook .byKey {} : TemplateId via TemplateBook: prefix changed 'template' -> 'tmpl'; stored and newly minted ids no longer share an identity domain [IdPrefixChanged]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible snapshot-hydration=advisory
+BREAKING: template_work nominal-workqueue workqueue template_work payload .templateId : TemplateId: prefix changed 'template' -> 'tmpl'; stored and newly minted ids no longer share an identity domain [IdPrefixChanged]
+    vector: consumer-build=breaking rollout=workers-first,drain-required
+    mapped-persisted-surface: workqueue-history:template_work=breaking
+WARNING: template_lookup nominal-query-result readmodel template_lookup query result : TemplateId []: prefix changed 'template' -> 'tmpl'; stored and newly minted ids no longer share an identity domain [IdPrefixChanged]
+    vector: private-history-read=compatible old-binary-read-new-events=compatible consumer-build=advisory

@@ -59,7 +59,7 @@ where
 
 import Data.Char (toUpper)
 import Data.Foldable (traverse_)
-import Data.List (find, sort, sortOn, (\\))
+import Data.List (find, nub, sort, sortOn, (\\))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust, isNothing, mapMaybe, maybeToList)
@@ -101,7 +101,7 @@ import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedServiceWithSpec, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
 import Keiro.Dsl.TransitionFamily (ReplayBodyDelta (..), ReplayBodyKey, ReplayBodyStatus (..), TransitionFamilyKey (..), guardAlternatives, guardImplies, guardUnion, replayBodyDeltas, replayBodyKey)
-import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), RootRef (..), UsePath (..), renderUsePath, resolveTypeGraph)
+import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), PathSeg (..), RootRef (..), UsePath (..), nominalUsePaths, renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), renderDiagnostic, validateService)
 
 -- | A classified spec change.
@@ -383,10 +383,14 @@ classifyCompatibility context code
   | code == NominalBindingChanged = mappedBindingVector context
   | code `elem` [NominalInitialChanged, NominalCanonicalTypeChanged] = mappedSnapshotBuildVector context
   | code == NominalRepresentationChanged = mappedWireBreakingVector context
+  | code == IdPrefixChanged && (.contextKind) context /= ContextGeneral = mappedWireBreakingVector context
   | code == NominalIdDecoderTightened =
       replaceConsumerBuild VAdvisory (advisoryVector PrivateHistoryRead Set.empty)
   | code == ContractTypeIdDomainChanged = contractTypeIdDomainVector
-  | code == IdDomainContractChanged = idDomainContractVector
+  | code == IdDomainContractChanged =
+      if (.contextKind) context == ContextGeneral
+        then idDomainContractVector
+        else idDomainBoundaryVector context
   | code == MappedDeclAdded = compatibleVector
   | code `elem` privateDecodeCodes = privateDecodeBreakingVector
   | code `elem` identityCodes = persistedIdentityBreakingVector
@@ -616,6 +620,14 @@ mappedSnapshotBuildVector context = case (.contextKind) context of
   ContextSnapshot -> replaceConsumerBuild VAdvisory mappedSnapshotVector
   _ -> mappedBuildVector
 
+idDomainBoundaryVector :: ChangeContext -> CompatibilityVector
+idDomainBoundaryVector context = case (.contextKind) context of
+  ContextPrivateEvent -> mappedBuildVector
+  ContextSnapshot -> replaceConsumerBuild VAdvisory mappedSnapshotVector
+  ContextQueue -> queueBreakingVector
+  ContextConsumerBuild -> mappedBuildVector
+  _ -> mappedBuildVector
+
 surfaceForContext :: ChangeContext -> CompatibilitySurface
 surfaceForContext context = case (.contextKind) context of
   ContextPrivateEvent -> PrivateHistoryRead
@@ -802,23 +814,26 @@ diffServices oldService newService = do
     oldAggregates = [((.name) aggregate, aggregate) | NAggregate aggregate <- (.nodes) oldSpec]
     newAggregates = [((.name) aggregate, aggregate) | NAggregate aggregate <- (.nodes) newSpec]
     idDomainContractChanges =
-      [ breaking
-          ((.name) newDeclaration)
-          "id-domain-contract"
-          ((.name) newDeclaration)
-          IdDomainContractChanged
-          ( "ID admission contract changed "
-              <> renderIdDomainContract oldContract
-              <> " -> "
-              <> renderIdDomainContract newContract
-              <> "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots miss and rebuild from readable events, while rebuilt state that still contains legacy-invalid text remains intentionally uncacheable until overwritten or explicitly migrated"
-          )
-      | newDeclaration <- (.ids) newSpec,
-        Just oldDeclaration <- [find ((== (.name) newDeclaration) . (.name)) ((.ids) oldSpec)],
-        let oldContract = idDomainContractFor (checkedLanguageContract oldService) ((.prefix) oldDeclaration),
-        let newContract = idDomainContractFor (checkedLanguageContract newService) ((.prefix) newDeclaration),
-        oldContract /= newContract
-      ]
+      concat
+        [ breaking
+            ((.name) newDeclaration)
+            "id-domain-contract"
+            ((.name) newDeclaration)
+            IdDomainContractChanged
+            detail
+            : [nominalUseChange use IdDomainContractChanged detail | use <- nominalBoundaryUses oldSpec newSpec ((.name) newDeclaration)]
+        | newDeclaration <- (.ids) newSpec,
+          Just oldDeclaration <- [find ((== (.name) newDeclaration) . (.name)) ((.ids) oldSpec)],
+          let oldContract = idDomainContractFor (checkedLanguageContract oldService) ((.prefix) oldDeclaration),
+          let newContract = idDomainContractFor (checkedLanguageContract newService) ((.prefix) newDeclaration),
+          oldContract /= newContract,
+          let detail =
+                "ID admission contract changed "
+                  <> renderIdDomainContract oldContract
+                  <> " -> "
+                  <> renderIdDomainContract newContract
+                  <> "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots miss and rebuild from readable events, while rebuilt state that still contains legacy-invalid text remains intentionally uncacheable until overwritten or explicitly migrated"
+        ]
     contractTypeIdDomainChanges =
       [ breaking
           ((.name) newContract)
@@ -2333,26 +2348,32 @@ projectionSurface projection = do
 
 idDiff :: DiffEnv -> [Change]
 idDiff env =
-  concatMap (uncurry (idPairDiff ((.old) env))) ((.matched) paired)
+  concatMap (uncurry (idPairDiff ((.old) env) ((.new) env))) ((.matched) paired)
     ++ concatMap addedIdDiff ((.added) paired)
     ++ concatMap removedIdDiff ((.removed) paired)
   where
     paired = pairDeclarations (.name) ((.ids) ((.old) env)) ((.ids) ((.new) env))
 
-idPairDiff :: Spec -> IdDecl -> IdDecl -> [Change]
-idPairDiff oldSpec oldId newId =
-  [ breaking ((.name) newId) "id-prefix" ((.name) newId) IdPrefixChanged ("prefix changed '" <> (.prefix) oldId <> "' -> '" <> (.prefix) newId <> "'; stored and newly minted ids no longer share an identity domain")
-  | (.prefix) oldId /= (.prefix) newId
-  ]
-    <> nominalBindingDeclDiff oldSpec "id" ((.name) newId) ((.binding) oldId) ((.binding) newId)
+idPairDiff :: Spec -> Spec -> IdDecl -> IdDecl -> [Change]
+idPairDiff oldSpec newSpec oldId newId =
+  ( if (.prefix) oldId /= (.prefix) newId
+      then
+        breaking ((.name) newId) "id-prefix" ((.name) newId) IdPrefixChanged prefixDetail
+          : [nominalUseChange use IdPrefixChanged prefixDetail | use <- nominalBoundaryUses oldSpec newSpec ((.name) oldId)]
+      else []
+  )
+    <> nominalBindingDeclDiff oldSpec newSpec "id" ((.name) newId) ((.binding) oldId) ((.binding) newId)
     <> [ nominalUseChange
            use
            NominalIdDecoderTightened
            "adopting a checked KindID binding tightens historical decoding; keep a committed valid old-payload fixture and run the targeted real-log audit for this event"
        | (.binding) oldId == Nothing,
          isJust ((.binding) newId),
-         use@NominalEventUse {} <- nominalUses oldSpec ((.name) oldId)
+         use <- nominalUses oldSpec newSpec ((.name) oldId),
+         nominalUseIsEvent use
        ]
+  where
+    prefixDetail = "prefix changed '" <> (.prefix) oldId <> "' -> '" <> (.prefix) newId <> "'; stored and newly minted ids no longer share an identity domain"
 
 addedIdDiff :: IdDecl -> [Change]
 addedIdDiff declaration = [additive ((.name) declaration) "id-prefix" ((.name) declaration) DeclarationAdded "new id declaration"]
@@ -2362,14 +2383,14 @@ removedIdDiff declaration = [breaking ((.name) declaration) "id-prefix" ((.name)
 
 enumDiff :: DiffEnv -> [Change]
 enumDiff env =
-  concatMap (uncurry (enumPairDiff ((.old) env))) ((.matched) paired)
+  concatMap (uncurry (enumPairDiff ((.old) env) ((.new) env))) ((.matched) paired)
     ++ concatMap addedEnumDiff ((.added) paired)
     ++ concatMap (removedEnumDiff ((.old) env)) ((.removed) paired)
   where
     paired = pairDeclarations (.name) ((.enums) ((.old) env)) ((.enums) ((.new) env))
 
-enumPairDiff :: Spec -> EnumDecl -> EnumDecl -> [Change]
-enumPairDiff oldSpec oldEnum newEnum =
+enumPairDiff :: Spec -> Spec -> EnumDecl -> EnumDecl -> [Change]
+enumPairDiff oldSpec newSpec oldEnum newEnum =
   [ breaking ((.name) newEnum) "enum-constructor" ctor EnumCtorRemoved ("constructor removed; stored wire value '" <> wire <> "' no longer decodes" <> enumUsageSuffix oldSpec ((.name) oldEnum))
   | (ctor, wire) <- (.ctors) oldEnum,
     isNothing (lookup ctor ((.ctors) newEnum))
@@ -2384,7 +2405,7 @@ enumPairDiff oldSpec oldEnum newEnum =
       | (ctor, wire) <- (.ctors) newEnum,
         isNothing (lookup ctor ((.ctors) oldEnum))
       ]
-      <> nominalBindingDeclDiff oldSpec "enum" ((.name) newEnum) ((.binding) oldEnum) ((.binding) newEnum)
+      <> nominalBindingDeclDiff oldSpec newSpec "enum" ((.name) newEnum) ((.binding) oldEnum) ((.binding) newEnum)
 
 nominalScalarDiff :: DiffEnv -> [Change]
 nominalScalarDiff env =
@@ -2394,32 +2415,39 @@ nominalScalarDiff env =
   where
     paired = pairDeclarations (.name) ((.nominalScalars) ((.old) env)) ((.nominalScalars) ((.new) env))
     scalarPairDiff oldDeclaration newDeclaration =
-      [ nominalDeclarationChange
-          ((.name) newDeclaration)
-          NominalRepresentationChanged
-          ( "nominal scalar representation changed '"
-              <> (.representation) oldDeclaration
-              <> "' -> '"
-              <> (.representation) newDeclaration
-              <> "'"
-          )
-      | (.representation) oldDeclaration /= (.representation) newDeclaration
-      ]
+      ( if (.representation) oldDeclaration /= (.representation) newDeclaration
+          then
+            nominalDeclarationChange ((.name) newDeclaration) NominalRepresentationChanged representationDetail
+              : [nominalUseChange use NominalRepresentationChanged representationDetail | use <- nominalBoundaryUses ((.old) env) ((.new) env) ((.name) oldDeclaration)]
+          else []
+      )
         <> nominalBindingDeclDiff
           ((.old) env)
+          ((.new) env)
           "scalar"
           ((.name) newDeclaration)
           (Just ((.binding) oldDeclaration))
           (Just ((.binding) newDeclaration))
+      where
+        representationDetail =
+          "nominal scalar representation changed '"
+            <> (.representation) oldDeclaration
+            <> "' -> '"
+            <> (.representation) newDeclaration
+            <> "'"
 
 data NominalUse
   = NominalCommandUse !Name !Name !Name
   | NominalEventUse !Name !Name !Name
   | NominalRegisterUse !Name !Name
+  | NominalStructuralUse !Name !UsePath
+  | NominalConsumerRootUse !UsePath
+  deriving stock (Eq, Ord, Show)
 
-nominalUses :: Spec -> Name -> [NominalUse]
-nominalUses spec target = concatMap usesInAggregate [aggregate | NAggregate aggregate <- (.nodes) spec]
+nominalUses :: Spec -> Spec -> Name -> [NominalUse]
+nominalUses oldSpec newSpec target = nub (directUses <> graphUses oldSpec <> graphUses newSpec)
   where
+    directUses = concatMap usesInAggregate [aggregate | NAggregate aggregate <- (.nodes) oldSpec]
     usesInAggregate aggregate =
       [ NominalCommandUse ((.name) aggregate) ((.name) command) ((.name) field)
       | command <- (.commands) aggregate,
@@ -2446,8 +2474,39 @@ nominalUses spec target = concatMap usesInAggregate [aggregate | NAggregate aggr
       Nothing -> value
       Just (initialChar, rest) -> T.cons (toUpper initialChar) rest
 
-nominalBindingDeclDiff :: Spec -> Text -> Name -> Maybe NominalBindingDecl -> Maybe NominalBindingDecl -> [Change]
-nominalBindingDeclDiff oldSpec category name oldBinding newBinding =
+    graphUses spec = case resolveTypeGraph spec of
+      Left _ -> []
+      Right graph -> mapMaybe pathUse (nominalUsePaths graph target)
+    pathUse path@UsePath {root, segments} = case segments of
+      SegDecl declaration : _ -> Just (NominalStructuralUse declaration path)
+      SegNominal {} : _ -> case root of
+        RootWorkqueueField {} -> Just (NominalConsumerRootUse path)
+        RootReadModelQueryInput {} -> Just (NominalConsumerRootUse path)
+        RootReadModelQueryResult {} -> Just (NominalConsumerRootUse path)
+        RootCommandField {} -> Nothing
+        RootEventField {} -> Nothing
+        RootRegister {} -> Nothing
+      _ -> Nothing
+
+nominalBoundaryUses :: Spec -> Spec -> Name -> [NominalUse]
+nominalBoundaryUses oldSpec newSpec name =
+  [ use
+  | use <- nominalUses oldSpec newSpec name,
+    case use of
+      NominalStructuralUse {} -> True
+      NominalConsumerRootUse {} -> True
+      _ -> False
+  ]
+
+nominalUseIsEvent :: NominalUse -> Bool
+nominalUseIsEvent = \case
+  NominalEventUse {} -> True
+  NominalStructuralUse _ UsePath {root = RootEventField {}} -> True
+  NominalConsumerRootUse UsePath {root = RootEventField {}} -> True
+  _ -> False
+
+nominalBindingDeclDiff :: Spec -> Spec -> Text -> Name -> Maybe NominalBindingDecl -> Maybe NominalBindingDecl -> [Change]
+nominalBindingDeclDiff oldSpec newSpec category name oldBinding newBinding =
   concat
     [ nominalFinding NominalBindingChanged "binding source, symbol, or version changed; rebuild every consumer use and audit persisted event uses because hand-written conversion behavior is opaque"
     | bindingRuntimeFacts oldBinding /= bindingRuntimeFacts newBinding
@@ -2472,9 +2531,13 @@ nominalBindingDeclDiff oldSpec category name oldBinding newBinding =
       )
     nominalFinding code detail =
       nominalDeclarationChange name code (category <> " " <> detail)
-        : [nominalUseChange use code detail | use <- nominalUses oldSpec name, includeUse code use]
+        : [nominalUseChange use code detail | use <- nominalUses oldSpec newSpec name, includeUse code use]
+    includeUse NominalFixturesChanged NominalStructuralUse {} = True
+    includeUse NominalFixturesChanged NominalConsumerRootUse {} = True
     includeUse NominalFixturesChanged _ = False
     includeUse NominalCanonicalTypeChanged NominalRegisterUse {} = True
+    includeUse NominalCanonicalTypeChanged NominalStructuralUse {} = True
+    includeUse NominalCanonicalTypeChanged NominalConsumerRootUse {} = True
     includeUse NominalCanonicalTypeChanged _ = False
     includeUse NominalInitialChanged NominalRegisterUse {} = True
     includeUse NominalInitialChanged _ = False
@@ -2499,12 +2562,30 @@ nominalUseChange :: NominalUse -> DiagnosticCode -> Text -> Change
 nominalUseChange use code detail =
   mkChange (deriveLabel defaultGate vector) context root facet subject code detail
   where
-    (root, facet, subject, kind) = case use of
-      NominalCommandUse aggregate command field -> (aggregate, "nominal-command", aggregate <> " command " <> command <> " ." <> field, ContextConsumerBuild)
-      NominalEventUse aggregate event field -> (aggregate, "nominal-event", aggregate <> " event " <> event <> " ." <> field, ContextPrivateEvent)
-      NominalRegisterUse aggregate register -> (aggregate, "nominal-register", aggregate <> " register " <> register, ContextSnapshot)
+    (root, facet, subject, kind) = nominalUseContext use
     context = ChangeContext root [subject] kind LabelAdvisory
     vector = classifyCompatibility context code
+
+nominalUseContext :: NominalUse -> (Name, Text, Text, ContextKind)
+nominalUseContext = \case
+  NominalCommandUse aggregate command field -> (aggregate, "nominal-command", aggregate <> " command " <> command <> " ." <> field, ContextConsumerBuild)
+  NominalEventUse aggregate event field -> (aggregate, "nominal-event", aggregate <> " event " <> event <> " ." <> field, ContextPrivateEvent)
+  NominalRegisterUse aggregate register -> (aggregate, "nominal-register", aggregate <> " register " <> register, ContextSnapshot)
+  NominalStructuralUse declaration path ->
+    let (root, facet, kind) = nominalPathContext path
+     in (root, facet, renderUsePath path <> " via " <> declaration, kind)
+  NominalConsumerRootUse path ->
+    let (root, facet, kind) = nominalPathContext path
+     in (root, facet, renderUsePath path, kind)
+
+nominalPathContext :: UsePath -> (Name, Text, ContextKind)
+nominalPathContext path = case (.root) path of
+  RootCommandField aggregate _ _ -> (aggregate, "nominal-structural-command", ContextConsumerBuild)
+  RootEventField aggregate _ _ -> (aggregate, "nominal-structural-event", ContextPrivateEvent)
+  RootRegister aggregate _ -> (aggregate, "nominal-structural-register", ContextSnapshot)
+  RootWorkqueueField workqueue _ -> (workqueue, "nominal-workqueue", ContextQueue)
+  RootReadModelQueryInput readModel -> (readModel, "nominal-query-input", ContextConsumerBuild)
+  RootReadModelQueryResult readModel -> (readModel, "nominal-query-result", ContextConsumerBuild)
 
 addedEnumDiff :: EnumDecl -> [Change]
 addedEnumDiff enumDecl =

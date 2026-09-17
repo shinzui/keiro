@@ -63,6 +63,7 @@ module Keiro.Dsl.TypeGraph
     MappedDeclAlgebra (..),
     foldMappedDecl,
     wireFingerprint,
+    nominalWireFingerprint,
   )
 where
 
@@ -825,20 +826,39 @@ collectUseSites keyByName nominalByName enumNames spec =
     workqueues = [workqueue | NWorkqueue workqueue <- (.nodes) spec]
     readModels = [readModel | NReadModel readModel <- (.nodes) spec]
     aggregateSites aggregate =
-      [ CollectedMapped (UseSite (RootCommandField ((.name) aggregate) ((.name) command) ((.name) field)) key) []
+      [ aggregateSite
+          (RootCommandField ((.name) aggregate) ((.name) command) ((.name) field))
+          ((.loc) field)
+          expression
       | command <- (.commands) aggregate,
         field <- (.fields) command,
-        key <- maybeToList ((.valueType) field >>= typeRefName >>= (`Map.lookup` keyByName))
+        expression <- maybeToList ((.valueType) field)
       ]
-        ++ [ CollectedMapped (UseSite (RootEventField ((.name) aggregate) ((.name) event) ((.name) field)) key) []
+        ++ [ aggregateSite
+               (RootEventField ((.name) aggregate) ((.name) event) ((.name) field))
+               ((.loc) field)
+               expression
            | event <- (.events) aggregate,
              field <- eventFields aggregate event,
-             key <- maybeToList ((.valueType) field >>= typeRefName >>= (`Map.lookup` keyByName))
+             expression <- maybeToList ((.valueType) field)
            ]
-        ++ [ CollectedMapped (UseSite (RootRegister ((.name) aggregate) ((.name) register)) key) []
-           | register <- (.regs) aggregate,
-             key <- maybeToList (typeRefName ((.valueType) register) >>= (`Map.lookup` keyByName))
+        ++ [ aggregateSite
+               (RootRegister ((.name) aggregate) ((.name) register))
+               ((.loc) register)
+               ((.valueType) register)
+           | register <- (.regs) aggregate
            ]
+
+    -- Aggregate validation owns unresolved and enum references.  This graph
+    -- projection records only the mapped/nominal roots it can resolve without
+    -- changing those established diagnostics.
+    aggregateSite rootRef loc expression =
+      case resolveExpr keyByName nominalByName enumNames "aggregate consumer" loc expression of
+        Right resolved -> case rootReference resolved of
+          Just (MappedRootReference key segments) -> CollectedMapped (UseSite rootRef key) segments
+          Just (NominalRootReference name segments) -> CollectedNominal (NominalRootSite rootRef name segments)
+          Nothing -> CollectedNone
+        Left _ -> CollectedNone
 
     workqueueSites workqueue =
       [ consumerSite
@@ -897,8 +917,6 @@ collectUseSites keyByName nominalByName enumNames spec =
         concat [(.fields) command | command <- (.commands) aggregate, (.name) command == commandName]
 
     maybeToList = maybe [] pure
-    typeRefName (TRef name) = Just name
-    typeRefName _ = Nothing
 
 usePaths :: TypeGraph -> Name -> [UsePath]
 usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declarations) graph) of
@@ -1175,9 +1193,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       RList value -> "list(" <> wireExpr visited value <> ")"
       RMap value -> "map(" <> wireExpr visited value <> ")"
       RRef key -> wireDecl visited key
-      RNominal leaf -> case (.kind) leaf of
-        NominalIdLeaf prefix -> "nominal-id(" <> prefix <> "," <> nominalIdDomainVersion <> ")"
-        NominalScalarLeaf representation -> "nominal-scalar(" <> scalarToken representation <> ")"
+      RNominal leaf -> nominalWireToken leaf
 
     renderDefault field (OmCtor constructor) =
       case (.valueType) field of
@@ -1194,6 +1210,15 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
     renderPresence PRequired = "required"
     renderPresence POptional = "optional"
     atom value = T.pack (show value)
+
+nominalWireFingerprint :: NominalLeaf -> Text
+nominalWireFingerprint = fnv1a64 . nominalWireToken
+
+nominalWireToken :: NominalLeaf -> Text
+nominalWireToken leaf = case (.kind) leaf of
+  NominalIdLeaf prefix -> "nominal-id(" <> prefix <> "," <> nominalIdDomainVersion <> ")"
+  NominalScalarLeaf representation -> "nominal-scalar(" <> scalarToken representation <> ")"
+  where
     scalarToken = \case
       NominalText -> "Text"
       NominalInt -> "Int"
@@ -1201,10 +1226,11 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       NominalBool -> "Bool"
       NominalTime -> "Time"
 
-    -- Kept byte-identical to Keiro.Dsl.IdDomain.enforcedIdDomainVersion.  This
-    -- low-level graph module cannot import IdDomain because that module reads
-    -- CheckedService, whose analysis contains this graph.
-    nominalIdDomainVersion = "keiro-dsl/id-domain/typeid-v7/1"
+-- Kept byte-identical to Keiro.Dsl.IdDomain.enforcedIdDomainVersion.  This
+-- low-level graph module cannot import IdDomain because that module reads
+-- CheckedService, whose analysis contains this graph.
+nominalIdDomainVersion :: Text
+nominalIdDomainVersion = "keiro-dsl/id-domain/typeid-v7/1"
 
 fnv1a64 :: Text -> Text
 fnv1a64 input =

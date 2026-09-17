@@ -83,6 +83,7 @@ aggregateFoldSurfaceForService service aggregate = do
             ++ registerSegments
             ++ mappedRegisterSegments graph
             ++ nominalSegments nominalRegistry
+            ++ nestedNominalSegments graph
             ++ ["nominal-equality-use:" <> identity | identity <- Set.toAscList equalityUses]
             ++ transitionSegments
             ++ map ruleSegment referencedRules
@@ -107,6 +108,58 @@ aggregateFoldSurfaceForService service aggregate = do
         Just nominal <- [lookupNominalType typeName registry],
         ConsumerNominal binding <- [(.ownership) nominal]
       ]
+    nestedNominalSegments graph =
+      [ nestedNominalUseSegment path leaf
+      | leaf <- Map.elems ((.nominalLeaves) graph),
+        path <- nominalUsePaths graph ((.name) leaf),
+        isNestedAggregateFoldUse ((.name) aggregate) path
+      ]
+
+-- | Nested nominal leaves participate in an aggregate fold wherever persisted
+-- event payloads or snapshot registers contain their enclosing structural
+-- declaration.  The structural register's own initial binding constructs the
+-- whole value, so a nested nominal's @initial@ symbol is deliberately absent.
+isNestedAggregateFoldUse :: Name -> UsePath -> Bool
+isNestedAggregateFoldUse aggregateName UsePath {root, segments} =
+  isNested segments && case root of
+    RootEventField owner _ _ -> owner == aggregateName
+    RootRegister owner _ -> owner == aggregateName
+    RootCommandField {} -> False
+    RootWorkqueueField {} -> False
+    RootReadModelQueryInput {} -> False
+    RootReadModelQueryResult {} -> False
+  where
+    isNested (SegDecl {} : _) = True
+    isNested _ = False
+
+nestedNominalUseSegment :: UsePath -> NominalLeaf -> Text
+nestedNominalUseSegment path leaf =
+  T.intercalate
+    "|"
+    ( [ "nested-nominal-use:" <> renderUsePath path,
+        "name=" <> (.name) leaf,
+        "representation=" <> nominalLeafRepresentationSegment ((.kind) leaf)
+      ]
+        <> ownershipSegments ((.ownership) leaf)
+    )
+  where
+    ownershipSegments GeneratedLeaf = ["owner=generated"]
+    ownershipSegments (ConsumerLeaf binding) =
+      [ "owner=consumer",
+        "canonical=" <> unCanonicalTypeId ((.canonical) binding),
+        "binding=" <> unQualifiedValueName ((.binding) binding),
+        "binding-version=" <> unBindingVersion ((.bindingVersion) binding)
+      ]
+
+nominalLeafRepresentationSegment :: NominalLeafKind -> Text
+nominalLeafRepresentationSegment = \case
+  NominalIdLeaf prefix -> "id:" <> prefix
+  NominalScalarLeaf representation -> case representation of
+    NominalText -> "Text"
+    NominalInt -> "Int"
+    NominalNatural -> "Natural"
+    NominalBool -> "Bool"
+    NominalTime -> "Time"
 
 -- | Equality representation belongs in the fold identity only when a guard
 -- actually compares that declaration. This keeps unrelated binding metadata out

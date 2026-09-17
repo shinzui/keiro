@@ -205,7 +205,10 @@ coverageReportForService specPath service = do
   graph <- checkedTypeGraph service
   let spec = checkedSpec service
   let impact = semanticImpact graph
-      roots = sortOn (\root -> ((.path) root, (.consumer) root, (.surface) root)) (map (coverageRoot graph) ((.roots) impact))
+      roots =
+        sortOn
+          (\root -> ((.path) root, (.consumer) root, (.surface) root))
+          (map (coverageRoot graph) ((.roots) impact) <> map (coverageNominalRoot graph) ((.nominalRootSites) graph))
       structural = structuralBoundaryInventory graph
       opaque = opaqueBoundaryInventory graph
       json = sortOn (.path) (jsonBoundaryInventory graph <> queueExplicitJsonBoundaries spec)
@@ -410,6 +413,23 @@ coverageRoot graph mappedRoot =
             }
         Nothing -> error "coverageRoot: resolved use-site key missing from graph"
 
+coverageNominalRoot :: TypeGraph -> NominalRootSite -> CoverageRoot
+coverageNominalRoot graph site =
+  case Map.lookup ((.nominal) site) ((.nominalLeaves) graph) of
+    Nothing -> error "coverageNominalRoot: resolved nominal use-site missing from graph"
+    Just leaf ->
+      CoverageRoot
+        { surface = rootRefSurface ((.root) site),
+          consumer = nominalRootConsumer ((.root) site),
+          path = renderUsePath (UsePath ((.root) site) ([SegNominal ((.nominal) site)] <> (.segments) site)),
+          mappedType = (.nominal) site,
+          mode = StructuralCoverage,
+          canonicalType = case (.ownership) leaf of GeneratedLeaf -> Nothing; ConsumerLeaf binding -> Just (unCanonicalTypeId ((.canonical) binding)),
+          codecIdentity = Nothing,
+          codecVersion = Nothing,
+          wireFingerprint = nominalWireFingerprint leaf
+        }
+
 structuralBoundaryInventory :: TypeGraph -> [StructuralBoundary]
 structuralBoundaryInventory graph =
   sortOn
@@ -513,20 +533,35 @@ snapshotBoundaryInventory :: Spec -> TypeGraph -> [SnapshotBoundary]
 snapshotBoundaryInventory spec graph =
   sortOn
     (.root)
-    [ SnapshotBoundary
-        { root = renderUsePath (UsePath ((.root) site) [SegDecl (unMappedKey key)]),
-          aggregate = aggregate,
-          register = register,
-          mappedType = unMappedKey key,
-          mode = declarationMode declaration,
-          encoding = "consumer-json-cache",
-          invalidation = "tracked-by-mapped-wire-fingerprint",
-          wireFingerprint = wireFingerprint graph (unMappedKey key),
-          enabled = aggregateHasSnapshot aggregate
-        }
-    | site@UseSite {root = RootRegister aggregate register, mappedKey = key} <- persistedSites graph,
-      Just declaration <- [Map.lookup key ((.declarations) graph)]
-    ]
+    ( [ SnapshotBoundary
+          { root = renderUsePath (UsePath ((.root) site) [SegDecl (unMappedKey key)]),
+            aggregate = aggregate,
+            register = register,
+            mappedType = unMappedKey key,
+            mode = declarationMode declaration,
+            encoding = "consumer-json-cache",
+            invalidation = "tracked-by-mapped-wire-fingerprint",
+            wireFingerprint = wireFingerprint graph (unMappedKey key),
+            enabled = aggregateHasSnapshot aggregate
+          }
+      | site@UseSite {root = RootRegister aggregate register, mappedKey = key} <- persistedSites graph,
+        Just declaration <- [Map.lookup key ((.declarations) graph)]
+      ]
+        <> [ SnapshotBoundary
+               { root = renderUsePath (UsePath ((.root) site) ([SegNominal ((.nominal) site)] <> (.segments) site)),
+                 aggregate = aggregate,
+                 register = register,
+                 mappedType = (.nominal) site,
+                 mode = StructuralCoverage,
+                 encoding = "consumer-json-cache",
+                 invalidation = "tracked-by-nominal-wire-fingerprint",
+                 wireFingerprint = nominalWireFingerprint leaf,
+                 enabled = aggregateHasSnapshot aggregate
+               }
+           | site@NominalRootSite {root = RootRegister aggregate register} <- (.nominalRootSites) graph,
+             Just leaf <- [Map.lookup ((.nominal) site) ((.nominalLeaves) graph)]
+           ]
+    )
   where
     aggregateHasSnapshot name =
       any
@@ -679,6 +714,15 @@ isWireSite RootReadModelQueryResult {} = False
 
 rootText :: RootRef -> Text
 rootText site = renderUsePath (UsePath site [])
+
+nominalRootConsumer :: RootRef -> Text
+nominalRootConsumer = \case
+  RootCommandField aggregate _ _ -> aggregate
+  RootEventField aggregate _ _ -> aggregate
+  RootRegister aggregate _ -> aggregate
+  RootWorkqueueField workqueue _ -> "workqueue:" <> workqueue
+  RootReadModelQueryInput readModel -> "read-model-query:" <> readModel <> ":input"
+  RootReadModelQueryResult readModel -> "read-model-query:" <> readModel <> ":result"
 
 declarationMode :: ResolvedMappedDecl -> CoverageMode
 declarationMode =

@@ -4,15 +4,19 @@ module Main (main) where
 
 import Conformance.StructuralNominals.Bindings qualified as Bindings
 import Conformance.StructuralNominals.Domain
+import Conformance.StructuralNominals.Historical (historicalTemplateStateCodec)
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Text (Text)
 import Data.Text qualified as T
 import Generated.StructuralNominalLeaves.Nominals (TemplateId)
 import Generated.StructuralNominalLeaves.StructuralConformance (structuralConformanceAssertions)
+import Generated.StructuralNominalLeaves.Structural.CodecCompare.TemplateState (compareWithHistorical)
 import Generated.StructuralNominalLeaves.TemplateCatalog.Codec
+import Generated.StructuralNominalLeaves.TemplateCatalog.Codec qualified as GeneratedCodec
 import Generated.StructuralNominalLeaves.TemplateCatalog.Domain
 import Generated.StructuralNominalLeaves.TemplateCatalog.Harness (harnessAssertions)
 import Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
@@ -23,12 +27,16 @@ import Generated.MappedNominalQueueOnly.Nominals qualified as QueueOnlyNominals
 import Generated.MappedNominalQueueOnly.TemplateWork.Queue qualified as QueueOnly
 import Keiki.Core ((!))
 import Keiro.Codec (eventType)
+import Keiro.Dsl.CodecCompare (HistoricalCodec (..), reportSucceeded)
 import Keiro.EventStream qualified as EventStream
 import Keiro.Snapshot.Codec (defaultStateCodec)
 import System.Exit (exitFailure)
 
 main :: IO ()
 main = do
+  comparison <- compareWithHistorical historicalTemplateStateCodec "test/conformance-structural-nominals/fixtures/codec-compare"
+  malformed <-
+    (Aeson.eitherDecodeFileStrict "test/conformance-structural-nominals/fixtures/codec-compare-malformed/template-state-wrong-prefix.json" :: IO (Either String Value))
   let assertions =
         [("structural/" <> label, passed) | (label, passed) <- structuralConformanceAssertions]
           <> harnessAssertions
@@ -43,11 +51,22 @@ main = do
                ("queue generated ID rejection is located", rejectedAt "$['template_id']" badQueue),
                ("query aliases preserve nominal domain types", queryAliasAgreement),
                ("queue-only nominal scaffold compiles with its leaf helper", queueOnlyAgreement),
-               ("query-only nominal scaffold compiles without a leaf helper", queryOnlyAgreement)
+               ("query-only nominal scaffold compiles without a leaf helper", queryOnlyAgreement),
+               ("historical opaque TemplateState codec has parity with the generated codec", reportSucceeded comparison),
+               ("historical and generated TemplateState codecs both reject malformed IDs", malformedIdRejected malformed)
              ]
   forM_ assertions $ \(label, passed) ->
     putStrLn ((if passed then "PASS  " else "FAIL  ") <> label)
   unless (all snd assertions) exitFailure
+
+malformedIdRejected :: Either String Value -> Bool
+malformedIdRejected = \case
+  Left _ -> False
+  Right value ->
+    isRejected (historicalTemplateStateCodec.decode value)
+      && isRejected (GeneratedCodec.decodeTemplateStateMapped value)
+  where
+    isRejected = \case Left _ -> True; Right _ -> False
 
 eventRoundTrip :: Bool
 eventRoundTrip =

@@ -1353,7 +1353,9 @@ mappedConflictRules spec = sourceCollisions ++ canonicalCollisions ++ packageCol
 nominalLeafLanguageRules :: EffectiveLanguageContract -> Spec -> TypeGraph -> [Diagnostic]
 nominalLeafLanguageRules languageContract spec graph
   | runtimeProfileHasCapability ((.runtimeProfile) languageContract) StructuralNominalLeaves = []
-  | otherwise = concatMap declarationRules (Map.elems ((.declarations) graph)) <> concatMap rootRule ((.nominalRootSites) graph)
+  | otherwise =
+      concatMap declarationRules (Map.elems ((.declarations) graph))
+        <> concatMap rootRule [site | site <- (.nominalRootSites) graph, candidateOnlyRoot ((.root) site)]
   where
     declarationRules =
       foldMappedDecl
@@ -1389,6 +1391,13 @@ nominalLeafLanguageRules languageContract spec graph
       RootWorkqueueField workqueue field -> "workqueue '" <> workqueue <> "' payload field '" <> field <> "'"
       RootReadModelQueryInput readModel -> "readmodel '" <> readModel <> "' query input"
       RootReadModelQueryResult readModel -> "readmodel '" <> readModel <> "' query result"
+    candidateOnlyRoot = \case
+      RootWorkqueueField {} -> True
+      RootReadModelQueryInput {} -> True
+      RootReadModelQueryResult {} -> True
+      RootCommandField {} -> False
+      RootEventField {} -> False
+      RootRegister {} -> False
     maybeToList = maybe [] pure
 
 nominalNamesInExpr :: ResolvedTypeExpr -> Set Name

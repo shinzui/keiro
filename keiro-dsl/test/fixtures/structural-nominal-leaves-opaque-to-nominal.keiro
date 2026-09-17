@@ -1,0 +1,136 @@
+language keiro-dsl 6
+context structural-nominal-leaves
+
+id TemplateId prefix=template
+
+id ClaimId prefix=claim using {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=ClaimId
+  binding = "Conformance.StructuralNominals.Bindings.claimIdBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.ClaimId.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.claimIdFixtures"
+}
+
+mapped nominal AccountNumber : Text {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=AccountNumber
+  binding = "Conformance.StructuralNominals.Bindings.accountNumberBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.AccountNumber.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.accountNumberFixtures"
+}
+
+mapped opaque TemplateIdValue {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=TemplateIdValue
+  codec = "conformance.structural-nominals.template-id.json"
+  version = "1"
+  fixtures = "Conformance.StructuralNominals.Bindings.templateStateFixtures"
+}
+
+mapped structural record TemplateState {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=TemplateState
+  binding = "Conformance.StructuralNominals.Bindings.templateStateBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.TemplateState.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.templateStateFixtures"
+  wire object constructor=TemplateState unknown-fields=reject {
+    templateId as "templateId" : TemplateIdValue required
+    holder as "holder" : Optional ClaimId optional on-missing=null
+    account as "account" : AccountNumber required
+  }
+}
+
+mapped structural union TemplateRef {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=TemplateRef
+  binding = "Conformance.StructuralNominals.Bindings.templateRefBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.TemplateRef.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.templateRefFixtures"
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
+    ById as "by_id" : TemplateId
+    ByAccount as "by_account" : AccountNumber
+    Unknown as "unknown"
+  }
+}
+
+mapped structural record TemplateBook {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=TemplateBook
+  binding = "Conformance.StructuralNominals.Bindings.templateBookBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.TemplateBook.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.templateBookFixtures"
+  initial = "Conformance.StructuralNominals.Bindings.initialTemplateBook"
+  wire object constructor=TemplateBook unknown-fields=reject {
+    templates as "templates" : List TemplateState required
+    holders as "holders" : List (Optional ClaimId) required
+    byKey as "byKey" : Map TemplateId required
+  }
+}
+
+aggregate TemplateCatalog
+  regs
+    book TemplateBook = initial
+  states Empty Recorded!
+
+  command RecordTemplate { state:TemplateState reference:TemplateRef book:TemplateBook }
+  event TemplateRecorded = fields(RecordTemplate)
+
+  Empty -- RecordTemplate -->
+    write book := cmd.book
+    emit TemplateRecorded
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="structural-nominal-leaves-v1"
+
+workqueue template_work {
+  queue logical = "template.work"
+  derive physical = "template_work"
+         dlq = "template_work_dlq"
+         table = "pgmq.q_template_work"
+  payload TemplateWork {
+    templateId -> "template_id" : TemplateId
+    holder -> "holder" : Optional ClaimId
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+target template_table {
+  schema = "public"
+  table = "templates"
+  reset = clear
+}
+
+rebuild-group template_rebuild {
+  targets = [ template_table ]
+  order = [ template_table ]
+}
+
+projection-owner template_writer {
+  source = all
+  delivery = subscription
+  group = template_rebuild
+  targets = [ template_table ]
+  order = 10
+  subscription = "template-writer"
+  dedup = "template-writer-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel template_lookup {
+  columns {}
+  query input = TemplateState
+  query result = List TemplateId
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head entire-log
+  group = template_rebuild
+  targets = [ template_table ]
+}

@@ -153,7 +153,7 @@ maps are a separate expansion and should not delay this delivery.
 - [x] 2026-09-17: Final value/release assessment; reproduced the current nested-ID refusal and separated feature completion from production-language publication.
 - [x] 2026-09-17: Review graph, generator, diff, fingerprints, and completed Plan 228;
       revise missing paths and validation instructions.
-- [ ] M1–M3. Qualify isolated queue/query roots, nested binding fingerprint changes,
+- [x] 2026-09-17: M1–M3. Qualify isolated queue/query roots, nested binding fingerprint changes,
       and exact consumer locality with Plan 228's existing infrastructure.
 - [x] 2026-09-17: M1. Add the nominal leaf to the resolved type graph, resolve `id` and `mapped nominal`
       names inside structural declarations, and gate the capability on candidate Language 6.
@@ -175,9 +175,9 @@ maps are a separate expansion and should not delay this delivery.
 - [x] 2026-09-17: M2. The corpus also compiles the isolated queue-only and query-only scaffolds,
       plus a combined workqueue payload and read-model query pair typed by nominal leaves;
       the queue codec round-trips TypeID text and rejects a wrong prefix at the payload path.
-- [ ] M3. Coverage reports nominal boundaries as structural, including workqueue payload
+- [x] 2026-09-17: M3. Coverage reports nominal boundaries as structural, including workqueue payload
       roots; the strict gate passes on the fully structural fixture.
-- [ ] M3. `MappedDiff` compares nominal leaves; `Diff.nominalUses` includes structural use
+- [x] 2026-09-17: M3. `MappedDiff` compares nominal leaves; `Diff.nominalUses` includes structural use
       paths; mutants for prefix, binding-version, opaque-to-nominal, and text-to-nominal are
       classified and golden-tested; `CodecCompare` branch schema handles the leaf.
 - [ ] M4. Workspace fixture proves one shared ID owner reachable from two members' records
@@ -213,6 +213,14 @@ maps are a separate expansion and should not delay this delivery.
 - Implementation, 2026-09-17: Aeson's stable path formatter renders a key containing an
   underscore as `$['template_id']`, while nested alphanumeric object keys retain dot form
   (for example `$.templates[1].templateId`). Conformance follows the actual formatter.
+- Implementation, 2026-09-17: Direct aggregate nominal roots predate Language 6, while the
+  new direct queue/query roots are candidate-only. Exposing all of them in the common type
+  graph required the language gate and structural-conformance projection to filter by root
+  kind so existing aggregate-only specifications and generated corpora remain unchanged.
+- Implementation, 2026-09-17: The corpus regeneration driver intentionally refuses dirty
+  corpus paths. During the milestone checkpoint, `--allow-dirty` was required to prove that
+  the newly declared comparison module regenerates unchanged; the final clean-tree corpus
+  check remains part of `just verify`.
 
 
 ## Decision Log
@@ -325,6 +333,13 @@ maps are a separate expansion and should not delay this delivery.
   Rationale: the consumer's transitional specification declares exactly that twin today; it
   must remain checkable while the migration to nominal leaves is in progress.
   Date: 2026-09-16
+- Decision: Implement opaque-to-nominal parity evidence as an explicit historical codec over
+  the public generated `TemplateId` parser and public `Keiro.Codec.IdDomain` API, with missing,
+  null, present, and malformed-prefix samples committed beside the corpus.
+  Rationale: the comparison must exercise the former JSON contract rather than merely compile
+  the generated comparison module, while keeping ID admission identical to the supported
+  public runtime boundary.
+  Date: 2026-09-17
 - Decision: Nested nominal leaves are not exposed as aggregate expression paths, router
   selection keys, or generated projection witnesses in this plan.
   Rationale: IR-40 concerns composition and codecs, and IR-12 (nominal equality in

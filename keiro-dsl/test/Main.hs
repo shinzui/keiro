@@ -1797,6 +1797,10 @@ main = hspec $ do
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
             "projection-owner-multi-query.keiro",
+            "structural-nominal-leaves-binding-change.keiro",
+            "structural-nominal-leaves-opaque-to-nominal.keiro",
+            "structural-nominal-leaves-prefix-change.keiro",
+            "structural-nominal-leaves-text-to-nominal.keiro",
             "structural-nominal-leaves.keiro",
             "process-reactions-accepted-requires-event.keiro",
             "process-reactions-accepted-unverified.keiro",
@@ -4242,6 +4246,20 @@ main = hspec $ do
         `shouldSatisfy` either (T.isInfixOf "is opaque") (const False)
 
   describe "structural/opaque coverage reporting" $ do
+    it "counts nominal-only consumer roots as structural and inventories their wire boundaries" $ do
+      spec <- specOf "test/fixtures/structural-nominal-leaves.keiro"
+      report <- shouldResolveCoverage "structural-nominal-leaves.keiro" spec
+      (.workqueuePayloads) ((.summary) report)
+        `shouldBe` Coverage.CoverageCounts 2 2 0 0
+      (.readModelQueryResults) ((.summary) report)
+        `shouldBe` Coverage.CoverageCounts 1 1 0 0
+      (.nominalBoundaries) report `shouldSatisfy` ((>= 3) . length)
+      map (.path) ((.nominalBoundaries) report)
+        `shouldContain` ["workqueue template_work payload .templateId : TemplateId"]
+      map (.ownership) ((.nominalBoundaries) report)
+        `shouldContain` ["generated", "consumer"]
+      map (.canonicalType) [boundary | boundary <- (.nominalBoundaries) report, (.nominal) boundary == "ClaimId"]
+        `shouldSatisfy` all (== Just "conformance.structural-nominals.ClaimId.v1")
     it "reports mapped private-event roots and consumer-json register boundaries without a percentage" $ do
       spec <- specOf "test/fixtures/structural-conformance.keiro"
       report <- shouldResolveCoverage "structural-conformance.keiro" spec
@@ -6580,6 +6598,36 @@ main = hspec $ do
       let baseFingerprint = aggregateFoldFingerprint base (onlyAggregate base)
       aggregateFoldFingerprint bindingChanged (onlyAggregate bindingChanged) `shouldNotBe` baseFingerprint
       aggregateFoldFingerprint wireChanged (onlyAggregate wireChanged) `shouldNotBe` baseFingerprint
+    it "invalidates nested nominal folds for representation, binding, and canonical changes only" $ do
+      baseSource <- readTestText "test/fixtures/structural-nominal-leaves.keiro"
+      base <- checkedServiceFromText "structural-nominal-leaves.keiro" baseSource
+      prefixChanged <- checkedServiceOf "test/fixtures/structural-nominal-leaves-prefix-change.keiro"
+      bindingChanged <- checkedServiceOf "test/fixtures/structural-nominal-leaves-binding-change.keiro"
+      canonicalChanged <-
+        checkedServiceFromText
+          "structural-nominal-leaves-canonical-change.keiro"
+          (T.replace "conformance.structural-nominals.ClaimId.v1" "conformance.structural-nominals.ClaimId.v2" baseSource)
+      fixturesChanged <-
+        checkedServiceFromText
+          "structural-nominal-leaves-fixtures-change.keiro"
+          (T.replace "Bindings.claimIdFixtures" "Bindings.claimIdFixturesV2" baseSource)
+      unrelated <-
+        checkedServiceFromText
+          "structural-nominal-leaves-unrelated.keiro"
+          (T.replace "id TemplateId prefix=template" "id UnusedId prefix=unused\nid TemplateId prefix=template" baseSource)
+      let fingerprint service = aggregateFoldFingerprintForService service (onlyAggregate (checkedSpec service))
+          surface = aggregateFoldSurfaceForService base (onlyAggregate (checkedSpec base))
+          generatedTransducer =
+            generatedTextEndingIn
+              "TemplateCatalog/Transducer.hs"
+              (scaffoldServiceModules (defaultContext ((checkedSpec base).context)) base)
+      surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId"
+      surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog register book : TemplateBook .holders [] optional : ClaimId"
+      generatedTransducer `shouldSatisfy` T.isInfixOf (fingerprint base)
+      map fingerprint [prefixChanged, bindingChanged, canonicalChanged]
+        `shouldSatisfy` all (/= fingerprint base)
+      map fingerprint [fixturesChanged, unrelated]
+        `shouldSatisfy` all (== fingerprint base)
 
   describe "process/timer (EP-3)" $ do
     it "parses the hospital-surge process + nested timer" $ do
@@ -8147,7 +8195,24 @@ main = hspec $ do
                   ==> deriveLabel (gate <> extra) compatibility
                 == LabelBreaking
     it "renders the consumer-neutral matrix with separate private, snapshot, and public surfaces" $ do
-      changes <- diffFixtures "test/fixtures/compatibility-vector-old.keiro" "test/fixtures/compatibility-vector-new.keiro"
+      baseChanges <- diffFixtures "test/fixtures/compatibility-vector-old.keiro" "test/fixtures/compatibility-vector-new.keiro"
+      nominalChanges <-
+        diffFixtures
+          "test/fixtures/structural-nominal-leaves.keiro"
+          "test/fixtures/structural-nominal-leaves-prefix-change.keiro"
+      let selectedNominalSubjects =
+            [ "TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId via TemplateState",
+              "TemplateCatalog register book : TemplateBook .byKey {} : TemplateId via TemplateBook",
+              "workqueue template_work payload .templateId : TemplateId",
+              "readmodel template_lookup query result : TemplateId []"
+            ]
+          changes =
+            baseChanges
+              <> [ change
+                 | change <- nominalChanges,
+                   changeCode change == IdPrefixChanged,
+                   (.subject) (kindOfChange change) `elem` selectedNominalSubjects
+                 ]
       let rendered = T.intercalate "\n" (map renderFinding changes)
           explained = T.intercalate "\n" (map renderExplainBlock changes)
           reportJson = T.pack (show (Aeson.toJSON (diffReport defaultGate changes)))
@@ -8199,6 +8264,48 @@ main = hspec $ do
         forM_ changes $ \change ->
           remediationFor ((kindOfChange change).context) ((.code) (kindOfChange change))
             `shouldSatisfy` (not . null)
+    it "classifies nested nominal changes at event, snapshot, queue, and query boundaries" $ do
+      prefixChanges <-
+        diffFixtures
+          "test/fixtures/structural-nominal-leaves.keiro"
+          "test/fixtures/structural-nominal-leaves-prefix-change.keiro"
+      let prefixFindings = [kindOfChange change | change <- prefixChanges, changeCode change == IdPrefixChanged]
+          prefixFacets = map (.facet) prefixFindings
+      forM_ ["nominal-structural-event", "nominal-structural-register", "nominal-workqueue", "nominal-query-input", "nominal-query-result"] $ \facet ->
+        prefixFacets `shouldContain` [facet]
+      map (.subject) [finding | finding <- prefixFindings, (.facet) finding == "nominal-structural-event"]
+        `shouldContain` ["TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId via TemplateState"]
+      map (.subject) [finding | finding <- prefixFindings, (.facet) finding == "nominal-structural-register"]
+        `shouldContain` ["TemplateCatalog register book : TemplateBook .byKey {} : TemplateId via TemplateBook"]
+      forM_ [finding | finding <- prefixFindings, (.facet) finding `elem` ["nominal-query-input", "nominal-query-result"]] $ \finding -> do
+        verdictFor ConsumerBuild (finding.vector) `shouldBe` VAdvisory
+        verdictFor PrivateHistoryRead (finding.vector) `shouldBe` VCompatible
+        verdictFor SnapshotHydration (finding.vector) `shouldBe` VNotApplicable
+
+      bindingChanges <-
+        diffFixtures
+          "test/fixtures/structural-nominal-leaves.keiro"
+          "test/fixtures/structural-nominal-leaves-binding-change.keiro"
+      let bindingFindings = [kindOfChange change | change <- bindingChanges, changeCode change == NominalBindingChanged]
+      forM_ ["nominal-structural-event", "nominal-structural-register", "nominal-workqueue", "nominal-query-input"] $ \facet ->
+        map (.facet) bindingFindings `shouldContain` [facet]
+      forM_
+        [ "TemplateCatalog event TemplateRecorded .state : TemplateState .holder optional : ClaimId via TemplateState",
+          "TemplateCatalog register book : TemplateBook .holders [] optional : ClaimId via TemplateBook",
+          "workqueue template_work payload .holder : ClaimId optional"
+        ]
+        $ \subject -> map (.subject) bindingFindings `shouldContain` [subject]
+
+      textChanges <-
+        diffFixtures
+          "test/fixtures/structural-nominal-leaves-text-to-nominal.keiro"
+          "test/fixtures/structural-nominal-leaves.keiro"
+      opaqueChanges <-
+        diffFixtures
+          "test/fixtures/structural-nominal-leaves-opaque-to-nominal.keiro"
+          "test/fixtures/structural-nominal-leaves.keiro"
+      map changeCode textChanges `shouldContain` [MappedFieldTypeChanged]
+      map changeCode opaqueChanges `shouldContain` [MappedFieldTypeChanged]
     it "separates mapped event migration, snapshot invalidation, and directional rollout" $ do
       breakingAdd <- diffFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-fieldadd-nodefault.keiro"
       let noDefault = [change | change <- breakingAdd, (.code) (kindOfChange change) == MappedFieldAddedNoDefault]
