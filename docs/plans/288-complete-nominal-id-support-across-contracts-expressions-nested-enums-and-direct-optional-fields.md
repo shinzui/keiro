@@ -133,9 +133,10 @@ that milestone rather than amending the frozen profile.
       existing nominal equality contract.
 - [x] 2026-09-17: M3. Declarative router selection accepts nominal ID columns as recipient, key, and
       comparison operands; exact projection witnesses exist for nested ID and enum leaves.
-      Evidence: the 752-example `keiro-dsl-test` suite and the focused structural-nominals
-      conformance suite pass; negative fixtures pin mismatched-ID, ordering, and optional-path
-      diagnostics, while the compiled router pins its canonical identity and fingerprint.
+      Evidence: commits `99450583` and `815a6c71`; the 752-example `keiro-dsl-test` suite,
+      focused structural-nominals and workspace-nominals conformance suites, and all 47
+      clean-tree corpus invocations pass. Negative fixtures pin mismatched-ID, ordering, and
+      optional-path diagnostics, while the compiled router pins its identity and fingerprint.
 - [ ] M4. `Map[Id] V` parses and pretty-prints under a Language 6 syntax feature, resolves
       as a keyed map whose key is a nominal ID leaf, and generates a shape keyed by the ID's
       Haskell type with admission on every key.
