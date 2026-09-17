@@ -1419,7 +1419,7 @@ structuralNominalLeafOwners :: Context -> CheckedService -> TypeGraph -> [(Scaff
 structuralNominalLeafOwners ctx service graph =
   [ ( ScaffoldModule
         { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
-          text = emitStructuralNominalLeaves ctx leaves,
+          text = emitStructuralNominalLeaves ctx keyedNames leaves,
           kind = Generated,
           origin = "context " <> (.context) spec <> " structural nominal leaves"
         },
@@ -1448,9 +1448,18 @@ structuralNominalLeafOwners ctx service graph =
       | name <- Set.toAscList (structuralNames <> queueNames <> contractNames),
         Just leaf <- [Map.lookup name ((.nominalLeaves) graph)]
       ]
+    keyedNames =
+      Set.unions
+        [ keyedMapNominalNames expression
+        | ResolvedStructural _ shape <- Map.elems ((.declarations) graph),
+          expression <- shapeExpressions shape
+        ]
+    shapeExpressions (RRecord _ _ fields) = map (.valueType) fields
+    shapeExpressions (RUnion _ arms) = [payload | arm <- arms, payload <- maybe [] pure ((.payload) arm)]
+    shapeExpressions REnum {} = []
 
-emitStructuralNominalLeaves :: Context -> [NominalLeaf] -> Text
-emitStructuralNominalLeaves ctx leaves =
+emitStructuralNominalLeaves :: Context -> Set.Set Name -> [NominalLeaf] -> Text
+emitStructuralNominalLeaves ctx keyedNames leaves =
   nl $
     renderGeneratedLanguagePragmas []
       <> [ generatedBanner,
@@ -1473,6 +1482,7 @@ emitStructuralNominalLeaves ctx leaves =
             <> Set.fromList
               [ functionName <> (.name) leaf <> "LeafKey"
               | leaf <- leaves,
+                Set.member ((.name) leaf) keyedNames,
                 NominalIdLeaf {} <- [(.kind) leaf],
                 functionName <- ["parse", "render"]
               ]
@@ -1483,7 +1493,7 @@ emitStructuralNominalLeaves ctx leaves =
         "import Data.Aeson.Types (Parser)"
       ]
         <> ["import Data.KindID qualified as KindID" | any isConsumerId leaves]
-        <> ["import Data.Text (Text)" | any isId leaves]
+        <> ["import Data.Text (Text)" | not (Set.null keyedNames)]
         <> ["import Data.Text qualified as T" | any isGeneratedId leaves]
         <> ["import Keiro.Codec.IdDomain (parseKindIdV7Text)" | any isConsumerId leaves]
         <> ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | any isConsumer leaves]
@@ -1523,45 +1533,55 @@ emitStructuralNominalLeaves ctx leaves =
       (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural leaf emission"
     emitGeneratedId leaf =
       nl
-        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
-          encodeName leaf <> " = String . " <> generatedText leaf,
-          "{-# NOINLINE " <> encodeName leaf <> " #-}",
-          "",
-          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
-          parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " (either (fail . T.unpack) pure . " <> generatedParser leaf <> ")",
-          "{-# NOINLINE " <> parseName leaf <> " #-}",
-          "",
-          renderKeyName leaf <> " :: " <> leafType leaf <> " -> Text",
-          renderKeyName leaf <> " = " <> generatedText leaf,
-          "{-# NOINLINE " <> renderKeyName leaf <> " #-}",
-          "",
-          parseKeyName leaf <> " :: Text -> Parser " <> leafType leaf,
-          parseKeyName leaf <> " = either (fail . T.unpack) pure . " <> generatedParser leaf,
-          "{-# NOINLINE " <> parseKeyName leaf <> " #-}"
-        ]
+        ( [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+            encodeName leaf <> " = String . " <> generatedText leaf,
+            "{-# NOINLINE " <> encodeName leaf <> " #-}",
+            "",
+            parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+            parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " (either (fail . T.unpack) pure . " <> generatedParser leaf <> ")",
+            "{-# NOINLINE " <> parseName leaf <> " #-}"
+          ]
+            <> if Set.member ((.name) leaf) keyedNames
+              then
+                [ "",
+                  renderKeyName leaf <> " :: " <> leafType leaf <> " -> Text",
+                  renderKeyName leaf <> " = " <> generatedText leaf,
+                  "{-# NOINLINE " <> renderKeyName leaf <> " #-}",
+                  "",
+                  parseKeyName leaf <> " :: Text -> Parser " <> leafType leaf,
+                  parseKeyName leaf <> " = either (fail . T.unpack) pure . " <> generatedParser leaf,
+                  "{-# NOINLINE " <> parseKeyName leaf <> " #-}"
+                ]
+              else []
+        )
     emitConsumerId leaf prefix binding =
       nl
-        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
-          encodeName leaf <> " = String . KindID.toText . nominalToRepresentation " <> bindingValue binding,
-          "{-# NOINLINE " <> encodeName leaf <> " #-}",
-          "",
-          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
-          parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " $ \\input ->",
-          "  case parseKindIdV7Text @" <> tshow prefix <> " input of",
-          "    Left reason -> fail (show reason)",
-          "    Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
-          "{-# NOINLINE " <> parseName leaf <> " #-}",
-          "",
-          renderKeyName leaf <> " :: " <> leafType leaf <> " -> Text",
-          renderKeyName leaf <> " = KindID.toText . nominalToRepresentation " <> bindingValue binding,
-          "{-# NOINLINE " <> renderKeyName leaf <> " #-}",
-          "",
-          parseKeyName leaf <> " :: Text -> Parser " <> leafType leaf,
-          parseKeyName leaf <> " input = case parseKindIdV7Text @" <> tshow prefix <> " input of",
-          "  Left reason -> fail (show reason)",
-          "  Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
-          "{-# NOINLINE " <> parseKeyName leaf <> " #-}"
-        ]
+        ( [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+            encodeName leaf <> " = String . KindID.toText . nominalToRepresentation " <> bindingValue binding,
+            "{-# NOINLINE " <> encodeName leaf <> " #-}",
+            "",
+            parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+            parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " $ \\input ->",
+            "  case parseKindIdV7Text @" <> tshow prefix <> " input of",
+            "    Left reason -> fail (show reason)",
+            "    Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
+            "{-# NOINLINE " <> parseName leaf <> " #-}"
+          ]
+            <> if Set.member ((.name) leaf) keyedNames
+              then
+                [ "",
+                  renderKeyName leaf <> " :: " <> leafType leaf <> " -> Text",
+                  renderKeyName leaf <> " = KindID.toText . nominalToRepresentation " <> bindingValue binding,
+                  "{-# NOINLINE " <> renderKeyName leaf <> " #-}",
+                  "",
+                  parseKeyName leaf <> " :: Text -> Parser " <> leafType leaf,
+                  parseKeyName leaf <> " input = case parseKindIdV7Text @" <> tshow prefix <> " input of",
+                  "  Left reason -> fail (show reason)",
+                  "  Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
+                  "{-# NOINLINE " <> parseKeyName leaf <> " #-}"
+                ]
+              else []
+        )
     emitGeneratedEnum leaf constructors =
       nl $
         [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
