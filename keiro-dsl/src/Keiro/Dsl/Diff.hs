@@ -101,7 +101,7 @@ import Keiro.Dsl.ReadModelShape (registryNameFor, subscriptionNameFor)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedServiceWithSpec, checkedSource, checkedSpec, effectiveLanguageContract, effectiveRuntimeSemantics, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (MappedConsequence (..), MappedConsumer (..), MappedImpactDelta (..), MappedQueryPosition (..), diffSemanticImpact, mappedConsumerIdentity, mappedImpactForDeclarations, semanticImpact, semanticImpactForService, semanticImpactSnapshot)
 import Keiro.Dsl.TransitionFamily (ReplayBodyDelta (..), ReplayBodyKey, ReplayBodyStatus (..), TransitionFamilyKey (..), guardAlternatives, guardImplies, guardUnion, replayBodyDeltas, replayBodyKey)
-import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), UsePath (..), UseSite (..), renderUsePath, resolveTypeGraph)
+import Keiro.Dsl.TypeGraph (DerivedMappedConsumer (..), MappedKey (..), RootRef (..), UsePath (..), renderUsePath, resolveTypeGraph)
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), renderDiagnostic, validateService)
 
 -- | A classified spec change.
@@ -1095,22 +1095,22 @@ mappedUseChange finding path =
   where
     subject = renderMappedSubject path ((.leaf) finding)
     (root, facet, kind) = case (.root) path of
-      RootCommandField aggregate _ _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
-      RootEventField aggregate _ _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
-      RootRegister aggregate _ _ -> (aggregate, "mapped-register", ContextSnapshot)
-      RootWorkqueueField workqueue _ _ -> (workqueue, "mapped-workqueue", ContextQueue)
-      RootReadModelQueryInput readModel _ -> (readModel, "mapped-query-input", ContextConsumerBuild)
-      RootReadModelQueryResult readModel _ -> (readModel, "mapped-query-result", ContextConsumerBuild)
+      RootCommandField aggregate _ _ -> (aggregate, "mapped-command", ContextConsumerBuild)
+      RootEventField aggregate _ _ -> (aggregate, "mapped-event", ContextPrivateEvent)
+      RootRegister aggregate _ -> (aggregate, "mapped-register", ContextSnapshot)
+      RootWorkqueueField workqueue _ -> (workqueue, "mapped-workqueue", ContextQueue)
+      RootReadModelQueryInput readModel -> (readModel, "mapped-query-input", ContextConsumerBuild)
+      RootReadModelQueryResult readModel -> (readModel, "mapped-query-result", ContextConsumerBuild)
     context = ChangeContext root [subject] kind (mappedContextHint finding kind)
 
 mappedUseConsequences :: UsePath -> Set MappedConsequence
 mappedUseConsequences path = Set.fromList $ case (.root) path of
-  RootCommandField aggregate _ _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate)]
-  RootEventField aggregate _ _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate), MappedPrivateEventHistory aggregate]
-  RootRegister aggregate _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate), MappedSnapshotHydration aggregate]
-  RootWorkqueueField workqueue _ _ -> [MappedConsumerBuild (WorkqueueConsumer workqueue), MappedWorkqueueHistory workqueue]
-  RootReadModelQueryInput readModel _ -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryInput), MappedQueryApi readModel MappedQueryInput]
-  RootReadModelQueryResult readModel _ -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryResult), MappedQueryApi readModel MappedQueryResult]
+  RootCommandField aggregate _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate)]
+  RootEventField aggregate _ _ -> [MappedConsumerBuild (AggregateConsumer aggregate), MappedPrivateEventHistory aggregate]
+  RootRegister aggregate _ -> [MappedConsumerBuild (AggregateConsumer aggregate), MappedSnapshotHydration aggregate]
+  RootWorkqueueField workqueue _ -> [MappedConsumerBuild (WorkqueueConsumer workqueue), MappedWorkqueueHistory workqueue]
+  RootReadModelQueryInput readModel -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryInput), MappedQueryApi readModel MappedQueryInput]
+  RootReadModelQueryResult readModel -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryResult), MappedQueryApi readModel MappedQueryResult]
 
 withMappedConsequences :: Set MappedConsequence -> Change -> Change
 withMappedConsequences consequences = \case

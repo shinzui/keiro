@@ -139,7 +139,8 @@ mappedClosure graph =
         onOptional = id,
         onList = id,
         onMap = id,
-        onRef = \key -> Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph))
+        onRef = \key -> Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph)),
+        onNominal = const Set.empty
       }
 
 positionLabel :: QueryContractPosition -> Text

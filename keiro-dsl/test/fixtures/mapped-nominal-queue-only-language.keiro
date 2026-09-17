@@ -1,0 +1,21 @@
+language keiro-dsl 5
+context mapped-nominal-queue-only-language
+
+id TemplateId prefix=template
+
+workqueue template_work {
+  queue logical = "template.work"
+  derive physical = "template_work"
+         dlq = "template_work_dlq"
+         table = "pgmq.q_template_work"
+  payload TemplateWork {
+    templateId -> "template_id" : Optional TemplateId
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

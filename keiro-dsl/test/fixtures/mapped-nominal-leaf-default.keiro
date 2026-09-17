@@ -1,0 +1,15 @@
+language keiro-dsl 6
+context mapped-nominal-leaf-default
+
+id TemplateId prefix=template
+
+mapped structural record TemplateState {
+  haskell package=example-core module=Example.Domain type=TemplateState
+  binding = "Example.Bindings.templateStateBinding"
+  binding-version = "1"
+  canonical-type = "example.TemplateState.v1"
+  fixtures = "Example.Bindings.templateStateFixtures"
+  wire object constructor=TemplateState unknown-fields=reject {
+    templateId as "templateId" : TemplateId optional on-missing="template_01h455vb4pex5vsknk084sn02q"
+  }
+}

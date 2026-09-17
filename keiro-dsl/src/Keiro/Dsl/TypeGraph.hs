@@ -20,6 +20,15 @@ module Keiro.Dsl.TypeGraph
     mkBindingVersion,
     mkCodecIdentity,
     mkCodecVersion,
+    NominalScalarRepresentation (..),
+    ConsumerNominalBinding (..),
+    NominalLeafKind (..),
+    NominalLeafOwnership (..),
+    NominalLeaf (..),
+    NominalLeafIssue (..),
+    NominalLeafError (..),
+    checkIdLeaf,
+    checkScalarLeaf,
     MappedDeclError (..),
     CheckedMappedDecl (..),
     StructuralDecl (..),
@@ -36,13 +45,16 @@ module Keiro.Dsl.TypeGraph
     DerivedMappedConsumer (..),
     UnsupportedProjectionSource (..),
     TypeGraph (..),
+    RootRef (..),
     UseSite (..),
+    NominalRootSite (..),
     PathSeg (..),
     UsePath (..),
     resolveTypeGraph,
     resolveTypeExpression,
     useSiteSegments,
     usePaths,
+    nominalUsePaths,
     renderUsePath,
     TypeExprAlgebra (..),
     foldTypeExpr,
@@ -56,7 +68,7 @@ where
 
 import Data.Bifunctor (first)
 import Data.Bits (xor)
-import Data.Char (ord)
+import Data.Char (isAscii, isDigit, isLower, isUpper, ord)
 import Data.Either (partitionEithers)
 import Data.Graph (SCC (..), stronglyConnComp)
 import Data.List (sort, sortOn)
@@ -64,14 +76,15 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (catMaybes)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.TypeID qualified as TypeID
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
+import Keiro.Dsl.HaskellName (haskellKeywords)
 import Numeric (showHex)
 
 newtype QualifiedValueName = QualifiedValueName {unQualifiedValueName :: Text}
@@ -143,6 +156,147 @@ mkCodecVersion :: Text -> Either MappedDeclError CodecVersion
 mkCodecVersion value
   | T.null (T.strip value) = Left (EmptyCodecVersion value)
   | otherwise = Right (CodecVersion value)
+
+data NominalScalarRepresentation
+  = NominalText
+  | NominalInt
+  | NominalNatural
+  | NominalBool
+  | NominalTime
+  deriving stock (Eq, Ord, Show, Generic)
+
+data ConsumerNominalBinding = ConsumerNominalBinding
+  { haskell :: !HaskellSource,
+    binding :: !QualifiedValueName,
+    bindingVersion :: !BindingVersion,
+    canonical :: !CanonicalTypeId,
+    fixtures :: !QualifiedValueName,
+    initial :: !(Maybe QualifiedValueName)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data NominalLeafKind
+  = NominalIdLeaf !Text
+  | NominalScalarLeaf !NominalScalarRepresentation
+  deriving stock (Eq, Ord, Show, Generic)
+
+data NominalLeafOwnership
+  = GeneratedLeaf
+  | ConsumerLeaf !ConsumerNominalBinding
+  deriving stock (Eq, Ord, Show, Generic)
+
+data NominalLeaf = NominalLeaf
+  { name :: !Name,
+    kind :: !NominalLeafKind,
+    ownership :: !NominalLeafOwnership,
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+data NominalLeafIssue
+  = LeafMissingIngredient !Name !Loc !Text
+  | LeafInvalidHaskellSource !Name !Loc !Text
+  | LeafInvalidQualifiedValue !Name !Loc !Text !Text
+  | LeafInvalidIdentity !Name !Loc !Text !Text
+  | LeafInvalidIdPrefix !Name !Loc !Text !Text
+  | LeafUnsupportedScalar !Name !Loc !Name
+  deriving stock (Eq, Show, Generic)
+
+newtype NominalLeafError = NominalLeafError {nominalLeafIssues :: NonEmpty NominalLeafIssue}
+  deriving stock (Eq, Show, Generic)
+
+checkIdLeaf :: IdDecl -> Either NominalLeafError NominalLeaf
+checkIdLeaf declaration = do
+  ownership <- checkLeafOwnership ((.name) declaration) ((.loc) declaration) ((.binding) declaration)
+  case (.binding) declaration >>= const (TypeID.checkPrefix ((.prefix) declaration)) of
+    Just err ->
+      Left
+        ( NominalLeafError
+            (LeafInvalidIdPrefix ((.name) declaration) ((.loc) declaration) ((.prefix) declaration) (T.pack (show err)) :| [])
+        )
+    Nothing ->
+      Right
+        NominalLeaf
+          { name = (.name) declaration,
+            kind = NominalIdLeaf ((.prefix) declaration),
+            ownership = ownership,
+            loc = (.loc) declaration
+          }
+
+checkScalarLeaf :: NominalScalarDecl -> Either NominalLeafError NominalLeaf
+checkScalarLeaf declaration = do
+  ownership <- checkRequiredLeafOwnership ((.name) declaration) ((.loc) declaration) ((.binding) declaration)
+  representation <- case scalarLeafRepresentation ((.representation) declaration) of
+    Nothing -> Left (NominalLeafError (LeafUnsupportedScalar ((.name) declaration) ((.loc) declaration) ((.representation) declaration) :| []))
+    Just value -> Right value
+  Right
+    NominalLeaf
+      { name = (.name) declaration,
+        kind = NominalScalarLeaf representation,
+        ownership = ownership,
+        loc = (.loc) declaration
+      }
+
+checkLeafOwnership :: Name -> Loc -> Maybe NominalBindingDecl -> Either NominalLeafError NominalLeafOwnership
+checkLeafOwnership _ _ Nothing = Right GeneratedLeaf
+checkLeafOwnership name loc (Just declaration) = checkRequiredLeafOwnership name loc declaration
+
+checkRequiredLeafOwnership :: Name -> Loc -> NominalBindingDecl -> Either NominalLeafError NominalLeafOwnership
+checkRequiredLeafOwnership name loc declaration =
+  case NE.nonEmpty issues of
+    Just errors -> Left (NominalLeafError errors)
+    Nothing -> case checkedBinding of
+      Just value -> Right (ConsumerLeaf value)
+      Nothing -> error "keiro-dsl internal invariant: a nominal leaf binding without issues is complete"
+  where
+    issues =
+      [LeafMissingIngredient name loc label | (label, missing) <- missingFacts, missing]
+        <> maybe [] (validateLeafHaskellSource name loc) ((.haskell) declaration)
+        <> qualifiedIssues "binding" ((.binding) declaration)
+        <> qualifiedIssues "fixtures" ((.fixtures) declaration)
+        <> qualifiedIssues "initial" ((.initial) declaration)
+        <> identityIssues "binding-version" ((.bindingVersion) declaration)
+        <> canonicalIssues ((.canonicalType) declaration)
+    missingFacts =
+      [ ("haskell", (.haskell) declaration == Nothing),
+        ("binding", (.binding) declaration == Nothing),
+        ("binding-version", (.bindingVersion) declaration == Nothing),
+        ("canonical-type", (.canonicalType) declaration == Nothing),
+        ("fixtures", (.fixtures) declaration == Nothing)
+      ]
+    qualifiedIssues category value = case value of
+      Just symbol | not (qualifiedValueSafe symbol) -> [LeafInvalidQualifiedValue name loc category symbol]
+      _ -> []
+    identityIssues category value = case value of
+      Just identity | not (identitySafe identity) -> [LeafInvalidIdentity name loc category identity]
+      _ -> []
+    canonicalIssues value = case value of
+      Just identity | not (identitySafe identity) -> [LeafInvalidIdentity name loc "canonical-type" identity]
+      _ -> []
+    checkedBinding =
+      ConsumerNominalBinding
+        <$> (.haskell) declaration
+        <*> ((.binding) declaration >>= either (const Nothing) Just . mkQualifiedValueName)
+        <*> ((.bindingVersion) declaration >>= either (const Nothing) Just . mkBindingVersion)
+        <*> ((.canonicalType) declaration >>= either (const Nothing) Just . mkCanonicalTypeId)
+        <*> ((.fixtures) declaration >>= either (const Nothing) Just . mkQualifiedValueName)
+        <*> pure ((.initial) declaration >>= either (const Nothing) Just . mkQualifiedValueName)
+
+validateLeafHaskellSource :: Name -> Loc -> HaskellSource -> [NominalLeafIssue]
+validateLeafHaskellSource name loc source =
+  [LeafInvalidHaskellSource name loc "package" | not (cabalPackageName ((.package) source))]
+    <> [LeafInvalidHaskellSource name loc "module" | not (moduleNameSafe ((.moduleName) source))]
+    <> [LeafInvalidHaskellSource name loc "type" | not (constructorSafe ((.valueType) source))]
+
+scalarLeafRepresentation :: Name -> Maybe NominalScalarRepresentation
+scalarLeafRepresentation = \case
+  "Text" -> Just NominalText
+  "Int" -> Just NominalInt
+  "Natural" -> Just NominalNatural
+  "Bool" -> Just NominalBool
+  "Time" -> Just NominalTime
+  "UTCTime" -> Just NominalTime
+  _ -> Nothing
 
 data StructuralDecl = StructuralDecl
   { name :: !Name,
@@ -237,6 +391,7 @@ data ResolvedTypeExpr
   | RList !ResolvedTypeExpr
   | RMap !ResolvedTypeExpr
   | RRef !MappedKey
+  | RNominal !NominalLeaf
   deriving stock (Eq, Show, Generic)
 
 data ResolvedWireField = ResolvedWireField
@@ -273,16 +428,30 @@ data TypeGraphError
   | TGAmbiguousName !Name ![Text]
   | TGUnresolvedRef !Name !Name !Loc
   | TGUnresolvedConsumerRef !Text !Name !Loc
+  | TGUnsupportedNominalLeaf !Name !Name !Text !Loc
   | TGRecursive ![Name]
   deriving stock (Eq, Show, Generic)
 
-data UseSite
-  = RootCommandField !Name !Name !Name !MappedKey
-  | RootEventField !Name !Name !Name !MappedKey
-  | RootRegister !Name !Name !MappedKey
-  | RootWorkqueueField !Name !Name !MappedKey
-  | RootReadModelQueryInput !Name !MappedKey
-  | RootReadModelQueryResult !Name !MappedKey
+data RootRef
+  = RootCommandField !Name !Name !Name
+  | RootEventField !Name !Name !Name
+  | RootRegister !Name !Name
+  | RootWorkqueueField !Name !Name
+  | RootReadModelQueryInput !Name
+  | RootReadModelQueryResult !Name
+  deriving stock (Eq, Ord, Show, Generic)
+
+data UseSite = UseSite
+  { root :: !RootRef,
+    mappedKey :: !MappedKey
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+
+data NominalRootSite = NominalRootSite
+  { root :: !RootRef,
+    nominal :: !Name,
+    segments :: ![PathSeg]
+  }
   deriving stock (Eq, Ord, Show, Generic)
 
 data PathSeg
@@ -292,10 +461,11 @@ data PathSeg
   | SegMapValue
   | SegOptional
   | SegDecl !Name
+  | SegNominal !Name
   deriving stock (Eq, Ord, Show, Generic)
 
 data UsePath = UsePath
-  { root :: !UseSite,
+  { root :: !RootRef,
     segments :: ![PathSeg]
   }
   deriving stock (Eq, Ord, Show, Generic)
@@ -318,7 +488,11 @@ data UnsupportedProjectionSource
 data TypeGraph = TypeGraph
   { declarations :: !(Map MappedKey ResolvedMappedDecl),
     reachability :: !(Map MappedKey (Set MappedKey)),
+    nominalLeaves :: !(Map Name NominalLeaf),
+    unsupportedNominalLeafKinds :: !(Map Name Text),
+    nominalReachability :: !(Map MappedKey (Set Name)),
     useSites :: ![UseSite],
+    nominalRootSites :: ![NominalRootSite],
     rootSegments :: !(Map UseSite [PathSeg]),
     derivedMappedConsumers :: ![DerivedMappedConsumer],
     replayableProjectionGroups :: !(Map DerivedMappedConsumer Name),
@@ -332,24 +506,41 @@ resolveTypeGraph spec = do
   checked <- collectChecked ((.mapped) spec)
   rejectMany (ambiguityErrors spec checked)
   let keyByName = Map.fromList [(checkedName decl, MappedKey (checkedName decl)) | decl <- checked]
-      (resolveErrors, resolvedPairs) = partitionEithers (map (resolveCheckedDecl keyByName) checked)
+      nominalLeaves = collectNominalLeaves spec
+      enumNames = Set.fromList [(.name) declaration | declaration <- (.enums) spec]
+      (resolveErrors, resolvedPairs) = partitionEithers (map (resolveCheckedDecl keyByName nominalLeaves enumNames) checked)
   rejectMany resolveErrors
   let declarations = Map.fromList resolvedPairs
   rejectMany (cycleErrors declarations)
   let reachability = Map.mapWithKey (reachableFrom declarations) declarations
-      (rootErrors, rootSites) = partitionEithers (collectUseSites keyByName spec)
+      nominalReachability = Map.mapWithKey (nominalsReachableFrom declarations) declarations
+      (rootErrors, rootSites) = partitionEithers (collectUseSites keyByName nominalLeaves enumNames spec)
   rejectMany rootErrors
+  let mappedRootSites = [(site, segments) | CollectedMapped site segments <- rootSites]
+      nominalRootSites = [site | CollectedNominal site <- rootSites]
   pure
     TypeGraph
       { declarations = declarations,
         reachability = reachability,
-        useSites = map fst (catMaybes rootSites),
-        rootSegments = Map.fromList (catMaybes rootSites),
+        nominalLeaves = nominalLeaves,
+        unsupportedNominalLeafKinds = Map.fromSet (const "enum") enumNames,
+        nominalReachability = nominalReachability,
+        useSites = map fst mappedRootSites,
+        nominalRootSites = nominalRootSites,
+        rootSegments = Map.fromList mappedRootSites,
         derivedMappedConsumers = sort (derivedMappedConsumers spec),
         replayableProjectionGroups = replayableProjectionGroups spec,
         projectionOperationalIdentities = projectionOperationalIdentities spec,
         unsupportedProjectionSources = sort (unsupportedProjectionSources spec)
       }
+
+collectNominalLeaves :: Spec -> Map Name NominalLeaf
+collectNominalLeaves spec =
+  Map.fromList
+    [ ((.name) leaf, leaf)
+    | result <- map checkIdLeaf ((.ids) spec) <> map checkScalarLeaf ((.nominalScalars) spec),
+      Right leaf <- [result]
+    ]
 
 derivedMappedConsumers :: Spec -> [DerivedMappedConsumer]
 derivedMappedConsumers spec =
@@ -445,7 +636,8 @@ ambiguityErrors :: Spec -> [CheckedMappedDecl] -> [TypeGraphError]
 ambiguityErrors spec declarations =
   [ TGAmbiguousName name origins
   | (name, origins) <- Map.toList allOrigins,
-    length origins > 1
+    length origins > 1,
+    "mapped" `elem` origins || "built-in" `elem` origins
   ]
   where
     builtins = ["Text", "Int", "Bool", "Natural", "Time", "UTCTime", "Json", "Optional", "List", "Map"]
@@ -453,58 +645,65 @@ ambiguityErrors spec declarations =
       [(checkedName declaration, "mapped") | declaration <- declarations]
         ++ [((.name) declaration, "id") | declaration <- (.ids) spec]
         ++ [((.name) declaration, "enum") | declaration <- (.enums) spec]
+        ++ [((.name) declaration, "nominal scalar") | declaration <- (.nominalScalars) spec]
         ++ [(name, "built-in") | name <- builtins]
     allOrigins = Map.fromListWith (++) [(name, [origin]) | (name, origin) <- originPairs]
 
-resolveCheckedDecl :: Map Name MappedKey -> CheckedMappedDecl -> Either TypeGraphError (MappedKey, ResolvedMappedDecl)
-resolveCheckedDecl _ (CheckedOpaque declaration) =
+resolveCheckedDecl :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> CheckedMappedDecl -> Either TypeGraphError (MappedKey, ResolvedMappedDecl)
+resolveCheckedDecl _ _ _ (CheckedOpaque declaration) =
   Right (MappedKey ((.name) declaration), ResolvedOpaque declaration)
-resolveCheckedDecl keyByName (CheckedStructural declaration shape) = do
-  resolvedShape <- resolveShape keyByName ((.name) declaration) shape
+resolveCheckedDecl keyByName nominalByName enumNames (CheckedStructural declaration shape) = do
+  resolvedShape <- resolveShape keyByName nominalByName enumNames ((.name) declaration) shape
   pure (MappedKey ((.name) declaration), ResolvedStructural declaration resolvedShape)
 
-resolveShape :: Map Name MappedKey -> Name -> MappedShape -> Either TypeGraphError ResolvedMappedShape
-resolveShape keyByName owner (ShapeRecord constructor unknownFields fields) =
+resolveShape :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> Name -> MappedShape -> Either TypeGraphError ResolvedMappedShape
+resolveShape keyByName nominalByName enumNames owner (ShapeRecord constructor unknownFields fields) =
   RRecord constructor unknownFields <$> traverse resolveField fields
   where
     resolveField field =
       ResolvedWireField
         ((.haskell) field)
         ((.key) field)
-        <$> resolveExpr keyByName owner (wireFieldLoc field) ((.valueType) field)
+        <$> resolveExpr keyByName nominalByName enumNames owner (wireFieldLoc field) ((.valueType) field)
         <*> pure ((.presence) field)
         <*> pure ((.onMissing) field)
         <*> pure (wireFieldLoc field)
-resolveShape _ _ (ShapeEnum entries) = Right (REnum entries)
-resolveShape keyByName owner (ShapeUnion encoding arms) =
+resolveShape _ _ _ _ (ShapeEnum entries) = Right (REnum entries)
+resolveShape keyByName nominalByName enumNames owner (ShapeUnion encoding arms) =
   RUnion encoding <$> traverse resolveArm arms
   where
     resolveArm arm =
       ResolvedWireArm
         ((.ctor) arm)
         ((.tag) arm)
-        <$> traverse (resolveExpr keyByName owner ((.loc) arm)) ((.payload) arm)
+        <$> traverse (resolveExpr keyByName nominalByName enumNames owner ((.loc) arm)) ((.payload) arm)
         <*> pure ((.loc) arm)
 
-resolveExpr :: Map Name MappedKey -> Name -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
-resolveExpr _ _ _ TText = Right RText
-resolveExpr _ _ _ TInt = Right RInt
-resolveExpr _ _ _ TInteger = Right RInteger
-resolveExpr _ _ _ TBool = Right RBool
-resolveExpr _ _ _ TNatural = Right RNatural
-resolveExpr _ _ _ TTime = Right RTime
-resolveExpr _ _ _ TJson = Right RJson
-resolveExpr names owner loc (TOptional value) = ROptional <$> resolveExpr names owner loc value
-resolveExpr names owner loc (TList value) = RList <$> resolveExpr names owner loc value
-resolveExpr names owner loc (TMap value) = RMap <$> resolveExpr names owner loc value
-resolveExpr names owner loc (TRef name) =
-  maybe (Left (TGUnresolvedRef owner name loc)) (Right . RRef) (Map.lookup name names)
+resolveExpr :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> Name -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
+resolveExpr _ _ _ _ _ TText = Right RText
+resolveExpr _ _ _ _ _ TInt = Right RInt
+resolveExpr _ _ _ _ _ TInteger = Right RInteger
+resolveExpr _ _ _ _ _ TBool = Right RBool
+resolveExpr _ _ _ _ _ TNatural = Right RNatural
+resolveExpr _ _ _ _ _ TTime = Right RTime
+resolveExpr _ _ _ _ _ TJson = Right RJson
+resolveExpr names nominals enums owner loc (TOptional value) = ROptional <$> resolveExpr names nominals enums owner loc value
+resolveExpr names nominals enums owner loc (TList value) = RList <$> resolveExpr names nominals enums owner loc value
+resolveExpr names nominals enums owner loc (TMap value) = RMap <$> resolveExpr names nominals enums owner loc value
+resolveExpr names nominals enums owner loc (TRef name) =
+  case Map.lookup name names of
+    Just key -> Right (RRef key)
+    Nothing -> case Map.lookup name nominals of
+      Just leaf -> Right (RNominal leaf)
+      Nothing
+        | name `Set.member` enums -> Left (TGUnsupportedNominalLeaf owner name "enum" loc)
+        | otherwise -> Left (TGUnresolvedRef owner name loc)
 
 -- | Resolve a consumer-surface type expression against an already checked
 -- graph. Emitters use this entry point instead of reconstructing declaration
 -- lookup rules independently.
 resolveTypeExpression :: TypeGraph -> Text -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
-resolveTypeExpression graph owner loc = resolveExpr keyByName owner loc
+resolveTypeExpression graph owner loc = resolveExpr keyByName ((.nominalLeaves) graph) (Map.keysSet ((.unsupportedNominalLeafKinds) graph)) owner loc
   where
     keyByName = Map.fromList [(unMappedKey key, key) | key <- Map.keys ((.declarations) graph)]
 
@@ -550,8 +749,52 @@ refsInExpr =
         onOptional = id,
         onList = id,
         onMap = id,
-        onRef = Set.singleton
+        onRef = Set.singleton,
+        onNominal = const Set.empty
       }
+
+nominalRefsInExpr :: ResolvedTypeExpr -> Set Name
+nominalRefsInExpr =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = Set.empty,
+        onInt = Set.empty,
+        onInteger = Set.empty,
+        onBool = Set.empty,
+        onNatural = Set.empty,
+        onTime = Set.empty,
+        onJson = Set.empty,
+        onOptional = id,
+        onList = id,
+        onMap = id,
+        onRef = const Set.empty,
+        onNominal = Set.singleton . (.name)
+      }
+
+directNominalRefs :: ResolvedMappedDecl -> Set Name
+directNominalRefs =
+  foldMappedDecl
+    MappedDeclAlgebra
+      { onStructuralDecl = \_ shape ->
+          foldMappedShape
+            MappedShapeAlgebra
+              { onRecord = \_ _ fields -> Set.unions (map (nominalRefsInExpr . (.valueType)) fields),
+                onEnum = const Set.empty,
+                onUnion = \_ arms -> Set.unions (map (maybe Set.empty nominalRefsInExpr . (.payload)) arms)
+              }
+            shape,
+        onOpaqueDecl = const Set.empty
+      }
+
+nominalsReachableFrom :: Map MappedKey ResolvedMappedDecl -> MappedKey -> ResolvedMappedDecl -> Set Name
+nominalsReachableFrom declarations _ declaration = go Set.empty Set.empty [declaration]
+  where
+    go _ names [] = names
+    go visited names (current : rest) =
+      let names' = names <> directNominalRefs current
+          nextKeys = Set.toList (directRefs current `Set.difference` visited)
+          next = [value | key <- nextKeys, Just value <- [Map.lookup key declarations]]
+       in go (visited <> Set.fromList nextKeys) names' (next <> rest)
 
 reachableFrom :: Map MappedKey ResolvedMappedDecl -> MappedKey -> ResolvedMappedDecl -> Set MappedKey
 reachableFrom declarations origin declaration = go Set.empty (Set.toList (directRefs declaration))
@@ -563,9 +806,18 @@ reachableFrom declarations origin declaration = go Set.empty (Set.toList (direct
           let next = maybe [] (Set.toList . directRefs) (Map.lookup key declarations)
            in go (Set.insert key visited) (next ++ rest)
 
-collectUseSites :: Map Name MappedKey -> Spec -> [Either TypeGraphError (Maybe (UseSite, [PathSeg]))]
-collectUseSites keyByName spec =
-  map (Right . Just) (concatMap aggregateSites aggregates)
+data CollectedRoot
+  = CollectedMapped !UseSite ![PathSeg]
+  | CollectedNominal !NominalRootSite
+  | CollectedNone
+
+data RootReference
+  = MappedRootReference !MappedKey ![PathSeg]
+  | NominalRootReference !Name ![PathSeg]
+
+collectUseSites :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> Spec -> [Either TypeGraphError CollectedRoot]
+collectUseSites keyByName nominalByName enumNames spec =
+  map Right (concatMap aggregateSites aggregates)
     <> concatMap workqueueSites workqueues
     <> concatMap readModelSites readModels
   where
@@ -573,17 +825,17 @@ collectUseSites keyByName spec =
     workqueues = [workqueue | NWorkqueue workqueue <- (.nodes) spec]
     readModels = [readModel | NReadModel readModel <- (.nodes) spec]
     aggregateSites aggregate =
-      [ (RootCommandField ((.name) aggregate) ((.name) command) ((.name) field) key, [])
+      [ CollectedMapped (UseSite (RootCommandField ((.name) aggregate) ((.name) command) ((.name) field)) key) []
       | command <- (.commands) aggregate,
         field <- (.fields) command,
         key <- maybeToList ((.valueType) field >>= typeRefName >>= (`Map.lookup` keyByName))
       ]
-        ++ [ (RootEventField ((.name) aggregate) ((.name) event) ((.name) field) key, [])
+        ++ [ CollectedMapped (UseSite (RootEventField ((.name) aggregate) ((.name) event) ((.name) field)) key) []
            | event <- (.events) aggregate,
              field <- eventFields aggregate event,
              key <- maybeToList ((.valueType) field >>= typeRefName >>= (`Map.lookup` keyByName))
            ]
-        ++ [ (RootRegister ((.name) aggregate) ((.name) register) key, [])
+        ++ [ CollectedMapped (UseSite (RootRegister ((.name) aggregate) ((.name) register)) key) []
            | register <- (.regs) aggregate,
              key <- maybeToList (typeRefName ((.valueType) register) >>= (`Map.lookup` keyByName))
            ]
@@ -613,13 +865,14 @@ collectUseSites keyByName spec =
             result
         ]
 
-    consumerSite owner loc constructor expression =
-      case resolveExpr keyByName owner loc expression of
+    consumerSite owner loc rootRef expression =
+      case resolveExpr keyByName nominalByName enumNames owner loc expression of
         Left (TGUnresolvedRef _ missing _) -> Left (TGUnresolvedConsumerRef owner missing loc)
         Left other -> Left other
         Right resolved -> case rootReference resolved of
-          Nothing -> Right Nothing
-          Just (key, segments) -> Right (Just (constructor key, segments))
+          Nothing -> Right CollectedNone
+          Just (MappedRootReference key segments) -> Right (CollectedMapped (UseSite rootRef key) segments)
+          Just (NominalRootReference name segments) -> Right (CollectedNominal (NominalRootSite rootRef name segments))
 
     rootReference = \case
       RText -> Nothing
@@ -632,8 +885,11 @@ collectUseSites keyByName spec =
       ROptional value -> prepend SegOptional (rootReference value)
       RList value -> prepend SegElem (rootReference value)
       RMap value -> prepend SegMapValue (rootReference value)
-      RRef key -> Just (key, [])
-    prepend segment = fmap (\(key, segments) -> (key, segment : segments))
+      RRef key -> Just (MappedRootReference key [])
+      RNominal leaf -> Just (NominalRootReference ((.name) leaf) [])
+    prepend segment = fmap $ \case
+      MappedRootReference key segments -> MappedRootReference key (segment : segments)
+      NominalRootReference name segments -> NominalRootReference name (segment : segments)
 
     eventFields aggregate event = case (.body) event of
       EventFields fields -> fields
@@ -648,15 +904,18 @@ usePaths :: TypeGraph -> Name -> [UsePath]
 usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declarations) graph) of
   Nothing -> []
   Just _ ->
-    [ UsePath site segments
+    [ UsePath ((.root) site) segments
     | site <- (.useSites) graph,
       segments <- sitePaths site
     ]
   where
     target = MappedKey targetName
     sitePaths site
-      | siteKey site == target = [rootSegments site]
-      | otherwise = map (rootSegments site <>) (pathsFromDecl Set.empty (siteKey site))
+      | siteKey site == target = [[SegDecl (unMappedKey target)] <> rootSegments site]
+      | otherwise =
+          map
+            (\segments -> [SegDecl (unMappedKey (siteKey site))] <> rootSegments site <> segments)
+            (pathsFromDecl Set.empty (siteKey site))
 
     rootSegments = useSiteSegments graph
 
@@ -702,14 +961,75 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declaratio
       RRef key
         | key == target -> [[SegDecl (unMappedKey key)]]
         | otherwise -> map (SegDecl (unMappedKey key) :) (pathsFromDecl visited key)
+      RNominal _ -> []
+
+nominalUsePaths :: TypeGraph -> Name -> [UsePath]
+nominalUsePaths graph targetName
+  | Map.notMember targetName ((.nominalLeaves) graph) = []
+  | otherwise = mappedPaths <> directPaths
+  where
+    mappedPaths =
+      [ UsePath
+          ((.root) site)
+          ( [SegDecl (unMappedKey (siteKey site))]
+              <> useSiteSegments graph site
+              <> segments
+          )
+      | site <- (.useSites) graph,
+        segments <- pathsFromDecl Set.empty (siteKey site)
+      ]
+    directPaths =
+      [ UsePath ((.root) site) ([SegNominal targetName] <> (.segments) site)
+      | site <- (.nominalRootSites) graph,
+        (.nominal) site == targetName
+      ]
+
+    pathsFromDecl visited current
+      | current `Set.member` visited = []
+      | otherwise = case Map.lookup current ((.declarations) graph) of
+          Nothing -> []
+          Just declaration ->
+            foldMappedDecl
+              MappedDeclAlgebra
+                { onStructuralDecl = \_ shape -> pathsInShape (Set.insert current visited) shape,
+                  onOpaqueDecl = const []
+                }
+              declaration
+
+    pathsInShape visited =
+      foldMappedShape
+        MappedShapeAlgebra
+          { onRecord = \_ _ fields ->
+              concat
+                [ map (SegField ((.haskell) field) ((.key) field) :) (pathsInExpr visited ((.valueType) field))
+                | field <- fields
+                ],
+            onEnum = const [],
+            onUnion = \_ arms ->
+              concat
+                [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (pathsInExpr visited) ((.payload) arm))
+                | arm <- arms
+                ]
+          }
+
+    pathsInExpr visited = \case
+      RText -> []
+      RInt -> []
+      RInteger -> []
+      RBool -> []
+      RNatural -> []
+      RTime -> []
+      RJson -> []
+      ROptional value -> map (SegOptional :) (pathsInExpr visited value)
+      RList value -> map (SegElem :) (pathsInExpr visited value)
+      RMap value -> map (SegMapValue :) (pathsInExpr visited value)
+      RRef key -> map (SegDecl (unMappedKey key) :) (pathsFromDecl visited key)
+      RNominal leaf
+        | (.name) leaf == targetName -> [[SegNominal targetName]]
+        | otherwise -> []
 
 siteKey :: UseSite -> MappedKey
-siteKey (RootCommandField _ _ _ key) = key
-siteKey (RootEventField _ _ _ key) = key
-siteKey (RootRegister _ _ key) = key
-siteKey (RootWorkqueueField _ _ key) = key
-siteKey (RootReadModelQueryInput _ key) = key
-siteKey (RootReadModelQueryResult _ key) = key
+siteKey = (.mappedKey)
 
 -- | Container path segments attached to a consumer root before its first
 -- mapped declaration reference.
@@ -719,18 +1039,18 @@ useSiteSegments graph site = Map.findWithDefault [] site ((.rootSegments) graph)
 renderUsePath :: UsePath -> Text
 renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderSegment segments)
   where
-    renderRoot (RootCommandField aggregate command field key) =
-      aggregate <> " command " <> command <> " ." <> field <> " : " <> unMappedKey key
-    renderRoot (RootEventField aggregate event field key) =
-      aggregate <> " event " <> event <> " ." <> field <> " : " <> unMappedKey key
-    renderRoot (RootRegister aggregate register key) =
-      aggregate <> " register " <> register <> " : " <> unMappedKey key
-    renderRoot (RootWorkqueueField workqueue field key) =
-      "workqueue " <> workqueue <> " payload ." <> field <> " : " <> unMappedKey key
-    renderRoot (RootReadModelQueryInput readModel key) =
-      "readmodel " <> readModel <> " query input : " <> unMappedKey key
-    renderRoot (RootReadModelQueryResult readModel key) =
-      "readmodel " <> readModel <> " query result : " <> unMappedKey key
+    renderRoot (RootCommandField aggregate command field) =
+      aggregate <> " command " <> command <> " ." <> field
+    renderRoot (RootEventField aggregate event field) =
+      aggregate <> " event " <> event <> " ." <> field
+    renderRoot (RootRegister aggregate register) =
+      aggregate <> " register " <> register
+    renderRoot (RootWorkqueueField workqueue field) =
+      "workqueue " <> workqueue <> " payload ." <> field
+    renderRoot (RootReadModelQueryInput readModel) =
+      "readmodel " <> readModel <> " query input"
+    renderRoot (RootReadModelQueryResult readModel) =
+      "readmodel " <> readModel <> " query result"
 
     renderSegment (SegField haskellName wireName)
       | haskellName == wireName = " ." <> haskellName
@@ -740,6 +1060,7 @@ renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderS
     renderSegment SegMapValue = " {}"
     renderSegment SegOptional = " optional"
     renderSegment (SegDecl name) = " : " <> name
+    renderSegment (SegNominal name) = " : " <> name
     quoted value = T.pack (show value)
 
 data TypeExprAlgebra a = TypeExprAlgebra
@@ -753,7 +1074,8 @@ data TypeExprAlgebra a = TypeExprAlgebra
     onOptional :: a -> a,
     onList :: a -> a,
     onMap :: a -> a,
-    onRef :: MappedKey -> a
+    onRef :: MappedKey -> a,
+    onNominal :: NominalLeaf -> a
   }
 
 foldTypeExpr :: TypeExprAlgebra a -> ResolvedTypeExpr -> a
@@ -769,6 +1091,7 @@ foldTypeExpr algebra = \case
   RList value -> (.onList) algebra (foldTypeExpr algebra value)
   RMap value -> (.onMap) algebra (foldTypeExpr algebra value)
   RRef key -> (.onRef) algebra key
+  RNominal leaf -> (.onNominal) algebra leaf
 
 data MappedShapeAlgebra a = MappedShapeAlgebra
   { onRecord :: Name -> UnknownFields -> [ResolvedWireField] -> a,
@@ -800,7 +1123,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
     wireDecl visited key
       | key `Set.member` visited = "recursive"
       | otherwise = case Map.lookup key declarations of
-          Nothing -> "missing:" <> unMappedKey key
+          Nothing -> error ("keiro-dsl internal invariant: wire fingerprint references missing mapped declaration " <> T.unpack (unMappedKey key))
           Just declaration ->
             foldMappedDecl
               MappedDeclAlgebra
@@ -852,6 +1175,9 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       RList value -> "list(" <> wireExpr visited value <> ")"
       RMap value -> "map(" <> wireExpr visited value <> ")"
       RRef key -> wireDecl visited key
+      RNominal leaf -> case (.kind) leaf of
+        NominalIdLeaf prefix -> "nominal-id(" <> prefix <> "," <> nominalIdDomainVersion <> ")"
+        NominalScalarLeaf representation -> "nominal-scalar(" <> scalarToken representation <> ")"
 
     renderDefault field (OmCtor constructor) =
       case (.valueType) field of
@@ -859,6 +1185,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
           Just (ResolvedStructural _ (REnum entries)) ->
             maybe ("ctor:" <> atom constructor) ("enum:" <>) (lookup constructor [((.ctor) entry, atom ((.tag) entry)) | entry <- entries])
           _ -> "ctor:" <> atom constructor
+        RNominal _ -> "ctor:" <> atom constructor
         _ -> "ctor:" <> atom constructor
     renderDefault _ value = T.pack (show value)
 
@@ -867,6 +1194,17 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
     renderPresence PRequired = "required"
     renderPresence POptional = "optional"
     atom value = T.pack (show value)
+    scalarToken = \case
+      NominalText -> "Text"
+      NominalInt -> "Int"
+      NominalNatural -> "Natural"
+      NominalBool -> "Bool"
+      NominalTime -> "Time"
+
+    -- Kept byte-identical to Keiro.Dsl.IdDomain.enforcedIdDomainVersion.  This
+    -- low-level graph module cannot import IdDomain because that module reads
+    -- CheckedService, whose analysis contains this graph.
+    nominalIdDomainVersion = "keiro-dsl/id-domain/typeid-v7/1"
 
 fnv1a64 :: Text -> Text
 fnv1a64 input =
@@ -875,3 +1213,40 @@ fnv1a64 input =
       digest = T.foldl' (\hash char -> (hash `xor` fromIntegral (ord char)) * prime) offsetBasis input
       hexadecimal = showHex digest ""
    in T.pack (replicate (16 - length hexadecimal) '0' <> hexadecimal)
+
+cabalPackageName :: Text -> Bool
+cabalPackageName packageName = not (null components) && all validComponent components
+  where
+    components = T.splitOn "-" packageName
+    validComponent component = not (T.null component) && T.all asciiAlphaNum component && T.any asciiLetter component
+
+moduleNameSafe :: Text -> Bool
+moduleNameSafe moduleName = not (null components) && all constructorSafe components
+  where
+    components = T.splitOn "." moduleName
+
+qualifiedValueSafe :: Text -> Bool
+qualifiedValueSafe qualified = case reverse (T.splitOn "." qualified) of
+  value : reversedModule -> not (null reversedModule) && lowerIdentifierSafe value && all constructorSafe reversedModule
+  [] -> False
+
+constructorSafe :: Text -> Bool
+constructorSafe name = case T.uncons name of
+  Just (initial, rest) -> asciiUpper initial && T.all asciiAlphaNumOrUnderscore rest
+  Nothing -> False
+
+lowerIdentifierSafe :: Text -> Bool
+lowerIdentifierSafe name = case T.uncons name of
+  Just (initial, rest) -> asciiLower initial && T.all asciiAlphaNumOrUnderscore rest && name `Set.notMember` haskellKeywords
+  Nothing -> False
+
+identitySafe :: Text -> Bool
+identitySafe value = not (T.null (T.strip value)) && not (T.any asciiControl value)
+
+asciiUpper, asciiLower, asciiLetter, asciiAlphaNum, asciiAlphaNumOrUnderscore, asciiControl :: Char -> Bool
+asciiUpper c = isAscii c && isUpper c
+asciiLower c = isAscii c && isLower c
+asciiLetter c = asciiUpper c || asciiLower c
+asciiAlphaNum c = asciiLetter c || (isAscii c && isDigit c)
+asciiAlphaNumOrUnderscore c = asciiAlphaNum c || c == '_'
+asciiControl c = ord c < 32 || ord c == 127

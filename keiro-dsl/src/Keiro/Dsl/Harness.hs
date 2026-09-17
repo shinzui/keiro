@@ -1600,10 +1600,10 @@ missingExpectedValue aggregate field = case (.onMissing) field of
     (Just graph, RRef key) -> case Map.lookup key ((.declarations) graph) of
       Just (ResolvedStructural _ (REnum entries)) -> case find ((== constructor) . (.ctor)) entries of
         Just entry -> "Aeson.String " <> tshow ((.tag) entry)
-        Nothing -> "error \"missing enum default constructor\""
-      _ -> "error \"non-enum constructor default\""
-    _ -> "error \"non-reference constructor default\""
-  Nothing -> "error \"optional field lacks on-missing policy\""
+        Nothing -> error "Keiro.Dsl.Harness: checked enum default constructor is missing"
+      _ -> error "Keiro.Dsl.Harness: checked constructor default does not target an enum"
+    _ -> error "Keiro.Dsl.Harness: checked constructor default does not target a reference"
+  Nothing -> error "Keiro.Dsl.Harness: checked optional field lacks an on-missing policy"
 
 unknownFieldAssertion :: Agg -> StructuralDecl -> UnknownFields -> Text
 unknownFieldAssertion aggregate declaration policy =

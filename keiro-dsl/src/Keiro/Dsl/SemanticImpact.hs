@@ -401,7 +401,7 @@ semanticImpact graph =
             useSite = site,
             declaration = declaration
           }
-      | site@(RootEventField aggregate _ _ declaration) <- (.useSites) graph,
+      | site@UseSite {root = RootEventField aggregate _ _, mappedKey = declaration} <- (.useSites) graph,
         aggregate == derivedAuthority consumer
       ]
     aggregateDeclarations =
@@ -428,7 +428,7 @@ semanticImpact graph =
         (\_ paths -> Set.fromList (concatMap evidenceForPath paths))
         pathsByDeclaration
     evidenceForPath usePath =
-      let directRoot = mappedRootFromUseSite ((.root) usePath)
+      let directRoot = mappedRootFromUsePath graph usePath
           direct =
             MappedRootEvidence
               { consumer = (.consumer) directRoot,
@@ -520,7 +520,7 @@ checkedRouterEvidence (router, selection) = queryInputEvidence <> expressionEvid
   where
     queryInputEvidence =
       [ selectionEvidence router SelectionQueryInput MappedRouterSelectionQueryInputRoot site ("router " <> router <> " selection query input")
-      | site@RootReadModelQueryInput {} <- (.useSites) selection
+      | site@UseSite {root = RootReadModelQueryInput {}} <- (.useSites) selection
       ]
     expressionEvidence =
       checkedExpressionEvidence router selection SelectionPredicate MappedRouterSelectionPredicateRoot "predicate" ((.predicate) selection)
@@ -554,7 +554,7 @@ selectionRootSites :: SelectionRoot -> CheckedRouterSelection -> [UseSite]
 selectionRootSites root selection =
   [ site
   | site <- (.useSites) selection,
-    case (root, site) of
+    case (root, (.root) site) of
       (SelectionInput, RootReadModelQueryInput {}) -> True
       (SelectionRow, RootReadModelQueryResult {}) -> True
       _ -> False
@@ -580,13 +580,7 @@ renderCheckedPath root segments =
       | otherwise = " as '" <> (.wireKey) segment <> "'"
 
 useSiteDeclaration :: UseSite -> MappedKey
-useSiteDeclaration = \case
-  RootCommandField _ _ _ declaration -> declaration
-  RootEventField _ _ _ declaration -> declaration
-  RootRegister _ _ declaration -> declaration
-  RootWorkqueueField _ _ declaration -> declaration
-  RootReadModelQueryInput _ declaration -> declaration
-  RootReadModelQueryResult _ declaration -> declaration
+useSiteDeclaration = (.mappedKey)
 
 consequencesForMappedEvidence :: TypeGraph -> MappedRootEvidence -> Set MappedConsequence
 consequencesForMappedEvidence graph evidence =
@@ -876,42 +870,42 @@ declarationClosure graph root =
   Set.insert root (Map.findWithDefault Set.empty root ((.reachability) graph))
 
 mappedRootFromUseSite :: UseSite -> MappedRoot
-mappedRootFromUseSite site@(RootCommandField aggregate _ _ declaration) =
+mappedRootFromUseSite site@UseSite {root = RootCommandField aggregate _ _, mappedKey = declaration} =
   MappedRoot
     { consumer = AggregateConsumer aggregate,
       kind = MappedCommandFieldRoot,
       useSite = site,
       declaration = declaration
     }
-mappedRootFromUseSite site@(RootEventField aggregate _ _ declaration) =
+mappedRootFromUseSite site@UseSite {root = RootEventField aggregate _ _, mappedKey = declaration} =
   MappedRoot
     { consumer = AggregateConsumer aggregate,
       kind = MappedEventFieldRoot,
       useSite = site,
       declaration = declaration
     }
-mappedRootFromUseSite site@(RootRegister aggregate _ declaration) =
+mappedRootFromUseSite site@UseSite {root = RootRegister aggregate _, mappedKey = declaration} =
   MappedRoot
     { consumer = AggregateConsumer aggregate,
       kind = MappedRegisterRoot,
       useSite = site,
       declaration = declaration
     }
-mappedRootFromUseSite site@(RootWorkqueueField workqueue _ declaration) =
+mappedRootFromUseSite site@UseSite {root = RootWorkqueueField workqueue _, mappedKey = declaration} =
   MappedRoot
     { consumer = WorkqueueConsumer workqueue,
       kind = MappedWorkqueueFieldRoot,
       useSite = site,
       declaration = declaration
     }
-mappedRootFromUseSite site@(RootReadModelQueryInput readModel declaration) =
+mappedRootFromUseSite site@UseSite {root = RootReadModelQueryInput readModel, mappedKey = declaration} =
   MappedRoot
     { consumer = ReadModelQueryConsumer readModel MappedQueryInput,
       kind = MappedReadModelQueryInputRoot,
       useSite = site,
       declaration = declaration
     }
-mappedRootFromUseSite site@(RootReadModelQueryResult readModel declaration) =
+mappedRootFromUseSite site@UseSite {root = RootReadModelQueryResult readModel, mappedKey = declaration} =
   MappedRoot
     { consumer = ReadModelQueryConsumer readModel MappedQueryResult,
       kind = MappedReadModelQueryResultRoot,
@@ -920,7 +914,12 @@ mappedRootFromUseSite site@(RootReadModelQueryResult readModel declaration) =
     }
 
 eventAuthority :: UsePath -> Maybe Name
-eventAuthority UsePath {root = RootEventField aggregate _ _ _} = Just aggregate
+mappedRootFromUsePath :: TypeGraph -> UsePath -> MappedRoot
+mappedRootFromUsePath graph path =
+  case [site | site <- (.useSites) graph, (.root) site == (.root) path] of
+    site : _ -> mappedRootFromUseSite site
+    [] -> error ("keiro-dsl internal invariant: use path has no mapped root site: " <> T.unpack (renderUsePath path))
+eventAuthority UsePath {root = RootEventField aggregate _ _} = Just aggregate
 eventAuthority _ = Nothing
 
 maybeToList :: Maybe value -> [value]

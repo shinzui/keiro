@@ -356,9 +356,9 @@ checkRouterSelection languageContract graph spec router = case (.source) ((.reso
     queryUseSites queryName =
       [ useSite
       | useSite <- (.useSites) graph,
-        case useSite of
-          RootReadModelQueryInput name _ -> name == queryName
-          RootReadModelQueryResult name _ -> name == queryName
+        case (.root) useSite of
+          RootReadModelQueryInput name -> name == queryName
+          RootReadModelQueryResult name -> name == queryName
           _ -> False
       ]
 
@@ -500,6 +500,7 @@ selectionTypeFromResolved = \case
   RList {} -> Nothing
   RMap {} -> Nothing
   RRef {} -> Nothing
+  RNominal {} -> Nothing
 
 selectionTypeFromAggregate :: ResolvedAggregateType -> Maybe SelectionScalarType
 selectionTypeFromAggregate = \case
@@ -593,6 +594,7 @@ canonicalResolvedType = \case
   RList value -> tuple [atom "List", canonicalResolvedType value]
   RMap value -> tuple [atom "Map", canonicalResolvedType value]
   RRef key -> tuple [atom "Ref", atom (unMappedKey key)]
+  RNominal leaf -> tuple [atom "Nominal", atom ((.name) leaf)]
 
 tuple :: [Text] -> Text
 tuple values = "[" <> T.concat values <> "]"

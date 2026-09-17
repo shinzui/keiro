@@ -953,7 +953,8 @@ branchExpr graph =
         onOptional = BranchOptional,
         onList = BranchList,
         onMap = BranchMap,
-        onRef = \key -> maybe BranchScalar (branchSchemaFor graph) (Map.lookup key ((.declarations) graph))
+        onRef = \key -> maybe BranchScalar (branchSchemaFor graph) (Map.lookup key ((.declarations) graph)),
+        onNominal = const BranchScalar
       }
 
 renderBranchSchema :: BranchSchema -> Text
@@ -2119,7 +2120,8 @@ exprRequirements ctx graph =
                 )
             ]
           Just (ResolvedOpaque declaration) -> [ReqReference (haskellTypeReference ((.haskell) declaration))]
-          Nothing -> []
+          Nothing -> [],
+        onNominal = pure . ReqReference . nominalLeafTypeReference ctx
       }
 
 renderShapeType :: HaskellImportPlan -> Context -> TypeGraph -> ResolvedTypeExpr -> Text
@@ -2145,8 +2147,14 @@ renderShapeType importPlan ctx graph =
                   (HaskellReference (structuralShapeModule ctx ((.name) nested)) ((.name) nested <> "Shape") TypeNamespace RequireQualified)
               Just (ResolvedOpaque opaque) ->
                 renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) opaque))
-              Nothing -> "()"
+              Nothing -> error ("keiro-dsl internal invariant: shape type references missing mapped declaration " <> show key),
+          onNominal = atomicShapeType . renderReferenceOrDie importPlan . nominalLeafTypeReference ctx
         }
+
+nominalLeafTypeReference :: Context -> NominalLeaf -> HaskellReference
+nominalLeafTypeReference ctx leaf = case (.ownership) leaf of
+  GeneratedLeaf -> HaskellReference (generatedNominalModule ctx) ((.name) leaf) TypeNamespace RequireQualified
+  ConsumerLeaf binding -> haskellTypeReference ((.haskell) binding)
 
 data ShapeTypePrecedence
   = AtomicShapeType
@@ -2251,6 +2259,7 @@ projectionScalar = \case
   RList {} -> Nothing
   RMap {} -> Nothing
   RRef {} -> Nothing
+  RNominal {} -> Nothing
 
 escapePointer :: Text -> Text
 escapePointer = T.replace "/" "~1" . T.replace "~" "~0"
@@ -3894,19 +3903,19 @@ queueLead 0 keyValue = "    [ " <> keyValue
 queueLead _ keyValue = "    , " <> keyValue
 
 typeUsesNatural :: ResolvedTypeExpr -> Bool
-typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False id id id (const False))
+typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False id id id (const False) (const False))
 
 typeUsesTime :: ResolvedTypeExpr -> Bool
-typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False id id id (const False))
+typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False id id id (const False) (const False))
 
 typeUsesText :: ResolvedTypeExpr -> Bool
-typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False id id (const True) (const False))
+typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False id id (const True) (const False) (const False))
 
 typeUsesJson :: ResolvedTypeExpr -> Bool
-typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False True id id id (const False))
+typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False True id id id (const False) (const False))
 
 typeUsesParserAnnotation :: ResolvedTypeExpr -> Bool
-typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False id (const True) (const True) (const False))
+typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False id (const True) (const True) (const False) (const False))
 
 typeUsesParseJson :: TypeGraph -> ResolvedTypeExpr -> Bool
 typeUsesParseJson graph =
@@ -3924,7 +3933,8 @@ typeUsesParseJson graph =
         onMap = const True,
         onRef = \key -> case Map.lookup key ((.declarations) graph) of
           Just ResolvedOpaque {} -> True
-          _ -> False
+          _ -> False,
+        onNominal = const False
       }
 
 typeUsesToJson :: TypeGraph -> ResolvedTypeExpr -> Bool
@@ -6657,7 +6667,8 @@ typeUsesMap =
         onOptional = id,
         onList = id,
         onMap = const True,
-        onRef = const False
+        onRef = const False,
+        onNominal = const False
       }
 
 typeUsesOptional :: ResolvedTypeExpr -> Bool
@@ -6674,7 +6685,8 @@ typeUsesOptional =
         onOptional = const True,
         onList = id,
         onMap = id,
-        onRef = const False
+        onRef = const False,
+        onNominal = const False
       }
 
 typeUsesAesonConversion :: Agg -> ResolvedTypeExpr -> Bool
@@ -6693,7 +6705,8 @@ typeUsesAesonConversion aggregate =
         onMap = const True,
         onRef = \key -> case (.typeGraph) aggregate >>= \graph -> Map.lookup key ((.declarations) graph) of
           Just ResolvedOpaque {} -> True
-          _ -> False
+          _ -> False,
+        onNominal = const False
       }
 
 codecUsesOptionalFieldHelper :: Agg -> Bool
@@ -7096,7 +7109,8 @@ exprRefs =
         onOptional = id,
         onList = id,
         onMap = id,
-        onRef = pure
+        onRef = pure,
+        onNominal = const []
       }
 
 emitMappedCodecs :: HaskellImportPlan -> Agg -> Text

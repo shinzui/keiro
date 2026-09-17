@@ -142,6 +142,7 @@ data RuntimeCapability
   | TypedDomainCommandOutcomes
   | SeparatedProjectionQueryPolicy
   | DelegatedInboxRuntime
+  | StructuralNominalLeaves
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -172,6 +173,8 @@ capabilityFoldSegment ProjectionCatalogRuntime = Just "semantic-contract:keiro-d
 capabilityFoldSegment TypedDomainCommandOutcomes = Nothing
 capabilityFoldSegment SeparatedProjectionQueryPolicy = Nothing
 capabilityFoldSegment DelegatedInboxRuntime = Nothing
+-- Structural nominal leaves change generated codecs, not transition/fold semantics.
+capabilityFoldSegment StructuralNominalLeaves = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {capabilities} =
@@ -339,7 +342,7 @@ runtimeProfileV5 :: RuntimeSemanticsProfile
 runtimeProfileV5 =
   RuntimeSemanticsProfile
     "keiro-dsl/runtime-semantics/5"
-    (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4))
+    (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4)))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion

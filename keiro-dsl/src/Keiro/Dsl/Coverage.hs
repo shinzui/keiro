@@ -12,6 +12,7 @@ module Keiro.Dsl.Coverage
     StructuralBoundary (..),
     OpaqueBoundary (..),
     JsonBoundary (..),
+    NominalBoundary (..),
     SnapshotBoundary (..),
     UnsupportedSurface (..),
     CoverageCounts (..),
@@ -100,6 +101,18 @@ data JsonBoundary = JsonBoundary
   }
   deriving stock (Eq, Ord, Show)
 
+data NominalBoundary = NominalBoundary
+  { root :: !Text,
+    path :: !Text,
+    nominal :: !Text,
+    kind :: !Text,
+    prefix :: !(Maybe Text),
+    domainVersion :: !(Maybe Text),
+    canonicalType :: !(Maybe Text),
+    ownership :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
 data SnapshotBoundary = SnapshotBoundary
   { root :: !Text,
     aggregate :: !Text,
@@ -174,6 +187,7 @@ data CoverageReport = CoverageReport
     structuralBoundaries :: ![StructuralBoundary],
     opaqueBoundaries :: ![OpaqueBoundary],
     jsonBoundaries :: ![JsonBoundary],
+    nominalBoundaries :: ![NominalBoundary],
     snapshotBoundaries :: ![SnapshotBoundary],
     unsupportedSurfaces :: ![UnsupportedSurface],
     summary :: !CoverageSummary,
@@ -195,6 +209,7 @@ coverageReportForService specPath service = do
       structural = structuralBoundaryInventory graph
       opaque = opaqueBoundaryInventory graph
       json = sortOn (.path) (jsonBoundaryInventory graph <> queueExplicitJsonBoundaries spec)
+      nominals = nominalBoundaryInventory graph
       snapshots = snapshotBoundaryInventory spec graph
       summary = summarize roots json
       findings = opaqueSurfaceFindings opaque
@@ -205,6 +220,7 @@ coverageReportForService specPath service = do
         structuralBoundaries = structural,
         opaqueBoundaries = opaque,
         jsonBoundaries = json,
+        nominalBoundaries = nominals,
         snapshotBoundaries = snapshots,
         unsupportedSurfaces = unsupportedInventory graph,
         summary = summary,
@@ -286,6 +302,7 @@ replaceCoverageReportComparison findings previous delta report =
       structuralBoundaries = report.structuralBoundaries,
       opaqueBoundaries = report.opaqueBoundaries,
       jsonBoundaries = report.jsonBoundaries,
+      nominalBoundaries = report.nominalBoundaries,
       snapshotBoundaries = report.snapshotBoundaries,
       unsupportedSurfaces = report.unsupportedSurfaces,
       summary = report.summary,
@@ -350,7 +367,7 @@ writeCoverageReport path report = do
   Aeson.encodeFile path report
 
 persistedSites :: TypeGraph -> [UseSite]
-persistedSites = filter isPersisted . (.useSites)
+persistedSites = filter (isPersisted . (.root)) . (.useSites)
   where
     isPersisted RootEventField {} = True
     isPersisted RootRegister {} = True
@@ -361,9 +378,10 @@ persistedSites = filter isPersisted . (.useSites)
 
 coverageRoot :: TypeGraph -> MappedRoot -> CoverageRoot
 coverageRoot graph mappedRoot =
-  let site = (.useSite) mappedRoot
+  let site :: UseSite
+      site = (.useSite) mappedRoot
       key = (.declaration) mappedRoot
-      path = renderUsePath (UsePath site (useSiteSegments graph site))
+      path = renderUsePath (UsePath ((.root) site) ([SegDecl (unMappedKey key)] <> useSiteSegments graph site))
       fingerprint = wireFingerprint graph (unMappedKey key)
    in case Map.lookup key ((.declarations) graph) of
         Just (ResolvedStructural declaration _) ->
@@ -424,22 +442,41 @@ opaqueBoundaryInventory graph =
       isWireSite ((.root) path)
     ]
 
+nominalBoundaryInventory :: TypeGraph -> [NominalBoundary]
+nominalBoundaryInventory graph =
+  sortOn
+    (.path)
+    [ NominalBoundary
+        { root = rootText ((.root) path),
+          path = renderUsePath path,
+          nominal = (.name) leaf,
+          kind = case (.kind) leaf of NominalIdLeaf {} -> "id"; NominalScalarLeaf {} -> "scalar",
+          prefix = case (.kind) leaf of NominalIdLeaf value -> Just value; NominalScalarLeaf {} -> Nothing,
+          domainVersion = case (.kind) leaf of NominalIdLeaf {} -> Just "keiro-dsl/id-domain/typeid-v7/1"; NominalScalarLeaf {} -> Nothing,
+          canonicalType = case (.ownership) leaf of GeneratedLeaf -> Nothing; ConsumerLeaf binding -> Just (unCanonicalTypeId ((.canonical) binding)),
+          ownership = case (.ownership) leaf of GeneratedLeaf -> "generated"; ConsumerLeaf {} -> "consumer"
+        }
+    | leaf <- Map.elems ((.nominalLeaves) graph),
+      path <- nominalUsePaths graph ((.name) leaf),
+      isWireSite ((.root) path)
+    ]
+
 jsonBoundaryInventory :: TypeGraph -> [JsonBoundary]
 jsonBoundaryInventory graph =
   sortOn
     (.path)
     [ boundary site completeSegments
     | site <- persistedSites graph,
-      isWireSite site,
+      isWireSite ((.root) site),
       segments <- jsonPathsFromDecl graph Set.empty (useSiteKey site),
-      let completeSegments = useSiteSegments graph site <> segments
+      let completeSegments = [SegDecl (unMappedKey (useSiteKey site))] <> useSiteSegments graph site <> segments
     ]
   where
     boundary site segments =
       JsonBoundary
         { surface = useSiteSurface site,
-          root = rootText site,
-          path = renderUsePath (UsePath site segments)
+          root = rootText ((.root) site),
+          path = renderUsePath (UsePath ((.root) site) segments)
         }
 
 queueExplicitJsonBoundaries :: Spec -> [JsonBoundary]
@@ -470,13 +507,14 @@ queueExplicitJsonBoundaries spec =
       | otherwise = " ." <> name <> " as " <> T.pack (show key)
     renderSegment (SegArm _ tag) = " arm " <> T.pack (show tag)
     renderSegment (SegDecl name) = " : " <> name
+    renderSegment (SegNominal name) = " : " <> name
 
 snapshotBoundaryInventory :: Spec -> TypeGraph -> [SnapshotBoundary]
 snapshotBoundaryInventory spec graph =
   sortOn
     (.root)
     [ SnapshotBoundary
-        { root = renderUsePath (UsePath site []),
+        { root = renderUsePath (UsePath ((.root) site) [SegDecl (unMappedKey key)]),
           aggregate = aggregate,
           register = register,
           mappedType = unMappedKey key,
@@ -486,7 +524,7 @@ snapshotBoundaryInventory spec graph =
           wireFingerprint = wireFingerprint graph (unMappedKey key),
           enabled = aggregateHasSnapshot aggregate
         }
-    | site@(RootRegister aggregate register key) <- persistedSites graph,
+    | site@UseSite {root = RootRegister aggregate register, mappedKey = key} <- persistedSites graph,
       Just declaration <- [Map.lookup key ((.declarations) graph)]
     ]
   where
@@ -539,7 +577,8 @@ jsonPathsFromExpr graph visited =
         onOptional = map (SegOptional :),
         onList = map (SegElem :),
         onMap = map (SegMapValue :),
-        onRef = \key -> map (SegDecl (unMappedKey key) :) (jsonPathsFromDecl graph visited key)
+        onRef = \key -> map (SegDecl (unMappedKey key) :) (jsonPathsFromDecl graph visited key),
+        onNominal = const []
       }
 
 summarize :: [CoverageRoot] -> [JsonBoundary] -> CoverageSummary
@@ -604,20 +643,18 @@ unsupportedInventory graph =
     unsupportedProjectionIdentity (UnsupportedCatalogAll owner) = "projection-all:" <> owner
 
 useSiteKey :: UseSite -> MappedKey
-useSiteKey (RootCommandField _ _ _ key) = key
-useSiteKey (RootEventField _ _ _ key) = key
-useSiteKey (RootRegister _ _ key) = key
-useSiteKey (RootWorkqueueField _ _ key) = key
-useSiteKey (RootReadModelQueryInput _ key) = key
-useSiteKey (RootReadModelQueryResult _ key) = key
+useSiteKey = (.mappedKey)
 
 useSiteSurface :: UseSite -> CoverageSurface
-useSiteSurface RootCommandField {} = AggregateCommandPayload
-useSiteSurface RootEventField {} = PrivateEventPayload
-useSiteSurface RootRegister {} = SnapshotRegister
-useSiteSurface RootWorkqueueField {} = WorkqueuePayload
-useSiteSurface RootReadModelQueryInput {} = ReadModelQueryInput
-useSiteSurface RootReadModelQueryResult {} = ReadModelQueryResult
+useSiteSurface = rootRefSurface . (.root)
+
+rootRefSurface :: RootRef -> CoverageSurface
+rootRefSurface RootCommandField {} = AggregateCommandPayload
+rootRefSurface RootEventField {} = PrivateEventPayload
+rootRefSurface RootRegister {} = SnapshotRegister
+rootRefSurface RootWorkqueueField {} = WorkqueuePayload
+rootRefSurface RootReadModelQueryInput {} = ReadModelQueryInput
+rootRefSurface RootReadModelQueryResult {} = ReadModelQueryResult
 
 rootKindSurface :: MappedRootKind -> CoverageSurface
 rootKindSurface MappedCommandFieldRoot = AggregateCommandPayload
@@ -632,7 +669,7 @@ rootKindSurface MappedRouterSelectionRecipientRoot = ReadModelQueryResult
 rootKindSurface MappedRouterSelectionCommandFieldRoot = ReadModelQueryResult
 rootKindSurface MappedProjectionEventRoot = ProjectionTypedConsumer
 
-isWireSite :: UseSite -> Bool
+isWireSite :: RootRef -> Bool
 isWireSite RootEventField {} = True
 isWireSite RootWorkqueueField {} = True
 isWireSite RootRegister {} = False
@@ -640,7 +677,7 @@ isWireSite RootCommandField {} = False
 isWireSite RootReadModelQueryInput {} = False
 isWireSite RootReadModelQueryResult {} = False
 
-rootText :: UseSite -> Text
+rootText :: RootRef -> Text
 rootText site = renderUsePath (UsePath site [])
 
 declarationMode :: ResolvedMappedDecl -> CoverageMode
@@ -663,6 +700,19 @@ instance ToJSON CoverageSurface where
 instance ToJSON CoverageMode where
   toJSON StructuralCoverage = toJSON ("structural" :: Text)
   toJSON OpaqueCoverage = toJSON ("opaque" :: Text)
+
+instance ToJSON NominalBoundary where
+  toJSON boundary =
+    object
+      [ "root" .= (.root) boundary,
+        "path" .= (.path) boundary,
+        "nominal" .= (.nominal) boundary,
+        "kind" .= (.kind) boundary,
+        "prefix" .= (.prefix) boundary,
+        "domainVersion" .= (.domainVersion) boundary,
+        "canonicalType" .= (.canonicalType) boundary,
+        "ownership" .= (.ownership) boundary
+      ]
 
 instance ToJSON CoverageRoot where
   toJSON root =
@@ -791,6 +841,7 @@ instance ToJSON CoverageReport where
         "structuralBoundaries" .= (.structuralBoundaries) report,
         "opaqueBoundaries" .= (.opaqueBoundaries) report,
         "jsonBoundaries" .= (.jsonBoundaries) report,
+        "nominalBoundaries" .= (.nominalBoundaries) report,
         "snapshotBoundaries" .= (.snapshotBoundaries) report,
         "unsupportedSurfaces" .= (.unsupportedSurfaces) report,
         "summary" .= (.summary) report,

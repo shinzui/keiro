@@ -35,7 +35,6 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (haskellKeywords)
@@ -43,14 +42,6 @@ import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec)
 import Keiro.Dsl.TypeGraph
-
-data NominalScalarRepresentation
-  = NominalText
-  | NominalInt
-  | NominalNatural
-  | NominalBool
-  | NominalTime
-  deriving stock (Eq, Ord, Show, Generic)
 
 data NominalRepresentation
   = IdRepresentation !Text
@@ -81,16 +72,6 @@ data CheckedNominalEquality = CheckedNominalEquality
   { keyRepresentation :: !NominalEqualityKey,
     domain :: !NominalEqualityDomain,
     contractVersion :: !Text
-  }
-  deriving stock (Eq, Ord, Show, Generic)
-
-data ConsumerNominalBinding = ConsumerNominalBinding
-  { haskell :: !HaskellSource,
-    binding :: !QualifiedValueName,
-    bindingVersion :: !BindingVersion,
-    canonical :: !CanonicalTypeId,
-    fixtures :: !QualifiedValueName,
-    initial :: !(Maybe QualifiedValueName)
   }
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -223,17 +204,9 @@ resolveNominalTypes spec = do
     declarationErrors = concatMap fst declarationResults
     resolvedDeclarations = [value | (_, Just value) <- declarationResults]
 
-    resolveId declaration =
-      let name = (.name) declaration
-          loc = (.loc) declaration
-          prefixErrors =
-            case (.binding) declaration >>= const (TypeID.checkPrefix ((.prefix) declaration)) of
-              Nothing -> []
-              Just err -> [NominalInvalidIdPrefix name loc ((.prefix) declaration) (T.pack (show err))]
-          (bindingErrors, ownership) = resolveOwnership name loc ((.binding) declaration)
-          errors = prefixErrors <> bindingErrors
-          value = ResolvedNominalType name (IdRepresentation ((.prefix) declaration)) <$> ownership <*> pure loc
-       in (errors, value <* guardNoErrors errors)
+    resolveId declaration = case checkIdLeaf declaration of
+      Left leafError -> (map leafIssueToNominalError (NE.toList ((.nominalLeafIssues) leafError)), Nothing)
+      Right leaf -> ([], Just (resolvedFromLeaf leaf))
 
     resolveEnum declaration =
       let name = (.name) declaration
@@ -245,15 +218,9 @@ resolveNominalTypes spec = do
           value = ResolvedNominalType name <$> (EnumRepresentation <$> representation) <*> ownership <*> pure loc
        in (errors, value <* guardNoErrors errors)
 
-    resolveScalar declaration =
-      let name = (.name) declaration
-          loc = (.loc) declaration
-          representation = scalarRepresentation ((.representation) declaration)
-          representationErrors = [NominalUnsupportedScalar name loc ((.representation) declaration) | representation == Nothing]
-          (bindingErrors, ownership) = resolveRequiredOwnership name loc ((.binding) declaration)
-          errors = representationErrors <> bindingErrors
-          value = ResolvedNominalType name <$> (ScalarRepresentation <$> representation) <*> ownership <*> pure loc
-       in (errors, value <* guardNoErrors errors)
+    resolveScalar declaration = case checkScalarLeaf declaration of
+      Left leafError -> (map leafIssueToNominalError (NE.toList ((.nominalLeafIssues) leafError)), Nothing)
+      Right leaf -> ([], Just (resolvedFromLeaf leaf))
 
     collisionErrors =
       [ NominalDeclarationCollision name loc categories
@@ -344,15 +311,27 @@ validateCanonical name loc (Just value) =
     Right checked | identitySafe value -> ([], Just checked)
     _ -> ([NominalInvalidIdentity name loc "canonical-type" value], Nothing)
 
-scalarRepresentation :: Name -> Maybe NominalScalarRepresentation
-scalarRepresentation = \case
-  "Text" -> Just NominalText
-  "Int" -> Just NominalInt
-  "Natural" -> Just NominalNatural
-  "Bool" -> Just NominalBool
-  "Time" -> Just NominalTime
-  "UTCTime" -> Just NominalTime
-  _ -> Nothing
+resolvedFromLeaf :: NominalLeaf -> ResolvedNominalType
+resolvedFromLeaf leaf =
+  ResolvedNominalType
+    { name = (.name) leaf,
+      representation = case (.kind) leaf of
+        NominalIdLeaf prefix -> IdRepresentation prefix
+        NominalScalarLeaf representation -> ScalarRepresentation representation,
+      ownership = case (.ownership) leaf of
+        GeneratedLeaf -> GeneratedNominal
+        ConsumerLeaf binding -> ConsumerNominal binding,
+      loc = (.loc) leaf
+    }
+
+leafIssueToNominalError :: NominalLeafIssue -> NominalTypeError
+leafIssueToNominalError = \case
+  LeafMissingIngredient name loc label -> NominalMissingIngredient name loc label
+  LeafInvalidHaskellSource name loc label -> NominalInvalidHaskellSource name loc label
+  LeafInvalidQualifiedValue name loc category value -> NominalInvalidQualifiedValue name loc category value
+  LeafInvalidIdentity name loc category value -> NominalInvalidIdentity name loc category value
+  LeafInvalidIdPrefix name loc prefix reason -> NominalInvalidIdPrefix name loc prefix reason
+  LeafUnsupportedScalar name loc representation -> NominalUnsupportedScalar name loc representation
 
 rejectErrors :: [e] -> [a] -> Either (NonEmpty e) [a]
 rejectErrors errors values = maybe (Right values) Left (NE.nonEmpty errors)

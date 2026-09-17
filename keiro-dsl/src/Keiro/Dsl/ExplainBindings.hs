@@ -234,7 +234,8 @@ renderExprType =
         onOptional = \value -> "Maybe (" <> value <> ")",
         onList = \value -> "[" <> value <> "]",
         onMap = \value -> "Map Text (" <> value <> ")",
-        onRef = unMappedKey
+        onRef = unMappedKey,
+        onNominal = (.name)
       }
 
 obligationsFor :: TypeGraph -> StructuralDecl -> [BindingObligation]

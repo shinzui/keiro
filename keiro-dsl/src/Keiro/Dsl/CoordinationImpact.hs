@@ -41,7 +41,7 @@ import Keiro.Dsl.ProcessReaction (CheckedProcessReaction (..), checkProcessReact
 import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph)
 import Keiro.Dsl.SemanticImpact (MappedConsumer (..), MappedImpactDelta (..))
-import Keiro.Dsl.TypeGraph (UsePath (..), UseSite, renderUsePath)
+import Keiro.Dsl.TypeGraph (PathSeg (..), UsePath (..), UseSite (..), renderUsePath, unMappedKey)
 import Numeric.Natural (Natural)
 
 data SelectionVerification = DeclarativeVerified | CustomUnverified
@@ -179,7 +179,7 @@ instance ToJSON CoordinationImpact where
         "currentVersion" .= (.currentVersion) impact,
         "previousFingerprint" .= (.previousFingerprint) impact,
         "currentFingerprint" .= (.currentFingerprint) impact,
-        "affectedUseSites" .= map (renderUsePath . (`UsePath` [])) ((.affectedUseSites) impact)
+        "affectedUseSites" .= map (renderUsePath . useSitePath) ((.affectedUseSites) impact)
       ]
 
 -- | Freeze every router's checked coordination metadata in canonical name order.
@@ -401,7 +401,10 @@ renderCoordinationImpact impacts = "coordination impact:" : concatMap renderImpa
     renderMaybe = maybe "(unverified)" id
     renderMaybeShow = maybe "(unverified)" (T.pack . show)
     renderUseSites [] = "(none)"
-    renderUseSites values = T.intercalate ", " (map (renderUsePath . (`UsePath` [])) values)
+    renderUseSites values = T.intercalate ", " (map (renderUsePath . useSitePath) values)
+
+useSitePath :: UseSite -> UsePath
+useSitePath site = UsePath ((.root) site) [SegDecl (unMappedKey ((.mappedKey) site))]
 
 snapshotValid :: RouterSelectionSnapshot -> Bool
 snapshotValid snapshot = case (.verification) snapshot of

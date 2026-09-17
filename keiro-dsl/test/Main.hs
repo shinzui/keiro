@@ -209,7 +209,8 @@ main = hspec $ do
                 [ ImportRequirement "artifact-domain" "Example.Artifact.Domain" "ArtifactInfo",
                   ImportRequirement "base" "Data.Maybe" "Maybe"
                 ],
-              dependencies = Set.fromList [MappedKey "ArtifactInfo", MappedKey "ArtifactKind", MappedKey "ArtifactLocation"]
+              dependencies = Set.fromList [MappedKey "ArtifactInfo", MappedKey "ArtifactKind", MappedKey "ArtifactLocation"],
+              nominalDependencies = Set.empty
             }
       unresolved <-
         parseInlineSpec
@@ -1776,6 +1777,16 @@ main = hspec $ do
             "language-misplaced.keiro",
             "language-v1.keiro",
             "language-zero.keiro",
+            "mapped-nominal-leaf-default.keiro",
+            "mapped-nominal-leaf-enum.keiro",
+            "mapped-nominal-leaf-language.keiro",
+            "mapped-nominal-leaf.keiro",
+            "mapped-nominal-query-only-enum.keiro",
+            "mapped-nominal-query-only-language.keiro",
+            "mapped-nominal-query-only.keiro",
+            "mapped-nominal-queue-only-enum.keiro",
+            "mapped-nominal-queue-only-language.keiro",
+            "mapped-nominal-queue-only.keiro",
             "mapped-readmodel-workspace/readmodel.keiro",
             "mapped-readmodel-workspace/types.keiro",
             "mapped-readmodel.keiro",
@@ -2991,6 +3002,7 @@ main = hspec $ do
               ]
           )
         keiroCorePackageId <- activeCabalPackageId "keiro-core"
+        keikiPackageId <- activeCabalPackageId "keiki"
         (exitCode, standardOutput, standardError) <-
           readProcessWithExitCode
             "cabal"
@@ -3004,8 +3016,8 @@ main = hspec $ do
               "-fforce-recomp",
               "-package-id",
               keiroCorePackageId,
-              "-package",
-              "keiki",
+              "-package-id",
+              keikiPackageId,
               "-outputdir",
               ghcOutput,
               "-i" <> out,
@@ -4353,6 +4365,24 @@ main = hspec $ do
       spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
       parseStableRenderedSpec "<consumer-types-round-trip>" spec `shouldBe` Right spec
       length ((.mapped) spec) `shouldBe` 4
+    it "round-trips and emits nominal leaves at every structural consumer root" $ do
+      source <- TIO.readFile "test/fixtures/mapped-nominal-leaf.keiro"
+      parsed <- checkedServiceFromText "test/fixtures/mapped-nominal-leaf.keiro" source
+      case parseSource "<mapped-nominal-leaf-round-trip>" ("language keiro-dsl 6\n" <> renderSpec (checkedSpec parsed)) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right reparsed -> reparsed.spec `shouldBe` checkedSpec parsed
+      errorCodesOf "test/fixtures/mapped-nominal-leaf.keiro" `shouldReturn` []
+      graph <- shouldResolveTypeGraph (checkedSpec parsed)
+      let paths = map renderUsePath (nominalUsePaths graph "TemplateId")
+      forM_
+        [ "Template command RecordTemplate .state : TemplateState .templateId : TemplateId",
+          "workqueue template_work payload .templateId : TemplateId optional",
+          "readmodel template_lookup query result : TemplateId []"
+        ]
+        (\path -> paths `shouldContain` [path])
+      (exitCode, emitted, err) <- runKeiroDsl ["check", "test/fixtures/mapped-nominal-leaf.keiro", "--emit"]
+      unless (exitCode == ExitSuccess) (expectationFailure (emitted <> err))
+      parseSource "<mapped-nominal-leaf-emitted>" (T.pack emitted) `shouldSatisfy` isRight
     it "preserves every missing-value policy, nested type expression, and unit union arm" $ do
       source <- TIO.readFile "test/fixtures/consumer-types.keiro"
       spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
@@ -4388,10 +4418,21 @@ main = hspec $ do
               ("mapped-empty-identity.keiro", MappedInvalidIdentity),
               ("mapped-import-conflict.keiro", MappedImportConflict),
               ("mapped-illtyped-default.keiro", MappedDefaultIllTyped),
+              ("mapped-nominal-leaf-language.keiro", MappedNominalLeafRequiresLanguage),
+              ("mapped-nominal-leaf-enum.keiro", MappedNominalLeafUnsupported),
+              ("mapped-nominal-leaf-default.keiro", MappedDefaultIllTyped),
+              ("mapped-nominal-queue-only-language.keiro", MappedNominalLeafRequiresLanguage),
+              ("mapped-nominal-queue-only-enum.keiro", MappedNominalLeafUnsupported),
               ("mapped-guard.keiro", AggregateExpressionOperatorUnsupported)
             ]
       forM_ cases $ \(fixture, expected) ->
         errorCodesOf ("test/fixtures/" <> fixture) `shouldReturn` [expected]
+      errorCodesOf "test/fixtures/mapped-nominal-query-only-language.keiro"
+        `shouldReturn` replicate 2 MappedNominalLeafRequiresLanguage
+      errorCodesOf "test/fixtures/mapped-nominal-query-only-enum.keiro"
+        `shouldReturn` replicate 2 MappedNominalLeafUnsupported
+      errorCodesOf "test/fixtures/mapped-nominal-queue-only.keiro" `shouldReturn` []
+      errorCodesOf "test/fixtures/mapped-nominal-query-only.keiro" `shouldReturn` []
     it "keeps Time and Natural in Keiki's curated comparison set" $ do
       errorCodesOf "test/fixtures/mapped-guard-time.keiro" `shouldReturn` []
       errorCodesOf "test/fixtures/mapped-guard-natural.keiro" `shouldReturn` []
@@ -4592,12 +4633,18 @@ main = hspec $ do
           throughArm = mappedSpec [completeStructural "A" (ShapeUnion (TaggedObject "tag" "contents" RejectUnknown) [WireArm "Again" "again" (Just (TRef "A")) noLoc])]
       map (hasTypeGraphError isRecursive . resolveTypeGraph) [direct, mutual, wrapped, throughArm]
         `shouldBe` replicate 4 True
-    it "keeps existing ids and enums outside the mapped-reference namespace" $ do
-      let spec =
+    it "resolves existing ids as nominal leaves while keeping enums unsupported" $ do
+      let withId =
             (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingId"])])
               { ids = [IdDecl "ExistingId" "id" Nothing noLoc]
               }
-      resolveTypeGraph spec `shouldSatisfy` hasTypeGraphError isUnresolved
+          withEnum =
+            (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingEnum"])])
+              { enums = [EnumDecl "ExistingEnum" [("One", "one")] Nothing noLoc]
+              }
+      graph <- shouldResolveTypeGraph withId
+      Map.lookup (MappedKey "A") ((.nominalReachability) graph) `shouldBe` Just (Set.singleton "ExistingId")
+      resolveTypeGraph withEnum `shouldSatisfy` hasTypeGraphError isUnsupportedNominal
     it "fingerprints wire identity while ignoring Haskell selector names" $ do
       source <- TIO.readFile "test/fixtures/consumer-types.keiro"
       base <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
@@ -4652,12 +4699,12 @@ main = hspec $ do
       source `shouldSatisfy` T.isInfixOf "{-# OPTIONS_GHC -Werror=incomplete-patterns #-}"
       map
         (`T.isInfixOf` source)
-        [ "mappedRootFromUseSite site@(RootCommandField",
-          "mappedRootFromUseSite site@(RootEventField",
-          "mappedRootFromUseSite site@(RootRegister",
-          "mappedRootFromUseSite site@(RootWorkqueueField",
-          "mappedRootFromUseSite site@(RootReadModelQueryInput",
-          "mappedRootFromUseSite site@(RootReadModelQueryResult"
+        [ "mappedRootFromUseSite site@UseSite {root = RootCommandField",
+          "mappedRootFromUseSite site@UseSite {root = RootEventField",
+          "mappedRootFromUseSite site@UseSite {root = RootRegister",
+          "mappedRootFromUseSite site@UseSite {root = RootWorkqueueField",
+          "mappedRootFromUseSite site@UseSite {root = RootReadModelQueryInput",
+          "mappedRootFromUseSite site@UseSite {root = RootReadModelQueryResult"
         ]
         `shouldBe` replicate 6 True
       source `shouldSatisfy` (not . T.isInfixOf "mappedRootFromUseSite _")
@@ -8997,6 +9044,7 @@ main = hspec $ do
           >>= writeFileWithParents domainSource
         createDirectoryIfMissing True ghcOutput
         keiroCorePackageId <- activeCabalPackageId "keiro-core"
+        keikiPackageId <- activeCabalPackageId "keiki"
         (exitCode, standardOutput, standardError) <-
           readProcessWithExitCode
             "cabal"
@@ -9010,8 +9058,8 @@ main = hspec $ do
               "-fforce-recomp",
               "-package-id",
               keiroCorePackageId,
-              "-package",
-              "keiki",
+              "-package-id",
+              keikiPackageId,
               "-outputdir",
               ghcOutput,
               "-i" <> out,
@@ -13792,7 +13840,8 @@ expressionTags =
       onOptional = ("optional" :),
       onList = ("list" :),
       onMap = ("map" :),
-      onRef = \key -> ["ref:" <> unMappedKey key]
+      onRef = \key -> ["ref:" <> unMappedKey key],
+      onNominal = \leaf -> ["nominal:" <> (.name) leaf]
     }
 
 hasTypeGraphError :: (TypeGraphError -> Bool) -> Either (NonEmpty TypeGraphError) TypeGraph -> Bool
@@ -13804,9 +13853,9 @@ isRecursive :: TypeGraphError -> Bool
 isRecursive TGRecursive {} = True
 isRecursive _ = False
 
-isUnresolved :: TypeGraphError -> Bool
-isUnresolved TGUnresolvedRef {} = True
-isUnresolved _ = False
+isUnsupportedNominal :: TypeGraphError -> Bool
+isUnsupportedNominal TGUnsupportedNominalLeaf {} = True
+isUnsupportedNominal _ = False
 
 mappedSpec :: [MappedDecl] -> Spec
 mappedSpec declarations = Spec "mapped-test" Nothing Nothing [] [] [] [] declarations []

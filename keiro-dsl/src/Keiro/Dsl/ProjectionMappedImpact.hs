@@ -160,10 +160,10 @@ projectionAggregateSourceFingerprintWithGraph maybeGraph aggregate =
     base = "aggregate:" <> aggregate <> "/generated-codec/v1"
     eventRows graph =
       sort
-        [ renderUsePath (UsePath site (useSiteSegments graph site))
+        [ renderUsePath (UsePath ((.root) site) (useSiteSegments graph site <> [SegDecl (unMappedKey declarationKey)]))
             <> "|wire="
             <> wireFingerprint graph (unMappedKey declarationKey)
-        | site@(RootEventField authority _ _ declarationKey) <- (.useSites) graph,
+        | site@UseSite {root = RootEventField authority _ _, mappedKey = declarationKey} <- (.useSites) graph,
           authority == aggregate
         ]
 
@@ -274,7 +274,7 @@ observingReadModels spec owner =
     ]
 
 eventAuthority :: UsePath -> Maybe Name
-eventAuthority UsePath {root = RootEventField aggregate _ _ _} = Just aggregate
+eventAuthority UsePath {root = RootEventField aggregate _ _} = Just aggregate
 eventAuthority _ = Nothing
 
 derivedAuthority :: DerivedMappedConsumer -> Name

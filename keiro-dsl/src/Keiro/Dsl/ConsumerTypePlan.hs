@@ -44,7 +44,8 @@ data ImportRequirement = ImportRequirement
 data ConsumerTypePlan = ConsumerTypePlan
   { haskellType :: !HaskellTypeOccurrence,
     imports :: ![ImportRequirement],
-    dependencies :: !(Set MappedKey)
+    dependencies :: !(Set MappedKey),
+    nominalDependencies :: !(Set Text)
   }
   deriving stock (Eq, Show)
 
@@ -55,12 +56,13 @@ data ConsumerTypePlanError
 
 planConsumerType :: TypeGraph -> ResolvedTypeExpr -> Either ConsumerTypePlanError ConsumerTypePlan
 planConsumerType graph expression = do
-  RenderedType {rendered, requirements, mappedDependencies} <- plan expression
+  RenderedType {rendered, requirements, mappedDependencies, nominalDependencies} <- plan expression
   pure
     ConsumerTypePlan
       { haskellType = HaskellTypeOccurrence rendered,
         imports = Set.toAscList requirements,
-        dependencies = mappedDependencies
+        dependencies = mappedDependencies,
+        nominalDependencies = nominalDependencies
       }
   where
     plan = \case
@@ -83,8 +85,10 @@ planConsumerType graph expression = do
                   { rendered = (.valueType) source,
                     precedence = AtomicType,
                     requirements = Set.singleton (ImportRequirement ((.package) source) ((.moduleName) source) ((.valueType) source)),
-                    mappedDependencies = Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph))
+                    mappedDependencies = Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph)),
+                    nominalDependencies = Map.findWithDefault Set.empty key ((.nominalReachability) graph)
                   }
+      RNominal leaf -> Right (nominalRenderedType leaf)
 
     atom rendered requiredImports =
       Right
@@ -92,7 +96,8 @@ planConsumerType graph expression = do
           { rendered,
             precedence = AtomicType,
             requirements = Set.fromList requiredImports,
-            mappedDependencies = Set.empty
+            mappedDependencies = Set.empty,
+            nominalDependencies = Set.empty
           }
 
     application constructor requiredImports value =
@@ -120,13 +125,26 @@ planConsumerType graph expression = do
       AtomicType -> (.rendered) value
       ApplicationType -> "(" <> (.rendered) value <> ")"
 
+    nominalRenderedType leaf = case (.ownership) leaf of
+      GeneratedLeaf ->
+        RenderedType ((.name) leaf) AtomicType Set.empty Set.empty (Set.singleton ((.name) leaf))
+      ConsumerLeaf binding ->
+        let source = (.haskell) binding
+         in RenderedType
+              ((.valueType) source)
+              AtomicType
+              (Set.singleton (ImportRequirement ((.package) source) ((.moduleName) source) ((.valueType) source)))
+              Set.empty
+              (Set.singleton ((.name) leaf))
+
 data TypePrecedence = AtomicType | ApplicationType
 
 data RenderedType = RenderedType
   { rendered :: !Text,
     precedence :: !TypePrecedence,
     requirements :: !(Set ImportRequirement),
-    mappedDependencies :: !(Set MappedKey)
+    mappedDependencies :: !(Set MappedKey),
+    nominalDependencies :: !(Set Text)
   }
 
 mappedSource :: ResolvedMappedDecl -> HaskellSource
@@ -168,9 +186,14 @@ renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . (.rendered))
         Just declaration ->
           let source = mappedSource declaration
            in atom ((.valueType) source) (reference ((.moduleName) source) ((.valueType) source))
+      RNominal leaf -> case (.ownership) leaf of
+        GeneratedLeaf -> pure (plainAtom ((.name) leaf))
+        ConsumerLeaf binding ->
+          let source = (.haskell) binding
+           in atom ((.valueType) source) (reference ((.moduleName) source) ((.valueType) source))
 
     atom _ ref = plainAtom <$> plannedReference ref
-    plainAtom value = RenderedType value AtomicType Set.empty Set.empty
+    plainAtom value = RenderedType value AtomicType Set.empty Set.empty Set.empty
     application constructor value = replaceRenderedType (constructor <> " " <> argument value) ApplicationType value.requirements value
     listType value = replaceRenderedType ("[" <> value.rendered <> "]") AtomicType value.requirements value
     argument value = case (.precedence) value of
@@ -185,5 +208,6 @@ replaceRenderedType rendered precedence requirements value =
     { rendered,
       precedence,
       requirements,
-      mappedDependencies = value.mappedDependencies
+      mappedDependencies = value.mappedDependencies,
+      nominalDependencies = value.nominalDependencies
     }

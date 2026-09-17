@@ -456,6 +456,7 @@ resolveProjectionPath environment loc provenance fields = do
       RList {} -> unsupported "List"
       RMap {} -> unsupported "Map"
       RRef key -> Right (AggregateMapped key)
+      RNominal leaf -> failure loc ScalarPathInvalid ("nominal leaf '" <> (.name) leaf <> "' is not a supported scalar path leaf")
     unsupported name = failure loc ScalarPathUnsupported (name <> " is not a supported scalar path leaf")
 
 resolveLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> ScalarLiteral -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr

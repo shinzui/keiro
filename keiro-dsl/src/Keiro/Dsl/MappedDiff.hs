@@ -88,6 +88,7 @@ data ExprView
   | ExprList !ExprView
   | ExprMap !ExprView
   | ExprRef !MappedKey
+  | ExprNominal !Name
   deriving stock (Eq, Show)
 
 declView :: ResolvedMappedDecl -> DeclView
@@ -121,7 +122,8 @@ exprView =
         onOptional = ExprOptional,
         onList = ExprList,
         onMap = ExprMap,
-        onRef = ExprRef
+        onRef = ExprRef,
+        onNominal = ExprNominal . (.name)
       }
 
 diffDeclaration :: TypeGraph -> TypeGraph -> ResolvedMappedDecl -> ResolvedMappedDecl -> [MappedFinding]

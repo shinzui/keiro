@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves]
                    ]
       map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],

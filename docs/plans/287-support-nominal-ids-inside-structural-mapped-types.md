@@ -155,13 +155,13 @@ maps are a separate expansion and should not delay this delivery.
       revise missing paths and validation instructions.
 - [ ] M1–M3. Qualify isolated queue/query roots, nested binding fingerprint changes,
       and exact consumer locality with Plan 228's existing infrastructure.
-- [ ] M1. Add the nominal leaf to the resolved type graph, resolve `id` and `mapped nominal`
+- [x] 2026-09-17: M1. Add the nominal leaf to the resolved type graph, resolve `id` and `mapped nominal`
       names inside structural declarations, and gate the capability on candidate Language 6.
-- [ ] M1. Classify nullability, `on-missing` defaults, wire fingerprint token, use paths,
+- [x] 2026-09-17: M1. Classify nullability, `on-missing` defaults, wire fingerprint token, use paths,
       nominal reachability, and nominal root sites at workqueue and read-model roots.
-- [ ] M1. Add the `MappedNominalLeafRequiresLanguage` and `MappedNominalLeafUnsupported`
+- [x] 2026-09-17: M1. Add the `MappedNominalLeafRequiresLanguage` and `MappedNominalLeafUnsupported`
       diagnostics with fixtures, and extend the stable code table in `keiro-dsl/test/Main.hs`.
-- [ ] M1. `cabal test keiro-dsl:test:keiro-dsl-test` is green and the IR-40 reproduction
+- [x] 2026-09-17: M1. `cabal test keiro-dsl:test:keiro-dsl-test` is green (744 examples) and the IR-40 reproduction
       checks `OK` at Language 6 and reports the language diagnostic at Language 5.
 - [ ] M2. Render nominal leaf shape types and imports; emit the per-context
       `Structural.NominalLeaves` codec module; wire `MappedCodecPlan`, `ConsumerTypePlan`,
@@ -201,6 +201,10 @@ maps are a separate expansion and should not delay this delivery.
 - Correctness review, 2026-09-17: `Diff.idPairDiff`, `nominalScalarDiff`, and the ID-domain
   pass in `diffServices` emit declaration findings independently of `nominalUses`.
   Extending that function alone cannot produce the promised path-specific findings.
+- Implementation, 2026-09-17: Factoring `RootRef` initially rendered outer queue/query
+  containers before the referenced declaration. Existing reports render the declaration
+  first (for example `: ArtifactInfo [] optional`), so `UseSite` stores container segments
+  separately while `usePaths` and `nominalUsePaths` append them after the root leaf.
 
 
 ## Decision Log

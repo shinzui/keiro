@@ -359,6 +359,8 @@ data DiagnosticCode
   | WorkflowEvolutionGuardAdded
   | -- MasterPlan 25 / EP-149 (consumer-owned mapped types).
     MappedUnresolvedName
+  | MappedNominalLeafRequiresLanguage
+  | MappedNominalLeafUnsupported
   | MappedAmbiguousName
   | MappedDuplicateFieldName
   | MappedDuplicateWireKey
@@ -846,7 +848,7 @@ validateSpec = validateService . legacyCheckedService
 
 validateCheckedSpec :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> ProjectionSupplyAnalysis -> Spec -> [Diagnostic]
 validateCheckedSpec languageContract typeGraphResult supplyAnalysis spec =
-  sortOn (.line) (validateNames languageContract typeGraphResult spec ++ validateMapped typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) ((.nodes) spec))
+  sortOn (.line) (validateNames languageContract typeGraphResult spec ++ validateMapped languageContract typeGraphResult spec ++ validateNominal languageContract spec ++ validateAggregateTypes typeGraphResult spec ++ specLevelRules languageContract supplyAnalysis spec ++ concatMap (validateNode languageContract typeGraphResult supplyAnalysis spec) ((.nodes) spec))
 
 -- | Rules added before language 4 ships consult the effective semantic
 -- contract, not the numeric source spelling. Versions 1 through 3 retain their
@@ -1138,14 +1140,14 @@ renderAggregateUseSite useSite = case useSite of
 -- Haskell. Symbol-shaped facts are checked lexically here; GHC remains the
 -- authority for whether the named packages, modules, values, types, and
 -- instances actually exist with the promised types.
-validateMapped :: Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
-validateMapped typeGraphResult spec =
+validateMapped :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError) TypeGraph -> Spec -> [Diagnostic]
+validateMapped languageContract typeGraphResult spec =
   mappedLexicalRules spec
     ++ mappedIdentityRules spec
     ++ mappedConflictRules spec
     ++ case typeGraphResult of
       Left errors -> concatMap (typeGraphDiagnostic spec) (NE.toList errors)
-      Right graph -> mappedGraphRules spec graph
+      Right graph -> nominalLeafLanguageRules languageContract spec graph ++ mappedGraphRules spec graph
 
 typeGraphDiagnostic :: Spec -> TypeGraphError -> [Diagnostic]
 typeGraphDiagnostic spec = \case
@@ -1173,16 +1175,45 @@ typeGraphDiagnostic spec = \case
     ]
   TGUnresolvedRef owner missing loc ->
     [ mkErr (locLine loc) MappedUnresolvedName $
-        "mapped declaration '" <> owner <> "' references unresolved mapped type '" <> missing <> "'"
+        if declaredNominal spec missing
+          then mappedOwnerAt spec owner loc <> " references malformed nominal declaration '" <> missing <> "'"
+          else mappedOwnerAt spec owner loc <> " references unresolved mapped type '" <> missing <> "'"
     ]
   TGUnresolvedConsumerRef owner missing loc ->
     [ mkErr (locLine loc) MappedUnresolvedName $
-        owner <> " references unresolved mapped type '" <> missing <> "'"
+        if declaredNominal spec missing
+          then owner <> " references malformed nominal declaration '" <> missing <> "'"
+          else owner <> " references unresolved mapped type '" <> missing <> "'"
+    ]
+  TGUnsupportedNominalLeaf owner name category loc ->
+    [ mkErr (locLine loc) MappedNominalLeafUnsupported $
+        mappedOwnerAt spec owner loc <> " uses " <> category <> " '" <> name <> "'; nominal enums are not supported as structural leaves, declare a mapped structural enum instead"
     ]
   TGRecursive names ->
     [ mkErr (mappedLine spec (headOr "<mapped>" names)) MappedRecursiveType $
         "recursive structural mapping is unsupported: " <> T.intercalate " -> " (names <> take 1 names)
     ]
+
+declaredNominal :: Spec -> Name -> Bool
+declaredNominal spec name =
+  any ((== name) . (.name)) ((.ids) spec)
+    || any ((== name) . (.name)) ((.nominalScalars) spec)
+
+mappedOwnerAt :: Spec -> Name -> Loc -> Text
+mappedOwnerAt spec owner useLoc =
+  case [shape | MappedStructural {msName, msShape = shape} <- (.mapped) spec, msName == owner] of
+    ShapeRecord _ _ fields : _ ->
+      case [(.haskell) field | field <- fields, (.loc) field == useLoc] of
+        fieldName : _ -> "mapped declaration '" <> owner <> "' field '" <> fieldName <> "'"
+        [] -> declaration
+    ShapeUnion _ arms : _ ->
+      case [(.ctor) arm | arm <- arms, (.loc) arm == useLoc] of
+        armName : _ -> "mapped declaration '" <> owner <> "' union arm '" <> armName <> "'"
+        [] -> declaration
+    _ : _ -> declaration
+    [] -> owner
+  where
+    declaration = "mapped declaration '" <> owner <> "'"
 
 declarationErrorMessage :: MappedDeclError -> Text
 declarationErrorMessage = \case
@@ -1319,6 +1350,100 @@ mappedConflictRules spec = sourceCollisions ++ canonicalCollisions ++ packageCol
     conflict declaration detail = mkErr (locLine (mappedLoc declaration)) MappedImportConflict detail
     maybeToList = maybe [] pure
 
+nominalLeafLanguageRules :: EffectiveLanguageContract -> Spec -> TypeGraph -> [Diagnostic]
+nominalLeafLanguageRules languageContract spec graph
+  | runtimeProfileHasCapability ((.runtimeProfile) languageContract) StructuralNominalLeaves = []
+  | otherwise = concatMap declarationRules (Map.elems ((.declarations) graph)) <> concatMap rootRule ((.nominalRootSites) graph)
+  where
+    declarationRules =
+      foldMappedDecl
+        MappedDeclAlgebra
+          { onStructuralDecl = \declaration shape ->
+              foldMappedShape
+                MappedShapeAlgebra
+                  { onRecord = \_ _ fields ->
+                      [ languageError ((.loc) field) ("mapped declaration '" <> (.name) declaration <> "' field '" <> (.haskell) field <> "'") nominal
+                      | field <- fields,
+                        nominal <- Set.toAscList (nominalNamesInExpr ((.valueType) field))
+                      ],
+                    onEnum = const [],
+                    onUnion = \_ arms ->
+                      [ languageError ((.loc) arm) ("mapped declaration '" <> (.name) declaration <> "' arm '" <> (.ctor) arm <> "'") nominal
+                      | arm <- arms,
+                        payload <- maybeToList ((.payload) arm),
+                        nominal <- Set.toAscList (nominalNamesInExpr payload)
+                      ]
+                  }
+                shape,
+            onOpaqueDecl = const []
+          }
+    rootRule site =
+      [languageError (rootRefLoc spec ((.root) site)) (renderRootOwner ((.root) site)) ((.nominal) site)]
+    languageError loc owner nominal =
+      mkErr (locLine loc) MappedNominalLeafRequiresLanguage $
+        owner <> " uses nominal '" <> nominal <> "'; nominal leaves require candidate language 6"
+    renderRootOwner = \case
+      RootCommandField aggregate command field -> "aggregate '" <> aggregate <> "' command '" <> command <> "' field '" <> field <> "'"
+      RootEventField aggregate event field -> "aggregate '" <> aggregate <> "' event '" <> event <> "' field '" <> field <> "'"
+      RootRegister aggregate register -> "aggregate '" <> aggregate <> "' register '" <> register <> "'"
+      RootWorkqueueField workqueue field -> "workqueue '" <> workqueue <> "' payload field '" <> field <> "'"
+      RootReadModelQueryInput readModel -> "readmodel '" <> readModel <> "' query input"
+      RootReadModelQueryResult readModel -> "readmodel '" <> readModel <> "' query result"
+    maybeToList = maybe [] pure
+
+nominalNamesInExpr :: ResolvedTypeExpr -> Set Name
+nominalNamesInExpr =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = Set.empty,
+        onInt = Set.empty,
+        onInteger = Set.empty,
+        onBool = Set.empty,
+        onNatural = Set.empty,
+        onTime = Set.empty,
+        onJson = Set.empty,
+        onOptional = id,
+        onList = id,
+        onMap = id,
+        onRef = const Set.empty,
+        onNominal = Set.singleton . (.name)
+      }
+
+rootRefLoc :: Spec -> RootRef -> Loc
+rootRefLoc spec = \case
+  RootCommandField aggregateName commandName fieldName ->
+    firstLoc
+      [ (.loc) field
+      | aggregate <- [value | NAggregate value <- (.nodes) spec, (.name) value == aggregateName],
+        command <- (.commands) aggregate,
+        (.name) command == commandName,
+        field <- (.fields) command,
+        (.name) field == fieldName
+      ]
+  RootEventField aggregateName eventName fieldName ->
+    firstLoc
+      [ (.loc) field
+      | aggregate <- [value | NAggregate value <- (.nodes) spec, (.name) value == aggregateName],
+        event <- (.events) aggregate,
+        (.name) event == eventName,
+        field <- case (.body) event of
+          EventFields fields -> fields
+          EventFromCommand commandName -> concat [(.fields) command | command <- (.commands) aggregate, (.name) command == commandName],
+        (.name) field == fieldName
+      ]
+  RootRegister aggregateName registerName ->
+    firstLoc [(.loc) register | aggregate <- [value | NAggregate value <- (.nodes) spec, (.name) value == aggregateName], register <- (.regs) aggregate, (.name) register == registerName]
+  RootWorkqueueField workqueueName fieldName ->
+    firstLoc [(.loc) field | workqueue <- [value | NWorkqueue value <- (.nodes) spec, (.name) value == workqueueName], field <- (.payload) workqueue, (.name) field == fieldName]
+  RootReadModelQueryInput readModelName ->
+    firstLoc [inputLoc | readModel <- [value | NReadModel value <- (.nodes) spec, (.name) value == readModelName], Just ReadModelQueryTypes {inputLoc} <- [(.queryTypes) readModel]]
+  RootReadModelQueryResult readModelName ->
+    firstLoc [resultLoc | readModel <- [value | NReadModel value <- (.nodes) spec, (.name) value == readModelName], Just ReadModelQueryTypes {resultLoc} <- [(.queryTypes) readModel]]
+  where
+    firstLoc = \case
+      loc : _ -> loc
+      [] -> noLoc
+
 mappedGraphRules :: Spec -> TypeGraph -> [Diagnostic]
 mappedGraphRules spec graph =
   concatMap declarationRules (Map.elems ((.declarations) graph))
@@ -1404,7 +1529,14 @@ mappedGraphRules spec graph =
             "optional field '" <> (.haskell) field <> "' is missing its on-missing policy"
         ]
       (POptional, Just value)
-        | not (defaultMatches graph ((.valueType) field) value) -> [illTyped "on-missing value does not match the field type or numeric bounds"]
+        | not (defaultMatches graph ((.valueType) field) value) ->
+            [ illTyped $ case (.valueType) field of
+                RNominal leaf ->
+                  "nominal fields do not accept literal on-missing defaults; write Optional "
+                    <> (.name) leaf
+                    <> " optional on-missing=null"
+                _ -> "on-missing value does not match the field type or numeric bounds"
+            ]
       _ -> []
       where
         illTyped detail =
@@ -1425,6 +1557,7 @@ data DefaultType
   | DefaultList
   | DefaultMap
   | DefaultEnum !(Set Name)
+  | DefaultNominal
   | DefaultOther
 
 defaultMatches :: TypeGraph -> ResolvedTypeExpr -> OnMissing -> Bool
@@ -1453,7 +1586,8 @@ defaultType graph =
         onOptional = const DefaultOptional,
         onList = const DefaultList,
         onMap = const DefaultMap,
-        onRef = referencedDefaultType graph
+        onRef = referencedDefaultType graph,
+        onNominal = const DefaultNominal
       }
 
 referencedDefaultType :: TypeGraph -> MappedKey -> DefaultType
@@ -1494,7 +1628,8 @@ hasNonInjectiveOptional graph =
           onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
           onList = nestedNonNull,
           onMap = nestedNonNull,
-          onRef = \key -> if mappedRefIsOpaque graph key then nullable else nonNull
+          onRef = \key -> if mappedRefIsOpaque graph key then nullable else nonNull,
+          onNominal = const nonNull
         }
   where
     nonNull = NullabilityFacts False False

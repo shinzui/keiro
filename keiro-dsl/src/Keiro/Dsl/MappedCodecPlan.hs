@@ -26,6 +26,7 @@ data MappedAuthorityMode
   | ExplicitJsonAuthority
   | StructuralAuthority !MappedKey
   | OpaqueAuthority !MappedKey
+  | NominalAuthority !Text
   deriving stock (Eq, Ord, Show)
 
 -- | A consumer root crosses a declared total binding for structural
@@ -72,7 +73,8 @@ planMappedCodec graph expression = do
           onRef = \key -> case Map.lookup key ((.declarations) graph) of
             Just ResolvedStructural {} -> Set.singleton (StructuralAuthority key)
             Just ResolvedOpaque {} -> Set.singleton (OpaqueAuthority key)
-            Nothing -> Set.empty
+            Nothing -> error ("keiro-dsl internal invariant: mapped codec plan references missing declaration " <> show key),
+          onNominal = Set.singleton . NominalAuthority . (.name)
         }
 
 renderMappedEncode :: TypeGraph -> MappedReferenceBoundary -> MappedCodecPlan -> Text -> Text
@@ -89,7 +91,8 @@ renderMappedEncode graph boundary plan value =
         onOptional = \encode candidate -> "maybe Null (\\item -> " <> encode "item" <> ") (" <> candidate <> ")",
         onList = \encode candidate -> "toJSON (map (\\item -> " <> encode "item" <> ") (" <> candidate <> "))",
         onMap = \encode candidate -> "toJSON (Map.map (\\item -> " <> encode "item" <> ") (" <> candidate <> "))",
-        onRef = encodeReference
+        onRef = encodeReference,
+        onNominal = \leaf candidate -> "encode" <> (.name) leaf <> "Leaf " <> candidate
       }
     ((.resolvedExpression) plan)
     value
@@ -101,7 +104,7 @@ renderMappedEncode graph boundary plan value =
       Just ResolvedOpaque {} -> case boundary of
         ConsumerValueBoundary -> "toJSON " <> candidate
         StructuralShapeBoundary -> primitive candidate
-      Nothing -> primitive candidate
+      Nothing -> error ("keiro-dsl internal invariant: mapped encoder references missing declaration " <> show key)
     argument candidate = case boundary of
       ConsumerValueBoundary -> " " <> candidate
       StructuralShapeBoundary -> " (" <> candidate <> ")"
@@ -123,14 +126,15 @@ renderMappedParse graph boundary plan =
         onOptional = \decode -> "\\value -> case value of Null -> pure Nothing; other -> Just <$> " <> decode <> " other",
         onList = \decode -> "\\value -> (parseJSON value :: Parser [Value]) >>= traverse (" <> decode <> ")",
         onMap = \decode -> "\\value -> (parseJSON value :: Parser (Map Text Value)) >>= traverse (" <> decode <> ")",
-        onRef = parseReference
+        onRef = parseReference,
+        onNominal = \leaf -> "parse" <> (.name) leaf <> "Leaf"
       }
     ((.resolvedExpression) plan)
   where
     parseReference key = case Map.lookup key ((.declarations) graph) of
       Just (ResolvedStructural declaration _) -> "parse" <> (.name) declaration <> suffix
       Just ResolvedOpaque {} -> "parseJSON"
-      Nothing -> "parseJSON"
+      Nothing -> error ("keiro-dsl internal invariant: mapped parser references missing declaration " <> show key)
     suffix = case boundary of
       ConsumerValueBoundary -> "Mapped"
       StructuralShapeBoundary -> "Shape"

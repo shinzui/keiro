@@ -137,7 +137,7 @@ import Keiro.Dsl.SidecarNames (contextCabalFragmentFileName, legacyContextRecord
 import Keiro.Dsl.Source (SourcePoint (..), SourceSpan (..))
 import Keiro.Dsl.SourceIndex (SemanticSourceIndex)
 import Keiro.Dsl.StructuralConformance (structuralConformanceModule)
-import Keiro.Dsl.TypeGraph (MappedKey (..), TypeGraph (..), UseSite (..))
+import Keiro.Dsl.TypeGraph (MappedKey (..), RootRef (..), TypeGraph (..), UseSite (..))
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), validateService)
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist, removeFile, renameFile)
 import System.FilePath (takeDirectory, (</>))
@@ -1390,7 +1390,7 @@ constraintPlanForService service plan = case checkedTypeGraph service of
     let registerRoots =
           Set.fromList
             [ key
-            | RootRegister _ _ key <- (.useSites) graph
+            | UseSite {root = RootRegister _ _, mappedKey = key} <- (.useSites) graph
             ]
      in map (constraintFor registerRoots) ((.mappings) plan)
   where

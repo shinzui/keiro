@@ -247,8 +247,18 @@ sampleMappedExpression graph =
         onOptional = id,
         onList = \value -> Array (pure value),
         onMap = \value -> Object (KeyMap.singleton (Key.fromText "sample") value),
-        onRef = \key -> maybe emptyObject (sampleMappedDeclaration graph) (Map.lookup key ((.declarations) graph))
+        onRef = \key -> maybe emptyObject (sampleMappedDeclaration graph) (Map.lookup key ((.declarations) graph)),
+        onNominal = sampleNominalLeaf
       }
+
+sampleNominalLeaf :: NominalLeaf -> Value
+sampleNominalLeaf leaf = case (.kind) leaf of
+  NominalIdLeaf prefix -> String (prefix <> "_01h455vb4pex5vsknk084sn02q")
+  NominalScalarLeaf NominalText -> String "sample"
+  NominalScalarLeaf NominalInt -> Number 1
+  NominalScalarLeaf NominalNatural -> Number 1
+  NominalScalarLeaf NominalBool -> Bool True
+  NominalScalarLeaf NominalTime -> String "2026-01-01T00:00:00Z"
 
 emptyObject :: Value
 emptyObject = Object KeyMap.empty
