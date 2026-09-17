@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-17T23:10:58Z
+      mode: "implement"
+      note: "Started EP-1 and refreshed coordination against current nominal-ID work"
 ---
 
 # Address the REV-17 keiro 0.17.0.0 release readiness findings
@@ -96,7 +102,7 @@ retiring the Language 4 read-model generator.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Restore a green verify gate for the 0.17.0.0 candidate | docs/plans/281-restore-a-green-verify-gate-for-the-0-17-0-0-candidate.md | None | None | Not Started |
+| 1 | Restore a green verify gate for the 0.17.0.0 candidate | docs/plans/281-restore-a-green-verify-gate-for-the-0-17-0-0-candidate.md | None | None | In Progress |
 | 2 | Write the 0.16.0.0 to 0.17.0.0 upgrade edge and reconcile release metadata | docs/plans/282-write-the-0-16-0-0-to-0-17-0-0-upgrade-edge-and-reconcile-release-metadata.md | None | EP-3, EP-4 | Not Started |
 | 3 | Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces | docs/plans/283-reconcile-the-0-17-0-0-changelogs-and-user-documentation-with-the-shipped-surfaces.md | None | EP-1, EP-4, EP-6 | Not Started |
 | 4 | Gate ordering fifo-heads to Language 6 | docs/plans/284-gate-ordering-fifo-heads-to-language-6.md | None | EP-1 | Not Started |
@@ -226,7 +232,14 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: Work completed after this MasterPlan was written already delivered EP-1's two
+  `keiki` package-id fixes and regenerated both record migration manifests while implementing
+  nominal-ID support. The same work expanded `keiro-dsl-test` and the conformance corpus, so the
+  original fixed test counts and narrow regeneration-diff expectations are historical rather
+  than current acceptance criteria.
+  Evidence: commits `7d235121` and `acda7fc0`; on 2026-09-17 the two targeted examples passed,
+  `just record-migration-policy` exited 0, and `just conformance-corpus-policy` reported 47 of 47
+  invocations and `conformance corpus: ok`.
 
 
 ## Decision Log

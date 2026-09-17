@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-17T23:10:57Z
+      mode: "implement"
+      note: "Refreshed EP-1 against nominal-ID changes and validated completed milestones"
 ---
 
 # Restore a green verify gate for the 0.17.0.0 candidate
@@ -40,19 +46,26 @@ emits. None of them is a defect in shipped library code. All of them block the t
 
 ## Progress
 
-- [ ] Milestone 1: both `keiro-dsl-test` examples that compile generated code pass `-package-id`
-      for `keiki`; `cabal test keiro-dsl-test` reports 743 examples, 0 failures.
-- [ ] Milestone 2: `python3 scripts/generate-record-migration-manifests.py` has been run and
-      `just record-migration-policy` exits 0.
-- [ ] Milestone 3: `just corpus-regen` has been run, the five `QueuePolicy.hs` files are
-      committed in generator-exact form, and `just conformance-corpus-policy` exits 0.
+- [x] (2026-09-17T23:09:55Z) Milestone 1: both `keiro-dsl-test` examples that compile generated
+      code pass `-package-id` for `keiki`; the targeted two-example run reports 0 failures.
+- [x] (2026-09-17T23:09:55Z) Milestone 2: the current record migration manifests are generated
+      from the expanded nominal-ID tree and `just record-migration-policy` exits 0.
+- [x] (2026-09-17T23:09:55Z) Milestone 3: all 47 registered conformance invocations reproduce
+      the committed corpus exactly and `just conformance-corpus-policy` exits 0.
 - [ ] Milestone 4: a full `just verify` from a clean tree logs `EXIT=0`, and `git status
       --short` is empty afterwards.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: Commits made after this plan was authored already implemented the two package-id
+  fixes (`7d235121`) and regenerated the record migration manifests (`acda7fc0`) as part of the
+  nominal-ID initiative. That initiative also added tests and candidate corpora, so the planned
+  total of 743 examples and the expectation that regeneration touches exactly five files no
+  longer describe the current tree.
+  Evidence: the two named examples passed on 2026-09-17; `just record-migration-policy` exited 0;
+  `just conformance-corpus-policy` reported `corpus: 47 of 47 invocations selected` and
+  `conformance corpus: ok` without changing tracked files.
 
 
 ## Decision Log
@@ -378,3 +391,8 @@ inventory documents `keiro-dsl/record-field-migration-0.15.md` and
 files and `plan.json` layout), on the `keiro-dsl-corpus-regen` tool in
 `keiro-dsl/tools/corpus-regen/`, and on a running PostgreSQL for the full gate, which `just
 verify` provisions through process-compose. It has no hard dependency on any sibling plan.
+
+
+Revision note (2026-09-17): Refreshed the progress and acceptance evidence against the current
+tree after the nominal-ID work implemented the package-id fix, expanded the test/corpus surface,
+and regenerated the migration manifests. The release gate remains the final open milestone.
