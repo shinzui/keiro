@@ -14,7 +14,7 @@ import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.MappedQueue.StructuralProjections qualified as StructuralProjections
 import Generated.MappedQueue.Structural.Shape.JobMetadata (JobMetadataShape(note))
-import Generated.MappedQueue.Structural.Shape.JobPayload (JobPayloadShape(jobId, label, metadata))
+import Generated.MappedQueue.Structural.Shape.JobPayload (JobPayloadShape(metadata))
 import Conformance.MappedQueue.Bindings qualified as Bindings
 import Conformance.MappedQueue.Domain (JobMetadata, JobPayload)
 
@@ -82,6 +82,6 @@ coverageJobPayload = any (isNothing . (.metadata)) shapes && any (isJust . (.met
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/job_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadJobIdWitness (\referenceOwner -> (bindingToShape Bindings.jobPayloadBinding referenceOwner).jobId) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
-  , ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadLabelWitness (\referenceOwner -> (bindingToShape Bindings.jobPayloadBinding referenceOwner).label) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
+  [ ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/job_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadJobIdWitness (\referenceOwner -> StructuralProjections.jobPayloadJobIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
+  , ("projection witness agreement: conformance.mapped-queue.JobPayload.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.jobPayloadLabelWitness (\referenceOwner -> StructuralProjections.jobPayloadLabelGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.jobPayloadCases)))
   ]

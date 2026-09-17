@@ -12,7 +12,7 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.BehaviorComplete.StructuralProjections qualified as StructuralProjections
-import Generated.BehaviorComplete.Structural.Shape.StartPayload (StartPayloadShape(label, note))
+import Generated.BehaviorComplete.Structural.Shape.StartPayload (StartPayloadShape(note))
 import BehaviorComplete.Bindings qualified as Bindings
 import BehaviorComplete.Domain (StartPayload)
 
@@ -50,5 +50,5 @@ coverageStartPayload = any (isNothing . (.note)) shapes && any (isJust . (.note)
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.startPayloadDisplayLabelWitness (\referenceOwner -> (bindingToShape Bindings.startPayloadBinding referenceOwner).label) owner) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases)))
+  [ ("projection witness agreement: behavior-complete.StartPayload.v1/display_label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.startPayloadDisplayLabelWitness (\referenceOwner -> StructuralProjections.startPayloadDisplayLabelGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.startPayloadCases)))
   ]

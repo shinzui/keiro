@@ -13,7 +13,7 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.StructuralConformance.StructuralProjections qualified as StructuralProjections
-import Generated.StructuralConformance.Structural.Shape.ArtifactInfo (ArtifactInfoShape(artifactHash, artifactKey, displayName))
+import Generated.StructuralConformance.Structural.Shape.ArtifactInfo (ArtifactInfoShape(artifactHash))
 import Generated.StructuralConformance.Structural.Shape.ArtifactMetadata (ArtifactMetadataShape(note))
 import Conformance.Structural.Bindings qualified as Bindings
 import Conformance.Structural.Domain (ArtifactInfo, ArtifactKind, ArtifactLocation, ArtifactMetadata)
@@ -124,6 +124,6 @@ coverageArtifactMetadata = any (isNothing . (.note)) shapes && any (isJust . (.n
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.structural.ArtifactInfo.v1/artifact_key", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoArtifactKeyWitness (\referenceOwner -> (bindingToShape Bindings.artifactInfoBinding referenceOwner).artifactKey) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
-  , ("projection witness agreement: conformance.structural.ArtifactInfo.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoDisplayNameWitness (\referenceOwner -> (bindingToShape Bindings.artifactInfoBinding referenceOwner).displayName) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
+  [ ("projection witness agreement: conformance.structural.ArtifactInfo.v1/artifact_key", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoArtifactKeyWitness (\referenceOwner -> StructuralProjections.artifactInfoArtifactKeyGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
+  , ("projection witness agreement: conformance.structural.ArtifactInfo.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactInfoDisplayNameWitness (\referenceOwner -> StructuralProjections.artifactInfoDisplayNameGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.artifactInfoCases)))
   ]

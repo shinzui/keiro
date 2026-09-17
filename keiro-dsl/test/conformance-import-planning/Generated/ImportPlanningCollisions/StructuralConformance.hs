@@ -11,7 +11,6 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.ImportPlanningCollisions.StructuralProjections qualified as StructuralProjections
-import Generated.ImportPlanningCollisions.Structural.Shape.Details (DetailsShape(label))
 import ImportPlanning.Bindings qualified as Bindings
 import ImportPlanning.Consumer.Shared.Types (Details)
 
@@ -47,5 +46,5 @@ coverageDetails = True
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: import-planning.Details.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.detailsLabelWitness (\referenceOwner -> (bindingToShape Bindings.detailsBinding referenceOwner).label) owner) (NonEmpty.toList (fixtureCases Bindings.detailsFixtures)))
+  [ ("projection witness agreement: import-planning.Details.v1/label", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.detailsLabelWitness (\referenceOwner -> StructuralProjections.detailsLabelGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.detailsFixtures)))
   ]

@@ -13,7 +13,7 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.CatalogDemo.StructuralProjections qualified as StructuralProjections
-import Generated.CatalogDemo.Structural.Shape.QualificationPayload (QualificationPayloadShape(note, qualificationId))
+import Generated.CatalogDemo.Structural.Shape.QualificationPayload (QualificationPayloadShape(note))
 import CatalogDemo.MappedBindings qualified as MappedBindings
 import CatalogDemo.MappedDomain (QualificationPayload)
 
@@ -121,5 +121,5 @@ coverageQualificationPayload = any (isNothing . (.note)) shapes && any (isJust .
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: catalog-demo.QualificationPayload.v1/qualification_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.qualificationPayloadQualificationIdWitness (\referenceOwner -> (bindingToShape MappedBindings.qualificationPayloadBinding referenceOwner).qualificationId) owner) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases)))
+  [ ("projection witness agreement: catalog-demo.QualificationPayload.v1/qualification_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.qualificationPayloadQualificationIdWitness (\referenceOwner -> StructuralProjections.qualificationPayloadQualificationIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases MappedBindings.qualificationPayloadCases)))
   ]

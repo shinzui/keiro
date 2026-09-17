@@ -12,11 +12,7 @@ import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
 import Generated.MappedReadmodel.StructuralProjections qualified as StructuralProjections
-import Generated.MappedReadmodel.Structural.Shape.AccountLookup (AccountLookupShape(accountId, tenant))
-import Generated.MappedReadmodel.Structural.Shape.AccountProfile (AccountProfileShape(displayName))
-import Generated.MappedReadmodel.Structural.Shape.AccountSummary (AccountSummaryShape(accountId, profile, tenant))
-import Generated.MappedReadmodel.Structural.Shape.TenantKey (TenantKeyShape(tenantId))
-import Generated.MappedReadmodel.Structural.Shape.UnusedFilter (UnusedFilterShape(prefix))
+import Generated.MappedReadmodel.Structural.Shape.AccountSummary (AccountSummaryShape(profile))
 import Conformance.MappedReadModel.Bindings qualified as Bindings
 import Conformance.MappedReadModel.Domain (AccountLookup, AccountProfile, AccountSummary, TenantKey, UnusedFilter)
 
@@ -126,11 +122,11 @@ coverageUnusedFilter = True
 
 structuralProjectionAssertions :: [(String, Bool)]
 structuralProjectionAssertions =
-  [ ("projection witness agreement: conformance.mapped-readmodel.AccountLookup.v1/account_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountLookupAccountIdWitness (\referenceOwner -> (bindingToShape Bindings.accountLookupBinding referenceOwner).accountId) owner) (NonEmpty.toList (fixtureCases Bindings.accountLookupCases)))
-  , ("projection witness agreement: conformance.mapped-readmodel.AccountLookup.v1/tenant/tenant_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountLookupTenantTenantIdWitness (\referenceOwner -> ((bindingToShape Bindings.accountLookupBinding referenceOwner).tenant).tenantId) owner) (NonEmpty.toList (fixtureCases Bindings.accountLookupCases)))
-  , ("projection witness agreement: conformance.mapped-readmodel.AccountProfile.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountProfileDisplayNameWitness (\referenceOwner -> (bindingToShape Bindings.accountProfileBinding referenceOwner).displayName) owner) (NonEmpty.toList (fixtureCases Bindings.accountProfileCases)))
-  , ("projection witness agreement: conformance.mapped-readmodel.AccountSummary.v1/account_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountSummaryAccountIdWitness (\referenceOwner -> (bindingToShape Bindings.accountSummaryBinding referenceOwner).accountId) owner) (NonEmpty.toList (fixtureCases Bindings.accountSummaryCases)))
-  , ("projection witness agreement: conformance.mapped-readmodel.AccountSummary.v1/tenant/tenant_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountSummaryTenantTenantIdWitness (\referenceOwner -> ((bindingToShape Bindings.accountSummaryBinding referenceOwner).tenant).tenantId) owner) (NonEmpty.toList (fixtureCases Bindings.accountSummaryCases)))
-  , ("projection witness agreement: conformance.mapped-readmodel.TenantKey.v1/tenant_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.tenantKeyTenantIdWitness (\referenceOwner -> (bindingToShape Bindings.tenantKeyBinding referenceOwner).tenantId) owner) (NonEmpty.toList (fixtureCases Bindings.tenantKeyCases)))
-  , ("projection witness agreement: conformance.mapped-readmodel.UnusedFilter.v1/prefix", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.unusedFilterPrefixWitness (\referenceOwner -> (bindingToShape Bindings.unusedFilterBinding referenceOwner).prefix) owner) (NonEmpty.toList (fixtureCases Bindings.unusedFilterCases)))
+  [ ("projection witness agreement: conformance.mapped-readmodel.AccountLookup.v1/account_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountLookupAccountIdWitness (\referenceOwner -> StructuralProjections.accountLookupAccountIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.accountLookupCases)))
+  , ("projection witness agreement: conformance.mapped-readmodel.AccountLookup.v1/tenant/tenant_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountLookupTenantTenantIdWitness (\referenceOwner -> StructuralProjections.accountLookupTenantTenantIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.accountLookupCases)))
+  , ("projection witness agreement: conformance.mapped-readmodel.AccountProfile.v1/display_name", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountProfileDisplayNameWitness (\referenceOwner -> StructuralProjections.accountProfileDisplayNameGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.accountProfileCases)))
+  , ("projection witness agreement: conformance.mapped-readmodel.AccountSummary.v1/account_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountSummaryAccountIdWitness (\referenceOwner -> StructuralProjections.accountSummaryAccountIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.accountSummaryCases)))
+  , ("projection witness agreement: conformance.mapped-readmodel.AccountSummary.v1/tenant/tenant_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.accountSummaryTenantTenantIdWitness (\referenceOwner -> StructuralProjections.accountSummaryTenantTenantIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.accountSummaryCases)))
+  , ("projection witness agreement: conformance.mapped-readmodel.TenantKey.v1/tenant_id", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.tenantKeyTenantIdWitness (\referenceOwner -> StructuralProjections.tenantKeyTenantIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.tenantKeyCases)))
+  , ("projection witness agreement: conformance.mapped-readmodel.UnusedFilter.v1/prefix", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.unusedFilterPrefixWitness (\referenceOwner -> StructuralProjections.unusedFilterPrefixGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.unusedFilterCases)))
   ]
