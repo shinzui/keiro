@@ -512,6 +512,12 @@ test-suite keiro-dsl-conformance-workspace-nominals
     Generated.WorkspaceNominalProof.ProjectArtifact.Projection
     Generated.WorkspaceNominalProof.ProjectArtifact.Transducer
     Generated.WorkspaceNominalProof.ReplayAudit
+    Generated.WorkspaceNominalProof.Structural.NominalLeaves
+    Generated.WorkspaceNominalProof.Structural.Shape.ArtifactClaim
+    Generated.WorkspaceNominalProof.Structural.Shape.ProjectClaim
+    Generated.WorkspaceNominalProof.StructuralConformance
+    WorkspaceNominalProof.Bindings
+    WorkspaceNominalProof.Domain
     WorkspaceNominalProof.Project.BehaviorHoles
     WorkspaceNominalProof.ProjectArtifact.BehaviorHoles
 
@@ -521,6 +527,9 @@ test-suite keiro-dsl-conformance-workspace-nominals
     containers >=0.6 && <0.8,
     keiki >=0.9 && <0.10,
     keiro,
+    keiro-core,
+    keiro-dsl,
+    mmzk-typeid >=0.7 && <0.8,
     text >=2.1 && <2.2,
 
 -- Plan 150 / IR-1: compiled structural consumer bindings, declared-wire

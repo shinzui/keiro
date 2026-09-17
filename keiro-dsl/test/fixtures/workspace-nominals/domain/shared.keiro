@@ -1,7 +1,15 @@
-language keiro-dsl 4
+language keiro-dsl 6
 context workspace-nominal-proof
 
 id ProjectId prefix=proj
+
+id ClaimId prefix=claim using {
+  haskell package=keiro-dsl module=WorkspaceNominalProof.Domain type=ClaimId
+  binding = "WorkspaceNominalProof.Bindings.claimIdBinding"
+  binding-version = "1"
+  canonical-type = "workspace-nominal-proof.ClaimId.v1"
+  fixtures = "WorkspaceNominalProof.Bindings.claimIdFixtures"
+}
 
 enum ProjectPhase { Draft=draft Active=active }
 

@@ -29,6 +29,11 @@ other-modules:
     Generated.WorkspaceNominalProof.ProjectArtifact.Projection
     Generated.WorkspaceNominalProof.ProjectArtifact.Transducer
     Generated.WorkspaceNominalProof.ReplayAudit
+    Generated.WorkspaceNominalProof.Structural.NominalLeaves
+    Generated.WorkspaceNominalProof.Structural.Shape.ArtifactClaim
+    Generated.WorkspaceNominalProof.Structural.Shape.ProjectClaim
+    Generated.WorkspaceNominalProof.StructuralConformance
+    WorkspaceNominalProof.Bindings
     WorkspaceNominalProof.Project.BehaviorHoles
     WorkspaceNominalProof.ProjectArtifact.BehaviorHoles
 
@@ -37,4 +42,12 @@ build-depends:
     , base
     , keiki
     , keiro
+    , keiro-dsl
     , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    WorkspaceNominalProof.Bindings
+    WorkspaceNominalProof.Domain

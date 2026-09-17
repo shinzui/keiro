@@ -271,7 +271,7 @@ conformanceImportPlan ctx graph declarations nominals _projections =
         | ResolvedStructural declaration (RRecord constructor _ _) <- declarations,
           not . Set.null $
             Set.intersection
-              structuralNominalNames
+              generatedIdNames
               (Map.findWithDefault Set.empty (MappedKey ((.name) declaration)) ((.nominalReachability) graph))
         ]
     nominalReferences =
@@ -299,6 +299,11 @@ conformanceImportPlan ctx graph declarations nominals _projections =
       Set.unions
         [ Map.findWithDefault Set.empty (MappedKey ((.name) declaration)) ((.nominalReachability) graph)
         | ResolvedStructural declaration _ <- declarations
+        ]
+    generatedIdNames =
+      Set.fromList
+        [ (.name) leaf
+        | leaf@NominalLeaf {kind = NominalIdLeaf {}, ownership = GeneratedLeaf} <- nominals
         ]
     references = declarationReferences <> shapeReferences <> generatedShapeReferences <> nominalReferences <> generatedNominalReferences
 

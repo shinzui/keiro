@@ -1,5 +1,16 @@
-language keiro-dsl 4
+language keiro-dsl 6
 context workspace-nominal-proof
+
+mapped structural record ProjectClaim {
+  haskell package=keiro-dsl module=WorkspaceNominalProof.Domain type=ProjectClaim
+  binding = "WorkspaceNominalProof.Bindings.projectClaimBinding"
+  binding-version = "1"
+  canonical-type = "workspace-nominal-proof.ProjectClaim.v1"
+  fixtures = "WorkspaceNominalProof.Bindings.projectClaimFixtures"
+  wire object constructor=ProjectClaim unknown-fields=reject {
+    claimId as "claimId" : ClaimId required
+  }
+}
 
 aggregate Project
   regs
@@ -7,7 +18,7 @@ aggregate Project
     phase ProjectPhase = Draft
   states Empty Live Archived!
 
-  command RegisterProject { projectId phase:ProjectPhase }
+  command RegisterProject { projectId phase:ProjectPhase claim:ProjectClaim }
   command ArchiveProject { projectId phase:ProjectPhase }
   event ProjectRegistered = fields(RegisterProject)
   event ArchivalRecorded = fields(ArchiveProject)

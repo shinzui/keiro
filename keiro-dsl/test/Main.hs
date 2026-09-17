@@ -1839,7 +1839,10 @@ main = hspec $ do
             "transition-family-outcome-new.keiro",
             "transition-family-outcome-old.keiro",
             "transition-family.keiro",
-            "workflow-evolution.keiro"
+            "workflow-evolution.keiro",
+            "workspace-nominals/domain/project-artifact.keiro",
+            "workspace-nominals/domain/project.keiro",
+            "workspace-nominals/domain/shared.keiro"
           ]
 
     it "checks v1 and inspects legacy explicitly" $ do

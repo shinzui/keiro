@@ -92,31 +92,35 @@ surface-end
 
 fixture=workspace-nominals
 aggregate=ProjectArtifact
-fingerprint=a437868e9773ccac1561d3cdef96dbde
+fingerprint=de96e197b11760a8a58b42859d3ea990
 surface-begin
+semantic-contract:keiro-dsl/projection-catalog/1
 semantic-contract:keiro-dsl/runtime-semantics/2
 state:Empty|terminal=false
 state:Recorded|terminal=true
 reg:projectId:ProjectId=placeholder
 reg:phase:ProjectPhase=Draft
+nested-nominal-use:ProjectArtifact event ArtifactRecorded .claim : ArtifactClaim .claimId : ClaimId|name=ClaimId|representation=id:claim|owner=consumer|canonical=workspace-nominal-proof.ClaimId.v1|binding=WorkspaceNominalProof.Bindings.claimIdBinding|binding-version=1
 nominal-equality-use:nominal-equality|name=ProjectId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:proj:keiro-dsl/id-domain/typeid-v7/1|owner=generated
 nominal-equality-use:nominal-equality|name=ProjectPhase|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,active|owner=generated
-transition:live|Empty|RecordArtifact|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=projectId:=cmd.projectId;phase:=cmd.phase|emits=ArtifactRecorded|outputs=ArtifactRecorded=generated-command-identity:RecordArtifact[projectId=projectId:ProjectId,phase=phase:ProjectPhase]|goto=Recorded
+transition:live|Empty|RecordArtifact|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=projectId:=cmd.projectId;phase:=cmd.phase|emits=ArtifactRecorded|outputs=ArtifactRecorded=generated-command-identity:RecordArtifact[projectId=projectId:ProjectId,phase=phase:ProjectPhase,claim=claim:ArtifactClaim]|goto=Recorded
 surface-end
 
 
 fixture=workspace-nominals
 aggregate=Project
-fingerprint=45ade9770d9fd050b296ae227bd65aa2
+fingerprint=68143dc8be9a6ce53c182ea6b8c99ab5
 surface-begin
+semantic-contract:keiro-dsl/projection-catalog/1
 semantic-contract:keiro-dsl/runtime-semantics/2
 state:Empty|terminal=false
 state:Live|terminal=false
 state:Archived|terminal=true
 reg:projectId:ProjectId=placeholder
 reg:phase:ProjectPhase=Draft
+nested-nominal-use:Project event ProjectRegistered .claim : ProjectClaim .claimId : ClaimId|name=ClaimId|representation=id:claim|owner=consumer|canonical=workspace-nominal-proof.ClaimId.v1|binding=WorkspaceNominalProof.Bindings.claimIdBinding|binding-version=1
 nominal-equality-use:nominal-equality|name=ProjectId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:proj:keiro-dsl/id-domain/typeid-v7/1|owner=generated
 nominal-equality-use:nominal-equality|name=ProjectPhase|contract=keiro-dsl/nominal-equality/1|key=Text|domain=finite-text:draft,active|owner=generated
-transition:live|Empty|RegisterProject|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=projectId:=cmd.projectId;phase:=cmd.phase|emits=ProjectRegistered|outputs=ProjectRegistered=generated-command-identity:RegisterProject[projectId=projectId:ProjectId,phase=phase:ProjectPhase]|goto=Live
+transition:live|Empty|RegisterProject|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=projectId:=cmd.projectId;phase:=cmd.phase|emits=ProjectRegistered|outputs=ProjectRegistered=generated-command-identity:RegisterProject[projectId=projectId:ProjectId,phase=phase:ProjectPhase,claim=claim:ProjectClaim]|goto=Live
 transition:live|Live|ArchiveProject|implementation=generated|guard=cmd.projectId == reg.projectId && cmd.phase == reg.phase|writes=|emits=ArchivalRecorded|outputs=ArchivalRecorded=generated-command-identity:ArchiveProject[projectId=projectId:ProjectId,phase=phase:ProjectPhase]|goto=Archived
 surface-end

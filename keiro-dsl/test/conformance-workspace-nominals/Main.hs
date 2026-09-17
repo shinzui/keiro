@@ -3,6 +3,7 @@
 module Main (main) where
 
 import Data.Text qualified as T
+import Data.Aeson.Types (parseEither)
 import Generated.WorkspaceNominalProof.Nominals (ProjectId, ProjectPhase (..), parseProjectId)
 import Generated.WorkspaceNominalProof.Project.Codec qualified as ProjectCodec
 import Generated.WorkspaceNominalProof.Project.Domain qualified as Project
@@ -12,30 +13,54 @@ import Generated.WorkspaceNominalProof.ProjectArtifact.Codec qualified as Artifa
 import Generated.WorkspaceNominalProof.ProjectArtifact.Domain qualified as Artifact
 import Generated.WorkspaceNominalProof.ProjectArtifact.Harness qualified as ArtifactHarness
 import Generated.WorkspaceNominalProof.ProjectArtifact.Transducer (projectArtifactTransducer)
+import Generated.WorkspaceNominalProof.Structural.NominalLeaves qualified as NominalLeaves
+import Generated.WorkspaceNominalProof.StructuralConformance (structuralConformanceAssertions)
 import Keiki.Core qualified as K
 import Keiro.Codec (EventType (..))
+import WorkspaceNominalProof.Bindings qualified as Bindings
+import WorkspaceNominalProof.Domain qualified as Consumer
 
 main :: IO ()
 main =
-  if and (map snd (ProjectHarness.harnessAssertions <> ArtifactHarness.harnessAssertions) <> [sharedNominalIdentity, projectRoundTrip, artifactRoundTrip, generatedFleetAgreement])
+  if and (map snd (structuralConformanceAssertions <> ProjectHarness.harnessAssertions <> ArtifactHarness.harnessAssertions) <> [sharedNominalIdentity, sharedClaimIdentity, memberStructuralRoundTrips, projectRoundTrip, artifactRoundTrip, generatedFleetAgreement])
     then pure ()
     else fail "workspace nominal conformance failed"
 
 projectPayload :: Project.ProjectRegisteredData
-projectPayload = Project.ProjectRegisteredData projectIdValue Active
+projectPayload = Project.ProjectRegisteredData projectIdValue Active projectClaim
 
 artifactPayload :: Artifact.ArtifactRecordedData
 artifactPayload = toArtifactPayload projectPayload
 
 toArtifactPayload :: Project.ProjectRegisteredData -> Artifact.ArtifactRecordedData
-toArtifactPayload (Project.ProjectRegisteredData projectId phase) =
-  Artifact.ArtifactRecordedData projectId phase
+toArtifactPayload (Project.ProjectRegisteredData projectId phase (Consumer.ProjectClaim claimId)) =
+  Artifact.ArtifactRecordedData projectId phase (Consumer.ArtifactClaim claimId)
 
 sharedNominalIdentity :: Bool
 sharedNominalIdentity =
   case artifactPayload of
-    Artifact.ArtifactRecordedData projectId phase ->
-      projectId == projectIdValue && phase == Active
+    Artifact.ArtifactRecordedData projectId phase (Consumer.ArtifactClaim claimId) ->
+      projectId == projectIdValue && phase == Active && claimId == Bindings.claimId
+
+sharedClaimIdentity :: Bool
+sharedClaimIdentity =
+  case parseEither NominalLeaves.parseClaimIdLeaf (NominalLeaves.encodeClaimIdLeaf Bindings.claimId) of
+    Left _ -> False
+    Right claimId ->
+      case (Consumer.ProjectClaim claimId, Consumer.ArtifactClaim claimId) of
+        (Consumer.ProjectClaim projectClaimId, Consumer.ArtifactClaim artifactClaimId) ->
+          projectClaimId == artifactClaimId
+
+memberStructuralRoundTrips :: Bool
+memberStructuralRoundTrips =
+  ProjectCodec.decodeProjectClaimMapped (ProjectCodec.encodeProjectClaimMapped projectClaim) == Right projectClaim
+    && ArtifactCodec.decodeArtifactClaimMapped (ArtifactCodec.encodeArtifactClaimMapped artifactClaim) == Right artifactClaim
+
+projectClaim :: Consumer.ProjectClaim
+projectClaim = Consumer.ProjectClaim Bindings.claimId
+
+artifactClaim :: Consumer.ArtifactClaim
+artifactClaim = Consumer.ArtifactClaim Bindings.claimId
 
 projectRoundTrip :: Bool
 projectRoundTrip =
@@ -58,7 +83,7 @@ generatedFleetAgreement = projectRing && artifactRing
   where
     matchingId = projectIdValue
     matchingPhase = Draft
-    register = Project.RegisterProject (Project.RegisterProjectData matchingId matchingPhase)
+    register = Project.RegisterProject (Project.RegisterProjectData matchingId matchingPhase projectClaim)
     archive = Project.ArchiveProject (Project.ArchiveProjectData matchingId matchingPhase)
     mismatchedArchive = Project.ArchiveProject (Project.ArchiveProjectData otherProjectIdValue matchingPhase)
     projectRing = case K.step projectTransducer (Project.ProjectEmpty, Project.initialProjectRegs) register of
@@ -69,8 +94,8 @@ generatedFleetAgreement = projectRing && artifactRing
           && case K.step projectTransducer (live, registers) archive of
             Just (archived, _, _) -> archived == Project.ProjectArchived
             Nothing -> False
-    artifactCommand = Artifact.RecordArtifact (Artifact.RecordArtifactData matchingId matchingPhase)
-    artifactMismatch = Artifact.RecordArtifact (Artifact.RecordArtifactData otherProjectIdValue matchingPhase)
+    artifactCommand = Artifact.RecordArtifact (Artifact.RecordArtifactData matchingId matchingPhase artifactClaim)
+    artifactMismatch = Artifact.RecordArtifact (Artifact.RecordArtifactData otherProjectIdValue matchingPhase artifactClaim)
     artifactRing =
       case K.step projectArtifactTransducer (Artifact.ProjectArtifactEmpty, Artifact.initialProjectArtifactRegs) artifactCommand of
         Just (recorded, _, _) ->

@@ -1,5 +1,16 @@
-language keiro-dsl 4
+language keiro-dsl 6
 context workspace-nominal-proof
+
+mapped structural record ArtifactClaim {
+  haskell package=keiro-dsl module=WorkspaceNominalProof.Domain type=ArtifactClaim
+  binding = "WorkspaceNominalProof.Bindings.artifactClaimBinding"
+  binding-version = "1"
+  canonical-type = "workspace-nominal-proof.ArtifactClaim.v1"
+  fixtures = "WorkspaceNominalProof.Bindings.artifactClaimFixtures"
+  wire object constructor=ArtifactClaim unknown-fields=reject {
+    claimId as "claimId" : ClaimId required
+  }
+}
 
 aggregate ProjectArtifact
   regs
@@ -7,7 +18,7 @@ aggregate ProjectArtifact
     phase ProjectPhase = Draft
   states Empty Recorded!
 
-  command RecordArtifact { projectId phase:ProjectPhase }
+  command RecordArtifact { projectId phase:ProjectPhase claim:ArtifactClaim }
   event ArtifactRecorded = fields(RecordArtifact)
 
   Empty -- RecordArtifact -->

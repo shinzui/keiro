@@ -221,6 +221,15 @@ maps are a separate expansion and should not delay this delivery.
   corpus paths. During the milestone checkpoint, `--allow-dirty` was required to prove that
   the newly declared comparison module regenerates unchanged; the final clean-tree corpus
   check remains part of `just verify`.
+- Implementation, 2026-09-17: Workspace scaffolding deliberately emits one context-owned
+  `Structural.NominalLeaves` module, not one per member. Both member-owned shape and codec
+  paths import the same consumer `ClaimId` owner through that authority, which is the stronger
+  duplicate-type proof intended by the milestone's wording.
+- Implementation, 2026-09-17: A workspace containing only consumer-bound nominal leaves
+  exposed an unused-import bug in `StructuralConformance`: record-shape constructor imports
+  were planned for all nominal reachability even though canonical-text assertions exist only
+  for generated IDs. Restricting those imports to generated ID names preserves the assertions
+  and keeps consumer-only conformance modules warning-clean.
 
 
 ## Decision Log
