@@ -1,0 +1,27 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/mapped-nominal-queue-only.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.MappedNominalQueueOnly.Nominals
+    Generated.MappedNominalQueueOnly.Nominals.Internal
+    Generated.MappedNominalQueueOnly.Structural.NominalLeaves
+    Generated.MappedNominalQueueOnly.StructuralConformance
+    Generated.MappedNominalQueueOnly.TemplateWork.Queue
+    Generated.MappedNominalQueueOnly.TemplateWork.QueueCodec
+    Generated.MappedNominalQueueOnly.TemplateWork.QueuePolicy
+
+build-depends:
+    , aeson
+    , base
+    , keiro-core
+    , keiro-pgmq
+    , text

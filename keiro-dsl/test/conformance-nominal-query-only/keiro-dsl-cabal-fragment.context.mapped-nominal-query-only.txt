@@ -1,0 +1,31 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/mapped-nominal-query-only.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.MappedNominalQueryOnly.Nominals
+    Generated.MappedNominalQueryOnly.Nominals.Internal
+    Generated.MappedNominalQueryOnly.ProjectionCatalog
+    Generated.MappedNominalQueryOnly.StructuralConformance
+    Generated.MappedNominalQueryOnly.TemplateLookup.QueryContract
+    Generated.MappedNominalQueryOnly.TemplateLookup.ReadModel
+    Generated.MappedNominalQueryOnly.TemplateLookup.ReadModelHarness
+    Generated.MappedNominalQueryOnly.TemplateLookup.ReadModelTable
+    MappedNominalQueryOnly.ProjectionCatalog.ProjectionCatalogHoles
+    MappedNominalQueryOnly.TemplateLookup.ReadModelHoles
+
+build-depends:
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiro
+    , kiroku-store
+    , text

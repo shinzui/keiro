@@ -1,0 +1,73 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+module Conformance.StructuralNominals.Domain where
+
+import Data.Aeson (FromJSON, ToJSON)
+import Data.KindID (KindID)
+import Data.Map.Strict (Map)
+import Data.Proxy (Proxy)
+import Data.Text (Text)
+import GHC.Generics (Generic)
+import Generated.StructuralNominalLeaves.Nominals (TemplateId)
+import Keiki.Shape (CanonicalTypeName (..))
+
+newtype ClaimId = ClaimId {unClaimId :: KindID "claim"}
+  deriving stock (Eq, Generic, Show)
+  deriving newtype (FromJSON, ToJSON)
+
+unClaimId :: ClaimId -> KindID "claim"
+unClaimId (ClaimId value) = value
+
+instance CanonicalTypeName ClaimId where
+  canonicalTypeName :: Proxy ClaimId -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.ClaimId.v1"
+
+newtype AccountNumber = AccountNumber {unAccountNumber :: Text}
+  deriving stock (Eq, Generic, Ord, Show)
+  deriving newtype (FromJSON, ToJSON)
+
+unAccountNumber :: AccountNumber -> Text
+unAccountNumber (AccountNumber value) = value
+
+instance CanonicalTypeName AccountNumber where
+  canonicalTypeName :: Proxy AccountNumber -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.AccountNumber.v1"
+
+data TemplateState = TemplateState
+  { templateId :: !TemplateId,
+    holder :: !(Maybe ClaimId),
+    account :: !AccountNumber
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalTypeName TemplateState where
+  canonicalTypeName :: Proxy TemplateState -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.TemplateState.v1"
+
+data TemplateRef
+  = ById !TemplateId
+  | ByAccount !AccountNumber
+  | Unknown
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalTypeName TemplateRef where
+  canonicalTypeName :: Proxy TemplateRef -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.TemplateRef.v1"
+
+data TemplateBook = TemplateBook
+  { templates :: ![TemplateState],
+    holders :: ![Maybe ClaimId],
+    byKey :: !(Map Text TemplateId)
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalTypeName TemplateBook where
+  canonicalTypeName :: Proxy TemplateBook -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.TemplateBook.v1"

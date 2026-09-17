@@ -48,13 +48,13 @@ decodeJobMetadataMapped = mapLeftText . parseEither parseJobMetadataMapped
 encodeJobMetadataShape :: ShapeJobMetadata.JobMetadataShape -> Value
 encodeJobMetadataShape shape =
   object
-      [ "note" .= maybe Null (\item -> toJSON (item)) (shape.note)
+      [ "note" .= maybe Null (\item0 -> toJSON (item0)) (shape.note)
       ]
 
 parseJobMetadataShape :: Value -> Parser ShapeJobMetadata.JobMetadataShape
 parseJobMetadataShape = withObject "JobMetadataShape" $ \objectValue -> do
   ShapeJobMetadata.JobMetadata
-    <$> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "note"
+    <$> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "note"
 
 encodeJobPayloadMapped :: JobPayload -> Value
 encodeJobPayloadMapped = encodeJobPayloadShape . bindingToShape Bindings.jobPayloadBinding
@@ -70,7 +70,7 @@ encodeJobPayloadShape shape =
   object
       [ "job_id" .= toJSON (shape.jobId)
       , "label" .= toJSON (shape.label)
-      , "metadata" .= maybe Null (\item -> encodeJobMetadataShape (item)) (shape.metadata)
+      , "metadata" .= maybe Null (\item0 -> encodeJobMetadataShape (item0)) (shape.metadata)
       , "geometry" .= toJSON (shape.geometry)
       ]
 
@@ -80,21 +80,21 @@ parseJobPayloadShape = withObject "JobPayloadShape" $ \objectValue -> do
   ShapeJobPayload.JobPayload
     <$> explicitParseField (parseJSON) objectValue "job_id"
     <*> explicitParseField (parseJSON) objectValue "label"
-    <*> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJobMetadataShape other) objectValue "metadata"
+    <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJobMetadataShape) other0) objectValue "metadata"
     <*> explicitParseField (parseJSON) objectValue "geometry"
 
 encodeMappedJob :: MappedJob -> Value
 encodeMappedJob payload =
   object
     [ "job" .= encodeJobPayloadMapped payload.job
-    , "maybe_job" .= maybe Null (\item -> encodeJobPayloadMapped item) (payload.maybeJob)
+    , "maybe_job" .= maybe Null (\item0 -> encodeJobPayloadMapped item0) (payload.maybeJob)
     , "trace" .= payload.trace
     ]
 
 parseMappedJob :: Value -> Either Text MappedJob
 parseMappedJob = mapLeftText . parseEither (withObject "MappedJob" go)
   where
-    go objectValue = MappedJob <$> explicitParseField (parseJobPayloadMapped) objectValue "job" <*> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJobPayloadMapped other) objectValue "maybe_job" <*> explicitParseField (pure) objectValue "trace"
+    go objectValue = MappedJob <$> explicitParseField (parseJobPayloadMapped) objectValue "job" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJobPayloadMapped) other0) objectValue "maybe_job" <*> explicitParseField (pure) objectValue "trace"
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

@@ -49,7 +49,7 @@ encodeQualificationPayloadShape :: ShapeQualificationPayload.QualificationPayloa
 encodeQualificationPayloadShape shape =
   object
       [ "qualification_id" .= toJSON (shape.qualificationId)
-      , "note" .= maybe Null (\item -> toJSON (item)) (shape.note)
+      , "note" .= maybe Null (\item0 -> toJSON (item0)) (shape.note)
       ]
 
 parseQualificationPayloadShape :: Value -> Parser ShapeQualificationPayload.QualificationPayloadShape
@@ -57,7 +57,7 @@ parseQualificationPayloadShape = withObject "QualificationPayloadShape" $ \objec
   rejectUnknownFields "QualificationPayload" ["qualification_id", "note"] objectValue
   ShapeQualificationPayload.QualificationPayload
     <$> explicitParseField (parseJSON) objectValue "qualification_id"
-    <*> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "note"
+    <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "note"
 
 encodeQualificationJob :: QualificationJob -> Value
 encodeQualificationJob payload =
@@ -65,7 +65,7 @@ encodeQualificationJob payload =
     [ "shared_reference" .= toJSON payload.sharedReference
     , "payload" .= encodeQualificationPayloadMapped payload.qualification
     , "metadata" .= toJSON payload.metadata
-    , "maybe_metadata" .= maybe Null (\item -> toJSON item) (payload.maybeMetadata)
+    , "maybe_metadata" .= maybe Null (\item0 -> toJSON item0) (payload.maybeMetadata)
     , "attempt" .= payload.attempt
     , "trace" .= payload.trace
     ]
@@ -73,7 +73,7 @@ encodeQualificationJob payload =
 parseQualificationJob :: Value -> Either Text QualificationJob
 parseQualificationJob = mapLeftText . parseEither (withObject "QualificationJob" go)
   where
-    go objectValue = QualificationJob <$> explicitParseField (parseJSON) objectValue "shared_reference" <*> explicitParseField (parseQualificationPayloadMapped) objectValue "payload" <*> explicitParseField (parseJSON) objectValue "metadata" <*> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "maybe_metadata" <*> objectValue .: "attempt" <*> explicitParseField (pure) objectValue "trace"
+    go objectValue = QualificationJob <$> explicitParseField (parseJSON) objectValue "shared_reference" <*> explicitParseField (parseQualificationPayloadMapped) objectValue "payload" <*> explicitParseField (parseJSON) objectValue "metadata" <*> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "maybe_metadata" <*> objectValue .: "attempt" <*> explicitParseField (pure) objectValue "trace"
 
 mapLeftText :: Either String b -> Either Text b
 mapLeftText = either (Left . T.pack) Right

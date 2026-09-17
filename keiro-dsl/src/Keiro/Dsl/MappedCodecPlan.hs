@@ -18,6 +18,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as T
 import Keiro.Dsl.ConsumerTypePlan
 import Keiro.Dsl.TypeGraph
 
@@ -78,25 +79,24 @@ planMappedCodec graph expression = do
         }
 
 renderMappedEncode :: TypeGraph -> MappedReferenceBoundary -> MappedCodecPlan -> Text -> Text
-renderMappedEncode graph boundary plan value =
-  foldTypeExpr
-    TypeExprAlgebra
-      { onText = primitive,
-        onInt = primitive,
-        onInteger = primitive,
-        onBool = primitive,
-        onNatural = primitive,
-        onTime = primitive,
-        onJson = id,
-        onOptional = \encode candidate -> "maybe Null (\\item -> " <> encode "item" <> ") (" <> candidate <> ")",
-        onList = \encode candidate -> "toJSON (map (\\item -> " <> encode "item" <> ") (" <> candidate <> "))",
-        onMap = \encode candidate -> "toJSON (Map.map (\\item -> " <> encode "item" <> ") (" <> candidate <> "))",
-        onRef = encodeReference,
-        onNominal = \leaf candidate -> "encode" <> (.name) leaf <> "Leaf " <> candidate
-      }
-    ((.resolvedExpression) plan)
-    value
+renderMappedEncode graph boundary plan = render (0 :: Int) ((.resolvedExpression) plan)
   where
+    render depth expression candidate = case expression of
+      RText -> primitive candidate
+      RInt -> primitive candidate
+      RInteger -> primitive candidate
+      RBool -> primitive candidate
+      RNatural -> primitive candidate
+      RTime -> primitive candidate
+      RJson -> candidate
+      ROptional nested ->
+        "maybe Null (\\" <> item depth <> " -> " <> render (depth + 1) nested (item depth) <> ") (" <> candidate <> ")"
+      RList nested ->
+        "toJSON (map (\\" <> item depth <> " -> " <> render (depth + 1) nested (item depth) <> ") (" <> candidate <> "))"
+      RMap nested ->
+        "toJSON (Map.map (\\" <> item depth <> " -> " <> render (depth + 1) nested (item depth) <> ") (" <> candidate <> "))"
+      RRef key -> encodeReference key candidate
+      RNominal leaf -> "encode" <> (.name) leaf <> "Leaf " <> candidate
     primitive candidate = "toJSON (" <> candidate <> ")"
     encodeReference key candidate = case Map.lookup key ((.declarations) graph) of
       Just (ResolvedStructural declaration _) ->
@@ -111,30 +111,40 @@ renderMappedEncode graph boundary plan value =
     suffix = case boundary of
       ConsumerValueBoundary -> "Mapped"
       StructuralShapeBoundary -> "Shape"
+    item depth = "item" <> tshow depth
 
 renderMappedParse :: TypeGraph -> MappedReferenceBoundary -> MappedCodecPlan -> Text
-renderMappedParse graph boundary plan =
-  foldTypeExpr
-    TypeExprAlgebra
-      { onText = "parseJSON",
-        onInt = "parseJSON",
-        onInteger = "parseJSON",
-        onBool = "parseJSON",
-        onNatural = "parseJSON",
-        onTime = "parseJSON",
-        onJson = "pure",
-        onOptional = \decode -> "\\value -> case value of Null -> pure Nothing; other -> Just <$> " <> decode <> " other",
-        onList = \decode -> "\\value -> (parseJSON value :: Parser [Value]) >>= traverse (" <> decode <> ")",
-        onMap = \decode -> "\\value -> (parseJSON value :: Parser (Map Text Value)) >>= traverse (" <> decode <> ")",
-        onRef = parseReference,
-        onNominal = \leaf -> "parse" <> (.name) leaf <> "Leaf"
-      }
-    ((.resolvedExpression) plan)
+renderMappedParse graph boundary plan = render (0 :: Int) ((.resolvedExpression) plan)
   where
-    parseReference key = case Map.lookup key ((.declarations) graph) of
+    render depth = \case
+      RText -> "parseJSON"
+      RInt -> "parseJSON"
+      RInteger -> "parseJSON"
+      RBool -> "parseJSON"
+      RNatural -> "parseJSON"
+      RTime -> "parseJSON"
+      RJson -> "pure"
+      ROptional nested ->
+        "\\" <> value depth <> " -> case " <> value depth <> " of Null -> pure Nothing; " <> other depth <> " -> Just <$> (" <> render (depth + 1) nested <> ") " <> other depth
+      RList nested ->
+        "\\" <> value depth <> " -> do " <> items depth <> " <- (parseJSON " <> value depth <> " :: Parser [Value]); traverse (\\(" <> index depth <> ", " <> item depth <> ") -> (" <> render (depth + 1) nested <> ") " <> item depth <> " <?> Index " <> index depth <> ") (zip [0..] " <> items depth <> ")"
+      RMap nested ->
+        "\\" <> value depth <> " -> do " <> items depth <> " <- (parseJSON " <> value depth <> " :: Parser (Map Text Value)); Map.traverseWithKey (\\" <> key depth <> " " <> item depth <> " -> (" <> render (depth + 1) nested <> ") " <> item depth <> " <?> Key (Key.fromText " <> key depth <> ")) " <> items depth
+      RRef keyValue -> parseReference keyValue
+      RNominal leaf -> "parse" <> (.name) leaf <> "Leaf"
+    parseReference mappedKey = case Map.lookup mappedKey ((.declarations) graph) of
       Just (ResolvedStructural declaration _) -> "parse" <> (.name) declaration <> suffix
       Just ResolvedOpaque {} -> "parseJSON"
-      Nothing -> error ("keiro-dsl internal invariant: mapped parser references missing declaration " <> show key)
+      Nothing -> error ("keiro-dsl internal invariant: mapped parser references missing declaration " <> show mappedKey)
     suffix = case boundary of
       ConsumerValueBoundary -> "Mapped"
       StructuralShapeBoundary -> "Shape"
+    value depth = "value" <> tshow depth
+    other depth = "other" <> tshow depth
+    items depth = "items" <> tshow depth
+    index depth = "index" <> tshow depth
+    item depth = "item" <> tshow depth
+    key depth = "key" <> tshow depth
+
+tshow :: (Show value) => value -> Text
+tshow = T.pack . show

@@ -42,7 +42,7 @@ encodeStartPayloadShape :: ShapeStartPayload.StartPayloadShape -> Value
 encodeStartPayloadShape shape =
   object
       [ "display_label" .= toJSON (shape.label)
-      , "optional_note" .= maybe Null (\item -> toJSON (item)) (shape.note)
+      , "optional_note" .= maybe Null (\item0 -> toJSON (item0)) (shape.note)
       ]
 
 parseStartPayloadShape :: Value -> Parser ShapeStartPayload.StartPayloadShape
@@ -50,7 +50,7 @@ parseStartPayloadShape = withObject "StartPayloadShape" $ \objectValue -> do
   rejectUnknownFields "StartPayload" ["display_label", "optional_note"] objectValue
   ShapeStartPayload.StartPayload
     <$> explicitParseField (parseJSON) objectValue "display_label"
-    <*> parseOptionalField (pure Nothing) (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "optional_note"
+    <*> parseOptionalField (pure Nothing) (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "optional_note"
 
 journeyEventTypes :: NonEmpty EventType
 journeyEventTypes = EventType "Started" :| [EventType "DecisionRecorded", EventType "Retired", EventType "RetirementAudited", EventType "LegacyStarted"]

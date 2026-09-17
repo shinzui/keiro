@@ -18,7 +18,7 @@ import Control.Monad (unless)
 import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
-import Data.Aeson.Types (Parser, explicitParseField, parseEither)
+import Data.Aeson.Types (Parser, JSONPathElement (..), (<?>), explicitParseField, parseEither)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Text (Text)
@@ -50,12 +50,12 @@ encodeArtifactInfoShape shape =
   object
       [ "artifact_key" .= toJSON (shape.artifactKey)
       , "display_name" .= toJSON (shape.displayName)
-      , "artifact_hash" .= maybe Null (\item -> toJSON (item)) (shape.artifactHash)
+      , "artifact_hash" .= maybe Null (\item0 -> toJSON (item0)) (shape.artifactHash)
       , "artifact_kind" .= encodeArtifactKindShape (shape.artifactKind)
       , "location" .= encodeArtifactLocationShape (shape.location)
       , "metadata" .= encodeArtifactMetadataShape (shape.metadata)
       , "active" .= toJSON (shape.active)
-      , "tags" .= toJSON (map (\item -> toJSON (item)) (shape.tags))
+      , "tags" .= toJSON (map (\item0 -> toJSON (item0)) (shape.tags))
       ]
 
 parseArtifactInfoShape :: Value -> Parser ShapeArtifactInfo.ArtifactInfoShape
@@ -64,12 +64,12 @@ parseArtifactInfoShape = withObject "ArtifactInfoShape" $ \objectValue -> do
   ShapeArtifactInfo.ArtifactInfo
     <$> explicitParseField (parseJSON) objectValue "artifact_key"
     <*> explicitParseField (parseJSON) objectValue "display_name"
-    <*> parseOptionalField (pure Nothing) (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "artifact_hash"
+    <*> parseOptionalField (pure Nothing) (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "artifact_hash"
     <*> parseOptionalField (pure ShapeArtifactKind.Guide) (parseArtifactKindShape) objectValue "artifact_kind"
     <*> explicitParseField (parseArtifactLocationShape) objectValue "location"
     <*> explicitParseField (parseArtifactMetadataShape) objectValue "metadata"
     <*> parseOptionalField (pure False) (parseJSON) objectValue "active"
-    <*> parseOptionalField (pure []) (\value -> (parseJSON value :: Parser [Value]) >>= traverse (parseJSON)) objectValue "tags"
+    <*> parseOptionalField (pure []) (\value0 -> do items0 <- (parseJSON value0 :: Parser [Value]); traverse (\(index0, item0) -> (parseJSON) item0 <?> Index index0) (zip [0..] items0)) objectValue "tags"
 
 encodeArtifactKindMapped :: ArtifactKind -> Value
 encodeArtifactKindMapped = encodeArtifactKindShape . bindingToShape Bindings.artifactKindBinding
@@ -165,13 +165,13 @@ decodeArtifactMetadataMapped = mapLeftText . parseEither parseArtifactMetadataMa
 encodeArtifactMetadataShape :: ShapeArtifactMetadata.ArtifactMetadataShape -> Value
 encodeArtifactMetadataShape shape =
   object
-      [ "note" .= maybe Null (\item -> toJSON (item)) (shape.note)
+      [ "note" .= maybe Null (\item0 -> toJSON (item0)) (shape.note)
       ]
 
 parseArtifactMetadataShape :: Value -> Parser ShapeArtifactMetadata.ArtifactMetadataShape
 parseArtifactMetadataShape = withObject "ArtifactMetadataShape" $ \objectValue -> do
   ShapeArtifactMetadata.ArtifactMetadata
-    <$> explicitParseField (\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue "note"
+    <$> explicitParseField (\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue "note"
 
 artifactCatalogEventTypes :: NonEmpty EventType
 artifactCatalogEventTypes = EventType "ArtifactRecorded" :| [EventType "ArtifactAccepted"]

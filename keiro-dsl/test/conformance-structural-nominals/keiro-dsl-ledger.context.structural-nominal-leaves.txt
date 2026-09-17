@@ -1,0 +1,103 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/structural-nominal-leaves.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves structural conformance","path":"Generated/StructuralNominalLeaves/StructuralConformance.hs"}
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves behavior source map","path":"Generated/StructuralNominalLeaves/BehaviorSourceMap.hs"}
+module-role {"family":"TemplateBook","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural TemplateBook (line 48)","path":"Generated/StructuralNominalLeaves/Structural/Shape/TemplateBook.hs"}
+module-role {"family":"TemplateRef","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural TemplateRef (line 35)","path":"Generated/StructuralNominalLeaves/Structural/Shape/TemplateRef.hs"}
+module-role {"family":"TemplateState","kind":"generated","ownerKind":"mapped","ownerName":"mapped structural TemplateState (line 22)","path":"Generated/StructuralNominalLeaves/Structural/Shape/TemplateState.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves generated nominal declarations","path":"Generated/StructuralNominalLeaves/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves generated nominal ID internals","path":"Generated/StructuralNominalLeaves/Nominals/Internal.hs"}
+module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves structural nominal leaves","path":"Generated/StructuralNominalLeaves/Structural/NominalLeaves.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.StructuralNominals.Bindings","path":"Conformance/StructuralNominals/Bindings.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context structural-nominal-leaves replay-audit assembly","path":"Generated/StructuralNominalLeaves/ReplayAudit.hs"}
+module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog structural-nominal-leaves","path":"Generated/StructuralNominalLeaves/ProjectionCatalog.hs"}
+module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog structural-nominal-leaves","path":"StructuralNominalLeaves/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses TemplateCatalog (line 62)","path":"StructuralNominalLeaves/TemplateCatalog/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate TemplateCatalog (line 62)","path":"Generated/StructuralNominalLeaves/TemplateCatalog/Harness.hs"}
+module-role {"family":"Queue","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue template_work (line 79)","path":"Generated/StructuralNominalLeaves/TemplateWork/Queue.hs"}
+module-role {"family":"QueuePolicy","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue template_work (line 79)","path":"Generated/StructuralNominalLeaves/TemplateWork/QueuePolicy.hs"}
+module-role {"family":"QueueCodec","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue template_work (line 79)","path":"Generated/StructuralNominalLeaves/TemplateWork/QueueCodec.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 120)","path":"Generated/StructuralNominalLeaves/TemplateLookup/ReadModelTable.hs"}
+module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 120)","path":"Generated/StructuralNominalLeaves/TemplateLookup/QueryContract.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 120)","path":"Generated/StructuralNominalLeaves/TemplateLookup/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 120)","path":"StructuralNominalLeaves/TemplateLookup/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 120)","path":"Generated/StructuralNominalLeaves/TemplateLookup/ReadModelHarness.hs"}
+generated Generated/StructuralNominalLeaves/StructuralConformance.hs
+generated Generated/StructuralNominalLeaves/BehaviorSourceMap.hs
+generated Generated/StructuralNominalLeaves/Structural/Shape/TemplateBook.hs
+generated Generated/StructuralNominalLeaves/Structural/Shape/TemplateRef.hs
+generated Generated/StructuralNominalLeaves/Structural/Shape/TemplateState.hs
+generated Generated/StructuralNominalLeaves/Nominals.hs
+generated Generated/StructuralNominalLeaves/Nominals/Internal.hs
+generated Generated/StructuralNominalLeaves/Structural/NominalLeaves.hs
+hole Conformance/StructuralNominals/Bindings.hs
+generated Generated/StructuralNominalLeaves/ReplayAudit.hs
+generated Generated/StructuralNominalLeaves/ProjectionCatalog.hs
+hole StructuralNominalLeaves/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/Domain.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/Codec.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/Transducer.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/BehaviorContract.hs
+hole StructuralNominalLeaves/TemplateCatalog/BehaviorHoles.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/EventStream.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/Projection.hs
+generated Generated/StructuralNominalLeaves/TemplateCatalog/Harness.hs
+generated Generated/StructuralNominalLeaves/TemplateWork/Queue.hs
+generated Generated/StructuralNominalLeaves/TemplateWork/QueuePolicy.hs
+generated Generated/StructuralNominalLeaves/TemplateWork/QueueCodec.hs
+generated Generated/StructuralNominalLeaves/TemplateLookup/ReadModelTable.hs
+generated Generated/StructuralNominalLeaves/TemplateLookup/QueryContract.hs
+generated Generated/StructuralNominalLeaves/TemplateLookup/ReadModel.hs
+hole StructuralNominalLeaves/TemplateLookup/ReadModelHoles.hs
+generated Generated/StructuralNominalLeaves/TemplateLookup/ReadModelHarness.hs
+nominal-mapping {"bindingSymbol":"Conformance.StructuralNominals.Bindings.accountNumberBinding","bindingVersion":"1","canonicalType":"conformance.structural-nominals.AccountNumber.v1","category":"scalar","fixtureSymbol":"Conformance.StructuralNominals.Bindings.accountNumberFixtures","initialSymbol":null,"mode":"nominal","module":"Conformance.StructuralNominals.Domain","package":"keiro-dsl","representation":"Text","schema":1,"specName":"AccountNumber","type":"AccountNumber"}
+nominal-mapping {"bindingSymbol":"Conformance.StructuralNominals.Bindings.claimIdBinding","bindingVersion":"1","canonicalType":"conformance.structural-nominals.ClaimId.v1","category":"id","fixtureSymbol":"Conformance.StructuralNominals.Bindings.claimIdFixtures","initialSymbol":null,"mode":"nominal","module":"Conformance.StructuralNominals.Domain","package":"keiro-dsl","representation":"KindID:claim","schema":1,"specName":"ClaimId","type":"ClaimId"}
+mapping {"bindingSymbol":"Conformance.StructuralNominals.Bindings.templateBookBinding","bindingVersion":"1","canonicalType":"conformance.structural-nominals.TemplateBook.v1","mode":"structural","module":"Conformance.StructuralNominals.Domain","package":"keiro-dsl","schema":1,"specName":"TemplateBook","type":"TemplateBook"}
+mapping {"bindingSymbol":"Conformance.StructuralNominals.Bindings.templateRefBinding","bindingVersion":"1","canonicalType":"conformance.structural-nominals.TemplateRef.v1","mode":"structural","module":"Conformance.StructuralNominals.Domain","package":"keiro-dsl","schema":1,"specName":"TemplateRef","type":"TemplateRef"}
+mapping {"bindingSymbol":"Conformance.StructuralNominals.Bindings.templateStateBinding","bindingVersion":"1","canonicalType":"conformance.structural-nominals.TemplateState.v1","mode":"structural","module":"Conformance.StructuralNominals.Domain","package":"keiro-dsl","schema":1,"specName":"TemplateState","type":"TemplateState"}
+id-domain id-domain|name=TemplateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+id-domain id-domain|name=ClaimId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=claim|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=ClaimId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:claim:keiro-dsl/id-domain/typeid-v7/1|owner=consumer;canonical=conformance.structural-nominals.ClaimId.v1;binding=Conformance.StructuralNominals.Bindings.claimIdBinding;binding-version=1
+nominal-equality nominal-equality|name=TemplateId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:template:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+binding {"kind":"binding","mappedName":"AccountNumber","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"accountNumberBinding :: NominalBinding Conformance.StructuralNominals.Domain.AccountNumber Text","symbol":"accountNumberBinding"}
+binding {"kind":"fixtures","mappedName":"AccountNumber","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"accountNumberFixtures :: NominalFixtureCases Conformance.StructuralNominals.Domain.AccountNumber","symbol":"accountNumberFixtures"}
+binding {"kind":"binding","mappedName":"ClaimId","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"claimIdBinding :: NominalBinding Conformance.StructuralNominals.Domain.ClaimId (KindID \"claim\")","symbol":"claimIdBinding"}
+binding {"kind":"fixtures","mappedName":"ClaimId","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"claimIdFixtures :: NominalFixtureCases Conformance.StructuralNominals.Domain.ClaimId","symbol":"claimIdFixtures"}
+binding {"kind":"binding","mappedName":"TemplateBook","module":"Conformance.StructuralNominals.Bindings","path":"byKey","schema":1,"signature":"templateBookBinding.byKey :: Map Text (TemplateId)","symbol":"templateBookBinding"}
+binding {"kind":"binding","mappedName":"TemplateBook","module":"Conformance.StructuralNominals.Bindings","path":"holders","schema":1,"signature":"templateBookBinding.holders :: [Maybe (ClaimId)]","symbol":"templateBookBinding"}
+binding {"kind":"binding","mappedName":"TemplateBook","module":"Conformance.StructuralNominals.Bindings","path":"templates","schema":1,"signature":"templateBookBinding.templates :: [TemplateState]","symbol":"templateBookBinding"}
+binding {"kind":"fixtures","mappedName":"TemplateBook","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"templateBookFixtures :: FixtureCases Conformance.StructuralNominals.Domain.TemplateBook","symbol":"templateBookFixtures"}
+binding {"kind":"initial-value","mappedName":"TemplateBook","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"initialTemplateBook :: Conformance.StructuralNominals.Domain.TemplateBook","symbol":"initialTemplateBook"}
+binding {"kind":"binding","mappedName":"TemplateRef","module":"Conformance.StructuralNominals.Bindings","path":"ByAccount","schema":1,"signature":"templateRefBinding.ByAccount :: AccountNumber","symbol":"templateRefBinding"}
+binding {"kind":"binding","mappedName":"TemplateRef","module":"Conformance.StructuralNominals.Bindings","path":"ById","schema":1,"signature":"templateRefBinding.ById :: TemplateId","symbol":"templateRefBinding"}
+binding {"kind":"binding","mappedName":"TemplateRef","module":"Conformance.StructuralNominals.Bindings","path":"Unknown","schema":1,"signature":"templateRefBinding.Unknown :: constructor case","symbol":"templateRefBinding"}
+binding {"kind":"fixtures","mappedName":"TemplateRef","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"templateRefFixtures :: FixtureCases Conformance.StructuralNominals.Domain.TemplateRef","symbol":"templateRefFixtures"}
+binding {"kind":"binding","mappedName":"TemplateState","module":"Conformance.StructuralNominals.Bindings","path":"account","schema":1,"signature":"templateStateBinding.account :: AccountNumber","symbol":"templateStateBinding"}
+binding {"kind":"binding","mappedName":"TemplateState","module":"Conformance.StructuralNominals.Bindings","path":"holder","schema":1,"signature":"templateStateBinding.holder :: Maybe (ClaimId)","symbol":"templateStateBinding"}
+binding {"kind":"binding","mappedName":"TemplateState","module":"Conformance.StructuralNominals.Bindings","path":"templateId","schema":1,"signature":"templateStateBinding.templateId :: TemplateId","symbol":"templateStateBinding"}
+binding {"kind":"fixtures","mappedName":"TemplateState","module":"Conformance.StructuralNominals.Bindings","path":null,"schema":1,"signature":"templateStateFixtures :: FixtureCases Conformance.StructuralNominals.Domain.TemplateState","symbol":"templateStateFixtures"}
+behavior {"aggregate":"TemplateCatalog","command":"RecordTemplate","evidence":"generated-authoritative","key":"behavior-v1-324168e7e31368e6","kind":"live-transition","outputs":[{"command":"RecordTemplate","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"TemplateCatalog","command":"RecordTemplate","evidence":"generated-authoritative","key":"behavior-v1-6cb89110a4e5d4bc","kind":"required-rejection","outputs":[],"source":"Recorded"}
+projection-catalog-fact cursor|template_lookup|template-writer|120
+projection-catalog-fact delivery|template_writer|subscription|108
+projection-catalog-fact freshness|template_lookup|wait-for-head:entire-log|120
+projection-catalog-fact group|template_rebuild|template_table|template_table|103
+projection-catalog-fact owner|template_writer|all|template_rebuild|template_table|10|template-writer|template-writer-v1|from-beginning|explicit|108
+projection-catalog-fact query|template_lookup|template_rebuild|template_table|template_table|120
+projection-catalog-fact supply|template_lookup|template_writer|template_rebuild|template_table|120|108
+projection-catalog-fact target|template_table|public|templates|clear||97
+query-contract-baseline v1
+query-contract {"mappedDependencies":["TemplateState"],"position":"input","readModel":"template_lookup","typeExpression":"TemplateState"}
+query-contract {"mappedDependencies":[],"position":"result","readModel":"template_lookup","typeExpression":"List TemplateId"}
+semantic-impact {"declarations":[{"consequences":[{"consumer":"TemplateCatalog","kind":"consumer-build"},{"aggregate":"TemplateCatalog","kind":"private-event-history"},{"aggregate":"TemplateCatalog","kind":"snapshot-hydration"}],"consumerEvidence":[{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog command RecordTemplate .book : TemplateBook","surface":"aggregate-command"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog event TemplateRecorded .book : TemplateBook","surface":"private-event-payload"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog register book : TemplateBook","surface":"snapshot-register"}],"consumers":["TemplateCatalog"],"declaration":"TemplateBook","identity":"structural\u001fkeiro-dsl:Conformance.StructuralNominals.Domain:TemplateBook\u001fConformance.StructuralNominals.Bindings.templateBookBinding\u001f1\u001fconformance.structural-nominals.TemplateBook.v1\u001fConformance.StructuralNominals.Bindings.templateBookFixtures\u001fConformance.StructuralNominals.Bindings.initialTemplateBook\u001fa1dc1480bb2672bf\u001frecord:TemplateBook:byKey=byKey,holders=holders,templates=templates"},{"consequences":[{"consumer":"TemplateCatalog","kind":"consumer-build"},{"aggregate":"TemplateCatalog","kind":"private-event-history"}],"consumerEvidence":[{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog command RecordTemplate .reference : TemplateRef","surface":"aggregate-command"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog event TemplateRecorded .reference : TemplateRef","surface":"private-event-payload"}],"consumers":["TemplateCatalog"],"declaration":"TemplateRef","identity":"structural\u001fkeiro-dsl:Conformance.StructuralNominals.Domain:TemplateRef\u001fConformance.StructuralNominals.Bindings.templateRefBinding\u001f1\u001fconformance.structural-nominals.TemplateRef.v1\u001fConformance.StructuralNominals.Bindings.templateRefFixtures\u001f\u001fa83946df4faff246\u001funion:by_account,by_id,unknown"},{"consequences":[{"consumer":"TemplateCatalog","kind":"consumer-build"},{"consumer":"read-model-query:template_lookup:input","kind":"consumer-build"},{"aggregate":"TemplateCatalog","kind":"private-event-history"},{"aggregate":"TemplateCatalog","kind":"snapshot-hydration"},{"kind":"query-api","position":"input","readModel":"template_lookup"}],"consumerEvidence":[{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog command RecordTemplate .book : TemplateBook .templates [] : TemplateState","surface":"aggregate-command"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog command RecordTemplate .state : TemplateState","surface":"aggregate-command"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog event TemplateRecorded .book : TemplateBook .templates [] : TemplateState","surface":"private-event-payload"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog event TemplateRecorded .state : TemplateState","surface":"private-event-payload"},{"consumer":"TemplateCatalog","operation":null,"path":"TemplateCatalog register book : TemplateBook .templates [] : TemplateState","surface":"snapshot-register"},{"consumer":"read-model-query:template_lookup:input","operation":null,"path":"readmodel template_lookup query input : TemplateState","surface":"read-model-query-input"}],"consumers":["TemplateCatalog","read-model-query:template_lookup:input"],"declaration":"TemplateState","identity":"structural\u001fkeiro-dsl:Conformance.StructuralNominals.Domain:TemplateState\u001fConformance.StructuralNominals.Bindings.templateStateBinding\u001f1\u001fconformance.structural-nominals.TemplateState.v1\u001fConformance.StructuralNominals.Bindings.templateStateFixtures\u001f\u001f4a42d68c2d277d3c\u001frecord:TemplateState:account=account,holder=holder,templateId=templateId"}],"mappedSurfaceEvidenceVersion":1,"serviceInventory":["TemplateBook","TemplateRef","TemplateState"]}

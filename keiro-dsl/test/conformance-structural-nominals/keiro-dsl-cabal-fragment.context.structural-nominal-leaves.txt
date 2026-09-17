@@ -1,0 +1,61 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/structural-nominal-leaves.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.StructuralNominals.Bindings
+    Generated.StructuralNominalLeaves.BehaviorSourceMap
+    Generated.StructuralNominalLeaves.Nominals
+    Generated.StructuralNominalLeaves.Nominals.Internal
+    Generated.StructuralNominalLeaves.ProjectionCatalog
+    Generated.StructuralNominalLeaves.ReplayAudit
+    Generated.StructuralNominalLeaves.Structural.NominalLeaves
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateState
+    Generated.StructuralNominalLeaves.StructuralConformance
+    Generated.StructuralNominalLeaves.TemplateCatalog.BehaviorContract
+    Generated.StructuralNominalLeaves.TemplateCatalog.Codec
+    Generated.StructuralNominalLeaves.TemplateCatalog.Domain
+    Generated.StructuralNominalLeaves.TemplateCatalog.EventStream
+    Generated.StructuralNominalLeaves.TemplateCatalog.Harness
+    Generated.StructuralNominalLeaves.TemplateCatalog.Projection
+    Generated.StructuralNominalLeaves.TemplateCatalog.Transducer
+    Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
+    Generated.StructuralNominalLeaves.TemplateLookup.ReadModel
+    Generated.StructuralNominalLeaves.TemplateLookup.ReadModelHarness
+    Generated.StructuralNominalLeaves.TemplateLookup.ReadModelTable
+    Generated.StructuralNominalLeaves.TemplateWork.Queue
+    Generated.StructuralNominalLeaves.TemplateWork.QueueCodec
+    Generated.StructuralNominalLeaves.TemplateWork.QueuePolicy
+    StructuralNominalLeaves.ProjectionCatalog.ProjectionCatalogHoles
+    StructuralNominalLeaves.TemplateCatalog.BehaviorHoles
+    StructuralNominalLeaves.TemplateLookup.ReadModelHoles
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , kiroku-store
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.StructuralNominals.Bindings
+    Conformance.StructuralNominals.Domain

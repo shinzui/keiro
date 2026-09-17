@@ -163,17 +163,18 @@ maps are a separate expansion and should not delay this delivery.
       diagnostics with fixtures, and extend the stable code table in `keiro-dsl/test/Main.hs`.
 - [x] 2026-09-17: M1. `cabal test keiro-dsl:test:keiro-dsl-test` is green (744 examples) and the IR-40 reproduction
       checks `OK` at Language 6 and reports the language diagnostic at Language 5.
-- [ ] M2. Render nominal leaf shape types and imports; emit the per-context
+- [x] 2026-09-17: M2. Render nominal leaf shape types and imports; emit the per-context
       `Structural.NominalLeaves` codec module; wire `MappedCodecPlan`, `ConsumerTypePlan`,
       `ExplainBindings`, and the binding skeleton.
-- [ ] M2. Extend `StructuralConformance` with nominal-leaf declaration laws and remove the
-      generated-source `error` for non-enum defaults in `Harness.hs`.
-- [ ] M2. Add the `keiro-dsl-conformance-structural-nominals` corpus with positive round
+- [x] 2026-09-17: M2. Extend `StructuralConformance` with consumer nominal laws and generated-ID
+      canonical fixture assertions; keep optional nominal defaults on the ordinary JSON-policy
+      path rather than the enum-constructor default path in `Harness.hs`.
+- [x] 2026-09-17: M2. Add the `keiro-dsl-conformance-structural-nominals` corpus with positive round
       trips, negative decoders with located errors, and a mutation script that turns the
       suite red when admission is bypassed.
-- [ ] M2. The corpus also compiles a workqueue payload and a read-model query pair typed by
-      nominal leaves; the queue codec round-trips TypeID text and rejects a wrong prefix at
-      the payload path.
+- [x] 2026-09-17: M2. The corpus also compiles the isolated queue-only and query-only scaffolds,
+      plus a combined workqueue payload and read-model query pair typed by nominal leaves;
+      the queue codec round-trips TypeID text and rejects a wrong prefix at the payload path.
 - [ ] M3. Coverage reports nominal boundaries as structural, including workqueue payload
       roots; the strict gate passes on the fully structural fixture.
 - [ ] M3. `MappedDiff` compares nominal leaves; `Diff.nominalUses` includes structural use
@@ -205,6 +206,13 @@ maps are a separate expansion and should not delay this delivery.
   containers before the referenced declaration. Existing reports render the declaration
   first (for example `: ArtifactInfo [] optional`), so `UseSite` stores container segments
   separately while `usePaths` and `nominalUsePaths` append them after the root leaf.
+- Implementation, 2026-09-17: GHC 9.12.4 panicked at `coercionKind ConsSymbolDef` when
+  optimizing callers that inlined nominal leaf codecs through type-level TypeID symbols.
+  Keeping generated leaf encoder/parser functions as explicit `NOINLINE` admission
+  boundaries avoids the compiler bug without weakening normal `-O1` compilation.
+- Implementation, 2026-09-17: Aeson's stable path formatter renders a key containing an
+  underscore as `$['template_id']`, while nested alphanumeric object keys retain dot form
+  (for example `$.templates[1].templateId`). Conformance follows the actual formatter.
 
 
 ## Decision Log
@@ -221,6 +229,12 @@ maps are a separate expansion and should not delay this delivery.
   structural declarations to expose missing language gates, helpers, and dependency facts.
   Rationale: Plan 228 delivered mapped queue/query support and cross-surface qualification;
   it did not add nominal leaves. Plan 288 explicitly builds on this plan for those leaves.
+  Date: 2026-09-17
+- Decision: Emit one context-owned nominal leaf codec module and make its functions
+  non-inlinable admission boundaries.
+  Rationale: structural, queue, and aggregate callers share one checked implementation; the
+  boundary also prevents a GHC 9.12.4 optimizer defect caused by specialization through
+  type-level ID symbols.
   Date: 2026-09-17
 - Decision: Represent a nominal reference as a third leaf constructor `RNominal` on
   `ResolvedTypeExpr`, carrying the checked leaf facts inline, instead of widening

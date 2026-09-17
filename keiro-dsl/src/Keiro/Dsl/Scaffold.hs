@@ -749,6 +749,7 @@ scaffoldStructuralOwnersForService ctx service = case checkedTypeGraph service o
     [(shapeModule ctx graph entry, [(.name) (fst entry)]) | entry <- structural]
       <> projectionModules
       <> generatedNominalOwners ctx service
+      <> structuralNominalLeafOwners ctx service graph
       <> nominalRepresentationOwners ctx spec
       <> nominalProjectionOwners ctx service
       <> bindingSkeletonOwnersForService ctx service graph
@@ -1332,6 +1333,22 @@ structuralPrefix ctx = case (.placement) ctx of
   GeneratedPrefix -> rootPrefix ctx <> "Generated." <> ctxPascalOf ctx <> ".Structural"
   CollocatedLeaf -> rootPrefix ctx <> ctxPascalOf ctx <> ".Generated.Structural"
 
+structuralNominalLeavesModule :: Context -> Text
+structuralNominalLeavesModule ctx = structuralPrefix ctx <> ".NominalLeaves"
+
+nominalLeafCodecImport :: Context -> Set.Set Name -> Text
+nominalLeafCodecImport ctx names =
+  "import "
+    <> structuralNominalLeavesModule ctx
+    <> " ("
+    <> T.intercalate
+      ", "
+      [ functionName <> name <> "Leaf"
+      | name <- Set.toAscList names,
+        functionName <- ["encode", "parse"]
+      ]
+    <> ")"
+
 structuralShapeModule :: Context -> Name -> Text
 structuralShapeModule ctx name = structuralPrefix ctx <> ".Shape." <> name
 
@@ -1379,6 +1396,135 @@ generatedNominalOwners ctx service = case planNominalGenerationForService ctx se
   where
     spec = checkedSpec service
     languageContract = checkedLanguageContract service
+
+-- | One context-level admission authority for every nominal leaf used by a
+-- structural codec or a direct workqueue codec. Read-model query aliases need
+-- only the domain type import and therefore do not cause this JSON helper to be
+-- emitted on their own.
+structuralNominalLeafOwners :: Context -> CheckedService -> TypeGraph -> [(ScaffoldModule, [Name])]
+structuralNominalLeafOwners ctx service graph =
+  [ ( ScaffoldModule
+        { path = T.unpack (T.replace "." "/" moduleName <> ".hs"),
+          text = emitStructuralNominalLeaves ctx leaves,
+          kind = Generated,
+          origin = "context " <> (.context) spec <> " structural nominal leaves"
+        },
+      []
+    )
+  | not (null leaves)
+  ]
+  where
+    spec = checkedSpec service
+    moduleName = structuralNominalLeavesModule ctx
+    structuralNames = Set.unions (Map.elems ((.nominalReachability) graph))
+    queueNames =
+      Set.fromList
+        [ (.nominal) site
+        | site <- (.nominalRootSites) graph,
+          RootWorkqueueField {} <- [(.root) site]
+        ]
+    leaves =
+      [ leaf
+      | name <- Set.toAscList (structuralNames <> queueNames),
+        Just leaf <- [Map.lookup name ((.nominalLeaves) graph)]
+      ]
+
+emitStructuralNominalLeaves :: Context -> [NominalLeaf] -> Text
+emitStructuralNominalLeaves ctx leaves =
+  nl $
+    renderGeneratedLanguagePragmas []
+      <> [ generatedBanner,
+           "module " <> moduleName <> " where",
+           ""
+         ]
+      <> imports
+      <> ["", T.intercalate "\n\n" (map emitLeaf leaves)]
+  where
+    moduleName = structuralNominalLeavesModule ctx
+    importPlan =
+      planImportsOrDie
+        moduleName
+        ( Set.fromList
+            [ functionName <> name <> "Leaf"
+            | leaf <- leaves,
+              name <- [(.name) leaf],
+              functionName <- ["encode", "parse"]
+            ]
+        )
+        (Set.fromList (concatMap leafReferences leaves))
+    imports =
+      [ "import Data.Aeson (" <> T.intercalate ", " aesonImports <> ")",
+        "import Data.Aeson.Types (Parser)"
+      ]
+        <> ["import Data.KindID qualified as KindID" | any isConsumerId leaves]
+        <> ["import Data.Text qualified as T" | any isGeneratedId leaves]
+        <> ["import Keiro.Codec.IdDomain (parseKindIdV7Text)" | any isConsumerId leaves]
+        <> ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | any isConsumer leaves]
+        <> T.lines (renderPlannedImports importPlan)
+    aesonImports =
+      ["Value (..)"]
+        <> (if any isConsumerScalar leaves then ["parseJSON", "toJSON"] else [])
+        <> ["withText" | any isId leaves]
+    leafReferences leaf =
+      nominalLeafTypeReference ctx leaf
+        : case ((.kind) leaf, (.ownership) leaf) of
+          (NominalIdLeaf _, GeneratedLeaf) ->
+            [ generatedNominalValueReference ("parse" <> (.name) leaf),
+              generatedNominalValueReference (lowerFirst ((.name) leaf) <> "Text")
+            ]
+          (_, ConsumerLeaf binding) -> [qualifiedValueReference ((.binding) binding)]
+          (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural leaf emission"
+    generatedNominalValueReference occurrence =
+      HaskellReference (generatedNominalModule ctx) occurrence ValueNamespace RequireQualified
+    emitLeaf leaf = case ((.kind) leaf, (.ownership) leaf) of
+      (NominalIdLeaf _, GeneratedLeaf) -> emitGeneratedId leaf
+      (NominalIdLeaf prefix, ConsumerLeaf binding) -> emitConsumerId leaf prefix binding
+      (NominalScalarLeaf _, ConsumerLeaf binding) -> emitConsumerScalar leaf binding
+      (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural leaf emission"
+    emitGeneratedId leaf =
+      nl
+        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+          encodeName leaf <> " = String . " <> generatedText leaf,
+          "{-# NOINLINE " <> encodeName leaf <> " #-}",
+          "",
+          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+          parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " (either (fail . T.unpack) pure . " <> generatedParser leaf <> ")",
+          "{-# NOINLINE " <> parseName leaf <> " #-}"
+        ]
+    emitConsumerId leaf prefix binding =
+      nl
+        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+          encodeName leaf <> " = String . KindID.toText . nominalToRepresentation " <> bindingValue binding,
+          "{-# NOINLINE " <> encodeName leaf <> " #-}",
+          "",
+          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+          parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " $ \\input ->",
+          "  case parseKindIdV7Text @" <> tshow prefix <> " input of",
+          "    Left reason -> fail (show reason)",
+          "    Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
+          "{-# NOINLINE " <> parseName leaf <> " #-}"
+        ]
+    emitConsumerScalar leaf binding =
+      nl
+        [ encodeName leaf <> " :: " <> leafType leaf <> " -> Value",
+          encodeName leaf <> " = toJSON . nominalToRepresentation " <> bindingValue binding,
+          "{-# NOINLINE " <> encodeName leaf <> " #-}",
+          "",
+          parseName leaf <> " :: Value -> Parser " <> leafType leaf,
+          parseName leaf <> " value = nominalFromRepresentation " <> bindingValue binding <> " <$> parseJSON value",
+          "{-# NOINLINE " <> parseName leaf <> " #-}"
+        ]
+    leafType = renderReferenceOrDie importPlan . nominalLeafTypeReference ctx
+    generatedParser leaf = renderReferenceOrDie importPlan (generatedNominalValueReference ("parse" <> (.name) leaf))
+    generatedText leaf = renderReferenceOrDie importPlan (generatedNominalValueReference (lowerFirst ((.name) leaf) <> "Text"))
+    bindingValue = renderReferenceOrDie importPlan . qualifiedValueReference . (.binding)
+    encodeName leaf = "encode" <> (.name) leaf <> "Leaf"
+    parseName leaf = "parse" <> (.name) leaf <> "Leaf"
+    isConsumer leaf = case (.ownership) leaf of ConsumerLeaf {} -> True; GeneratedLeaf -> False
+    isGeneratedId leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalIdLeaf {}, GeneratedLeaf) -> True; _ -> False
+    isConsumerId leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalIdLeaf {}, ConsumerLeaf {}) -> True; _ -> False
+    isConsumerScalar leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalScalarLeaf {}, ConsumerLeaf {}) -> True; _ -> False
+    isId leaf = case (.kind) leaf of NominalIdLeaf {} -> True; NominalScalarLeaf {} -> False
 
 generatedNominalInternalModule :: Context -> Text
 generatedNominalInternalModule ctx = generatedNominalModule ctx <> ".Internal"
@@ -2154,6 +2300,11 @@ renderShapeType importPlan ctx graph =
 nominalLeafTypeReference :: Context -> NominalLeaf -> HaskellReference
 nominalLeafTypeReference ctx leaf = case (.ownership) leaf of
   GeneratedLeaf -> HaskellReference (generatedNominalModule ctx) ((.name) leaf) TypeNamespace RequireQualified
+  ConsumerLeaf binding -> haskellTypeReference ((.haskell) binding)
+
+consumerNominalLeafTypeReference :: Context -> NominalLeaf -> HaskellReference
+consumerNominalLeafTypeReference ctx leaf = case (.ownership) leaf of
+  GeneratedLeaf -> HaskellReference (generatedNominalModule ctx) ((.name) leaf) TypeNamespace PreferUnqualified
   ConsumerLeaf binding -> haskellTypeReference ((.haskell) binding)
 
 data ShapeTypePrecedence
@@ -3743,6 +3894,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     plans = [plan | ResolvedQueueField {codecPlan = Just plan} <- fields]
     rootExpressions = [expression | ResolvedQueueField {expression = Just expression} <- fields]
     selectedKeys = Set.unions (map ((.dependencies) . (.consumerType)) plans)
+    selectedNominals = Set.unions (map ((.nominalDependencies) . (.consumerType)) plans)
     declarations = mapMaybe (`Map.lookup` (.declarations) graph) (Set.toAscList selectedKeys)
     structuralDeclarations = [(declaration, shape) | ResolvedStructural declaration shape <- declarations]
     mappedCodecExports (declaration, _) =
@@ -3753,6 +3905,11 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     allExpressions = rootExpressions <> concatMap (shapeTypeExpressions . snd) structuralDeclarations
     importsPlanReferences =
       Set.unions (map (consumerTypeReferences . (.consumerType)) plans)
+        <> Set.fromList
+          [ consumerNominalLeafTypeReference ctx leaf
+          | name <- Set.toAscList selectedNominals,
+            Just leaf@NominalLeaf {ownership = GeneratedLeaf} <- [Map.lookup name ((.nominalLeaves) graph)]
+          ]
         <> Set.fromList
           [ reference
           | (declaration, shape) <- structuralDeclarations,
@@ -3783,13 +3940,15 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     usesWithText = any isTextShape (map snd structuralDeclarations)
     usesUnknownRejection = any rejectsUnknown (map snd structuralDeclarations)
     usesOptionalField = any hasOptionalField (map snd structuralDeclarations)
+    usesLocatedContainers = any typeUsesLocatedContainer allExpressions
     usesKeyMap = usesUnknownRejection || usesOptionalField
+    usesKeyModule = usesKeyMap || usesMap
     usesParser = hasStructural || any typeUsesParserAnnotation allExpressions
     usesLegacyDecoder = any isLegacy fields
     mappedQueueImports =
       ["import Control.Monad (unless)" | usesUnknownRejection]
         <> ["import Data.Aeson (" <> T.intercalate ", " aesonImports <> ")"]
-        <> ["import Data.Aeson.Key qualified as Key" | usesKeyMap]
+        <> ["import Data.Aeson.Key qualified as Key" | usesKeyModule]
         <> ["import Data.Aeson.KeyMap qualified as KeyMap" | usesKeyMap]
         <> ["import Data.Aeson.Types (" <> T.intercalate ", " aesonTypesImports <> ")"]
         <> (if usesMap then ["import Data.Map.Strict (Map)", "import Data.Map.Strict qualified as Map"] else [])
@@ -3799,6 +3958,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
              "import qualified Data.Text as T"
            ]
         <> ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructural]
+        <> [nominalLeafCodecImport ctx selectedNominals | not (Set.null selectedNominals)]
         <> map ("import " <>) opaqueInstanceImports
         <> T.lines (renderPlannedImports importPlan)
     aesonImports =
@@ -3811,6 +3971,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
         <> ["(.=)"]
     aesonTypesImports =
       ["Parser" | usesParser]
+        <> (if usesLocatedContainers then ["JSONPathElement (..)", "(<?>)"] else [])
         <> ["explicitParseField", "parseEither"]
     queueFieldType ResolvedQueueField {field = raw, expression = Nothing} = legacyQueueType raw
     queueFieldType ResolvedQueueField {expression = Just expression} =
@@ -3818,7 +3979,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
         either
           (error . ("validated queue consumer type rendering failed: " <>) . show)
           id
-          (renderConsumerType importPlan graph expression)
+          (renderConsumerType (generatedNominalModule ctx) importPlan graph expression)
     strictQueueFieldType rendered
       | T.any (== ' ') rendered && not ("[" `T.isPrefixOf` rendered) = "!(" <> rendered <> ")"
       | otherwise = "!" <> rendered
@@ -4119,7 +4280,7 @@ scaffoldReadModelForService ctx service readModel = case (.queryTypes) readModel
     ]
   Just queryPair ->
     [ generated "ReadModelTable" (emitReadModelTable tableModule stem readModel),
-      generated "QueryContract" (emitReadModelQueryContract queryContractModule graph stem readModel queryPair),
+      generated "QueryContract" (emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPair),
       generated "ReadModel" (emitReadModelGenWithContract ctx readModelModule tableModule readModelHolePrefix (ownerDerivedCursor service readModel) (Just queryContractModule) stem readModel),
       ScaffoldModule
         { path = modulePathFor readModelHolePrefix "ReadModelHoles",
@@ -4833,8 +4994,8 @@ emitReadModelTable tableModule stem readModel =
   where
     qualifiedName = stem <> "QualifiedTable"
 
-emitReadModelQueryContract :: Text -> TypeGraph -> Text -> ReadModelNode -> ReadModelQueryTypes -> Text
-emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
+emitReadModelQueryContract :: Context -> Text -> TypeGraph -> Text -> ReadModelNode -> ReadModelQueryTypes -> Text
+emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPair =
   nl $
     [ generatedBanner,
       "module " <> queryContractModule,
@@ -4855,7 +5016,14 @@ emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
     resultExpression = resolve "result" ((.resultLoc) queryPair) ((.result) queryPair)
     expressions = [inputExpression, resultExpression]
     plans = map plan expressions
-    references = Set.unions (map consumerTypeReferences plans)
+    references =
+      Set.unions (map consumerTypeReferences plans)
+        <> Set.fromList
+          [ consumerNominalLeafTypeReference ctx leaf
+          | planValue <- plans,
+            name <- Set.toAscList ((.nominalDependencies) planValue),
+            Just leaf@NominalLeaf {ownership = GeneratedLeaf} <- [Map.lookup name ((.nominalLeaves) graph)]
+          ]
     reservedNames = Set.fromList [queryInputType, queryResultType, "Map", "Natural", "Text", "UTCTime", "Value"]
     importPlan = planImportsOrDie queryContractModule reservedNames references
     imports =
@@ -4882,7 +5050,7 @@ emitReadModelQueryContract queryContractModule graph stem readModel queryPair =
         either
           (error . ("validated read-model consumer type rendering failed: " <>) . show)
           id
-          (renderConsumerType importPlan graph expression)
+          (renderConsumerType (generatedNominalModule ctx) importPlan graph expression)
 
 emitReadModelGen :: Context -> Text -> Text -> Text -> Text -> ReadModelNode -> Text
 emitReadModelGen ctx readModelModule tableModule readModelHolePrefix stem readModel =
@@ -6449,7 +6617,7 @@ emitCodec a =
       ++ generatedNominalCodecImports (aggregateCheckedService a) ((.context) a) (codecGeneratedNominals a)
       ++ ["import Control.Monad (unless)" | codecUsesUnknownFieldRejection a]
       ++ [codecAesonImport a]
-      ++ ["import Data.Aeson.Key qualified as Key" | codecUsesKeyMap a]
+      ++ ["import Data.Aeson.Key qualified as Key" | codecUsesKeyMap a || codecUsesMap a]
       ++ ["import Data.Aeson.KeyMap qualified as KeyMap" | codecUsesKeyMap a]
       ++ [ "import Data.Aeson.Types (" <> T.intercalate ", " (codecAesonTypesImports a) <> ")",
            "import Data.List.NonEmpty (NonEmpty (..))",
@@ -6471,6 +6639,7 @@ emitCodec a =
          ]
       ++ [nl (map ("import " <>) (codecMappedImports a)) | hasMappedCodec a]
       ++ [nl (map ("import " <>) (codecNominalImports a)) | hasConsumerNominalCodec a]
+      ++ [nl (codecNominalLeafImports a) | not (null (codecNominalLeafImports a))]
       ++ T.lines (renderPlannedImports importPlan)
       ++ [ "",
            emitEnumParsers a,
@@ -6562,6 +6731,7 @@ codecUsesObject aggregate =
 codecAesonTypesImports :: Agg -> [Text]
 codecAesonTypesImports aggregate =
   ["Parser" | codecUsesParserType aggregate]
+    <> (if codecUsesLocatedContainers aggregate then ["JSONPathElement (..)", "(<?>)"] else [])
     <> ["explicitParseField" | codecUsesExplicitParseField aggregate]
     <> ["parseEither"]
 
@@ -6625,6 +6795,12 @@ codecUsesMap = any declarationUsesMap . codecMappedDeclarations
     declarationUsesMap (ResolvedStructural _ shape) = any typeUsesMap (shapeTypeExpressions shape)
     declarationUsesMap ResolvedOpaque {} = False
 
+codecUsesLocatedContainers :: Agg -> Bool
+codecUsesLocatedContainers = any declarationUsesLocatedContainer . codecMappedDeclarations
+  where
+    declarationUsesLocatedContainer (ResolvedStructural _ shape) = any typeUsesLocatedContainer (shapeTypeExpressions shape)
+    declarationUsesLocatedContainer ResolvedOpaque {} = False
+
 codecUsesParseJSON :: Agg -> Bool
 codecUsesParseJSON aggregate = any (declarationUsesAesonConversion aggregate) (codecMappedDeclarations aggregate)
 
@@ -6666,6 +6842,24 @@ typeUsesMap =
         onJson = False,
         onOptional = id,
         onList = id,
+        onMap = const True,
+        onRef = const False,
+        onNominal = const False
+      }
+
+typeUsesLocatedContainer :: ResolvedTypeExpr -> Bool
+typeUsesLocatedContainer =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = False,
+        onInt = False,
+        onInteger = False,
+        onBool = False,
+        onNatural = False,
+        onTime = False,
+        onJson = False,
+        onOptional = id,
+        onList = const True,
         onMap = const True,
         onRef = const False,
         onNominal = const False
@@ -7052,6 +7246,18 @@ codecImportPlan aggregate =
 
 codecNominalImports :: Agg -> [Text]
 codecNominalImports _ = []
+
+codecNominalLeafImports :: Agg -> [Text]
+codecNominalLeafImports aggregate =
+  [nominalLeafCodecImport ((.context) aggregate) names | not (Set.null names)]
+  where
+    names = case (.typeGraph) aggregate of
+      Nothing -> Set.empty
+      Just graph ->
+        Set.unions
+          [ Map.findWithDefault Set.empty (MappedKey ((.name) declaration)) ((.nominalReachability) graph)
+          | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate
+          ]
 
 codecMappedImports :: Agg -> [Text]
 codecMappedImports a = case (.typeGraph) a of

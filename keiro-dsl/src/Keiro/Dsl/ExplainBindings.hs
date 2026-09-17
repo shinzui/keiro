@@ -21,6 +21,7 @@ import Data.Bifunctor (first)
 import Data.List (groupBy, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
@@ -147,7 +148,7 @@ bindingObligationsForService service = do
       [ obligationsFor graph declaration
       | ResolvedStructural declaration _ <- Map.elems ((.declarations) graph)
       ]
-      <> concatMap (nominalObligationsFor service) (Map.elems (nominalTypes nominalRegistry))
+      <> concatMap (nominalObligationsFor service graph) (Map.elems (nominalTypes nominalRegistry))
   where
     spec = checkedSpec service
 
@@ -293,15 +294,17 @@ obligationFor declaration qualified kindValue signature paths version canonical 
   where
     (ownerModule, symbol) = splitQualified (unQualifiedValueName qualified)
 
-nominalObligationsFor :: CheckedService -> ResolvedNominalType -> [BindingObligation]
-nominalObligationsFor service nominal = case (.ownership) nominal of
+nominalObligationsFor :: CheckedService -> TypeGraph -> ResolvedNominalType -> [BindingObligation]
+nominalObligationsFor service graph nominal = case (.ownership) nominal of
   GeneratedNominal -> []
   ConsumerNominal binding -> bindingEntry : fixtureEntry : initialEntries
     where
       name = (.name) nominal
       source = (.haskell) binding
       consumerType = (.moduleName) source <> "." <> (.valueType) source
-      paths = useSites spec name
+      paths =
+        Set.toAscList . Set.fromList $
+          useSites spec name <> map renderUsePath (nominalUsePaths graph name)
       registerPaths = [path | path <- paths, " register " `T.isInfixOf` path]
       category = case (.representation) nominal of
         IdRepresentation {} -> "nominal-id"

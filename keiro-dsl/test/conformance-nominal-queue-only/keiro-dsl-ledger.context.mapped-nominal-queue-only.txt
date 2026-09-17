@@ -1,0 +1,24 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/mapped-nominal-queue-only.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-queue-only structural conformance","path":"Generated/MappedNominalQueueOnly/StructuralConformance.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-queue-only generated nominal declarations","path":"Generated/MappedNominalQueueOnly/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-queue-only generated nominal ID internals","path":"Generated/MappedNominalQueueOnly/Nominals/Internal.hs"}
+module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-queue-only structural nominal leaves","path":"Generated/MappedNominalQueueOnly/Structural/NominalLeaves.hs"}
+module-role {"family":"Queue","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue template_work (line 6)","path":"Generated/MappedNominalQueueOnly/TemplateWork/Queue.hs"}
+module-role {"family":"QueuePolicy","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue template_work (line 6)","path":"Generated/MappedNominalQueueOnly/TemplateWork/QueuePolicy.hs"}
+module-role {"family":"QueueCodec","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue template_work (line 6)","path":"Generated/MappedNominalQueueOnly/TemplateWork/QueueCodec.hs"}
+generated Generated/MappedNominalQueueOnly/StructuralConformance.hs
+generated Generated/MappedNominalQueueOnly/Nominals.hs
+generated Generated/MappedNominalQueueOnly/Nominals/Internal.hs
+generated Generated/MappedNominalQueueOnly/Structural/NominalLeaves.hs
+generated Generated/MappedNominalQueueOnly/TemplateWork/Queue.hs
+generated Generated/MappedNominalQueueOnly/TemplateWork/QueuePolicy.hs
+generated Generated/MappedNominalQueueOnly/TemplateWork/QueueCodec.hs
+id-domain id-domain|name=TemplateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=TemplateId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:template:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

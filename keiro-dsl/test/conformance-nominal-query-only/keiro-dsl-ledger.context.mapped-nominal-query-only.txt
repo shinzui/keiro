@@ -1,0 +1,41 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/mapped-nominal-query-only.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-query-only structural conformance","path":"Generated/MappedNominalQueryOnly/StructuralConformance.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-query-only generated nominal declarations","path":"Generated/MappedNominalQueryOnly/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context mapped-nominal-query-only generated nominal ID internals","path":"Generated/MappedNominalQueryOnly/Nominals/Internal.hs"}
+module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-nominal-query-only","path":"Generated/MappedNominalQueryOnly/ProjectionCatalog.hs"}
+module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog mapped-nominal-query-only","path":"MappedNominalQueryOnly/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 29)","path":"Generated/MappedNominalQueryOnly/TemplateLookup/ReadModelTable.hs"}
+module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 29)","path":"Generated/MappedNominalQueryOnly/TemplateLookup/QueryContract.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 29)","path":"Generated/MappedNominalQueryOnly/TemplateLookup/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 29)","path":"MappedNominalQueryOnly/TemplateLookup/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel template_lookup (line 29)","path":"Generated/MappedNominalQueryOnly/TemplateLookup/ReadModelHarness.hs"}
+generated Generated/MappedNominalQueryOnly/StructuralConformance.hs
+generated Generated/MappedNominalQueryOnly/Nominals.hs
+generated Generated/MappedNominalQueryOnly/Nominals/Internal.hs
+generated Generated/MappedNominalQueryOnly/ProjectionCatalog.hs
+hole MappedNominalQueryOnly/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/MappedNominalQueryOnly/TemplateLookup/ReadModelTable.hs
+generated Generated/MappedNominalQueryOnly/TemplateLookup/QueryContract.hs
+generated Generated/MappedNominalQueryOnly/TemplateLookup/ReadModel.hs
+hole MappedNominalQueryOnly/TemplateLookup/ReadModelHoles.hs
+generated Generated/MappedNominalQueryOnly/TemplateLookup/ReadModelHarness.hs
+id-domain id-domain|name=TemplateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=TemplateId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:template:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+projection-catalog-fact cursor|template_lookup|template-writer|29
+projection-catalog-fact delivery|template_writer|subscription|17
+projection-catalog-fact freshness|template_lookup|wait-for-head:entire-log|29
+projection-catalog-fact group|template_rebuild|template_table|template_table|12
+projection-catalog-fact owner|template_writer|all|template_rebuild|template_table|10|template-writer|template-writer-v1|from-beginning|explicit|17
+projection-catalog-fact query|template_lookup|template_rebuild|template_table|template_table|29
+projection-catalog-fact supply|template_lookup|template_writer|template_rebuild|template_table|29|17
+projection-catalog-fact target|template_table|public|templates|clear||6
+query-contract-baseline v1
+query-contract {"mappedDependencies":[],"position":"input","readModel":"template_lookup","typeExpression":"TemplateId"}
+query-contract {"mappedDependencies":[],"position":"result","readModel":"template_lookup","typeExpression":"List TemplateId"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

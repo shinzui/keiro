@@ -239,14 +239,14 @@ main = hspec $ do
         Right planned -> do
           (.authority) planned `shouldBe` Set.singleton (StructuralAuthority (MappedKey "ArtifactInfo"))
           renderMappedEncode graph ConsumerValueBoundary planned "payload.jobs"
-            `shouldBe` "toJSON (map (\\item -> maybe Null (\\item -> encodeArtifactInfoMapped item) (item)) (payload.jobs))"
+            `shouldBe` "toJSON (map (\\item0 -> maybe Null (\\item1 -> encodeArtifactInfoMapped item1) (item0)) (payload.jobs))"
           renderMappedParse graph ConsumerValueBoundary planned
-            `shouldBe` "\\value -> (parseJSON value :: Parser [Value]) >>= traverse (\\value -> case value of Null -> pure Nothing; other -> Just <$> parseArtifactInfoMapped other)"
+            `shouldBe` "\\value0 -> do items0 <- (parseJSON value0 :: Parser [Value]); traverse (\\(index0, item0) -> (\\value1 -> case value1 of Null -> pure Nothing; other1 -> Just <$> (parseArtifactInfoMapped) other1) item0 <?> Index index0) (zip [0..] items0)"
           let references = consumerTypeReferences ((.consumerType) planned)
           case planHaskellImports (ImportEnvironment "Generated.Test.Queue" (Set.singleton "Payload") Set.empty) references of
             Left failure -> expectationFailure (show failure)
             Right importPlan ->
-              renderConsumerType importPlan graph expression
+              renderConsumerType "Generated.Test.Nominals" importPlan graph expression
                 `shouldBe` Right (HaskellTypeOccurrence "[Maybe ArtifactInfo]")
 
     it "derives mapped projection impact from aggregate event authority and exposes heterogeneous boundaries" $ do
@@ -433,7 +433,7 @@ main = hspec $ do
               queue = generatedTextEndingIn "Queue.hs" modules
           queue `shouldSatisfy` T.isInfixOf "jobData :: ![Maybe ArtifactInfo]"
           queue `shouldSatisfy` T.isInfixOf "encodeArtifactInfoMapped"
-          queue `shouldSatisfy` T.isInfixOf "explicitParseField (\\value -> (parseJSON value :: Parser [Value])"
+          queue `shouldSatisfy` T.isInfixOf "<?> Index index0"
           queue `shouldNotSatisfy` T.isInfixOf "Vendor.Geometry"
         workqueues -> expectationFailure ("unexpected workqueues: " <> show workqueues)
       case [readModel | NReadModel readModel <- (.nodes) ((.spec) parsed)] of
@@ -1797,6 +1797,7 @@ main = hspec $ do
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
             "projection-owner-multi-query.keiro",
+            "structural-nominal-leaves.keiro",
             "process-reactions-accepted-requires-event.keiro",
             "process-reactions-accepted-unverified.keiro",
             "process-reactions-badmapping.keiro",
@@ -3815,7 +3816,7 @@ main = hspec $ do
       harness `shouldSatisfy` T.isInfixOf "case step journeyTransducer (JourneyEmpty, initialJourneyRegs) (Start (StartData"
       harness `shouldSatisfy` T.isInfixOf "-- clock-free: spec samples no wall clock (verified at scaffold time)"
       harness `shouldSatisfy` (not . T.isInfixOf "(\"clock-free: spec samples no wall clock\", True)")
-      codec `shouldSatisfy` T.isInfixOf "parseOptionalField (pure Nothing) (\\value -> case value of Null -> pure Nothing; other -> Just <$> parseJSON other) objectValue \"optional_note\""
+      codec `shouldSatisfy` T.isInfixOf "parseOptionalField (pure Nothing) (\\value0 -> case value0 of Null -> pure Nothing; other0 -> Just <$> (parseJSON) other0) objectValue \"optional_note\""
       T.count "parseOptionalField ::" codec `shouldBe` 1
       projection `shouldSatisfy` T.isInfixOf "-- No projection declarations are present; this module keeps the generated manifest inventory total."
 

@@ -562,6 +562,81 @@ test-suite keiro-dsl-conformance-structural
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,
 
+-- Plan 287 / IR-40: nominal ID and scalar admission remains authoritative
+-- through structural records, unions, containers, queues, queries, and snapshots.
+test-suite keiro-dsl-conformance-structural-nominals
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs:
+    test/conformance-structural-nominals
+    test/conformance-nominal-queue-only
+    test/conformance-nominal-query-only
+
+  main-is: Main.hs
+  other-modules:
+    Conformance.StructuralNominals.Bindings
+    Conformance.StructuralNominals.Domain
+    Generated.MappedNominalQueryOnly.Nominals
+    Generated.MappedNominalQueryOnly.Nominals.Internal
+    Generated.MappedNominalQueryOnly.ProjectionCatalog
+    Generated.MappedNominalQueryOnly.StructuralConformance
+    Generated.MappedNominalQueryOnly.TemplateLookup.QueryContract
+    Generated.MappedNominalQueryOnly.TemplateLookup.ReadModel
+    Generated.MappedNominalQueryOnly.TemplateLookup.ReadModelHarness
+    Generated.MappedNominalQueryOnly.TemplateLookup.ReadModelTable
+    Generated.MappedNominalQueueOnly.Nominals
+    Generated.MappedNominalQueueOnly.Nominals.Internal
+    Generated.MappedNominalQueueOnly.Structural.NominalLeaves
+    Generated.MappedNominalQueueOnly.StructuralConformance
+    Generated.MappedNominalQueueOnly.TemplateWork.Queue
+    Generated.MappedNominalQueueOnly.TemplateWork.QueueCodec
+    Generated.MappedNominalQueueOnly.TemplateWork.QueuePolicy
+    Generated.StructuralNominalLeaves.BehaviorSourceMap
+    Generated.StructuralNominalLeaves.Nominals
+    Generated.StructuralNominalLeaves.Nominals.Internal
+    Generated.StructuralNominalLeaves.ProjectionCatalog
+    Generated.StructuralNominalLeaves.ReplayAudit
+    Generated.StructuralNominalLeaves.Structural.NominalLeaves
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateState
+    Generated.StructuralNominalLeaves.StructuralConformance
+    Generated.StructuralNominalLeaves.TemplateCatalog.BehaviorContract
+    Generated.StructuralNominalLeaves.TemplateCatalog.Codec
+    Generated.StructuralNominalLeaves.TemplateCatalog.Domain
+    Generated.StructuralNominalLeaves.TemplateCatalog.EventStream
+    Generated.StructuralNominalLeaves.TemplateCatalog.Harness
+    Generated.StructuralNominalLeaves.TemplateCatalog.Projection
+    Generated.StructuralNominalLeaves.TemplateCatalog.Transducer
+    Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
+    Generated.StructuralNominalLeaves.TemplateLookup.ReadModel
+    Generated.StructuralNominalLeaves.TemplateLookup.ReadModelHarness
+    Generated.StructuralNominalLeaves.TemplateLookup.ReadModelTable
+    Generated.StructuralNominalLeaves.TemplateWork.Queue
+    Generated.StructuralNominalLeaves.TemplateWork.QueueCodec
+    Generated.StructuralNominalLeaves.TemplateWork.QueuePolicy
+    MappedNominalQueryOnly.ProjectionCatalog.ProjectionCatalogHoles
+    MappedNominalQueryOnly.TemplateLookup.ReadModelHoles
+    StructuralNominalLeaves.ProjectionCatalog.ProjectionCatalogHoles
+    StructuralNominalLeaves.TemplateCatalog.BehaviorHoles
+    StructuralNominalLeaves.TemplateLookup.ReadModelHoles
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    kiroku-store,
+    mmzk-typeid >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural
 -- codec authority while preserving the queue schema-version-1 envelope.
 test-suite keiro-dsl-conformance-mapped-queue

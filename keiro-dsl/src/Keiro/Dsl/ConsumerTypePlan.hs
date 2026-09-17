@@ -164,8 +164,8 @@ consumerTypeReferences planned =
 -- | Render a planned type through the target module's complete deterministic
 -- import plan. This is the collision-safe counterpart to 'haskellType', whose
 -- unqualified text remains useful for diagnostics and dependency reports.
-renderConsumerType :: HaskellImportPlan -> TypeGraph -> ResolvedTypeExpr -> Either ConsumerTypePlanError HaskellTypeOccurrence
-renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . (.rendered)) . render
+renderConsumerType :: Text -> HaskellImportPlan -> TypeGraph -> ResolvedTypeExpr -> Either ConsumerTypePlanError HaskellTypeOccurrence
+renderConsumerType generatedNominalModule importPlan graph = fmap (HaskellTypeOccurrence . (.rendered)) . render
   where
     render = \case
       RText -> pure (plainAtom "Text")
@@ -187,7 +187,10 @@ renderConsumerType importPlan graph = fmap (HaskellTypeOccurrence . (.rendered))
           let source = mappedSource declaration
            in atom ((.valueType) source) (reference ((.moduleName) source) ((.valueType) source))
       RNominal leaf -> case (.ownership) leaf of
-        GeneratedLeaf -> pure (plainAtom ((.name) leaf))
+        GeneratedLeaf ->
+          atom
+            ((.name) leaf)
+            (HaskellReference generatedNominalModule ((.name) leaf) TypeNamespace PreferUnqualified)
         ConsumerLeaf binding ->
           let source = (.haskell) binding
            in atom ((.valueType) source) (reference ((.moduleName) source) ((.valueType) source))
