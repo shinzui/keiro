@@ -52,8 +52,8 @@ emits. None of them is a defect in shipped library code. All of them block the t
       from the expanded nominal-ID tree and `just record-migration-policy` exits 0.
 - [x] (2026-09-17T23:09:55Z) Milestone 3: all 47 registered conformance invocations reproduce
       the committed corpus exactly and `just conformance-corpus-policy` exits 0.
-- [ ] Milestone 4: a full `just verify` from a clean tree logs `EXIT=0`, and `git status
-      --short` is empty afterwards.
+- [x] (2026-09-17T23:27:01Z) Milestone 4: a full `just verify` from a clean commit exits 0,
+      including 755 `keiro-dsl-test` examples, and `git status --short` is empty afterwards.
 
 
 ## Surprises & Discoveries
@@ -97,7 +97,14 @@ emits. None of them is a defect in shipped library code. All of them block the t
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+EP-1 is complete. The two generated-code compile examples resolve `keiki` by package id and
+pass together; the current record migration inventories and all 47 conformance invocations are
+generator-exact; and `just verify` exits 0 from the clean EP-1 coordination commit. The full gate
+also proves that the intervening nominal-ID work compiles and passes its new conformance suites.
+
+No new durable architecture decision emerged. The implementation reused the package-id selection
+and generated-artifact ownership rules already recorded in this plan, so the ADR distillation pass
+required no ADR change.
 
 
 ## Context and Orientation
@@ -216,7 +223,7 @@ modes (no plan file, zero or several matching ids) with an `expectationFailure`,
 handling is needed.
 
 Then run the two examples on their own and the whole suite. Acceptance is 2 examples, 0 failures
-for the targeted run and 743 examples, 0 failures for the suite.
+for the targeted run and all current examples passing; the refreshed tree has 755 examples.
 
 ### Milestone 2: regenerate the record migration manifests
 
@@ -281,7 +288,7 @@ cabal test keiro-dsl-test --test-show-details=direct 2>&1 | tail -3
 Expected:
 
 ```text
-743 examples, 0 failures
+755 examples, 0 failures
 Test suite keiro-dsl-test: PASS
 ```
 
@@ -350,7 +357,7 @@ grep -E 'examples, [0-9]+ failures' "$LOG" | sort | uniq -c
 git status --short
 ```
 
-Expected: `EXIT=0`, every line ends in `0 failures` (including `743 examples, 0 failures` for
+Expected: `EXIT=0`, every line ends in `0 failures` (including `755 examples, 0 failures` for
 `keiro-dsl-test`, `694 examples, 0 failures` for `keiro-test`, and `79 examples, 0 failures, 2
 pending` for `keiro-pgmq-test`), and `git status --short` prints nothing.
 
@@ -358,7 +365,7 @@ pending` for `keiro-pgmq-test`), and `git status --short` prints nothing.
 ## Validation and Acceptance
 
 The plan is complete when all of the following are observed on the fixed commit. First,
-`cabal test keiro-dsl-test` reports 743 examples and 0 failures, and the two previously failing
+`cabal test keiro-dsl-test` reports 755 examples and 0 failures, and the two previously failing
 examples pass even on a machine whose store lists `keiki-0.9.1.0` twice (check with `ghc-pkg
 --package-db ~/.cabal/store/ghc-9.12.4-*/package.db list | grep keiki`; two entries prove the
 fix is exercised). Second, `just record-migration-policy` exits 0. Third, `just
@@ -395,4 +402,4 @@ verify` provisions through process-compose. It has no hard dependency on any sib
 
 Revision note (2026-09-17): Refreshed the progress and acceptance evidence against the current
 tree after the nominal-ID work implemented the package-id fix, expanded the test/corpus surface,
-and regenerated the migration manifests. The release gate remains the final open milestone.
+and regenerated the migration manifests. The refreshed 755-example release gate passes.

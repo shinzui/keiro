@@ -102,7 +102,7 @@ retiring the Language 4 read-model generator.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Restore a green verify gate for the 0.17.0.0 candidate | docs/plans/281-restore-a-green-verify-gate-for-the-0-17-0-0-candidate.md | None | None | In Progress |
+| 1 | Restore a green verify gate for the 0.17.0.0 candidate | docs/plans/281-restore-a-green-verify-gate-for-the-0-17-0-0-candidate.md | None | None | Complete |
 | 2 | Write the 0.16.0.0 to 0.17.0.0 upgrade edge and reconcile release metadata | docs/plans/282-write-the-0-16-0-0-to-0-17-0-0-upgrade-edge-and-reconcile-release-metadata.md | None | EP-3, EP-4 | Not Started |
 | 3 | Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces | docs/plans/283-reconcile-the-0-17-0-0-changelogs-and-user-documentation-with-the-shipped-surfaces.md | None | EP-1, EP-4, EP-6 | Not Started |
 | 4 | Gate ordering fifo-heads to Language 6 | docs/plans/284-gate-ordering-fifo-heads-to-language-6.md | None | EP-1 | Not Started |
@@ -203,10 +203,10 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
 
 ## Progress
 
-- [ ] EP-1: the two `keiro-dsl-test` compile examples select `keiki` by package id
-- [ ] EP-1: record migration manifests regenerated and `just record-migration-policy` passes
-- [ ] EP-1: five Language 4 `QueuePolicy.hs` corpora restored by `just corpus-regen` and committed
-- [ ] EP-1: full `just verify` from a clean tree logs `EXIT=0`
+- [x] EP-1: the two `keiro-dsl-test` compile examples select `keiki` by package id
+- [x] EP-1: record migration manifests regenerated and `just record-migration-policy` passes
+- [x] EP-1: all 47 registered corpora reproduce their committed generator-exact bytes
+- [x] EP-1: full `just verify` from a clean commit exits 0 and leaves the tree clean
 - [ ] EP-2: `migrations/0.16.0.0-to-0.17.0.0.md` written with every consumer-visible change
 - [ ] EP-2: blueprint entry declared and version bumped in `blueprint.dhall`, `seihou-registry.dhall`, README, and cohort map
 - [ ] EP-2: `seihou validate-blueprint` passes and the synced-copy preview shows the edge
@@ -240,6 +240,10 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
   Evidence: commits `7d235121` and `acda7fc0`; on 2026-09-17 the two targeted examples passed,
   `just record-migration-policy` exited 0, and `just conformance-corpus-policy` reported 47 of 47
   invocations and `conformance corpus: ok`.
+- Discovery: The refreshed full release gate passes with 755 `keiro-dsl-test` examples rather
+  than the 743 examples recorded when EP-1 was drafted. This is expected growth from the
+  nominal-ID work and does not change the release criterion.
+  Evidence: `just verify` exited 0 on 2026-09-17 from commit `e6183397` and left the tree clean.
 
 
 ## Decision Log
