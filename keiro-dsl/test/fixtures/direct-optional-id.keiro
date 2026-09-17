@@ -1,0 +1,16 @@
+language keiro-dsl 6
+context direct-optional-id
+
+id TemplateId prefix=template
+
+aggregate OptionalCatalog
+  regs
+  states Open
+  command Start { templateId:Optional TemplateId }
+  event Started = fields(Start)
+
+  Open -- Start -->
+    emit Started
+    goto Open
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

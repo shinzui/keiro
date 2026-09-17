@@ -139,6 +139,7 @@ mappedClosure graph =
         onOptional = id,
         onList = id,
         onMap = id,
+        onKeyedMap = \_ -> id,
         onRef = \key -> Set.insert key (Map.findWithDefault Set.empty key ((.reachability) graph)),
         onNominal = const Set.empty
       }

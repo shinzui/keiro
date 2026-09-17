@@ -927,14 +927,14 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
           EventFields fields -> concatMap (fieldRule aggregate EventFieldUse) fields
           EventFromCommand _ -> []
         registerRules register = case resolveAggregateType symbols ((.loc) register) RegisterUse ((.valueType) register) of
-          Left typeError -> [aggregateTypeDiagnostic typeError]
+          Left typeError -> [aggregateTypeDiagnostic spec typeError]
           Right AggregateMapped {} -> []
           Right resolved -> case resolveRegisterInitial symbols ((.loc) register) resolved ((.initial) register) of
-            Left initialError -> [aggregateTypeDiagnostic initialError]
+            Left initialError -> [aggregateTypeDiagnostic spec initialError]
             Right _ -> []
 
     fieldRule aggregate useSite field =
-      either (pure . aggregateTypeDiagnostic) (const []) (inferAggregateFieldType symbols aggregate useSite field)
+      either (pure . aggregateTypeDiagnostic spec) (const []) (inferAggregateFieldType symbols aggregate useSite field)
 
     outcomeTypeRules aggregate = case (.domainOutcomeTypes) aggregate of
       Nothing -> []
@@ -1097,8 +1097,8 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       ELiteral {} -> []
       EAtom {} -> []
 
-aggregateTypeDiagnostic :: AggregateTypeError -> Diagnostic
-aggregateTypeDiagnostic aggregateError =
+aggregateTypeDiagnostic :: Spec -> AggregateTypeError -> Diagnostic
+aggregateTypeDiagnostic spec aggregateError =
   mkErr (locLine ((.loc) aggregateError)) diagnosticCode diagnosticMessage
   where
     diagnosticCode = case (.reason) aggregateError of
@@ -1117,7 +1117,7 @@ aggregateTypeDiagnostic aggregateError =
           <> typeExprCanonicalName expression
           <> "' is unsupported at "
           <> renderAggregateUseSite ((.useSite) aggregateError)
-          <> "; use a mapped structural declaration for Json or container shapes"
+          <> unsupportedShapeGuidance expression
       UnsupportedAggregateCapability resolved ->
         renderAggregateUseSite ((.useSite) aggregateError)
           <> " is unsupported for aggregate type '"
@@ -1125,6 +1125,28 @@ aggregateTypeDiagnostic aggregateError =
           <> "'"
       InvalidRegisterInitial resolved detail ->
         "invalid " <> aggregateCanonicalName resolved <> " register initial: " <> detail
+    unsupportedShapeGuidance = \case
+      TOptional (TRef name)
+        | name `Set.member` nominalNames ->
+            "; declare `mapped structural record "
+              <> name
+              <> "Ref { "
+              <> lowerInitial name
+              <> " as \""
+              <> lowerInitial name
+              <> "\" : Optional "
+              <> name
+              <> " optional on-missing=null }` and use it as the field type (candidate Language 6)"
+      _ -> "; use a mapped structural declaration for Json or container shapes"
+    nominalNames =
+      Set.fromList
+        ( map (.name) ((.ids) spec)
+            <> map (.name) ((.enums) spec)
+            <> map (.name) ((.nominalScalars) spec)
+        )
+    lowerInitial name = case T.uncons name of
+      Nothing -> name
+      Just (first, rest) -> T.cons (toLower first) rest
 
 renderAggregateUseSite :: AggregateUseSite -> Text
 renderAggregateUseSite useSite = case useSite of
@@ -1190,7 +1212,9 @@ typeGraphDiagnostic spec = \case
     ]
   TGUnsupportedNominalLeaf owner name category loc ->
     [ mkErr (locLine loc) MappedNominalLeafUnsupported $
-        mappedOwnerAt spec owner loc <> " uses " <> category <> " '" <> name <> "'; nominal enums are not supported as structural leaves, declare a mapped structural enum instead"
+        if " map key" `T.isSuffixOf` category
+          then mappedOwnerAt spec owner loc <> " uses " <> T.dropEnd 8 category <> " '" <> name <> "' as a map key; map keys must be declared ids"
+          else mappedOwnerAt spec owner loc <> " uses " <> category <> " '" <> name <> "'; nominal enums are not supported as structural leaves, declare a mapped structural enum instead"
     ]
   TGRecursive names ->
     [ mkErr (mappedLine spec (headOr "<mapped>" names)) MappedRecursiveType $
@@ -1419,6 +1443,7 @@ nominalNamesInExpr =
         onOptional = id,
         onList = id,
         onMap = id,
+        onKeyedMap = \key value -> Set.insert ((.name) key) value,
         onRef = const Set.empty,
         onNominal = Set.singleton . (.name)
       }
@@ -1609,6 +1634,7 @@ defaultType graph =
         onOptional = const DefaultOptional,
         onList = const DefaultList,
         onMap = const DefaultMap,
+        onKeyedMap = \_ _ -> DefaultMap,
         onRef = referencedDefaultType graph,
         onNominal = \leaf -> case (.kind) leaf of
           NominalEnumLeaf constructors -> DefaultEnum (Set.fromList (map fst (NE.toList constructors)))
@@ -1654,6 +1680,7 @@ hasNonInjectiveOptional graph =
           onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
           onList = nestedNonNull,
           onMap = nestedNonNull,
+          onKeyedMap = \_ -> nestedNonNull,
           onRef = \key -> if mappedRefIsOpaque graph key then nullable else nonNull,
           onNominal = const nonNull
         }

@@ -408,6 +408,7 @@ data ResolvedTypeExpr
   | ROptional !ResolvedTypeExpr
   | RList !ResolvedTypeExpr
   | RMap !ResolvedTypeExpr
+  | RKeyedMap !NominalLeaf !ResolvedTypeExpr
   | RRef !MappedKey
   | RNominal !NominalLeaf
   deriving stock (Eq, Show, Generic)
@@ -477,6 +478,7 @@ data PathSeg
   = SegField !Name !Text
   | SegArm !Name !Text
   | SegElem
+  | SegMapKey
   | SegMapValue
   | SegOptional
   | SegDecl !Name
@@ -709,6 +711,16 @@ resolveExpr _ _ _ _ _ TJson = Right RJson
 resolveExpr names nominals enums owner loc (TOptional value) = ROptional <$> resolveExpr names nominals enums owner loc value
 resolveExpr names nominals enums owner loc (TList value) = RList <$> resolveExpr names nominals enums owner loc value
 resolveExpr names nominals enums owner loc (TMap value) = RMap <$> resolveExpr names nominals enums owner loc value
+resolveExpr names nominals enums owner loc (TKeyedMap key value) = do
+  leaf <- case Map.lookup key nominals of
+    Just candidate@NominalLeaf {kind = NominalIdLeaf {}} -> Right candidate
+    Just NominalLeaf {kind = NominalEnumLeaf {}} -> Left (TGUnsupportedNominalLeaf owner key "enum map key" loc)
+    Just NominalLeaf {kind = NominalScalarLeaf {}} -> Left (TGUnsupportedNominalLeaf owner key "nominal scalar map key" loc)
+    Nothing
+      | Map.member key names -> Left (TGUnsupportedNominalLeaf owner key "mapped map key" loc)
+      | key `Set.member` enums -> Left (TGUnsupportedNominalLeaf owner key "enum map key" loc)
+      | otherwise -> Left (TGUnresolvedRef owner key loc)
+  RKeyedMap leaf <$> resolveExpr names nominals enums owner loc value
 resolveExpr names nominals enums owner loc (TRef name) =
   case Map.lookup name names of
     Just key -> Right (RRef key)
@@ -768,6 +780,7 @@ refsInExpr =
         onOptional = id,
         onList = id,
         onMap = id,
+        onKeyedMap = \_ -> id,
         onRef = Set.singleton,
         onNominal = const Set.empty
       }
@@ -786,6 +799,7 @@ nominalRefsInExpr =
         onOptional = id,
         onList = id,
         onMap = id,
+        onKeyedMap = \leaf value -> Set.insert ((.name) leaf) value,
         onRef = const Set.empty,
         onNominal = Set.singleton . (.name)
       }
@@ -938,6 +952,7 @@ collectUseSites keyByName nominalByName enumNames spec =
       ROptional value -> prepend SegOptional (rootReference value)
       RList value -> prepend SegElem (rootReference value)
       RMap value -> prepend SegMapValue (rootReference value)
+      RKeyedMap _ value -> prepend SegMapValue (rootReference value)
       RRef key -> Just (MappedRootReference key [])
       RNominal leaf -> Just (NominalRootReference ((.name) leaf) [])
     prepend segment = fmap $ \case
@@ -1009,6 +1024,7 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declaratio
       ROptional value -> map (SegOptional :) (pathsInExpr visited value)
       RList value -> map (SegElem :) (pathsInExpr visited value)
       RMap value -> map (SegMapValue :) (pathsInExpr visited value)
+      RKeyedMap _ value -> map (SegMapValue :) (pathsInExpr visited value)
       RRef key
         | key == target -> [[SegDecl (unMappedKey key)]]
         | otherwise -> map (SegDecl (unMappedKey key) :) (pathsFromDecl visited key)
@@ -1074,6 +1090,11 @@ nominalUsePaths graph targetName
       ROptional value -> map (SegOptional :) (pathsInExpr visited value)
       RList value -> map (SegElem :) (pathsInExpr visited value)
       RMap value -> map (SegMapValue :) (pathsInExpr visited value)
+      RKeyedMap leaf value ->
+        [ [SegMapKey, SegNominal targetName]
+        | (.name) leaf == targetName
+        ]
+          <> map (SegMapValue :) (pathsInExpr visited value)
       RRef key -> map (SegDecl (unMappedKey key) :) (pathsFromDecl visited key)
       RNominal leaf
         | (.name) leaf == targetName -> [[SegNominal targetName]]
@@ -1110,6 +1131,7 @@ renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderS
       | otherwise = " ." <> haskellName <> " as " <> quoted wireName
     renderSegment (SegArm _ wireTag) = " arm " <> quoted wireTag
     renderSegment SegElem = " []"
+    renderSegment SegMapKey = " {key}"
     renderSegment SegMapValue = " {}"
     renderSegment SegOptional = " optional"
     renderSegment (SegDecl name) = " : " <> name
@@ -1127,6 +1149,7 @@ data TypeExprAlgebra a = TypeExprAlgebra
     onOptional :: a -> a,
     onList :: a -> a,
     onMap :: a -> a,
+    onKeyedMap :: NominalLeaf -> a -> a,
     onRef :: MappedKey -> a,
     onNominal :: NominalLeaf -> a
   }
@@ -1143,6 +1166,7 @@ foldTypeExpr algebra = \case
   ROptional value -> (.onOptional) algebra (foldTypeExpr algebra value)
   RList value -> (.onList) algebra (foldTypeExpr algebra value)
   RMap value -> (.onMap) algebra (foldTypeExpr algebra value)
+  RKeyedMap key value -> (.onKeyedMap) algebra key (foldTypeExpr algebra value)
   RRef key -> (.onRef) algebra key
   RNominal leaf -> (.onNominal) algebra leaf
 
@@ -1227,6 +1251,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       ROptional value -> "optional(" <> wireExpr visited value <> ")"
       RList value -> "list(" <> wireExpr visited value <> ")"
       RMap value -> "map(" <> wireExpr visited value <> ")"
+      RKeyedMap key value -> "map(key=" <> nominalWireToken key <> ";" <> wireExpr visited value <> ")"
       RRef key -> wireDecl visited key
       RNominal leaf -> nominalWireToken leaf
 

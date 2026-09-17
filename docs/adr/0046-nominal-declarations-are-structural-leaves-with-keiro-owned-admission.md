@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Nominal declarations are structural leaves with Keiro-owned admission
 description: Candidate Language 6 preserves declared nominal domain types inside structural shapes while generated leaf codecs retain TypeID, scalar, and declared-enum spelling authority across aggregate, queue, and query roots.
-timestamp: 2026-09-17T17:16:09Z
+timestamp: 2026-09-17T21:30:00Z
 docId: ADR-46
 status: Accepted
 date: 2026-09-17
@@ -59,12 +59,34 @@ rollout semantics. A nominal nested in a structural register does not acquire th
 declaration's `initial` obligation because the structural register's own initial constructs the
 complete value.
 
+Public contract event fields may name a declared ID directly. The payload uses the declared
+generated or consumer-bound Haskell type while the declaration remains the sole prefix and
+TypeID-v7 admission authority. Moving between a literal `typeid` and a declaration with the
+same prefix preserves JSON bytes but changes the consumer build type; changing the prefix is a
+public wire break.
+
+Required structural record paths may terminate at nominal IDs, enums, and scalar leaves in
+aggregate expressions and declarative router selection. Equality requires the same nominal
+declaration. IDs and enums do not gain ordering, and paths still cannot cross `Optional`,
+collections, unions, `Json`, or opaque mappings. A router recipient that is a nominal ID keeps
+that domain in its checked selection identity.
+
 An optional nominal enum leaf may name a constructor as its `on-missing` default. Generated
 defaults construct the domain enum directly; consumer-bound defaults construct the generated
 representation and cross the declared nominal binding. Nominal fixtures already cover the enum
 arms, so embedding the enum in a structural declaration does not create a duplicate per-field
-branch-coverage obligation. Refined scalars, typed map keys, and arbitrary expression projection
-through nested nominals remain outside this decision.
+branch-coverage obligation. Refined scalars and arbitrary expression projection
+through optional nominal paths remain outside this decision. Direct aggregate
+`Optional <nominal>` fields therefore remain unsupported; their diagnostic directs authors to
+a one-field structural record with an optional nominal leaf and `on-missing=null`.
+
+Candidate Language 6 also adds the explicit structural form `Map[Id] Value`. Its JSON object
+keys pass through the same nominal ID admission as value-position leaves, and its Haskell shape
+is keyed by the ID domain type. Generated IDs supply canonical text ordering. A consumer-bound
+ID must provide `Ord` consistent with canonical TypeID text order; structural conformance checks
+that obligation over all fixture pairs. Coverage records key position, fold identity includes
+key nominal facts, and mapped diff treats a text-keyed map or changed key declaration as a field
+type change. Enums, nominal scalars, and mapped declarations cannot be map keys.
 
 Replacing `Text` or an opaque twin with a nominal leaf is conservatively
 `MappedFieldTypeChanged` at every affected root. A historical codec comparison over explicit

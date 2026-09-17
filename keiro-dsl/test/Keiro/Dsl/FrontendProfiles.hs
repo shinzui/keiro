@@ -79,6 +79,7 @@ frontendProfilesSpec = do
               DelegatedInboxSyntax -> version 6
               ProcessReactionSyntax -> version 6
               ContractDeclaredIdSyntax -> version 6
+              KeyedMapSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -278,9 +279,21 @@ featureBody = \case
         "  event ProfileChanged on events { profileId: ProfileId }",
         "}"
       ]
+  KeyedMapSyntax ->
+    T.unlines
+      [ "context profile",
+        "id ProfileId prefix=profile",
+        "mapped structural record ProfileMap {",
+        "  haskell Example.ProfileMap ProfileMap",
+        "  binding Example.ProfileMap.profileMapBinding version=1",
+        "  canonical example.ProfileMap.v1",
+        "  fixtures Example.ProfileMap.profileMapFixtures",
+        "  entries as \"entries\" : Map[ProfileId] Text required",
+        "}"
+      ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, ContractDeclaredIdSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

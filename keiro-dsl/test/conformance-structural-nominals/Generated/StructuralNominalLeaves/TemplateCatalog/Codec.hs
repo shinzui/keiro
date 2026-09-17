@@ -34,6 +34,7 @@ import Keiro.Codec (Codec (..), EventType (..))
 
 
 import Generated.StructuralNominalLeaves.Structural.NominalLeaves (encodeAccountNumberLeaf, parseAccountNumberLeaf, encodeChannelLeaf, parseChannelLeaf, encodeClaimIdLeaf, parseClaimIdLeaf, encodeTemplateIdLeaf, parseTemplateIdLeaf, encodeTemplateKindLeaf, parseTemplateKindLeaf)
+import Generated.StructuralNominalLeaves.Structural.NominalLeaves (parseClaimIdLeafKey, renderClaimIdLeafKey, parseTemplateIdLeafKey, renderTemplateIdLeafKey)
 import Conformance.StructuralNominals.Bindings qualified as Bindings
 import Conformance.StructuralNominals.Domain (ClaimId, TemplateBook, TemplateRef, TemplateState)
 import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as Channel
@@ -64,15 +65,19 @@ encodeTemplateBookShape shape =
       [ "templates" .= toJSON (map (\item0 -> encodeTemplateStateShape (item0)) (shape.templates))
       , "holders" .= toJSON (map (\item0 -> maybe Null (\item1 -> encodeClaimIdLeaf item1) (item0)) (shape.holders))
       , "byKey" .= toJSON (Map.map (\item0 -> encodeTemplateIdLeaf item0) (shape.byKey))
+      , "by_template" .= Object (KeyMap.fromList [(Key.fromText (renderTemplateIdLeafKey key0), toJSON (item0)) | (key0, item0) <- Map.toList (shape.byTemplate)])
+      , "claims" .= Object (KeyMap.fromList [(Key.fromText (renderClaimIdLeafKey key0), encodeTemplateStateShape (item0)) | (key0, item0) <- Map.toList (shape.claims)])
       ]
 
 parseTemplateBookShape :: Value -> Parser ShapeTemplateBook.TemplateBookShape
 parseTemplateBookShape = withObject "TemplateBookShape" $ \objectValue -> do
-  rejectUnknownFields "TemplateBook" ["templates", "holders", "byKey"] objectValue
+  rejectUnknownFields "TemplateBook" ["templates", "holders", "byKey", "by_template", "claims"] objectValue
   ShapeTemplateBook.TemplateBook
     <$> explicitParseField (\value0 -> do items0 <- (parseJSON value0 :: Parser [Value]); traverse (\(index0, item0) -> (parseTemplateStateShape) item0 <?> Index index0) (zip [0..] items0)) objectValue "templates"
     <*> explicitParseField (\value0 -> do items0 <- (parseJSON value0 :: Parser [Value]); traverse (\(index0, item0) -> (\value1 -> case value1 of Null -> pure Nothing; other1 -> Just <$> (parseClaimIdLeaf) other1) item0 <?> Index index0) (zip [0..] items0)) objectValue "holders"
     <*> explicitParseField (\value0 -> do items0 <- (parseJSON value0 :: Parser (Map Text Value)); Map.traverseWithKey (\key0 item0 -> (parseTemplateIdLeaf) item0 <?> Key (Key.fromText key0)) items0) objectValue "byKey"
+    <*> explicitParseField (\value0 -> withObject "Map[TemplateId]" (\object0 -> Map.fromList <$> traverse (\(rawKey0, item0) -> do key0 <- parseTemplateIdLeafKey (Key.toText rawKey0) <?> Key rawKey0; parsedItem0 <- (parseJSON) item0 <?> Key rawKey0; pure (key0, parsedItem0)) (KeyMap.toList object0)) value0) objectValue "by_template"
+    <*> parseOptionalField (pure Map.empty) (\value0 -> withObject "Map[ClaimId]" (\object0 -> Map.fromList <$> traverse (\(rawKey0, item0) -> do key0 <- parseClaimIdLeafKey (Key.toText rawKey0) <?> Key rawKey0; parsedItem0 <- (parseTemplateStateShape) item0 <?> Key rawKey0; pure (key0, parsedItem0)) (KeyMap.toList object0)) value0) objectValue "claims"
 
 encodeTemplateRefMapped :: TemplateRef -> Value
 encodeTemplateRefMapped = encodeTemplateRefShape . bindingToShape Bindings.templateRefBinding

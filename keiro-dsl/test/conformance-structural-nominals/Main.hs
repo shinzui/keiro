@@ -10,6 +10,7 @@ import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -54,6 +55,9 @@ main = do
                ("generated and consumer enum leaves round-trip declared spellings", nominalEnumRoundTrip),
                ("omitted enum leaves use domain defaults and re-encode declared spellings", enumDefaultRoundTrip),
                ("unknown consumer enum spelling is rejected at its field path", rejectedAt "$.channel" unknownChannel),
+               ("identifier-keyed maps round-trip canonical keys", keyedMapRoundTrip),
+               ("identifier-keyed map rejects a wrong-prefix key at its object path", keyedMapWrongPrefixRejected),
+               ("missing optional identifier-keyed map defaults to empty", missingClaimsDefaultsEmpty),
                ("queue nominal leaves round-trip canonically", queueRoundTrip),
                ("queue generated ID rejection is located", rejectedAt "$['template_id']" badQueue),
                ("query aliases preserve nominal domain types", queryAliasAgreement),
@@ -124,6 +128,11 @@ badBook replacement = decodeTemplateBookMapped value
             .= object
               [ "primary" .= String Bindings.templateIdText1,
                 "secondary" .= String Bindings.templateIdText2
+              ],
+          "by_template"
+            .= object
+              [ Key.fromText Bindings.templateIdText1 .= String "primary",
+                Key.fromText Bindings.templateIdText2 .= String "secondary"
               ]
         ]
 
@@ -152,6 +161,28 @@ unknownChannel :: Either Text TemplateState
 unknownChannel =
   decodeTemplateStateMapped
     (replaceObjectField "channel" (String "pager") (encodeTemplateStateMapped Bindings.stateWithoutHolder))
+
+keyedMapRoundTrip :: Bool
+keyedMapRoundTrip =
+  decodeTemplateBookMapped encoded == Right Bindings.initialTemplateBook
+    && objectHasKey "by_template" Bindings.templateIdText1 encoded
+    && objectHasKey "claims" Bindings.claimIdText encoded
+  where
+    encoded = encodeTemplateBookMapped Bindings.initialTemplateBook
+
+keyedMapWrongPrefixRejected :: Bool
+keyedMapWrongPrefixRejected =
+  case decodeTemplateBookMapped malformed of
+    Left problem -> "by_template" `T.isInfixOf` problem && Bindings.claimIdText `T.isInfixOf` problem
+    Right _ -> False
+  where
+    malformed = replaceObjectField "by_template" (object [Key.fromText Bindings.claimIdText .= String "wrong"]) (encodeTemplateBookMapped Bindings.initialTemplateBook)
+
+missingClaimsDefaultsEmpty :: Bool
+missingClaimsDefaultsEmpty =
+  case decodeTemplateBookMapped (deleteObjectFields ["claims"] (encodeTemplateBookMapped Bindings.initialTemplateBook)) of
+    Left _ -> False
+    Right decoded -> Map.null decoded.claims
 
 queueRoundTrip :: Bool
 queueRoundTrip =
@@ -245,3 +276,9 @@ containsString expected = \case
   Array values -> any (containsString expected) values
   Object fields -> any (containsString expected) fields
   _ -> False
+
+objectHasKey :: Text -> Text -> Value -> Bool
+objectHasKey outer expected (Object fields) = case KeyMap.lookup (Key.fromText outer) fields of
+  Just (Object nested) -> KeyMap.member (Key.fromText expected) nested
+  _ -> False
+objectHasKey _ _ _ = False

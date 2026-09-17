@@ -87,6 +87,7 @@ data ExprView
   | ExprOptional !ExprView
   | ExprList !ExprView
   | ExprMap !ExprView
+  | ExprKeyedMap !Name !ExprView
   | ExprRef !MappedKey
   | ExprNominal !Name
   deriving stock (Eq, Show)
@@ -122,6 +123,7 @@ exprView =
         onOptional = ExprOptional,
         onList = ExprList,
         onMap = ExprMap,
+        onKeyedMap = \key -> ExprKeyedMap ((.name) key),
         onRef = ExprRef,
         onNominal = ExprNominal . (.name)
       }

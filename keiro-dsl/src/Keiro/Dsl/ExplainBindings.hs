@@ -235,6 +235,7 @@ renderExprType =
         onOptional = \value -> "Maybe (" <> value <> ")",
         onList = \value -> "[" <> value <> "]",
         onMap = \value -> "Map Text (" <> value <> ")",
+        onKeyedMap = \key value -> "Map " <> (.name) key <> " (" <> value <> ")",
         onRef = unMappedKey,
         onNominal = (.name)
       }
@@ -415,6 +416,10 @@ renderBindingObligations context obligations = case obligations of
         <> maybe [] (\canonical -> ["      canonical-type: " <> quoted canonical]) ((.canonicalType) obligation)
         <> maybe [] (\contract -> ["      equality-contract: " <> quoted contract]) ((.equalityContract) obligation)
         <> maybe [] (\contract -> ["      id-domain-contract: " <> quoted contract]) ((.idDomainContract) obligation)
+        <> [ "      ordering-contract: Ord " <> (.mappedName) obligation <> " must agree with canonical TypeID text order"
+           | (.category) obligation == "nominal-id",
+             any (" {key}" `T.isInfixOf`) ((.useSites) obligation)
+           ]
     renderPaths [] = " (not currently used by an aggregate root)"
     renderPaths paths = " (" <> T.intercalate "; " paths <> ")"
     quoted value = T.pack (show value)

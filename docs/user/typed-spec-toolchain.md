@@ -396,6 +396,31 @@ Aggregate registers and explicit command/event fields accept:
 or registers. Put those shapes behind a named `mapped structural` or
 `mapped opaque` declaration.
 
+### Optional identifiers on commands
+
+A command or explicit event field cannot use `Optional DeclaredId` directly.
+Give the optional value a named structural boundary, then use that mapped type
+at the aggregate field:
+
+```text
+mapped structural record TemplateIdRef {
+  haskell package=templates-domain module=Templates.Domain type=TemplateIdRef
+  binding = "Templates.KeiroBindings.templateIdRefBinding"
+  binding-version = "1"
+  canonical-type = "templates.TemplateIdRef.v1"
+  fixtures = "Templates.KeiroBindings.templateIdRefFixtures"
+  wire object constructor=TemplateIdRef unknown-fields=reject {
+    templateId as "templateId" : Optional TemplateId optional on-missing=null
+  }
+}
+
+command FindTemplate { reference:TemplateIdRef }
+```
+
+The diagnostic prints the one-field `mapped structural record` shape as
+guidance. A real declaration still needs the Haskell source, binding version,
+canonical identity, fixtures, and complete wire block shown above.
+
 ### Field inference
 
 A field without `:Type` is inferred in this order:
@@ -429,6 +454,7 @@ Optional Text
 List Text
 List (Optional Text)
 Map Text
+Map[DeclaredId] Text
 OtherMappedType
 DeclaredId
 DeclaredEnum
@@ -436,6 +462,13 @@ MappedNominalScalar
 ```
 
 `Map T` means a JSON object with text keys and values of type `T`.
+Candidate Language 6 adds `Map[DeclaredId] T`, whose JSON object keys are
+admitted through the declared ID codec and whose generated shape is
+`Map DeclaredId T`. The bracketed key must name an `id`; enums, nominal
+scalars, and mapped declarations are rejected. For a consumer-bound ID,
+`Ord` on the consumer type must agree with the ordering of its canonical
+TypeID text. Generated conformance checks that law over every pair of declared
+fixtures.
 `DeclaredId`, `DeclaredEnum`, and `MappedNominalScalar` stand for the names of existing `id`,
 `enum`, and `mapped nominal` declarations and require candidate Language 6. They may
 occur beneath `Optional`, `List`, and `Map` and at typed workqueue and read-model
@@ -465,6 +498,7 @@ mapped structural record ArtifactInfo {
     active      as "active"      : Bool          optional on-missing=false
     tags        as "tags"        : List Text     optional on-missing=[]
     attributes  as "attributes"  : Map Text      optional on-missing={}
+    owners      as "owners"      : Map[ClaimId] Text optional on-missing={}
   }
 }
 ```
@@ -480,7 +514,7 @@ Optional fields need a type-correct `on-missing` value:
 | integer literal | `Int`, `Integer`, or `Natural` as valid |
 | `true`, `false` | `Bool` |
 | `[]` | `List T` |
-| `{}` | `Map T` |
+| `{}` | `Map T` or `Map[DeclaredId] T` |
 | constructor name | structural enum |
 
 The checker rejects recursive mappings, unresolved or ambiguous names,
@@ -664,8 +698,10 @@ Guards and register writes use a typed scalar expression language.
   structural records to a supported scalar leaf.
 
 Paths cannot cross an optional field, collection, union, `Json`, or opaque
-mapping. They must end at `Text`, `Int`, `Integer`, `Bool`, `Natural`, `Time`,
-or an eligible nominal scalar.
+mapping. They may end at `Text`, `Int`, `Integer`, `Bool`, `Natural`, `Time`,
+or a nominal ID, enum, or scalar leaf. Nominal IDs and enums support equality
+only; their declaration identity is preserved, so different ID declarations
+never compare even when their wire prefixes happen to match.
 
 ### Literals
 
@@ -1224,6 +1260,12 @@ owns the read-model SQL body. Generated code filters and maps its typed result,
 sorts commands by physical target stream, collapses exact duplicates, rejects
 unequal commands for one stream, and applies the cap after deduplication before
 performing any write.
+
+Candidate Language 6 also permits declared nominal leaves in those required
+structural paths. A selection such as `recipient = row.templateId` retains the
+ID's domain type and records `SelectionNominal` in the checked selection
+identity. Predicate equality is allowed only between values of the same
+nominal declaration. Optional and collection paths remain non-traversable.
 
 `empty` accepts `ack`, `retry`, `deadLetter`, or `halt`. `failure` accepts
 `retry`, `deadLetter`, or `halt`; failures include query/evaluation errors,

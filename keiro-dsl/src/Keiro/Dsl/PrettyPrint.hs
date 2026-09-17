@@ -267,12 +267,14 @@ docTypeExpr TJson = "Json"
 docTypeExpr (TOptional value) = "Optional" <+> docTypeArgument value
 docTypeExpr (TList value) = "List" <+> docTypeArgument value
 docTypeExpr (TMap value) = "Map" <+> docTypeArgument value
+docTypeExpr (TKeyedMap key value) = "Map[" <> pretty key <> "]" <+> docTypeArgument value
 docTypeExpr (TRef name) = pretty name
 
 docTypeArgument :: TypeExpr -> Doc ann
 docTypeArgument value@TOptional {} = parens (docTypeExpr value)
 docTypeArgument value@TList {} = parens (docTypeExpr value)
 docTypeArgument value@TMap {} = parens (docTypeExpr value)
+docTypeArgument value@TKeyedMap {} = parens (docTypeExpr value)
 docTypeArgument value = docTypeExpr value
 
 docNode :: Node -> Doc ann

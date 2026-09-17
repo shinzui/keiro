@@ -954,6 +954,7 @@ branchExpr graph =
         onOptional = BranchOptional,
         onList = BranchList,
         onMap = BranchMap,
+        onKeyedMap = \_ -> BranchMap,
         onRef = \key -> maybe BranchScalar (branchSchemaFor graph) (Map.lookup key ((.declarations) graph)),
         onNominal = const BranchScalar
       }
@@ -1349,6 +1350,19 @@ nominalLeafCodecImport ctx names =
       ]
     <> ")"
 
+nominalLeafKeyCodecImport :: Context -> Set.Set Name -> Text
+nominalLeafKeyCodecImport ctx names =
+  "import "
+    <> structuralNominalLeavesModule ctx
+    <> " ("
+    <> T.intercalate
+      ", "
+      [ functionName <> name <> "LeafKey"
+      | name <- Set.toAscList names,
+        functionName <- ["parse", "render"]
+      ]
+    <> ")"
+
 structuralShapeModule :: Context -> Name -> Text
 structuralShapeModule ctx name = structuralPrefix ctx <> ".Shape." <> name
 
@@ -1456,6 +1470,12 @@ emitStructuralNominalLeaves ctx leaves =
               name <- [(.name) leaf],
               functionName <- ["encode", "parse"]
             ]
+            <> Set.fromList
+              [ functionName <> (.name) leaf <> "LeafKey"
+              | leaf <- leaves,
+                NominalIdLeaf {} <- [(.kind) leaf],
+                functionName <- ["parse", "render"]
+              ]
         )
         (Set.fromList (concatMap leafReferences leaves))
     imports =
@@ -1463,6 +1483,7 @@ emitStructuralNominalLeaves ctx leaves =
         "import Data.Aeson.Types (Parser)"
       ]
         <> ["import Data.KindID qualified as KindID" | any isConsumerId leaves]
+        <> ["import Data.Text (Text)" | any isId leaves]
         <> ["import Data.Text qualified as T" | any isGeneratedId leaves]
         <> ["import Keiro.Codec.IdDomain (parseKindIdV7Text)" | any isConsumerId leaves]
         <> ["import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)" | any isConsumer leaves]
@@ -1508,7 +1529,15 @@ emitStructuralNominalLeaves ctx leaves =
           "",
           parseName leaf <> " :: Value -> Parser " <> leafType leaf,
           parseName leaf <> " = withText " <> tshow ((.name) leaf) <> " (either (fail . T.unpack) pure . " <> generatedParser leaf <> ")",
-          "{-# NOINLINE " <> parseName leaf <> " #-}"
+          "{-# NOINLINE " <> parseName leaf <> " #-}",
+          "",
+          renderKeyName leaf <> " :: " <> leafType leaf <> " -> Text",
+          renderKeyName leaf <> " = " <> generatedText leaf,
+          "{-# NOINLINE " <> renderKeyName leaf <> " #-}",
+          "",
+          parseKeyName leaf <> " :: Text -> Parser " <> leafType leaf,
+          parseKeyName leaf <> " = either (fail . T.unpack) pure . " <> generatedParser leaf,
+          "{-# NOINLINE " <> parseKeyName leaf <> " #-}"
         ]
     emitConsumerId leaf prefix binding =
       nl
@@ -1521,7 +1550,17 @@ emitStructuralNominalLeaves ctx leaves =
           "  case parseKindIdV7Text @" <> tshow prefix <> " input of",
           "    Left reason -> fail (show reason)",
           "    Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
-          "{-# NOINLINE " <> parseName leaf <> " #-}"
+          "{-# NOINLINE " <> parseName leaf <> " #-}",
+          "",
+          renderKeyName leaf <> " :: " <> leafType leaf <> " -> Text",
+          renderKeyName leaf <> " = KindID.toText . nominalToRepresentation " <> bindingValue binding,
+          "{-# NOINLINE " <> renderKeyName leaf <> " #-}",
+          "",
+          parseKeyName leaf <> " :: Text -> Parser " <> leafType leaf,
+          parseKeyName leaf <> " input = case parseKindIdV7Text @" <> tshow prefix <> " input of",
+          "  Left reason -> fail (show reason)",
+          "  Right representation -> pure (nominalFromRepresentation " <> bindingValue binding <> " representation)",
+          "{-# NOINLINE " <> parseKeyName leaf <> " #-}"
         ]
     emitGeneratedEnum leaf constructors =
       nl $
@@ -1576,6 +1615,8 @@ emitStructuralNominalLeaves ctx leaves =
     bindingValue = renderReferenceOrDie importPlan . qualifiedValueReference . (.binding)
     encodeName leaf = "encode" <> (.name) leaf <> "Leaf"
     parseName leaf = "parse" <> (.name) leaf <> "Leaf"
+    renderKeyName leaf = "render" <> (.name) leaf <> "LeafKey"
+    parseKeyName leaf = "parse" <> (.name) leaf <> "LeafKey"
     isConsumer leaf = case (.ownership) leaf of ConsumerLeaf {} -> True; GeneratedLeaf -> False
     isGeneratedId leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalIdLeaf {}, GeneratedLeaf) -> True; _ -> False
     isConsumerId leaf = case ((.kind) leaf, (.ownership) leaf) of (NominalIdLeaf {}, ConsumerLeaf {}) -> True; _ -> False
@@ -2314,6 +2355,7 @@ exprRequirements ctx graph =
         onOptional = id,
         onList = id,
         onMap = (ReqMap :) . (ReqText :),
+        onKeyedMap = \key value -> ReqMap : ReqReference (nominalLeafTypeReference ctx key) : value,
         onRef = \key -> case Map.lookup key ((.declarations) graph) of
           Just (ResolvedStructural declaration _) ->
             [ ReqReference
@@ -2344,6 +2386,13 @@ renderShapeType importPlan ctx graph =
           onOptional = applicationShapeType . ("Maybe " <>) . renderStrictOrApplicationArgument,
           onList = atomicShapeType . ("[" <>) . (<> "]") . (.text),
           onMap = applicationShapeType . ("Map Text " <>) . renderStrictOrApplicationArgument,
+          onKeyedMap = \key value ->
+            applicationShapeType
+              ( "Map "
+                  <> renderReferenceOrDie importPlan (nominalLeafTypeReference ctx key)
+                  <> " "
+                  <> renderStrictOrApplicationArgument value
+              ),
           onRef =
             atomicShapeType . \key -> case Map.lookup key ((.declarations) graph) of
               Just (ResolvedStructural nested _) ->
@@ -2490,6 +2539,7 @@ projectionScalar = \case
   ROptional {} -> Nothing
   RList {} -> Nothing
   RMap {} -> Nothing
+  RKeyedMap {} -> Nothing
   RRef {} -> Nothing
   RNominal leaf -> Just (nominalResultType leaf, Just leaf)
   where
@@ -4320,12 +4370,13 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     usesTime = any typeUsesTime rootExpressions
     usesParseJson = any (typeUsesParseJson graph) allExpressions
     usesToJson = any (typeUsesToJson graph) allExpressions
-    usesValueConstructors = usesOptionalValue || any isEnumShape (map snd structuralDeclarations)
+    usesValueConstructors = usesOptionalValue || not (Set.null keyedMapNames) || any isEnumShape (map snd structuralDeclarations)
     usesWithText = any isTextShape (map snd structuralDeclarations)
     usesUnknownRejection = any rejectsUnknown (map snd structuralDeclarations)
     usesOptionalField = any hasOptionalField (map snd structuralDeclarations)
     usesLocatedContainers = any typeUsesLocatedContainer allExpressions
-    usesKeyMap = usesUnknownRejection || usesOptionalField
+    keyedMapNames = Set.unions (map keyedMapNominalNames allExpressions)
+    usesKeyMap = usesUnknownRejection || usesOptionalField || not (Set.null keyedMapNames)
     usesKeyModule = usesKeyMap || usesMap
     usesParser = hasStructural || any typeUsesParserAnnotation allExpressions
     usesLegacyDecoder = any isLegacy fields
@@ -4343,6 +4394,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
            ]
         <> ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructural]
         <> [nominalLeafCodecImport ctx selectedNominals | not (Set.null selectedNominals)]
+        <> [nominalLeafKeyCodecImport ctx keyedMapNames | not (Set.null keyedMapNames)]
         <> map ("import " <>) opaqueInstanceImports
         <> T.lines (renderPlannedImports importPlan)
     aesonImports =
@@ -4448,19 +4500,19 @@ queueLead 0 keyValue = "    [ " <> keyValue
 queueLead _ keyValue = "    , " <> keyValue
 
 typeUsesNatural :: ResolvedTypeExpr -> Bool
-typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False id id id (const False) (const False))
+typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False id id id (\_ -> id) (const False) (const False))
 
 typeUsesTime :: ResolvedTypeExpr -> Bool
-typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False id id id (const False) (const False))
+typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False id id id (\_ -> id) (const False) (const False))
 
 typeUsesText :: ResolvedTypeExpr -> Bool
-typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False id id (const True) (const False) (const False))
+typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False id id (const True) (\_ -> id) (const False) (const False))
 
 typeUsesJson :: ResolvedTypeExpr -> Bool
-typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False True id id id (const False) (const False))
+typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False True id id id (\_ -> id) (const False) (const False))
 
 typeUsesParserAnnotation :: ResolvedTypeExpr -> Bool
-typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False id (const True) (const True) (const False) (const False))
+typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False id (const True) (const True) (\_ _ -> True) (const False) (const False))
 
 typeUsesParseJson :: TypeGraph -> ResolvedTypeExpr -> Bool
 typeUsesParseJson graph =
@@ -4476,6 +4528,7 @@ typeUsesParseJson graph =
         onOptional = id,
         onList = const True,
         onMap = const True,
+        onKeyedMap = \_ _ -> True,
         onRef = \key -> case Map.lookup key ((.declarations) graph) of
           Just ResolvedOpaque {} -> True
           _ -> False,
@@ -5441,6 +5494,7 @@ emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPai
             onOptional = id,
             onList = id,
             onMap = id,
+            onKeyedMap = \key value -> key : value,
             onRef = const [],
             onNominal = pure
           }
@@ -7198,7 +7252,13 @@ codecUsesDotColon aggregate = any fieldUsesDotColon (concatMap (.fields) ((.even
         _ -> True
 
 codecUsesKeyMap :: Agg -> Bool
-codecUsesKeyMap aggregate = codecUsesOptionalFieldHelper aggregate || codecUsesUnknownFieldRejection aggregate
+codecUsesKeyMap aggregate =
+  codecUsesOptionalFieldHelper aggregate
+    || codecUsesUnknownFieldRejection aggregate
+    || any declarationUsesKeyedMap (codecMappedDeclarations aggregate)
+  where
+    declarationUsesKeyedMap (ResolvedStructural _ shape) = any typeUsesKeyedMap (shapeTypeExpressions shape)
+    declarationUsesKeyedMap ResolvedOpaque {} = False
 
 codecUsesUnknownFieldRejection :: Agg -> Bool
 codecUsesUnknownFieldRejection = any declarationRejectsUnknown . codecMappedDeclarations
@@ -7235,7 +7295,7 @@ codecUsesValueConstructors :: Agg -> Bool
 codecUsesValueConstructors = any declarationUsesConstructors . codecMappedDeclarations
   where
     declarationUsesConstructors (ResolvedStructural _ shape) =
-      case shape of REnum {} -> True; _ -> any typeUsesOptional (shapeTypeExpressions shape)
+      case shape of REnum {} -> True; _ -> any (\expression -> typeUsesOptional expression || typeUsesKeyedMap expression) (shapeTypeExpressions shape)
     declarationUsesConstructors ResolvedOpaque {} = False
 
 declarationUsesAesonConversion :: Agg -> ResolvedMappedDecl -> Bool
@@ -7263,8 +7323,31 @@ typeUsesMap =
         onOptional = id,
         onList = id,
         onMap = const True,
+        onKeyedMap = \_ _ -> True,
         onRef = const False,
         onNominal = const False
+      }
+
+typeUsesKeyedMap :: ResolvedTypeExpr -> Bool
+typeUsesKeyedMap = not . Set.null . keyedMapNominalNames
+
+keyedMapNominalNames :: ResolvedTypeExpr -> Set.Set Name
+keyedMapNominalNames =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = Set.empty,
+        onInt = Set.empty,
+        onInteger = Set.empty,
+        onBool = Set.empty,
+        onNatural = Set.empty,
+        onTime = Set.empty,
+        onJson = Set.empty,
+        onOptional = id,
+        onList = id,
+        onMap = id,
+        onKeyedMap = \key value -> Set.insert ((.name) key) value,
+        onRef = const Set.empty,
+        onNominal = const Set.empty
       }
 
 typeUsesLocatedContainer :: ResolvedTypeExpr -> Bool
@@ -7281,6 +7364,7 @@ typeUsesLocatedContainer =
         onOptional = id,
         onList = const True,
         onMap = const True,
+        onKeyedMap = \_ _ -> True,
         onRef = const False,
         onNominal = const False
       }
@@ -7299,6 +7383,7 @@ typeUsesOptional =
         onOptional = const True,
         onList = id,
         onMap = id,
+        onKeyedMap = \_ -> id,
         onRef = const False,
         onNominal = const False
       }
@@ -7317,6 +7402,7 @@ typeUsesAesonConversion aggregate =
         onOptional = id,
         onList = const True,
         onMap = const True,
+        onKeyedMap = \_ _ -> True,
         onRef = \key -> case (.typeGraph) aggregate >>= \graph -> Map.lookup key ((.declarations) graph) of
           Just ResolvedOpaque {} -> True
           _ -> False,
@@ -7710,6 +7796,7 @@ codecNominalImports _ = []
 codecNominalLeafImports :: Agg -> [Text]
 codecNominalLeafImports aggregate =
   [nominalLeafCodecImport ((.context) aggregate) names | not (Set.null names)]
+    <> [nominalLeafKeyCodecImport ((.context) aggregate) keyNames | not (Set.null keyNames)]
   where
     names = case (.typeGraph) aggregate of
       Nothing -> Set.empty
@@ -7718,6 +7805,12 @@ codecNominalLeafImports aggregate =
           [ Map.findWithDefault Set.empty (MappedKey ((.name) declaration)) ((.nominalReachability) graph)
           | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate
           ]
+    keyNames =
+      Set.unions
+        [ keyedMapNominalNames expression
+        | ResolvedStructural _ shape <- codecMappedDeclarations aggregate,
+          expression <- shapeTypeExpressions shape
+        ]
 
 codecMappedImports :: Agg -> [Text]
 codecMappedImports a = case (.typeGraph) a of
@@ -7775,6 +7868,7 @@ exprRefs =
         onOptional = id,
         onList = id,
         onMap = id,
+        onKeyedMap = \_ -> id,
         onRef = pure,
         onNominal = const []
       }

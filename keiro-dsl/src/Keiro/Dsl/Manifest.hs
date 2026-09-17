@@ -164,7 +164,8 @@ workqueueDependencies workqueue =
     <> ["time" | any (typeExprUses isTime) expressions]
   where
     expressions = [expression | field <- (.payload) workqueue, TypedQueueExpression expression <- [(.valueType) field]]
-    isMap (TMap _) = True
+    isMap TMap {} = True
+    isMap TKeyedMap {} = True
     isMap _ = False
     isTime TTime = True
     isTime _ = False
@@ -174,6 +175,7 @@ workqueueDependencies workqueue =
           TOptional value -> typeExprUses predicate value
           TList value -> typeExprUses predicate value
           TMap value -> typeExprUses predicate value
+          TKeyedMap _ value -> typeExprUses predicate value
           _ -> False
 
 readModelDependencies :: ReadModelNode -> [Text]
@@ -188,6 +190,7 @@ readModelDependencies readModel =
     isJson TJson = True
     isJson _ = False
     isMap TMap {} = True
+    isMap TKeyedMap {} = True
     isMap _ = False
     isTime TTime = True
     isTime _ = False
@@ -197,6 +200,7 @@ readModelDependencies readModel =
           TOptional value -> typeExprUses predicate value
           TList value -> typeExprUses predicate value
           TMap value -> typeExprUses predicate value
+          TKeyedMap _ value -> typeExprUses predicate value
           _ -> False
 
 aggregateDependencies :: CheckedService -> Aggregate -> [Text]

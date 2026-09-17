@@ -6,9 +6,10 @@
 
 module Conformance.StructuralNominals.Domain where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
 import Data.KindID (KindID)
 import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Proxy (Proxy)
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -18,6 +19,9 @@ import Keiki.Shape (CanonicalTypeName (..))
 newtype ClaimId = ClaimId {unClaimId :: KindID "claim"}
   deriving stock (Eq, Generic, Show)
   deriving newtype (FromJSON, ToJSON)
+
+instance Ord ClaimId where
+  compare (ClaimId left) (ClaimId right) = compare left right
 
 unClaimId :: ClaimId -> KindID "claim"
 unClaimId (ClaimId value) = value
@@ -75,10 +79,30 @@ instance CanonicalTypeName TemplateRef where
 data TemplateBook = TemplateBook
   { templates :: ![TemplateState],
     holders :: ![Maybe ClaimId],
-    byKey :: !(Map Text TemplateId)
+    byKey :: !(Map Text TemplateId),
+    byTemplate :: !(Map Text Text),
+    claims :: !(Map ClaimId TemplateState)
   }
   deriving stock (Eq, Generic, Show)
-  deriving anyclass (FromJSON, ToJSON)
+
+instance ToJSON TemplateBook where
+  toJSON (TemplateBook templates holders byKey byTemplate claims) =
+    object
+      [ "templates" .= templates,
+        "holders" .= holders,
+        "byKey" .= byKey,
+        "byTemplate" .= byTemplate,
+        "claims" .= Map.toList claims
+      ]
+
+instance FromJSON TemplateBook where
+  parseJSON = withObject "TemplateBook" $ \value ->
+    TemplateBook
+      <$> value .: "templates"
+      <*> value .: "holders"
+      <*> value .: "byKey"
+      <*> value .: "byTemplate"
+      <*> (Map.fromList <$> value .: "claims")
 
 instance CanonicalTypeName TemplateBook where
   canonicalTypeName :: Proxy TemplateBook -> Text

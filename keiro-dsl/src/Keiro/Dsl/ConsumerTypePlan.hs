@@ -76,6 +76,7 @@ planConsumerType graph expression = do
       ROptional value -> application "Maybe" [ImportRequirement "base" "Data.Maybe" "Maybe"] <$> plan value
       RList value -> listType <$> plan value
       RMap value -> mapType <$> plan value
+      RKeyedMap key value -> keyedMapType (nominalRenderedType key) <$> plan value
       RRef key -> case Map.lookup key ((.declarations) graph) of
         Nothing -> Left (ConsumerTypePlanUnknownDeclaration key)
         Just declaration ->
@@ -120,6 +121,15 @@ planConsumerType graph expression = do
             <> value.requirements
         )
         value
+
+    keyedMapType key value =
+      RenderedType
+        { rendered = "Map " <> argument key <> " " <> argument value,
+          precedence = ApplicationType,
+          requirements = Set.singleton (ImportRequirement "containers" "Data.Map.Strict" "Map") <> key.requirements <> value.requirements,
+          mappedDependencies = key.mappedDependencies <> value.mappedDependencies,
+          nominalDependencies = key.nominalDependencies <> value.nominalDependencies
+        }
 
     argument value = case (.precedence) value of
       AtomicType -> (.rendered) value
@@ -181,6 +191,17 @@ renderConsumerType generatedNominalModule importPlan graph = fmap (HaskellTypeOc
         renderedValue <- render value
         pure $
           replaceRenderedType ("Map Text " <> argument renderedValue) ApplicationType renderedValue.requirements renderedValue
+      RKeyedMap key value -> do
+        renderedKey <- render (RNominal key)
+        renderedValue <- render value
+        pure
+          RenderedType
+            { rendered = "Map " <> argument renderedKey <> " " <> argument renderedValue,
+              precedence = ApplicationType,
+              requirements = renderedKey.requirements <> renderedValue.requirements,
+              mappedDependencies = renderedKey.mappedDependencies <> renderedValue.mappedDependencies,
+              nominalDependencies = renderedKey.nominalDependencies <> renderedValue.nominalDependencies
+            }
       RRef key -> case Map.lookup key ((.declarations) graph) of
         Nothing -> Left (ConsumerTypePlanUnknownDeclaration key)
         Just declaration ->

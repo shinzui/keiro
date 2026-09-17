@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-17
+* **Update**: Extend ADR-46 with declared contract IDs, required-path nominal expressions and router selection, identifier-keyed maps with canonical ordering, and direct-optional wrapper guidance (plan 288).
 * **Update**: Extend ADR-46's nominal-leaf decision to generated and consumer-bound enums with
 declared-spelling codec authority and constructor defaults (plan 288).
 * **Update**: Link ADR-12 single structural schema authority to ADR-46 nominal leaf decision (plan 287).

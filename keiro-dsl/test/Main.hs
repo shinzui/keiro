@@ -63,7 +63,7 @@ import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService, moduleNameOf, renderManifest, renderManifestForService, renderManifestForServiceWithFacade)
 import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
-import Keiro.Dsl.MappedDiff (diffMapped)
+import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
@@ -1770,6 +1770,7 @@ main = hspec $ do
             "contract-declared-id.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
+            "direct-optional-id.keiro",
             "domain-command-outcomes.keiro",
             "hospital-surge-reactions.keiro",
             "id-domain-migration-v3.keiro",
@@ -1782,6 +1783,8 @@ main = hspec $ do
             "language-misplaced.keiro",
             "language-v1.keiro",
             "language-zero.keiro",
+            "mapped-keyed-map-enum-key.keiro",
+            "mapped-keyed-map-language5.keiro",
             "mapped-nominal-leaf-default.keiro",
             "mapped-nominal-leaf-enum.keiro",
             "mapped-nominal-leaf-enum-language.keiro",
@@ -1808,6 +1811,7 @@ main = hspec $ do
             "projection-owner-multi-query.keiro",
             "structural-nominal-leaves-enum-spelling.keiro",
             "structural-nominal-leaves-binding-change.keiro",
+            "structural-nominal-leaves-keyed-map-key-change.keiro",
             "structural-nominal-leaves-opaque-to-nominal.keiro",
             "structural-nominal-leaves-prefix-change.keiro",
             "structural-nominal-leaves-text-to-nominal.keiro",
@@ -4289,6 +4293,11 @@ main = hspec $ do
         `shouldContain` ["enum"]
       map (.canonicalType) [boundary | boundary <- (.nominalBoundaries) report, (.nominal) boundary == "ClaimId"]
         `shouldSatisfy` all (== Just "conformance.structural-nominals.ClaimId.v1")
+      let keyedBoundaries = [boundary | boundary <- (.nominalBoundaries) report, "{key}" `T.isInfixOf` (.path) boundary]
+      Set.fromList (map (.nominal) keyedBoundaries) `shouldBe` Set.fromList ["ClaimId", "TemplateId"]
+      map (.position) keyedBoundaries `shouldSatisfy` all (== "key")
+      map (.position) [boundary | boundary <- (.nominalBoundaries) report, "{key}" `T.isInfixOf` (.path) boundary == False]
+        `shouldSatisfy` all (== "value")
     it "reports mapped private-event roots and consumer-json register boundaries without a percentage" $ do
       spec <- specOf "test/fixtures/structural-conformance.keiro"
       report <- shouldResolveCoverage "structural-conformance.keiro" spec
@@ -4442,6 +4451,48 @@ main = hspec $ do
         `shouldBe` [TList (TOptional TText)]
       [(.ctor) arm | arm <- arms, (.payload) arm == Nothing]
         `shouldBe` ["Unknown"]
+    it "round-trips explicit ID-keyed maps without changing legacy Map parsing" $ do
+      source <- readTestText "test/fixtures/structural-nominal-leaves.keiro"
+      parsed <- checkedServiceFromText "test/fixtures/structural-nominal-leaves.keiro" source
+      let spec = checkedSpec parsed
+          templateBookFields =
+            [ field
+            | MappedStructural {msName = "TemplateBook", msShape = ShapeRecord _ _ fields} <- (.mapped) spec,
+              field <- fields
+            ]
+          fieldType fieldName = [(.valueType) field | field <- templateBookFields, (.haskell) field == fieldName]
+          rendered = renderSpec spec
+      fieldType "byKey" `shouldBe` [TMap (TRef "TemplateId")]
+      fieldType "byTemplate" `shouldBe` [TKeyedMap "TemplateId" TText]
+      fieldType "claims" `shouldBe` [TKeyedMap "ClaimId" (TRef "TemplateState")]
+      rendered `shouldSatisfy` T.isInfixOf "byTemplate as \"by_template\" : Map[TemplateId] Text required"
+      rendered `shouldSatisfy` T.isInfixOf "claims as \"claims\" : Map[ClaimId] TemplateState optional on-missing={}"
+      case parseSource "<keyed-map-round-trip>" ("language keiro-dsl 6\n" <> rendered) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right reparsed -> reparsed.spec `shouldBe` spec
+    it "reports keyed-map key changes and explains consumer ordering obligations" $ do
+      base <- checkedServiceOf "test/fixtures/structural-nominal-leaves.keiro"
+      let spec = checkedSpec base
+          changeKey declaration@MappedStructural {msName = "TemplateBook", msShape = ShapeRecord constructor unknown fields} =
+            declaration
+              { msShape =
+                  ShapeRecord
+                    constructor
+                    unknown
+                    [ if (.haskell) field == "claims"
+                        then field {valueType = TKeyedMap "TemplateId" (TRef "TemplateState")}
+                        else field
+                    | field <- fields
+                    ]
+              }
+          changeKey declaration = declaration
+          changed = spec {mapped = map changeKey ((.mapped) spec)}
+          findings = diffMapped spec changed
+      map (.code) findings `shouldContain` [MappedFieldTypeChanged]
+      map (.leaf) findings `shouldContain` [".field claims[\"claims\"].type"]
+      obligations <- either (\errors -> expectationFailure (show errors) >> pure []) pure (bindingObligationsForService base)
+      renderBindingObligations (spec.context) obligations
+        `shouldSatisfy` T.isInfixOf "ordering-contract: Ord ClaimId must agree with canonical TypeID text order"
     it "rejects every mapped validation fixture with its stable diagnostic code" $ do
       let cases =
             [ ("mapped-unresolved.keiro", MappedUnresolvedName),
@@ -4470,6 +4521,7 @@ main = hspec $ do
               ("mapped-nominal-leaf-enum-language.keiro", MappedNominalLeafRequiresLanguage),
               ("mapped-nominal-leaf-default.keiro", MappedDefaultIllTyped),
               ("mapped-nominal-queue-only-language.keiro", MappedNominalLeafRequiresLanguage),
+              ("mapped-keyed-map-enum-key.keiro", MappedNominalLeafUnsupported),
               ("mapped-guard.keiro", AggregateExpressionOperatorUnsupported)
             ]
       forM_ cases $ \(fixture, expected) ->
@@ -4481,6 +4533,10 @@ main = hspec $ do
       errorCodesOf "test/fixtures/mapped-nominal-query-only-enum.keiro" `shouldReturn` []
       errorCodesOf "test/fixtures/mapped-nominal-queue-only.keiro" `shouldReturn` []
       errorCodesOf "test/fixtures/mapped-nominal-query-only.keiro" `shouldReturn` []
+      language5Source <- readTestText "test/fixtures/mapped-keyed-map-language5.keiro"
+      case parseSource "test/fixtures/mapped-keyed-map-language5.keiro" language5Source of
+        Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        result -> expectationFailure ("expected keyed-map language refusal, got " <> show result)
     it "keeps Time and Natural in Keiki's curated comparison set" $ do
       errorCodesOf "test/fixtures/mapped-guard-time.keiro" `shouldReturn` []
       errorCodesOf "test/fixtures/mapped-guard-natural.keiro" `shouldReturn` []
@@ -4614,6 +4670,13 @@ main = hspec $ do
                     )
 
   describe "aggregate scalar diagnostics" $ do
+    it "guides direct optional identifiers to a one-field structural wrapper" $ do
+      diagnostics <- diagnosticsOf "test/fixtures/direct-optional-id.keiro"
+      let errors = [diagnostic | diagnostic <- diagnostics, (.severity) diagnostic == Error]
+      [((.code) diagnostic, (.line) diagnostic) | diagnostic <- errors]
+        `shouldBe` [(AggregateTypeUnsupportedAtUse, 9)]
+      map (.message) errors
+        `shouldBe` ["direct aggregate type 'Optional(TemplateId)' is unsupported at command field; declare `mapped structural record TemplateIdRef { templateId as \"templateId\" : Optional TemplateId optional on-missing=null }` and use it as the field type (candidate Language 6)"]
     it "reports unsupported shapes, invalid initials, and mismatched guards at stable lines" $ do
       diagnostics <- diagnosticsOf "test/fixtures/aggregate-scalars-unsupported.keiro"
       [((.code) diagnostic, (.line) diagnostic) | diagnostic <- diagnostics, (.severity) diagnostic == Error]
@@ -6656,6 +6719,7 @@ main = hspec $ do
               (scaffoldServiceModules (defaultContext ((checkedSpec base).context)) base)
       surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog event TemplateRecorded .state : TemplateState .templateId : TemplateId"
       surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog register book : TemplateBook .holders [] optional : ClaimId"
+      surface `shouldSatisfy` T.isInfixOf "nested-nominal-use:TemplateCatalog register book : TemplateBook .claims {key} : ClaimId"
       generatedTransducer `shouldSatisfy` T.isInfixOf (fingerprint base)
       map fingerprint [prefixChanged, bindingChanged, canonicalChanged, enumSpellingChanged]
         `shouldSatisfy` all (/= fingerprint base)
@@ -14079,6 +14143,7 @@ expressionTags =
       onOptional = ("optional" :),
       onList = ("list" :),
       onMap = ("map" :),
+      onKeyedMap = \key -> (("keyed-map:" <> (.name) key) :),
       onRef = \key -> ["ref:" <> unMappedKey key],
       onNominal = \leaf -> ["nominal:" <> (.name) leaf]
     }

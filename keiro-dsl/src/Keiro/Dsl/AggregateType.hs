@@ -141,6 +141,7 @@ resolveAggregateType symbols loc useSite expression = do
     TOptional {} -> unsupportedShape
     TList {} -> unsupportedShape
     TMap {} -> unsupportedShape
+    TKeyedMap {} -> unsupportedShape
     TRef name
       | Just nominal <- Map.lookup name ((.nominals) symbols) -> pure (AggregateNominal nominal)
       | Map.member name ((.vertices) symbols) -> pure (AggregateVertex name)
@@ -249,6 +250,7 @@ typeExprCanonicalName expression = case expression of
   TOptional value -> "Optional(" <> typeExprCanonicalName value <> ")"
   TList value -> "List(" <> typeExprCanonicalName value <> ")"
   TMap value -> "Map(" <> typeExprCanonicalName value <> ")"
+  TKeyedMap key value -> "Map[" <> key <> "](" <> typeExprCanonicalName value <> ")"
   TRef name -> name
 
 data AggregateHaskellSource = AggregateHaskellSource

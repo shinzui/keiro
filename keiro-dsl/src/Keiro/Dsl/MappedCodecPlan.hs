@@ -71,6 +71,7 @@ planMappedCodec graph expression = do
           onOptional = id,
           onList = id,
           onMap = id,
+          onKeyedMap = \key value -> Set.insert (NominalAuthority ((.name) key)) value,
           onRef = \key -> case Map.lookup key ((.declarations) graph) of
             Just ResolvedStructural {} -> Set.singleton (StructuralAuthority key)
             Just ResolvedOpaque {} -> Set.singleton (OpaqueAuthority key)
@@ -95,16 +96,30 @@ renderMappedEncode graph boundary plan = render (0 :: Int) ((.resolvedExpression
         "toJSON (map (\\" <> item depth <> " -> " <> render (depth + 1) nested (item depth) <> ") (" <> candidate <> "))"
       RMap nested ->
         "toJSON (Map.map (\\" <> item depth <> " -> " <> render (depth + 1) nested (item depth) <> ") (" <> candidate <> "))"
-      RRef key -> encodeReference key candidate
+      RKeyedMap keyLeaf nested ->
+        "Object (KeyMap.fromList [(Key.fromText (render"
+          <> (.name) keyLeaf
+          <> "LeafKey "
+          <> key depth
+          <> "), "
+          <> render (depth + 1) nested (item depth)
+          <> ") | ("
+          <> key depth
+          <> ", "
+          <> item depth
+          <> ") <- Map.toList ("
+          <> candidate
+          <> ")])"
+      RRef referenceKey -> encodeReference referenceKey candidate
       RNominal leaf -> "encode" <> (.name) leaf <> "Leaf " <> candidate
     primitive candidate = "toJSON (" <> candidate <> ")"
-    encodeReference key candidate = case Map.lookup key ((.declarations) graph) of
+    encodeReference referenceKey candidate = case Map.lookup referenceKey ((.declarations) graph) of
       Just (ResolvedStructural declaration _) ->
         "encode" <> (.name) declaration <> suffix <> argument candidate
       Just ResolvedOpaque {} -> case boundary of
         ConsumerValueBoundary -> "toJSON " <> candidate
         StructuralShapeBoundary -> primitive candidate
-      Nothing -> error ("keiro-dsl internal invariant: mapped encoder references missing declaration " <> show key)
+      Nothing -> error ("keiro-dsl internal invariant: mapped encoder references missing declaration " <> show referenceKey)
     argument candidate = case boundary of
       ConsumerValueBoundary -> " " <> candidate
       StructuralShapeBoundary -> " (" <> candidate <> ")"
@@ -112,6 +127,7 @@ renderMappedEncode graph boundary plan = render (0 :: Int) ((.resolvedExpression
       ConsumerValueBoundary -> "Mapped"
       StructuralShapeBoundary -> "Shape"
     item depth = "item" <> tshow depth
+    key depth = "key" <> tshow depth
 
 renderMappedParse :: TypeGraph -> MappedReferenceBoundary -> MappedCodecPlan -> Text
 renderMappedParse graph boundary plan = render (0 :: Int) ((.resolvedExpression) plan)
@@ -130,6 +146,41 @@ renderMappedParse graph boundary plan = render (0 :: Int) ((.resolvedExpression)
         "\\" <> value depth <> " -> do " <> items depth <> " <- (parseJSON " <> value depth <> " :: Parser [Value]); traverse (\\(" <> index depth <> ", " <> item depth <> ") -> (" <> render (depth + 1) nested <> ") " <> item depth <> " <?> Index " <> index depth <> ") (zip [0..] " <> items depth <> ")"
       RMap nested ->
         "\\" <> value depth <> " -> do " <> items depth <> " <- (parseJSON " <> value depth <> " :: Parser (Map Text Value)); Map.traverseWithKey (\\" <> key depth <> " " <> item depth <> " -> (" <> render (depth + 1) nested <> ") " <> item depth <> " <?> Key (Key.fromText " <> key depth <> ")) " <> items depth
+      RKeyedMap keyLeaf nested ->
+        "\\"
+          <> value depth
+          <> " -> withObject "
+          <> tshow ("Map[" <> (.name) keyLeaf <> "]")
+          <> " (\\"
+          <> object depth
+          <> " -> Map.fromList <$> traverse (\\("
+          <> rawKey depth
+          <> ", "
+          <> item depth
+          <> ") -> do "
+          <> key depth
+          <> " <- parse"
+          <> (.name) keyLeaf
+          <> "LeafKey (Key.toText "
+          <> rawKey depth
+          <> ") <?> Key "
+          <> rawKey depth
+          <> "; "
+          <> parsedItem depth
+          <> " <- ("
+          <> render (depth + 1) nested
+          <> ") "
+          <> item depth
+          <> " <?> Key "
+          <> rawKey depth
+          <> "; pure ("
+          <> key depth
+          <> ", "
+          <> parsedItem depth
+          <> ")) (KeyMap.toList "
+          <> object depth
+          <> ")) "
+          <> value depth
       RRef keyValue -> parseReference keyValue
       RNominal leaf -> "parse" <> (.name) leaf <> "Leaf"
     parseReference mappedKey = case Map.lookup mappedKey ((.declarations) graph) of
@@ -145,6 +196,9 @@ renderMappedParse graph boundary plan = render (0 :: Int) ((.resolvedExpression)
     index depth = "index" <> tshow depth
     item depth = "item" <> tshow depth
     key depth = "key" <> tshow depth
+    rawKey depth = "rawKey" <> tshow depth
+    parsedItem depth = "parsedItem" <> tshow depth
+    object depth = "object" <> tshow depth
 
 tshow :: (Show value) => value -> Text
 tshow = T.pack . show

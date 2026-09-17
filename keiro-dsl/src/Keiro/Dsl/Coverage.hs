@@ -104,6 +104,7 @@ data JsonBoundary = JsonBoundary
 data NominalBoundary = NominalBoundary
   { root :: !Text,
     path :: !Text,
+    position :: !Text,
     nominal :: !Text,
     kind :: !Text,
     prefix :: !(Maybe Text),
@@ -475,6 +476,7 @@ nominalBoundaryInventory graph =
     [ NominalBoundary
         { root = rootText ((.root) path),
           path = renderUsePath path,
+          position = if SegMapKey `elem` (.segments) path then "key" else "value",
           nominal = (.name) leaf,
           kind = case (.kind) leaf of NominalIdLeaf {} -> "id"; NominalEnumLeaf {} -> "enum"; NominalScalarLeaf {} -> "scalar",
           prefix = case (.kind) leaf of NominalIdLeaf value -> Just value; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
@@ -523,10 +525,12 @@ queueExplicitJsonBoundaries spec =
     explicitJsonPaths (TOptional value) = map (SegOptional :) (explicitJsonPaths value)
     explicitJsonPaths (TList value) = map (SegElem :) (explicitJsonPaths value)
     explicitJsonPaths (TMap value) = map (SegMapValue :) (explicitJsonPaths value)
+    explicitJsonPaths (TKeyedMap _ value) = map (SegMapValue :) (explicitJsonPaths value)
     explicitJsonPaths _ = []
     renderSegments = T.concat . map renderSegment
     renderSegment SegOptional = " optional"
     renderSegment SegElem = " []"
+    renderSegment SegMapKey = " {key}"
     renderSegment SegMapValue = " {}"
     renderSegment (SegField name key)
       | name == key = " ." <> name
@@ -618,6 +622,7 @@ jsonPathsFromExpr graph visited =
         onOptional = map (SegOptional :),
         onList = map (SegElem :),
         onMap = map (SegMapValue :),
+        onKeyedMap = \_ -> map (SegMapValue :),
         onRef = \key -> map (SegDecl (unMappedKey key) :) (jsonPathsFromDecl graph visited key),
         onNominal = const []
       }
@@ -759,6 +764,7 @@ instance ToJSON NominalBoundary where
     object
       [ "root" .= (.root) boundary,
         "path" .= (.path) boundary,
+        "position" .= (.position) boundary,
         "nominal" .= (.nominal) boundary,
         "kind" .= (.kind) boundary,
         "prefix" .= (.prefix) boundary,

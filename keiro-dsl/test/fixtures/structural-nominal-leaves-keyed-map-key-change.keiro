@@ -71,7 +71,7 @@ mapped structural record TemplateBook {
     holders as "holders" : List (Optional ClaimId) required
     byKey as "byKey" : Map TemplateId required
     byTemplate as "by_template" : Map[TemplateId] Text required
-    claims as "claims" : Map[ClaimId] TemplateState optional on-missing={}
+    claims as "claims" : Map[TemplateId] TemplateState optional on-missing={}
   }
 }
 

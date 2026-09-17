@@ -12,7 +12,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as ChannelRepresentation
-import Generated.StructuralNominalLeaves.Nominals (TemplateId, TemplateKind (..), parseTemplateId)
+import Generated.StructuralNominalLeaves.Nominals (TemplateId, TemplateKind (..), parseTemplateId, templateIdText)
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupInput qualified as ShapeTemplateLookupInput
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupRow qualified as ShapeTemplateLookupRow
@@ -21,17 +21,21 @@ import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState qualifie
 import Keiro.Codec.Nominal (NominalBinding (..), NominalFixture (..), NominalFixtureCases (..))
 import Keiro.Codec.Structural (FixtureCases (..), StructuralBinding (..))
 
-templateIdText1, templateIdText2, claimIdText :: Text
+templateIdText1, templateIdText2, claimIdText, claimIdText2 :: Text
 templateIdText1 = "template_01h455vb4pex5vsknk084sn02q"
 templateIdText2 = "template_01h455vb4pex5vsknk084sn02r"
 claimIdText = "claim_01h455vb4pex5vsknk084sn02q"
+claimIdText2 = "claim_01h455vb4pex5vsknk084sn02r"
 
 templateId1, templateId2 :: TemplateId
 templateId1 = parseCommittedTemplateId templateIdText1
 templateId2 = parseCommittedTemplateId templateIdText2
 
-claimId :: ClaimId
+claimId, claimId2 :: ClaimId
 claimId = case KindID.parseText @"claim" claimIdText of
+  Left reason -> error ("invalid committed ClaimId fixture: " <> show reason)
+  Right value -> ClaimId value
+claimId2 = case KindID.parseText @"claim" claimIdText2 of
   Left reason -> error ("invalid committed ClaimId fixture: " <> show reason)
   Right value -> ClaimId value
 
@@ -107,6 +111,8 @@ initialTemplateBook =
     [stateWithoutHolder, stateWithHolder]
     [Nothing, Just claimId]
     (Map.fromList [("primary", templateId1), ("secondary", templateId2)])
+    (Map.fromList [(templateIdText1, "primary"), (templateIdText2, "secondary")])
+    (Map.fromList [(claimId, stateWithHolder), (claimId2, stateWithoutHolder)])
 
 templateBookFixtures :: FixtureCases TemplateBook
 templateBookFixtures = FixtureCases (("two-templates", initialTemplateBook) :| [])
@@ -114,16 +120,20 @@ templateBookFixtures = FixtureCases (("two-templates", initialTemplateBook) :| [
 templateBookBinding :: StructuralBinding TemplateBook ShapeTemplateBook.TemplateBookShape
 templateBookBinding =
   StructuralBinding
-    { bindingToShape = \(TemplateBook templates holders byKey) ->
+    { bindingToShape = \(TemplateBook templates holders byKey byTemplate claims) ->
         ShapeTemplateBook.TemplateBook
           (map (bindingToShape templateStateBinding) templates)
           holders
-          byKey,
-      bindingFromShape = \(ShapeTemplateBook.TemplateBook templates holders byKey) ->
+          byKey
+          (Map.fromList [(parseCommittedTemplateId key, value) | (key, value) <- Map.toList byTemplate])
+          (Map.map (bindingToShape templateStateBinding) claims),
+      bindingFromShape = \(ShapeTemplateBook.TemplateBook templates holders byKey byTemplate claims) ->
         TemplateBook
           (map (bindingFromShape templateStateBinding) templates)
           holders
           byKey
+          (Map.fromList [(templateIdText key, value) | (key, value) <- Map.toList byTemplate])
+          (Map.map (bindingFromShape templateStateBinding) claims)
     }
 
 templateLookupInputFixtures :: FixtureCases TemplateLookupInput
@@ -150,7 +160,11 @@ claimIdBinding :: NominalBinding ClaimId (KindID "claim")
 claimIdBinding = NominalBinding unClaimId ClaimId
 
 claimIdFixtures :: NominalFixtureCases ClaimId
-claimIdFixtures = NominalFixtureCases (NominalFixture "claim" (String claimIdText) claimId :| [])
+claimIdFixtures =
+  NominalFixtureCases
+    ( NominalFixture "claim-1" (String claimIdText) claimId
+        :| [NominalFixture "claim-2" (String claimIdText2) claimId2]
+    )
 
 accountNumberBinding :: NominalBinding AccountNumber Text
 accountNumberBinding = NominalBinding unAccountNumber AccountNumber

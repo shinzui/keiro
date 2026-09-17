@@ -187,6 +187,8 @@ conformanceImports rendering =
     <> ["import Data.Aeson.Types qualified as AesonTypes" | not (null generatedIdAssertions)]
     <> ["import Data.List (nub)" | not (null structural) || not (null opaque)]
     <> ["import Data.List.NonEmpty qualified as NonEmpty" | not (null structural) || not (null opaque) || not (null consumerNominals)]
+    <> ["import Data.Map.Strict qualified as Map" | any structuralUsesKeyedMap structural]
+    <> ["import Data.KindID qualified as KindID" | any (nominalNeedsOrderingLaw rendering) consumerNominals]
     <> ["import Data.Maybe (isJust, isNothing)" | any shapeUsesMaybe structural]
     <> ["import Data.Proxy (Proxy (..))" | not (null structural) || not (null consumerNominals)]
     <> ["import Data.Text qualified as T" | not (null structural) || not (null opaque)]
@@ -227,6 +229,16 @@ conformanceImports rendering =
       REnum {} -> False
     isOptional ROptional {} = True
     isOptional _ = False
+    structuralUsesKeyedMap (_, shape) = any typeUsesKeyedMap (shapeExpressions shape)
+    shapeExpressions (RRecord _ _ fields) = map (.valueType) fields
+    shapeExpressions (RUnion _ arms) = [payload | arm <- arms, payload <- maybe [] pure ((.payload) arm)]
+    shapeExpressions REnum {} = []
+    typeUsesKeyedMap = \case
+      ROptional item -> typeUsesKeyedMap item
+      RList item -> typeUsesKeyedMap item
+      RMap item -> typeUsesKeyedMap item
+      RKeyedMap {} -> True
+      _ -> False
 
 lastSegment :: Text -> Text
 lastSegment = last . T.splitOn "."
@@ -369,11 +381,16 @@ nominalAssertionDecl rendering leaf = case (.ownership) leaf of
       valueName <> " =",
       "  [ (\"nominal domain law: " <> name <> "\", all (nominalDomainRoundTrip " <> bindingName <> " . nominalFixtureDomain) cases)",
       "  , (\"nominal representation law: " <> name <> "\", all (\\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip " <> bindingName <> " (nominalToRepresentation " <> bindingName <> " domainValue)) cases)",
-      "  , (\"nominal canonical identity: " <> name <> "\", canonicalTypeName (Proxy @" <> consumerType <> ") == " <> tshow canonical <> ")",
-      "  ]",
-      "  where",
-      "    cases = NonEmpty.toList (nominalFixtureCases " <> fixtures <> ")"
+      "  , (\"nominal canonical identity: " <> name <> "\", canonicalTypeName (Proxy @" <> consumerType <> ") == " <> tshow canonical <> ")"
     ]
+      <> [ "  , (\"nominal key ordering: " <> name <> "\", and [compare left right == compare (KindID.toText (nominalToRepresentation " <> bindingName <> " left)) (KindID.toText (nominalToRepresentation " <> bindingName <> " right)) | left <- domainValues, right <- domainValues])"
+         | nominalNeedsOrderingLaw rendering leaf
+         ]
+      <> [ "  ]",
+           "  where",
+           "    cases = NonEmpty.toList (nominalFixtureCases " <> fixtures <> ")"
+         ]
+      <> ["    domainValues = map nominalFixtureDomain cases" | nominalNeedsOrderingLaw rendering leaf]
     where
       name = (.name) leaf
       valueName = lowerFirst name <> "NominalAssertions"
@@ -381,6 +398,13 @@ nominalAssertionDecl rendering leaf = case (.ownership) leaf of
       bindingName = renderReference rendering (conformanceQualifiedValueReference ((.binding) binding))
       fixtures = renderReference rendering (conformanceQualifiedValueReference ((.fixtures) binding))
       canonical = unCanonicalTypeId ((.canonical) binding)
+
+nominalNeedsOrderingLaw :: ConformanceRendering -> NominalLeaf -> Bool
+nominalNeedsOrderingLaw rendering leaf =
+  case ((.kind) leaf, (.ownership) leaf) of
+    (NominalIdLeaf {}, ConsumerLeaf {}) ->
+      any (elem SegMapKey . (.segments)) (nominalUsePaths ((.graph) rendering) ((.name) leaf))
+    _ -> False
 
 structuralGeneratedIdAssertions :: ConformanceRendering -> [(StructuralDecl, ResolvedMappedShape)] -> [(StructuralDecl, ResolvedMappedShape, NominalLeaf)]
 structuralGeneratedIdAssertions rendering structural =
@@ -445,6 +469,25 @@ generatedIdTypeExpression rendering target expression candidate depth = case exp
   ROptional item -> "maybe True (\\item" <> tshow depth <> " -> " <> generatedIdTypeExpression rendering target item ("item" <> tshow depth) (depth + 1) <> ") " <> parenthesize candidate
   RList item -> "all (\\item" <> tshow depth <> " -> " <> generatedIdTypeExpression rendering target item ("item" <> tshow depth) (depth + 1) <> ") " <> parenthesize candidate
   RMap item -> "all (\\item" <> tshow depth <> " -> " <> generatedIdTypeExpression rendering target item ("item" <> tshow depth) (depth + 1) <> ") " <> parenthesize candidate
+  RKeyedMap key item ->
+    conjunction $
+      [ "all (\\key"
+          <> tshow depth
+          <> " -> "
+          <> generatedIdTypeExpression rendering target (RNominal key) ("key" <> tshow depth) (depth + 1)
+          <> ") (Map.keys "
+          <> parenthesize candidate
+          <> ")"
+      | (.name) key == (.name) target
+      ]
+        <> [ "all (\\item"
+               <> tshow depth
+               <> " -> "
+               <> generatedIdTypeExpression rendering target item ("item" <> tshow depth) (depth + 1)
+               <> ") "
+               <> parenthesize candidate
+           | nominalOccursIn rendering target item
+           ]
   RRef key -> case Map.lookup key ((.declarations) ((.graph) rendering)) of
     Just (ResolvedStructural declaration shape) -> generatedIdShapeExpression rendering target declaration shape candidate depth
     _ -> "True"
@@ -471,6 +514,7 @@ nominalOccursIn rendering target = \case
   ROptional item -> nominalOccursIn rendering target item
   RList item -> nominalOccursIn rendering target item
   RMap item -> nominalOccursIn rendering target item
+  RKeyedMap key item -> (.name) key == (.name) target || nominalOccursIn rendering target item
   RRef key -> Set.member ((.name) target) (Map.findWithDefault Set.empty key ((.nominalReachability) ((.graph) rendering)))
   RNominal leaf -> (.name) leaf == (.name) target
   _ -> False

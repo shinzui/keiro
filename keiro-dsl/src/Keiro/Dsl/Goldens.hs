@@ -247,6 +247,7 @@ sampleMappedExpression graph =
         onOptional = id,
         onList = \value -> Array (pure value),
         onMap = \value -> Object (KeyMap.singleton (Key.fromText "sample") value),
+        onKeyedMap = \key value -> Object (KeyMap.singleton (Key.fromText (sampleNominalKey key)) value),
         onRef = \key -> maybe emptyObject (sampleMappedDeclaration graph) (Map.lookup key ((.declarations) graph)),
         onNominal = sampleNominalLeaf
       }
@@ -260,6 +261,11 @@ sampleNominalLeaf leaf = case (.kind) leaf of
   NominalScalarLeaf NominalNatural -> Number 1
   NominalScalarLeaf NominalBool -> Bool True
   NominalScalarLeaf NominalTime -> String "2026-01-01T00:00:00Z"
+
+sampleNominalKey :: NominalLeaf -> Text
+sampleNominalKey leaf = case sampleNominalLeaf leaf of
+  String value -> value
+  _ -> error "keiro-dsl internal invariant: keyed map key is not text"
 
 emptyObject :: Value
 emptyObject = Object KeyMap.empty

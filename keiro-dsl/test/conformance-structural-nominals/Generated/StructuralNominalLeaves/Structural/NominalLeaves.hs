@@ -4,6 +4,7 @@ module Generated.StructuralNominalLeaves.Structural.NominalLeaves where
 import Data.Aeson (Value (..), parseJSON, toJSON, withText)
 import Data.Aeson.Types (Parser)
 import Data.KindID qualified as KindID
+import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Codec.IdDomain (parseKindIdV7Text)
 import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
@@ -42,6 +43,16 @@ parseClaimIdLeaf = withText "ClaimId" $ \input ->
     Right representation -> pure (nominalFromRepresentation Bindings.claimIdBinding representation)
 {-# NOINLINE parseClaimIdLeaf #-}
 
+renderClaimIdLeafKey :: ClaimId -> Text
+renderClaimIdLeafKey = KindID.toText . nominalToRepresentation Bindings.claimIdBinding
+{-# NOINLINE renderClaimIdLeafKey #-}
+
+parseClaimIdLeafKey :: Text -> Parser ClaimId
+parseClaimIdLeafKey input = case parseKindIdV7Text @"claim" input of
+  Left reason -> fail (show reason)
+  Right representation -> pure (nominalFromRepresentation Bindings.claimIdBinding representation)
+{-# NOINLINE parseClaimIdLeafKey #-}
+
 encodeTemplateIdLeaf :: Nominals.TemplateId -> Value
 encodeTemplateIdLeaf = String . Nominals.templateIdText
 {-# NOINLINE encodeTemplateIdLeaf #-}
@@ -49,6 +60,14 @@ encodeTemplateIdLeaf = String . Nominals.templateIdText
 parseTemplateIdLeaf :: Value -> Parser Nominals.TemplateId
 parseTemplateIdLeaf = withText "TemplateId" (either (fail . T.unpack) pure . Nominals.parseTemplateId)
 {-# NOINLINE parseTemplateIdLeaf #-}
+
+renderTemplateIdLeafKey :: Nominals.TemplateId -> Text
+renderTemplateIdLeafKey = Nominals.templateIdText
+{-# NOINLINE renderTemplateIdLeafKey #-}
+
+parseTemplateIdLeafKey :: Text -> Parser Nominals.TemplateId
+parseTemplateIdLeafKey = either (fail . T.unpack) pure . Nominals.parseTemplateId
+{-# NOINLINE parseTemplateIdLeafKey #-}
 
 encodeTemplateKindLeaf :: Nominals.TemplateKind -> Value
 encodeTemplateKindLeaf = String . Nominals.templateKindText

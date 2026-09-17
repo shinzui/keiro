@@ -1,0 +1,15 @@
+language keiro-dsl 5
+context keyed-map-language5
+
+id TemplateId prefix=template
+
+mapped structural record TemplateBook {
+  haskell package=keiro-dsl module=KeyedMapLanguage5.Domain type=TemplateBook
+  binding = "KeyedMapLanguage5.Bindings.templateBookBinding"
+  binding-version = "1"
+  canonical-type = "keyed-map-language5.TemplateBook.v1"
+  fixtures = "KeyedMapLanguage5.Bindings.templateBookFixtures"
+  wire object constructor=TemplateBook unknown-fields=reject {
+    byTemplate as "by_template" : Map[TemplateId] Text required
+  }
+}

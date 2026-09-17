@@ -261,6 +261,7 @@ data TypeExpr
   | TOptional !TypeExpr
   | TList !TypeExpr
   | TMap !TypeExpr
+  | TKeyedMap !Name !TypeExpr
   | TRef !Name
   deriving stock (Eq, Show, Generic)
 

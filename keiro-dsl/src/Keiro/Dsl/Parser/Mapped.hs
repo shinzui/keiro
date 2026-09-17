@@ -264,7 +264,7 @@ pMappedTypeExpr context =
   choice
     [ TOptional <$> (keyword "Optional" *> pTypeArgument),
       TList <$> (keyword "List" *> pTypeArgument),
-      TMap <$> (keyword "Map" *> pTypeArgument),
+      keyword "Map" *> pMapType,
       TText <$ keyword "Text",
       TInt <$ keyword "Int",
       TInteger <$ languageFeatureKeyword context IntegerScalarSyntax "Integer",
@@ -275,6 +275,13 @@ pMappedTypeExpr context =
       TRef <$> ident
     ]
   where
+    pMapType = do
+      keyed <- optional (withOwnedSpan (symbol "[" *> ident <* symbol "]"))
+      case keyed of
+        Nothing -> TMap <$> pTypeArgument
+        Just locatedKey -> do
+          requireLanguageFeatureAt context KeyedMapSyntax (spanOf locatedKey)
+          TKeyedMap (locatedValue locatedKey) <$> pTypeArgument
     pTypeArgument = parens (pMappedTypeExpr context) <|> pTypeAtom
     pTypeAtom =
       choice

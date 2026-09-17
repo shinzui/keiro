@@ -12,5 +12,7 @@ data TemplateBookShape = TemplateBook
   { templates :: ![TemplateState.TemplateStateShape]
   , holders :: ![Maybe ClaimId]
   , byKey :: !(Map Text Nominals.TemplateId)
+  , byTemplate :: !(Map Nominals.TemplateId Text)
+  , claims :: !(Map ClaimId TemplateState.TemplateStateShape)
   }
   deriving stock (Eq, Generic, Show)

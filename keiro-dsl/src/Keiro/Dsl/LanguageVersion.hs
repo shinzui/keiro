@@ -303,7 +303,7 @@ profileV5 :: SyntaxProfile
 profileV5 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/5"
-    (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4))))
+    (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4)))))
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
@@ -390,6 +390,7 @@ data LanguageFeature
   | DelegatedInboxSyntax
   | ProcessReactionSyntax
   | ContractDeclaredIdSyntax
+  | KeyedMapSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

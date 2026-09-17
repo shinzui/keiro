@@ -523,6 +523,7 @@ selectionTypeFromResolved = \case
   ROptional {} -> Nothing
   RList {} -> Nothing
   RMap {} -> Nothing
+  RKeyedMap {} -> Nothing
   RRef {} -> Nothing
   RNominal leaf@NominalLeaf {kind = NominalIdLeaf {}} -> Just (SelectionNominal ((.name) leaf))
   RNominal {} -> Nothing
@@ -622,6 +623,7 @@ canonicalResolvedType = \case
   ROptional value -> tuple [atom "Optional", canonicalResolvedType value]
   RList value -> tuple [atom "List", canonicalResolvedType value]
   RMap value -> tuple [atom "Map", canonicalResolvedType value]
+  RKeyedMap key value -> tuple [atom "KeyedMap", atom ((.name) key), canonicalResolvedType value]
   RRef key -> tuple [atom "Ref", atom (unMappedKey key)]
   RNominal leaf -> tuple [atom "Nominal", atom ((.name) leaf)]
 

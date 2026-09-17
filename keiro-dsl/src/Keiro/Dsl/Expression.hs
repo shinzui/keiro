@@ -461,6 +461,7 @@ resolveProjectionPath environment loc provenance fields = do
       ROptional {} -> unsupported "Optional"
       RList {} -> unsupported "List"
       RMap {} -> unsupported "Map"
+      RKeyedMap {} -> unsupported "Map"
       RRef key -> Right (AggregateMapped key, Nothing)
       RNominal leaf -> case lookupAggregateNominal ((.name) leaf) ((.symbols) environment) of
         Just nominal -> Right (AggregateNominal nominal, Just leaf)

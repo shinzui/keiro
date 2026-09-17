@@ -57,7 +57,7 @@ templateCatalogTransducer =
     _ -> False
 
 templateCatalogFoldFingerprint :: Text
-templateCatalogFoldFingerprint = "0faf739e98043f2cb91ce66d2b0dc530"
+templateCatalogFoldFingerprint = "19cd35d7ec57e20e4a9f0383da843a58"
 
 data BehaviorOwnership = GeneratedOwned | HoleOwned
   deriving stock (Eq, Show)

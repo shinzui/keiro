@@ -8,6 +8,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### New Features
 
+- Candidate Language 6 adds `Map[DeclaredId] Value` to structural mappings.
+  Generated shapes use the ID domain type as the Haskell key, codecs admit and
+  render canonical TypeID object keys, consumer bindings declare a checked
+  canonical-text ordering law, and coverage/diff/fold evidence records key
+  position separately from map values.
+- Candidate Language 6 contract event fields may name a declared `id` instead
+  of repeating `typeid "prefix"`; generated and consumer-bound domain types
+  retain the declaration's TypeID-v7 admission and compatibility identity.
+- Aggregate expressions and declarative router selection may traverse required
+  structural paths to nominal ID and enum leaves. Same-declaration equality is
+  supported while nominal ordering, optional traversal, and cross-declaration
+  comparisons remain rejected.
+
 - Candidate Language 6 adds the `StructuralNominalLeaves` capability: generated
   and consumer-bound `id` and `enum` declarations plus `mapped nominal` scalars may appear
   inside structural records, unions, containers, typed workqueue fields, and
@@ -44,6 +57,10 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   `reactions version` increase, or a version decrease, is also breaking.
 
 ### Other Changes
+
+- Direct `Optional DeclaredId` aggregate fields now point to the supported
+  one-field `mapped structural` wrapper pattern, including the required
+  `on-missing=null` policy.
 
 - Coverage report schema 1 now appends `nominalBoundaries`, including
   nominal-only workqueue and query roots classified as structural rather than
