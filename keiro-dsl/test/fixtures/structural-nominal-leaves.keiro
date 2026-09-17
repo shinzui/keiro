@@ -73,18 +73,49 @@ mapped structural record TemplateBook {
   }
 }
 
+mapped structural record TemplateLookupInput {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=TemplateLookupInput
+  binding = "Conformance.StructuralNominals.Bindings.templateLookupInputBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.TemplateLookupInput.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.templateLookupInputFixtures"
+  wire object constructor=TemplateLookupInput unknown-fields=reject {
+    claimId as "claimId" : ClaimId required
+  }
+}
+
+mapped structural record TemplateLookupRow {
+  haskell package=keiro-dsl module=Conformance.StructuralNominals.Domain type=TemplateLookupRow
+  binding = "Conformance.StructuralNominals.Bindings.templateLookupRowBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-nominals.TemplateLookupRow.v1"
+  fixtures = "Conformance.StructuralNominals.Bindings.templateLookupRowFixtures"
+  wire object constructor=TemplateLookupRow unknown-fields=reject {
+    templateId as "templateId" : TemplateId required
+    claimId as "claimId" : ClaimId required
+  }
+}
+
 aggregate TemplateCatalog
   regs
     book TemplateBook = initial
-  states Empty Recorded!
+    activeTemplateId TemplateId = placeholder
+  states Empty Recorded Routed!
 
   command RecordTemplate { state:TemplateState reference:TemplateRef book:TemplateBook }
+  command RouteTemplate { templateId:TemplateId claimId:ClaimId }
   event TemplateRecorded = fields(RecordTemplate)
+  event TemplateRouted = fields(RouteTemplate)
 
   Empty -- RecordTemplate -->
+    guard cmd.state.templateId == reg.activeTemplateId
     write book := cmd.book
     emit TemplateRecorded
     goto Recorded
+
+  Recorded -- RouteTemplate -->
+    emit TemplateRouted
+    goto Routed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   snapshot every 1
@@ -133,11 +164,40 @@ projection-owner template_writer {
 
 readmodel template_lookup {
   columns {}
-  query input = TemplateState
-  query result = List TemplateId
+  query input = TemplateLookupInput
+  query result = List TemplateLookupRow
   version = 1
   shape = "fnv1a:3c07a19c552c3547"
   freshness = wait-for-head entire-log
   group = template_rebuild
   targets = [ template_table ]
 }
+
+router TemplateDeliveryRouter
+  name "template-delivery-router"
+  input TemplateDeliveryRequested : TemplateLookupInput
+  key input.claimId
+  resolve declarative {
+    identity = "template-nominal-selection"
+    version = 1
+    query = read-model template_lookup with input
+    where = row.claimId == input.claimId && row.templateId == TemplateId("template_01h455vb4pex5vsknk084sn02q")
+    recipient = row.templateId
+    order = target-stream
+    dedupe = target-stream
+    max-recipients = 16
+    empty => ack
+    failure => retry
+    redelivery = stable-union
+    partial = retain-successes
+  }
+  target TemplateCatalog
+  projections []
+  dispatch-each RouteTemplate {
+    templateId=row.templateId
+    claimId=row.claimId
+  }
+    on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, key, sourceEventId, targetStreamName, occurrence)
+  rejected => deadLetter
+  poison => halt

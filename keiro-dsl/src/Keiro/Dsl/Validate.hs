@@ -986,7 +986,7 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
     outcomeExpressionDiagnostic label diagnostic =
       mkErr
         (locLine ((.loc) diagnostic))
-        ( if (.code) diagnostic `elem` [ScalarOperandTypeMismatch, ScalarBooleanOperandRequired]
+        ( if (.code) diagnostic `elem` [ScalarOperandTypeMismatch, ScalarNominalTypeMismatch, ScalarBooleanOperandRequired]
             then DomainOutcomeReasonTypeMismatch
             else expressionCode ((.code) diagnostic)
         )
@@ -1008,7 +1008,9 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       ScalarLiteralNeedsType -> AggregateExpressionLiteralNeedsType
       ScalarLiteralInvalid -> AggregateExpressionLiteralInvalid
       ScalarOperandTypeMismatch -> AggregateExpressionOperandTypeMismatch
+      ScalarNominalTypeMismatch -> AggregateGuardTypeMismatch
       ScalarOperatorUnsupported -> AggregateExpressionOperatorUnsupported
+      ScalarNominalOperatorUnsupported -> AggregateGuardCapabilityUnsupported
       ScalarBooleanOperandRequired -> AggregateExpressionBooleanRequired
       ScalarGuardBoolRequired -> AggregateExpressionGuardBoolRequired
       ScalarWriteTargetUnknown -> AggregateExpressionWriteTargetUnknown

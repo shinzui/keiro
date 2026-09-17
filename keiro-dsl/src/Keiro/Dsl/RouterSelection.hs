@@ -39,10 +39,12 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax), languageSupportsFeature)
+import Keiro.Dsl.NominalType (NominalRepresentation (..), ResolvedNominalType (..))
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract (..))
 import Keiro.Dsl.TypeGraph
 import Numeric (showHex)
@@ -75,7 +77,8 @@ data SelectionScalarType
   | SelectionBool
   | SelectionNatural
   | SelectionTime
-  deriving stock (Eq, Ord, Show, Enum, Bounded, Generic)
+  | SelectionNominal !Name
+  deriving stock (Eq, Ord, Show, Generic)
 
 data SelectionRoot = SelectionInput | SelectionRow
   deriving stock (Eq, Ord, Show, Generic)
@@ -99,6 +102,7 @@ data CheckedScalarNode
   | CheckedTextLiteral !Text
   | CheckedIntegralLiteral !Integer
   | CheckedBoolLiteral !Bool
+  | CheckedIdLiteral !Name !Text
   | CheckedCompare !CmpOp !CheckedScalarExpr !CheckedScalarExpr
   | CheckedAnd !CheckedScalarExpr !CheckedScalarExpr
   | CheckedOr !CheckedScalarExpr !CheckedScalarExpr
@@ -215,11 +219,11 @@ checkRouterSelection languageContract graph spec router = case (.source) ((.reso
       partial <- requireExact ((.partialLoc) declaration) SelectionPartialDispatchUnsupported "partial" "retain-successes" CheckedRetainSuccesses ((.partial) declaration)
       (query, inputBinding, rowBinding) <- checkQuery declaration
       keyExpression <- resolveSelectionExpr graph ((.valueType) inputBinding) rowBinding Nothing (EPath ((.loc) ((.input) router)) UnqualifiedRoot ["input", (.field) ((.key) router)])
-      requireScalarType ((.loc) ((.input) router)) SelectionQueryInputBindingInvalid "router key" SelectionText keyExpression
+      requireTextOrNominalId ((.loc) ((.input) router)) SelectionQueryInputBindingInvalid "router key" keyExpression
       predicate <- resolveSelectionExpr graph ((.valueType) inputBinding) rowBinding Nothing ((.predicate) declaration)
       requireScalarType (exprLoc ((.predicate) declaration)) SelectionPredicateNotBool "where predicate" SelectionBool predicate
       recipient <- resolveSelectionExpr graph ((.valueType) inputBinding) rowBinding Nothing ((.recipient) declaration)
-      requireScalarType (exprLoc ((.recipient) declaration)) SelectionRecipientNotText "recipient expression" SelectionText recipient
+      requireTextOrNominalId (exprLoc ((.recipient) declaration)) SelectionRecipientNotText "recipient expression" recipient
       (targetAggregate, targetCommand) <- resolveTargetCommand
       commandFields <- checkCommandMappings graph inputBinding rowBinding targetAggregate targetCommand
       let initial =
@@ -403,7 +407,7 @@ resolveSelectionExpr graph inputType rowType expected expression = case expressi
     _ -> selectionFailure loc SelectionExpressionTypeMismatch "integral selection literal needs an Int, Integer, or Natural operand"
   ELiteral loc (LiteralBool value) -> literal loc SelectionBool (CheckedBoolLiteral value)
   ELiteral loc LiteralQualified {} -> selectionFailure loc SelectionOperatorUnsupported "qualified enum literals are not admitted in declarative router selection"
-  ELiteral loc LiteralId {} -> selectionFailure loc SelectionOperatorUnsupported "nominal ID literals are not admitted in declarative router selection"
+  ELiteral loc (LiteralId typeName value) -> resolveIdLiteral loc typeName value
   EAtom (ABool value) -> literal noLoc SelectionBool (CheckedBoolLiteral value)
   EAtom (AName name) -> selectionFailure noLoc SelectionExpressionRootUnknown ("selection expression root must be input or row, found '" <> name <> "'")
   EAnd left right -> booleanNode CheckedAnd left right
@@ -426,7 +430,7 @@ resolveSelectionExpr graph inputType rowType expected expression = case expressi
 
     comparisonNode operator left right = do
       (checkedLeft, checkedRight) <- case left of
-        ELiteral _ LiteralIntegral {} -> do
+        ELiteral _ literalSyntax | contextualLiteral literalSyntax -> do
           rightValue <- resolveSelectionExpr graph inputType rowType Nothing right
           leftValue <- resolveSelectionExpr graph inputType rowType (Just ((.valueType) rightValue)) left
           pure (leftValue, rightValue)
@@ -444,6 +448,20 @@ resolveSelectionExpr graph inputType rowType expected expression = case expressi
       pure (CheckedScalarExpr SelectionBool (CheckedCompare operator checkedLeft checkedRight) (exprLoc expression))
 
     unsupportedArithmetic loc = selectionFailure loc SelectionOperatorUnsupported "arithmetic operators are not admitted in declarative router selection"
+
+    contextualLiteral = \case
+      LiteralIntegral {} -> True
+      LiteralId {} -> True
+      _ -> False
+
+    resolveIdLiteral loc typeName value = case Map.lookup typeName ((.nominalLeaves) graph) of
+      Just NominalLeaf {kind = NominalIdLeaf prefix} -> case TypeID.parseText value of
+        Left parseError -> selectionFailure loc SelectionExpressionTypeMismatch ("invalid " <> typeName <> " literal: " <> T.pack (show parseError))
+        Right parsed
+          | TypeID.getPrefix parsed /= prefix -> selectionFailure loc SelectionExpressionTypeMismatch ("ID literal prefix must be '" <> prefix <> "'")
+          | otherwise -> literal loc (SelectionNominal typeName) (CheckedIdLiteral typeName value)
+      Just _ -> selectionFailure loc SelectionExpressionTypeMismatch ("selection ID literal type '" <> typeName <> "' is not a declared ID")
+      Nothing -> selectionFailure loc SelectionExpressionTypeMismatch ("unknown selection ID literal type '" <> typeName <> "'")
 
 resolvePath :: TypeGraph -> Loc -> ResolvedTypeExpr -> [Name] -> Either (NonEmpty RouterSelectionDiagnostic) (SelectionScalarType, [CheckedSelectionPathSegment])
 resolvePath graph diagnosticLoc = go []
@@ -484,6 +502,12 @@ requireScalarType diagnosticLoc diagnosticCode owner expected expression
   | (.valueType) expression == expected = Right ()
   | otherwise = selectionFailure diagnosticLoc diagnosticCode (owner <> " must have type " <> scalarTypeText expected <> ", found " <> scalarTypeText ((.valueType) expression))
 
+requireTextOrNominalId :: Loc -> RouterSelectionDiagnosticCode -> Text -> CheckedScalarExpr -> Either (NonEmpty RouterSelectionDiagnostic) ()
+requireTextOrNominalId diagnosticLoc diagnosticCode owner expression = case (.valueType) expression of
+  SelectionText -> Right ()
+  SelectionNominal {} -> Right ()
+  actual -> selectionFailure diagnosticLoc diagnosticCode (owner <> " must have type Text or a declared ID, found " <> scalarTypeText actual)
+
 liftTypeGraph :: Loc -> Either TypeGraphError value -> Either (NonEmpty RouterSelectionDiagnostic) value
 liftTypeGraph diagnosticLoc = either (\err -> selectionFailure diagnosticLoc SelectionExpressionTypeMismatch ("mapped type could not be resolved: " <> T.pack (show err))) Right
 
@@ -500,6 +524,7 @@ selectionTypeFromResolved = \case
   RList {} -> Nothing
   RMap {} -> Nothing
   RRef {} -> Nothing
+  RNominal leaf@NominalLeaf {kind = NominalIdLeaf {}} -> Just (SelectionNominal ((.name) leaf))
   RNominal {} -> Nothing
 
 selectionTypeFromAggregate :: ResolvedAggregateType -> Maybe SelectionScalarType
@@ -510,7 +535,9 @@ selectionTypeFromAggregate = \case
   AggregateBool -> Just SelectionBool
   AggregateTime -> Just SelectionTime
   AggregateNatural -> Just SelectionNatural
-  AggregateNominal {} -> Nothing
+  AggregateNominal nominal -> case (.representation) nominal of
+    IdRepresentation {} -> Just (SelectionNominal ((.name) nominal))
+    _ -> Nothing
   AggregateVertex {} -> Nothing
   AggregateMapped {} -> Nothing
 
@@ -533,6 +560,7 @@ scalarTypeText = \case
   SelectionBool -> "Bool"
   SelectionNatural -> "Natural"
   SelectionTime -> "Time"
+  SelectionNominal name -> name
 
 selectionFailure :: Loc -> RouterSelectionDiagnosticCode -> Text -> Either (NonEmpty RouterSelectionDiagnostic) value
 selectionFailure diagnosticLoc diagnosticCode diagnosticMessage = Left (RouterSelectionDiagnostic diagnosticLoc diagnosticCode diagnosticMessage :| [])
@@ -576,6 +604,7 @@ canonicalScalar expression = tuple [atom (scalarTypeText ((.valueType) expressio
       CheckedTextLiteral value -> tuple [atom "text", atom value]
       CheckedIntegralLiteral value -> tuple [atom "integral", atom (T.pack (show value))]
       CheckedBoolLiteral value -> tuple [atom "bool", atom (if value then "true" else "false")]
+      CheckedIdLiteral name value -> tuple [atom "id", atom name, atom value]
       CheckedCompare operator left right -> tuple [atom (T.pack (show operator)), canonicalScalar left, canonicalScalar right]
       CheckedAnd left right -> tuple [atom "and", canonicalScalar left, canonicalScalar right]
       CheckedOr left right -> tuple [atom "or", canonicalScalar left, canonicalScalar right]

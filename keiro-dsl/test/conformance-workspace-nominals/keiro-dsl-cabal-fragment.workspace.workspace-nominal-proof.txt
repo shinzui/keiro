@@ -33,6 +33,7 @@ other-modules:
     Generated.WorkspaceNominalProof.Structural.Shape.ArtifactClaim
     Generated.WorkspaceNominalProof.Structural.Shape.ProjectClaim
     Generated.WorkspaceNominalProof.StructuralConformance
+    Generated.WorkspaceNominalProof.StructuralProjections
     WorkspaceNominalProof.Bindings
     WorkspaceNominalProof.Project.BehaviorHoles
     WorkspaceNominalProof.ProjectArtifact.BehaviorHoles

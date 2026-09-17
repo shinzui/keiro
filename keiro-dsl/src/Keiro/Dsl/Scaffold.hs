@@ -106,7 +106,7 @@ module Keiro.Dsl.Scaffold
 where
 
 import Data.Char (isAlpha, isAlphaNum, isDigit, isUpper)
-import Data.List (find, groupBy, isSuffixOf, nub, sort, sortOn)
+import Data.List (find, findIndex, groupBy, isSuffixOf, nub, sort, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -2030,7 +2030,7 @@ emitNominalProjections languageContract ctx nominals =
         ]
           <> ["Data.KindID qualified as KindID" | any hasId nominals]
           <> ["Keiro.Codec.IdDomain (idDomainTextPattern, typeIdV7Domain, validateIdDomainText)" | any hasEnforcedId nominals]
-          <> ["Data.List.NonEmpty (NonEmpty (..))" | any hasExactDomain nominals]
+          <> ["Data.List.NonEmpty (NonEmpty (..))" | any hasEnum nominals || any hasUnenforcedId nominals]
           <> ["Data.Text (Text)" | any usesText nominals]
           <> ["Data.Time (UTCTime)" | any (hasScalar NominalTime) nominals]
           -- The four text combinators build the legacy hand-rolled TypeID
@@ -2040,7 +2040,8 @@ emitNominalProjections languageContract ctx nominals =
           <> [ "Keiki.ProjectionDomain ("
                  <> T.intercalate
                    ", "
-                   ( ["TextPattern", "finiteProjectionDomain", "matchesTextPattern", "textProjectionDomain"]
+                   ( (if any hasId nominals then ["TextPattern", "matchesTextPattern", "textProjectionDomain"] else [])
+                       <> ["finiteProjectionDomain" | any hasEnum nominals]
                        <> (if any hasUnenforcedId nominals then ["textCharSet", "textConcat", "textLiteral", "textRepeatBetween"] else [])
                    )
                  <> ")"
@@ -2059,6 +2060,7 @@ emitNominalProjections languageContract ctx nominals =
         <> ["nominalFromRepresentation" | hasReconstruction]
     hasScalar wanted nominal = (.representation) nominal == ScalarRepresentation wanted
     hasId nominal = case (.representation) nominal of IdRepresentation {} -> True; _ -> False
+    hasEnum nominal = case (.representation) nominal of EnumRepresentation {} -> True; _ -> False
     hasEnforcedId nominal = case (.representation) nominal of
       IdRepresentation prefix -> isJust (idDomainContractFor languageContract prefix)
       _ -> False
@@ -2401,11 +2403,15 @@ renderStrictOrApplicationArgument rendered = case (.precedence) rendered of
 data StructuralProjection = StructuralProjection
   { tag :: !Text,
     witness :: !Text,
+    getter :: !Text,
+    rawGetter :: !(Maybe Text),
     pointer :: !Text,
     owner :: !HaskellSource,
     result :: !Text,
     canonical :: !CanonicalTypeId,
     binding :: !QualifiedValueName,
+    fixtures :: !QualifiedValueName,
+    terminalNominal :: !(Maybe NominalLeaf),
     selectors :: ![(Text, Text)]
   }
   deriving stock (Eq, Show)
@@ -2426,7 +2432,7 @@ projectionsForRoot graph root rootShape = case rootShape of
     walkField keys selectors field
       | (.presence) field /= PRequired = []
       | otherwise = case projectionScalar ((.valueType) field) of
-          Just result -> [mkProjection (keys <> [(.key) field]) (selectors <> [(shapeModuleForOwner, (.haskell) field)]) result]
+          Just (result, nominal) -> [mkProjection (keys <> [(.key) field]) (selectors <> [(shapeModuleForOwner, (.haskell) field)]) result nominal]
           Nothing -> case (.valueType) field of
             RRef key -> case Map.lookup key ((.declarations) graph) of
               Just (ResolvedStructural nested (RRecord _ _ nestedFields)) ->
@@ -2441,7 +2447,7 @@ projectionsForRoot graph root rootShape = case rootShape of
     walkNested owner keys selectors field
       | (.presence) field /= PRequired = []
       | otherwise = case projectionScalar ((.valueType) field) of
-          Just result -> [mkProjection (keys <> [(.key) field]) (selectors <> [(shapeModuleFor owner, (.haskell) field)]) result]
+          Just (result, nominal) -> [mkProjection (keys <> [(.key) field]) (selectors <> [(shapeModuleFor owner, (.haskell) field)]) result nominal]
           Nothing -> case (.valueType) field of
             RRef key -> case Map.lookup key ((.declarations) graph) of
               Just (ResolvedStructural nested (RRecord _ _ nestedFields)) ->
@@ -2453,35 +2459,50 @@ projectionsForRoot graph root rootShape = case rootShape of
 
     -- Context is supplied when rendering; this marker is replaced there.
     shapeModuleFor declaration = "__SHAPE__." <> (.name) declaration
-    mkProjection keys selectors result =
+    mkProjection keys selectors result nominal =
       StructuralProjection
         { tag = nameStem <> "Projection",
           witness = lowerFirst nameStem <> "Witness",
+          getter = lowerFirst nameStem <> "Get",
+          rawGetter = (lowerFirst nameStem <> "RawGet") <$ nominal,
           pointer = pointer,
           owner = (.haskell) root,
           result = result,
           canonical = (.canonical) root,
           binding = (.binding) root,
+          fixtures = (.fixtures) root,
+          terminalNominal = nominal,
           selectors = selectors
         }
       where
         pointer = T.concat ["/" <> escapePointer key | key <- keys]
         nameStem = projectionNameStem ((.name) root) pointer
 
-projectionScalar :: ResolvedTypeExpr -> Maybe Text
+projectionScalar :: ResolvedTypeExpr -> Maybe (Text, Maybe NominalLeaf)
 projectionScalar = \case
-  RText -> Just "Text"
-  RInt -> Just "Int"
-  RInteger -> Just "Integer"
-  RBool -> Just "Bool"
-  RTime -> Just "UTCTime"
-  RNatural -> Just "Natural"
+  RText -> primitive "Text"
+  RInt -> primitive "Int"
+  RInteger -> primitive "Integer"
+  RBool -> primitive "Bool"
+  RTime -> primitive "UTCTime"
+  RNatural -> primitive "Natural"
   RJson -> Nothing
   ROptional {} -> Nothing
   RList {} -> Nothing
   RMap {} -> Nothing
   RRef {} -> Nothing
-  RNominal {} -> Nothing
+  RNominal leaf -> Just (nominalResultType leaf, Just leaf)
+  where
+    primitive result = Just (result, Nothing)
+    nominalResultType leaf = case (.kind) leaf of
+      NominalIdLeaf {} -> "Text"
+      NominalEnumLeaf {} -> "Text"
+      NominalScalarLeaf representation -> case representation of
+        NominalText -> "Text"
+        NominalInt -> "Int"
+        NominalNatural -> "Natural"
+        NominalBool -> "Bool"
+        NominalTime -> "UTCTime"
 
 escapePointer :: Text -> Text
 escapePointer = T.replace "/" "~1" . T.replace "~" "~0"
@@ -2522,11 +2543,15 @@ allocateProjectionNames specs = concatMap allocateGroup groups
       StructuralProjection
         { tag = nameStem <> suffix <> "Projection",
           witness = lowerFirst nameStem <> suffix <> "Witness",
+          getter = lowerFirst nameStem <> suffix <> "Get",
+          rawGetter = (lowerFirst nameStem <> suffix <> "RawGet") <$ spec.rawGetter,
           pointer = spec.pointer,
           owner = spec.owner,
           result = spec.result,
           canonical = spec.canonical,
           binding = spec.binding,
+          fixtures = spec.fixtures,
+          terminalNominal = spec.terminalNominal,
           selectors = spec.selectors
         }
       where
@@ -2540,15 +2565,25 @@ projectionWitnessName graph owner pointer = do
       (\spec -> (.canonical) spec == (.canonical) declaration && (.pointer) spec == pointer)
       (projectionSpecs graph)
 
+projectionRawGetterName :: TypeGraph -> MappedKey -> Text -> Maybe Text
+projectionRawGetterName graph owner pointer = do
+  ResolvedStructural declaration _ <- Map.lookup owner ((.declarations) graph)
+  projection <-
+    find
+      (\spec -> (.canonical) spec == (.canonical) declaration && (.pointer) spec == pointer)
+      (projectionSpecs graph)
+  (.rawGetter) projection
+
 emitStructuralProjections :: Context -> TypeGraph -> Text
 emitStructuralProjections ctx graph =
   nl $
     renderGeneratedLanguagePragmas [ExtTypeFamilies | not (null specs)]
       <> [ generatedBanner,
            "-- Equality witnesses are emitted for Text, Int, Bool, Natural, and UTCTime.",
+           "-- Nominal ID and enum leaves carry exact canonical-text domains.",
            "-- Int, Natural, and UTCTime belong to Keiki's ordered subset.",
            "module " <> moduleName,
-           "  ( " <> T.intercalate "\n  , " (map (.witness) specs),
+           "  ( " <> T.intercalate "\n  , " (concatMap projectionExports specs),
            "  ) where",
            ""
          ]
@@ -2559,13 +2594,46 @@ emitStructuralProjections ctx graph =
   where
     moduleName = structuralProjectionModule ctx
     specs = map (resolveProjectionModules ctx) (projectionSpecs graph)
+    exactSpecs = [spec | spec <- specs, maybe False projectionLeafHasExactDomain ((.terminalNominal) spec)]
+    hasExact = not (null exactSpecs)
+    hasExactId = any (maybe False projectionLeafIsId . (.terminalNominal)) exactSpecs
+    hasExactEnum = any (maybe False projectionLeafIsEnum . (.terminalNominal)) exactSpecs
+    hasExactConsumer = any (maybe False projectionLeafIsConsumer . (.terminalNominal)) exactSpecs
     resultTypes = Set.fromList (map (.result) specs)
+    projectionExports spec = [(.witness) spec, (.getter) spec] <> maybeToList ((.rawGetter) spec)
     staticImports =
       ["import Data.Text (Text)" | "Text" `Set.member` resultTypes]
         <> ["import Data.Time (UTCTime)" | "UTCTime" `Set.member` resultTypes]
         <> ["import Numeric.Natural (Natural)" | "Natural" `Set.member` resultTypes]
-        <> ["import Keiro.Codec.Structural (bindingToShape)" | not (null specs)]
-        <> ["import Keiki.Core (FieldProjection (..), FieldWitness, fieldWitness)" | not (null specs)]
+        <> ["import Data.List.NonEmpty (NonEmpty (..))" | hasExactEnum]
+        <> ["import Data.List.NonEmpty qualified as NonEmpty" | hasExact]
+        <> ["import Data.KindID qualified as KindID" | any (maybe False projectionLeafIsConsumerId . (.terminalNominal)) specs]
+        <> [ "import Keiro.Codec.IdDomain (idDomainTextPattern, parseKindIdV7Text, typeIdV7Domain)"
+           | hasExactId
+           ]
+        <> [ "import Keiro.Codec.Nominal (" <> T.intercalate ", " nominalCodecImports <> ")"
+           | not (null nominalCodecImports)
+           ]
+        <> [ "import Keiro.Codec.Structural (" <> T.intercalate ", " structuralCodecImports <> ")"
+           | not (null specs)
+           ]
+        <> ["import Keiki.Core (" <> T.intercalate ", " keikiCoreImports <> ")" | not (null specs)]
+        <> [ "import Keiki.ProjectionDomain (" <> T.intercalate ", " projectionDomainImports <> ")"
+           | hasExact
+           ]
+    nominalCodecImports =
+      ["nominalToRepresentation" | any (maybe False projectionLeafIsConsumer . (.terminalNominal)) specs]
+        <> ["nominalFromRepresentation" | hasExactConsumer]
+    structuralCodecImports =
+      ["bindingToShape"]
+        <> if hasExact then ["bindingFromShape", "fixtureCases"] else []
+    keikiCoreImports =
+      ["FieldProjection (..)", "FieldWitness"]
+        <> (if hasExact then ["ExactFieldProjection (..)", "exactFieldWitness"] else [])
+        <> ["fieldWitness" | length exactSpecs /= length specs]
+    projectionDomainImports =
+      ["finiteProjectionDomain" | hasExactEnum]
+        <> if hasExactId then ["TextPattern", "textProjectionDomain"] else []
     fieldScopeImports =
       [ "import " <> shapeModuleName <> " (" <> lastSegment shapeModuleName <> "Shape(" <> T.intercalate ", " (Set.toAscList selectors) <> "))"
       | (shapeModuleName, selectors) <- Map.toAscList selectorsByModule
@@ -2580,26 +2648,118 @@ emitStructuralProjections ctx graph =
     importPlan =
       planImportsOrDie
         moduleName
-        (Set.fromList (map (.tag) specs))
+        (Set.fromList (concatMap (\spec -> [(.tag) spec, (.witness) spec, (.getter) spec, projectionPatternName spec] <> maybeToList ((.rawGetter) spec)) specs))
         ( Set.fromList
             ( [haskellTypeReference ((.owner) spec) | spec <- specs]
                 <> [qualifiedValueReference ((.binding) spec) | spec <- specs]
+                <> [qualifiedValueReference ((.fixtures) spec) | spec <- exactSpecs]
+                <> [nominalLeafTypeReference ctx leaf | spec <- specs, Just leaf <- [(.terminalNominal) spec]]
+                <> concatMap projectionConstructorReferences exactSpecs
+                <> concatMap (maybe [] (projectionNominalReferences ctx) . (.terminalNominal)) specs
             )
         )
     renderProjection spec =
-      [ "",
-        "data " <> (.tag) spec,
-        "",
-        "instance FieldProjection " <> (.tag) spec <> " where",
-        "  type FieldName " <> (.tag) spec <> " = " <> tshow ((.pointer) spec),
-        "  type FieldOwner " <> (.tag) spec <> " = " <> renderReferenceOrDie importPlan (haskellTypeReference ((.owner) spec)),
-        "  type FieldResult " <> (.tag) spec <> " = " <> (.result) spec,
-        "  fieldShapeId _ = " <> tshow (unCanonicalTypeId ((.canonical) spec)),
-        "  projectFieldValue _ owner = " <> renderGetter spec,
-        "",
-        (.witness) spec <> " :: FieldWitness " <> (.tag) spec,
-        (.witness) spec <> " = fieldWitness @" <> (.tag) spec
+      [""]
+        <> renderProjectionDomain spec
+        <> [ "data " <> (.tag) spec,
+             ""
+           ]
+        <> renderRawGetter spec
+        <> [ (.getter) spec <> " :: " <> ownerType spec <> " -> " <> (.result) spec,
+             (.getter) spec <> " owner = " <> renderProjectionGetter spec,
+             "",
+             "instance FieldProjection " <> (.tag) spec <> " where",
+             "  type FieldName " <> (.tag) spec <> " = " <> tshow ((.pointer) spec),
+             "  type FieldOwner " <> (.tag) spec <> " = " <> ownerType spec,
+             "  type FieldResult " <> (.tag) spec <> " = " <> (.result) spec,
+             "  fieldShapeId _ = " <> tshow (unCanonicalTypeId ((.canonical) spec)),
+             "  projectFieldValue _ = " <> (.getter) spec
+           ]
+        <> renderExactProjection spec
+        <> [ "",
+             (.witness) spec <> " :: FieldWitness " <> (.tag) spec,
+             (.witness) spec <> " = " <> witnessConstructor spec <> " @" <> (.tag) spec
+           ]
+    ownerType spec = renderReferenceOrDie importPlan (haskellTypeReference ((.owner) spec))
+    renderRawGetter spec = case ((.rawGetter) spec, (.terminalNominal) spec) of
+      (Just rawName, Just leaf) ->
+        [ rawName <> " :: " <> ownerType spec <> " -> " <> renderReferenceOrDie importPlan (nominalLeafTypeReference ctx leaf),
+          rawName <> " owner = " <> renderGetter spec,
+          ""
+        ]
+      (Nothing, Nothing) -> []
+      _ -> error "structural projection raw getter and terminal nominal disagree"
+    witnessConstructor spec
+      | isExactProjection spec = "exactFieldWitness"
+      | otherwise = "fieldWitness"
+    isExactProjection spec = maybe False projectionLeafHasExactDomain ((.terminalNominal) spec)
+    renderProjectionDomain spec = case (.terminalNominal) spec of
+      Just NominalLeaf {kind = NominalIdLeaf prefix} ->
+        [ projectionPatternName spec <> " :: TextPattern",
+          projectionPatternName spec <> " = either (error . show) id (idDomainTextPattern (typeIdV7Domain " <> tshow prefix <> "))",
+          ""
+        ]
+      _ -> []
+    renderExactProjection spec = case (.terminalNominal) spec of
+      Just leaf
+        | projectionLeafHasExactDomain leaf ->
+            [ "",
+              "instance ExactFieldProjection " <> (.tag) spec <> " where",
+              "  fieldProjectionDomain _ = " <> projectionDomain spec leaf,
+              "  reconstructFieldOwner _ value = do"
+            ]
+              <> map ("    " <>) (projectionNominalDecoder ctx importPlan leaf)
+              <> [ "    let baseShape = bindingToShape " <> bindingValue spec <> " (snd (NonEmpty.head (fixtureCases " <> fixturesValue spec <> ")))",
+                   "    pure (bindingFromShape " <> bindingValue spec <> " " <> renderProjectionReconstruction spec <> ")"
+                 ]
+      _ -> []
+    projectionDomain spec leaf = case (.kind) leaf of
+      NominalIdLeaf {} -> "textProjectionDomain " <> projectionPatternName spec
+      NominalEnumLeaf constructors -> "finiteProjectionDomain (" <> renderNonEmpty (map (tshow . snd) (NE.toList constructors)) <> ")"
+      NominalScalarLeaf {} -> error "nominal scalar reached exact structural projection rendering"
+    bindingValue spec = renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) spec))
+    fixturesValue spec = renderReferenceOrDie importPlan (qualifiedValueReference ((.fixtures) spec))
+    projectionConstructorReferences spec =
+      [ HaskellReference shapeModuleName constructor ConstructorNamespace RequireQualified
+      | (shapeModuleName, _selector) <- (.selectors) spec,
+        let (constructor, _fields) = projectionRecord shapeModuleName
       ]
+    projectionRecord shapeModuleName = case Map.lookup (MappedKey (lastSegment shapeModuleName)) ((.declarations) graph) of
+      Just (ResolvedStructural _ (RRecord constructor _ fields)) -> (constructor, fields)
+      _ -> error "structural projection path owner is not a record"
+    renderProjectionReconstruction spec = rebuild 0 "baseShape" ((.selectors) spec)
+      where
+        rebuild _ _ [] = error "cannot reconstruct an empty structural projection path"
+        rebuild depth shape ((shapeModuleName, selected) : remaining) =
+          "(case "
+            <> shape
+            <> " of "
+            <> constructorName
+            <> " "
+            <> T.unwords patterns
+            <> " -> "
+            <> constructorName
+            <> " "
+            <> T.unwords arguments
+            <> ")"
+          where
+            (constructor, fields) = projectionRecord shapeModuleName
+            constructorName =
+              renderReferenceOrDie importPlan (HaskellReference shapeModuleName constructor ConstructorNamespace RequireQualified)
+            variables = ["projectionField" <> tshow' depth <> "_" <> tshow' index | index <- [0 .. length fields - 1]]
+            selectedIndex = fromMaybe (error "structural projection selector disappeared") (findIndex ((== selected) . (.haskell)) fields)
+            selectedVariable = variables !! selectedIndex
+            patterns =
+              [ if index == selectedIndex && null remaining then "_" else variable
+              | (index, variable) <- zip [0 ..] variables
+              ]
+            replacement = case remaining of
+              [] -> "fieldValue"
+              _ -> rebuild (depth + 1) selectedVariable remaining
+            arguments =
+              [ if index == selectedIndex then replacement else variable
+              | (index, variable) <- zip [0 ..] variables
+              ]
     renderGetter spec =
       foldl
         ( \value (_shapeModuleName, selector) ->
@@ -2607,17 +2767,122 @@ emitStructuralProjections ctx graph =
         )
         ("bindingToShape " <> renderReferenceOrDie importPlan (qualifiedValueReference ((.binding) spec)) <> " owner")
         ((.selectors) spec)
+    renderProjectionGetter spec = case (.terminalNominal) spec of
+      Nothing -> renderGetter spec
+      Just leaf -> case (.rawGetter) spec of
+        Just rawName -> projectionNominalEncoder ctx importPlan leaf <> " (" <> rawName <> " owner)"
+        Nothing -> error "nominal structural projection has no raw getter"
+
+projectionPatternName :: StructuralProjection -> Text
+projectionPatternName spec = lowerFirst ((.tag) spec) <> "DomainPattern"
+
+projectionLeafHasExactDomain :: NominalLeaf -> Bool
+projectionLeafHasExactDomain leaf = projectionLeafIsId leaf || projectionLeafIsEnum leaf
+
+projectionLeafIsId :: NominalLeaf -> Bool
+projectionLeafIsId NominalLeaf {kind = NominalIdLeaf {}} = True
+projectionLeafIsId _ = False
+
+projectionLeafIsEnum :: NominalLeaf -> Bool
+projectionLeafIsEnum NominalLeaf {kind = NominalEnumLeaf {}} = True
+projectionLeafIsEnum _ = False
+
+projectionLeafIsConsumer :: NominalLeaf -> Bool
+projectionLeafIsConsumer NominalLeaf {ownership = ConsumerLeaf {}} = True
+projectionLeafIsConsumer _ = False
+
+projectionLeafIsConsumerId :: NominalLeaf -> Bool
+projectionLeafIsConsumerId NominalLeaf {kind = NominalIdLeaf {}, ownership = ConsumerLeaf {}} = True
+projectionLeafIsConsumerId _ = False
+
+projectionNominalReferences :: Context -> NominalLeaf -> [HaskellReference]
+projectionNominalReferences ctx leaf = case ((.kind) leaf, (.ownership) leaf) of
+  (NominalIdLeaf {}, GeneratedLeaf) -> [generatedTextReference, generatedValueReference ("parse" <> (.name) leaf)]
+  (NominalEnumLeaf constructors, GeneratedLeaf) ->
+    generatedTextReference
+      : [generatedConstructorReference constructor | (constructor, _) <- NE.toList constructors]
+  (NominalIdLeaf {}, ConsumerLeaf binding) -> [qualifiedValueReference ((.binding) binding)]
+  (NominalEnumLeaf constructors, ConsumerLeaf binding) ->
+    [ qualifiedValueReference ((.binding) binding),
+      nominalRepresentationEncoderReference ctx nominal
+    ]
+      <> [nominalRepresentationConstructorReference ctx nominal constructor | (constructor, _) <- NE.toList constructors]
+  (NominalScalarLeaf {}, ConsumerLeaf binding) -> [qualifiedValueReference ((.binding) binding)]
+  (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural projection planning"
+  where
+    nominal = resolvedNominalFromLeaf leaf
+    generatedTextReference = HaskellReference (generatedNominalModule ctx) (nominalTextName nominal) ValueNamespace RequireQualified
+    generatedValueReference occurrence = HaskellReference (generatedNominalModule ctx) occurrence ValueNamespace RequireQualified
+    generatedConstructorReference occurrence = HaskellReference (generatedNominalModule ctx) occurrence ConstructorNamespace RequireQualified
+
+projectionNominalDecoder :: Context -> HaskellImportPlan -> NominalLeaf -> [Text]
+projectionNominalDecoder ctx importPlan leaf = case ((.kind) leaf, (.ownership) leaf) of
+  (NominalIdLeaf {}, GeneratedLeaf) ->
+    [ "fieldValue <- either (const Nothing) Just (" <> rendered (generatedValueReference ("parse" <> (.name) leaf)) <> " value)"
+    ]
+  (NominalIdLeaf prefix, ConsumerLeaf binding) ->
+    [ "representation <- either (const Nothing) Just (parseKindIdV7Text @" <> tshow prefix <> " value)",
+      "let fieldValue = nominalFromRepresentation " <> rendered (qualifiedValueReference ((.binding) binding)) <> " representation"
+    ]
+  (NominalEnumLeaf constructors, GeneratedLeaf) ->
+    ["fieldValue <- case value of"]
+      <> [ "  " <> tshow wire <> " -> Just " <> rendered (generatedConstructorReference constructor)
+         | (constructor, wire) <- NE.toList constructors
+         ]
+      <> ["  _ -> Nothing"]
+  (NominalEnumLeaf constructors, ConsumerLeaf binding) ->
+    ["fieldValue <- case value of"]
+      <> [ "  "
+             <> tshow wire
+             <> " -> Just (nominalFromRepresentation "
+             <> rendered (qualifiedValueReference ((.binding) binding))
+             <> " "
+             <> rendered (nominalRepresentationConstructorReference ctx nominal constructor)
+             <> ")"
+         | (constructor, wire) <- NE.toList constructors
+         ]
+      <> ["  _ -> Nothing"]
+  (NominalScalarLeaf {}, _) -> error "nominal scalar reached exact structural projection decoding"
+  where
+    nominal = resolvedNominalFromLeaf leaf
+    generatedValueReference occurrence = HaskellReference (generatedNominalModule ctx) occurrence ValueNamespace RequireQualified
+    generatedConstructorReference occurrence = HaskellReference (generatedNominalModule ctx) occurrence ConstructorNamespace RequireQualified
+    rendered = renderReferenceOrDie importPlan
+
+projectionNominalEncoder :: Context -> HaskellImportPlan -> NominalLeaf -> Text
+projectionNominalEncoder ctx importPlan leaf = case ((.kind) leaf, (.ownership) leaf) of
+  (NominalIdLeaf {}, GeneratedLeaf) -> rendered generatedTextReference
+  (NominalEnumLeaf {}, GeneratedLeaf) -> rendered generatedTextReference
+  (NominalIdLeaf {}, ConsumerLeaf binding) ->
+    "(KindID.toText . nominalToRepresentation " <> rendered (qualifiedValueReference ((.binding) binding)) <> ")"
+  (NominalEnumLeaf {}, ConsumerLeaf binding) ->
+    "("
+      <> rendered (nominalRepresentationEncoderReference ctx nominal)
+      <> " . nominalToRepresentation "
+      <> rendered (qualifiedValueReference ((.binding) binding))
+      <> ")"
+  (NominalScalarLeaf {}, ConsumerLeaf binding) ->
+    "(nominalToRepresentation " <> rendered (qualifiedValueReference ((.binding) binding)) <> ")"
+  (NominalScalarLeaf {}, GeneratedLeaf) -> error "generated nominal scalar reached structural projection rendering"
+  where
+    nominal = resolvedNominalFromLeaf leaf
+    generatedTextReference = HaskellReference (generatedNominalModule ctx) (nominalTextName nominal) ValueNamespace RequireQualified
+    rendered = renderReferenceOrDie importPlan
 
 resolveProjectionModules :: Context -> StructuralProjection -> StructuralProjection
 resolveProjectionModules ctx spec =
   StructuralProjection
     { tag = spec.tag,
       witness = spec.witness,
+      getter = spec.getter,
+      rawGetter = spec.rawGetter,
       pointer = spec.pointer,
       owner = spec.owner,
       result = spec.result,
       canonical = spec.canonical,
       binding = spec.binding,
+      fixtures = spec.fixtures,
+      terminalNominal = spec.terminalNominal,
       selectors =
         [ (replaceModule marker, selector)
         | (marker, selector) <- spec.selectors
@@ -5687,6 +5952,7 @@ renderCheckedScalar graph expression = case (.node) expression of
   CheckedTextLiteral value -> tshow value
   CheckedIntegralLiteral value -> T.pack (show value)
   CheckedBoolLiteral value -> if value then "True" else "False"
+  CheckedIdLiteral _ value -> tshow value
   CheckedCompare operator left right ->
     "(" <> renderCheckedScalar graph left <> " " <> comparison operator <> " " <> renderCheckedScalar graph right <> ")"
   CheckedAnd left right -> "(" <> renderCheckedScalar graph left <> " && " <> renderCheckedScalar graph right <> ")"
@@ -5715,13 +5981,33 @@ renderSelectionCommand graph selection command =
     <> " (TargetDomain."
     <> (.name) command
     <> "Data"
-    <> T.concat [" (" <> renderCheckedScalar graph (commandExpression field) <> ")" | field <- (.fields) command]
+    <> T.concat [" (" <> renderCheckedCommandScalar graph (commandExpression field) <> ")" | field <- (.fields) command]
     <> ")"
   where
     commandExpression field =
       fromMaybe
         (error "checked declarative router command field disappeared")
         (Map.lookup ((.name) field) ((.commandFields) selection))
+
+renderCheckedCommandScalar :: TypeGraph -> CheckedScalarExpr -> Text
+renderCheckedCommandScalar graph expression = case ((.valueType) expression, (.node) expression) of
+  (SelectionNominal {}, CheckedPath root segments) ->
+    "(StructuralProjections."
+      <> rawGetterName segments
+      <> " "
+      <> rootName root
+      <> ")"
+  _ -> renderCheckedScalar graph expression
+  where
+    rootName SelectionInput = "input"
+    rootName SelectionRow = "row"
+    rawGetterName [] = error "checked nominal command path contained no fields"
+    rawGetterName path@(first : _) =
+      fromMaybe
+        (error "checked nominal command path has no generated structural raw getter")
+        (projectionRawGetterName graph ((.owner) first) pointer)
+      where
+        pointer = T.concat ["/" <> escapePointer ((.wireKey) segment) | segment <- path]
 
 emitRouterHoles :: Text -> RouterNode -> Text
 emitRouterHoles holePrefix router =

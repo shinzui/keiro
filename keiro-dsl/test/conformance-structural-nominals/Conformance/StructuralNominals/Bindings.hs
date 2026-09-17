@@ -14,6 +14,8 @@ import Data.Text (Text)
 import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as ChannelRepresentation
 import Generated.StructuralNominalLeaves.Nominals (TemplateId, TemplateKind (..), parseTemplateId)
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
+import Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupInput qualified as ShapeTemplateLookupInput
+import Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupRow qualified as ShapeTemplateLookupRow
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef qualified as ShapeTemplateRef
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState qualified as ShapeTemplateState
 import Keiro.Codec.Nominal (NominalBinding (..), NominalFixture (..), NominalFixtureCases (..))
@@ -122,6 +124,26 @@ templateBookBinding =
           (map (bindingFromShape templateStateBinding) templates)
           holders
           byKey
+    }
+
+templateLookupInputFixtures :: FixtureCases TemplateLookupInput
+templateLookupInputFixtures = FixtureCases (("claim", TemplateLookupInput claimId) :| [])
+
+templateLookupInputBinding :: StructuralBinding TemplateLookupInput ShapeTemplateLookupInput.TemplateLookupInputShape
+templateLookupInputBinding =
+  StructuralBinding
+    { bindingToShape = \(TemplateLookupInput claim) -> ShapeTemplateLookupInput.TemplateLookupInput claim,
+      bindingFromShape = \(ShapeTemplateLookupInput.TemplateLookupInput claim) -> TemplateLookupInput claim
+    }
+
+templateLookupRowFixtures :: FixtureCases TemplateLookupRow
+templateLookupRowFixtures = FixtureCases (("template-claim", TemplateLookupRow templateId1 claimId) :| [])
+
+templateLookupRowBinding :: StructuralBinding TemplateLookupRow ShapeTemplateLookupRow.TemplateLookupRowShape
+templateLookupRowBinding =
+  StructuralBinding
+    { bindingToShape = \(TemplateLookupRow template claim) -> ShapeTemplateLookupRow.TemplateLookupRow template claim,
+      bindingFromShape = \(ShapeTemplateLookupRow.TemplateLookupRow template claim) -> TemplateLookupRow template claim
     }
 
 claimIdBinding :: NominalBinding ClaimId (KindID "claim")

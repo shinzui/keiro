@@ -516,6 +516,7 @@ test-suite keiro-dsl-conformance-workspace-nominals
     Generated.WorkspaceNominalProof.Structural.Shape.ArtifactClaim
     Generated.WorkspaceNominalProof.Structural.Shape.ProjectClaim
     Generated.WorkspaceNominalProof.StructuralConformance
+    Generated.WorkspaceNominalProof.StructuralProjections
     WorkspaceNominalProof.Bindings
     WorkspaceNominalProof.Domain
     WorkspaceNominalProof.Project.BehaviorHoles
@@ -604,6 +605,7 @@ test-suite keiro-dsl-conformance-structural-nominals
     Generated.MappedNominalQueueOnly.TemplateWork.QueuePolicy
     Generated.StructuralNominalLeaves.BehaviorSourceMap
     Generated.StructuralNominalLeaves.Nominal.Shape.Channel
+    Generated.StructuralNominalLeaves.NominalProjections
     Generated.StructuralNominalLeaves.Nominals
     Generated.StructuralNominalLeaves.Nominals.Internal
     Generated.StructuralNominalLeaves.ProjectionCatalog
@@ -611,9 +613,12 @@ test-suite keiro-dsl-conformance-structural-nominals
     Generated.StructuralNominalLeaves.Structural.CodecCompare.TemplateState
     Generated.StructuralNominalLeaves.Structural.NominalLeaves
     Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupInput
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupRow
     Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef
     Generated.StructuralNominalLeaves.Structural.Shape.TemplateState
     Generated.StructuralNominalLeaves.StructuralConformance
+    Generated.StructuralNominalLeaves.StructuralProjections
     Generated.StructuralNominalLeaves.TemplateCatalog.BehaviorContract
     Generated.StructuralNominalLeaves.TemplateCatalog.Codec
     Generated.StructuralNominalLeaves.TemplateCatalog.Domain
@@ -621,6 +626,8 @@ test-suite keiro-dsl-conformance-structural-nominals
     Generated.StructuralNominalLeaves.TemplateCatalog.Harness
     Generated.StructuralNominalLeaves.TemplateCatalog.Projection
     Generated.StructuralNominalLeaves.TemplateCatalog.Transducer
+    Generated.StructuralNominalLeaves.TemplateDeliveryRouter.Router
+    Generated.StructuralNominalLeaves.TemplateDeliveryRouter.RouterHarness
     Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
     Generated.StructuralNominalLeaves.TemplateLookup.ReadModel
     Generated.StructuralNominalLeaves.TemplateLookup.ReadModelHarness
@@ -649,6 +656,7 @@ test-suite keiro-dsl-conformance-structural-nominals
     keiro-pgmq,
     kiroku-store,
     mmzk-typeid >=0.7 && <0.8,
+    shibuya-core,
     text >=2.1 && <2.2,
 
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural

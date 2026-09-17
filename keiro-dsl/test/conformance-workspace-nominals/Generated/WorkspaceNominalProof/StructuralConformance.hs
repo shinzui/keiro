@@ -7,9 +7,11 @@ import Data.List (nub)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
+import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
+import Generated.WorkspaceNominalProof.StructuralProjections qualified as StructuralProjections
 import WorkspaceNominalProof.Bindings qualified as Bindings
 import WorkspaceNominalProof.Domain (ArtifactClaim, ClaimId, ProjectClaim)
 
@@ -21,6 +23,7 @@ structuralConformanceAssertions =
     , claimIdNominalAssertions
     , [("fixture coverage: workspace-nominal-proof.ArtifactClaim.v1", coverageArtifactClaim)]
     , [("fixture coverage: workspace-nominal-proof.ProjectClaim.v1", coverageProjectClaim)]
+    , structuralProjectionAssertions
     ]
 
 validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
@@ -69,3 +72,9 @@ coverageArtifactClaim = True
 
 coverageProjectClaim :: Bool
 coverageProjectClaim = True
+
+structuralProjectionAssertions :: [(String, Bool)]
+structuralProjectionAssertions =
+  [ ("projection witness agreement: workspace-nominal-proof.ArtifactClaim.v1/claimId", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.artifactClaimClaimIdWitness (\referenceOwner -> StructuralProjections.artifactClaimClaimIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.artifactClaimFixtures)))
+  , ("projection witness agreement: workspace-nominal-proof.ProjectClaim.v1/claimId", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.projectClaimClaimIdWitness (\referenceOwner -> StructuralProjections.projectClaimClaimIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.projectClaimFixtures)))
+  ]

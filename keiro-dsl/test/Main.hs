@@ -18,6 +18,7 @@ import Data.List (find, isInfixOf, partition, permutations, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TextEncoding
@@ -1796,6 +1797,9 @@ main = hspec $ do
             "mapped-readmodel-workspace/types.keiro",
             "mapped-readmodel.keiro",
             "mapped-workqueue.keiro",
+            "nested-nominal-guard-mismatched-id.keiro",
+            "nested-nominal-guard-optional-path.keiro",
+            "nested-nominal-guard-ordering.keiro",
             "nominal-v1.keiro",
             "outcome-identifier-legacy.keiro",
             "outcome-identifier-v5.keiro",
@@ -3110,6 +3114,20 @@ main = hspec $ do
       firewallBreaches modules `shouldBe` []
 
   describe "scalar expressions" $ do
+    it "types required nested nominal paths and preserves nominal guard diagnostics" $ do
+      errorCodesOf "test/fixtures/structural-nominal-leaves.keiro" `shouldReturn` []
+      errorCodesOf "test/fixtures/nested-nominal-guard-mismatched-id.keiro"
+        `shouldReturn` [AggregateGuardTypeMismatch]
+      errorCodesOf "test/fixtures/nested-nominal-guard-ordering.keiro"
+        `shouldReturn` [AggregateGuardCapabilityUnsupported]
+      errorCodesOf "test/fixtures/nested-nominal-guard-optional-path.keiro"
+        `shouldReturn` [AggregateExpressionPathUnsupported]
+      service <- checkedServiceOf "test/fixtures/structural-nominal-leaves.keiro"
+      let spec = checkedSpec service
+          transducer = generatedTextEndingIn "TemplateCatalog/Transducer.hs" (scaffoldServiceModules (defaultContext (spec.context)) service)
+      transducer `shouldSatisfy` T.isInfixOf "StructuralProjections.templateStateTemplateIdWitness"
+      transducer `shouldSatisfy` T.isInfixOf "GeneratedNominals.templateIdEqualityWitness"
+
     it "parses, validates, and round-trips the authoritative stable scalar fixture" $ do
       source <- readTestText "test/fixtures/aggregate-scalar-expressions-v2.keiro"
       parsed <- case parseSource "aggregate-scalar-expressions-v2.keiro" source of
@@ -3403,7 +3421,7 @@ main = hspec $ do
               ]
       spec <- parseInlineSpec "<nominal-type-confusion>" source
       let diagnostics = validateSpec spec
-      length [() | diagnostic <- diagnostics, (.code) diagnostic == AggregateExpressionOperandTypeMismatch]
+      length [() | diagnostic <- diagnostics, (.code) diagnostic == AggregateGuardTypeMismatch]
         `shouldBe` 3
       errorCodes spec `shouldContain` [AggregateExpressionRootUnknown]
       T.unlines (map (.message) diagnostics) `shouldSatisfy` T.isInfixOf "qualify"
@@ -6784,6 +6802,27 @@ main = hspec $ do
         `shouldNotContain` [ProcessKeyFieldUnknown, ProcessDispatchKeyUnresolved, ProcessBindingUnscoped]
 
   describe "router (EP-108)" $ do
+    it "checks nominal ID keys, recipients, comparisons, literals, and command mappings" $ do
+      service <- checkedServiceOf "test/fixtures/structural-nominal-leaves.keiro"
+      let spec = checkedSpec service
+      graph <- shouldResolveTypeGraph spec
+      case [router | NRouter router <- (.nodes) spec, (.id) router == "TemplateDeliveryRouter"] of
+        [router] -> case RouterSelection.checkRouterSelection (checkedLanguageContract service) graph spec router of
+          Left diagnostics -> expectationFailure (show diagnostics)
+          Right selection -> do
+            (.valueType) ((.key) selection) `shouldBe` RouterSelection.SelectionNominal "ClaimId"
+            (.valueType) ((.recipient) selection) `shouldBe` RouterSelection.SelectionNominal "TemplateId"
+            (.valueType) (fromMaybe (error "templateId command mapping missing") (Map.lookup "templateId" ((.commandFields) selection)))
+              `shouldBe` RouterSelection.SelectionNominal "TemplateId"
+            show ((.predicate) selection) `shouldContain` "CheckedIdLiteral \"TemplateId\""
+            T.length ((.fingerprint) selection) `shouldBe` 64
+        routers -> expectationFailure ("expected the nominal declarative router, got " <> show (length routers))
+      let modules = scaffoldServiceModules (defaultContext (spec.context)) service
+          routerModule = generatedTextEndingIn "TemplateDeliveryRouter/Router.hs" modules
+      routerModule `shouldSatisfy` T.isInfixOf "fieldWitnessGet StructuralProjections.templateLookupRowTemplateIdWitness row"
+      routerModule `shouldSatisfy` T.isInfixOf "StructuralProjections.templateLookupRowTemplateIdRawGet row"
+      routerModule `shouldSatisfy` T.isInfixOf "template_01h455vb4pex5vsknk084sn02q"
+
     it "RouterSelection parses, checks, fingerprints, and round-trips bounded declarative selection" $ do
       source <- readTestText "test/fixtures/declarative-router/valid.keiro"
       parsed <- case parseSource "declarative-router.keiro" source of

@@ -10,22 +10,26 @@ import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
+import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Generated.StructuralNominalLeaves.Nominals (TemplateId)
+import Generated.StructuralNominalLeaves.StructuralProjections qualified as StructuralProjections
 import Generated.StructuralNominalLeaves.StructuralConformance (structuralConformanceAssertions)
 import Generated.StructuralNominalLeaves.Structural.CodecCompare.TemplateState (compareWithHistorical)
 import Generated.StructuralNominalLeaves.TemplateCatalog.Codec
 import Generated.StructuralNominalLeaves.TemplateCatalog.Codec qualified as GeneratedCodec
 import Generated.StructuralNominalLeaves.TemplateCatalog.Domain
 import Generated.StructuralNominalLeaves.TemplateCatalog.Harness (harnessAssertions)
+import Generated.StructuralNominalLeaves.TemplateCatalog.Transducer (templateCatalogTransducer)
+import Generated.StructuralNominalLeaves.TemplateDeliveryRouter.Router (templateDeliveryRouterSelectionFingerprint)
+import Generated.StructuralNominalLeaves.TemplateDeliveryRouter.RouterHarness (routerHarnessValues)
 import Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
 import Generated.StructuralNominalLeaves.TemplateWork.Queue
 import Generated.MappedNominalQueryOnly.TemplateLookup.QueryContract qualified as QueryOnly
 import Generated.MappedNominalQueryOnly.Nominals qualified as QueryOnlyNominals
 import Generated.MappedNominalQueueOnly.Nominals qualified as QueueOnlyNominals
 import Generated.MappedNominalQueueOnly.TemplateWork.Queue qualified as QueueOnly
-import Keiki.Core ((!))
+import Keiki.Core (fieldWitnessHasExactDomain, step, (!))
 import Keiro.Codec (eventType)
 import Keiro.Dsl.CodecCompare (HistoricalCodec (..), reportSucceeded)
 import Keiro.EventStream qualified as EventStream
@@ -53,6 +57,9 @@ main = do
                ("queue nominal leaves round-trip canonically", queueRoundTrip),
                ("queue generated ID rejection is located", rejectedAt "$['template_id']" badQueue),
                ("query aliases preserve nominal domain types", queryAliasAgreement),
+               ("nested nominal guard admits matching IDs and rejects different IDs", nestedNominalGuard),
+               ("nested nominal projections carry exact ID and enum domains", nestedNominalProjectionDomains),
+               ("router nominal selection identity and fingerprint are recorded", routerNominalSelectionMetadata),
                ("queue-only nominal scaffold compiles with its leaf helper", queueOnlyAgreement),
                ("query-only nominal scaffold compiles without a leaf helper", queryOnlyAgreement),
                ("historical opaque TemplateState codec has parity with the generated codec", reportSucceeded comparison),
@@ -166,14 +173,36 @@ badQueue =
 
 queryAliasAgreement :: Bool
 queryAliasAgreement =
-  queryInputIdentity Bindings.stateWithHolder == Bindings.stateWithHolder
-    && queryResultIdentity [Bindings.templateId1] == [Bindings.templateId1]
+  queryInputIdentity (TemplateLookupInput Bindings.claimId) == TemplateLookupInput Bindings.claimId
+    && queryResultIdentity [TemplateLookupRow Bindings.templateId1 Bindings.claimId]
+      == [TemplateLookupRow Bindings.templateId1 Bindings.claimId]
 
-queryInputIdentity :: TemplateLookupQueryInput -> TemplateState
+queryInputIdentity :: TemplateLookupQueryInput -> TemplateLookupInput
 queryInputIdentity = id
 
-queryResultIdentity :: TemplateLookupQueryResult -> [TemplateId]
+queryResultIdentity :: TemplateLookupQueryResult -> [TemplateLookupRow]
 queryResultIdentity = id
+
+nestedNominalGuard :: Bool
+nestedNominalGuard =
+  isJust (step templateCatalogTransducer initialState matching)
+    && isNothing (step templateCatalogTransducer initialState different)
+  where
+    initialState = (TemplateCatalogEmpty, initialTemplateCatalogRegs)
+    matching = RecordTemplate (RecordTemplateData Bindings.stateWithoutHolder (ById Bindings.templateId1) Bindings.initialTemplateBook)
+    different = RecordTemplate (RecordTemplateData Bindings.stateWithHolder (ById Bindings.templateId2) Bindings.initialTemplateBook)
+
+nestedNominalProjectionDomains :: Bool
+nestedNominalProjectionDomains =
+  fieldWitnessHasExactDomain StructuralProjections.templateStateTemplateIdWitness
+    && fieldWitnessHasExactDomain StructuralProjections.templateStateChannelWitness
+    && fieldWitnessHasExactDomain StructuralProjections.templateLookupInputClaimIdWitness
+    && fieldWitnessHasExactDomain StructuralProjections.templateLookupRowTemplateIdWitness
+
+routerNominalSelectionMetadata :: Bool
+routerNominalSelectionMetadata =
+  lookup "selectionIdentity" routerHarnessValues == Just "template-nominal-selection"
+    && lookup "selectionFingerprint" routerHarnessValues == Just (T.unpack templateDeliveryRouterSelectionFingerprint)
 
 queueOnlyAgreement :: Bool
 queueOnlyAgreement = case QueueOnlyNominals.parseTemplateId Bindings.templateIdText1 of

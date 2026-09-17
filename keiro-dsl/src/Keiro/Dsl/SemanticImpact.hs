@@ -566,6 +566,7 @@ checkedScalarPaths expression = case (.node) expression of
   CheckedTextLiteral _ -> []
   CheckedIntegralLiteral _ -> []
   CheckedBoolLiteral _ -> []
+  CheckedIdLiteral _ _ -> []
   CheckedCompare _ left right -> checkedScalarPaths left <> checkedScalarPaths right
   CheckedAnd left right -> checkedScalarPaths left <> checkedScalarPaths right
   CheckedOr left right -> checkedScalarPaths left <> checkedScalarPaths right

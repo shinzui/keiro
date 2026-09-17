@@ -130,17 +130,41 @@ instance ToJSON BehaviorConformanceReport where
 
 behaviorRequirements :: [BehaviorRequirement]
 behaviorRequirements =
-  [ -- TemplateCatalogEmpty x RecordTemplate: live transition
+  [ -- TemplateCatalogRouted x RecordTemplate: required rejection
     BehaviorRequirement
-      { key = BehaviorKey "behavior-v1-324168e7e31368e6"
+      { key = BehaviorKey "behavior-v1-01b677e97ee382b5"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = TemplateCatalogRouted
+      , commandName = "RecordTemplate"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- TemplateCatalogRouted x RouteTemplate: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-26fa1ba9ca514f81"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = TemplateCatalogRouted
+      , commandName = "RouteTemplate"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- TemplateCatalogRecorded x RouteTemplate: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-5dbbc70789956424"
       , kind = LiveTransition
       , evidence = GeneratedAuthoritative
       , guardCoverage = GuardTotal
-      , source = TemplateCatalogEmpty
-      , commandName = "RecordTemplate"
-      , expectedEdge = (Just (K.EdgeRef TemplateCatalogEmpty 0))
-      , target = Just TemplateCatalogRecorded
-      , eventKinds = ["TemplateRecorded"]
+      , source = TemplateCatalogRecorded
+      , commandName = "RouteTemplate"
+      , expectedEdge = (Just (K.EdgeRef TemplateCatalogRecorded 0))
+      , target = Just TemplateCatalogRouted
+      , eventKinds = ["TemplateRouted"]
       }
   , -- TemplateCatalogRecorded x RecordTemplate: required rejection
     BehaviorRequirement
@@ -150,6 +174,30 @@ behaviorRequirements =
       , guardCoverage = GuardNotApplicable
       , source = TemplateCatalogRecorded
       , commandName = "RecordTemplate"
+      , expectedEdge = Nothing
+      , target = Nothing
+      , eventKinds = []
+      }
+  , -- TemplateCatalogEmpty x RecordTemplate: live transition
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-83a3e25d3520f959"
+      , kind = LiveTransition
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardUnknown
+      , source = TemplateCatalogEmpty
+      , commandName = "RecordTemplate"
+      , expectedEdge = (Just (K.EdgeRef TemplateCatalogEmpty 0))
+      , target = Just TemplateCatalogRecorded
+      , eventKinds = ["TemplateRecorded"]
+      }
+  , -- TemplateCatalogEmpty x RouteTemplate: required rejection
+    BehaviorRequirement
+      { key = BehaviorKey "behavior-v1-d8388e1ef8008039"
+      , kind = RequiredRejection
+      , evidence = GeneratedAuthoritative
+      , guardCoverage = GuardNotApplicable
+      , source = TemplateCatalogEmpty
+      , commandName = "RouteTemplate"
       , expectedEdge = Nothing
       , target = Nothing
       , eventKinds = []
@@ -302,12 +350,13 @@ decodeEvents = traverse (\event -> parseTemplateCatalogEvent (Codec.eventType te
 commandKind :: TemplateCatalogCommand -> Text
 commandKind command = case command of
   RecordTemplate _ -> "RecordTemplate"
+  RouteTemplate _ -> "RouteTemplate"
 
 eventKind :: TemplateCatalogEvent -> Text
 eventKind event = case Codec.eventType templateCatalogCodec event of Codec.EventType tag -> tag
 
 regsEqual :: K.RegFile TemplateCatalogRegs -> K.RegFile TemplateCatalogRegs -> Bool
-regsEqual left right = (left K.! #book) == (right K.! #book)
+regsEqual left right = (left K.! #book) == (right K.! #book) && (left K.! #activeTemplateId) == (right K.! #activeTemplateId)
 
 proofStrength :: BehaviorRequirement -> Bool
 proofStrength requirement =

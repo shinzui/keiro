@@ -12,8 +12,10 @@ module Generated.StructuralNominalLeaves.TemplateCatalog.Codec (
 ) where
 
 import Generated.StructuralNominalLeaves.TemplateCatalog.Domain
+import Generated.StructuralNominalLeaves.Nominals (templateIdText)
+import Generated.StructuralNominalLeaves.Nominals.Internal (unsafeTemplateIdFromLegacyText)
 import Control.Monad (unless)
-import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.=))
+import Data.Aeson (Value (..), object, parseJSON, toJSON, withObject, withText, (.:), (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, JSONPathElement (..), (<?>), explicitParseField, parseEither)
@@ -23,14 +25,17 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import qualified Data.Text as T
-import Keiro.Codec.Nominal (nominalFromRepresentation)
+import Data.KindID qualified as KindID
+import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)
+import Keiro.Codec.Nominal (nominalFromRepresentation, nominalToRepresentation)
 import Keiro.Codec.Structural (bindingFromShape, bindingToShape)
 import Keiro.Codec (Codec (..), EventType (..))
 
 
+
 import Generated.StructuralNominalLeaves.Structural.NominalLeaves (encodeAccountNumberLeaf, parseAccountNumberLeaf, encodeChannelLeaf, parseChannelLeaf, encodeClaimIdLeaf, parseClaimIdLeaf, encodeTemplateIdLeaf, parseTemplateIdLeaf, encodeTemplateKindLeaf, parseTemplateKindLeaf)
 import Conformance.StructuralNominals.Bindings qualified as Bindings
-import Conformance.StructuralNominals.Domain (TemplateBook, TemplateRef, TemplateState)
+import Conformance.StructuralNominals.Domain (ClaimId, TemplateBook, TemplateRef, TemplateState)
 import Generated.StructuralNominalLeaves.Nominal.Shape.Channel qualified as Channel
 import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
@@ -38,7 +43,12 @@ import Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef qualified 
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState qualified as ShapeTemplateState
 
 
-
+parseClaimIdNominal :: Text -> Parser ClaimId
+parseClaimIdNominal input = case validateIdDomainText (typeIdV7Domain "claim") input of
+  Left reason -> fail (show reason)
+  Right () -> case KindID.parseText @"claim" input of
+    Left reason -> fail (show reason)
+    Right representation -> pure (nominalFromRepresentation Bindings.claimIdBinding representation)
 encodeTemplateBookMapped :: TemplateBook -> Value
 encodeTemplateBookMapped = encodeTemplateBookShape . bindingToShape Bindings.templateBookBinding
 
@@ -150,7 +160,7 @@ parseTemplateStateShape = withObject "TemplateStateShape" $ \objectValue -> do
     <*> parseOptionalField (pure (nominalFromRepresentation Bindings.channelBinding Channel.Email)) (parseChannelLeaf) objectValue "fallbackChannel"
 
 templateCatalogEventTypes :: NonEmpty EventType
-templateCatalogEventTypes = EventType "TemplateRecorded" :| []
+templateCatalogEventTypes = EventType "TemplateRecorded" :| [EventType "TemplateRouted"]
 
 templateCatalogCodec :: Codec TemplateCatalogEvent
 templateCatalogCodec =
@@ -158,6 +168,7 @@ templateCatalogCodec =
     { eventTypes = templateCatalogEventTypes
     , eventType = \case
         TemplateRecorded{} -> EventType "TemplateRecorded"
+        TemplateRouted{} -> EventType "TemplateRouted"
     , schemaVersion = 1
     , encode = encodeTemplateCatalogEvent
     , decode = parseTemplateCatalogEvent
@@ -173,6 +184,12 @@ encodeTemplateCatalogEvent = \case
       , "reference" .= encodeTemplateRefMapped payload.reference
       , "book" .= encodeTemplateBookMapped payload.book
       ]
+  TemplateRouted payload ->
+    object
+      [ "kind" .= ("TemplateRouted" :: Text)
+      , "templateId" .= templateIdText payload.templateId
+      , "claimId" .= KindID.toText (nominalToRepresentation Bindings.claimIdBinding payload.claimId)
+      ]
 
 parseTemplateCatalogEvent :: EventType -> Value -> Either Text TemplateCatalogEvent
 parseTemplateCatalogEvent (EventType tag) = mapLeftText . parseEither (withObject "TemplateCatalogEvent" go)
@@ -185,6 +202,12 @@ parseTemplateCatalogEvent (EventType tag) = mapLeftText . parseEither (withObjec
                     <$> explicitParseField parseTemplateStateMapped o "state"
                     <*> explicitParseField parseTemplateRefMapped o "reference"
                     <*> explicitParseField parseTemplateBookMapped o "book"
+                )
+        "TemplateRouted" ->
+          TemplateRouted
+            <$> ( TemplateRoutedData
+                    <$> (unsafeTemplateIdFromLegacyText <$> o .: "templateId")
+                    <*> explicitParseField (withText "ClaimId" parseClaimIdNominal) o "claimId"
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes templateCatalogEventTypes)
 

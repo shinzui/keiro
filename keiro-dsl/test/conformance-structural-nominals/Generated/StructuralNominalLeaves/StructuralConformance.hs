@@ -10,15 +10,18 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Maybe (isJust, isNothing)
 import Data.Proxy (Proxy (..))
 import Data.Text qualified as T
+import Keiki.Core (fieldWitnessAgrees)
 import Keiki.Shape (CanonicalTypeName (..))
 import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
 import Keiro.Codec.Structural (FixtureCases (..), bindingDomainRoundTrip, bindingShapeRoundTrip, bindingToShape)
+import Generated.StructuralNominalLeaves.StructuralProjections qualified as StructuralProjections
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState (TemplateStateShape(holder))
 import Conformance.StructuralNominals.Bindings qualified as Bindings
-import Conformance.StructuralNominals.Domain (AccountNumber, Channel, ClaimId, TemplateBook, TemplateRef, TemplateState)
+import Conformance.StructuralNominals.Domain (AccountNumber, Channel, ClaimId, TemplateBook, TemplateLookupInput, TemplateLookupRow, TemplateRef, TemplateState)
 import Generated.StructuralNominalLeaves.Nominals qualified as Nominals
 import Generated.StructuralNominalLeaves.Structural.NominalLeaves qualified as NominalLeaves
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook qualified as ShapeTemplateBook
+import Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupRow qualified as ShapeTemplateLookupRow
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef qualified as ShapeTemplateRef
 import Generated.StructuralNominalLeaves.Structural.Shape.TemplateState qualified as ShapeTemplateState
 
@@ -26,17 +29,23 @@ structuralConformanceAssertions :: [(String, Bool)]
 structuralConformanceAssertions =
   concat
     [ templateBookBindingAssertions
+    , templateLookupInputBindingAssertions
+    , templateLookupRowBindingAssertions
     , templateRefBindingAssertions
     , templateStateBindingAssertions
     , accountNumberNominalAssertions
     , channelNominalAssertions
     , claimIdNominalAssertions
     , [("generated nominal canonical text: conformance.structural-nominals.TemplateBook.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateBookBinding value of ShapeTemplateBook.TemplateBook field0_0 _ field0_2 -> (all (\item1 -> (case item1 of ShapeTemplateState.TemplateState field2_0 _ _ _ _ _ -> ((NominalLeaves.encodeTemplateIdLeaf (field2_0) == Aeson.String (Nominals.templateIdText (field2_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field2_0)) == Right (field2_0))))) (field0_0)) && (all (\item1 -> (NominalLeaves.encodeTemplateIdLeaf (item1) == Aeson.String (Nominals.templateIdText (item1)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (item1)) == Right (item1))) (field0_2)))) (NonEmpty.toList (fixtureCases Bindings.templateBookFixtures)))]
+    , [("generated nominal canonical text: conformance.structural-nominals.TemplateLookupRow.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateLookupRowBinding value of ShapeTemplateLookupRow.TemplateLookupRow field0_0 _ -> ((NominalLeaves.encodeTemplateIdLeaf (field0_0) == Aeson.String (Nominals.templateIdText (field0_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field0_0)) == Right (field0_0))))) (NonEmpty.toList (fixtureCases Bindings.templateLookupRowFixtures)))]
     , [("generated nominal canonical text: conformance.structural-nominals.TemplateRef.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateRefBinding value of ShapeTemplateRef.ById payload0 -> (NominalLeaves.encodeTemplateIdLeaf (payload0) == Aeson.String (Nominals.templateIdText (payload0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (payload0)) == Right (payload0)); ShapeTemplateRef.ByAccount _ -> True; ShapeTemplateRef.ByChannel _ -> True; ShapeTemplateRef.Unknown -> True)) (NonEmpty.toList (fixtureCases Bindings.templateRefFixtures)))]
     , [("generated nominal canonical text: conformance.structural-nominals.TemplateState.v1/TemplateId", all (\(_, value) -> (case bindingToShape Bindings.templateStateBinding value of ShapeTemplateState.TemplateState field0_0 _ _ _ _ _ -> ((NominalLeaves.encodeTemplateIdLeaf (field0_0) == Aeson.String (Nominals.templateIdText (field0_0)) && AesonTypes.parseEither NominalLeaves.parseTemplateIdLeaf (NominalLeaves.encodeTemplateIdLeaf (field0_0)) == Right (field0_0))))) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures)))]
     , [("fixture coverage: conformance.structural-nominals.TemplateBook.v1", coverageTemplateBook)]
+    , [("fixture coverage: conformance.structural-nominals.TemplateLookupInput.v1", coverageTemplateLookupInput)]
+    , [("fixture coverage: conformance.structural-nominals.TemplateLookupRow.v1", coverageTemplateLookupRow)]
     , [("fixture coverage: conformance.structural-nominals.TemplateRef.v1", coverageTemplateRef)]
     , [("fixture coverage: conformance.structural-nominals.TemplateState.v1", coverageTemplateState)]
+    , structuralProjectionAssertions
     ]
 
 validFixtureLabels :: NonEmpty.NonEmpty (T.Text, value) -> Bool
@@ -57,6 +66,32 @@ templateBookBindingAssertions =
     ]
   where
     cases = fixtureCases Bindings.templateBookFixtures
+
+templateLookupInputBindingAssertions :: [(String, Bool)]
+templateLookupInputBindingAssertions =
+  ("fixture labels: conformance.structural-nominals.TemplateLookupInput.v1", validFixtureLabels cases) :
+  ("canonical identity: conformance.structural-nominals.TemplateLookupInput.v1", canonicalTypeName (Proxy @TemplateLookupInput) == "conformance.structural-nominals.TemplateLookupInput.v1") :
+  concat
+    [ [ ("binding domain round-trip: conformance.structural-nominals.TemplateLookupInput.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.templateLookupInputBinding value)
+      , ("binding shape round-trip: conformance.structural-nominals.TemplateLookupInput.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.templateLookupInputBinding (bindingToShape Bindings.templateLookupInputBinding value))
+      ]
+    | (label, value) <- NonEmpty.toList cases
+    ]
+  where
+    cases = fixtureCases Bindings.templateLookupInputFixtures
+
+templateLookupRowBindingAssertions :: [(String, Bool)]
+templateLookupRowBindingAssertions =
+  ("fixture labels: conformance.structural-nominals.TemplateLookupRow.v1", validFixtureLabels cases) :
+  ("canonical identity: conformance.structural-nominals.TemplateLookupRow.v1", canonicalTypeName (Proxy @TemplateLookupRow) == "conformance.structural-nominals.TemplateLookupRow.v1") :
+  concat
+    [ [ ("binding domain round-trip: conformance.structural-nominals.TemplateLookupRow.v1/" <> T.unpack label, bindingDomainRoundTrip Bindings.templateLookupRowBinding value)
+      , ("binding shape round-trip: conformance.structural-nominals.TemplateLookupRow.v1/" <> T.unpack label, bindingShapeRoundTrip Bindings.templateLookupRowBinding (bindingToShape Bindings.templateLookupRowBinding value))
+      ]
+    | (label, value) <- NonEmpty.toList cases
+    ]
+  where
+    cases = fixtureCases Bindings.templateLookupRowFixtures
 
 templateRefBindingAssertions :: [(String, Bool)]
 templateRefBindingAssertions =
@@ -114,6 +149,12 @@ claimIdNominalAssertions =
 coverageTemplateBook :: Bool
 coverageTemplateBook = True
 
+coverageTemplateLookupInput :: Bool
+coverageTemplateLookupInput = True
+
+coverageTemplateLookupRow :: Bool
+coverageTemplateLookupRow = True
+
 coverageTemplateRef :: Bool
 coverageTemplateRef = any (\case ShapeTemplateRef.ById{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.ByAccount{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.ByChannel{} -> True; _ -> False) shapes && any (\case ShapeTemplateRef.Unknown -> True; _ -> False) shapes
   where
@@ -123,3 +164,13 @@ coverageTemplateState :: Bool
 coverageTemplateState = any (isNothing . (.holder)) shapes && any (isJust . (.holder)) shapes
   where
     shapes = map (bindingToShape Bindings.templateStateBinding . snd) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures))
+
+structuralProjectionAssertions :: [(String, Bool)]
+structuralProjectionAssertions =
+  [ ("projection witness agreement: conformance.structural-nominals.TemplateLookupInput.v1/claimId", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.templateLookupInputClaimIdWitness (\referenceOwner -> StructuralProjections.templateLookupInputClaimIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.templateLookupInputFixtures)))
+  , ("projection witness agreement: conformance.structural-nominals.TemplateLookupRow.v1/claimId", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.templateLookupRowClaimIdWitness (\referenceOwner -> StructuralProjections.templateLookupRowClaimIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.templateLookupRowFixtures)))
+  , ("projection witness agreement: conformance.structural-nominals.TemplateLookupRow.v1/templateId", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.templateLookupRowTemplateIdWitness (\referenceOwner -> StructuralProjections.templateLookupRowTemplateIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.templateLookupRowFixtures)))
+  , ("projection witness agreement: conformance.structural-nominals.TemplateState.v1/account", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.templateStateAccountWitness (\referenceOwner -> StructuralProjections.templateStateAccountGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures)))
+  , ("projection witness agreement: conformance.structural-nominals.TemplateState.v1/channel", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.templateStateChannelWitness (\referenceOwner -> StructuralProjections.templateStateChannelGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures)))
+  , ("projection witness agreement: conformance.structural-nominals.TemplateState.v1/templateId", all (\(_, owner) -> fieldWitnessAgrees StructuralProjections.templateStateTemplateIdWitness (\referenceOwner -> StructuralProjections.templateStateTemplateIdGet referenceOwner) owner) (NonEmpty.toList (fixtureCases Bindings.templateStateFixtures)))
+  ]

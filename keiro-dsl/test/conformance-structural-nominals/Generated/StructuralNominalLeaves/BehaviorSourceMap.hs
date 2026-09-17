@@ -17,8 +17,12 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
-  "behavior-v1-324168e7e31368e6" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 84 3)
-  "behavior-v1-6cb89110a4e5d4bc" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 79 16)
+  "behavior-v1-01b677e97ee382b5" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 103 25)
+  "behavior-v1-26fa1ba9ca514f81" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 103 25)
+  "behavior-v1-5dbbc70789956424" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 116 3)
+  "behavior-v1-6cb89110a4e5d4bc" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 103 16)
+  "behavior-v1-83a3e25d3520f959" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 110 3)
+  "behavior-v1-d8388e1ef8008039" -> Just (BehaviorSourceLocation "keiro-dsl/test/fixtures/structural-nominal-leaves.keiro" 103 10)
   _ -> Nothing
 
 renderBehaviorSourceLocation :: Text -> Text

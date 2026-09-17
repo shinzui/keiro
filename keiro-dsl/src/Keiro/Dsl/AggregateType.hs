@@ -13,6 +13,7 @@ module Keiro.Dsl.AggregateType
     aggregateSymbols,
     aggregateSymbolsFromGraph,
     aggregateSymbolsFromGraphResult,
+    lookupAggregateNominal,
     AggregateTypeErrorReason (..),
     AggregateTypeError (..),
     resolveAggregateType,
@@ -109,6 +110,9 @@ aggregateSymbolsFromDeclarations mappedDeclarations spec =
           ],
       mapped = mappedDeclarations
     }
+
+lookupAggregateNominal :: Name -> AggregateSymbols -> Maybe ResolvedNominalType
+lookupAggregateNominal name symbols = Map.lookup name ((.nominals) symbols)
 
 data AggregateTypeErrorReason
   = UnknownAggregateType !Name

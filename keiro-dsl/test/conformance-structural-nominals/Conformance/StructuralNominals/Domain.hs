@@ -83,3 +83,24 @@ data TemplateBook = TemplateBook
 instance CanonicalTypeName TemplateBook where
   canonicalTypeName :: Proxy TemplateBook -> Text
   canonicalTypeName _ = "conformance.structural-nominals.TemplateBook.v1"
+
+newtype TemplateLookupInput = TemplateLookupInput
+  { lookupClaimId :: ClaimId
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalTypeName TemplateLookupInput where
+  canonicalTypeName :: Proxy TemplateLookupInput -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.TemplateLookupInput.v1"
+
+data TemplateLookupRow = TemplateLookupRow
+  { lookupTemplateId :: !TemplateId,
+    rowClaimId :: !ClaimId
+  }
+  deriving stock (Eq, Generic, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalTypeName TemplateLookupRow where
+  canonicalTypeName :: Proxy TemplateLookupRow -> Text
+  canonicalTypeName _ = "conformance.structural-nominals.TemplateLookupRow.v1"

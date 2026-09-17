@@ -14,15 +14,19 @@ other-modules:
     Conformance.StructuralNominals.Bindings
     Generated.StructuralNominalLeaves.BehaviorSourceMap
     Generated.StructuralNominalLeaves.Nominal.Shape.Channel
+    Generated.StructuralNominalLeaves.NominalProjections
     Generated.StructuralNominalLeaves.Nominals
     Generated.StructuralNominalLeaves.Nominals.Internal
     Generated.StructuralNominalLeaves.ProjectionCatalog
     Generated.StructuralNominalLeaves.ReplayAudit
     Generated.StructuralNominalLeaves.Structural.NominalLeaves
     Generated.StructuralNominalLeaves.Structural.Shape.TemplateBook
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupInput
+    Generated.StructuralNominalLeaves.Structural.Shape.TemplateLookupRow
     Generated.StructuralNominalLeaves.Structural.Shape.TemplateRef
     Generated.StructuralNominalLeaves.Structural.Shape.TemplateState
     Generated.StructuralNominalLeaves.StructuralConformance
+    Generated.StructuralNominalLeaves.StructuralProjections
     Generated.StructuralNominalLeaves.TemplateCatalog.BehaviorContract
     Generated.StructuralNominalLeaves.TemplateCatalog.Codec
     Generated.StructuralNominalLeaves.TemplateCatalog.Domain
@@ -30,6 +34,8 @@ other-modules:
     Generated.StructuralNominalLeaves.TemplateCatalog.Harness
     Generated.StructuralNominalLeaves.TemplateCatalog.Projection
     Generated.StructuralNominalLeaves.TemplateCatalog.Transducer
+    Generated.StructuralNominalLeaves.TemplateDeliveryRouter.Router
+    Generated.StructuralNominalLeaves.TemplateDeliveryRouter.RouterHarness
     Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
     Generated.StructuralNominalLeaves.TemplateLookup.ReadModel
     Generated.StructuralNominalLeaves.TemplateLookup.ReadModelHarness
@@ -52,6 +58,8 @@ build-depends:
     , keiro-dsl
     , keiro-pgmq
     , kiroku-store
+    , mmzk-typeid
+    , shibuya-core
     , text
 
 consumer-packages:

@@ -5,15 +5,20 @@ module Generated.StructuralNominalLeaves.TemplateCatalog.Harness (harnessAsserti
 import Generated.StructuralNominalLeaves.TemplateCatalog.Domain
 import Generated.StructuralNominalLeaves.TemplateCatalog.Codec (encodeTemplateCatalogEvent, parseTemplateCatalogEvent, templateCatalogCodec, encodeTemplateBookMapped, decodeTemplateBookMapped, encodeTemplateRefMapped, decodeTemplateRefMapped, encodeTemplateStateMapped, decodeTemplateStateMapped)
 import Generated.StructuralNominalLeaves.TemplateCatalog.Transducer (templateCatalogTransducer)
-import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
+import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, fieldWitnessAgrees, (!))
 import Keiro.Codec (eventType)
+import Generated.StructuralNominalLeaves.Nominals (TemplateId, parseTemplateId)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.KeyMap qualified as AesonKeyMap
 import Data.Either (isLeft, isRight)
-import Data.List.NonEmpty qualified as NonEmpty
-import Data.Text qualified as T
 import Keiro.Codec.Structural (FixtureCases (..))
+import Data.List.NonEmpty qualified as NonEmpty
+import Keiro.Codec.Nominal (nominalDomainRoundTrip, nominalFixtureCases, nominalFixtureDomain, nominalRepresentationRoundTrip, nominalToRepresentation)
+import Data.KindID qualified as KindID
+import Data.Text qualified as T
+import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)
+import Generated.StructuralNominalLeaves.NominalProjections qualified as NominalProjections
 import Conformance.StructuralNominals.Bindings qualified as Bindings
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
@@ -24,16 +29,27 @@ harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions templateCatalogTransducer))
   -- clock-free: spec samples no wall clock (verified at scaffold time)
   , ("golden round-trip: TemplateRecorded", roundTrips sampleEventTemplateRecorded)
+  , ("golden round-trip: TemplateRouted", roundTrips sampleEventTemplateRouted)
   , ("accepts RecordTemplate from TemplateCatalogEmpty", acceptRecordTemplate)
   ]
   ++ mappedConformanceAssertions
+  ++ nominalConformanceAssertions
   ++ forwardReplayRecordTemplate
 
 roundTrips :: TemplateCatalogEvent -> Bool
 roundTrips e = parseTemplateCatalogEvent (eventType templateCatalogCodec e) (encodeTemplateCatalogEvent e) == Right e
 
+sampleTemplateId :: TemplateId
+sampleTemplateId =
+  case parseTemplateId "template_01h455vb4pex5vsknk084sn02q" of
+    Right parsed -> parsed
+    Left problem -> error (show problem)
+
 sampleEventTemplateRecorded :: TemplateCatalogEvent
 sampleEventTemplateRecorded = TemplateRecorded (TemplateRecordedData (snd (NonEmpty.head (fixtureCases Bindings.templateStateFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.templateRefFixtures))) (snd (NonEmpty.head (fixtureCases Bindings.templateBookFixtures))))
+
+sampleEventTemplateRouted :: TemplateCatalogEvent
+sampleEventTemplateRouted = TemplateRouted (TemplateRoutedData sampleTemplateId (nominalFixtureDomain (NonEmpty.head (nominalFixtureCases Bindings.claimIdFixtures))))
 
 acceptRecordTemplate :: Bool
 acceptRecordTemplate =
@@ -56,6 +72,7 @@ forwardReplayRecordTemplate =
             Right (replayVertex, replayRegs) ->
               [ (prefix <> "final vertex", replayVertex == forwardVertex)
               , (prefix <> "register book", (replayRegs ! #book) == (forwardRegs ! #book))
+              , (prefix <> "register activeTemplateId", (replayRegs ! #activeTemplateId) == (forwardRegs ! #activeTemplateId))
               ]
   where
     prefix = "forward/replay equality: RecordTemplate from TemplateCatalogEmpty -- "
@@ -115,3 +132,13 @@ insertObjectField _ _ value = value
 objectField :: T.Text -> Aeson.Value -> Maybe Aeson.Value
 objectField key (Aeson.Object objectValue) = AesonKeyMap.lookup (AesonKey.fromText key) objectValue
 objectField _ _ = Nothing
+
+nominalConformanceAssertions :: [(String, Bool)]
+nominalConformanceAssertions =
+  [ ("nominal domain law: ClaimId", all (\fixture -> nominalDomainRoundTrip Bindings.claimIdBinding (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases Bindings.claimIdFixtures)))
+  , ("nominal representation law: ClaimId", all (\fixture -> let domainValue = nominalFixtureDomain fixture in nominalRepresentationRoundTrip Bindings.claimIdBinding (nominalToRepresentation Bindings.claimIdBinding domainValue)) (NonEmpty.toList (nominalFixtureCases Bindings.claimIdFixtures)))
+  , ("nominal ID projection agreement: ClaimId", all (\fixture -> fieldWitnessAgrees NominalProjections.claimIdEqualityWitness (KindID.toText . nominalToRepresentation Bindings.claimIdBinding) (nominalFixtureDomain fixture)) (NonEmpty.toList (nominalFixtureCases Bindings.claimIdFixtures)))
+  , ("nominal ID fixture domain agreement: ClaimId", all (\fixture -> case validateIdDomainText (typeIdV7Domain "claim") (KindID.toText (nominalToRepresentation Bindings.claimIdBinding (nominalFixtureDomain fixture))) of Right () -> True; Left _ -> False) (NonEmpty.toList (nominalFixtureCases Bindings.claimIdFixtures)))
+  , ("nominal ID binding preserves canonical representations: ClaimId", all (nominalRepresentationRoundTrip Bindings.claimIdBinding) [(case KindID.parseText @"claim" "claim_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated canonical ID conformance probe failed to parse"), (case KindID.parseText @"claim" "claim_01h455vb4pex5vsknk084sn02r" of Right parsed -> parsed; Left _ -> error "generated canonical ID conformance probe failed to parse")])
+  , ("nominal ID boundary rejects wrong-prefix and normalized text: ClaimId", case (validateIdDomainText (typeIdV7Domain "claim") "wrong_01h455vb4pex5vsknk084sn02q", validateIdDomainText (typeIdV7Domain "claim") (T.toUpper "claim_01h455vb4pex5vsknk084sn02q")) of (Left _, Left _) -> True; _ -> False)
+  ]

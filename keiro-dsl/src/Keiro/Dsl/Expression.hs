@@ -87,7 +87,8 @@ data ScalarRootProvenance
 data ResolvedScalarProjection = ResolvedScalarProjection
   { owner :: !MappedKey,
     pointer :: !Text,
-    fields :: ![Name]
+    fields :: ![Name],
+    terminalNominal :: !(Maybe NominalLeaf)
   }
   deriving stock (Eq, Show)
 
@@ -136,7 +137,9 @@ data ExpressionDiagnosticCode
   | ScalarLiteralNeedsType
   | ScalarLiteralInvalid
   | ScalarOperandTypeMismatch
+  | ScalarNominalTypeMismatch
   | ScalarOperatorUnsupported
+  | ScalarNominalOperatorUnsupported
   | ScalarBooleanOperandRequired
   | ScalarGuardBoolRequired
   | ScalarWriteTargetUnknown
@@ -238,7 +241,7 @@ resolveScalarExpr environment expected expression =
       | otherwise =
           failure
             ((.loc) right)
-            ScalarOperandTypeMismatch
+            (nominalMismatchCode ((.valueType) left) ((.valueType) right))
             ( "expression operands have different scalar types '"
                 <> aggregateCanonicalName ((.valueType) left)
                 <> "' and '"
@@ -262,7 +265,7 @@ resolveScalarExpr environment expected expression =
         unsupported useSite =
           failure
             ((.loc) operand)
-            ScalarOperatorUnsupported
+            (case (.valueType) operand of AggregateNominal {} -> ScalarNominalOperatorUnsupported; _ -> ScalarOperatorUnsupported)
             ( renderUseSite useSite
                 <> " is unsupported for scalar type '"
                 <> aggregateCanonicalName ((.valueType) operand)
@@ -280,7 +283,7 @@ resolveScalarExpr environment expected expression =
       | otherwise =
           failure
             ((.loc) resolved)
-            ScalarOperandTypeMismatch
+            (nominalMismatchCode wanted ((.valueType) resolved))
             ( "expected scalar type '"
                 <> aggregateCanonicalName wanted
                 <> "', found '"
@@ -326,7 +329,7 @@ resolveWriteExpr environment registerName expression =
           | otherwise -> Right resolved
         where
           writeDiagnostic diagnostic
-            | (.code) diagnostic == ScalarOperandTypeMismatch =
+            | (.code) diagnostic `elem` [ScalarOperandTypeMismatch, ScalarNominalTypeMismatch] =
                 replaceExpressionDiagnostic
                   ScalarWriteTypeMismatch
                   ( "write to register '"
@@ -405,7 +408,7 @@ resolveProjectionPath environment loc provenance fields = do
         ScalarPathInvalid
         ("cannot project fields through scalar type '" <> aggregateCanonicalName other <> "'")
   graph <- maybe (failure loc ScalarPathUnsupported "mapped structural graph is unavailable") Right ((.typeGraph) environment)
-  (resolvedType, wireKeys) <- walk graph owner fields
+  (resolvedType, terminalNominal, wireKeys) <- walk graph owner fields
   if scalarLeaf resolvedType
     then
       pure
@@ -418,7 +421,8 @@ resolveProjectionPath environment loc provenance fields = do
                 ResolvedScalarProjection
                   { owner = owner,
                     pointer = T.concat ["/" <> escapePointer key | key <- wireKeys],
-                    fields = fields
+                    fields = fields,
+                    terminalNominal = terminalNominal
                   }
           }
     else
@@ -438,25 +442,29 @@ resolveProjectionPath environment loc provenance fields = do
       Nothing -> failure loc ScalarPathInvalid ("required structural field '" <> name <> "' does not exist")
       Just field
         | (.presence) field /= PRequired -> failure loc ScalarPathUnsupported ("field '" <> name <> "' is optional; scalar paths must be total")
-        | null rest -> (,[(.key) field]) <$> resolvedLeaf ((.valueType) field)
+        | null rest -> do
+            (leafType, nominal) <- resolvedLeaf ((.valueType) field)
+            pure (leafType, nominal, [(.key) field])
         | RRef nextOwner <- (.valueType) field -> do
-            (leafType, keys) <- walk graph nextOwner rest
-            pure (leafType, (.key) field : keys)
+            (leafType, nominal, keys) <- walk graph nextOwner rest
+            pure (leafType, nominal, (.key) field : keys)
         | otherwise -> failure loc ScalarPathUnsupported ("field '" <> name <> "' is not a required structural record")
 
     resolvedLeaf = \case
-      RText -> Right AggregateText
-      RInt -> Right AggregateInt
-      RInteger -> Right AggregateInteger
-      RBool -> Right AggregateBool
-      RNatural -> Right AggregateNatural
-      RTime -> Right AggregateTime
+      RText -> Right (AggregateText, Nothing)
+      RInt -> Right (AggregateInt, Nothing)
+      RInteger -> Right (AggregateInteger, Nothing)
+      RBool -> Right (AggregateBool, Nothing)
+      RNatural -> Right (AggregateNatural, Nothing)
+      RTime -> Right (AggregateTime, Nothing)
       RJson -> unsupported "Json"
       ROptional {} -> unsupported "Optional"
       RList {} -> unsupported "List"
       RMap {} -> unsupported "Map"
-      RRef key -> Right (AggregateMapped key)
-      RNominal leaf -> failure loc ScalarPathInvalid ("nominal leaf '" <> (.name) leaf <> "' is not a supported scalar path leaf")
+      RRef key -> Right (AggregateMapped key, Nothing)
+      RNominal leaf -> case lookupAggregateNominal ((.name) leaf) ((.symbols) environment) of
+        Just nominal -> Right (AggregateNominal nominal, Just leaf)
+        Nothing -> failure loc ScalarPathInvalid ("nominal leaf '" <> (.name) leaf <> "' has no checked aggregate nominal declaration")
     unsupported name = failure loc ScalarPathUnsupported (name <> " is not a supported scalar path leaf")
 
 resolveLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> ScalarLiteral -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
@@ -487,7 +495,7 @@ resolveLiteral environment loc expected literal = case literal of
     mismatch other syntax =
       failure
         loc
-        ScalarOperandTypeMismatch
+        (case other of AggregateNominal {} -> ScalarNominalTypeMismatch; _ -> ScalarOperandTypeMismatch)
         (syntax <> " literal cannot inhabit scalar type '" <> aggregateCanonicalName other <> "'")
 
 resolveEnumLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> Name -> Name -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
@@ -508,7 +516,7 @@ resolveEnumLiteral environment loc expected typeName constructor = case find ((=
       InferScalarType -> Right ()
       ExpectScalarType wanted
         | wanted == resolved -> Right ()
-        | otherwise -> failure loc ScalarOperandTypeMismatch ("enum literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
+        | otherwise -> failure loc (nominalMismatchCode resolved wanted) ("enum literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
 
 resolveIdLiteral :: ExpressionEnvironment -> Loc -> ExpectedScalarType -> Name -> Text -> Either (NonEmpty ExpressionDiagnostic) TypedScalarExpr
 resolveIdLiteral environment loc expected typeName value = case find ((== typeName) . (.name)) ((.ids) ((.spec) environment)) of
@@ -526,8 +534,14 @@ resolveIdLiteral environment loc expected typeName value = case find ((== typeNa
             InferScalarType -> pure ()
             ExpectScalarType wanted
               | wanted == resolved -> pure ()
-              | otherwise -> failure loc ScalarOperandTypeMismatch ("ID literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
+              | otherwise -> failure loc (nominalMismatchCode resolved wanted) ("ID literal has type '" <> aggregateCanonicalName resolved <> "', expected '" <> aggregateCanonicalName wanted <> "'")
           pure (literalExpr loc resolved (ScalarIdValue typeName value))
+
+nominalMismatchCode :: ResolvedAggregateType -> ResolvedAggregateType -> ExpressionDiagnosticCode
+nominalMismatchCode left right = case (left, right) of
+  (AggregateNominal {}, _) -> ScalarNominalTypeMismatch
+  (_, AggregateNominal {}) -> ScalarNominalTypeMismatch
+  _ -> ScalarOperandTypeMismatch
 
 arithmeticEvidence :: Loc -> ResolvedAggregateType -> Either (NonEmpty ExpressionDiagnostic) ArithmeticEvidence
 arithmeticEvidence _ AggregateInteger = Right ExactIntegerArithmetic

@@ -128,11 +128,14 @@ that milestone rather than amending the frozen profile.
       wrong-prefix refusal, and contract-only nominal helper reachability. Evidence:
       commit `6effec8d`; focused contract/diff tests pass and all 47 clean-tree corpus
       invocations are byte-stable with consistent records and Cabal inventory.
-- [ ] M3. Expression paths ending at a nominal leaf type-check as that nominal; equality
+- [x] 2026-09-17: M3. Expression paths ending at a nominal leaf type-check as that nominal; equality
       between two paths or a path and an ID literal is checked and projected with the
       existing nominal equality contract.
-- [ ] M3. Declarative router selection accepts nominal ID columns as recipient, key, and
-      comparison operands; projection witnesses exist for nested nominal leaves.
+- [x] 2026-09-17: M3. Declarative router selection accepts nominal ID columns as recipient, key, and
+      comparison operands; exact projection witnesses exist for nested ID and enum leaves.
+      Evidence: the 752-example `keiro-dsl-test` suite and the focused structural-nominals
+      conformance suite pass; negative fixtures pin mismatched-ID, ordering, and optional-path
+      diagnostics, while the compiled router pins its canonical identity and fingerprint.
 - [ ] M4. `Map[Id] V` parses and pretty-prints under a Language 6 syntax feature, resolves
       as a keyed map whose key is a nominal ID leaf, and generates a shape keyed by the ID's
       Haskell type with admission on every key.
@@ -198,6 +201,15 @@ that milestone rather than amending the frozen profile.
   classifier fell back to a build-only vector for `ContextPublicContract`. Adding the public
   case to prefix, binding, and ID-domain boundary classification produced the intended
   breaking contract finding while preserving the build-only equal-prefix syntax migration.
+- 2026-09-17 implementation: Exact projection witnesses cannot update nested values through
+  record selectors because generated shape modules intentionally enable duplicate field
+  names. Reconstructing each shape with its qualified positional constructor keeps the
+  witness total, deterministic, and independent of selector disambiguation.
+- 2026-09-17 implementation: Router selection needs both forms of a nominal projection:
+  canonical text for keys, recipients, and predicate comparison, and the raw domain value
+  for constructing a target command field. Exporting paired `<path>Get` and `<path>RawGet`
+  accessors from the projection facade preserves that distinction without bypassing the
+  nominal binding.
 
 
 ## Decision Log
@@ -260,6 +272,14 @@ that milestone rather than amending the frozen profile.
   dominant use of ID columns; comparing two different ID declarations by text would defeat
   the nominal distinction that the whole feature exists to preserve.
   Date: 2026-09-17
+- Decision: Structural nominal projections expose a canonical representation getter and,
+  only for generated command construction, a raw domain getter. Exact ID and enum witnesses
+  reconstruct the owning shape through its `StructuralBinding`; nominal scalar projections
+  retain their existing representation-domain witness.
+  Rationale: selection identity and comparison must use canonical wire text, while generated
+  target commands remain typed by the consumer domain. Keeping the accessors adjacent makes
+  the conversion boundary explicit and lets conformance prove the canonical getter.
+  Date: 2026-09-17
 - Decision: Keep direct `Optional` unsupported as an aggregate shape and improve the
   diagnostic and documentation instead.
   Rationale: ADR 12's single aggregate type authority deliberately confines containers to the
@@ -316,8 +336,10 @@ leaf authority, preserve exact declared spellings, support generated- and consum
 constructor defaults, contribute coverage/fold/diff facts, and compile in the structural
 nominals corpus. The 747-example main suite, focused compiled corpus, shell diff matrix, strict
 documentation profiles, generated-inventory check, and 46-invocation clean-tree corpus gate
-all pass. Milestones 2 through 5 remain unstarted. The recommendation remains staged delivery,
-with keyed maps optional for the next feature release.
+all pass. Milestone 2 completed at `6effec8d`, and Milestone 3 now carries nested nominal guard,
+exact projection, and declarative router evidence with the 752-example main suite green.
+Milestones 4 and 5 remain. The recommendation remains staged delivery, with keyed maps
+optional for the next feature release.
 
 
 ## Context and Orientation

@@ -4,8 +4,7 @@ module Generated.StructuralNominalLeaves.TemplateLookup.QueryContract
   , TemplateLookupQueryResult
   ) where
 
-import Conformance.StructuralNominals.Domain (TemplateState)
-import Generated.StructuralNominalLeaves.Nominals (TemplateId)
+import Conformance.StructuralNominals.Domain (TemplateLookupInput, TemplateLookupRow)
 
-type TemplateLookupQueryInput = TemplateState
-type TemplateLookupQueryResult = [TemplateId]
+type TemplateLookupQueryInput = TemplateLookupInput
+type TemplateLookupQueryResult = [TemplateLookupRow]

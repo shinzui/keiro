@@ -213,16 +213,11 @@ conformanceImports rendering =
     selectorsByModule =
       Map.fromListWith
         Set.union
-        ( [ (structuralShapeModuleName ((.context) rendering) ((.name) declaration), Set.singleton ((.haskell) field))
-          | (declaration, RRecord _ _ fields) <- structural,
-            field <- fields,
-            isOptional ((.valueType) field)
-          ]
-            <> [ (shapeModule, Set.singleton selector)
-               | projection <- projections,
-                 (shapeModule, selector) <- (.selectors) projection
-               ]
-        )
+        [ (structuralShapeModuleName ((.context) rendering) ((.name) declaration), Set.singleton ((.haskell) field))
+        | (declaration, RRecord _ _ fields) <- structural,
+          field <- fields,
+          isOptional ((.valueType) field)
+        ]
     structuralCodecImports =
       ["FixtureCases (..)"]
         <> if null structural then [] else ["bindingDomainRoundTrip", "bindingShapeRoundTrip", "bindingToShape"]
@@ -600,16 +595,8 @@ projectionAssertionDecls rendering structural
       Nothing -> "error \"projection owner fixtures missing\""
 
 projectionGetter :: ConformanceRendering -> Text -> StructuralProjection -> Text
-projectionGetter rendering owner spec =
-  foldl
-    ( \value (_shapeModule, selector) ->
-        "("
-          <> value
-          <> ")."
-          <> selector
-    )
-    ("bindingToShape " <> renderReference rendering (conformanceQualifiedValueReference ((.binding) spec)) <> " " <> owner)
-    ((.selectors) spec)
+projectionGetter _rendering owner spec =
+  "StructuralProjections." <> (.getter) spec <> " " <> owner
 
 structuralShapeModuleName :: Context -> Name -> Text
 structuralShapeModuleName ctx name = case (.placement) ctx of

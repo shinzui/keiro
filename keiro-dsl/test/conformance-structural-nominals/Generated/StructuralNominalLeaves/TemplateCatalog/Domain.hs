@@ -8,11 +8,12 @@ import Data.Proxy (Proxy (..))
 import GHC.Generics (Generic)
 import Keiki.Core (RegFile (..))
 import Keiki.Shape (CanonicalStateShape, CanonicalTypeName)
+import Generated.StructuralNominalLeaves.Nominals (TemplateId, parseTemplateId)
 import Conformance.StructuralNominals.Bindings qualified as Bindings
-import Conformance.StructuralNominals.Domain (TemplateBook, TemplateRef, TemplateState)
+import Conformance.StructuralNominals.Domain (ClaimId, TemplateBook, TemplateRef, TemplateState)
 import Keiki.Generics.TH (deriveAggregateCtorsAll, deriveWireCtorsAll)
 
-data TemplateCatalogVertex = TemplateCatalogEmpty | TemplateCatalogRecorded
+data TemplateCatalogVertex = TemplateCatalogEmpty | TemplateCatalogRecorded | TemplateCatalogRouted
   deriving stock (Generic, Eq, Ord, Show, Enum, Bounded)
   deriving anyclass (ToJSON, FromJSON)
 instance CanonicalStateShape TemplateCatalogVertex
@@ -25,7 +26,14 @@ data RecordTemplateData = RecordTemplateData
   }
   deriving stock (Generic, Eq, Show)
 
+data RouteTemplateData = RouteTemplateData
+  { templateId :: !TemplateId
+  , claimId :: !ClaimId
+  }
+  deriving stock (Generic, Eq, Show)
+
 data TemplateCatalogCommand = RecordTemplate !RecordTemplateData
+  | RouteTemplate !RouteTemplateData
   deriving stock (Generic, Eq, Show)
 
 data TemplateRecordedData = TemplateRecordedData
@@ -35,16 +43,25 @@ data TemplateRecordedData = TemplateRecordedData
   }
   deriving stock (Generic, Eq, Show)
 
+data TemplateRoutedData = TemplateRoutedData
+  { templateId :: !TemplateId
+  , claimId :: !ClaimId
+  }
+  deriving stock (Generic, Eq, Show)
+
 data TemplateCatalogEvent = TemplateRecorded !TemplateRecordedData
+  | TemplateRouted !TemplateRoutedData
   deriving stock (Generic, Eq, Show)
 
 type TemplateCatalogRegs =
   '[ '("book", TemplateBook)
+   , '("activeTemplateId", TemplateId)
    ]
 
 initialTemplateCatalogRegs :: RegFile TemplateCatalogRegs
 initialTemplateCatalogRegs =
-  RCons (Proxy @"book") Bindings.initialTemplateBook RNil
+  RCons (Proxy @"book") Bindings.initialTemplateBook $
+  RCons (Proxy @"activeTemplateId") (case parseTemplateId "template_01h455vb4pex5vsknk084sn02q" of Right parsed -> parsed; Left _ -> error "generated valid ID sample failed to parse") RNil
 
 $(deriveAggregateCtorsAll ''TemplateCatalogCommand ''TemplateCatalogRegs)
 

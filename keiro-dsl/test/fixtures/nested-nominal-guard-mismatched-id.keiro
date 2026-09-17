@@ -1,0 +1,32 @@
+language keiro-dsl 6
+context nested-nominal-guard-mismatched-id
+
+id TemplateId prefix=template
+id ClaimId prefix=claim
+
+mapped structural record GuardState {
+  haskell package=keiro-dsl module=Negative.NestedNominal.Domain type=GuardState
+  binding = "Negative.NestedNominal.Bindings.guardStateBinding"
+  binding-version = "1"
+  canonical-type = "negative.nested-nominal.GuardState.v1"
+  fixtures = "Negative.NestedNominal.Bindings.guardStateFixtures"
+  wire object constructor=GuardState unknown-fields=reject {
+    templateId as "templateId" : TemplateId required
+    holder as "holder" : Optional ClaimId optional on-missing=null
+  }
+}
+
+aggregate GuardedCatalog
+  regs
+    activeTemplateId TemplateId = placeholder
+  states Open Closed!
+
+  command Compare { state:GuardState claimId:ClaimId }
+  event Compared = fields(Compare)
+
+  Open -- Compare -->
+    guard cmd.state.templateId == cmd.claimId
+    emit Compared
+    goto Closed
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
