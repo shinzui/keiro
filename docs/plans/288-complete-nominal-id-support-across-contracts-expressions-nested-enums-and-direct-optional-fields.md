@@ -107,11 +107,14 @@ that milestone rather than amending the frozen profile.
       the landed `NominalLeaf`, `collectNominalLeaves`, `RootRef`, `nominalUsePaths`, and
       `RNominal` authorities and corrected enum defaults, codecs, contract reachability, and
       router literal/projection work before implementation.
-- [ ] M1. Nominal enums (generated and consumer-bound) resolve as structural leaves with
+- [x] 2026-09-17: M1. Nominal enums (generated and consumer-bound) resolve as structural leaves with
       constructor defaults, leaf codecs, wire token, coverage, and diff contexts.
-- [ ] M1. The structural-nominals corpus carries an enum leaf with an `on-missing`
-      constructor default and passes; IR-1's deferred nested-enum bullet is recorded as
-      delivered.
+- [x] 2026-09-17: M1. The structural-nominals corpus carries generated and consumer-bound enum
+      leaves with `on-missing`
+      constructor defaults and passes; IR-1's deferred nested-enum bullet is recorded as
+      delivered. Evidence: commit `74b9206b`; 747 `keiro-dsl-test` examples, the focused
+      structural-nominals suite, the shell diff matrix, and all 46 clean-tree corpus
+      invocations pass.
 - [ ] M2. Contract event fields accept a declared `id` name under a Language 6 syntax feature,
       lower to the declaration's Haskell type with Keiro admission, and `diff` links a shared
       prefix change to the public contract.
@@ -164,6 +167,19 @@ that milestone rather than amending the frozen profile.
   `Keiro.Dsl.FoldFingerprint` register segments. Every milestone here that promised
   path-specific contexts "through `nominalUses`" was rewritten to update the producers
   and the fold fingerprint directly.
+- 2026-09-17 implementation: The existing `mapped-nominal-leaf-default.keiro` already pins
+  the required refusal for a literal default on an ID leaf. Adding the planned
+  `mapped-nominal-leaf-enum-default.keiro` would have duplicated that exact contract, so M1
+  reuses the existing fixture and adds only the new Language 5 enum refusal fixture.
+- 2026-09-17 implementation: Query-contract import planning treated every generated nominal
+  reachable beneath a consumer mapped input as a direct generated query alias. Adding a
+  generated enum leaf exposed the redundant import. Restricting that plan to direct generated
+  nominal query roots removed the unused import while the mapped input continued to use its
+  generated shape authority.
+- 2026-09-17 implementation: The broad suite found one stale type-graph assertion that still
+  expected enums to be unsupported. Replacing it with an explicit `NominalEnumLeaf` kind and
+  reachability assertion made the intended resolver contract executable instead of merely
+  deleting the old expectation.
 
 
 ## Decision Log
@@ -276,9 +292,14 @@ that milestone rather than amending the frozen profile.
 
 
 Plan 287 completed on 2026-09-17 and this plan was refreshed against its landed resolver,
-context, codec, conformance, and fingerprint authorities before Milestone 1 implementation.
-The recommendation remains staged delivery, with keyed maps optional for the next feature
-release. Plan 288 compiled behavior and release readiness remain unverified.
+context, codec, conformance, and fingerprint authorities before implementation. Milestone 1
+completed at `74b9206b`: generated and consumer-bound enums now share the nominal structural
+leaf authority, preserve exact declared spellings, support generated- and consumer-domain
+constructor defaults, contribute coverage/fold/diff facts, and compile in the structural
+nominals corpus. The 747-example main suite, focused compiled corpus, shell diff matrix, strict
+documentation profiles, generated-inventory check, and 46-invocation clean-tree corpus gate
+all pass. Milestones 2 through 5 remain unstarted. The recommendation remains staged delivery,
+with keyed maps optional for the next feature release.
 
 
 ## Context and Orientation
@@ -290,11 +311,14 @@ structural mapped type, resolved type graph, leaf, `TypeExprAlgebra`, conformanc
 language candidate, runtime capability) without repeating every definition. The facts below
 are the ones specific to this plan's five areas, verified on 2026-09-17.
 
-The completed plan 287 leaves these behaviours in place, each with a deliberate diagnostic: a declared
-`enum` used as a structural leaf is `MappedNominalLeafUnsupported`; an expression path that
+At the start of this plan, completed plan 287 left these behaviours in place, each with a
+deliberate diagnostic: a declared `enum` used as a structural leaf was
+`MappedNominalLeafUnsupported`; an expression path that
 ends at a nominal leaf is `ScalarPathInvalid`; a nominal leaf in router selection is rejected
 with the existing "must be a mapped structural record" message; and `projectionScalar` in
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` (near line 2241) returns no witness for it.
+Milestone 1 removes only the first diagnostic; the expression, router, and projection gaps
+remain for Milestone 3.
 
 *Nested enums.* `Keiro.Dsl.NominalType` represents an enum as `EnumRepresentation
 (NonEmpty (Name, Text))`, a constructor name paired with its wire spelling. Generated enums
@@ -435,8 +459,10 @@ corpus, fill the new binding for `Channel`, and assert in `Main.hs` that a paylo
 enums round-trip. Omitting `fallbackChannel` must produce the consumer-domain Email value
 and re-encode as `email`, with the representation and domain deliberately distinct types. Add `structural-nominal-leaves-enum-spelling.keiro` as a diff mutant and
 assert the spelling-change code carries the `TemplateState` event path. Add
-`mapped-nominal-leaf-enum-default.keiro` (an ID leaf with a literal default, still
-`MappedDefaultIllTyped`) to keep the ID rule pinned. Move `mapped-nominal-leaf-enum.keiro` into positive Language 6 coverage and retain a
+or reuse a fixture for an ID leaf with a literal default, still `MappedDefaultIllTyped`, to
+keep the ID rule pinned; implementation reused the existing
+`mapped-nominal-leaf-default.keiro`. Move `mapped-nominal-leaf-enum.keiro` into positive
+Language 6 coverage and retain a
 Language 5 enum-leaf refusal. M4 supplies the unsupported enum-map-key diagnostic case;
 do not expect an unrelated unresolved vertex name to produce that diagnostic. Record in
 `docs/improvement-requests/log.md` and in IR-1's `relatedPlans` that the nested-enum bullet
@@ -830,6 +856,12 @@ symbol used.
 ## Revision Notes
 
 
+- 2026-09-17: Completed Milestone 1 at `74b9206b`. Enum leaves now extend the landed nominal
+  graph, codec, default, coverage, fingerprint, and diff authorities; generated and
+  consumer-bound cases compile and round-trip in the structural-nominals corpus. Recorded
+  the reused ID-default fixture, query import-planner correction, full test evidence, and
+  clean-tree corpus verification. No provenance entry is added because this session already
+  recorded its revision.
 - 2026-09-17: Refreshed after plan 287 completed at `539a0580` and began Milestone 1.
   Replaced hypothetical resolver names with the landed `NominalLeaf`,
   `collectNominalLeaves`, `RootRef`, `nominalUsePaths`, and `RNominal` authorities; corrected
