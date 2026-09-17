@@ -16,6 +16,17 @@ provenance:
       at: 2026-09-17T03:43:16Z
       mode: "update"
       note: "Widened scope to workqueue payload rows and read-model query expressions"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-17T13:21:18Z
+      mode: "update"
+      note: "Correct root-only nominal support, snapshot fingerprints, diff routing, qualification reuse, and validation commands"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-17T13:22:03Z
+      verdict: "changes-requested"
+      note: "Original plan omitted root-only gating/emission, actual nested snapshot fingerprints, and independent diff producers; findings applied in this update"
 ---
 
 # Support nominal IDs inside structural mapped types
@@ -93,6 +104,10 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 
 ## Progress
 
+- [x] 2026-09-17: Review graph, generator, diff, fingerprints, and completed Plan 228;
+      revise missing paths and validation instructions.
+- [ ] M1–M3. Qualify isolated queue/query roots, nested binding fingerprint changes,
+      and exact consumer locality with Plan 228's existing infrastructure.
 - [ ] M1. Add the nominal leaf to the resolved type graph, resolve `id` and `mapped nominal`
       names inside structural declarations, and gate the capability on candidate Language 6.
 - [ ] M1. Classify nullability, `on-missing` defaults, wire fingerprint token, use paths,
@@ -125,11 +140,25 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Correctness review, 2026-09-17: `UsePath.root` requires a mapped-key-bearing `UseSite`,
+  and `SemanticImpact` inventories are keyed by `MappedKey`. Direct queue/query nominal
+  roots need a common key-free root identity and separate nominal dependency inventories.
+- Correctness review, 2026-09-17: `FoldFingerprint.mappedRegisterSegment` includes the
+  root mapped binding and recursive wire shape, but `nominalUseNames` only sees direct
+  nominal fields. Nested binding changes require explicit fingerprint propagation.
+- Correctness review, 2026-09-17: `Diff.idPairDiff`, `nominalScalarDiff`, and the ID-domain
+  pass in `diffServices` emit declaration findings independently of `nominalUses`.
+  Extending that function alone cannot produce the promised path-specific findings.
 
 
 ## Decision Log
 
+- Decision: Reuse the completed Plan 228 qualification infrastructure for nominal roots,
+  retaining queue/query support here as assumed by Plan 288. Add isolated roots with no
+  structural declarations to expose missing language gates, helpers, and dependency facts.
+  Rationale: Plan 228 delivered mapped queue/query support and cross-surface qualification;
+  it did not add nominal leaves. Plan 288 explicitly builds on this plan for those leaves.
+  Date: 2026-09-17
 - Decision: Represent a nominal reference as a third leaf constructor `RNominal` on
   `ResolvedTypeExpr`, carrying the checked leaf facts inline, instead of widening
   `ResolvedMappedDecl` with a nominal constructor so `RRef` keeps working.
@@ -234,7 +263,10 @@ graph: typed workqueue payload rows (`holder -> "holder" : Optional ClaimId`) an
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Correctness review and plan revision completed on 2026-09-17. Implementation has not
+started. The milestones now address direct-root completeness, actual snapshot identity,
+all nominal diff producers, and reuse of the existing cross-surface qualification gates.
+Runtime acceptance remains to be demonstrated during implementation.
 
 
 ## Context and Orientation
@@ -399,6 +431,21 @@ IR-14 (enforceable ID domains), and IR-12 (nominal equality in expressions) are 
 requests. This plan is not part of MasterPlan 43 (the 0.17.0.0 release remediation); it lands
 on the candidate Language 6 line after that release.
 
+[Plan 228](228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md)
+completed mapped queue/query/projection qualification. Reuse
+the `MappedSurfaceQualification` helper and `mapped surface qualification` group in
+`keiro-dsl/test/Main.hs`,
+`keiro-dsl/test/mapped-surface-locality-test.sh`, and
+`keiro-dsl/test/mapped-surface-mutation-test.sh` to extend its exact consumer, consequence,
+and generated-file locality checks to nominal leaves. Queue envelopes stay at version 1;
+query aliases remain Haskell APIs with no generated JSON or SQL contract. Plan 288 assumes
+this plan delivers nominal queue/query roots and adds the remaining nominal features.
+The 2026-09-17 review of Plan 228 found stale mutation substitutions and growth coverage
+limited to one event mapping. When extending these tests, require every mutation to change
+its intended source exactly once and fail for the expected reason, and repeat the complete
+nominal edit matrix after unrelated growth. Do not rely on Plan 228's completed label as
+evidence that the current mutation script is healthy.
+
 
 ## Plan of Work
 
@@ -435,7 +482,8 @@ first, then nominal leaf, then (for a name in `spec.enums`) the new error
 Set the conservative positions in the same module: `rootReference` returns `Nothing` for
 `RNominal`; in `collectUseSites`, every consumer root (workqueue field, read-model query input or
 result) whose resolved expression contains a nominal leaf is recorded in a new
-`nominalRootSites` inventory on the graph, whether or not a mapped root is also present. To
+`nominalRootSites` inventory on the graph for direct nominal roots with outer containers;
+paths through mapped declarations come from mapped use sites without duplication. To
 do that without giving `UseSite` a second key, factor the root identity that its six
 constructors currently repeat (root kind, owner, field) into a `RootRef` record, so a
 `UseSite` pairs a `RootRef` with a `MappedKey` and a `NominalRootSite` pairs a `RootRef` with a
@@ -444,6 +492,8 @@ leaf, while a new `nominalRefsInExpr` populates `nominalReachability`; `pathsInE
 path at `SegNominal name`, and a new `nominalUsePaths :: TypeGraph -> Name -> [UsePath]`
 returns every root path reaching that nominal, whether through structural declarations or
 directly from a nominal root site;
+change `UsePath.root` to the key-free `RootRef` too and migrate its consumers. Never invent
+a mapped key for a nominal to satisfy the old path type.
 `renderUsePath` renders `SegNominal name` as `" : " <> name` exactly like `SegDecl` (names are
 unambiguous because `ambiguityErrors` already forbids a nominal and a mapped declaration
 sharing a spelling); `wireExpr` renders `nominal-id(<prefix>,keiro-dsl/id-domain/typeid-v7/1)`
@@ -458,10 +508,11 @@ are unchanged and successors are monotone must stay green without edits to Langu
 
 In `keiro-dsl/src/Keiro/Dsl/Validate.hs`, add the diagnostic codes
 `MappedNominalLeafRequiresLanguage` and `MappedNominalLeafUnsupported`. In `validateMapped`,
-when the effective language contract (obtain it the same way `nominalEqualityContractForService`
-in `NominalType.hs` receives the checked service) lacks `StructuralNominalLeaves` and any
-declaration contains an `RNominal`, emit `MappedNominalLeafRequiresLanguage` at each field or
-arm location, naming the nominal and stating that candidate Language 6 is required. Render
+thread `EffectiveLanguageContract` from `validateWithAnalysis` into `validateMapped`.
+When it lacks `StructuralNominalLeaves`, inspect structural declarations and direct typed
+queue/query expressions for `RNominal`, emitting `MappedNominalLeafRequiresLanguage` at
+each field, arm, or query-clause location. Existing direct aggregate nominal fields retain
+their current language contract. Render
 `TGUnsupportedNominalLeaf` as `MappedNominalLeafUnsupported` with a message that names the
 category (`enum`). In `typeGraphDiagnostic`, when a
 `TGUnresolvedRef` names a declared but malformed nominal, say so in the message. Set
@@ -496,6 +547,10 @@ expecting `MappedDefaultIllTyped`). Register the negative fixtures in the stable
 diagnostic-code table in `keiro-dsl/test/Main.hs` (around lines 4367 to 4394) and add
 `parse`/`pretty` round-trip and `check --emit` cases for the positive one.
 
+Add queue-only and query-only positive fixtures without mapped declarations, plus
+Language 5 copies expecting `MappedNominalLeafRequiresLanguage`. Repeat the unsupported
+enum case at these roots so both resolution entry points retain the precise diagnostic.
+
 Acceptance: the IR-40 reproduction from the Purpose section prints `OK` at Language 6 and the
 language diagnostic at Language 5; each negative fixture prints exactly its expected code;
 `cabal build all` and `cabal test keiro-dsl:test:keiro-dsl-test` pass; the conformance corpus
@@ -516,9 +571,11 @@ field), and for `ConsumerLeaf` the `haskell` target of the binding. `exprRequire
 the matching `HaskellReference` so `planHaskellImports` (in `HaskellImport.hs`) never reports
 `MissingHaskellReference`. Emit a new generated module per context,
 `<ContextPrefix>.Structural.NominalLeaves` (module-role family `NominalLeaves`, owner kind
-`context`, recorded in the scaffold ledger like `StructuralConformance`), only when
-`nominalReachability` is non-empty. For every nominal name reachable from a structural
-declaration it defines `encode<X>Leaf :: X -> Value` and `parse<X>Leaf :: Value -> Parser X`.
+`context`, recorded in the scaffold ledger like `StructuralConformance`). Emit it when the
+union of nominals reachable from structural declarations and direct queue roots is
+non-empty. Queue-only specs must receive helpers; query-only roots need nominal type
+imports but no JSON helpers. For every name in that union it defines
+`encode<X>Leaf :: X -> Value` and `parse<X>Leaf :: Value -> Parser X`.
 For a generated ID these call the public `parse<X>`/`<x>Text` that
 `emitGeneratedNominalInternals` already exports; for a consumer-bound ID they encode with
 `KindID.toText (nominalToRepresentation <binding> value)` and decode with `withText`,
@@ -543,16 +600,23 @@ records. The workqueue payload codec emitter and the read-model `QueryContract` 
 already obtain their field expressions through these two plans; confirm that a nominal root
 site makes the queue codec import the `NominalLeaves` module and the query aliases import the
 nominal type modules. In `keiro-dsl/src/Keiro/Dsl/SemanticImpact.hs`, include nominal names from
-`nominalReachability` in each consumer's declaration closure, so the ledger's
-`semantic-impact` rows name them and scaffold locality regenerates the `NominalLeaves`
-module and the consumers that reach a changed nominal. In `ExplainBindings.hs`, compute a
+`nominalReachability` and direct root sites in separate nominal closures, identities,
+evidence, and consequences keyed by `Name`. Existing mapped inventories remain keyed by
+real `MappedKey` values. Add `nominalDependencies :: Set Name` to `ConsumerTypePlan` and
+thread context/workspace ownership into generated nominal type/import planning. Persist
+nominal impact as additive fields/rows, treating absent historical nominal evidence as
+unavailable rather than empty. Update service conformance's exact impact inventory and
+derived event-projection consequences. Verify exact locality for queue-only, query-only,
+and shared nominal edits, including unrelated consumer growth, with Plan 228's machinery.
+In `ExplainBindings.hs`, compute a
 nominal's use sites from both the existing aggregate list and `nominalUsePaths`, and keep
 nominal leaves out of `holesFor` (they are checked leaves, not holes). The structural binding
 skeleton from `renderBinding` needs no new fields, but its imports must include the nominal
 types that appear in the shape.
 
 In `keiro-dsl/src/Keiro/Dsl/StructuralConformance.hs`, add nominal-leaf assertions to the
-inventory: for every consumer-bound nominal reachable from a structural declaration, assert
+inventory: for every consumer-bound nominal reached through a structural declaration or
+direct queue/query root, assert
 the two `NominalBinding` laws and the canonical-type equality over its `NominalFixtureCases`
 (reuse the assertion the aggregate harness generates for a direct consumer-bound field; find
 it in `Harness.hs` rather than writing a second law), and for every generated ID leaf assert
@@ -586,14 +650,19 @@ required, with each error message containing the field path; and `holder` distin
 TypeID text and a wrong prefix is rejected at `$.template_id`; the generated `QueryContract`
 aliases are asserted at the type level to equal `TemplateState` and `[TemplateId]`. Add `keiro-dsl/test/structural-nominal-mutation-test.sh`, modelled
 on `keiro-dsl/test/structural-mutation-test.sh`, that rewrites the generated
-`parseTemplateIdLeaf` to accept any text and asserts the suite fails, then restores the file.
+`parseTemplateIdLeaf` to return a known valid fixture ID for any text and asserts the
+negative-admission test fails, then restores the file. The mutation must compile despite
+the generated ID's abstract constructor; a compiler error does not count as falsification.
 
 Acceptance: `cabal test keiro-dsl:test:keiro-dsl-conformance-structural-nominals` passes;
-the mutation script exits non-zero on the mutated tree and zero after restore;
+the mutation script exits zero only after detecting its named failing assertion, restoring
+exact bytes with an EXIT trap, and rerunning the green suite;
 `cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/structural-nominal-leaves.keiro
 --explain-bindings` lists `TemplateState`, `TemplateRef`, `TemplateBook`, `ClaimId`, and
 `AccountNumber` obligations, with `ClaimId`'s use sites including the structural paths and the queue payload row;
 `scripts/check-conformance-corpus.sh` passes from a clean tree.
+The isolated queue-only and query-only fixtures also scaffold and compile, proving that
+the combined fixture is not hiding absent helpers or type imports.
 
 ### Milestone 3: Coverage, semantic diff, and compatibility for nested nominals
 
@@ -610,8 +679,14 @@ payload rows; leave `structuralRoots`, `opaqueRoots`, and
 `jsonBoundaries` semantics unchanged so a root that contains only nominal leaves is a
 structural root with no opaque boundary. Keep the schema tag `keiro-dsl/coverage-report/1`;
 the addition is a new array that old readers ignore. Confirm `snapshotBoundaryInventory`
-picks up the new wire token by diffing `structural-nominal-leaves.keiro` against a
-`-prefix-change` mutant and observing register snapshot invalidation.
+picks up the new wire token. Separately extend
+`keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` with nested nominal runtime binding,
+canonical identity, and representation facts at register/event uses consistently with
+the existing direct-nominal policy. Keep these facts out of the wire-only fingerprint.
+Test `aggregateFoldSurfaceForService` and the generated fingerprint: nested prefix,
+binding-version, and canonical-type edits change the affected snapshot discriminator;
+fixture-only and unrelated nominal edits do not. Snapshot encoding remains consumer JSON
+cache serialization. A report-only snapshot context does not satisfy this acceptance.
 
 In `keiro-dsl/src/Keiro/Dsl/MappedDiff.hs`, give `ExprView` an `ExprNominal !Name` arm; two
 nominal views with equal names are equal, and any other pairing involving a nominal is
@@ -622,11 +697,25 @@ structural use carrying the declaration name and the root path, populate it from
 to a workqueue payload root, `ContextSnapshot` for register roots, and `ContextConsumerBuild`
 for command and read-model query roots, so `IdPrefixChanged`,
 `NominalBindingChanged`, `NominalFixturesChanged`, `NominalCanonicalTypeChanged`,
-`NominalInitialChanged`, `NominalRepresentationChanged`, and `IdDomainContractChanged` carry
-the nested paths in their contexts and `--explain` output. In
-`keiro-dsl/src/Keiro/Dsl/CodecCompare.hs`, add the nominal leaf to the branch schema as a
-scalar leaf with its declared domain, and add an `extra-args` manifest row for the new corpus
-with `--codec-comparison TemplateState` so the comparison module compiles.
+`NominalRepresentationChanged`, and `IdDomainContractChanged` carry
+the nested paths in their contexts and `--explain` output. Also update the producers
+`idPairDiff`, `nominalScalarDiff`, `diffServices.idDomainContractChanges`, and the
+`nominalBindingDeclDiff.includeUse` filters; these do not automatically acquire the
+promised contexts from `nominalUses`. Preserve existing direct-use classifications and
+derive nested contexts and queue rollout facts from the common root authority. Fixture
+changes remain evidence-only. A nominal `initial` symbol is not invoked merely because
+the type occurs within a structural register, whose own initial symbol constructs the
+value; do not claim an initialization change there. Test each producer across event,
+register, queue-only, and query-only uses, keeping query consequences build-only.
+
+In `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, extend `branchSchemaFor`'s expression algebra
+with `onNominal = const BranchScalar`. `CodecCompare.BranchSchema` describes branch
+coverage, not scalar admission; generated leaf parsers own admission. The new corpus's
+`extra-args` row in `keiro-dsl/test/conformance-corpus-manifest.txt` must supply both
+`--codec-comparison TemplateState` and `--comparison-out` with the exact generated
+comparison-module path under its output directory. Execute historical comparison against
+explicit historical goldens and codec functions, asserting parity for valid migration
+samples and rejection of malformed IDs; compilation alone is not parity evidence.
 
 Add mutants beside the fixture: `structural-nominal-leaves-prefix-change.keiro` (`TemplateId`
 prefix becomes `tmpl`), `-binding-change.keiro` (`ClaimId` binding-version `2`),
@@ -680,7 +769,7 @@ Language 6 accepts `id` and `mapped nominal` declarations as structural leaves w
 the coverage report and structural contexts on nominal diff findings. Allocate a new ADR with
 `okf id next docs/adr --profile docs/adr/profile.dhall ADR` titled "Nominal declarations are
 structural leaves with Keiro-owned admission", recording the leaf representation, the domain
-type inside shapes, the wire token, the enum and consumer-root exclusions, and the migration
+type inside shapes, the wire token, the enum exclusion, supported queue/query roots, and the migration
 classification; add a one-line pointer under ADR 12's related decisions with a timestamp
 advance and `okf log add`. Set IR-40's frontmatter `status` to `in-progress` when Milestone 1
 starts and to `completed` with `completedAt` and a `resolution` line when this milestone ends,
@@ -696,15 +785,17 @@ policies, and the conformance-corpus check.
 Run everything from the repository root. The repository's development shell is
 `nix develop`; prefix commands with `nix develop -c` if `cabal` is not already on the path.
 
-Build the CLI and run the reproduction before any change to record the baseline:
+First save the complete Purpose example to
+`keiro-dsl/test/fixtures/mapped-nominal-leaf.keiro`; this is a new fixture. Build the CLI
+and run that reproduction before changing the resolver to record the baseline:
 
 ```bash
 cabal build keiro-dsl:exe:keiro-dsl
 cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/mapped-nominal-leaf.keiro
 ```
 
-Expected before Milestone 1 (the fixture does not exist yet; use the IR-40 reproduction
-saved as a scratch file):
+Expected before Milestone 1: `MappedUnresolvedName`, possibly followed by a cascading
+aggregate diagnostic. The following is illustrative; capture actual locations from the run:
 
 ```text
 nested-id.keiro:13: error[MappedUnresolvedName]: mapped declaration 'TemplateState' references unresolved mapped type 'TemplateId'
@@ -749,16 +840,33 @@ Milestone 3, the strict gate and the diff classifications:
 ```bash
 cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/structural-nominal-leaves.keiro \
   --deny-warnings --coverage-report /tmp/structural-nominal-coverage.json --fail-on-opaque
-cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/structural-nominal-leaves.keiro \
-  keiro-dsl/test/fixtures/structural-nominal-leaves-prefix-change.keiro --explain
 keiro-dsl/test/diff-test.sh
 ```
 
-Expected: the first command exits 0 and prints the coverage summary with
-`private-event-payloads: ... (N structural, 0 opaque, 0 Json boundaries)`; the second lists
-`IdPrefixChanged` with contexts naming `TemplateState` event paths and the `book` register.
-Check the `diff` invocation form against `cabal run -v0 keiro-dsl -- diff --help` and the
-`### diff` section of `docs/user/typed-spec-toolchain.md`, which is authoritative.
+Expected: the check exits 0 with zero opaque persisted roots. The CLI accepts one source
+file and `--since GIT-REF`, not two paths. Exercise each baseline/mutant pair in an isolated
+temporary Git repository, as the integration script does:
+
+```bash
+nominal_dsl_exe="$(cabal list-bin keiro-dsl:exe:keiro-dsl)"
+nominal_diff_dir="$(mktemp -d "${TMPDIR:-/tmp}/keiro-nominal-diff.XXXXXX")"
+cp keiro-dsl/test/fixtures/structural-nominal-leaves.keiro "$nominal_diff_dir/service.keiro"
+git -C "$nominal_diff_dir" init -q
+git -C "$nominal_diff_dir" add service.keiro
+git -C "$nominal_diff_dir" -c user.name=Qualification -c user.email=qualification@example.invalid \
+  -c commit.gpgsign=false commit -qm 'test: establish nominal diff baseline' \
+  -m 'ExecPlan: docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md' \
+  -m 'Intention: intention_01m2p79tjte5ftry3pdmgbqtjw'
+cp keiro-dsl/test/fixtures/structural-nominal-leaves-prefix-change.keiro "$nominal_diff_dir/service.keiro"
+(cd "$nominal_diff_dir" && "$nominal_dsl_exe" diff service.keiro --since HEAD --explain)
+```
+
+The last command is expected to exit non-zero for the breaking prefix change and list
+`IdPrefixChanged` at event and register paths. Keep that expected failure separate from
+success-only shell pipelines. For text-to-nominal and opaque-to-nominal comparisons,
+commit the Text/opaque form as the baseline and copy the nominal form over the same path;
+the migration direction is old Text/opaque to new nominal. Leave the scratch directory
+available for inspection.
 
 Milestone 4, the full gate:
 
@@ -803,6 +911,14 @@ The same fixture's workqueue payload row and read-model query pair check, scaffo
 compile; the queue codec round-trips TypeID text and rejects a wrong prefix at the payload
 path.
 
+Isolated queue-only and query-only specs without mapped declarations check and compile
+under Language 6 and fail the nominal-leaf capability gate under Language 5. Their impact
+inventories retain exact queue/query consequences. The full nominal edit matrix has the
+same generated-file delta after unrelated consumer growth. Nested binding-version and
+canonical-type edits alter the actual affected snapshot fingerprint; fixture-only and
+unrelated edits leave it unchanged. Historical comparison runs with explicit goldens and
+asserts valid-byte parity, rather than merely compiling its module.
+
 `keiro-dsl diff` classifies the prefix, binding-version, text-to-nominal, and
 opaque-to-nominal mutants as described in Milestone 3, with contexts naming the nested paths,
 and the compatibility-vector golden matches.
@@ -817,8 +933,9 @@ two consecutive runs.
 ## Idempotence and Recovery
 
 All fixture, test, documentation, and changelog additions are additive and can be re-applied.
-The corpus driver refuses to run over a dirty corpus directory; discard a broken regeneration
-with `git checkout -- keiro-dsl/test/conformance-structural-nominals` and re-run. Never pass
+The corpus driver refuses to run over a dirty corpus directory. Preserve existing changes
+and compare failed regeneration in a temporary checkout or against a saved baseline before
+retrying; do not discard hand-owned bindings or unrelated edits. Never pass
 a force-overwrite flag to `scaffold` in a corpus directory, and never hand-edit a generated
 module to make regeneration pass; fix the generator or the fixture. `--allow-dirty` is for
 local iteration only.
@@ -826,7 +943,8 @@ local iteration only.
 Because the capability is gated on the unpublished candidate Language 6, no published
 language changes behaviour and no existing generated corpus changes bytes until a fixture
 opts in; if `scripts/check-conformance-corpus.sh` reports drift in a corpus other than the
-new ones, that is a regression to fix, not a golden to accept. Moving
+new or explicitly upgraded workspace-nominal fixtures, that is a regression to fix, not
+a golden to accept. Moving
 `NominalScalarRepresentation` and `ConsumerNominalBinding` between modules is safe as long as
 `NominalType.hs` re-exports them; if an external package imported them from `NominalType`,
 the re-export preserves the import.
@@ -866,6 +984,8 @@ data PathSeg = {- existing segments -} | SegNominal !Name
 data TypeGraphError = {- existing -} | TGUnsupportedNominalLeaf !Name !Name !Text !Loc
 
 data RootRef = {- the root kind, owner, and field identity currently repeated across the UseSite constructors -}
+data UseSite = UseSite { root :: !RootRef, mapped :: !MappedKey }
+data UsePath = UsePath { root :: !RootRef, segments :: ![PathSeg] }
 data NominalRootSite = NominalRootSite { root :: !RootRef, nominal :: !Name, segments :: ![PathSeg] }
 
 checkIdLeaf :: IdDecl -> Either NominalLeafError NominalLeaf
@@ -904,6 +1024,11 @@ introduced.
 
 ## Revision Notes
 
+- 2026-09-17: Correctness review applied. Completed direct queue/query language gates,
+  helper emission, key-free root paths, and nominal impact planning; added real nested
+  binding fingerprint validation and all nominal diff producers. Reused completed Plan
+  228's qualification machinery, clarified Plan 288's dependency, corrected comparison
+  CLI/branch-schema instructions, and made mutation/recovery requirements precise.
 - 2026-09-17: Widened the scope to accept nominal leaves at workqueue payload rows and read-model
   query expressions after verifying that both fail with the same `MappedUnresolvedName` as
   records. Replaced the consumer-root rejection with a nominal root-site inventory (and the

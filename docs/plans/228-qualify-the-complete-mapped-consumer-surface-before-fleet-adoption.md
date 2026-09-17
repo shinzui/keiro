@@ -6,6 +6,13 @@ kind: exec-plan
 created_at: 2026-08-09T20:45:31Z
 intention: "intention_01kzkzswbae5dan7x42gx8fv1c"
 master_plan: "docs/masterplans/35-make-mapped-types-first-class-across-queues-read-models-and-projections-before-fleet-adoption.md"
+provenance:
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-17T13:22:03Z
+      verdict: "changes-requested"
+      note: "Focused suites pass, but two mutation substitutions are stale, failure causes are unchecked, growth matrix is partial, and a documented Cabal target is absent"
 ---
 
 # Qualify the complete mapped consumer surface before fleet adoption
