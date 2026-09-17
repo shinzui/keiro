@@ -26,6 +26,11 @@ provenance:
       at: 2026-09-17T13:54:12Z
       mode: "update"
       note: "Final value and release assessment; prioritize nominal composition and distinguish candidate implementation from production closure"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-17T14:08:31Z
+      mode: "implement"
+      note: "Implementation started; reproduced the nested nominal refusal before resolver changes"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -141,6 +146,10 @@ maps are a separate expansion and should not delay this delivery.
 ## Progress
 
 
+- [x] 2026-09-17: Began implementation, saved the Purpose reproduction as
+      `keiro-dsl/test/fixtures/mapped-nominal-leaf.keiro`, and reproduced
+      `MappedUnresolvedName` at the nested `TemplateId` plus the cascading
+      `AggregateTypeUnknown` before changing the resolver.
 - [x] 2026-09-17: Final value/release assessment; reproduced the current nested-ID refusal and separated feature completion from production-language publication.
 - [x] 2026-09-17: Review graph, generator, diff, fingerprints, and completed Plan 228;
       revise missing paths and validation instructions.

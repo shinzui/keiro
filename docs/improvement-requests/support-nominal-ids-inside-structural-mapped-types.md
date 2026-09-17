@@ -5,9 +5,9 @@ description: >-
   Resolve and lower declared IDs inside structural records, unions, and containers with
   the same nominal identity and checked TypeID contract as direct aggregate fields,
   without requiring an opaque codec or a text-keyed replacement model.
-timestamp: 2026-09-16T23:18:13Z
+timestamp: 2026-09-17T14:08:31Z
 requestId: IR-40
-status: accepted
+status: in-progress
 origin: mori://tan/notification-render-service
 plan: docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md
 reviews:
@@ -50,7 +50,8 @@ reviews:
 
 ## Status
 
-Accepted on 2026-09-16 after in-repository validation and planned as
+Implementation began on 2026-09-17 after the baseline refusal was reproduced at the current
+repository head. The request was accepted on 2026-09-16 after in-repository validation and planned as
 [ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md), which
 adds a nominal leaf to the resolved structural type graph, gates the capability on candidate
 Language 6, generates leaf codecs with Keiro-owned TypeID admission, and extends coverage,

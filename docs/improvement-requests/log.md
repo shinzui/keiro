@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-17
+* **Status**: Implementation began under ExecPlan 287 after reproducing the nested nominal resolver failure.
+
 ## 2026-09-16
 * **Accepted**: IR-40 accepted after in-repository validation and linked to ExecPlan 287, which
 adds nominal leaves to the structural type graph under candidate Language 6.

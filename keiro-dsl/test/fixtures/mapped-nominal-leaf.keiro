@@ -1,0 +1,25 @@
+language keiro-dsl 6
+context nested-id-repro
+
+id TemplateId prefix=template
+
+mapped structural record TemplateState {
+  haskell package=example-core module=Example.Model type=TemplateState
+  binding = "Example.Bindings.templateStateBinding"
+  binding-version = "1"
+  canonical-type = "example.TemplateState.v1"
+  fixtures = "Example.Bindings.templateStateFixtures"
+  wire object constructor=TemplateState unknown-fields=reject {
+    templateId as "templateId" : TemplateId required
+  }
+}
+
+aggregate NotificationType
+  regs
+  states NotCreated Active!
+  command Create { template:TemplateState }
+  event Created = fields(Create)
+  NotCreated -- Create -->
+    emit Created
+    goto Active
+  wire kind=ctorName fields=camelCase schemaVersion=1
