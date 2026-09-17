@@ -128,6 +128,7 @@ isNestedAggregateFoldUse aggregateName UsePath {root, segments} =
     RootWorkqueueField {} -> False
     RootReadModelQueryInput {} -> False
     RootReadModelQueryResult {} -> False
+    RootContractField {} -> False
   where
     isNested (SegDecl {} : _) = True
     isNested _ = False

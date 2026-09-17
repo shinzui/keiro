@@ -119,6 +119,7 @@ conformanceNominalLeaves graph =
               RootWorkqueueField {} -> True
               RootReadModelQueryInput {} -> True
               RootReadModelQueryResult {} -> True
+              RootContractField {} -> True
               RootCommandField {} -> False
               RootEventField {} -> False
               RootRegister {} -> False

@@ -1,0 +1,25 @@
+language keiro-dsl 6
+context contract-declared-id
+
+id TemplateId prefix=template
+
+id ClaimId prefix=claim using {
+  haskell package=keiro-dsl module=Conformance.ContractDeclaredId.Domain type=ClaimId
+  binding = "Conformance.ContractDeclaredId.Bindings.claimIdBinding"
+  binding-version = "1"
+  canonical-type = "conformance.contract-declared-id.ClaimId.v1"
+  fixtures = "Conformance.ContractDeclaredId.Bindings.claimIdFixtures"
+}
+
+contract templates {
+  schemaVersion 1
+  discriminator messageType
+
+  topic templateEvents "templates.events"
+
+  event TemplateClaimed on templateEvents {
+    templateId: typeid "template"
+    claimId: ClaimId
+    legacyTemplateId: typeid "template"
+  }
+}

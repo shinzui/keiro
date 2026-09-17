@@ -78,6 +78,7 @@ frontendProfilesSpec = do
               SeparatedProjectionQueryPolicySyntax -> version 5
               DelegatedInboxSyntax -> version 6
               ProcessReactionSyntax -> version 6
+              ContractDeclaredIdSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -195,7 +196,8 @@ featureCases =
     FeatureCase DeclarativeRouterSelectionSyntax "declarative" declarativeRouterFeatureBody,
     FeatureCase SeparatedProjectionQueryPolicySyntax "freshness" separatedProjectionQueryPolicyBody,
     FeatureCase DelegatedInboxSyntax "idempotence" delegatedInboxFeatureBody,
-    FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody
+    FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody,
+    FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax)
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -265,9 +267,20 @@ featureBody = \case
   SeparatedProjectionQueryPolicySyntax -> separatedProjectionQueryPolicyBody
   DelegatedInboxSyntax -> delegatedInboxFeatureBody
   ProcessReactionSyntax -> processReactionFeatureBody
+  ContractDeclaredIdSyntax ->
+    T.unlines
+      [ "context profile",
+        "id ProfileId prefix=profile",
+        "contract profiles {",
+        "  schemaVersion 1",
+        "  discriminator kind",
+        "  topic events \"profiles.events\"",
+        "  event ProfileChanged on events { profileId: ProfileId }",
+        "}"
+      ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, ContractDeclaredIdSyntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

@@ -1271,6 +1271,7 @@ Contract field types are:
 | Syntax | Generated type |
 | --- | --- |
 | `typeid "prefix"` | `KindID "prefix"` with current TypeID-v7 decoding |
+| `DeclaredId` (Language 6 candidate) | the declared ID's generated or consumer-bound Haskell type, with that declaration's TypeID-v7 admission |
 | `text` | `Text` |
 | `int` | `Int` |
 
@@ -1278,6 +1279,32 @@ Field names are unique within an event and cannot equal the contract
 discriminator. TypeID prefixes follow the same validity rules as shared IDs.
 The generated decoder rejects malformed, non-canonical, non-v7, and
 wrong-prefix values at the field path.
+
+A candidate Language 6 contract may name a top-level `id` declaration directly:
+
+```text
+language keiro-dsl 6
+context templates
+
+id TemplateId prefix=template
+
+contract publicTemplates {
+  schemaVersion 1
+  discriminator messageType
+  topic templateEvents "templates.events"
+
+  event TemplateClaimed on templateEvents {
+    templateId: TemplateId
+  }
+}
+```
+
+This keeps the public field linked to the declaration's prefix and Haskell
+ownership. Only `id` declarations are accepted here; enums, nominal scalars,
+and mapped declarations are rejected. Moving between `typeid "template"` and
+`TemplateId` with the same prefix preserves JSON bytes but requires consumers
+to rebuild for the changed Haskell type. A prefix change remains a breaking
+public-contract change.
 
 Contract fields use the same optional `haskell` selector and `as "wire-key"`
 aliases as aggregate fields. The generated record uses `payloadType` and

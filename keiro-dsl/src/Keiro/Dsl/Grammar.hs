@@ -1032,8 +1032,8 @@ data RouterNode = RouterNode
 
 -- EP-4: the cross-service @contract@ (shared Kafka message schema, define-once).
 
--- | A contract field type: @typeid \"inc\"@, @text@, or @int@.
-data ContractType = CTypeId !Text | CText | CInt
+-- | A contract field type: @typeid \"inc\"@, a declared ID, @text@, or @int@.
+data ContractType = CTypeId !Text | CDeclaredId !Name | CText | CInt
   deriving stock (Eq, Show, Generic)
 
 data ContractField = ContractField

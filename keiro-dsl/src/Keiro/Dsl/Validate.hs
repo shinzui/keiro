@@ -486,6 +486,7 @@ data DiagnosticCode
   | AggregateEventlessStateChange
   | -- ExecPlan 178: language-4 integration contract TypeID admission.
     ContractInvalidTypeIdPrefix
+  | ContractIdUnknown
   | ContractTypeIdDomainChanged
   | -- ExecPlan 180: accepted-but-unenforced spec surfaces.
     PublisherOrderingUnknown
@@ -1391,10 +1392,12 @@ nominalLeafLanguageRules languageContract spec graph
       RootWorkqueueField workqueue field -> "workqueue '" <> workqueue <> "' payload field '" <> field <> "'"
       RootReadModelQueryInput readModel -> "readmodel '" <> readModel <> "' query input"
       RootReadModelQueryResult readModel -> "readmodel '" <> readModel <> "' query result"
+      RootContractField contract event field -> "contract '" <> contract <> "' event '" <> event <> "' field '" <> field <> "'"
     candidateOnlyRoot = \case
       RootWorkqueueField {} -> True
       RootReadModelQueryInput {} -> True
       RootReadModelQueryResult {} -> True
+      RootContractField {} -> True
       RootCommandField {} -> False
       RootEventField {} -> False
       RootRegister {} -> False
@@ -1448,6 +1451,15 @@ rootRefLoc spec = \case
     firstLoc [inputLoc | readModel <- [value | NReadModel value <- (.nodes) spec, (.name) value == readModelName], Just ReadModelQueryTypes {inputLoc} <- [(.queryTypes) readModel]]
   RootReadModelQueryResult readModelName ->
     firstLoc [resultLoc | readModel <- [value | NReadModel value <- (.nodes) spec, (.name) value == readModelName], Just ReadModelQueryTypes {resultLoc} <- [(.queryTypes) readModel]]
+  RootContractField contractName eventName fieldName ->
+    firstLoc
+      [ (.loc) field
+      | contract <- [value | NContract value <- (.nodes) spec, (.name) value == contractName],
+        event <- (.events) contract,
+        (.name) event == eventName,
+        field <- (.fields) event,
+        (.name) field == fieldName
+      ]
   where
     firstLoc = \case
       loc : _ -> loc
@@ -2291,7 +2303,7 @@ validateNode :: EffectiveLanguageContract -> Either (NE.NonEmpty TypeGraphError)
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NAggregate agg) = validateAggregate languageContract typeGraphResult spec agg
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NProcess p) = validateProcess languageContract typeGraphResult spec p
 validateNode languageContract typeGraphResult _supplyAnalysis spec (NRouter router) = validateRouter languageContract typeGraphResult spec router
-validateNode languageContract _typeGraphResult _supplyAnalysis _spec (NContract contract) = validateContract languageContract contract
+validateNode languageContract _typeGraphResult _supplyAnalysis spec (NContract contract) = validateContract languageContract spec contract
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NIntake i) = validateIntake languageContract i ++ intakeCoupling languageContract spec i
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NEmit e) = validateEmit languageContract spec e
 validateNode languageContract _typeGraphResult _supplyAnalysis spec (NPublisher p) = validatePublisher languageContract spec p
@@ -2306,10 +2318,11 @@ validateNode languageContract _typeGraphResult supplyAnalysis spec (NProjectionO
 validateNode _languageContract _typeGraphResult _supplyAnalysis _spec (NWorkflow w) = validateWorkflow w
 validateNode _languageContract _typeGraphResult _supplyAnalysis spec (NOperation o) = validateOperation spec o
 
-validateContract :: EffectiveLanguageContract -> ContractNode -> [Diagnostic]
-validateContract languageContract contract =
+validateContract :: EffectiveLanguageContract -> Spec -> ContractNode -> [Diagnostic]
+validateContract languageContract spec contract =
   emptyContract
     <> typeIdPrefixErrors
+    <> declaredIdErrors
     <> schemaVersionFloor
     <> topicNames
     <> duplicateEvents
@@ -2344,6 +2357,30 @@ validateContract languageContract contract =
         Just _ <- [contractIdDomainContractFor languageContract prefix],
         Just reason <- [TypeID.checkPrefix prefix]
       ]
+    declaredIdErrors =
+      [ mkErr (locLine ((.loc) field)) ContractIdUnknown $
+          "contract '"
+            <> (.name) contract
+            <> "' event '"
+            <> (.name) event
+            <> "' field '"
+            <> (.name) field
+            <> "' names '"
+            <> declaredName
+            <> "', which "
+            <> declaredIdProblem declaredName
+      | event <- (.events) contract,
+        field <- (.fields) event,
+        CDeclaredId declaredName <- [(.valueType) field],
+        all ((/= declaredName) . (.name)) ((.ids) spec)
+      ]
+    declaredIdProblem declaredName
+      | any ((== declaredName) . (.name)) ((.enums) spec) = "is an enum; contract declared-ID fields must name a declared id"
+      | any ((== declaredName) . (.name)) ((.nominalScalars) spec) = "is a nominal scalar; contract declared-ID fields must name a declared id"
+      | any ((== declaredName) . rawMappedName) ((.mapped) spec) = "is a mapped declaration; contract declared-ID fields must name a declared id"
+      | otherwise = "is not a declared id"
+    rawMappedName MappedStructural {msName = name} = name
+    rawMappedName MappedOpaque {moName = name} = name
     schemaVersionFloor =
       [ mkErr (locLine ((.loc) contract)) ContractSchemaVersionBelowMinimum $
           "contract '" <> (.name) contract <> "' schemaVersion must be at least 1"

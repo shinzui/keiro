@@ -1,0 +1,34 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/contract-declared-id.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.ContractDeclaredId.Bindings
+    Generated.ContractDeclaredId.Nominals
+    Generated.ContractDeclaredId.Nominals.Internal
+    Generated.ContractDeclaredId.Structural.NominalLeaves
+    Generated.ContractDeclaredId.StructuralConformance
+    Generated.ContractDeclaredId.Templates.Contract
+
+build-depends:
+    , aeson
+    , base
+    , keiro-core
+    , keiro-dsl
+    , mmzk-typeid
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.ContractDeclaredId.Bindings
+    Conformance.ContractDeclaredId.Domain

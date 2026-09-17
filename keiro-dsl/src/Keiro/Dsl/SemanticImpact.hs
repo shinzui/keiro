@@ -912,6 +912,8 @@ mappedRootFromUseSite site@UseSite {root = RootReadModelQueryResult readModel, m
       useSite = site,
       declaration = declaration
     }
+mappedRootFromUseSite UseSite {root = RootContractField {}} =
+  error "contract declared IDs are nominal roots, never mapped use sites"
 
 eventAuthority :: UsePath -> Maybe Name
 mappedRootFromUsePath :: TypeGraph -> UsePath -> MappedRoot

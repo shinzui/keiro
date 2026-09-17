@@ -1763,6 +1763,10 @@ main = hspec $ do
             "catalog-readmodel-reorder-a.keiro",
             "catalog-readmodel-reorder-b.keiro",
             "contract-v1-compat.keiro",
+            "contract-declared-id-language5.keiro",
+            "contract-declared-id-literal-to-declared.keiro",
+            "contract-declared-id-prefix-change.keiro",
+            "contract-declared-id.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
             "domain-command-outcomes.keiro",
@@ -7113,6 +7117,52 @@ main = hspec $ do
             map (.name) ((.events) c) `shouldBe` ["IncidentTransferNeedDeclared", "TransferReservationAccepted"]
           [] -> expectationFailure "no contract node parsed"
 
+    it "lowers generated and consumer-bound declared IDs from the checked contract graph" $ do
+      sourceText <- readTestText "test/fixtures/contract-declared-id.keiro"
+      parsed <- case parseSource "contract-declared-id.keiro" sourceText of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure)) >> fail "unreachable"
+        Right value -> pure value
+      let service = checkedSource parsed
+          spec = checkedSpec service
+          ctx = defaultContext (spec.context)
+          modules = scaffoldServiceModules ctx service
+          contractModule = generatedTextEndingIn "Templates/Contract.hs" modules
+          leafModule = generatedTextEndingIn "Structural/NominalLeaves.hs" modules
+      validateService service `shouldBe` []
+      contractModule `shouldSatisfy` T.isInfixOf "templateId :: !Nominals.TemplateId"
+      contractModule `shouldSatisfy` T.isInfixOf "claimId :: !ClaimId"
+      contractModule `shouldSatisfy` T.isInfixOf "NominalLeaves.encodeTemplateIdLeaf payload.templateId"
+      contractModule `shouldSatisfy` T.isInfixOf "explicitParseField NominalLeaves.parseClaimIdLeaf o \"claimId\""
+      leafModule `shouldSatisfy` T.isInfixOf "parseTemplateIdLeaf :: Value -> Parser Nominals.TemplateId"
+      leafModule `shouldSatisfy` T.isInfixOf "nominalFromRepresentation Bindings.claimIdBinding"
+      idDomainIdentitiesForService service
+        `shouldContain` [ "id-domain|name=contract:templates.TemplateClaimed.templateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text",
+                          "id-domain|name=contract:templates.TemplateClaimed.claimId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=claim|separator=_|json=canonical-json-text"
+                        ]
+      obligations <- case bindingObligationsForService service of
+        Left failures -> expectationFailure (show failures) >> fail "unreachable"
+        Right values -> pure values
+      [site | obligation <- obligations, (.mappedName) obligation == "ClaimId", site <- (.useSites) obligation]
+        `shouldContain` ["contract templates event TemplateClaimed .claimId : ClaimId"]
+
+    it "rejects non-ID declarations in declared-ID contract fields" $ do
+      let sourceText =
+            T.unlines
+              [ "language keiro-dsl 6",
+                "context contract-declared-id-invalid",
+                "enum Channel { Email=email }",
+                "contract templates {",
+                "  schemaVersion 1",
+                "  discriminator kind",
+                "  topic events \"templates.events\"",
+                "  event TemplateChanged on events { channel: Channel }",
+                "}"
+              ]
+      service <- checkedServiceFromText "contract-declared-id-invalid.keiro" sourceText
+      case [diagnostic | diagnostic <- validateService service, (.code) diagnostic == ContractIdUnknown] of
+        [diagnostic] -> (.message) diagnostic `shouldSatisfy` T.isInfixOf "is an enum; contract declared-ID fields must name a declared id"
+        diagnostics -> expectationFailure ("expected one ContractIdUnknown diagnostic, got " <> show diagnostics)
+
     it "branches contract scaffolding, manifests, and durable identities only for language 4" $ do
       sourceText <- readTestText "test/fixtures/contract-v4.keiro"
       parsed <- case parseSource "contract-v4.keiro" sourceText of
@@ -8645,6 +8695,27 @@ main = hspec $ do
       [(.code) k | Breaking k <- changed] `shouldContain` [ContractFieldChanged]
       added <- diffFixtures "test/fixtures/contract.keiro" "test/fixtures/contract-fieldadd.keiro"
       [(.code) k | Breaking k <- added] `shouldContain` [ContractFieldChanged]
+    it "links declared contract IDs to prefix evolution and keeps equal-prefix literal migration build-only" $ do
+      prefixChanges <-
+        diffFixtures
+          "test/fixtures/contract-declared-id.keiro"
+          "test/fixtures/contract-declared-id-prefix-change.keiro"
+      case [finding | Breaking finding <- prefixChanges, (.code) finding == IdPrefixChanged, (.facet) finding == "nominal-contract"] of
+        [finding] -> do
+          (.subject) finding `shouldBe` "contract templates event TemplateClaimed .templateId"
+          verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
+        findings -> expectationFailure ("expected one public contract prefix finding, got " <> show findings)
+      migrationChanges <-
+        diffFixtures
+          "test/fixtures/contract-declared-id.keiro"
+          "test/fixtures/contract-declared-id-literal-to-declared.keiro"
+      [finding | Breaking finding <- migrationChanges, (.code) finding == ContractFieldChanged] `shouldBe` []
+      case [finding | Advisory finding <- migrationChanges, (.code) finding == ContractFieldChanged] of
+        [finding] -> do
+          (.subject) finding `shouldBe` "TemplateClaimed.templateId"
+          verdictFor PublicConsumer (finding.vector) `shouldBe` VNotApplicable
+          verdictFor ConsumerBuild (finding.vector) `shouldBe` VAdvisory
+        findings -> expectationFailure ("expected one build-only literal migration finding, got " <> show findings)
     it "freezes the contract TypeID diff report byte contract and rollout" $ do
       let source versionNumber prefix =
             T.unlines

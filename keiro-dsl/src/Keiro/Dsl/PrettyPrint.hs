@@ -653,6 +653,7 @@ docContract c =
         <> ":"
         <+> docContractType ((.valueType) f)
     docContractType (CTypeId p) = "typeid" <+> dquoted p
+    docContractType (CDeclaredId name) = pretty name
     docContractType CText = "text"
     docContractType CInt = "int"
 

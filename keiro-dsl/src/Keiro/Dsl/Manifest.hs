@@ -150,10 +150,12 @@ depsForNode service n = case n of
     integration = ["effectful-core", "hasql-transaction", "keiro", "kiroku-store"]
     hasTypedContractId contract =
       or
-        [ contractIdDomainContractFor (checkedLanguageContract service) prefix /= Nothing
+        [ case (.valueType) field of
+            CTypeId prefix -> contractIdDomainContractFor (checkedLanguageContract service) prefix /= Nothing
+            CDeclaredId {} -> True
+            _ -> False
         | event <- (.events) contract,
-          field <- (.fields) event,
-          CTypeId prefix <- [(.valueType) field]
+          field <- (.fields) event
         ]
 
 workqueueDependencies :: WorkqueueNode -> [Text]

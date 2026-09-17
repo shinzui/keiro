@@ -9,7 +9,7 @@ where
 
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (DelegatedInboxSyntax, FieldAliasSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (ContractDeclaredIdSyntax, DelegatedInboxSyntax, FieldAliasSyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
 
@@ -64,7 +64,11 @@ pContract context = do
       choice
         [ CTypeId <$> (keyword "typeid" *> stringLit),
           CText <$ keyword "text",
-          CInt <$ keyword "int"
+          CInt <$ keyword "int",
+          do
+            declaredId <- withOwnedSpan ident
+            requireLanguageFeatureAt context ContractDeclaredIdSyntax (spanOf declaredId)
+            pure (CDeclaredId (locatedValue declaredId))
         ]
 
 pIntake :: FrontendContext -> P IntakeNode

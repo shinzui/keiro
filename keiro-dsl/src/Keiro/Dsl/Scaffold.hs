@@ -1398,7 +1398,7 @@ generatedNominalOwners ctx service = case planNominalGenerationForService ctx se
     languageContract = checkedLanguageContract service
 
 -- | One context-level admission authority for every nominal leaf used by a
--- structural codec or a direct workqueue codec. Read-model query aliases need
+-- structural codec, a direct workqueue codec, or a declared-ID contract field. Read-model query aliases need
 -- only the domain type import and therefore do not cause this JSON helper to be
 -- emitted on their own.
 structuralNominalLeafOwners :: Context -> CheckedService -> TypeGraph -> [(ScaffoldModule, [Name])]
@@ -1423,9 +1423,15 @@ structuralNominalLeafOwners ctx service graph =
         | site <- (.nominalRootSites) graph,
           RootWorkqueueField {} <- [(.root) site]
         ]
+    contractNames =
+      Set.fromList
+        [ (.nominal) site
+        | site <- (.nominalRootSites) graph,
+          RootContractField {} <- [(.root) site]
+        ]
     leaves =
       [ leaf
-      | name <- Set.toAscList (structuralNames <> queueNames),
+      | name <- Set.toAscList (structuralNames <> queueNames <> contractNames),
         Just leaf <- [Map.lookup name ((.nominalLeaves) graph)]
       ]
 
@@ -3359,19 +3365,24 @@ holeModule a body =
 -- compiles standalone — the cross-service schema both producer and consumer agree
 -- on. No keiki symbolic operator (firewall holds).
 scaffoldContract :: Context -> ContractNode -> [ScaffoldModule]
-scaffoldContract ctx = scaffoldContractWithLanguage ctx (effectiveLanguageContract LegacyUnversioned)
+scaffoldContract ctx = scaffoldContractWithLanguage ctx (effectiveLanguageContract LegacyUnversioned) Map.empty
 
 -- | Emit a contract under the checked service's released semantic contract.
 -- Language versions 1 through 3 retain the legacy Text representation; only
 -- runtime semantics 3 lowers declared TypeID fields to prefix-indexed KindIDs.
 scaffoldContractForService :: Context -> CheckedService -> ContractNode -> [ScaffoldModule]
-scaffoldContractForService ctx service = scaffoldContractWithLanguage ctx (checkedLanguageContract service)
+scaffoldContractForService ctx service =
+  scaffoldContractWithLanguage ctx (checkedLanguageContract service) leaves
+  where
+    leaves = case checkedTypeGraph service of
+      Left failures -> error ("checked contract type graph failed during scaffolding: " <> show failures)
+      Right graph -> (.nominalLeaves) graph
 
-scaffoldContractWithLanguage :: Context -> EffectiveLanguageContract -> ContractNode -> [ScaffoldModule]
-scaffoldContractWithLanguage ctx languageContract c =
+scaffoldContractWithLanguage :: Context -> EffectiveLanguageContract -> Map.Map Name NominalLeaf -> ContractNode -> [ScaffoldModule]
+scaffoldContractWithLanguage ctx languageContract nominalLeaves c =
   [ ScaffoldModule
       { path = T.unpack (T.replace "." "/" genPrefix <> "/Contract.hs"),
-        text = emitContractGen languageContract genPrefix c,
+        text = emitContractGen ctx languageContract genPrefix nominalLeaves c,
         kind = Generated,
         origin = nodeOrigin "contract" ((.name) c) ((.loc) c)
       }
@@ -3379,8 +3390,8 @@ scaffoldContractWithLanguage ctx languageContract c =
   where
     genPrefix = genPrefixFor ctx (pascal ((.name) c))
 
-emitContractGen :: EffectiveLanguageContract -> Text -> ContractNode -> Text
-emitContractGen languageContract genPrefix c =
+emitContractGen :: Context -> EffectiveLanguageContract -> Text -> Map.Map Name NominalLeaf -> ContractNode -> Text
+emitContractGen ctx languageContract genPrefix nominalLeaves c =
   ( nl $
       pragmas
         ++ [generatedBanner]
@@ -3395,10 +3406,11 @@ emitContractGen languageContract genPrefix c =
              aesonTypesImport
            ]
         ++ typedKindIdImports
+        ++ T.lines (renderPlannedImports importPlan)
         ++ [ "import Data.Text (Text)",
              "import qualified Data.Text as T"
            ]
-        ++ ["import Keiro.Codec.IdDomain (parseKindIdV7Value)" | hasTypedTypeIds]
+        ++ ["import Keiro.Codec.IdDomain (parseKindIdV7Value)" | hasLiteralTypedTypeIds]
         ++ [ "",
              "-- topic constants"
            ]
@@ -3406,7 +3418,7 @@ emitContractGen languageContract genPrefix c =
         ++ [ "",
              "-- the closed payload set (discriminated by " <> tshow ((.discriminator) c) <> ")"
            ]
-        ++ [emitPayloadAdt languageContract payloadTy ((.events) c)]
+        ++ [emitPayloadAdt languageContract contractValueType payloadTy ((.events) c)]
         ++ [ "",
              "messageTypeOf :: " <> payloadTy <> " -> Text",
              "messageTypeOf = \\case"
@@ -3441,14 +3453,55 @@ emitContractGen languageContract genPrefix c =
   where
     payloadTy = pascal ((.name) c) <> "Payload"
     hasTypedTypeIds = any (any (isTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
+    hasLiteralTypedTypeIds = any (any (isLiteralTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
     usesPlainFieldDecode = any (any (not . isTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
+    moduleName = genPrefix <> ".Contract"
+    declaredLeaves =
+      Map.fromList
+        [ (name, declaredLeaf name)
+        | event <- (.events) c,
+          field <- (.fields) event,
+          CDeclaredId name <- [(.valueType) field]
+        ]
+    importPlan =
+      planImportsOrDie
+        moduleName
+        Set.empty
+        ( Set.fromList
+            [ reference
+            | leaf <- Map.elems declaredLeaves,
+              reference <-
+                [ nominalLeafTypeReference ctx leaf,
+                  declaredLeafHelperReference "encode" leaf,
+                  declaredLeafHelperReference "parse" leaf
+                ]
+            ]
+        )
+    declaredLeaf name = case Map.lookup name nominalLeaves of
+      Just leaf@NominalLeaf {kind = NominalIdLeaf {}} -> leaf
+      _ -> error ("checked contract declared ID is missing from the nominal leaf graph: " <> T.unpack name)
+    declaredLeafHelperReference prefix leaf =
+      HaskellReference
+        (structuralNominalLeavesModule ctx)
+        (prefix <> (.name) leaf <> "Leaf")
+        ValueNamespace
+        RequireQualified
+    renderedDeclaredLeafHelper prefix name =
+      renderReferenceOrDie importPlan (declaredLeafHelperReference prefix (declaredLeaf name))
+    contractValueType CText = "Text"
+    contractValueType CInt = "Int"
+    contractValueType (CTypeId prefix)
+      | isJust (contractIdDomainContractFor languageContract prefix) = "(KindID " <> tshow prefix <> ")"
+      | otherwise = "Text"
+    contractValueType (CDeclaredId name) =
+      renderReferenceOrDie importPlan (nominalLeafTypeReference ctx (declaredLeaf name))
     pragmas =
       renderGeneratedLanguagePragmas
         ( [ExtDuplicateRecordFields | contractNeedsDuplicateRecordFields c]
             <> [ExtOverloadedRecordDot | contractUsesRecordDot c]
         )
     typedKindIdImports
-      | hasTypedTypeIds = ["import Data.KindID (KindID)", "import qualified Data.KindID as KindID"]
+      | hasLiteralTypedTypeIds = ["import Data.KindID (KindID)", "import qualified Data.KindID as KindID"]
       | otherwise = []
     moduleHeader =
       [ "module " <> genPrefix <> ".Contract",
@@ -3469,7 +3522,10 @@ emitContractGen languageContract genPrefix c =
           ]
       | otherwise = [lowerFirst alias <> "Topic :: Text\n" <> lowerFirst alias <> "Topic = " <> tshow topic | (alias, topic) <- (.topics) c]
     isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
+    isTypedTypeId CDeclaredId {} = True
     isTypedTypeId _ = False
+    isLiteralTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
+    isLiteralTypedTypeId _ = False
     aesonTypesImport = "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
     encodeArm e =
       [ "  " <> (.name) e <> " payload ->",
@@ -3505,6 +3561,7 @@ emitContractGen languageContract genPrefix c =
         <> case (.valueType) field of
           CTypeId prefix
             | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> (.selector) identity
+          CDeclaredId name -> renderedDeclaredLeafHelper "encode" name <> " payload." <> (.selector) identity
           _ -> "payload." <> (.selector) identity
       where
         identity = resolveContractFieldIdentity field
@@ -3512,6 +3569,7 @@ emitContractGen languageContract genPrefix c =
       CTypeId prefix
         | isJust (contractIdDomainContractFor languageContract prefix) ->
             "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow wireKey
+      CDeclaredId name -> "explicitParseField " <> renderedDeclaredLeafHelper "parse" name <> " o " <> tshow wireKey
       _ -> "o .: " <> tshow wireKey
       where
         wireKey = (.wireKey) (resolveContractFieldIdentity field)
@@ -3522,18 +3580,14 @@ contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map ((.selec
 contractUsesRecordDot :: ContractNode -> Bool
 contractUsesRecordDot = any (not . null . (.fields)) . (.events)
 
-emitPayloadAdt :: EffectiveLanguageContract -> Text -> [ContractEvent] -> Text
-emitPayloadAdt languageContract tyName events =
+emitPayloadAdt :: EffectiveLanguageContract -> (ContractType -> Text) -> Text -> [ContractEvent] -> Text
+emitPayloadAdt languageContract valueType tyName events =
   sectionsOf [map dataRecord events, [sumDecl]]
   where
     hasTypedTypeIds = any (any (isTypedTypeId . (.valueType)) . (.fields)) events
     isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
+    isTypedTypeId CDeclaredId {} = True
     isTypedTypeId _ = False
-    valueType CText = "Text"
-    valueType CInt = "Int"
-    valueType (CTypeId prefix)
-      | isJust (contractIdDomainContractFor languageContract prefix) = "(KindID " <> tshow prefix <> ")"
-      | otherwise = "Text"
     dataRecord e =
       "data "
         <> (.name) e

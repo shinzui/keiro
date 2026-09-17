@@ -15,6 +15,7 @@ module Keiro.Dsl.IdDomain
   )
 where
 
+import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Codec.IdDomain
@@ -69,6 +70,10 @@ idDomainIdentitiesForService service =
       | NContract contractNode <- (.nodes) spec,
         event <- (.events) contractNode,
         field <- (.fields) event,
-        CTypeId prefix <- [(.valueType) field],
+        Just prefix <- [contractFieldPrefix field],
         Just contract <- [contractIdDomainContractFor languageContract prefix]
       ]
+    contractFieldPrefix field = case (.valueType) field of
+      CTypeId prefix -> Just prefix
+      CDeclaredId name -> (.prefix) <$> find ((== name) . (.name)) ((.ids) spec)
+      _ -> Nothing

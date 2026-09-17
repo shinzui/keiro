@@ -26,6 +26,11 @@ provenance:
       at: 2026-09-17T17:57:28Z
       mode: "update"
       note: "Refresh against completed Plan 287 and start Milestone 1 with landed resolver, default, contract, and router authorities"
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-17T20:25:52Z
+      mode: "implement"
+      note: "Implementing declared contract IDs and continuing Plans 288 milestones 2 through 5"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -115,11 +120,12 @@ that milestone rather than amending the frozen profile.
       delivered. Evidence: commit `74b9206b`; 747 `keiro-dsl-test` examples, the focused
       structural-nominals suite, the shell diff matrix, and all 46 clean-tree corpus
       invocations pass.
-- [ ] M2. Contract event fields accept a declared `id` name under a Language 6 syntax feature,
+- [x] 2026-09-17: M2. Contract event fields accept a declared `id` name under a Language 6 syntax feature,
       lower to the declaration's Haskell type with Keiro admission, and `diff` links a shared
       prefix change to the public contract.
-- [ ] M2. Contract conformance fixtures cover a declared-ID field, a literal-to-declared
-      migration with identical bytes, and a mismatched prefix.
+- [x] 2026-09-17: M2. The candidate-language contract corpus covers generated and
+      consumer-bound declared IDs, byte-identical literal migration, field-local
+      wrong-prefix refusal, and contract-only nominal helper reachability.
 - [ ] M3. Expression paths ending at a nominal leaf type-check as that nominal; equality
       between two paths or a path and an ID literal is checked and projected with the
       existing nominal equality contract.
@@ -180,6 +186,16 @@ that milestone rather than amending the frozen profile.
   expected enums to be unsupported. Replacing it with an explicit `NominalEnumLeaf` kind and
   reachability assertion made the intended resolver contract executable instead of merely
   deleting the old expectation.
+- 2026-09-17 implementation: Contract-only declared IDs exposed two independently owned
+  surfaces. The contract module needs the nominal leaf helpers even when no mapped or
+  aggregate root exists, while compatibility findings need an explicit
+  `RootContractField`; neither falls out of the existing structural-root traversal. Keeping
+  both authorities explicit made the generated imports and public-contract diff vector
+  agree without treating contracts as mapped consumers.
+- 2026-09-17 implementation: The first full M2 unit run found that the generic nominal wire
+  classifier fell back to a build-only vector for `ContextPublicContract`. Adding the public
+  case to prefix, binding, and ID-domain boundary classification produced the intended
+  breaking contract finding while preserving the build-only equal-prefix syntax migration.
 
 
 ## Decision Log

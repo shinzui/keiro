@@ -208,7 +208,7 @@ coverageReportForService specPath service = do
       roots =
         sortOn
           (\root -> ((.path) root, (.consumer) root, (.surface) root))
-          (map (coverageRoot graph) ((.roots) impact) <> map (coverageNominalRoot graph) ((.nominalRootSites) graph))
+          (map (coverageRoot graph) ((.roots) impact) <> map (coverageNominalRoot graph) (filter coverageOwnedNominalRoot ((.nominalRootSites) graph)))
       structural = structuralBoundaryInventory graph
       opaque = opaqueBoundaryInventory graph
       json = sortOn (.path) (jsonBoundaryInventory graph <> queueExplicitJsonBoundaries spec)
@@ -378,6 +378,12 @@ persistedSites = filter (isPersisted . (.root)) . (.useSites)
     isPersisted RootWorkqueueField {} = True
     isPersisted RootReadModelQueryInput {} = False
     isPersisted RootReadModelQueryResult {} = False
+    isPersisted RootContractField {} = False
+
+coverageOwnedNominalRoot :: NominalRootSite -> Bool
+coverageOwnedNominalRoot site = case (.root) site of
+  RootContractField {} -> False
+  _ -> True
 
 coverageRoot :: TypeGraph -> MappedRoot -> CoverageRoot
 coverageRoot graph mappedRoot =
@@ -690,6 +696,7 @@ rootRefSurface RootRegister {} = SnapshotRegister
 rootRefSurface RootWorkqueueField {} = WorkqueuePayload
 rootRefSurface RootReadModelQueryInput {} = ReadModelQueryInput
 rootRefSurface RootReadModelQueryResult {} = ReadModelQueryResult
+rootRefSurface RootContractField {} = error "public contracts have a separately owned coverage surface"
 
 rootKindSurface :: MappedRootKind -> CoverageSurface
 rootKindSurface MappedCommandFieldRoot = AggregateCommandPayload
@@ -711,6 +718,7 @@ isWireSite RootRegister {} = False
 isWireSite RootCommandField {} = False
 isWireSite RootReadModelQueryInput {} = False
 isWireSite RootReadModelQueryResult {} = False
+isWireSite RootContractField {} = False
 
 rootText :: RootRef -> Text
 rootText site = renderUsePath (UsePath site [])
@@ -723,6 +731,7 @@ nominalRootConsumer = \case
   RootWorkqueueField workqueue _ -> "workqueue:" <> workqueue
   RootReadModelQueryInput readModel -> "read-model-query:" <> readModel <> ":input"
   RootReadModelQueryResult readModel -> "read-model-query:" <> readModel <> ":result"
+  RootContractField {} -> error "public contracts have a separately owned coverage surface"
 
 declarationMode :: ResolvedMappedDecl -> CoverageMode
 declarationMode =

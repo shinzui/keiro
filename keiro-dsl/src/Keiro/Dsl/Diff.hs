@@ -62,7 +62,7 @@ import Data.Foldable (traverse_)
 import Data.List (find, nub, sort, sortOn, (\\))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
-import Data.Maybe (isJust, isNothing, mapMaybe, maybeToList)
+import Data.Maybe (fromMaybe, isJust, isNothing, mapMaybe, maybeToList)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -387,6 +387,7 @@ classifyCompatibility context code
   | code == NominalIdDecoderTightened =
       replaceConsumerBuild VAdvisory (advisoryVector PrivateHistoryRead Set.empty)
   | code == ContractTypeIdDomainChanged = contractTypeIdDomainVector
+  | code == ContractFieldChanged && (.contextKind) context == ContextConsumerBuild = mappedBuildVector
   | code == IdDomainContractChanged =
       if (.contextKind) context == ContextGeneral
         then idDomainContractVector
@@ -574,6 +575,7 @@ mappedWireBreakingVector context = case (.contextKind) context of
       (Set.singleton RolloutStopTheWorld)
   ContextSnapshot -> mappedSnapshotVector
   ContextQueue -> queueBreakingVector
+  ContextPublicContract -> publicBreakingVector
   ContextConsumerBuild -> mappedBuildVector
   _ -> mappedBuildVector
 
@@ -613,6 +615,7 @@ mappedBindingVector context = case (.contextKind) context of
   ContextSnapshot ->
     replaceConsumerBuild VAdvisory mappedSnapshotVector
   ContextQueue -> queueBreakingVector
+  ContextPublicContract -> publicBreakingVector
   _ -> mappedBuildVector
 
 mappedSnapshotBuildVector :: ChangeContext -> CompatibilityVector
@@ -625,6 +628,7 @@ idDomainBoundaryVector context = case (.contextKind) context of
   ContextPrivateEvent -> mappedBuildVector
   ContextSnapshot -> replaceConsumerBuild VAdvisory mappedSnapshotVector
   ContextQueue -> queueBreakingVector
+  ContextPublicContract -> publicBreakingVector
   ContextConsumerBuild -> mappedBuildVector
   _ -> mappedBuildVector
 
@@ -841,6 +845,7 @@ diffServices oldService newService = do
           ((.name) newEvent <> "." <> (.name) newField)
           ContractTypeIdDomainChanged
           ( renderContractIdDomainChange
+              (contractTypePrefix newSpec ((.valueType) newField))
               ((.valueType) newField)
               oldContract
               newContract'
@@ -852,8 +857,8 @@ diffServices oldService newService = do
         newField <- (.fields) newEvent,
         Just oldField <- [find ((== (.name) newField) . (.name)) ((.fields) oldEvent)],
         (.valueType) oldField == (.valueType) newField,
-        let oldContract = contractFieldIdDomain (checkedLanguageContract oldService) oldField,
-        let newContract' = contractFieldIdDomain (checkedLanguageContract newService) newField,
+        let oldContract = contractFieldIdDomain oldSpec (checkedLanguageContract oldService) oldField,
+        let newContract' = contractFieldIdDomain newSpec (checkedLanguageContract newService) newField,
         oldContract /= newContract'
       ]
     semanticContractFoldChange (name, oldAggregate) = case lookup name newAggregates of
@@ -879,13 +884,14 @@ renderIdDomainContract Nothing = "legacy-unchecked"
 renderIdDomainContract (Just contract) =
   idDomainVersion contract <> "(prefix=" <> idDomainPrefix contract <> ",json=" <> idDomainJsonRepresentation contract <> ")"
 
-contractFieldIdDomain :: EffectiveLanguageContract -> ContractField -> Maybe IdDomainContract
-contractFieldIdDomain languageContract field = case (.valueType) field of
+contractFieldIdDomain :: Spec -> EffectiveLanguageContract -> ContractField -> Maybe IdDomainContract
+contractFieldIdDomain spec languageContract field = case (.valueType) field of
   CTypeId prefix -> contractIdDomainContractFor languageContract prefix
+  CDeclaredId name -> contractTypePrefix spec (CDeclaredId name) >>= contractIdDomainContractFor languageContract
   _ -> Nothing
 
-renderContractIdDomainChange :: ContractType -> Maybe IdDomainContract -> Maybe IdDomainContract -> Text
-renderContractIdDomainChange valueType oldContract newContract =
+renderContractIdDomainChange :: Maybe Text -> ContractType -> Maybe IdDomainContract -> Maybe IdDomainContract -> Text
+renderContractIdDomainChange resolvedPrefix valueType oldContract newContract =
   "contract TypeID admission changed "
     <> renderIdDomainContract oldContract
     <> " -> "
@@ -894,6 +900,7 @@ renderContractIdDomainChange valueType oldContract newContract =
   where
     prefix = case valueType of
       CTypeId value -> value
+      CDeclaredId _ -> fromMaybe "" resolvedPrefix
       _ -> ""
     representationChange = case (oldContract, newContract) of
       (Nothing, Just _) ->
@@ -1116,6 +1123,7 @@ mappedUseChange finding path =
       RootWorkqueueField workqueue _ -> (workqueue, "mapped-workqueue", ContextQueue)
       RootReadModelQueryInput readModel -> (readModel, "mapped-query-input", ContextConsumerBuild)
       RootReadModelQueryResult readModel -> (readModel, "mapped-query-result", ContextConsumerBuild)
+      RootContractField contract _ _ -> (contract, "mapped-contract", ContextPublicContract)
     context = ChangeContext root [subject] kind (mappedContextHint finding kind)
 
 mappedUseConsequences :: UsePath -> Set MappedConsequence
@@ -1126,6 +1134,7 @@ mappedUseConsequences path = Set.fromList $ case (.root) path of
   RootWorkqueueField workqueue _ -> [MappedConsumerBuild (WorkqueueConsumer workqueue), MappedWorkqueueHistory workqueue]
   RootReadModelQueryInput readModel -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryInput), MappedQueryApi readModel MappedQueryInput]
   RootReadModelQueryResult readModel -> [MappedConsumerBuild (ReadModelQueryConsumer readModel MappedQueryResult), MappedQueryApi readModel MappedQueryResult]
+  RootContractField {} -> []
 
 withMappedConsequences :: Set MappedConsequence -> Change -> Change
 withMappedConsequences consequences = \case
@@ -2497,6 +2506,7 @@ nominalUses oldSpec newSpec target = nub (directUses <> graphUses oldSpec <> gra
         RootWorkqueueField {} -> Just (NominalConsumerRootUse path)
         RootReadModelQueryInput {} -> Just (NominalConsumerRootUse path)
         RootReadModelQueryResult {} -> Just (NominalConsumerRootUse path)
+        RootContractField {} -> Just (NominalConsumerRootUse path)
         RootCommandField {} -> Nothing
         RootEventField {} -> Nothing
         RootRegister {} -> Nothing
@@ -2588,6 +2598,8 @@ nominalUseContext = \case
   NominalStructuralUse declaration path ->
     let (root, facet, kind) = nominalPathContext path
      in (root, facet, renderUsePath path <> " via " <> declaration, kind)
+  NominalConsumerRootUse UsePath {root = RootContractField contract event field} ->
+    (contract, "nominal-contract", "contract " <> contract <> " event " <> event <> " ." <> field, ContextPublicContract)
   NominalConsumerRootUse path ->
     let (root, facet, kind) = nominalPathContext path
      in (root, facet, renderUsePath path, kind)
@@ -2600,6 +2612,7 @@ nominalPathContext path = case (.root) path of
   RootWorkqueueField workqueue _ -> (workqueue, "nominal-workqueue", ContextQueue)
   RootReadModelQueryInput readModel -> (readModel, "nominal-query-input", ContextConsumerBuild)
   RootReadModelQueryResult readModel -> (readModel, "nominal-query-result", ContextConsumerBuild)
+  RootContractField contract _ _ -> (contract, "nominal-contract", ContextPublicContract)
 
 addedEnumDiff :: EnumDecl -> [Change]
 addedEnumDiff enumDecl =
@@ -2673,14 +2686,14 @@ pairDeclarations nameOf oldNodes newNodes =
 
 contractDiff :: DiffEnv -> [Change]
 contractDiff env =
-  concatMap (uncurry contractPairDiff) ((.matched) paired)
+  concatMap (uncurry (contractPairDiff env)) ((.matched) paired)
     ++ concatMap addedContractDiff ((.added) paired)
     ++ concatMap removedContractDiff ((.removed) paired)
   where
     paired = pairByName nodeContract (.name) env
 
-contractPairDiff :: ContractNode -> ContractNode -> [Change]
-contractPairDiff oldContract newContract =
+contractPairDiff :: DiffEnv -> ContractNode -> ContractNode -> [Change]
+contractPairDiff env oldContract newContract =
   schemaChanges
     ++ discriminatorChanges
     ++ topicChanges
@@ -2711,7 +2724,7 @@ contractPairDiff oldContract newContract =
     matchedEvents = (.matched) eventPairs
     addedEvents = (.added) eventPairs
     removedEvents' = (.removed) eventPairs
-    eventPairChanges (oldEvent, newEvent) = contractEventDiff oldContract newContract oldEvent newEvent
+    eventPairChanges (oldEvent, newEvent) = contractEventDiff env oldContract newContract oldEvent newEvent
     addedEventChanges event =
       [additive ((.name) newContract) "contract-event" ((.name) event) ContractEventAdded "new contract event"]
     removedEventChanges event =
@@ -2751,8 +2764,8 @@ contractTopicDiff oldContract newContract =
          isNothing (lookup alias ((.topics) oldContract))
        ]
 
-contractEventDiff :: ContractNode -> ContractNode -> ContractEvent -> ContractEvent -> [Change]
-contractEventDiff oldContract newContract oldEvent newEvent =
+contractEventDiff :: DiffEnv -> ContractNode -> ContractNode -> ContractEvent -> ContractEvent -> [Change]
+contractEventDiff env oldContract newContract oldEvent newEvent =
   topicAliasChange
     ++ removedFieldChanges
     ++ changedFieldChanges
@@ -2775,15 +2788,29 @@ contractEventDiff oldContract newContract oldEvent newEvent =
       | field <- (.removed) fieldPairs
       ]
     changedFieldChanges =
-      [ breaking
-          ((.name) newContract)
-          "contract-field"
-          ((.name) newEvent <> "." <> (.name) newField)
-          ContractFieldChanged
-          ("field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField))
+      [ fieldTypeChange oldField newField
       | (oldField, newField) <- (.matched) fieldPairs,
         (.valueType) oldField /= (.valueType) newField
       ]
+    fieldTypeChange oldField newField
+      | literalDeclaredSamePrefix =
+          advisoryAt
+            (consumerBuildContext ((.name) newContract) [subject])
+            ((.name) newContract)
+            "contract-field"
+            subject
+            ContractFieldChanged
+            (detail <> "; canonical JSON bytes and TypeID admission are unchanged, but generated consumers must rebuild for the declared Haskell type")
+      | otherwise = breaking ((.name) newContract) "contract-field" subject ContractFieldChanged detail
+      where
+        subject = (.name) newEvent <> "." <> (.name) newField
+        detail = "field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField)
+        literalDeclaredSamePrefix =
+          isLiteralDeclaredTransition ((.valueType) oldField) ((.valueType) newField)
+            && contractTypePrefix ((.old) env) ((.valueType) oldField) == contractTypePrefix ((.new) env) ((.valueType) newField)
+    isLiteralDeclaredTransition CTypeId {} CDeclaredId {} = True
+    isLiteralDeclaredTransition CDeclaredId {} CTypeId {} = True
+    isLiteralDeclaredTransition _ _ = False
     selectorFieldChanges =
       [ fieldSelectorChange
           ((.name) newContract)
@@ -2822,8 +2849,14 @@ contractEventDiff oldContract newContract oldEvent newEvent =
 
 renderContractType :: ContractType -> Text
 renderContractType (CTypeId prefix) = "typeid '" <> prefix <> "'"
+renderContractType (CDeclaredId name) = name
 renderContractType CText = "text"
 renderContractType CInt = "int"
+
+contractTypePrefix :: Spec -> ContractType -> Maybe Text
+contractTypePrefix _ (CTypeId prefix) = Just prefix
+contractTypePrefix spec (CDeclaredId name) = (.prefix) <$> find ((== name) . (.name)) ((.ids) spec)
+contractTypePrefix _ _ = Nothing
 
 workqueueDiff :: DiffEnv -> [Change]
 workqueueDiff env =

@@ -457,6 +457,7 @@ data RootRef
   | RootWorkqueueField !Name !Name
   | RootReadModelQueryInput !Name
   | RootReadModelQueryResult !Name
+  | RootContractField !Name !Name !Name
   deriving stock (Eq, Ord, Show, Generic)
 
 data UseSite = UseSite
@@ -836,10 +837,12 @@ data RootReference
 collectUseSites :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> Spec -> [Either TypeGraphError CollectedRoot]
 collectUseSites keyByName nominalByName enumNames spec =
   map Right (concatMap aggregateSites aggregates)
+    <> map Right (concatMap contractSites contracts)
     <> concatMap workqueueSites workqueues
     <> concatMap readModelSites readModels
   where
     aggregates = [aggregate | NAggregate aggregate <- (.nodes) spec]
+    contracts = [contract | NContract contract <- (.nodes) spec]
     workqueues = [workqueue | NWorkqueue workqueue <- (.nodes) spec]
     readModels = [readModel | NReadModel readModel <- (.nodes) spec]
     aggregateSites aggregate =
@@ -865,6 +868,19 @@ collectUseSites keyByName nominalByName enumNames spec =
                ((.valueType) register)
            | register <- (.regs) aggregate
            ]
+
+    contractSites contract =
+      [ CollectedNominal
+          ( NominalRootSite
+              (RootContractField ((.name) contract) ((.name) event) ((.name) field))
+              nominalName
+              []
+          )
+      | event <- (.events) contract,
+        field <- (.fields) event,
+        CDeclaredId nominalName <- [(.valueType) field],
+        Just NominalLeaf {kind = NominalIdLeaf {}} <- [Map.lookup nominalName nominalByName]
+      ]
 
     -- Aggregate validation owns unresolved and enum references.  This graph
     -- projection records only the mapped/nominal roots it can resolve without
@@ -1086,6 +1102,8 @@ renderUsePath (UsePath root segments) = renderRoot root <> T.concat (map renderS
       "readmodel " <> readModel <> " query input"
     renderRoot (RootReadModelQueryResult readModel) =
       "readmodel " <> readModel <> " query result"
+    renderRoot (RootContractField contract event field) =
+      "contract " <> contract <> " event " <> event <> " ." <> field
 
     renderSegment (SegField haskellName wireName)
       | haskellName == wireName = " ." <> haskellName

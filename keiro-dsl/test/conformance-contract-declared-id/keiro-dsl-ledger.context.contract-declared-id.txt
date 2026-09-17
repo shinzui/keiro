@@ -1,0 +1,30 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/contract-declared-id.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context contract-declared-id structural conformance","path":"Generated/ContractDeclaredId/StructuralConformance.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context contract-declared-id generated nominal declarations","path":"Generated/ContractDeclaredId/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context contract-declared-id generated nominal ID internals","path":"Generated/ContractDeclaredId/Nominals/Internal.hs"}
+module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context contract-declared-id structural nominal leaves","path":"Generated/ContractDeclaredId/Structural/NominalLeaves.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.ContractDeclaredId.Bindings","path":"Conformance/ContractDeclaredId/Bindings.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract templates (line 14)","path":"Generated/ContractDeclaredId/Templates/Contract.hs"}
+generated Generated/ContractDeclaredId/StructuralConformance.hs
+generated Generated/ContractDeclaredId/Nominals.hs
+generated Generated/ContractDeclaredId/Nominals/Internal.hs
+generated Generated/ContractDeclaredId/Structural/NominalLeaves.hs
+hole Conformance/ContractDeclaredId/Bindings.hs
+generated Generated/ContractDeclaredId/Templates/Contract.hs
+nominal-mapping {"bindingSymbol":"Conformance.ContractDeclaredId.Bindings.claimIdBinding","bindingVersion":"1","canonicalType":"conformance.contract-declared-id.ClaimId.v1","category":"id","fixtureSymbol":"Conformance.ContractDeclaredId.Bindings.claimIdFixtures","initialSymbol":null,"mode":"nominal","module":"Conformance.ContractDeclaredId.Domain","package":"keiro-dsl","representation":"KindID:claim","schema":1,"specName":"ClaimId","type":"ClaimId"}
+id-domain id-domain|name=TemplateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+id-domain id-domain|name=ClaimId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=claim|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplateClaimed.templateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplateClaimed.claimId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=claim|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplateClaimed.legacyTemplateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=ClaimId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:claim:keiro-dsl/id-domain/typeid-v7/1|owner=consumer;canonical=conformance.contract-declared-id.ClaimId.v1;binding=Conformance.ContractDeclaredId.Bindings.claimIdBinding;binding-version=1
+nominal-equality nominal-equality|name=TemplateId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:template:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+binding {"kind":"binding","mappedName":"ClaimId","module":"Conformance.ContractDeclaredId.Bindings","path":null,"schema":1,"signature":"claimIdBinding :: NominalBinding Conformance.ContractDeclaredId.Domain.ClaimId (KindID \"claim\")","symbol":"claimIdBinding"}
+binding {"kind":"fixtures","mappedName":"ClaimId","module":"Conformance.ContractDeclaredId.Bindings","path":null,"schema":1,"signature":"claimIdFixtures :: NominalFixtureCases Conformance.ContractDeclaredId.Domain.ClaimId","symbol":"claimIdFixtures"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

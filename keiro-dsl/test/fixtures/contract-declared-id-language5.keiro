@@ -1,0 +1,13 @@
+language keiro-dsl 5
+context contract-declared-id-language5
+
+id TemplateId prefix=template
+
+contract templates {
+  schemaVersion 1
+  discriminator messageType
+  topic templateEvents "templates.events"
+  event TemplateClaimed on templateEvents {
+    templateId: TemplateId
+  }
+}
