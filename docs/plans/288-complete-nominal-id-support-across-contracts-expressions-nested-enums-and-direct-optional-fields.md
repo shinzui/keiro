@@ -84,7 +84,14 @@ so the fix here is precise guidance, not a new direct shape.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- 2026-09-17: A Codex correctness review of plan 287 (recorded in its provenance and Surprises
+  sections) found that `Diff.nominalUses` is not the producer of nominal findings:
+  `idPairDiff`, `nominalScalarDiff`, `enumDiff`, and the ID-domain pass in `diffServices`
+  emit declaration findings independently, `UsePath.root` must become a key-free `RootRef`,
+  and nested nominal binding changes need explicit propagation into
+  `Keiro.Dsl.FoldFingerprint` register segments. Every milestone here that promised
+  path-specific contexts "through `nominalUses`" was rewritten to update the producers
+  and the fold fingerprint directly.
 
 
 ## Decision Log
@@ -302,9 +309,15 @@ right module, and the `NominalLeaves` module gains `encode<X>Leaf`/`parse<X>Leaf
 a generated enum delegates to its generated `ToJSON`/`FromJSON` spelling table; a
 consumer-bound enum decodes the representation and applies `nominalFromRepresentation`, and
 encodes with `nominalToRepresentation` then the spelling table. Coverage lists the leaf with
-`kind: enum`. `Diff.nominalUses` already includes structural paths after plan 287; confirm
-that the enum diff codes emitted by `enumDiff` (spelling added, removed, renamed, binding
-changed) receive those contexts and add a mutant to prove it.
+`kind: enum`. In `Diff.hs`, update the enum producer `enumDiff` (spelling added, removed,
+renamed, binding changed) the same way plan 287 updates `idPairDiff` and `nominalScalarDiff`:
+derive nested contexts from the common root authority (`nominalUsePaths` over the key-free
+`RootRef`) rather than from `nominalUses`, keep existing direct-use classifications, and add a
+mutant to prove each context. In `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs`, propagate a
+nested enum leaf's binding, canonical-identity, and spelling facts into the register and
+event segments exactly as plan 287 does for ID and scalar leaves, and test that a spelling
+or binding-version edit changes the affected snapshot discriminator while a fixture-only
+edit does not.
 
 Extend `keiro-dsl/test/fixtures/structural-nominal-leaves.keiro` with a generated
 `enum TemplateKind { Draft=draft Published=published }` and a consumer-bound
@@ -349,10 +362,13 @@ that module from the contract module; the prefix comes from the declaration, so
 `contractIdDomainContractFor` is consulted with it. Contract fields still may not be
 `Optional` or containers.
 
-In `Diff.hs`, extend `nominalUses` with contract uses (contract name, event name, field
-selector and wire key) mapped through `nominalUseChange` to the public-contract context used
-by `contractTypeIdDomainChanges`, so `IdPrefixChanged`, `NominalBindingChanged`, and
-`IdDomainContractChanged` name the contract field. Add a contract field diff classification:
+In `Diff.hs`, add contract roots (contract name, event name, field selector and wire key)
+to the common root authority that plan 287 introduces, and update the producers that emit
+nominal findings, `idPairDiff`, `nominalBindingDeclDiff` and its `includeUse` filters, and
+`diffServices.idDomainContractChanges`, to consult it, so `IdPrefixChanged`,
+`NominalBindingChanged`, and `IdDomainContractChanged` name the contract field under the
+public-contract context used by `contractTypeIdDomainChanges`. Do not route this through
+`nominalUses` alone; plan 287's review established that it is not the producer. Add a contract field diff classification:
 `typeid "p"` to `CDeclaredId X` with `X`'s prefix `p` is a consumer-build change; any other
 change between the four forms is breaking on the public-contract vector. Extend the
 compatibility-vector golden.
@@ -448,8 +464,11 @@ fixture domain values, `compare a b == compare (toText a') (toText b')` where `a
 are the representations from the nominal binding. In `Coverage.hs`, add `position: key` to
 `nominalBoundaries` rows produced from `SegMapKey`. In `MappedDiff.hs`, add
 `ExprKeyedMap !Name !ExprView`; a text-keyed map becoming ID-keyed or the key declaration
-changing is `MappedFieldTypeChanged`; a key ID's prefix or binding change reaches the map's
-paths through `nominalUses` automatically. In `CodecCompare.hs`, add the keyed map to the
+changing is `MappedFieldTypeChanged`. Because the key is recorded as a nominal use at
+`SegMapKey` in the common root authority, the producers plan 287 updates report a key ID's
+prefix, binding, or domain change at the map's paths; add a mutant to prove it rather than
+assuming it. In `FoldFingerprint.hs`, include the key ID's nested facts in register segments
+the same way as value-position leaves. In `CodecCompare.hs`, add the keyed map to the
 branch schema as a map whose key branch carries the ID domain. Expressions, router
 selection, and projection witnesses keep rejecting maps, unchanged.
 
@@ -459,7 +478,10 @@ Extend `structural-nominal-leaves.keiro`: `TemplateBook` gains
 corpus and assert in `Main.hs`: both maps round-trip with canonical TypeID keys; a key with
 the wrong prefix is rejected at `$.by_template.<key>`; a missing `claims` decodes to an empty
 map; the ordering law holds for `ClaimId`'s fixtures, and the mutation script additionally
-flips the consumer `Ord` on `ClaimId` and asserts the suite goes red. Add
+reverses the consumer `Ord` on `ClaimId` and asserts that the named ordering assertion
+fails. As in plan 287, the mutation must compile, the script must detect its named failing
+assertion, restore exact bytes with an EXIT trap, and rerun the green suite; a compiler
+error does not count as falsification. Add
 `structural-nominal-leaves-keyed-map-key-change.keiro` (`Map ClaimId` becomes
 `Map TemplateId`) expecting `MappedFieldTypeChanged`, `mapped-keyed-map-enum-key.keiro`
 (`Map Channel Text`) expecting `MappedNominalLeafUnsupported`, and a Language 5 copy expecting
@@ -525,21 +547,29 @@ cabal test keiro-dsl:test:keiro-dsl-test
 scripts/check-conformance-corpus.sh
 ```
 
-Diff classifications for Milestone 2:
+Diff classifications for Milestones 2 and 4. `keiro-dsl diff` takes one source file and
+`--since GIT-REF`, not two paths, so exercise each baseline/mutant pair in a throwaway Git
+repository, exactly as plan 287's Concrete Steps do:
 
 ```bash
-cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/contract-declared-id.keiro \
-  keiro-dsl/test/fixtures/contract-declared-id-prefix-change.keiro --explain
+dsl_exe="$(cabal list-bin keiro-dsl:exe:keiro-dsl)"
+diff_dir="$(mktemp -d "${TMPDIR:-/tmp}/keiro-nominal-diff.XXXXXX")"
+cp keiro-dsl/test/fixtures/contract-declared-id.keiro "$diff_dir/service.keiro"
+git -C "$diff_dir" init -q && git -C "$diff_dir" add service.keiro
+git -C "$diff_dir" -c user.name=Qualification -c user.email=qualification@example.invalid \
+  -c commit.gpgsign=false commit -qm 'test: establish contract diff baseline'
+cp keiro-dsl/test/fixtures/contract-declared-id-prefix-change.keiro "$diff_dir/service.keiro"
+(cd "$diff_dir" && "$dsl_exe" diff service.keiro --since HEAD --explain)
 ```
 
-Check the `diff` invocation form against `cabal run -v0 keiro-dsl -- diff --help`; the
-`### diff` section of `docs/user/typed-spec-toolchain.md` is authoritative.
-
-Keyed-map classification for Milestone 4:
+The last command exits non-zero for the breaking prefix change and lists `IdPrefixChanged`
+with a public-contract context naming the event and field. Repeat the recipe with
+`structural-nominal-leaves.keiro` as the baseline and
+`structural-nominal-leaves-keyed-map-key-change.keiro` as the mutant, expecting
+`MappedFieldTypeChanged` on the `TemplateBook` paths. The negative keyed-map fixture is a
+plain check:
 
 ```bash
-cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/structural-nominal-leaves.keiro \
-  keiro-dsl/test/fixtures/structural-nominal-leaves-keyed-map-key-change.keiro --explain
 cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/mapped-keyed-map-enum-key.keiro
 ```
 
@@ -660,3 +690,9 @@ symbol used.
   consumer-bound ordering law. Containers inside contract fields remain postponed and are
   captured in `docs/research/15-containers-in-public-contract-fields.md`. The plan title is
   unchanged to keep its path stable.
+- 2026-09-17: Aligned with the Codex correctness review applied to plan 287 the same day.
+  Milestones 1, 2, and 4 now update the nominal diff producers and the fold fingerprint
+  directly instead of assuming `nominalUses` routes contexts; the keyed-map mutation follows
+  plan 287's stricter falsification standard; and the `diff` recipes use the real
+  single-file `--since` form. No provenance entry is added because this session already
+  recorded its revision.
