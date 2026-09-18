@@ -9,16 +9,17 @@ import Codd.Parsing (connStringParser)
 import Codd.Types (ConnectionString, SchemaAlgo (..), SchemaSelection (..), SqlSchema (..), TxnIsolationLvl (..), singleTryPolicy)
 import Contravariant.Extras (contrazip3)
 import Control.Concurrent.Async (concurrently)
-import Control.Exception (finally)
 import Control.Monad (filterM)
 import Data.Attoparsec.Text (endOfInput, parseOnly)
 import Data.Int (Int32)
 import Data.List (isSuffixOf, sort)
+import Data.Monoid (Last (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import EphemeralPg qualified as Pg
+import EphemeralPg.Config qualified as Pg.Config
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -40,27 +41,36 @@ import Keiro.Migrations.LegacyCodd
     verifySchema,
   )
 import Keiro.Migrations.New (migrationFileName, migrationSlug, newMigrationFile)
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory)
 import System.FilePath (takeFileName)
 import System.IO.Temp (withSystemTempDirectory)
+import System.Posix.User (getEffectiveUserID)
 import Test.Hspec
 
 -- | Pin the ephemeral PostgreSQL superuser to the fixed name @keiro@ so the
 -- captured snapshot identity (roles, database owner, per-object owners) is
 -- deterministic across machines and CI rather than the local OS username. This is
 -- the portability fix for the strict drift gate.
-keiroPgConfig :: Pg.Config
-keiroPgConfig = Pg.defaultConfig {Pg.user = "keiro"}
+keiroPgConfig :: IO Pg.Config
+keiroPgConfig = withStableRoot Pg.defaultConfig {Pg.Config.user = "keiro"}
+
+-- | Give @config@ a stable, per-user temporary root, so ephemeral-pg's startup
+-- sweep reclaims clusters abandoned by earlier killed runs instead of searching a
+-- per-session @$TMPDIR@. Must match the root in @Keiro.Test.Postgres@
+-- (keiro-test-support) so every Keiro suite shares it.
+withStableRoot :: Pg.Config -> IO Pg.Config
+withStableRoot config = do
+  uid <- getEffectiveUserID
+  let root = "/tmp/ephpg-keiro-" <> show uid
+  createDirectoryIfMissing True root
+  pure config {Pg.temporaryRoot = Last (Just root)}
 
 -- | Start a cached ephemeral server whose PostgreSQL superuser is the fixed
--- name @keiro@. Mirrors 'Pg.withCached' but pins the user; 'Pg.withCachedConfig'
--- is not exported, so we use 'Pg.startCached' + 'finally'.
+-- name @keiro@. Mirrors 'Pg.withCached' but pins the user.
 withKeiroPg :: (Pg.Database -> IO a) -> IO (Either Pg.StartError a)
 withKeiroPg action = do
-  started <- Pg.startCached keiroPgConfig Pg.defaultCacheConfig
-  case started of
-    Left err -> pure (Left err)
-    Right db -> Right <$> (action db `finally` Pg.stop db)
+  config <- keiroPgConfig
+  Pg.withCachedConfig config Pg.defaultCacheConfig action
 
 main :: IO ()
 main =

@@ -14,6 +14,7 @@ import Data.List (findIndex, sort, (\\))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
+import Data.Monoid (Last (..))
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -29,8 +30,9 @@ import Database.PostgreSQL.Migrate.Internal
     planDescription,
   )
 import Database.PostgreSQL.Migrate.Internal qualified as Migrate.Internal
-import Database.PostgreSQL.Migrate.Test (withMigratedDatabase)
+import Database.PostgreSQL.Migrate.Test (MigratedDatabaseError, withMigratedDatabaseConfig)
 import EphemeralPg qualified as Pg
+import EphemeralPg.Config qualified as Pg.Config
 import Hasql.Connection qualified as Connection
 import Hasql.Connection.Settings qualified as Settings
 import Hasql.Decoders qualified as Decoders
@@ -46,9 +48,10 @@ import Kiroku.Store.Migrations qualified as Kiroku
 import Kiroku.Store.Migrations.History.Codd qualified as Kiroku.Codd
 import Lint
 import Numeric qualified
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, listDirectory)
 import System.Environment (lookupEnv)
 import System.FilePath (takeExtension, (</>))
+import System.Posix.User (getEffectiveUserID)
 import Test.Hspec
 
 main :: IO ()
@@ -1347,12 +1350,32 @@ reportOutcomes MigrationReport {results} = outcome <$> toList results
 importOutcomes :: HistoryImportReport -> [HistoryImportOutcome]
 importOutcomes HistoryImportReport {importResults} = importOutcome <$> toList importResults
 
-keiroPgConfig :: Pg.Config
-keiroPgConfig = Pg.defaultConfig {Pg.user = "keiro"}
+-- | Give @config@ a stable, per-user temporary root, so ephemeral-pg's startup
+-- sweep reclaims clusters abandoned by earlier killed runs instead of searching a
+-- per-session @$TMPDIR@. Must match the root in @Keiro.Test.Postgres@
+-- (keiro-test-support) so every Keiro suite shares it.
+withStableRoot :: Pg.Config -> IO Pg.Config
+withStableRoot config = do
+  uid <- getEffectiveUserID
+  let root = "/tmp/ephpg-keiro-" <> show uid
+  createDirectoryIfMissing True root
+  pure config {Pg.temporaryRoot = Last (Just root)}
+
+keiroPgConfig :: IO Pg.Config
+keiroPgConfig = withStableRoot Pg.defaultConfig {Pg.Config.user = "keiro"}
+
+withMigratedDatabase ::
+  MigrationPlan ->
+  (Connection.Connection -> IO value) ->
+  IO (Either MigratedDatabaseError value)
+withMigratedDatabase plan callback = do
+  config <- withStableRoot Pg.defaultConfig
+  withMigratedDatabaseConfig config defaultRunOptions plan callback
 
 withKeiroPg :: (Pg.Database -> IO ()) -> IO ()
 withKeiroPg action = do
-  started <- Pg.startCached keiroPgConfig Pg.defaultCacheConfig
+  config <- keiroPgConfig
+  started <- Pg.startCached config Pg.defaultCacheConfig
   case started of
     Left startError -> expectationFailure (show startError)
     Right database -> action database `finally` Pg.stop database

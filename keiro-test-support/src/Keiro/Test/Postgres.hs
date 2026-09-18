@@ -39,6 +39,7 @@ where
 import Control.Concurrent.STM (TVar, atomically, newTVarIO, stateTVar)
 import Control.Exception (bracket, onException)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Monoid (Last (..))
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Database.PostgreSQL.Migrate (MigrationComponent, defaultRunOptions, migrationPlan, runMigrationPlan)
@@ -55,6 +56,8 @@ import Kiroku.Store.Effect (Store, runStoreResource)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource, getKirokuStore, withKirokuStore)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Migrations qualified as Kiroku
+import System.Directory (createDirectoryIfMissing)
+import System.Posix.User (getEffectiveUserID)
 
 -- | A running, migrated suite fixture: one cached PostgreSQL server owning a
 -- single migrated template database, plus a counter for unique clone names.
@@ -66,6 +69,24 @@ data Fixture = Fixture
 
 templateDbName :: Text
 templateDbName = "keiro_template"
+
+-- | The ephemeral PostgreSQL configuration for Keiro suites: 'Pg.defaultConfig'
+-- with a stable, per-user temporary root.
+--
+-- ephemeral-pg sweeps clusters abandoned by killed runs on the next startup, but
+-- only inside the configured temporary root. Left unset, the root is @$TMPDIR@,
+-- which @nix develop@ and some CI runners make per-session, so each run sweeps an
+-- empty directory and orphaned postmasters accumulate. A fixed root shared by
+-- every Keiro suite lets any run reclaim what an earlier run left behind. The
+-- effective uid keys the root so a build sandbox running as another user does not
+-- collide with a developer's @0700@ directory. The keiro-migrations test suites
+-- use the same root.
+ephemeralPgConfig :: IO Pg.Config
+ephemeralPgConfig = do
+  uid <- getEffectiveUserID
+  let root = "/tmp/ephpg-keiro-" <> show uid
+  createDirectoryIfMissing True root
+  pure Pg.defaultConfig {Pg.temporaryRoot = Last (Just root)}
 
 -- | Start one cached PostgreSQL server, create a template database, apply the
 -- Kiroku event-store schema and Keiro framework schema to it once, then run
@@ -89,7 +110,8 @@ withMigratedSuite = withMigratedSuiteWith []
 -- @UnknownStoredMigration@.
 withMigratedSuiteWith :: [MigrationComponent] -> (Fixture -> IO a) -> IO a
 withMigratedSuiteWith extraComponents action = do
-  started <- Pg.startCached Pg.defaultConfig Pg.defaultCacheConfig
+  config <- ephemeralPgConfig
+  started <- Pg.startCached config Pg.defaultCacheConfig
   case started of
     Left err -> fail (Text.unpack (Pg.renderStartError err))
     Right server ->

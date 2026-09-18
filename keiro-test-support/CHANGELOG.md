@@ -6,6 +6,14 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+### Other Changes
+
+- Require `ephemeral-pg >=0.3.1 && <0.4`. The suite fixture now starts its
+  server under a stable per-user temporary root, `/tmp/ephpg-keiro-<uid>`,
+  instead of `$TMPDIR`, so ephemeral-pg's startup sweep reclaims PostgreSQL
+  clusters abandoned by earlier killed runs even when `$TMPDIR` is per-session
+  (`nix develop`, some CI runners).
+
 ## 0.17.0.0 — 2026-09-17
 
 ### New Features
