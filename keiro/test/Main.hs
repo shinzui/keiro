@@ -4595,8 +4595,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       _ <- forkIO (runOne firstResult)
       _ <- forkIO (runOne secondResult)
       outcomes <- traverse takeMVar [firstResult, secondResult]
-      let results = [commandResults | Right (Right Reaction.ReactiveProcessManagerResult {commandResults}) <- outcomes]
+      let successful = [result | Right (Right result) <- outcomes]
+          results = [commandResults | Reaction.ReactiveProcessManagerResult {commandResults} <- successful]
       Prelude.length results `shouldBe` 2
+      map (^. #timerEffects) successful `shouldBe` Prelude.replicate 2 (Reaction.ReactionTimerEffects 0 0 0)
       results `shouldSatisfy` \observed ->
         Prelude.length [() | [PMCommandAppended {}] <- observed] == 1
           && Prelude.length [() | [PMCommandDuplicate {}] <- observed] == 1

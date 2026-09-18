@@ -1841,11 +1841,11 @@ guardTighteningDiff env oldAgg newAgg = concatMap classifyFamily (Map.toAscList 
                     Just newGuard -> Just (maybe (complementExpr newGuard) (\oldGuard -> EAnd oldGuard (complementExpr newGuard)) oldUnion)
                 _ -> oldUnion
               twin = replaceTransitionGuardAndMode twinGuard TmReplayOnly (NE.head oldMembers)
-          if coveredByCandidate bodyDelta twin
+          if coveredByCandidate bodyDelta newUnion twin
             then Nothing
             else Just GuardProposal {proposalBody = bodyDelta, proposalTwin = twin}
 
-    coveredByCandidate bodyDelta twin =
+    coveredByCandidate bodyDelta newUnion twin =
       null ((.newValidationErrors) env)
         && any coversBody candidateReplayBodies
       where
@@ -1861,6 +1861,11 @@ guardTighteningDiff env oldAgg newAgg = concatMap classifyFamily (Map.toAscList 
         coversBody transition =
           guardsCanonicalEqual ((.guard) transition) ((.guard) twin)
             || all (\oldGuard -> guardImplies oldGuard ((.guard) transition)) oldAlternatives
+            || all (\oldGuard -> guardImplies oldGuard (unionWith ((.guard) transition))) oldAlternatives
+        unionWith replayGuard = case (newUnion, replayGuard) of
+          (Nothing, _) -> Nothing
+          (_, Nothing) -> Nothing
+          (Just live, Just replay) -> Just (EOr live replay)
 
     renderProposal proposal =
       case Map.lookup (canonicalTransition ((.proposalTwin) proposal)) proposalResults of

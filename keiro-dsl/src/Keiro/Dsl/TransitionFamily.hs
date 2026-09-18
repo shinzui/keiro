@@ -30,6 +30,7 @@ import Keiro.Dsl.Grammar
     ScalarLiteral (..),
     Transition (..),
     TransitionMode (..),
+    complementExpr,
     noLoc,
   )
 
@@ -213,8 +214,15 @@ guardImplies (Just oldGuard) (Just newGuard) = implies oldGuard newGuard
     implies old _ | isFalseExpr old = True
     implies _ new | isTrueExpr new = True
     implies (EAnd left right) new = implies left new || implies right new
+    implies old (EOr (EAnd leftA rightA) (EAnd leftB rightB))
+      | canonicalExpr leftA == canonicalExpr leftB =
+          implies old leftA && implies old (EOr rightA rightB)
+    implies _ (EOr left right) | complementary left right = True
     implies old (EOr left right) = implies old left || implies old right
     implies _ _ = False
+    complementary left right =
+      canonicalExpr (complementExpr left) == canonicalExpr right
+        || canonicalExpr left == canonicalExpr (complementExpr right)
 
 isTrueGuard :: Maybe Expr -> Bool
 isTrueGuard Nothing = True

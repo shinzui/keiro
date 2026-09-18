@@ -78,6 +78,7 @@ for shape in same distinct; do
   done
 done
 assert_count "no-advance probe entries" 0 "$(case_count "$REACTION_LOG" no-advance '' '')"
+assert_count "no-advance timer-phase entries" 0 "$(case_count "$REACTION_LOG" no-advance timer-phase '')"
 
 run_probe keiro-dsl:keiro-dsl-conformance-process-state-authority "$STATE_LOG"
 conflict_hydrates="$(case_count "$STATE_LOG" state-authority-forced-conflict hydrate '"stream":"escalation-inc_01h455vb4pex5vsknk084sn07w"')"

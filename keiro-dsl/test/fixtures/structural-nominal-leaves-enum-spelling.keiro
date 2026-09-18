@@ -76,15 +76,23 @@ mapped structural record TemplateBook {
 aggregate TemplateCatalog
   regs
     book TemplateBook = initial
-  states Empty Recorded!
+    activeTemplateId TemplateId = placeholder
+  states Empty Recorded Routed!
 
   command RecordTemplate { state:TemplateState reference:TemplateRef book:TemplateBook }
+  command RouteTemplate { templateId:TemplateId claimId:ClaimId }
   event TemplateRecorded = fields(RecordTemplate)
+  event TemplateRouted = fields(RouteTemplate)
 
   Empty -- RecordTemplate -->
+    guard cmd.state.templateId == reg.activeTemplateId
     write book := cmd.book
     emit TemplateRecorded
     goto Recorded
+
+  Recorded -- RouteTemplate -->
+    emit TemplateRouted
+    goto Routed
 
   wire kind=ctorName fields=camelCase schemaVersion=1
   snapshot every 1

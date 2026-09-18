@@ -47,6 +47,7 @@ import Data.ByteString.Lazy.Char8 qualified as LazyByteString
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as ByteString.Char8
 import Data.Coerce (coerce)
+import Data.List qualified as List
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as Text
@@ -485,8 +486,38 @@ runReactiveProcessManagerWorker =
   runReactiveProcessManagerWorkerWith defaultWorkerOptions
 
 -- | Execute just the timer subsequence in one transaction.
-runTimerPhase :: (Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
-runTimerPhase followUps = runTransaction (runTimerPhaseTx followUps)
+runTimerPhase :: (IOE :> es, Store :> es) => [FollowUp targetCi] -> Eff es ReactionTimerEffects
+runTimerPhase followUps
+  | List.null timerFollowUps = pure zeroTimerEffects
+  | otherwise = do
+      emitTimerPhaseProbe (List.length timerFollowUps)
+      runTransaction (runTimerPhaseTx followUps)
+  where
+    timerFollowUps = List.filter isTimerFollowUp followUps
+    isTimerFollowUp FollowSchedule {} = True
+    isTimerFollowUp FollowCancel {} = True
+    isTimerFollowUp FollowDispatch {} = False
+
+#ifdef KEIRO_REACTION_HYDRATION_PROBE
+emitTimerPhaseProbe :: (IOE :> es) => Int -> Eff es ()
+emitTimerPhaseProbe statementCount =
+  liftIO
+    ( ByteString.Char8.hPutStrLn stderr
+        ( LazyByteString.toStrict
+            ( Aeson.encode
+                ( Aeson.object
+                    [ "marker" Aeson..= ("reaction-probe" :: Text.Text),
+                      "operation" Aeson..= ("timer-phase" :: Text.Text),
+                      "statements" Aeson..= statementCount
+                    ]
+                )
+            )
+        )
+    )
+#else
+emitTimerPhaseProbe :: Int -> Eff es ()
+emitTimerPhaseProbe _ = pure ()
+#endif
 
 runTimerPhaseTx :: [FollowUp targetCi] -> Tx.Transaction ReactionTimerEffects
 runTimerPhaseTx = foldM step zeroTimerEffects

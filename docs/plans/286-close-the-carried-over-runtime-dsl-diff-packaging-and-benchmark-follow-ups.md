@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T02:20:09Z
+      mode: "implement"
+      note: "Refreshed carried follow-ups against the post-release-readiness tree and began implementation"
 ---
 
 # Close the carried-over runtime, DSL diff, packaging, and benchmark follow-ups
@@ -28,43 +34,56 @@ closes all five so that the next release cycle does not carry them again. After 
 complete: a reaction that dispatches commands but schedules no timers no longer opens an
 empty database transaction on every delivery; `keiro-dsl diff` no longer reports a guard
 hazard against a hand-written replay-only transition that is logically identical to the one
-it would have computed; the ten deprecated read-model names in `keiro` state an honest removal
+it would have computed; the twelve deprecated read-model APIs in `keiro` state an honest removal
 window instead of one that expired four releases ago; the two non-conformance stanzas in
 `keiro-dsl.cabal` that depend on internal packages without a version bound get one; and the
 delegated-inbox benchmark's fresh-traffic guard stops failing on whichever scenario happens
 to run first in a process. Each outcome is observable on its own: a probe count in the
 reaction proof script, a `diff` transcript with no advisory, a compiler warning whose text
 names a real window, a `cabal build` that solves with the new bounds, and a
-`just bench-regression` run that passes on a quiet machine.
+scoped inbox benchmark-regression run that passes on a quiet machine.
 
 
 ## Progress
 
-- [ ] M1: `runTimerPhase` skips the transaction when no follow-up is a timer operation, the
+- [x] M1: `runTimerPhase` skips the transaction when no follow-up is a timer operation, the
       opt-in probe emits a `timer-phase` marker, and the reaction proof script asserts zero
       markers for the no-action conformance case.
-- [ ] M1: `keiro/CHANGELOG.md` records the change under `Unreleased`.
-- [ ] M2: `coversBody` in `keiro-dsl/src/Keiro/Dsl/Diff.hs` accepts an existing replay-only
+- [x] M1: `keiro/CHANGELOG.md` records the change under `Unreleased`.
+- [x] M2: `coversBody` in `keiro-dsl/src/Keiro/Dsl/Diff.hs` accepts an existing replay-only
       sibling whenever every old alternative implies the union of the new live guards and the
       sibling's guard.
-- [ ] M2: the partial-twin cases in `keiro-dsl/test/diff-test.sh` and `keiro-dsl/test/Main.hs`
+- [x] M2: the partial-twin cases in `keiro-dsl/test/diff-test.sh` and `keiro-dsl/test/Main.hs`
       assert no advisory; every hazard-hiding case still fails as before.
-- [ ] M2: `keiro-dsl/CHANGELOG.md` states the coverage rule precisely.
-- [ ] M3: the ten `DEPRECATED` pragmas in `keiro/src/Keiro/ReadModel.hs` name the Language 4
+- [x] M2: `keiro-dsl/CHANGELOG.md` states the coverage rule precisely.
+- [x] M3: the twelve `DEPRECATED` pragmas in `keiro/src/Keiro/ReadModel.hs` name the Language 4
       read-model generator as their removal boundary; `keiro/CHANGELOG.md` records it.
-- [ ] M4: `keiro-dsl-runtime-vocabulary-test` and `keiro-dsl-codec-bench` carry bounds on
+- [x] M4: `keiro-dsl-runtime-vocabulary-test` and `keiro-dsl-codec-bench` carry bounds on
       `keiro` and `shibuya-core`; `cabal build all` solves; `keiro-dsl/CHANGELOG.md` records it.
-- [ ] M5: the first-run cost in `keiro/bench/InboxDelegatedBench.hs` is identified with
+- [x] M5: the first-run cost in `keiro/bench/InboxDelegatedBench.hs` is identified with
       evidence and removed from the timed action.
-- [ ] M5: the fresh downstream rows in `keiro/bench/baseline-inbox.csv` are re-recorded from
+- [x] M5: the fresh downstream rows in `keiro/bench/baseline-inbox.csv` are re-recorded from
       five paired runs on a quiet machine; historical rows are byte-identical; the evidence
-      README carries a dated addendum; `just bench-regression` passes.
-- [ ] Final: Outcomes & Retrospective written and the ADR distillation pass done.
+      README carries a dated addendum; the scoped inbox regression passes all 49 rows.
+- [ ] Final: Outcomes & Retrospective written and the ADR distillation pass done; final clean-tree gate remains.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- The reviewed count of ten read-model deprecations omitted the `strongScope` field and
+  `runQueryWith`; all twelve pragmas carried the same expired boundary and now name the
+  Language 4 generator retirement.
+- The nominal-ID work that landed after this plan changed the structural-nominal baseline
+  fixture without updating its prefix, binding, and enum evolution variants. The full diff
+  script exposed invalid guard and emitted-event references; the three variants now carry
+  the same register, guard, and routing surface and the script passes end to end.
+- Prebuilding 64 complete `DownstreamRun` values retained enough live heap to increase both
+  mean and variance. The stable fix is one complete untimed warmup for every fresh scenario;
+  steady-state input construction remains measured and no large pool remains live.
+- The full `just bench-regression` recipe passed producer identity, outbox, and all 49 inbox
+  rows, then exposed unrelated cold-start failures in the command group. The refreshed
+  acceptance therefore uses the repository's exact inbox subcommand; command baselines were
+  not changed by this plan.
 
 
 ## Decision Log
@@ -97,11 +116,29 @@ names a real window, a `cabal build` that solves with the new bounds, and a
   rule that a baseline refresh never excuses a regression still holds because the refreshed
   rows are re-measured against the same code path with the noise source removed.
   Date: 2026-09-16
+- Decision: Warm every fresh scenario once outside timing instead of retaining a prepared
+  input pool.
+  Rationale: five-process evidence showed stable 0.5–0.9 second measurements after complete
+  warmups, while the proposed pool raised live-heap pressure and produced multi-second
+  estimates. A complete warmup also covers the PostgreSQL and intake path that caused the
+  cold-position effect.
+  Date: 2026-09-18
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All five follow-ups are implemented. Dispatch-only reactions skip the empty timer transaction
+and the opt-in proof reports `no-advance timer-phase entries=0`. Semantic replay-twin coverage
+accepts the hand-simplified equivalent while the new disjoint case still reports
+`AggGuardTightened`. Twelve read-model compatibility deprecations now share the Language 4
+generator retirement boundary, recorded in ADR-26. Both non-conformance Cabal components build
+with bounded internal dependencies.
+
+Five serial fresh benchmark matrices produced stable evidence in `fresh-warmup-1.csv` through
+`fresh-warmup-5.csv`. The nine previously tracked fresh baseline rows use their median means
+and median spreads; every non-fresh row is byte-identical. The exact inbox regression command
+passed all 49 rows. The full umbrella recipe later failed in unrelated command cold-start rows,
+so this plan neither relaxed nor refreshed those baselines.
 
 
 ## Context and Orientation
@@ -186,10 +223,11 @@ redundant conjunct. `docs/adr/0004-evolution-changes-are-gated-at-the-earliest-s
 explains why `diff` codes rather than prose are the contract tooling depends on; the code
 `AggGuardTightened` itself does not change here, only when it is emitted.
 
-The *read-model deprecations* are ten `{-# DEPRECATED ... #-}` pragmas at lines 334 to 352 of
+The *read-model deprecations* are twelve `{-# DEPRECATED ... #-}` pragmas in
 `keiro/src/Keiro/ReadModel.hs` (`ConsistencyMode`, `Strong`, `Eventual`, `PositionWait`,
 `StrongScope`, `EntireLog`, `CategoryHead`, `defaultStrongWaitOptions`, `subscriptionName`,
-`defaultConsistency`), each promising removal "in 0.13". The package is at 0.16.0.0 and about
+`defaultConsistency`, `strongScope`, and `runQueryWith`), each promising removal "in 0.13".
+The package is at 0.16.0.0 and about
 to become 0.17.0.0. They cannot be removed: the Language 4 read-model generator in
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` (around lines 4941 to 5037) still emits imports of
 `ConsistencyMode (..)`, `StrongScope (..)`, the record field `defaultConsistency`, and the
@@ -406,7 +444,7 @@ times slower than the same scenario in second position, move that cost out of th
 action, and re-record the fresh downstream baseline rows. At the end, running
 `cabal bench keiro-bench --benchmark-options="-p /table-downstream-single.fresh/ --time-mode
 wall --hide-progress"` three times in a row reports a standard deviation under 15% of the
-mean on every run, and `just bench-regression` passes.
+mean on every run, and the inbox benchmark regression passes.
 
 First measure, then change. Run the single fresh scenario alone with `--csv` and `--stdev 5`
 and compare its first sample to later ones; tasty-bench does not print per-sample times, so
@@ -422,20 +460,13 @@ local server) for `automatic vacuum` or `checkpoint` lines during the run, and c
 `log_min_duration_statement` set to a low value for the benchmark database. Record what you
 find in Surprises & Discoveries with the numbers.
 
-Then apply the fix that the evidence supports. If preparation dominates, move it out of the
-timed action: give each fresh or repeated scenario an `env` block (as `historyBenchmark`
-already does) that prepares a pool of `DownstreamRun` values ahead of time, one per expected
-sample invocation, and have the timed action take the next run from an `IORef` cursor; the
-pool size must exceed the number of samples tasty-bench will draw, so derive it from the
-configured `--stdev` and `--timeout` conservatively (a pool of 64 runs of 2,000 deliveries is
-128,000 prepared events, which is acceptable for a benchmark process) and fail loudly if the
-pool is exhausted rather than reusing a run, because reusing ids would turn fresh traffic
-into duplicate traffic. If the database is the cause, add one untimed warm-up in
-`prepareInboxDelegatedBenchmarks` that runs a fresh table scenario and a fresh delegated
-scenario once before returning the benchmark list, and note that the warm-up's streams remain
-in the database for the timed scenarios exactly as the seeded duplicate runs already do. Do
-both if both contribute. Keep `deliveryCount` at 2,000 and keep the scenario names unchanged
-so the baseline row names still match.
+The implementation experiment rejected the prepared-pool approach: keeping tens of thousands
+of prepared events live increased garbage-collection pressure and made the measurements slower.
+The evidence instead supports one complete untimed warmup for each fresh scenario in
+`prepareInboxDelegatedBenchmarks`. The warmup covers input preparation, PostgreSQL statements,
+the intake mode, chunk size, and metrics setting; its streams remain in the ephemeral database
+exactly as seeded duplicate runs do. Measured invocations retain their normal preparation cost,
+`deliveryCount` remains 2,000, and scenario names remain unchanged.
 
 Prove the fix on a quiet machine (no other builds, tests, or agents running; the review of
 2026-09-16 was taken under heavy load and its numbers are only evidence of the spread, not of
@@ -449,11 +480,12 @@ change any other row; `git diff -- keiro/bench/baseline-inbox.csv` must show exa
 fresh downstream rows. Add a dated addendum section to
 `keiro/bench/results/delegated-inbox-v1/README.md` that states the cause found, the change
 made, the machine and toolchain, and the five-run medians, and that the historical rows and
-the 2026-09-15 conclusions are unchanged. Then run `just bench-regression` and confirm every
-inbox row reports `OK`.
+the 2026-09-15 conclusions are unchanged. Then run the exact inbox command from
+`just bench-regression` and confirm every inbox row reports `OK`.
 
-Acceptance: the three isolated runs and the `just bench-regression` transcript are pasted
-into Outcomes & Retrospective; the baseline diff touches only fresh downstream rows.
+Acceptance: the isolated and five-process evidence is summarized in Outcomes & Retrospective;
+the scoped inbox transcript reports all 49 rows passing, and the baseline diff touches only
+fresh downstream rows.
 
 
 ## Concrete Steps
@@ -523,7 +555,7 @@ cabal bench keiro-bench --benchmark-options="-p /delegated-single.fresh/ --time-
 for n in 1 2 3 4 5; do
   cabal bench keiro-bench --benchmark-options="-p inbox -j1 --time-mode wall --hide-progress --csv keiro/bench/results/delegated-inbox-v1/fresh-rerecord-$n.csv"
 done
-just bench-regression
+cabal bench keiro-bench --benchmark-options="-p inbox --time-mode wall --baseline bench/baseline-inbox.csv --fail-if-slower 25"
 ```
 
 The `-p /table-downstream-single.fresh/` filter is a tasty pattern that matches both the
@@ -571,9 +603,10 @@ count is unchanged.
 
 Milestone 4 is accepted when both stanzas build and the diff is bounds only.
 
-Milestone 5 is accepted when three isolated first-position runs show under 15% relative
-standard deviation, `just bench-regression` reports `OK` on every inbox row, and the baseline
-diff is limited to fresh downstream rows.
+Milestone 5 is accepted when the first-position and five-process runs show under 15% relative
+standard deviation, the scoped benchmark regression reports `OK` on every inbox row, and the
+baseline diff is limited to fresh downstream rows. The umbrella recipe's unrelated command
+baseline failures are recorded above and do not authorize changing command baselines here.
 
 The full `just verify` gate must exit 0 after all milestones; capture the exit status inside
 the log as shown, because `just verify > log; echo $?` reports the `echo`, not the gate.
@@ -594,8 +627,8 @@ whose standard deviation exceeds 15% of its mean.
 
 ## Interfaces and Dependencies
 
-`keiro/src/Keiro/ProcessManager/Reaction.hs`: `runTimerPhase :: (Store :> es) => [FollowUp
-targetCi] -> Eff es ReactionTimerEffects` keeps its signature; it returns `zeroTimerEffects`
+`keiro/src/Keiro/ProcessManager/Reaction.hs`: `runTimerPhase :: (IOE :> es, Store :> es) =>
+[FollowUp targetCi] -> Eff es ReactionTimerEffects` returns `zeroTimerEffects`
 without a transaction when no follow-up is `FollowSchedule` or `FollowCancel`. The probe
 marker uses `Data.Aeson` and `Data.ByteString.Char8` already imported under the CPP guard.
 

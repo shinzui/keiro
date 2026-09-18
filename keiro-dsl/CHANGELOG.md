@@ -113,12 +113,14 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   body after exact cancellation. Split and merged alternatives, duplicate
   removal, and cancelled covering siblings no longer produce false history
   advisories; removed emitting bodies receive the same mechanical remedy.
-- Existing replay-only coverage is currently syntactic: it must match the same
-  replay body and its guard must be byte-canonically equal to the removed
-  region, or every old alternative must imply the sibling guard alone. A
-  hand-simplified but logically identical twin can therefore draw an
-  `AggGuardTightened` advisory that 0.16 did not emit; stale or partial siblings
-  no longer hide a later hazard.
+- Existing replay-only coverage must match the same replay body and is accepted
+  when its guard is byte-canonically equal to the removed region, every old
+  alternative implies the sibling alone, or every old alternative implies the
+  union of the new live guards and the sibling. Shapes outside the deliberately
+  small implication fragment remain conservative; stale or partial siblings do
+  not hide a later hazard.
+- The runtime-vocabulary test and structural-codec benchmark now bound their
+  internal `keiro` and `shibuya-core` dependencies.
 - Diff now inserts every proposed twin into a copied candidate and proves its
   effective-language render, parse, replay identity, cleared outcome, and
   validation before printing it. Failed proofs emit the append-only

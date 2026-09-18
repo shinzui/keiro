@@ -273,9 +273,11 @@ dedup rows are not completion evidence.
   one binding.
 - Existing `InlineProjection`, `AsyncProjection`, and `ReadModel` values remain
   source-compatible through 0.12. New read models use the truthful freshness/cursor
-  façade; the legacy `Strong`, `Eventual`, `PositionWait`, and direct waiting fields are
-  deprecated for removal in 0.13. Explicit unmanaged wrappers label callers that have
-  not adopted catalog validation; they do not make a legacy list safe by naming it.
+  façade. The legacy consistency constructors, direct waiting fields, defaults, and
+  `runQueryWith` remain deprecated compatibility APIs until the frozen Language 4
+  read-model generator is retired; removing them requires a later major release.
+  Explicit unmanaged wrappers label callers that have not adopted catalog validation;
+  they do not make a legacy list safe by naming it.
 - One physical table has one projection owner. Several ordered handlers can be
   composed under that one owner, but two independent projection identities
   cannot both claim the table.

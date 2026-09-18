@@ -195,6 +195,12 @@ test-suites alone, though: those stanzas are unbounded for *all* internal deps
 (`keiro`, `keiro-pgmq`, `keiro-dsl` too), so bounding only `keiro-core` there
 would be arbitrary churn.
 
+Apply the same rule to every non-conformance stanza and every internal package,
+including test suites and benchmarks. In particular,
+`keiro-dsl-runtime-vocabulary-test` bounds both `keiro` and `shibuya-core`, and
+`keiro-dsl-codec-bench` bounds `keiro`; keep those bounds aligned with the
+released internal version and the independently verified `shibuya-core` release.
+
 #### Re-exports
 If `keiro-core` gained a **public module this cycle that generated code
 imports**, check whether `keiro` needs to re-export it:

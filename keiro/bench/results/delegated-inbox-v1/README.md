@@ -38,6 +38,26 @@ The earlier `wrapper-*.csv` paired runs are retained but excluded: whichever
 fresh benchmark ran second inherited thousands of streams from the first and
 was consistently slower.
 
+## 2026-09-18 cold-start correction
+
+The original fresh rows included each scenario's first complete intake run in
+the measured samples. That cold run dominated the estimate and produced a
+two-standard-deviation spread close to the mean. The benchmark now executes one
+fresh run for every mode, chunk size, and metrics setting while constructing the
+benchmark tree, before `tasty-bench` starts timing. The measured operation keeps
+the same per-invocation record and prepared-event construction, unique stream
+identities, 2,000 deliveries, and database path; only the one-time cold database
+and runtime path is outside the timed action.
+
+Five serial wall-time process runs produced the refreshed `fresh-warmup-1.csv`
+through `fresh-warmup-5.csv` evidence. The committed baseline uses the median
+mean and median two-standard-deviation value for each of the nine fresh rows it
+already tracked; the evidence covers all fourteen fresh variants. The
+single-delivery medians are 718.7 ms table, 551.1 ms delegated, and
+562.0 ms direct delegated with metrics off. Their five-run mean ranges are
+655.2–743.0 ms, 534.9–582.7 ms, and 534.0–652.9 ms respectively. Historical,
+repeated-key, duplicate, and history-depth baseline rows were left byte-identical.
+
 ## Stream-length evidence
 
 Confirmed duplicate time is flat across target histories:
@@ -64,11 +84,12 @@ on a confirmed duplicate.
   fixture settings and connection pool.
 - Built with Cabal's `-O1` benchmark profile and measured in wall-time mode with
   `+RTS -T`; runs were serial (`-j1` behavior).
-- Fixture creation, schema migration, duplicate/history prepopulation, and the
-  100,000-event history build occur outside the timed benchmark operation.
-  Fresh/repeated scenario record construction and prepared-event construction
-  remain inside the timed action because `tasty-bench` has no per-sample setup
-  hook; their cost is identical input setup for the compared modes.
+- Fixture creation, schema migration, duplicate/history prepopulation, the
+  100,000-event history build, and one complete fresh warmup for every scenario
+  occur outside the timed benchmark operation. Fresh/repeated scenario record
+  construction and prepared-event construction remain inside each measured
+  invocation because `tasty-bench` has no per-sample setup hook; their cost is
+  identical input setup for the compared modes.
 - RTS peak residency is process-wide rather than attributable per benchmark. It
   ranged from 97 to 106 MiB and did not grow with history length. Allocation per
   delivery is the stable scenario-level memory comparison.

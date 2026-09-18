@@ -113,6 +113,7 @@ prepareInboxDelegatedBenchmarks :: Store.KirokuStore -> KeiroMetrics -> IO [Benc
 prepareInboxDelegatedBenchmarks store metrics = do
   runStoreChecked store $ Store.runTransaction (Tx.sql businessTableSql)
   scenarios <- concat <$> traverse (prepareScenario store metrics) scenarioInputs
+  traverse_ (runScenario store) [scenario | scenario <- scenarios, scenario.traffic == FreshTraffic]
   pure
     ( [ bgroup
           (Text.unpack scenario.name)

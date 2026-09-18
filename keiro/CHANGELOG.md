@@ -52,6 +52,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Other Changes
 
+- Reactions with no schedule or cancel follow-ups skip the empty timer
+  transaction while preserving dispatch behavior and zero timer effects.
+- Read-model compatibility deprecations now name retirement of the frozen
+  Language 4 generator as their removal boundary instead of an expired version.
 - Add matched table/delegated inbox benchmarks for fresh, repeated, duplicate,
   chunked, metrics, and long-history receipt-probe workloads.
 - Deprecate `mintIntegrationEvent` in favor of `freshIntegrationEvent`, which

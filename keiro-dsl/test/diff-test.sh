@@ -399,12 +399,12 @@ else
 fi
 cp "$FIX/reservation-guard-tightened-partial-twin.keiro" "$GUARD_BODY/service.keiro"
 if output="$("$EXE" diff --since HEAD "$GUARD_BODY/service.keiro" 2>&1)" \
-    && [[ "$output" == *"[AggGuardTightened]"* ]]; then
-  echo "$output"
-  echo "ok: partial replay twin does not claim whole-body coverage"
+    && [[ "$output" != *"[AggGuardTightened]"* \
+    && "$output" != *"[AggGuardRemedyUnavailable]"* ]]; then
+  echo "ok: hand-simplified replay twin covers the removed region"
 else
   echo "$output"
-  echo "FAIL: partial replay twin incorrectly suppressed the hazard"; exit 1
+  echo "FAIL: hand-simplified replay twin did not suppress the guard-history finding"; exit 1
 fi
 
 echo "== 20) unavailable remedies stay advisory and are selectively deniable =="

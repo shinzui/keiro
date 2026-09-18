@@ -8077,6 +8077,8 @@ main = hspec $ do
           finding.detail `shouldSatisfy` T.isInfixOf (renderTransition (replayEdge exactRemovedRegion))
         findings -> expectationFailure ("expected one whole-union finding, got " <> show findings)
       map (.code) (guardFindings oldUnion (withFamily [edge a, replayEdge b]))
+        `shouldBe` []
+      map (.code) (guardFindings oldUnion (withFamily [edge a, replayEdge (EAnd a b)]))
         `shouldBe` [AggGuardTightened]
       guardFindings oldUnion (withFamily [edge a, replayEdge exactRemovedRegion]) `shouldBe` []
       guardFindings oldUnion (withFamily [edge a, replayEdge aOrB]) `shouldBe` []

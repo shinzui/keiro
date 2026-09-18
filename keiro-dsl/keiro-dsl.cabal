@@ -289,9 +289,9 @@ test-suite keiro-dsl-runtime-vocabulary-test
   main-is: Main.hs
   build-depends:
     base >=4.21 && <5,
-    keiro,
+    keiro ^>=0.16.0.0,
     keiro-dsl,
-    shibuya-core,
+    shibuya-core ^>=0.9.0.0,
     text >=2.1 && <2.2,
 
 -- Conformance: proves the scaffolded Generated modules plus a hand-filled
@@ -846,7 +846,7 @@ benchmark keiro-dsl-codec-bench
     containers >=0.6 && <0.8,
     deepseq >=1.5 && <1.6,
     keiki >=0.9 && <0.10,
-    keiro,
+    keiro ^>=0.16.0.0,
     tasty-bench >=0.5 && <0.6,
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,

@@ -18,7 +18,7 @@
 -- deprecated 'runQueryWith' waiting overrides. Define new models through
 -- 'ReadModelBlueprint' and the truthful builders. 'ConsistencyMode', direct
 -- waiting fields, and 'runQueryWith' remain deprecated 0.12 compatibility and
--- are removed in 0.13.
+-- remain until the frozen Language 4 read-model generator is retired.
 --
 -- Schema lifecycle (registration, status transitions) lives in
 -- "Keiro.ReadModel.Schema", which is re-exported here.
@@ -331,27 +331,29 @@ defaultHeadWaitOptions =
       pollMicros = 10000
     }
 
-{-# DEPRECATED ConsistencyMode "Use QueryFreshness. ConsistencyMode remains through the 0.12 compatibility window and is removed in 0.13." #-}
+-- Published keiro-dsl Language 4 output still names this compatibility surface.
+-- Keep it until that frozen read-model generator is retired.
+{-# DEPRECATED ConsistencyMode "Use QueryFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED Strong "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability; it is removed in 0.13." #-}
+{-# DEPRECATED Strong "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED Eventual "Use Immediate. Eventual means only that the query does not wait; it is removed in 0.13." #-}
+{-# DEPRECATED Eventual "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED PositionWait "Use WaitForPosition with a concrete target. Legacy PositionWait Nothing remains immediate through 0.12 and is removed in 0.13." #-}
+{-# DEPRECATED PositionWait "Use WaitForPosition with a concrete target. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED StrongScope "Use HeadScope. StrongScope remains through the 0.12 compatibility window and is removed in 0.13." #-}
+{-# DEPRECATED StrongScope "Use HeadScope. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED EntireLog "Use EntireVisibleLog. EntireLog remains through the 0.12 compatibility window and is removed in 0.13." #-}
+{-# DEPRECATED EntireLog "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED CategoryHead "Use CategoryVisibleHead. CategoryHead remains through the 0.12 compatibility window and is removed in 0.13." #-}
+{-# DEPRECATED CategoryHead "Use CategoryVisibleHead. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED defaultStrongWaitOptions "Use defaultHeadWaitOptions. The legacy name is removed in 0.13." #-}
+{-# DEPRECATED defaultStrongWaitOptions "Use defaultHeadWaitOptions. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED subscriptionName "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. The legacy record field is removed in 0.13." #-}
+{-# DEPRECATED subscriptionName "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED defaultConsistency "Use ReadModelBlueprint builders and readModelDefaultFreshness. The legacy record field is removed in 0.13." #-}
+{-# DEPRECATED defaultConsistency "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
-{-# DEPRECATED strongScope "Use HeadScope through the ReadModelBlueprint builders. The legacy record field is removed in 0.13." #-}
+{-# DEPRECATED strongScope "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release." #-}
 
 -- | Why a read-model query could not run.
 data ReadModelError
@@ -415,7 +417,7 @@ runQueryWith ::
   Eff es (Either ReadModelError r)
 runQueryWith metrics consistency readModel =
   runQueryWithFreshness metrics (legacyOverrideFreshness consistency readModel) readModel
-{-# DEPRECATED runQueryWith "Use runQueryWithFreshness. The legacy override is removed in 0.13." #-}
+{-# DEPRECATED runQueryWith "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release." #-}
 
 runValidatedQuery ::
   (Store :> es) =>

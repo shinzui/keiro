@@ -1,0 +1,15 @@
+Name,Mean (ps),2*Stdev (ps)
+All.inbox.downstream.table-downstream-single.fresh.metrics-off,732449599999,133837836260
+All.inbox.downstream.table-downstream-single.fresh.metrics-on,685021600050,61759303512
+All.inbox.downstream.delegated-single.fresh.metrics-off,576538799923,80179137426
+All.inbox.downstream.delegated-single.fresh.metrics-on,589874599934,100006798938
+All.inbox.downstream.delegated-direct-single.fresh.metrics-off,652860899942,88716890946
+All.inbox.downstream.delegated-direct-single.fresh.metrics-on,566449400012,63194858866
+All.inbox.downstream.table-downstream-batch-100.fresh.metrics-off,546757549977,53603468856
+All.inbox.downstream.table-downstream-batch-100.fresh.metrics-on,561776199884,93260133664
+All.inbox.downstream.delegated-batch-100.fresh.metrics-off,581596199730,100925375492
+All.inbox.downstream.delegated-batch-100.fresh.metrics-on,595301000191,98521155660
+All.inbox.downstream.table-downstream-batch-1000.fresh.metrics-off,782599400038,132727628924
+All.inbox.downstream.table-downstream-batch-1000.fresh.metrics-on,894711799909,75272307910
+All.inbox.downstream.delegated-batch-1000.fresh.metrics-off,773960999987,80603542984
+All.inbox.downstream.delegated-batch-1000.fresh.metrics-on,724081799987,115128879056

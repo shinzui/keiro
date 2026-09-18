@@ -2,6 +2,7 @@
 
 ## 2026-09-18
 * **Update**: Extend ADR-24 with the candidate Language 6 framed UTF-8 reaction timer and fired-event derivation (plan 285).
+* **Update**: Tie removal of deprecated read-model compatibility APIs to retiring the frozen Language 4 generator in a later major release (plan 286).
 
 ## 2026-09-17
 * **Update**: Extend ADR-46 with declared contract IDs, required-path nominal expressions and router selection, identifier-keyed maps with canonical ordering, and direct-optional wrapper guidance (plan 288).
