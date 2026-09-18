@@ -6,7 +6,7 @@ docId: DOC-23
 tags: [keiro, dsl, language-5, reference]
 generated:
   by: human:nadeem
-  at: 2026-09-18T00:12:21Z
+  at: 2026-09-18T02:05:25Z
 ---
 
 # Keiro DSL Language 5 Reference
@@ -31,9 +31,8 @@ delegated inboxes, first-class process reactions, and nominal declarations as
 structural leaves. Candidate-only examples say so explicitly and begin with
 `language keiro-dsl 6`; released-only services should remain on Language 5
 until that candidate is published. On the current development branch,
-`keiro-dsl new` selects the active candidate through
-`currentAuthoringLanguageVersion`; review the generated Language 6 preamble
-before adopting a starter.
+`keiro-dsl new` selects `currentStableLanguageVersion`, so starters remain on
+Language 5 until the candidate is published.
 
 Use this page as both an introduction and a syntax reference. The shortest path
 is [Quick start](#quick-start), followed by the node family you need. The
@@ -1158,7 +1157,11 @@ one block per timer:
 ```
 
 `schedule` defaults to rearm; `schedule ... once` is insert-only. `cancel`
-uses the named timer's deterministic id. A timer's constant and typed payload
+uses the named timer's deterministic id. The timer id and fired-event id are
+UUIDv5 over the UTF-8 bytes of separately
+length-prefixed prefix and correlation fields. This preserves non-ASCII text
+without the code-point truncation that could alias distinct correlations.
+A timer's constant and typed payload
 fields must be supplied exactly once by every schedule. Deadlines must derive
 from an injected `:Time` input field. Timer and fired-event prefixes must be
 unique within the process, and each id ends in `correlationId`. Cancellation

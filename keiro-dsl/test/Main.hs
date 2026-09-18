@@ -67,6 +67,7 @@ import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
+import Keiro.Dsl.ProcessReaction (processReactionFingerprintFrom)
 import Keiro.Dsl.ProjectionMappedImpact qualified as ProjectionImpact
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelQueryContract (QueryContractDrift (..), QueryContractIdentity (..), QueryContractPosition (..), queryContractIdentities)
@@ -9016,10 +9017,12 @@ main = hspec $ do
       [(.code) k | Advisory k <- cs] `shouldBe` [ProcessTimerPayloadChanged]
     it "classifies reaction fan-out, guard, timer, and version evolution" $ do
       source <- readTestText "test/fixtures/process-timers.keiro"
+      reactionSource <- readTestText "test/fixtures/process-reactions.keiro"
       stateSource <- readTestText "test/fixtures/process-state-authority.keiro"
       payloadSource <- readTestText "test/fixtures/process-timers-payload-changed.keiro"
       identitySource <- readTestText "test/fixtures/process-timers-identity-changed.keiro"
       baseline <- checkedServiceFromText "process-reaction-diff-base.keiro" source
+      reactionBaseline <- checkedServiceFromText "process-reaction-fingerprint-base.keiro" reactionSource
       stateBaseline <- checkedServiceFromText "process-reaction-guard-base.keiro" stateSource
       guardChanged <- checkedServiceFromText "process-reaction-guard-changed.keiro" (T.replace "input.severity == Severity.Sev1" "input.severity == Severity.Sev2" stateSource)
       fanOutChanged <- checkedServiceFromText "process-reaction-diff-fanout.keiro" (T.replace "+ 5m" "+ 10m" source)
@@ -9052,6 +9055,18 @@ main = hspec $ do
       let changes old new = resolvedFold (CheckedDiff.diffServices old new)
           codes select old new = [(.code) kind | change <- changes old new, kind <- [kindOfChange change], select change]
           finding code old new = find ((== code) . (.code) . kindOfChange) (changes old new)
+          fingerprints service =
+            [ (process.name, processReactionFingerprintFrom reaction)
+            | NProcess process <- (checkedSpec service).nodes,
+              ReactionProcessBody reaction <- [process.body]
+            ]
+      fingerprints baseline
+        `shouldBe` [("incident-timers", "5a6afd7c9691c5716a9c7b3140b5c6c54ff8689aa6e0fbc9acf576ce56aa4904")]
+      fingerprints reactionBaseline
+        `shouldBe` [ ("incident-reaction", "dff4a685084373ac102b8fa9591bc4cdbaa358a19bdec488ea157bd038421573"),
+                     ("audit-only", "a98c341339b007c1e28edff6a1a89b91a9dd3ac63c83bfe57e6b41479d84af96"),
+                     ("scaling-reaction", "8329eab62dfa1917a468c914b9bbb7cae121b5d353656e69543f6aa95a43a14f")
+                   ]
       codes isAdvisory baseline fanOutChanged `shouldContain` [ProcessReactionFanOutChanged]
       codes isAdvisory stateBaseline guardChanged `shouldContain` [ProcessReactionGuardChanged]
       codes isBreaking baseline fanOutChanged `shouldContain` [ProcessReactionFingerprintChangedWithoutVersionBump]

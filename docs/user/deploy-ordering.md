@@ -6,7 +6,7 @@ docId: DOC-7
 tags: [keiro, deployment, compatibility, operations]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T02:05:25Z
 ---
 
 # Deploy Ordering
@@ -147,6 +147,11 @@ a legacy body to reactions produces the breaking
 `ProcessDispatchIdentityModelChanged`; drain before changing the body rather
 than treating the version bump as a migration mechanism.
 
+The JSON report carries `drain-required` for guard, arm-order, fan-out,
+reaction-removal, and versioned-fingerprint advisories. Timer-policy text and
+ceiling edits are excluded from the semantic fingerprint and produce only the
+`ProcessTimerCeilingChanged` advisory.
+
 The deterministic-id behavior is implemented in
 [`Keiro.Router`](../../keiro/src/Keiro/Router.hs) and
 [`Keiro.ProcessManager`](../../keiro/src/Keiro/ProcessManager.hs), with the new
@@ -197,8 +202,8 @@ been migrated and verified. An absent `cancel` creates no tombstone, and
 deleting the declaration does not cancel a row. A timer-prefix or fired-event
 prefix change similarly produces `ProcessTimerIdentityChanged`; drain or
 migrate outstanding rows before deploying it. Changing `max-attempts` produces
-`ProcessTimerCeilingChanged`, and existing rows retain their accumulated
-attempt count.
+`ProcessTimerCeilingChanged`, as does changing the operator dead-letter text,
+and existing rows retain their accumulated attempt count.
 
 See [`TimerRequest`](../../keiro/src/Keiro/Timer/Types.hs) and
 [`TimerWorkerOptions`](../../keiro/src/Keiro/Timer.hs).

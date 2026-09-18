@@ -20,7 +20,9 @@ module Generated.IncidentResponse.IncidentEscalation.Process
 import Data.Text (Text)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
+import Data.ByteString qualified as BS
 import Data.Text qualified as T
+import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, addUTCTime)
 import Data.UUID (UUID)
 import Data.UUID.V5 qualified as UUID.V5
@@ -38,6 +40,7 @@ import Keiro.Command (CommandError (..), RunCommandOptions (..), runCommand)
 import Keiro.ProcessManager (PMCommand (..), confirmBenignDuplicate)
 import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Stream qualified as Stream
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerWorkerOptions (..))
 import Kiroku.Store.Types (EventId (..))
 import Keiro.ProcessManager (PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))
@@ -54,7 +57,7 @@ data EscalationPayload = EscalationPayload
 incidentEscalationEscalationTimerRequest :: Text -> UTCTime -> N.IncidentId -> N.Severity -> TimerRequest
 incidentEscalationEscalationTimerRequest correlationId fireAtTime payloadIncidentId payloadSeverity =
   TimerRequest
-    { timerId = TimerId (namedUuid ("incident-escalation-timer:" <> correlationId))
+    { timerId = TimerId (reactionIdentity "incident-escalation-timer:" correlationId)
     , processManagerName = incidentEscalationProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime
@@ -88,7 +91,7 @@ incidentEscalationReactionVersion :: Natural
 incidentEscalationReactionVersion = 1
 
 incidentEscalationReactionFingerprint :: Text
-incidentEscalationReactionFingerprint = "e9a5083c5083259dfc13773f7fed59992b6df13361d98d1e0362fa7531555e33"
+incidentEscalationReactionFingerprint = "74ccfa3e3e78a8d747546629dce80be851ec3dd2babbd7ddea34b0746f19c7c7"
 
 incidentEscalationCorrelate :: IncidentEscalationInput -> Text
 incidentEscalationCorrelate input = case input of
@@ -103,9 +106,9 @@ incidentEscalationReact input = case input of
     | (severity == N.Sev1) -> Reaction.AdvanceReaction { command = Saga.NoteRaised (Saga.NoteRaisedData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowSchedule Reaction.Rearm (incidentEscalationEscalationTimerRequest (N.incidentIdText incidentId) (addUTCTime 300 raisedAt) incidentId severity)], onAccepted = [] }
     | otherwise -> Reaction.AdvanceReaction { command = Saga.NoteRaised (Saga.NoteRaisedData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowSchedule Reaction.Rearm (incidentEscalationEscalationTimerRequest (N.incidentIdText incidentId) (addUTCTime 3600 raisedAt) incidentId severity)], onAccepted = [] }
   ResponderAcked { incidentId, ackedAt = _ackedAt }
-    -> Reaction.AdvanceReaction { command = Saga.NoteAcknowledged (Saga.NoteAcknowledgedData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowCancel (TimerId (namedUuid ("incident-escalation-timer:" <> (N.incidentIdText incidentId))))], onAccepted = [Reaction.FollowDispatch (PMCommand (Stream.entityStream incidentCommandCategory (N.incidentIdText incidentId)) (Target.AcknowledgeIncident (Target.AcknowledgeIncidentData { Target.incidentId = incidentId })))] }
+    -> Reaction.AdvanceReaction { command = Saga.NoteAcknowledged (Saga.NoteAcknowledgedData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowCancel (TimerId (reactionIdentity "incident-escalation-timer:" (N.incidentIdText incidentId)))], onAccepted = [Reaction.FollowDispatch (PMCommand (Stream.entityStream incidentCommandCategory (N.incidentIdText incidentId)) (Target.AcknowledgeIncident (Target.AcknowledgeIncidentData { Target.incidentId = incidentId })))] }
   ResponderIgnored { incidentId }
-    -> Reaction.AdvanceReaction { command = Saga.NoteIgnored (Saga.NoteIgnoredData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowCancel (TimerId (namedUuid ("incident-escalation-timer:" <> (N.incidentIdText incidentId))))], onAccepted = [Reaction.FollowDispatch (PMCommand (Stream.entityStream incidentCommandCategory (N.incidentIdText incidentId)) (Target.AcknowledgeIncident (Target.AcknowledgeIncidentData { Target.incidentId = incidentId })))] }
+    -> Reaction.AdvanceReaction { command = Saga.NoteIgnored (Saga.NoteIgnoredData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowCancel (TimerId (reactionIdentity "incident-escalation-timer:" (N.incidentIdText incidentId)))], onAccepted = [Reaction.FollowDispatch (PMCommand (Stream.entityStream incidentCommandCategory (N.incidentIdText incidentId)) (Target.AcknowledgeIncident (Target.AcknowledgeIncidentData { Target.incidentId = incidentId })))] }
   IncidentNoted {}
     -> Reaction.NoAdvance []
 
@@ -129,7 +132,7 @@ incidentEscalationRunProcessWorker options adapter =
     (\event -> case decodeIncidentEscalationInput event of Nothing -> Nothing; Just input -> Just (event, input))
 
 incidentEscalationFireTimer options timer
-  | timer.timerId == TimerId (namedUuid ("incident-escalation-timer:" <> timer.correlationId)) = incidentEscalationEscalationFire options timer
+  | timer.timerId == TimerId (reactionIdentity "incident-escalation-timer:" timer.correlationId) = incidentEscalationEscalationFire options timer
   | otherwise = pure Nothing
 
 incidentEscalationEscalationFire options timer
@@ -138,7 +141,7 @@ incidentEscalationEscalationFire options timer
       case (Aeson.fromJSON timer.payload :: Aeson.Result EscalationPayload) of
         Aeson.Error _ -> pure Nothing
         Aeson.Success decoded -> do
-          let firedId = EventId (namedUuid ("incident-escalation-fired:" <> timer.correlationId))
+          let firedId = EventId (reactionIdentity "incident-escalation-fired:" timer.correlationId)
               target = Stream.entityStream incidentCategory timer.correlationId
           result <-
             runCommand
@@ -155,5 +158,8 @@ incidentEscalationEscalationFire options timer
                 CommandAmbiguous _ -> Nothing
                 _ -> Nothing
 
-namedUuid :: Text -> UUID
-namedUuid value = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack value))
+reactionIdentity :: Text -> Text -> UUID
+reactionIdentity prefix correlation =
+  UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes (T.concat (map field [prefix, correlation])))
+  where
+    field value = T.pack (show (BS.length (encodeUtf8 value))) <> ":" <> value

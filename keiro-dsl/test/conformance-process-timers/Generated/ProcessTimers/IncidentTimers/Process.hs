@@ -22,7 +22,9 @@ module Generated.ProcessTimers.IncidentTimers.Process
 import Data.Text (Text)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
+import Data.ByteString qualified as BS
 import Data.Text qualified as T
+import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime, addUTCTime)
 import Data.UUID (UUID)
 import Data.UUID.V5 qualified as UUID.V5
@@ -40,6 +42,7 @@ import Keiro.Command (CommandError (..), RunCommandOptions (..), runCommand)
 import Keiro.ProcessManager (confirmBenignDuplicate)
 import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Stream qualified as Stream
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerWorkerOptions (..))
 import Kiroku.Store.Types (EventId (..))
 import Keiro.ProcessManager (PoisonPolicy (..), RejectedCommandPolicy (..), WorkerOptions (..))
@@ -56,7 +59,7 @@ data EscalationPayload = EscalationPayload
 incidentTimersEscalationTimerRequest :: Text -> UTCTime -> N.IncidentId -> Text -> TimerRequest
 incidentTimersEscalationTimerRequest correlationId fireAtTime payloadIncidentId payloadDetail =
   TimerRequest
-    { timerId = TimerId (namedUuid ("incident-escalation-timer:" <> correlationId))
+    { timerId = TimerId (reactionIdentity "incident-escalation-timer:" correlationId)
     , processManagerName = incidentTimersProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime
@@ -73,7 +76,7 @@ data ReminderPayload = ReminderPayload
 incidentTimersReminderTimerRequest :: Text -> UTCTime -> N.IncidentId -> TimerRequest
 incidentTimersReminderTimerRequest correlationId fireAtTime payloadIncidentId =
   TimerRequest
-    { timerId = TimerId (namedUuid ("incident-reminder-timer:" <> correlationId))
+    { timerId = TimerId (reactionIdentity "incident-reminder-timer:" correlationId)
     , processManagerName = incidentTimersProcessName
     , correlationId = correlationId
     , fireAt = fireAtTime
@@ -107,7 +110,7 @@ incidentTimersReactionVersion :: Natural
 incidentTimersReactionVersion = 1
 
 incidentTimersReactionFingerprint :: Text
-incidentTimersReactionFingerprint = "a87210576bba6fd3eacc636e6c8d22dcf183b849cfc6886ed2136d93da90ee08"
+incidentTimersReactionFingerprint = "5a6afd7c9691c5716a9c7b3140b5c6c54ff8689aa6e0fbc9acf576ce56aa4904"
 
 incidentTimersCorrelate :: IncidentTimersInput -> Text
 incidentTimersCorrelate input = case input of
@@ -119,7 +122,7 @@ incidentTimersReact input = case input of
   IncidentReported { incidentId, raisedAt, detail }
     -> Reaction.AdvanceReaction { command = Saga.RecordIncident (Saga.RecordIncidentData { Saga.incidentId = incidentId }), followUps = [Reaction.FollowSchedule Reaction.Rearm (incidentTimersEscalationTimerRequest (N.incidentIdText incidentId) (addUTCTime 300 raisedAt) incidentId detail), Reaction.FollowSchedule Reaction.Once (incidentTimersReminderTimerRequest (N.incidentIdText incidentId) (addUTCTime 3600 raisedAt) incidentId)], onAccepted = [] }
   ResponderAcked { incidentId }
-    -> Reaction.NoAdvance [Reaction.FollowCancel (TimerId (namedUuid ("incident-reminder-timer:" <> (N.incidentIdText incidentId))))]
+    -> Reaction.NoAdvance [Reaction.FollowCancel (TimerId (reactionIdentity "incident-reminder-timer:" (N.incidentIdText incidentId)))]
 
 incidentTimersProcessManager =
   Reaction.ReactiveProcessManager
@@ -141,8 +144,8 @@ incidentTimersRunProcessWorker options adapter =
     (\event -> case decodeIncidentTimersInput event of Nothing -> Nothing; Just input -> Just (event, input))
 
 incidentTimersFireTimer options timer
-  | timer.timerId == TimerId (namedUuid ("incident-escalation-timer:" <> timer.correlationId)) = incidentTimersEscalationFire options timer
-  | timer.timerId == TimerId (namedUuid ("incident-reminder-timer:" <> timer.correlationId)) = incidentTimersReminderFire options timer
+  | timer.timerId == TimerId (reactionIdentity "incident-escalation-timer:" timer.correlationId) = incidentTimersEscalationFire options timer
+  | timer.timerId == TimerId (reactionIdentity "incident-reminder-timer:" timer.correlationId) = incidentTimersReminderFire options timer
   | otherwise = pure Nothing
 
 incidentTimersEscalationFire options timer
@@ -151,7 +154,7 @@ incidentTimersEscalationFire options timer
       case (Aeson.fromJSON timer.payload :: Aeson.Result EscalationPayload) of
         Aeson.Error _ -> pure Nothing
         Aeson.Success decoded -> do
-          let firedId = EventId (namedUuid ("incident-escalation-fired:" <> timer.correlationId))
+          let firedId = EventId (reactionIdentity "incident-escalation-fired:" timer.correlationId)
               target = Stream.entityStream incidentCategory timer.correlationId
           result <-
             runCommand
@@ -174,7 +177,7 @@ incidentTimersReminderFire options timer
       case (Aeson.fromJSON timer.payload :: Aeson.Result ReminderPayload) of
         Aeson.Error _ -> pure Nothing
         Aeson.Success decoded -> do
-          let firedId = EventId (namedUuid ("incident-reminder-fired:" <> timer.correlationId))
+          let firedId = EventId (reactionIdentity "incident-reminder-fired:" timer.correlationId)
               target = Stream.entityStream incidentCategory timer.correlationId
           result <-
             runCommand
@@ -191,5 +194,8 @@ incidentTimersReminderFire options timer
                 CommandAmbiguous _ -> Nothing
                 _ -> Nothing
 
-namedUuid :: Text -> UUID
-namedUuid value = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack value))
+reactionIdentity :: Text -> Text -> UUID
+reactionIdentity prefix correlation =
+  UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes (T.concat (map field [prefix, correlation])))
+  where
+    field value = T.pack (show (BS.length (encodeUtf8 value))) <> ":" <> value

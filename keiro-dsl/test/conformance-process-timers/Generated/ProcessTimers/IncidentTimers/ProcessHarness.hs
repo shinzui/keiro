@@ -11,7 +11,7 @@ processHarnessValues :: [(String, String)]
 processHarnessValues =
   [ ("reactionOwnership", "generated-declarative")
   , ("reactionVersion", "1")
-  , ("reactionFingerprint", "a87210576bba6fd3eacc636e6c8d22dcf183b849cfc6886ed2136d93da90ee08")
+  , ("reactionFingerprint", "5a6afd7c9691c5716a9c7b3140b5c6c54ff8689aa6e0fbc9acf576ce56aa4904")
   , ("reaction.IncidentReported.0", "guard=always;advance=RecordIncident;followUps=schedule:escalation:rearm,schedule:reminder:once;accepted=")
   , ("reaction.ResponderAcked.0", "guard=always;advance=none;followUps=cancel:reminder;accepted=")
   , ("timer.escalation", "idPrefix=incident-escalation-timer:;payload=kind,incidentId,detail;fire=Incident.EscalateIncident;firedEventPrefix=incident-escalation-fired:")

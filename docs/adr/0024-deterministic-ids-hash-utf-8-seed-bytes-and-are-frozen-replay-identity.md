@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Deterministic ids hash UTF-8 seed bytes and are frozen replay identity
 description: Every Keiro deterministic id hashes the UTF-8 bytes of its seed text, and that derivation may never change again without a versioned migration story.
-timestamp: 2026-08-14T14:26:07Z
+timestamp: 2026-09-18T02:05:25Z
 docId: ADR-24
 status: Accepted
 date: 2026-08-06
@@ -84,6 +84,13 @@ derivations above keep their `:`-joined seeds because changing them would break
 the freeze; their residual delimiter ambiguity is bounded by the identity
 constructors, which reject `:` in workflow names and ids.
 
+Candidate Language 6 generated reaction timers follow that rule: timer ids and
+fired-event ids encode the declared prefix and correlation id as separate
+decimal-byte-length-prefixed UTF-8 fields before UUIDv5 hashing. The candidate
+vectors are pinned in the process-timer conformance suite. This becomes a fifth
+frozen derivation when Language 6 is published; until then ADR 16 permits its
+candidate corpus to be amended in place.
+
 
 ### Compatibility bridge for pre-UTF-8 identity
 
@@ -155,8 +162,7 @@ replays — must be unable to redeliver a source event first delivered before th
     appending a second command.
 - Workflows previously wedged by a non-ASCII step-name collision now run. This
   is the behavioral acceptance criterion, not an incidental improvement.
-- The defect class is closed only for these four derivations. Generated code
-  from `keiro-dsl` still emits the truncating `namedUuid` helper in scaffolded
-  process managers; that code's identity is governed by ADR 18's frozen-fold and
-  generated-edition rules and needs its own compatibility argument, so it is
-  deliberately out of this decision's scope.
+- The legacy Languages 1 through 5 process template remains byte-frozen and
+  retains its historical `namedUuid` helper. The unpublished Language 6 reaction
+  template uses the framed UTF-8 derivation above, so published output does not
+  move while the candidate closes the collision class before release.

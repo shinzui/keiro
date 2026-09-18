@@ -47,7 +47,7 @@ scalingReactionReactionVersion :: Natural
 scalingReactionReactionVersion = 1
 
 scalingReactionReactionFingerprint :: Text
-scalingReactionReactionFingerprint = "429b4baf4983072a9afb406762eadfc510d57344a3fabc664cf1a9839e2363f4"
+scalingReactionReactionFingerprint = "8329eab62dfa1917a468c914b9bbb7cae121b5d353656e69543f6aa95a43a14f"
 
 scalingReactionCorrelate :: ScalingReactionInput -> Text
 scalingReactionCorrelate input = case input of

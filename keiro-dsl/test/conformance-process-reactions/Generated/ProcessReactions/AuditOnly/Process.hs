@@ -46,7 +46,7 @@ auditOnlyReactionVersion :: Natural
 auditOnlyReactionVersion = 1
 
 auditOnlyReactionFingerprint :: Text
-auditOnlyReactionFingerprint = "9af0e65d73da0dc48e0939c34cbc230c608105a464c535a5712105ca7739505c"
+auditOnlyReactionFingerprint = "a98c341339b007c1e28edff6a1a89b91a9dd3ac63c83bfe57e6b41479d84af96"
 
 auditOnlyCorrelate :: AuditOnlyInput -> Text
 auditOnlyCorrelate input = case input of

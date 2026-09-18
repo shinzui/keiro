@@ -75,6 +75,18 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Other Changes
 
+- Candidate Language 6 reaction timers and fired events now derive UUIDv5 ids
+  from length-prefixed UTF-8 prefix and correlation fields. Their semantic
+  fingerprint uses a frozen canonical encoder that excludes operator-only
+  timer retry policy. Published Languages 1 through 5 are unchanged.
+- Reaction evolution reports now attach `drain-required` to guard, arm-order,
+  fan-out, removal, and versioned-fingerprint advisories; timer removal,
+  reaction-version decrease, and unversioned fingerprint changes classify on
+  persisted identity. Harness ownership comes from the checked reaction result,
+  and invalid reaction metadata returns a scaffold refusal instead of throwing.
+- `keiro-dsl new <kind>` now writes the current published stable language even
+  while a candidate language is registered.
+
 - Direct `Optional DeclaredId` aggregate fields now point to the supported
   one-field `mapped structural` wrapper pattern, including the required
   `on-missing=null` policy.

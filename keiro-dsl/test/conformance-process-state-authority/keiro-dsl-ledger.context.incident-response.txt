@@ -68,5 +68,5 @@ behavior {"aggregate":"Escalation","command":"NoteAcknowledged","evidence":"gene
 behavior {"aggregate":"Escalation","command":"NoteRaised","evidence":"generated-authoritative","key":"behavior-v1-75011409d18e29c3","kind":"required-rejection","outputs":[],"source":"Dormant"}
 behavior {"aggregate":"Escalation","command":"ActivateDormant","evidence":"generated-authoritative","key":"behavior-v1-8f58f8301e7a66f3","kind":"required-rejection","outputs":[],"source":"Dormant"}
 behavior {"aggregate":"Escalation","command":"NoteIgnored","evidence":"generated-authoritative","key":"behavior-v1-eecae8fa281fddcf","kind":"required-rejection","outputs":[],"source":"Dormant"}
-process-reaction {"fingerprint":"e9a5083c5083259dfc13773f7fed59992b6df13361d98d1e0362fa7531555e33","holeObligations":["decodeIncidentEscalationInput :: RecordedEvent -> Maybe IncidentEscalationInput"],"processName":"incident-escalation","verification":"generated-declarative","version":1}
+process-reaction {"fingerprint":"74ccfa3e3e78a8d747546629dce80be851ec3dd2babbd7ddea34b0746f19c7c7","holeObligations":["decodeIncidentEscalationInput :: RecordedEvent -> Maybe IncidentEscalationInput"],"processName":"incident-escalation","verification":"generated-declarative","version":1}
 semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

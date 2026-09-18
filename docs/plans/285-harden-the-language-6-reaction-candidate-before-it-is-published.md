@@ -62,11 +62,11 @@ even if it requires splitting a partially completed task into two ("done" vs. "r
 This section must always reflect the actual current state of the work.
 
 - [x] (2026-09-17 19:00 PDT) M1: reaction template derives timer and fired-event ids from length-prefixed UTF-8 fields; hand-written expectations and literal ASCII/non-ASCII collision vectors are pinned in the timer conformance suite.
-- [ ] M1: `just corpus-regen` run; only `keiro-dsl/test/conformance-process-timers` and `keiro-dsl/test/conformance-process-reactions` changed; `just process-reaction-proof` green.
+- [x] (2026-09-17 19:05 PDT) M1: `just corpus-regen` updated the three current Language 6 reaction corpora; all three conformance suites and `just process-reaction-proof` pass.
 - [x] (2026-09-17 19:00 PDT) M2: reaction advisory codes carry `RolloutDrainRequired`; `ProcessTimerRemoved`, `ProcessReactionVersionDecreased`, and `ProcessReactionFingerprintChangedWithoutVersionBump` use the persisted-identity vector; report-vector tests added.
-- [ ] M3: reaction fingerprint computed from a frozen canonical encoding that excludes operator text; golden pinned; ceiling test asserts exactly `ProcessTimerCeilingChanged`; whitespace-only rewrites still produce no change.
-- [ ] M4: harness `reactionOwnership` follows the checker; `processReactionRowsForService` and `processReactionSnapshots` return `Either`; `keiro-dsl new` skeletons target the stable language.
-- [ ] M5: `keiro-dsl/CHANGELOG.md`, `docs/user/typed-spec-toolchain.md`, and `docs/user/deploy-ordering.md` updated; full gate green; ADR-24 amended.
+- [x] (2026-09-17 19:05 PDT) M3: reaction fingerprint computed from a frozen canonical encoding that excludes operator text; fixture hashes pinned; ceiling and dead-letter tests assert exactly `ProcessTimerCeilingChanged`; whitespace-only rewrites still produce no change.
+- [x] (2026-09-17 19:05 PDT) M4: harness `reactionOwnership` follows the checker; `processReactionRowsForService` and `processReactionSnapshots` return `Either`; all `keiro-dsl new` skeletons target and validate on the stable language.
+- [ ] M5: `keiro-dsl/CHANGELOG.md`, `docs/user/typed-spec-toolchain.md`, and `docs/user/deploy-ordering.md` updated and ADR-24 amended; full gate remains.
 
 
 ## Surprises & Discoveries
@@ -79,6 +79,16 @@ implementation. Provide concise evidence.
   identity vectors fit better in the compiled timer conformance suite, which already depends on
   `uuid` and `keiro`, than in the main DSL unit suite, which intentionally has neither dependency.
   Evidence: the refreshed Cabal dependency stanzas and the focused reaction diff test.
+- Discovery: `conformance-process-state-authority` is a third Language 6 reaction corpus and shares
+  both the timer template and fingerprint ledger. Regeneration correctly changed it alongside the
+  two corpora named by the original plan; no published-language corpus changed.
+  Evidence: `just corpus-regen` selected 47 invocations and its final diff listed only the three
+  reaction corpus directories.
+- Discovery: the process starter itself had been rewritten to candidate reaction syntax after this
+  plan was drafted. Merely changing its preamble to Language 5 made it invalid, so the starter now
+  uses the published legacy process form while preserving a complete, valid timer example.
+  Evidence: the first focused skeleton run failed at `reactions version 1`; the revised 15-example
+  skeleton group passes and `keiro-dsl new process` begins with `language keiro-dsl 5`.
 
 
 ## Decision Log
@@ -120,6 +130,13 @@ Record every decision made while working on the plan.
   every new file contradicts that guidance and silently opts new users into an amendable
   contract. Candidate-only skeleton content, if any, must be opt-in.
   Date: 2026-09-16
+- Decision: Keep the default process starter useful by expressing the same process-and-timer
+  concepts with published legacy syntax, rather than removing the process body or retaining an
+  invalid candidate body under a stable preamble.
+  Rationale: every starter is promised to parse, validate, and scaffold. Candidate reaction syntax
+  cannot satisfy that promise under Language 5, while the legacy process grammar remains the
+  supported stable teaching surface.
+  Date: 2026-09-17
 
 
 ## Outcomes & Retrospective
