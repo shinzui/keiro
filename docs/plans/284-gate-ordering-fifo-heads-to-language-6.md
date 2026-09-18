@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T00:12:44Z
+      mode: "implement"
+      note: "Refreshed the Language 6 gate for later keyed-map profile additions and began implementation"
 ---
 
 # Gate ordering fifo-heads to Language 6
@@ -49,10 +55,10 @@ reference says so where it lists the ordering vocabulary.
 
 ## Progress
 
-- [ ] M1: `WorkqueueFifoHeadsSyntax` registered in `Keiro.Dsl.LanguageVersion` and added to the Language 6 candidate syntax profile.
-- [ ] M1: `pOrdering` in `Keiro.Dsl.Parser.Queue` refuses `fifo-heads` below Language 6 at the token span.
-- [ ] M1: `test/fixtures/workqueue-fifo-heads.keiro` declares `language keiro-dsl 6`; new tests prove Languages 4 and 5 refuse the token at its span and Language 6 still round-trips, scaffolds, and diffs.
-- [ ] M1: `FrontendProfiles` expectations extended (minimum version table, `featureBody`, `featureCases`) and the unversioned QuickCheck workqueue generator no longer emits `WqFifoHeads`.
+- [x] (2026-09-17 17:25 PDT) M1: `WorkqueueFifoHeadsSyntax` registered in `Keiro.Dsl.LanguageVersion` and added to the Language 6 candidate syntax profile.
+- [x] (2026-09-17 17:25 PDT) M1: `pOrdering` in `Keiro.Dsl.Parser.Queue` refuses `fifo-heads` below Language 6 at the token span.
+- [x] (2026-09-17 17:25 PDT) M1: `test/fixtures/workqueue-fifo-heads.keiro` declares `language keiro-dsl 6`; new tests prove Languages 4 and 5 refuse the token at its span and Language 6 still round-trips, scaffolds, and diffs.
+- [x] (2026-09-17 17:25 PDT) M1: `FrontendProfiles` expectations extended (minimum version table, `featureBody`, `featureCases`) and the unversioned QuickCheck workqueue generator no longer emits `WqFifoHeads`.
 - [ ] M1: `cabal test keiro-dsl-test` passes.
 - [ ] M2: `just corpus-regen` produces no diff; record migration manifests regenerated; `just conformance-corpus-policy`, `just record-migration-policy`, `just dsl-api-boundaries`, `just generated-name-policy` pass.
 - [ ] M3: `keiro-dsl/CHANGELOG.md` and root `CHANGELOG.md` say the token is a Language 6 candidate feature; `docs/user/typed-spec-toolchain.md`, `docs/user/work-queues.md`, and `docs/corpus/keiro-dsl-corpus.md` updated; `docs/user/log.md` entry added; `just user-documentation-validate` passes.
@@ -61,7 +67,17 @@ reference says so where it lists the ordering vocabulary.
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: `KeyedMapSyntax` was added to the Language 6 profile after this plan was written.
+  Its body cannot join the exact-marker matrix because Languages 1 through 4 correctly stop first
+  at the prerequisite mapped-consumer feature; adding it produced `BodySyntaxError` before the
+  keyed-map marker. It remains covered by its dedicated parser tests and the profile minimum table,
+  while the independent fifo-heads body joins the exact-marker matrix as planned.
+  Evidence: the focused `FrontendProfiles` failure during implementation and the mapped type parser.
+- Discovery: The structured frontend failure spans exactly the `fifo-heads` token, while the
+  released compatibility renderer used by the CLI reports contextual parse failures at column 1
+  of the owning line. The existing reaction gate has the same rendering. Changing that text would
+  violate the byte-identical compatibility test, so acceptance uses the structured span for the
+  token contract and the CLI for code, message, and exit status.
 
 
 ## Decision Log
@@ -532,3 +548,8 @@ It has soft dependencies on `docs/plans/283-reconcile-the-0-17-0-0-changelogs-an
 `docs/plans/281-restore-a-green-verify-gate-for-the-0-17-0-0-candidate.md` (shared record
 migration manifests; regenerate again if both land). `docs/plans/282-write-the-0-16-0-0-to-0-17-0-0-upgrade-edge-and-reconcile-release-metadata.md`
 consumes this plan's outcome.
+
+
+Revision note (2026-09-17): Refreshed the profile shape for the post-plan declared-ID and keyed-map
+features, preserving keyed-map's layered gate coverage while adding the independent fifo-heads
+marker case.

@@ -78,6 +78,7 @@ frontendProfilesSpec = do
               SeparatedProjectionQueryPolicySyntax -> version 5
               DelegatedInboxSyntax -> version 6
               ProcessReactionSyntax -> version 6
+              WorkqueueFifoHeadsSyntax -> version 6
               ContractDeclaredIdSyntax -> version 6
               KeyedMapSyntax -> version 6
               FieldAliasSyntax -> version 4
@@ -198,6 +199,7 @@ featureCases =
     FeatureCase SeparatedProjectionQueryPolicySyntax "freshness" separatedProjectionQueryPolicyBody,
     FeatureCase DelegatedInboxSyntax "idempotence" delegatedInboxFeatureBody,
     FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody,
+    FeatureCase WorkqueueFifoHeadsSyntax "fifo-heads" (featureBody WorkqueueFifoHeadsSyntax),
     FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax)
   ]
 
@@ -268,6 +270,19 @@ featureBody = \case
   SeparatedProjectionQueryPolicySyntax -> separatedProjectionQueryPolicyBody
   DelegatedInboxSyntax -> delegatedInboxFeatureBody
   ProcessReactionSyntax -> processReactionFeatureBody
+  WorkqueueFifoHeadsSyntax ->
+    T.unlines
+      [ "context profile",
+        "workqueue profile_jobs {",
+        "  queue logical = \"profile.jobs\"",
+        "  derive physical = \"profile_jobs\" dlq = \"profile_jobs_dlq\" table = \"pgmq.q_profile_jobs\"",
+        "  ordering fifo-heads",
+        "  group key from profileId via raw",
+        "  payload ProfileJob { profileId -> \"profile_id\" text required }",
+        "  retry maxRetries = 3 delay = 5s dlq = on",
+        "  disposition { storeFailure -> retry 5s commandRejected -> deadLetter decodeFailure -> deadLetter onCodecReject -> deadLetter }",
+        "}"
+      ]
   ContractDeclaredIdSyntax ->
     T.unlines
       [ "context profile",
@@ -293,7 +308,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

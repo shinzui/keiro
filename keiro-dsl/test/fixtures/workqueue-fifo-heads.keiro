@@ -1,4 +1,4 @@
-language keiro-dsl 4
+language keiro-dsl 6
 context hospital-capacity
 
 workqueue reservation_work {

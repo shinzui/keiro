@@ -47,7 +47,7 @@ import Keiro.Dsl.ExplainBindings (BindingHole (..), BindingObligation (..), Bind
 import Keiro.Dsl.Expression
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError (..))
 import Keiro.Dsl.FoldFingerprint qualified as CheckedFold
-import Keiro.Dsl.Frontend (FrontendErrorCode (..), FrontendFailure (..), LoweringFailure (..), LoweringFailureCode (..), lowerSurfaceDocument, parseSurfaceSource)
+import Keiro.Dsl.Frontend (FrontendErrorCode (..), FrontendFailure (..), LoweringFailure (..), LoweringFailureCode (..), lowerSurfaceDocument, parseSurfaceSource, renderFrontendFailure)
 import Keiro.Dsl.FrontendCompatibility (frontendCompatibilitySpec)
 import Keiro.Dsl.FrontendProfiles (frontendProfilesSpec)
 import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
@@ -7476,17 +7476,28 @@ main = hspec $ do
         Right spec -> parseSpec "in" (renderSpec spec) `shouldBe` Right spec
     it "round-trips fifo-heads and lowers it to the grouped-head runtime strategy" $ do
       input <- readTestText "test/fixtures/workqueue-fifo-heads.keiro"
-      case parseSpec "in" input of
-        Left err -> expectationFailure (T.unpack err)
+      case parseSource "in" input of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
         Right parsed -> do
-          renderSpec parsed `shouldSatisfy` T.isInfixOf "ordering fifo-heads"
-          parseSpec "in" (renderSpec parsed) `shouldBe` Right parsed
-          case [workqueue | NWorkqueue workqueue <- (.nodes) parsed] of
+          renderSource parsed `shouldSatisfy` T.isInfixOf "ordering fifo-heads"
+          parseSource "in" (renderSource parsed) `shouldBe` Right parsed
+          case [workqueue | NWorkqueue workqueue <- (.nodes) ((.spec) parsed)] of
             [workqueue] -> do
-              let policy = generatedTextEndingIn "QueuePolicy.hs" (scaffoldWorkqueue (defaultContext (parsed.context)) workqueue)
+              let policy = generatedTextEndingIn "QueuePolicy.hs" (scaffoldWorkqueue (defaultContext (((.spec) parsed).context)) workqueue)
               policy `shouldSatisfy` T.isInfixOf "jobOrdering = FifoHeads"
               policy `shouldSatisfy` T.isInfixOf "withFifoIndexProvision (standardProvision)"
             queues -> expectationFailure ("unexpected fifo-heads workqueues: " <> show queues)
+    it "gates ordering fifo-heads at the token before Language 6" $ do
+      source <- readTestText "test/fixtures/workqueue-fifo-heads.keiro"
+      forM_ [4 :: Int, 5] $ \predecessor -> do
+        let downgraded = T.replace "language keiro-dsl 6" ("language keiro-dsl " <> T.pack (show predecessor)) source
+        case parseSurfaceSource "workqueue-fifo-heads-predecessor.keiro" downgraded of
+          Left failure@FrontendFailure {code = SourceLanguageError LanguageFeatureRequiresVersion, span = SourceSpan {start = SourcePoint {offset = startOffset}, end = SourcePoint {offset = endOffset}}} -> do
+            T.take (endOffset - startOffset) (T.drop startOffset downgraded) `shouldBe` "fifo-heads"
+            renderFrontendFailure failure `shouldSatisfy` T.isInfixOf "LanguageFeatureRequiresVersion"
+            renderFrontendFailure failure `shouldSatisfy` T.isInfixOf "requires keiro-dsl language version 6"
+          Left failure -> expectationFailure (show failure)
+          Right _ -> expectationFailure ("Language " <> show predecessor <> " unexpectedly accepted ordering fifo-heads")
     it "accepts the reservation-work spec (physical matches, no inversions)" $ do
       codes <- errorCodesOf "test/fixtures/reservation-work.keiro"
       codes `shouldBe` []
@@ -15172,7 +15183,8 @@ genWorkqueue =
     <*> genAdversarialText
     <*> genAdversarialText
     <*> genAdversarialText
-    <*> elements [WqUnordered, WqFifoThroughput, WqFifoRoundRobin, WqFifoHeads]
+    -- The round-trip property renders no language preamble and therefore parses as Language 1.
+    <*> elements [WqUnordered, WqFifoThroughput, WqFifoRoundRobin]
     <*> genMaybe (WqGroupKey <$> genName <*> genName <*> genMaybe genAdversarialText)
     <*> oneof [pure WqStandard, pure WqUnlogged, WqPartitioned <$> genAdversarialText <*> genAdversarialText]
     <*> genName

@@ -7,7 +7,7 @@ where
 
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax))
+import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax, WorkqueueFifoHeadsSyntax))
 import Keiro.Dsl.Parser.Core
 import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
 import Text.Megaparsec
@@ -69,7 +69,10 @@ pWorkqueue context = do
         [ WqUnordered <$ symbol "unordered",
           WqFifoThroughput <$ symbol "fifo-throughput",
           WqFifoRoundRobin <$ symbol "fifo-roundrobin",
-          WqFifoHeads <$ symbol "fifo-heads"
+          do
+            marker <- withOwnedSpan (symbol "fifo-heads")
+            requireLanguageFeatureAt context WorkqueueFifoHeadsSyntax (spanOf marker)
+            pure WqFifoHeads
         ]
     pGroupKey = do
       _ <- symbol "group" *> symbol "key" *> symbol "from"
