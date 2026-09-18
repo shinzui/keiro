@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-18
+* **Addition**: IR-41 requests publishing keiro's controlled vocabulary as a docs/terminology catalog under the shared documentation.terminology profile, hard-depending on okf-profiles IR-6 (requested by mori plan 268).
+
 ## 2026-09-17
 * **Implementation**: ExecPlan 288 Milestone 1 adds generated and consumer-bound nominal enums
 as structural leaves with declared-spelling codecs, constructor defaults, coverage, fold identity,
