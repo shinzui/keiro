@@ -6,7 +6,7 @@ docId: DOC-25
 tags: [keiro, pgmq, work-queues, reference]
 generated:
   by: human:nadeem
-  at: 2026-09-18T00:04:13Z
+  at: 2026-09-18T00:12:21Z
 ---
 
 # Work Queues
@@ -554,7 +554,9 @@ that accepts both forms. See
 
 The DSL ordering vocabulary is `unordered`, `fifo-throughput`,
 `fifo-roundrobin`, and `fifo-heads`; scaffolding lowers the last form to
-`FifoHeads` and creates the FIFO index.
+`FifoHeads` and creates the FIFO index. `fifo-heads` is Language 6 candidate
+syntax and is refused below Language 6 with `LanguageFeatureRequiresVersion`;
+the other three orderings remain available in every published language.
 
 `keiro-dsl check` enforces the contracts that are dangerous to reconstruct by
 hand: FIFO queues require a group key and unordered queues reject one, and the

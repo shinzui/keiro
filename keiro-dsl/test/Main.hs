@@ -1854,6 +1854,7 @@ main = hspec $ do
             "transition-family-outcome-old.keiro",
             "transition-family.keiro",
             "workflow-evolution.keiro",
+            "workqueue-fifo-heads.keiro",
             "workspace-nominals/domain/project-artifact.keiro",
             "workspace-nominals/domain/project.keiro",
             "workspace-nominals/domain/shared.keiro"

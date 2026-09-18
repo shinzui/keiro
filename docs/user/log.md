@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-09-18
+* **Update**: Document that `ordering fifo-heads` is Language 6 candidate syntax refused by published languages.
 * **Update**: Document guarded DLQ inspection, exact-ID archive verification, guarded and forced purge, and original-header redrive behavior.
 * **Update**: Document delegated intake syntax, diff denial policy and guard diagnostics, intake identity changes, and the current skeleton language.
 

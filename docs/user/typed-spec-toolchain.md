@@ -6,7 +6,7 @@ docId: DOC-23
 tags: [keiro, dsl, language-5, reference]
 generated:
   by: human:nadeem
-  at: 2026-09-18T00:04:13Z
+  at: 2026-09-18T00:12:21Z
 ---
 
 # Keiro DSL Language 5 Reference
@@ -1517,6 +1517,8 @@ an event mapped by the publisher's emit.
 
 ### Work queues
 
+The grouped-head example below uses candidate Language 6 syntax.
+
 ```text
 workqueue reservation_work {
   queue logical = "hospital_capacity.reservation_work"
@@ -1581,7 +1583,10 @@ declared transitional codec rather than an automatic upcaster.
 Ordering is `unordered` (the default), `fifo-throughput`, `fifo-roundrobin`, or
 `fifo-heads`. FIFO requires a group key; unordered queues reject one.
 `fifo-heads` is the strict failure barrier and safely batches independent group
-heads. The two legacy FIFO fill modes require a runtime batch size of one.
+heads. It is Language 6 candidate syntax and is refused below Language 6 with
+`LanguageFeatureRequiresVersion`; `unordered`, `fifo-throughput`, and
+`fifo-roundrobin` remain available in every published language. The two legacy
+FIFO fill modes require a runtime batch size of one.
 `via raw` requires a `text` field. An opaque derivation uses:
 
 ```text

@@ -59,10 +59,10 @@ reference says so where it lists the ordering vocabulary.
 - [x] (2026-09-17 17:25 PDT) M1: `pOrdering` in `Keiro.Dsl.Parser.Queue` refuses `fifo-heads` below Language 6 at the token span.
 - [x] (2026-09-17 17:25 PDT) M1: `test/fixtures/workqueue-fifo-heads.keiro` declares `language keiro-dsl 6`; new tests prove Languages 4 and 5 refuse the token at its span and Language 6 still round-trips, scaffolds, and diffs.
 - [x] (2026-09-17 17:25 PDT) M1: `FrontendProfiles` expectations extended (minimum version table, `featureBody`, `featureCases`) and the unversioned QuickCheck workqueue generator no longer emits `WqFifoHeads`.
-- [ ] M1: `cabal test keiro-dsl-test` passes.
-- [ ] M2: `just corpus-regen` produces no diff; record migration manifests regenerated; `just conformance-corpus-policy`, `just record-migration-policy`, `just dsl-api-boundaries`, `just generated-name-policy` pass.
-- [ ] M3: `keiro-dsl/CHANGELOG.md` and root `CHANGELOG.md` say the token is a Language 6 candidate feature; `docs/user/typed-spec-toolchain.md`, `docs/user/work-queues.md`, and `docs/corpus/keiro-dsl-corpus.md` updated; `docs/user/log.md` entry added; `just user-documentation-validate` passes.
-- [ ] Commits made with the `MasterPlan:`, `ExecPlan:`, and `Intention:` trailers.
+- [x] (2026-09-17 17:55 PDT) M1: `cabal test keiro-dsl-test` passes with 756 examples.
+- [x] (2026-09-17 17:55 PDT) M2: `just corpus-regen` reproduced all 47 registered invocations without a corpus diff; record migration manifests regenerated; `just conformance-corpus-policy`, `just record-migration-policy`, `just dsl-api-boundaries`, and `just generated-name-policy` pass.
+- [x] (2026-09-17 17:55 PDT) M3: `keiro-dsl/CHANGELOG.md` and root `CHANGELOG.md` say the token is a Language 6 candidate feature; `docs/user/typed-spec-toolchain.md`, `docs/user/work-queues.md`, and `docs/corpus/keiro-dsl-corpus.md` updated; `docs/user/log.md` entry added; `just user-documentation-validate` passes.
+- [x] (2026-09-17 17:55 PDT) Commits made with the `MasterPlan:`, `ExecPlan:`, and `Intention:` trailers.
 
 
 ## Surprises & Discoveries
@@ -121,7 +121,16 @@ reference says so where it lists the ordering vocabulary.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+`ordering fifo-heads` is now owned exclusively by the Language 6 candidate profile. The parser
+checks the exact ordering token, so Languages 4 and 5 receive the standard
+`LanguageFeatureRequiresVersion` structured diagnostic at `fifo-heads`, while Language 6 keeps
+the existing round-trip, scaffold, and diff behavior. The fixture inventory and unversioned
+property generator now reflect that ownership.
+
+The complete DSL suite passed with 756 examples. Corpus regeneration reproduced all 47
+registered invocations without changing a frozen corpus, and the conformance, record migration,
+API-boundary, generated-name, and user-documentation policies passed. No ADR change was needed:
+the implementation applies the published-language rule already recorded in ADR-16.
 
 
 ## Context and Orientation

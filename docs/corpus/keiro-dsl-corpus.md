@@ -196,7 +196,7 @@ machine-checked fixture set contains 309 `.keiro` files as of 2026-09-16.
 | `test/fixtures/workflow.keiro` | valid workflow, all operation shapes, readmodel, and aggregate |
 | `test/fixtures/workqueue-dlq-divergent.keiro` | negative captured DLQ drift |
 | `test/fixtures/workqueue-dup-row.keiro` | negative duplicate workqueue disposition outcome |
-| `test/fixtures/workqueue-fifo-heads.keiro` | strict grouped-head FIFO parsing, scaffolding, and diff evolution |
+| `test/fixtures/workqueue-fifo-heads.keiro` | Language 6 strict grouped-head FIFO parsing, scaffolding, and diff evolution |
 | `test/fixtures/workqueue-group-key-change.keiro` | breaking group-key evolution |
 | `test/fixtures/workqueue-hashed-logical.keiro` | long logical queue name and hashed physical derivation |
 | `test/fixtures/workqueue-incomplete.keiro` | negative incomplete workqueue disposition table |
