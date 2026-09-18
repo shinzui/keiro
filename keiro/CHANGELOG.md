@@ -67,6 +67,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   identity migration: drain source redelivery, partial fan-out, pending timers,
   and permitted historical replay first. The reaction family has no automatic
   legacy or router identity fallback.
+- Outbox reads now preserve non-canonical stored `content_type` text. A retained
+  row containing, for example, `application/json; charset=utf-8` publishes that
+  exact `content-type` header instead of normalizing it to `application/json`;
+  inbox decoding continues to normalize either representation.
 
 ## 0.16.0.0 — 2026-09-07
 

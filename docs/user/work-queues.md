@@ -6,7 +6,7 @@ docId: DOC-25
 tags: [keiro, pgmq, work-queues, reference]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T00:04:13Z
 ---
 
 # Work Queues
@@ -422,25 +422,42 @@ PGMQ does not expire DLQ rows on its own. The retention model is
 archive-then-purge.
 
 ```haskell
-entries <- readDlq thumbnailJob 20        -- inspect, 30s visibility timeout
-moved   <- redriveDlq thumbnailJob 20     -- send back to the main queue
-kept    <- archiveDlq thumbnailJob 20     -- retain in pgmq.a_<dlq>
-purgeDlq thumbnailJob                     -- delete everything, permanently
+entries <- readDlq thumbnailJob 20
+let requested = fmap dlqMessageId entries
+archived <- archiveDlqEntries thumbnailJob requested
+if Set.fromList archived /= Set.fromList requested
+  then stopAndInvestigate
+  else purgeDlq thumbnailJob >>= \case
+    PurgeDlqPurged count -> reportPurged count
+    PurgeDlqBlocked hidden -> reportBlocked hidden
 ```
+
+Every `readDlq`, `redriveDlq`, and count-based `archiveDlq` call hides the rows
+it reads for 30 seconds. `purgeDlq` refuses while any row is hidden, so the old
+inspect-then-purge sequence cannot silently delete inspected records. Keep the
+IDs returned by the inspection, archive exactly those IDs with
+`archiveDlqEntries` (which can move hidden rows), and verify that every requested
+ID was returned before purging. `purgeDlqForce` is the explicit unconditional
+escape hatch and deletes hidden rows too. The metrics snapshot and deletion are
+separate operations; for a full-queue audit, quiesce producers and other
+operators before inspecting, archiving, and purging.
 
 A `DlqEntry p` carries the DLQ row's own `dlqMessageId`, the `reason`
 (`poison_pill: ...`, `invalid_payload: ...`, or `max_retries_exceeded`), the
 preserved `originalPayload` decoded with the job's codec, the original message
-id / enqueue time / read count when present, and `rawBody` for forensics. The
-required wrapper keys are `original_message` and `dead_letter_reason`; the
-metadata keys are treated as optional so legacy or hand-written rows still
-inspect cleanly. A malformed wrapper is reported as
+id / enqueue time / read count when present, `originalHeaders`, and `rawBody`
+for forensics. The required wrapper keys are `original_message` and
+`dead_letter_reason`; the metadata keys are treated as optional so legacy or
+hand-written rows still inspect cleanly. A malformed wrapper is reported as
 `malformed_dlq_payload: <error>` and left in place rather than redriven.
 
-Redriven messages start a fresh PGMQ `read_ct` on the main queue. `archiveDlq`
-moves rows into `pgmq.a_<dlq>`, preserving `enqueued_at`/`read_ct` and stamping
-`archived_at`; `archiveDlqEntry` archives one row by id. Operators who need an
-audit trail archive and then purge; operators who do not can purge alone.
+Redrive republishes the wrapper's original producer headers, including FIFO
+group, trace, and application metadata. A missing or JSON-null
+`original_headers` stays headerless. The new main-queue row receives a new
+message ID, a fresh `read_ct`, and a new position at the back of its group.
+`archiveDlq` moves rows into `pgmq.a_<dlq>`, preserving
+`enqueued_at`/`read_ct` and stamping `archived_at`; `archiveDlqEntry` archives
+one row by ID.
 
 Fix the cause before redriving. A redrive against unchanged code re-runs the
 same failure and burns the attempt budget again.

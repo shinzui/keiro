@@ -6,6 +6,38 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- The public AST grows the Language 6 surface. `ProcessNode.input`, `.handle`,
+  and `.timer` are replaced by `body :: ProcessBody`; `IntakeNode` gains
+  `idempotence :: IdempotenceMode`; `WqOrdering` gains `WqFifoHeads`;
+  `ContractType` gains `CDeclaredId`; and `TypeExpr` gains `TKeyedMap`. The
+  reaction AST types are exported. No top-level exported type or function is
+  removed or renamed, but exhaustive matches and positional construction must
+  handle the new constructors and record shapes.
+- `DiagnosticCode` gains 38 intake, reaction, timer, nominal-leaf, contract-ID,
+  and default-value constructors. `LanguageFeature` gains
+  `DelegatedInboxSyntax`, `ProcessReactionSyntax`, `ContractDeclaredIdSyntax`,
+  and `KeyedMapSyntax`; `RuntimeCapability` gains `DelegatedInboxRuntime` and
+  `StructuralNominalLeaves`.
+- `DiffEnv` gains `oldService`, `newService`, and `newValidationErrors`;
+  `ScaffoldReport` gains reaction coordination drift and ledger rows;
+  `ScaffoldRecord` gains `processReactions`; and `Refusal` gains
+  `HoleContractDrift`. `checkReport` and `workspaceCheckReport` now take a
+  `CheckedService` rather than an `EffectiveLanguageContract`.
+- `ordering fifo-heads` belongs to candidate Language 6. A Language 4 or 5
+  source that used the token during the unreleased window must move to Language
+  6 or choose a published legacy ordering with batch size one.
+- Changing an intake between table and delegated idempotence is classified as
+  `IntakeIdempotenceModeChanged` on the persisted-identity compatibility axis.
+- Migrating a legacy process body to reactions is classified as
+  `ProcessDispatchIdentityModelChanged`. Reaction target ids use physical target
+  stream plus same-target occurrence instead of the legacy positional emit
+  index, so the migration requires an explicit drain.
+- Removing or changing the identity of a declared reaction timer is breaking
+  while old rows may remain scheduled. A semantic reaction change without a
+  `reactions version` increase, or a version decrease, is also breaking.
+
 ### New Features
 
 - Candidate Language 6 adds `Map[DeclaredId] Value` to structural mappings.
@@ -20,7 +52,6 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   structural paths to nominal ID and enum leaves. Same-declaration equality is
   supported while nominal ordering, optional traversal, and cross-declaration
   comparisons remain rejected.
-
 - Candidate Language 6 adds the `StructuralNominalLeaves` capability: generated
   and consumer-bound `id` and `enum` declarations plus `mapped nominal` scalars may appear
   inside structural records, unions, containers, typed workqueue fields, and
@@ -28,11 +59,9 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   Haskell type and apply Keiro-owned ID/scalar admission or the enum's exact
   declared wire spellings. Optional enum leaves accept constructor defaults for
   both generated and consumer-bound domain types.
-
-- Workqueues accept `ordering fifo-heads`; round trips preserve the spelling,
-  scaffolding emits `FifoHeads` and FIFO-index provisioning, and ordering diffs
-  remain breaking delivery-contract changes.
-
+- Candidate Language 6 workqueues accept `ordering fifo-heads`; round trips
+  preserve the spelling, scaffolding emits `FifoHeads` and FIFO-index
+  provisioning, and ordering diffs remain breaking delivery-contract changes.
 - Candidate Language 6 adds `idempotence delegated` to intake declarations and
   generates a typed `runInboxIntake` wrapper over delegated runtime intake.
   Published Languages 1 through 5 and table-generated output remain unchanged.
@@ -43,18 +72,6 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   emits the input ADT, pure reaction, `ReactiveProcessManager`, worker wrapper,
   timer payload codecs/builders, firing dispatcher, reaction version and
   fingerprint; only the typed source-event decoder remains a create-once Hole.
-
-### Breaking Changes
-
-- Changing an intake between table and delegated idempotence is classified as
-  `IntakeIdempotenceModeChanged` on the persisted-identity compatibility axis.
-- Migrating a legacy process body to reactions is classified as
-  `ProcessDispatchIdentityModelChanged`. Reaction target ids use physical target
-  stream plus same-target occurrence instead of the legacy positional emit
-  index, so the migration requires an explicit drain.
-- Removing or changing the identity of a declared reaction timer is breaking
-  while old rows may remain scheduled. A semantic reaction change without a
-  `reactions version` increase, or a version decrease, is also breaking.
 
 ### Other Changes
 
@@ -84,17 +101,28 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   body after exact cancellation. Split and merged alternatives, duplicate
   removal, and cancelled covering siblings no longer produce false history
   advisories; removed emitting bodies receive the same mechanical remedy.
-- Existing replay-only coverage must match the same replay body and cover the
-  exact removed region or every old alternative. Stale or partial siblings no
-  longer hide a later hazard.
+- Existing replay-only coverage is currently syntactic: it must match the same
+  replay body and its guard must be byte-canonically equal to the removed
+  region, or every old alternative must imply the sibling guard alone. A
+  hand-simplified but logically identical twin can therefore draw an
+  `AggGuardTightened` advisory that 0.16 did not emit; stale or partial siblings
+  no longer hide a later hazard.
 - Diff now inserts every proposed twin into a copied candidate and proves its
   effective-language render, parse, replay identity, cleared outcome, and
   validation before printing it. Failed proofs emit the append-only
   `AggGuardRemedyUnavailable` advisory with do-not-deploy guidance and no
   paste-ready transition. Explicit Hole-owned changes remain
   `AggGuardRelationUnknown`.
-- No user-facing changes. The parser-scaling benchmark now uses the current
-  scaffold `path` and `text` record fields.
+- Legacy processes gain a one-time `process-reaction` ledger row with
+  `verification = "custom-unverified"`; the first re-scaffold reports this as
+  informational coordination drift. Check-report schema
+  `keiro-dsl/check-report/1` appends a `processReactions` key.
+- Generated `QueuePolicy.hs` files now explain that deployment owns a positive
+  batch size. This comment-only byte change applies to every language,
+  including frozen Language 4, without changing generated behavior or fold
+  identity.
+- Fix the parser-scaling benchmark's access to the current scaffold `path` and
+  `text` record fields.
 - Reaction checking reports total input ownership, Boolean/input-only guards,
   explicit silence, acceptance evidence, typed mappings, timer payload
   completeness, timer identity, and worker-policy errors at their source lines.

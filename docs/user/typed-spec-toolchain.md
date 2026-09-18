@@ -6,7 +6,7 @@ docId: DOC-23
 tags: [keiro, dsl, language-5, reference]
 generated:
   by: human:nadeem
-  at: 2026-09-17T17:16:09Z
+  at: 2026-09-18T00:04:13Z
 ---
 
 # Keiro DSL Language 5 Reference
@@ -18,7 +18,7 @@ the behavior that remains application-owned. The generated application uses
 ordinary Keiro APIs; the DSL is not interpreted in production.
 
 This reference describes **Language 5**, the published stable language and
-authoring default for new specifications. Language 4 remains a published,
+recommended contract for new released-only specifications. Language 4 remains a published,
 immutable compatibility contract; sections that compare predecessor behavior
 show Language 4 sources explicitly. New sources in this guide begin with:
 
@@ -30,7 +30,10 @@ The active, unpublished Language 6 candidate extends this stable base with
 delegated inboxes, first-class process reactions, and nominal declarations as
 structural leaves. Candidate-only examples say so explicitly and begin with
 `language keiro-dsl 6`; released-only services should remain on Language 5
-until that candidate is published.
+until that candidate is published. On the current development branch,
+`keiro-dsl new` selects the active candidate through
+`currentAuthoringLanguageVersion`; review the generated Language 6 preamble
+before adopting a starter.
 
 Use this page as both an introduction and a syntax reference. The shortest path
 is [Quick start](#quick-start), followed by the node family you need. The
@@ -1418,6 +1421,20 @@ causationId correlationId traceContext attributes idempotencyKey
 Dedupe policies are `PreferIntegrationMessageId`,
 `PreferSourceEventIdentity`, and `KafkaDeliveryIdentity`.
 
+Candidate Language 6 can delegate receipt ownership to the downstream state
+machine:
+
+```text
+dedupe key messageId policy PreferIntegrationMessageId
+idempotence delegated
+```
+
+The `idempotence` clause is optional, and omission means `table` in every
+language. `delegated` requires Language 6 and generates the typed
+`runInboxIntake` wrapper over `runInboxDelegated`. It must not be combined with
+`persist = dedupe-only`, because delegated mode writes no inbox storage; the
+validator reports `DelegatedInboxDedupeOnlyPersistence`.
+
 `persist` is optional and defaults to `full-envelope`. Use `dedupe-only` only
 when a successfully processed payload is re-fetchable or no longer valuable;
 failed rows keep the full envelope for operators regardless of this choice.
@@ -2277,7 +2294,8 @@ cabal run -v0 keiro-dsl -- new KIND
 
 Valid kinds are `aggregate`, `process`, `router`, `contract`, `intake`, `emit`,
 `publisher`, `workqueue`, `dispatch`, `workflow`, and `operation`. Every starter
-is a complete, checked Language 4 service. Coupled kinds include the nodes they
+is a complete, checked candidate Language 6 service because `new` currently
+uses `currentAuthoringLanguageVersion`. Coupled kinds include the nodes they
 need; for example, the publisher starter includes a contract and emit. There is
 no standalone read-model starter; the workqueue starter includes read models.
 
@@ -2433,6 +2451,7 @@ an old application instance at runtime.
 
 ```bash
 cabal run -v0 keiro-dsl -- diff service.keiro --since HEAD^ --explain \
+  --deny AggGuardRelationUnknown,AggGuardRemedyUnavailable \
   --report-out build/keiro-diff.json \
   --replay-impact-out build/replay-impact.json
 ```
@@ -2457,6 +2476,22 @@ the detailed compatibility findings, rollout constraints, or replay report.
 `--report-out` appends the same sorted projection under
 `semanticImpact` while keeping schema `keiro-dsl/diff-report/1`. Source-only or
 ownership-only movement has no mapped semantic-impact entries.
+
+`--deny CODE[,CODE...]` is repeatable and promotes the named advisories to a
+failing exit for this invocation only. It accepts only codes that `diff` can
+emit; a `check`-only code is refused rather than silently ignored.
+
+Three evolution codes need explicit rollout attention:
+
+- `AggGuardRelationUnknown` is an append-only advisory emitted when live
+  emitting sibling remainders are ambiguous. No replay-only twin is guessed;
+  review the history and do not deploy until the relation is understood.
+- `AggGuardRemedyUnavailable` means a computed replay-only twin failed its
+  render, parse, replay-identity, or validation proof. The report deliberately
+  omits a paste-ready transition.
+- `IntakeIdempotenceModeChanged` is a persisted-identity compatibility break.
+  Inbox-table rows and downstream-owned receipts are not interchangeable, so a
+  move between `table` and `delegated` requires an explicit cutover.
 
 Changes to a nominal prefix, domain contract, representation, binding,
 fixtures, or canonical type are reported at every direct or structural use.

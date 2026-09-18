@@ -41,7 +41,7 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
   the deleted or blocked count; `purgeDlqForce` is the distinctly named
   unconditional escape hatch.
 
-### Documentation
+### Other Changes
 
 - Clarify that partition retention drops whole active and archive partitions and
   can remove unprocessed work after a sufficiently long outage or backlog.

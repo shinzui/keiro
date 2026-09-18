@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T00:04:13Z
+      mode: "implement"
+      note: "Refreshed the release-note inventory for post-plan Language 6 nominal type work and began implementation"
 ---
 
 # Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces
@@ -44,19 +50,29 @@ PostgreSQL, and by running `just user-documentation-validate`.
 
 ## Progress
 
-- [ ] M1: root `CHANGELOG.md` `[Unreleased]` reconciled against all seven package changelogs.
-- [ ] M1: `keiro-dsl/CHANGELOG.md` gains a Breaking Changes list of public API changes, the ledger and check-report notes, the Language 4 comment-only note, and the reworded benchmark bullet.
-- [ ] M1: `keiro-test-support/CHANGELOG.md` and `keiro/CHANGELOG.md` corrected.
-- [ ] M1: fifo-heads and twin-coverage wording aligned with the sibling plans' outcomes.
-- [ ] M2: `docs/user/work-queues.md` "Operating the dead-letter queue" rewritten for the guarded workflow.
-- [ ] M3: `docs/user/typed-spec-toolchain.md` documents `diff --deny`, the three missing codes, the `idempotence` clause, and the skeleton language.
-- [ ] M3: `docs/user/log.md` entries added and `generated.at` bumped on every touched document.
-- [ ] M4: `just user-documentation-validate`, `just reviews-validate`, and `just adr-validate` pass; every changelog claim re-verified against source.
+- [x] (2026-09-17 17:20 PDT) M1: root `CHANGELOG.md` `[Unreleased]` reconciled against all seven package changelogs.
+- [x] (2026-09-17 17:20 PDT) M1: `keiro-dsl/CHANGELOG.md` gains a Breaking Changes list of public API changes, the ledger and check-report notes, the Language 4 comment-only note, and the reworded benchmark bullet.
+- [x] (2026-09-17 17:20 PDT) M1: `keiro-test-support/CHANGELOG.md` and `keiro/CHANGELOG.md` corrected.
+- [x] (2026-09-17 17:20 PDT) M1: fifo-heads and current syntactic twin-coverage wording aligned with the sibling plans' recorded decisions and implementation state.
+- [x] (2026-09-17 17:20 PDT) M2: `docs/user/work-queues.md` "Operating the dead-letter queue" rewritten for the guarded workflow.
+- [x] (2026-09-17 17:20 PDT) M3: `docs/user/typed-spec-toolchain.md` documents `diff --deny`, the three missing codes, the `idempotence` clause, and the current skeleton language.
+- [x] (2026-09-17 17:20 PDT) M3: `docs/user/log.md` entries added and `generated.at` bumped on every touched document.
+- [x] (2026-09-17 17:20 PDT) M4: `just user-documentation-validate`, `just reviews-validate`, and `just adr-validate` pass; every changelog claim re-verified against source.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: The public `keiro-dsl` increment grew after REV-17 and this plan's inventory.
+  `TypeExpr.TKeyedMap`, `ContractType.CDeclaredId`, `ContractDeclaredIdSyntax`, `KeyedMapSyntax`,
+  `StructuralNominalLeaves`, and four additional nominal/default diagnostics now join the reaction
+  and delegated-intake additions. The `DiagnosticCode` delta is 38 constructors rather than 34.
+  Evidence: `git diff keiro-0.16.0.0..HEAD` and the completed nominal-type plans through commit
+  `d5ff8e3f`.
+- Discovery: The sibling plans record their intended decisions but have not yet implemented them.
+  At this point in the sequence, replay-twin coverage remains syntactic and `keiro-dsl new` still
+  selects candidate Language 6 through `currentAuthoringLanguageVersion`. This plan documents the
+  current behavior; EP-5 and EP-6 must update the affected changelog and reference text when their
+  code changes land.
 
 
 ## Decision Log
@@ -78,11 +94,29 @@ PostgreSQL, and by running `just user-documentation-validate`.
   that matters for published languages is behavior and fold identity, and disclosure is
   cheaper and more honest than a second generator change one day before a release.
   Date: 2026-09-16
+- Decision: Extend the release-note reconciliation to the nominal-type and keyed-map work that
+  landed after the plan was written.
+  Rationale: Those additions are public Language 6 APIs and capabilities in the same 0.17 package
+  increment. Omitting them would make both the GitHub release notes and the PVP breaking inventory
+  stale before the tag.
+  Date: 2026-09-17
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The root release notes now summarize each consumer-visible 0.17 surface from all seven packages,
+and each package changelog uses the release skill's supported heading order. The `keiro-dsl`
+breaking inventory includes the full post-REV-17 Language 6 public API, including nominal types and
+keyed maps; the `keiro` content-type behavior and `keiro-test-support` fixture export are no longer
+missing.
+
+The work-queue reference now leads an operator through inspect, exact-ID archive verification, and
+guarded purge, with the forced escape hatch and redrive header semantics stated explicitly. The DSL
+reference now covers delegated idempotence, diff denial, all three omitted evolution codes, and the
+current skeleton default. The guarded-purge tests passed with three matched examples plus the
+archive-by-ID example; all three documentation validators and `nix fmt` passed. EP-5 and EP-6 own
+the two already-recorded future wording changes when they change the skeleton default and replay-twin
+coverage implementation. No architecture decision changed, so no ADR amendment was needed here.
 
 
 ## Context and Orientation
@@ -503,3 +537,8 @@ and the `keiro-dsl diff --deny` option in `keiro-dsl/app/Main.hs`. Tooling used:
 that may change documented facts: `docs/plans/284-gate-ordering-fifo-heads-to-language-6.md`,
 `docs/plans/285-harden-the-language-6-reaction-candidate-before-it-is-published.md`,
 `docs/plans/286-close-the-carried-over-runtime-dsl-diff-packaging-and-benchmark-follow-ups.md`.
+
+
+Revision note (2026-09-17): Expanded the changelog inventory for the nominal-ID, enum,
+declared-contract-ID, nested-expression, and identifier-keyed-map work added after REV-17, and
+corrected the expected `DiagnosticCode` delta from 34 to 38.

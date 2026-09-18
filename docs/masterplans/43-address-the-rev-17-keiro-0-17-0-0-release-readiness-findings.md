@@ -104,7 +104,7 @@ retiring the Language 4 read-model generator.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Restore a green verify gate for the 0.17.0.0 candidate | docs/plans/281-restore-a-green-verify-gate-for-the-0-17-0-0-candidate.md | None | None | Complete |
 | 2 | Write the 0.16.0.0 to 0.17.0.0 upgrade edge and reconcile release metadata | docs/plans/282-write-the-0-16-0-0-to-0-17-0-0-upgrade-edge-and-reconcile-release-metadata.md | None | EP-3, EP-4 | Complete |
-| 3 | Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces | docs/plans/283-reconcile-the-0-17-0-0-changelogs-and-user-documentation-with-the-shipped-surfaces.md | None | EP-1, EP-4, EP-6 | Not Started |
+| 3 | Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces | docs/plans/283-reconcile-the-0-17-0-0-changelogs-and-user-documentation-with-the-shipped-surfaces.md | None | EP-1, EP-4, EP-6 | Complete |
 | 4 | Gate ordering fifo-heads to Language 6 | docs/plans/284-gate-ordering-fifo-heads-to-language-6.md | None | EP-1 | Not Started |
 | 5 | Harden the Language 6 reaction candidate before it is published | docs/plans/285-harden-the-language-6-reaction-candidate-before-it-is-published.md | None | EP-1, EP-4 | Not Started |
 | 6 | Close the carried-over runtime, DSL diff, packaging, and benchmark follow-ups | docs/plans/286-close-the-carried-over-runtime-dsl-diff-packaging-and-benchmark-follow-ups.md | None | EP-3 | Not Started |
@@ -211,10 +211,10 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
 - [x] EP-2: blueprint entry declared and version bumped in `blueprint.dhall`, `seihou-registry.dhall`, README, and cohort map
 - [x] EP-2: `seihou validate-blueprint` passes and the synced-copy preview shows the edge
 - [x] EP-2: `mori.dhall` adapter constraint and release-skill formatter text reconciled
-- [ ] EP-3: root and package changelogs reconciled and corrected (`keiro-dsl` breaking list, `keiro` content-type, `keiro-test-support` export)
-- [ ] EP-3: DLQ section of `docs/user/work-queues.md` rewritten for the guarded workflow
-- [ ] EP-3: `docs/user/typed-spec-toolchain.md` covers `diff --deny`, the new diff codes, intake idempotence syntax, and skeleton language
-- [ ] EP-3: documentation validators pass and every bullet re-verified against source
+- [x] EP-3: root and package changelogs reconciled and corrected (`keiro-dsl` breaking list, `keiro` content-type, `keiro-test-support` export)
+- [x] EP-3: DLQ section of `docs/user/work-queues.md` rewritten for the guarded workflow
+- [x] EP-3: `docs/user/typed-spec-toolchain.md` covers `diff --deny`, the new diff codes, intake idempotence syntax, and skeleton language
+- [x] EP-3: documentation validators pass and every bullet re-verified against source
 - [ ] EP-4: `WorkqueueFifoHeadsSyntax` registered in the Language 6 profile and the parser refuses the token under Languages 4 and 5 at its span
 - [ ] EP-4: corpora and manifests proven unchanged or regenerated; all four policies pass
 - [ ] EP-4: changelogs and user reference say the token needs the Language 6 candidate

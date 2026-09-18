@@ -6,9 +6,12 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
-### Other Changes
+### New Features
 
-- No user-facing changes.
+- Add `withFreshResourceStorePrepared`, which clones a database, runs a
+  privileged preparation callback against a temporary store for roles and
+  ACLs, closes it, and then opens the resource-aware application store with
+  modified connection settings.
 
 ## 0.16.0.0 — 2026-09-07
 

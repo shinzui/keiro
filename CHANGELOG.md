@@ -26,6 +26,21 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   match it, raw invalid tuning fails before consumption, and legacy
   `FifoThroughput`/`FifoRoundRobin` modes reject batch sizes greater than one.
   Default worker and drain wrappers inherit the job's ordering.
+- `keiro-pgmq`: `DlqEntry` gains `originalHeaders`, and `purgeDlq` returns
+  `PurgeDlqResult`. Callers must handle `PurgeDlqBlocked` rather than assuming
+  deletion after inspection.
+- `keiro-ops`: forced `pgmq dlq purge` now uses the guarded library operation
+  and fails without deleting when inspected rows remain hidden; `--force`
+  authorizes the mutation but does not bypass this refusal.
+- `keiro-dsl`: public AST, validation, language-profile, diff, scaffold-ledger,
+  and check-report types grow for candidate Language 6. `ProcessNode` replaces
+  its legacy body fields with `ProcessBody`; intake, workqueue, contract, and
+  type-expression records gain the delegated, grouped-head, declared-ID, and
+  keyed-map alternatives. Exhaustive matches and positional construction must
+  handle the new constructors and fields.
+- `keiro-dsl`: `ordering fifo-heads` belongs to candidate Language 6. Sources
+  that used it under Language 4 or 5 during the unreleased window must move to
+  Language 6 or retain a published legacy ordering with batch size one.
 
 ### New Features
 
@@ -33,7 +48,20 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   PGMQ grouped-head reads. It safely batches one absolute head from each
   independent group and requires `shibuya-pgmq-adapter ^>=0.16.0.0`.
 - `keiro-dsl`: add `ordering fifo-heads` parsing, pretty-printing, breaking diff
-  classification, and scaffolding to `FifoHeads` plus FIFO-index provisioning.
+  classification, and scaffolding to `FifoHeads` plus FIFO-index provisioning
+  in candidate Language 6.
+- `keiro-pgmq`: add `archiveDlqEntries` for exact inspected IDs,
+  `purgeDlqForce` as the explicit unconditional escape hatch, and
+  `mkPartitionSpec` with typed validation before database access.
+- `keiro`: add no-Store `runInboxDelegated` wrappers and
+  `Keiro.Inbox.Delegated` for consumers whose downstream state transition owns
+  the durable idempotence receipt.
+- `keiro-dsl`: candidate Language 6 adds `idempotence delegated` intake and first-class
+  process reactions while Languages 1 through 5 remain published and frozen.
+  It also adds nominal IDs and enums across structural mapped surfaces,
+  declared contract IDs, nested nominal expressions, and identifier-keyed maps.
+- `keiro-test-support`: add `withFreshResourceStorePrepared` for privileged
+  database preparation before opening a resource-aware application store.
 
 - `keiro`: add `Keiro.ProcessManager.Reaction`, an additive typed process-manager
   API with explicit no-advance and accepted-only follow-ups, atomic saga/timer
@@ -46,12 +74,28 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - `keiro`: add `Keiro.Outbox.Identity`, a post-transaction identity-conflict metric
   (`keiro.outbox.identity.conflict`), and producer replay/performance coverage.
 
+### Bug Fixes
+
+- `keiro-pgmq`: DLQ redrive preserves the wrapper's original FIFO group,
+  trace, and application headers. Missing or JSON-null legacy headers remain
+  headerless instead of inheriting the DLQ row's transport headers.
+
 ### Other Changes
 
 - `keiro`: deprecate `mintIntegrationEvent` in favor of explicitly named
   `freshIntegrationEvent`; caller-owned envelope enqueue remains.
 - `keiro-core`: `IntegrationEvent.messageId` is documented as opaque text rather
   than a time-ordered UUID.
+- `keiro`: outbox reads preserve non-canonical stored `content_type` text in
+  the published header; inbox decoding still normalizes accepted forms.
+- `keiro-dsl`: guard diffing cancels exact siblings before classification,
+  reports ambiguous remainders as `AggGuardRelationUnknown`, suppresses an
+  unproved remedy as `AggGuardRemedyUnavailable`, and lets CI promote selected
+  advisories with repeatable `diff --deny`.
+- `keiro-dsl`: existing legacy processes gain an informational
+  `custom-unverified` reaction-ledger row, check reports append
+  `processReactions`, and generated `QueuePolicy.hs` comments change without
+  altering published-language behavior or fold identity.
 - Fix parser-scaling benchmark access to the current scaffold `path` and `text`
   fields, discovered by the full PGMQ 0.6 component build.
 - Reformat cabal files with cabal-gild and migrate to nix-haskell-flake v0.21.0.

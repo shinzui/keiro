@@ -1,5 +1,9 @@
 # Keiro User Documentation Log
 
+## 2026-09-18
+* **Update**: Document guarded DLQ inspection, exact-ID archive verification, guarded and forced purge, and original-header redrive behavior.
+* **Update**: Document delegated intake syntax, diff denial policy and guard diagnostics, intake identity changes, and the current skeleton language.
+
 ## 2026-09-17
 * **Update**: Document generated and consumer-bound enum structural leaves, exact declared
 wire spellings, constructor defaults, and declaration-scoped arm coverage.
