@@ -9026,6 +9026,7 @@ main = hspec $ do
       payloadChanged <- checkedServiceFromText "process-reaction-diff-payload.keiro" payloadSource
       identityChanged <- checkedServiceFromText "process-reaction-diff-identity.keiro" identitySource
       ceilingChanged <- checkedServiceFromText "process-reaction-diff-ceiling.keiro" (T.replace "max-attempts 5" "max-attempts 7" source)
+      deadLetterChanged <- checkedServiceFromText "process-reaction-diff-dead-letter.keiro" (T.replace "dead-letter \"incident timer exceeded ceiling\"" "dead-letter \"incident timer exceeded ceiling v2\"" source)
       versionedFanOut <- checkedServiceFromText "process-reaction-diff-versioned.keiro" (T.replace "reactions version 1" "reactions version 2" (T.replace "+ 5m" "+ 10m" source))
       versionTwo <- checkedServiceFromText "process-reaction-diff-version-two.keiro" (T.replace "reactions version 1" "reactions version 2" source)
       withoutAck <-
@@ -9048,13 +9049,18 @@ main = hspec $ do
                   (T.replace "\n  timer reminder\n    id uuidv5 \"incident-reminder-timer:\" <> correlationId\n    payload { kind=\"reminder\" incidentId:IncidentId }\n    fire dispatch Incident@correlationId RemindIncident { incidentId }\n      fired-event-id uuidv5 \"incident-reminder-fired:\" <> correlationId\n      on-ok Fired ; on-reject Fired ; on-ambiguous Retry ; on-error Retry ; not-mine Retry\n    decode unknown-status => Cancelled\n" "" source)
               )
           )
-      let codes select old new = [(.code) kind | change <- resolvedFold (CheckedDiff.diffServices old new), kind <- [kindOfChange change], select change]
+      let changes old new = resolvedFold (CheckedDiff.diffServices old new)
+          codes select old new = [(.code) kind | change <- changes old new, kind <- [kindOfChange change], select change]
+          finding code old new = find ((== code) . (.code) . kindOfChange) (changes old new)
       codes isAdvisory baseline fanOutChanged `shouldContain` [ProcessReactionFanOutChanged]
       codes isAdvisory stateBaseline guardChanged `shouldContain` [ProcessReactionGuardChanged]
       codes isBreaking baseline fanOutChanged `shouldContain` [ProcessReactionFingerprintChangedWithoutVersionBump]
       codes isAdvisory baseline payloadChanged `shouldContain` [ProcessTimerPayloadChanged]
       codes isBreaking baseline identityChanged `shouldContain` [ProcessTimerIdentityChanged]
-      codes isAdvisory baseline ceilingChanged `shouldContain` [ProcessTimerCeilingChanged]
+      codes isBreaking baseline ceilingChanged `shouldBe` []
+      codes isAdvisory baseline ceilingChanged `shouldBe` [ProcessTimerCeilingChanged]
+      codes isBreaking baseline deadLetterChanged `shouldBe` []
+      codes isAdvisory baseline deadLetterChanged `shouldBe` [ProcessTimerCeilingChanged]
       codes isAdvisory baseline versionedFanOut `shouldContain` [ProcessReactionFingerprintChangedWithVersionBump]
       codes isBreaking baseline versionedFanOut `shouldBe` []
       codes isBreaking versionTwo baseline `shouldContain` [ProcessReactionVersionDecreased]
@@ -9062,6 +9068,17 @@ main = hspec $ do
       codes isAdditiveChange withoutAck baseline `shouldContain` [ProcessReactionAdded]
       codes isBreaking baseline withoutReminder `shouldContain` [ProcessTimerRemoved]
       codes isAdditiveChange withoutReminder baseline `shouldContain` [ProcessTimerAdded]
+      case finding ProcessReactionFanOutChanged baseline fanOutChanged of
+        Just change -> do
+          let kind = kindOfChange change
+          (.rollout) kind.vector `shouldBe` Set.singleton RolloutDrainRequired
+          remediationFor kind.context kind.code `shouldSatisfy` (\case RemedyDeploymentOrder RolloutDrainRequired :| _ -> True; _ -> False)
+        Nothing -> expectationFailure "expected ProcessReactionFanOutChanged"
+      case finding ProcessTimerRemoved baseline withoutReminder of
+        Just change -> do
+          verdictFor PersistedIdentity ((.vector) (kindOfChange change)) `shouldBe` VBreaking
+          verdictFor PrivateHistoryRead ((.vector) (kindOfChange change)) `shouldBe` VNotApplicable
+        Nothing -> expectationFailure "expected ProcessTimerRemoved"
     it "classifies reaction arm reordering by ordinal and requires a version bump" $ do
       baselineSource <- readTestText "test/fixtures/process-reactions-diff.keiro"
       reorderedSource <- readTestText "test/fixtures/process-reactions-reordered.keiro"
@@ -9086,20 +9103,21 @@ main = hspec $ do
       versionTwo <- checkedServiceFromText "process-snapshot-v2.keiro" (T.replace "reactions version 1" "reactions version 2" reactionSource)
       legacy <- checkedServiceFromText "process-snapshot-legacy.keiro" legacySource
       case processReactionSnapshots reaction of
-        [snapshot] -> do
+        Right [snapshot] -> do
           (.verification) snapshot `shouldBe` "generated-declarative"
           (.version) snapshot `shouldBe` Just 1
           fmap T.length ((.fingerprint) snapshot) `shouldBe` Just 64
           Aeson.decode (Aeson.encode snapshot) `shouldBe` Just snapshot
         snapshots -> expectationFailure ("expected one process reaction snapshot, got " <> show snapshots)
       case processReactionSnapshots legacy of
-        [snapshot] -> do
+        Right [snapshot] -> do
           (.verification) snapshot `shouldBe` "custom-unverified"
           (.version) snapshot `shouldBe` Nothing
           (.fingerprint) snapshot `shouldBe` Nothing
         snapshots -> expectationFailure ("expected one legacy process snapshot, got " <> show snapshots)
-      processReactionDrift (processReactionSnapshots reaction) (processReactionSnapshots versionTwo)
-        `shouldSatisfy` (not . null)
+      case (processReactionSnapshots reaction, processReactionSnapshots versionTwo) of
+        (Right oldSnapshots, Right newSnapshots) -> processReactionDrift oldSnapshots newSnapshots `shouldSatisfy` (not . null)
+        snapshots -> expectationFailure ("expected checked reaction snapshots, got " <> show snapshots)
     it "ignores formatting-only process and timer surface rewrites" $ do
       original <- specOf "test/fixtures/hospital-surge.keiro"
       formatted <- shouldParseStableRenderedSpec "<formatted-process>" original
@@ -10522,8 +10540,8 @@ main = hspec $ do
 
   describe "new <kind> skeletons (M5)" $ do
     forM_ skeletonKinds $ \skeletonKind ->
-      it ("the " <> T.unpack skeletonKind <> " skeleton selects and preserves the active authoring language") $
-        assertSkeletonUsesAuthoringLanguage skeletonKind
+      it ("the " <> T.unpack skeletonKind <> " skeleton selects and preserves the stable language") $
+        assertSkeletonUsesStableLanguage skeletonKind
     it "every skeleton parses and validates with zero error diagnostics" $
       mapM_ assertSkeletonValid skeletonKinds
     it "every skeleton passes the scaffold refusal gates" $
@@ -12998,15 +13016,15 @@ assertSkeletonValid kind = case skeletonFor kind of
       [(.code) d | d <- validateSpec spec, (.severity) d == Error]
         `shouldBe` ([] :: [DiagnosticCode])
 
-assertSkeletonUsesAuthoringLanguage :: T.Text -> IO ()
-assertSkeletonUsesAuthoringLanguage kind = case skeletonFor kind of
+assertSkeletonUsesStableLanguage :: T.Text -> IO ()
+assertSkeletonUsesStableLanguage kind = case skeletonFor kind of
   Left err -> expectationFailure (T.unpack ("skeleton for " <> kind <> ": " <> err))
   Right source -> case parseSource ("new:" <> T.unpack kind) source of
     Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
     Right parsed -> do
       let service = checkedSource parsed
-      (.contractLanguageVersion) (checkedLanguageContract service) `shouldBe` currentAuthoringLanguageVersion
-      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Candidate
+      (.contractLanguageVersion) (checkedLanguageContract service) `shouldBe` currentStableLanguageVersion
+      effectiveLanguageSupport (checkedLanguageContract service) `shouldBe` Stable
       [(.code) diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error]
         `shouldBe` ([] :: [DiagnosticCode])
       scaffoldServiceModules (defaultContext ((checkedSpec service).context)) service

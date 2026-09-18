@@ -106,7 +106,7 @@ retiring the Language 4 read-model generator.
 | 2 | Write the 0.16.0.0 to 0.17.0.0 upgrade edge and reconcile release metadata | docs/plans/282-write-the-0-16-0-0-to-0-17-0-0-upgrade-edge-and-reconcile-release-metadata.md | None | EP-3, EP-4 | Complete |
 | 3 | Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces | docs/plans/283-reconcile-the-0-17-0-0-changelogs-and-user-documentation-with-the-shipped-surfaces.md | None | EP-1, EP-4, EP-6 | Complete |
 | 4 | Gate ordering fifo-heads to Language 6 | docs/plans/284-gate-ordering-fifo-heads-to-language-6.md | None | EP-1 | Complete |
-| 5 | Harden the Language 6 reaction candidate before it is published | docs/plans/285-harden-the-language-6-reaction-candidate-before-it-is-published.md | None | EP-1, EP-4 | Not Started |
+| 5 | Harden the Language 6 reaction candidate before it is published | docs/plans/285-harden-the-language-6-reaction-candidate-before-it-is-published.md | None | EP-1, EP-4 | In Progress |
 | 6 | Close the carried-over runtime, DSL diff, packaging, and benchmark follow-ups | docs/plans/286-close-the-carried-over-runtime-dsl-diff-packaging-and-benchmark-follow-ups.md | None | EP-3 | Not Started |
 
 Phase 1 (gates the 0.17.0.0 tag): EP-1, EP-2, EP-3, EP-4. Phase 2 (before Language 6 is

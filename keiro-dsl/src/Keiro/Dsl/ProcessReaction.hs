@@ -25,9 +25,9 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Data.Word (Word8)
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.CanonicalEncoding (canonicalReactionSurface)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType (NominalRepresentation (..), ResolvedNominalType (..))
-import Keiro.Dsl.PrettyPrint (renderReactionSurface)
 import Keiro.Dsl.SemanticContract (EffectiveLanguageContract)
 import Keiro.Dsl.TypeGraph (TypeGraph)
 import Numeric (showHex)
@@ -369,7 +369,7 @@ processReactionFingerprint = (.fingerprint)
 processReactionFingerprintFrom :: ReactionBody -> Text
 processReactionFingerprintFrom reaction = hex (BS.unpack (SHA256.hash (Text.encodeUtf8 canonical)))
   where
-    canonical = T.unlines (drop 1 (T.lines (renderReactionSurface reaction)))
+    canonical = canonicalReactionSurface reaction
 
 hex :: (Foldable f) => f Word8 -> Text
 hex = T.pack . concatMap twoHex . foldr (:) []

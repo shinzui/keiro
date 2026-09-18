@@ -8,6 +8,7 @@
 module Keiro.Dsl.CanonicalEncoding
   ( canonicalExpr,
     canonicalTransition,
+    canonicalReactionSurface,
     canonicalDomainOutcomeTypes,
     canonicalTransitionOutcome,
     foldFingerprint128,
@@ -15,8 +16,11 @@ module Keiro.Dsl.CanonicalEncoding
 where
 
 import Data.Bits (shiftR, xor, (.&.), (.|.))
+import Data.ByteString qualified as BS
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
 import Keiro.Dsl.Grammar
 import Numeric (showHex)
 import Prettyprinter
@@ -35,6 +39,131 @@ canonicalTransition =
   renderStrict
     . layoutPretty LayoutOptions {layoutPageWidth = Unbounded}
     . docTransition
+
+-- | Frozen semantic encoding for the Language 6 reaction fingerprint. Every
+-- component is UTF-8 length framed, so punctuation and non-ASCII text cannot
+-- alias adjacent fields. Operator-only timer retry policy is deliberately
+-- absent: it has its own diff diagnostic and is not reaction replay identity.
+canonicalReactionSurface :: ReactionBody -> Text
+canonicalReactionSurface reaction =
+  record
+    "reaction-v1"
+    [ scalar (T.pack (show reaction.version)),
+      list (map input (NE.toList reaction.inputs)),
+      list (map reactionNode (NE.toList reaction.reactions)),
+      scalar "target-keyed-source-event-occurrence-v1",
+      list (map timer reaction.timers)
+    ]
+  where
+    input value =
+      record
+        "input"
+        [ scalar value.name,
+          list [record "field" [scalar field.name, optional scalar field.valueType] | field <- value.fields],
+          optional typeExpr value.valueType
+        ]
+    typeExpr = \case
+      TText -> scalar "text"
+      TInt -> scalar "int"
+      TInteger -> scalar "integer"
+      TBool -> scalar "bool"
+      TNatural -> scalar "natural"
+      TTime -> scalar "time"
+      TJson -> scalar "json"
+      TOptional value -> record "optional" [typeExpr value]
+      TList value -> record "list-type" [typeExpr value]
+      TMap value -> record "map-type" [typeExpr value]
+      TKeyedMap key value -> record "keyed-map-type" [scalar key, typeExpr value]
+      TRef name -> record "ref" [scalar name]
+    reactionNode node = record "on" [scalar node.on, list (map arm (NE.toList node.arms))]
+    arm value = record "arm" [armGuard value.guard, armBody value.body]
+    armGuard = \case
+      UnconditionalArm -> scalar "unconditional"
+      WhenArm expression -> record "when" [scalar (canonicalExpr expression)]
+      OtherwiseArm -> scalar "otherwise"
+    armBody = \case
+      NoAction -> scalar "no-action"
+      ArmActions advance followUps -> record "actions" [optional advanceNode advance, list (map followUp followUps)]
+    advanceNode value =
+      record
+        "advance"
+        [ scalar value.command,
+          list (map binding value.fields),
+          optional (list . map followUp) value.accepted,
+          bool value.silentNoAction
+        ]
+    followUp = \case
+      FollowDispatch value -> dispatch value
+      FollowSchedule value -> schedule value
+      FollowCancel name _ -> record "cancel" [scalar name]
+    dispatch value =
+      record
+        "dispatch"
+        [ scalar value.target,
+          scalar value.key,
+          scalar value.command,
+          list (map binding value.fields),
+          disposition value.disposition
+        ]
+    disposition value =
+      record
+        "dispatch-disposition"
+        [disp value.onAppended, disp value.onDuplicate, disp value.onFailed]
+    disp = \case
+      DAckOk -> scalar "ack-ok"
+      DRetry -> scalar "retry"
+      DDeadLetter value -> record "dead-letter" [scalar value]
+    schedule value =
+      record
+        "schedule"
+        [ scalar value.timer,
+          scalar (case value.mode of ScheduleRearm -> "rearm"; ScheduleOnce -> "once"),
+          fireAt value.fireAt,
+          list (map binding value.bindings)
+        ]
+    fireAt value = record "fire-at" [scalar value.field, scalar value.window]
+    binding value = record "binding" [scalar value.name, optional scalar value.value]
+    timer value =
+      record
+        "timer"
+        [ scalar value.name,
+          identity value.id,
+          list (map payload value.payload),
+          fire value.fire,
+          scalar value.decodeUnknown
+        ]
+    identity value = record "uuidv5" [scalar value.prefix, scalar value.field]
+    payload = \case
+      PayloadConstant name value -> record "payload-constant" [scalar name, scalar value]
+      PayloadTyped name valueType -> record "payload-typed" [scalar name, optional scalar valueType]
+    fire value =
+      record
+        "fire"
+        [ scalar value.target,
+          scalar value.key,
+          scalar value.command,
+          list (map binding value.fields),
+          identity value.firedEventId,
+          fireDisposition value.disposition
+        ]
+    fireDisposition value =
+      record
+        "fire-disposition"
+        [ outcome value.onOk,
+          outcome value.onReject,
+          outcome value.onAmbiguous,
+          outcome value.onError,
+          outcome value.notMine
+        ]
+    outcome OFired = scalar "fired"
+    outcome ORetry = scalar "retry"
+
+    record tag values = scalar tag <> list values
+    list values = scalar (T.concat values)
+    optional render = maybe (scalar "none") (record "some" . pure . render)
+    bool False = scalar "false"
+    bool True = scalar "true"
+    scalar value = T.pack (show (BS.length (Text.encodeUtf8 value))) <> ":" <> value
 
 -- | Deterministic command-behavior identity for the aggregate-wide outcome
 -- types. This is deliberately separate from 'canonicalTransition', whose bytes

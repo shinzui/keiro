@@ -6275,7 +6275,9 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
          ]
       <> ["import Data.Aeson (FromJSON, ToJSON)" | hasTimers]
       <> ["import Data.Aeson qualified as Aeson" | hasTimers]
+      <> ["import Data.ByteString qualified as BS" | hasTimers]
       <> ["import Data.Text qualified as T" | processNeedsTextPack]
+      <> ["import Data.Text.Encoding (encodeUtf8)" | hasTimers]
       <> ["import Data.Time (UTCTime, addUTCTime)" | hasTimers]
       <> ["import Data.UUID (UUID)" | hasTimers]
       <> ["import Data.UUID.V5 qualified as UUID.V5" | hasTimers]
@@ -6296,6 +6298,7 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
       <> [ "import Keiro.ProcessManager.Reaction qualified as Reaction",
            "import Keiro.Stream qualified as Stream"
          ]
+      <> ["import Keiro.DeterministicId (identitySeedBytes)" | hasTimers]
       <> ["import Keiro.Timer (TimerId (..), TimerRequest (..), TimerWorkerOptions (..))" | hasTimers]
       <> ["import Kiroku.Store.Types (EventId (..))" | hasTimers]
       <> workerPolicyImports ((.poison) process)
@@ -6449,12 +6452,15 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
                ]
             <> concatMap renderTimerFire timers
             <> [ "",
-                 "namedUuid :: Text -> UUID",
-                 "namedUuid value = UUID.V5.generateNamed UUID.V5.namespaceURL (map (fromIntegral . fromEnum) (T.unpack value))"
+                 "reactionIdentity :: Text -> Text -> UUID",
+                 "reactionIdentity prefix correlation =",
+                 "  UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes (T.concat (map field [prefix, correlation])))",
+                 "  where",
+                 "    field value = T.pack (show (BS.length (encodeUtf8 value))) <> \":\" <> value"
                ]
 
     timerFireFunction timer = lo <> pascal ((.name) timer) <> "Fire"
-    timerIdExpression timer correlation = "TimerId (namedUuid (" <> tshow ((.prefix) ((.id) timer)) <> " <> " <> correlation <> "))"
+    timerIdExpression timer correlation = "TimerId (reactionIdentity " <> tshow ((.prefix) ((.id) timer)) <> " " <> correlation <> ")"
 
     renderTimerFire timer =
       [ "",
@@ -6464,7 +6470,7 @@ emitReactionProcessGen ctx genPrefix holePrefix process reaction =
         "      case (Aeson.fromJSON timer.payload :: Aeson.Result " <> timerPayloadType timer <> ") of",
         "        Aeson.Error _ -> pure Nothing",
         "        Aeson.Success decoded -> do",
-        "          let firedId = EventId (namedUuid (" <> tshow ((.prefix) ((.firedEventId) ((.fire) timer))) <> " <> timer.correlationId))",
+        "          let firedId = EventId (reactionIdentity " <> tshow ((.prefix) ((.firedEventId) ((.fire) timer))) <> " timer.correlationId)",
         "              target = Stream.entityStream " <> targetEventCategory <> " " <> renderFireKey ((.key) ((.fire) timer)),
         "          result <-",
         "            runCommand",

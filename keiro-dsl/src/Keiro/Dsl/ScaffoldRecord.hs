@@ -325,32 +325,34 @@ mappingRowPrefix :: MappingIdentity -> Text
 mappingRowPrefix NominalMapping {} = "nominal-mapping "
 mappingRowPrefix _ = "mapping "
 
-processReactionRowsForService :: CheckedService -> [ProcessReactionRecordRow]
+processReactionRowsForService :: CheckedService -> Either (NE.NonEmpty Text) [ProcessReactionRecordRow]
 processReactionRowsForService service =
-  map rowFor [process | NProcess process <- (.nodes) spec]
+  traverse rowFor [process | NProcess process <- (.nodes) spec]
   where
     spec = checkedSpec service
     rowFor process = case (.body) process of
       LegacyProcessBody {} ->
-        ProcessReactionRecordRow
-          { processName = (.name) process,
-            verification = "custom-unverified",
-            version = Nothing,
-            fingerprint = Nothing,
-            holeObligations = []
-          }
+        Right
+          ProcessReactionRecordRow
+            { processName = (.name) process,
+              verification = "custom-unverified",
+              version = Nothing,
+              fingerprint = Nothing,
+              holeObligations = []
+            }
       ReactionProcessBody {} -> case checkedTypeGraph service of
-        Left failures -> error ("checked service type graph did not resolve for process ledger: " <> show failures)
+        Left failures -> Left (T.pack ("checked service type graph did not resolve for process ledger: " <> show failures) NE.:| [])
         Right graph -> case checkProcessReaction (checkedLanguageContract service) graph spec process of
-          Left failures -> error ("validated process reaction did not check for process ledger: " <> show failures)
+          Left failures -> Left (T.pack ("validated process reaction did not check for process ledger: " <> show failures) NE.:| [])
           Right checked ->
-            ProcessReactionRecordRow
-              { processName = (.name) process,
-                verification = (.verification) checked,
-                version = Just ((.version) checked),
-                fingerprint = Just ((.fingerprint) checked),
-                holeObligations = decoderObligation process : (.holeObligations) checked
-              }
+            Right
+              ProcessReactionRecordRow
+                { processName = (.name) process,
+                  verification = (.verification) checked,
+                  version = Just ((.version) checked),
+                  fingerprint = Just ((.fingerprint) checked),
+                  holeObligations = decoderObligation process : (.holeObligations) checked
+                }
     decoderObligation process =
       "decode"
         <> (.id) process

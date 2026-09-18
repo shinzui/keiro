@@ -2,6 +2,9 @@ module Main (main) where
 
 import Control.Monad (forM_, unless)
 import Data.Aeson qualified as Aeson
+import Data.ByteString qualified as BS
+import Data.Text qualified as T
+import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime (..), addUTCTime, getCurrentTime, secondsToDiffTime)
 import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
@@ -13,6 +16,7 @@ import Generated.ProcessTimers.IncidentTimers.Process
 import Generated.ProcessTimers.Nominals (mkIncidentId)
 import Keiro.Codec (decodeRecorded)
 import Keiro.Command (defaultRunCommandOptions)
+import Keiro.DeterministicId (identitySeedBytes)
 import Keiro.ProcessManager.Reaction qualified as Reaction
 import Keiro.Test.Postgres (Fixture, StoreRunner (..), withFreshResourceStore, withMigratedSuite)
 import Keiro.Timer (TimerId (..), TimerRequest (..), TimerRow (..), TimerStatus (..), claimDueTimer, lookupTimer, markTimerFired, runTimerWorkerWith)
@@ -22,6 +26,7 @@ import Kiroku.Store.Types (EventId (..), EventType (..), GlobalPosition (..), Re
 main :: IO ()
 main =
   withMigratedSuite $ \fixture -> do
+    identityVectorCase
     withFreshResourceStore fixture $ \(_storeHandle, StoreRunner runStore) -> do
       incidentId <- either (fail . show) pure (mkIncidentId "inc_01h455vb4pex5vsknk084sn02q")
       let firstInput = IncidentReported incidentId firstObserved "first"
@@ -92,6 +97,35 @@ main =
     claimedCancelRaceCase fixture
     ceilingCase fixture
     putStrLn "process timer conformance: PASS"
+
+identityVectorCase :: IO ()
+identityVectorCase = do
+  UUID.toText (reactionIdentity "incident-escalation-timer:" "inc_01h455vb4pex5vsknk084sn02q")
+    `assertEqual` "58406c5e-b75e-515c-8a0c-30a4266b4b89"
+  UUID.toText (reactionIdentity "incident-escalation-timer:" "\x0101")
+    `assertEqual` "be5128ce-0df9-52a8-b2c8-5bd54ced1280"
+  UUID.toText (reactionIdentity "incident-escalation-timer:" "\SOH")
+    `assertEqual` "77aba1e9-500c-5e71-ae70-5194c47e5a30"
+  oldIdentity "\x0101" `assertEqual` oldIdentity "\SOH"
+  reactionIdentity "incident-escalation-timer:" "\x0101"
+    `assertNotEqual` reactionIdentity "incident-escalation-timer:" "\SOH"
+  where
+    oldIdentity correlation =
+      UUID.V5.generateNamed
+        UUID.V5.namespaceURL
+        (map (fromIntegral . fromEnum) ("incident-escalation-timer:" <> correlation))
+
+reactionIdentity :: T.Text -> T.Text -> UUID.UUID
+reactionIdentity prefix correlation =
+  UUID.V5.generateNamed UUID.V5.namespaceURL (identitySeedBytes (T.concat (map field [prefix, correlation])))
+  where
+    field value = T.pack (show (BS.length (encodeUtf8 value))) <> ":" <> value
+
+assertEqual :: (Eq a, Show a) => a -> a -> IO ()
+assertEqual actual expected = unless (actual == expected) (error ("expected " <> show expected <> ", got " <> show actual))
+
+assertNotEqual :: (Eq a, Show a) => a -> a -> IO ()
+assertNotEqual left right = unless (left /= right) (error ("expected distinct values, got " <> show left))
 
 absentCancelCase :: Fixture -> IO ()
 absentCancelCase fixture =
@@ -182,8 +216,10 @@ expectedEscalationTimerId =
   TimerId
     ( UUID.V5.generateNamed
         UUID.V5.namespaceURL
-        (map (fromIntegral . fromEnum) ("incident-escalation-timer:" <> "inc_01h455vb4pex5vsknk084sn02q"))
+        (identitySeedBytes (T.concat (map field ["incident-escalation-timer:", "inc_01h455vb4pex5vsknk084sn02q"])))
     )
+  where
+    field value = T.pack (show (BS.length (encodeUtf8 value))) <> ":" <> value
 
 sourceUuid1, sourceUuid2, sourceUuid3, sourceUuid4, sourceUuid5, sourceUuid6, sourceUuid7, sourceUuid8, sourceUuid9 :: UUID.UUID
 sourceUuid1 = staticUuid "123e4567-e89b-72d3-a456-426614174001"

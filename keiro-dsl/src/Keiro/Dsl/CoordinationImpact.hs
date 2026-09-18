@@ -29,6 +29,7 @@ where
 import Control.Monad (unless)
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
 import Data.List (sortOn)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
@@ -213,24 +214,25 @@ renderRouterSelectionDrift drifts = "router selection coordination metadata:" : 
         <> maybe "" ((" version=" <>) . T.pack . show) ((.version) snapshot)
         <> maybe "" (" fingerprint=" <>) ((.fingerprint) snapshot)
 
-processReactionSnapshots :: CheckedService -> [ProcessReactionSnapshot]
-processReactionSnapshots service = sortOn (.process) (map snapshotFor processes)
+processReactionSnapshots :: CheckedService -> Either (NE.NonEmpty Text) [ProcessReactionSnapshot]
+processReactionSnapshots service = sortOn (.process) <$> traverse snapshotFor processes
   where
     spec = checkedSpec service
     processes = [process | NProcess process <- (.nodes) spec]
     snapshotFor process = case (.body) process of
-      LegacyProcessBody {} -> customSnapshot process
+      LegacyProcessBody {} -> Right (customSnapshot process)
       ReactionProcessBody {} -> case checkedTypeGraph service of
-        Left failures -> error ("checked service type graph did not resolve for process coordination: " <> show failures)
+        Left failures -> Left (T.pack ("checked service type graph did not resolve for process coordination: " <> show failures) NE.:| [])
         Right graph -> case checkProcessReaction (checkedLanguageContract service) graph spec process of
-          Left failures -> error ("validated process reaction did not check for coordination: " <> show failures)
+          Left failures -> Left (T.pack ("validated process reaction did not check for coordination: " <> show failures) NE.:| [])
           Right checked ->
-            ProcessReactionSnapshot
-              { process = (.name) process,
-                verification = (.verification) checked,
-                version = Just ((.version) checked),
-                fingerprint = Just ((.fingerprint) checked)
-              }
+            Right
+              ProcessReactionSnapshot
+                { process = (.name) process,
+                  verification = (.verification) checked,
+                  version = Just ((.version) checked),
+                  fingerprint = Just ((.fingerprint) checked)
+                }
     customSnapshot process =
       ProcessReactionSnapshot
         { process = (.name) process,

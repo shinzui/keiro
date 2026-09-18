@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-18T01:49:47Z
+      mode: "implement"
+      note: "Refreshed the reaction hardening plan against nominal-ID changes and began implementation"
 ---
 
 # Harden the Language 6 reaction candidate before it is published
@@ -55,9 +61,9 @@ Use a checklist to summarize granular steps. Every stopping point must be docume
 even if it requires splitting a partially completed task into two ("done" vs. "remaining").
 This section must always reflect the actual current state of the work.
 
-- [ ] M1: reaction template derives timer and fired-event ids from length-prefixed UTF-8 fields; hand-written expectations in `keiro-dsl/test/conformance-process-timers/Main.hs` updated; non-ASCII collision vector pinned in `keiro-dsl/test/Main.hs`.
+- [x] (2026-09-17 19:00 PDT) M1: reaction template derives timer and fired-event ids from length-prefixed UTF-8 fields; hand-written expectations and literal ASCII/non-ASCII collision vectors are pinned in the timer conformance suite.
 - [ ] M1: `just corpus-regen` run; only `keiro-dsl/test/conformance-process-timers` and `keiro-dsl/test/conformance-process-reactions` changed; `just process-reaction-proof` green.
-- [ ] M2: reaction advisory codes carry `RolloutDrainRequired`; `ProcessTimerRemoved`, `ProcessReactionVersionDecreased`, and `ProcessReactionFingerprintChangedWithoutVersionBump` use the persisted-identity vector; JSON report tests added.
+- [x] (2026-09-17 19:00 PDT) M2: reaction advisory codes carry `RolloutDrainRequired`; `ProcessTimerRemoved`, `ProcessReactionVersionDecreased`, and `ProcessReactionFingerprintChangedWithoutVersionBump` use the persisted-identity vector; report-vector tests added.
 - [ ] M3: reaction fingerprint computed from a frozen canonical encoding that excludes operator text; golden pinned; ceiling test asserts exactly `ProcessTimerCeilingChanged`; whitespace-only rewrites still produce no change.
 - [ ] M4: harness `reactionOwnership` follows the checker; `processReactionRowsForService` and `processReactionSnapshots` return `Either`; `keiro-dsl new` skeletons target the stable language.
 - [ ] M5: `keiro-dsl/CHANGELOG.md`, `docs/user/typed-spec-toolchain.md`, and `docs/user/deploy-ordering.md` updated; full gate green; ADR-24 amended.
@@ -68,7 +74,11 @@ This section must always reflect the actual current state of the work.
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Discovery: nominal-ID work after this plan was drafted expanded the reaction fixtures and moved
+  the named source locations, but did not implement any of the six behavioral fixes. The timer
+  identity vectors fit better in the compiled timer conformance suite, which already depends on
+  `uuid` and `keiro`, than in the main DSL unit suite, which intentionally has neither dependency.
+  Evidence: the refreshed Cabal dependency stanzas and the focused reaction diff test.
 
 
 ## Decision Log

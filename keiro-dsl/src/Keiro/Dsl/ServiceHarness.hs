@@ -14,7 +14,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Harness (processHarnessFactValues, routerHarnessFactValuesForService, workflowHarnessFactValues)
+import Keiro.Dsl.Harness (processHarnessFactValuesForService, routerHarnessFactValuesForService, workflowHarnessFactValues)
 import Keiro.Dsl.LanguageVersion (LanguageFeature (MappedConsumerSurfaceSyntax), languageSupportsFeature)
 import Keiro.Dsl.Scaffold (Context, ModuleKind (Generated), ScaffoldModule (..), contextGeneratedPrefix, genPrefixFor, generatedBanner, pascal)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec, checkedTypeGraph)
@@ -203,7 +203,7 @@ valuesForNode service node =
   where
     (kindName, nodeName, _) = nodeIdentity node
     factValues = case node of
-      NProcess process -> processHarnessFactValues process
+      NProcess process -> processHarnessFactValuesForService service process
       NRouter router -> routerHarnessFactValuesForService service router
       NWorkflow workflow -> workflowHarnessFactValues workflow
       _ -> []

@@ -410,6 +410,14 @@ classifyCompatibility context code
   | code `elem` [AggGuardTightened, AggGuardRelationUnknown, AggGuardRemedyUnavailable] = advisoryVector PrivateHistoryRead Set.empty
   | code `elem` [RouterDecideSurfaceChanged, ProcessDecideSurfaceChanged] =
       replaceRollout (Set.singleton RolloutDrainRequired) compatibleVector
+  | code
+      `elem` [ ProcessReactionFanOutChanged,
+               ProcessReactionGuardChanged,
+               ProcessReactionArmsReordered,
+               ProcessReactionRemoved,
+               ProcessReactionFingerprintChangedWithVersionBump
+             ] =
+      replaceRollout (Set.singleton RolloutDrainRequired) (advisoryVector PrivateHistoryRead Set.empty)
   | code == ProcessTimerPayloadChanged = advisoryVector PrivateHistoryRead (Set.singleton RolloutProducerLast)
   | code == TimerWindowChanged = advisoryVector PrivateHistoryRead Set.empty
   | code == ProjectionChanged = advisoryVector PersistedIdentity Set.empty
@@ -458,6 +466,9 @@ classifyCompatibility context code
         RouterStableNameChanged,
         ProcessDispatchIdentityModelChanged,
         ProcessTimerIdentityChanged,
+        ProcessTimerRemoved,
+        ProcessReactionVersionDecreased,
+        ProcessReactionFingerprintChangedWithoutVersionBump,
         WorkflowStableNameChanged
       ]
     publicBreakingCodes =
@@ -3100,12 +3111,12 @@ reactionProcessPairDiff oldProcess oldReaction newProcess newReaction =
     timerRemoved timer =
       breaking processName "process-timer" ((.name) timer) ProcessTimerRemoved "timer declaration removed while scheduled rows may still fire; drain or migrate outstanding timer rows before deploying"
     timerCeilingDiff =
-      [ advisory processName "process-timer-policy" processName ProcessTimerCeilingChanged ("timer max-attempts changed " <> tInt oldCeiling <> " -> " <> tInt newCeiling <> "; already-attempted rows keep their persisted attempt count")
+      [ advisory processName "process-timer-policy" processName ProcessTimerCeilingChanged ("timer operator policy changed (max-attempts " <> tInt oldCeiling <> " -> " <> tInt newCeiling <> "); already-attempted rows keep their persisted attempt count")
       | Just oldPolicy <- [(.timerPolicy) oldReaction],
         Just newPolicy <- [(.timerPolicy) newReaction],
         let oldCeiling = (.maxAttempts) oldPolicy,
         let newCeiling = (.maxAttempts) newPolicy,
-        oldCeiling /= newCeiling
+        oldPolicy /= newPolicy
       ]
     oldVersion = (.version) oldReaction
     newVersion = (.version) newReaction
@@ -3675,6 +3686,9 @@ contextFor label root facet subject code =
         DedupeIdentityChanged,
         ProcessDispatchIdentityModelChanged,
         ProcessTimerIdentityChanged,
+        ProcessTimerRemoved,
+        ProcessReactionVersionDecreased,
+        ProcessReactionFingerprintChangedWithoutVersionBump,
         RouterStableNameChanged,
         WorkflowStableNameChanged,
         ReadModelVersionDecreased,

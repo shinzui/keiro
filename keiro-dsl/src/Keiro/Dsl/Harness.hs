@@ -27,12 +27,14 @@ module Keiro.Dsl.Harness
     harnessFor,
     harnessForWithGoldens,
     harnessProcess,
+    harnessProcessForService,
     harnessRouter,
     harnessRouterForService,
     harnessReadModel,
     harnessReadModelForService,
     harnessWorkflow,
     processHarnessFactValues,
+    processHarnessFactValuesForService,
     routerHarnessFactValues,
     routerHarnessFactValuesForService,
     workflowHarnessFactValues,
@@ -57,7 +59,7 @@ import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
-import Keiro.Dsl.ProcessReaction (processReactionFingerprintFrom)
+import Keiro.Dsl.ProcessReaction (CheckedProcessReaction (..), checkProcessReaction, processReactionFingerprintFrom)
 import Keiro.Dsl.ProjectionSupply
 import Keiro.Dsl.ReadModelShape (registryNameFor)
 import Keiro.Dsl.RouterSelection
@@ -119,13 +121,46 @@ harnessProcess :: Context -> ProcessNode -> [ScaffoldModule]
 harnessProcess ctx p =
   [ ScaffoldModule
       { path = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs"),
-        text = emitProcessHarness genPrefix p,
+        text = emitProcessHarness genPrefix (defaultProcessOwnership p) p,
         kind = Generated,
         origin = "process " <> (.id) p <> locSuffix ((.loc) p)
       }
   ]
   where
     genPrefix = genPrefixFor ctx ((.id) p)
+
+-- | Emit process facts from the same checked reaction result used by the
+-- ledger, so ownership evidence cannot disagree with validation.
+harnessProcessForService :: Context -> CheckedService -> ProcessNode -> [ScaffoldModule]
+harnessProcessForService ctx service p =
+  [ ScaffoldModule
+      { path = T.unpack (T.replace "." "/" genPrefix <> "/ProcessHarness.hs"),
+        text = emitProcessHarness genPrefix ownership p,
+        kind = Generated,
+        origin = "process " <> (.id) p <> locSuffix ((.loc) p)
+      }
+  ]
+  where
+    genPrefix = genPrefixFor ctx ((.id) p)
+    ownership = processOwnershipForService service p
+
+defaultProcessOwnership :: ProcessNode -> Text
+defaultProcessOwnership process = case (.body) process of
+  LegacyProcessBody {} -> "custom-unverified"
+  ReactionProcessBody {} -> "generated-declarative"
+
+processOwnershipForService :: CheckedService -> ProcessNode -> Text
+processOwnershipForService service process = case (.body) process of
+  LegacyProcessBody {} -> "custom-unverified"
+  ReactionProcessBody {} -> case checkedTypeGraph service of
+    Left _ -> "custom-unverified"
+    Right graph -> case checkProcessReaction (checkedLanguageContract service) graph (checkedSpec service) process of
+      Left _ -> "custom-unverified"
+      Right checked -> (.verification) checked
+
+processHarnessFactValuesForService :: CheckedService -> ProcessNode -> [(Text, Text)]
+processHarnessFactValuesForService service process =
+  processHarnessFactValues (processOwnershipForService service process) process
 
 -- | Emit runtime-free facts for a router's identity, resolution, dispatch,
 -- and worker-policy decisions. A hand-written conformance driver owns the
@@ -459,8 +494,8 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
       Just RmEntireLog -> "EntireLog"
       Just (RmCategory categoryName) -> "CategoryHead " <> categoryName
 
-emitProcessHarness :: Text -> ProcessNode -> Text
-emitProcessHarness genPrefix p =
+emitProcessHarness :: Text -> Text -> ProcessNode -> Text
+emitProcessHarness genPrefix ownership p =
   nl $
     [ generatedBanner,
       "module " <> genPrefix <> ".ProcessHarness (processHarnessValues) where",
@@ -474,15 +509,15 @@ emitProcessHarness genPrefix p =
       "processHarnessValues :: [(String, String)]",
       "processHarnessValues ="
     ]
-      <> renderFactValues (processHarnessFactValues p)
+      <> renderFactValues (processHarnessFactValues ownership p)
 
-processHarnessFactValues :: ProcessNode -> [(Text, Text)]
-processHarnessFactValues p = case (.body) p of
+processHarnessFactValues :: Text -> ProcessNode -> [(Text, Text)]
+processHarnessFactValues ownership p = case (.body) p of
   ReactionProcessBody reaction -> reactionFacts reaction
   LegacyProcessBody _ handle timer -> legacyFacts handle timer
   where
     reactionFacts reaction =
-      [ ("reactionOwnership", "generated-declarative"),
+      [ ("reactionOwnership", ownership),
         ("reactionVersion", T.pack (show ((.version) reaction))),
         ("reactionFingerprint", processReactionFingerprintFrom reaction)
       ]

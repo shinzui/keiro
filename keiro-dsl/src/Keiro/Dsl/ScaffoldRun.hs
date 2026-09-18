@@ -103,7 +103,7 @@ import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForServi
 import Keiro.Dsl.GeneratedHaskellLanguage (idiomaticV2LabelMigrations)
 import Keiro.Dsl.Goldens (GoldenPayload)
 import Keiro.Dsl.Grammar (EmitNode (..), Loc (..), Node (..), OperationNode (..), PgmqDispatchNode (..), Spec (..))
-import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcess, harnessReadModelForService, harnessRouterForService, harnessWorkflow)
+import Keiro.Dsl.Harness (harnessForServiceWithGoldens, harnessProcessForService, harnessReadModelForService, harnessRouterForService, harnessWorkflow)
 import Keiro.Dsl.HaskellName (currentGeneratedHaskellNamingEdition)
 import Keiro.Dsl.HaskellName qualified as HaskellName
 import Keiro.Dsl.HaskellSourceMove
@@ -171,6 +171,7 @@ data Refusal
   | DuplicateConformanceFactKeys ![DuplicateServiceFactKey]
   | ConformancePackageRefusal !ConformancePackageFailure
   | GeneratedNameInvariantViolation ![Text]
+  | ProcessReactionRefusal ![Text]
   | NameMigrationRequired ![SourceMove]
   | NameMigrationRefusal ![Text]
   | SidecarMigrationRequired ![SidecarMove]
@@ -335,7 +336,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
       <> concat
         [ case node of
             NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
-            NProcess process -> scaffoldProcess ctx process <> harnessProcess ctx process
+            NProcess process -> scaffoldProcess ctx process <> harnessProcessForService ctx service process
             NRouter router -> scaffoldRouterForService ctx service router <> harnessRouterForService ctx service router
             NContract contract -> scaffoldContractForService ctx service contract
             NIntake intake -> scaffoldIntake ctx intake
@@ -1103,6 +1104,12 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
             [contextCabalFragmentFileName ((.context) spec), recordFileName ((.context) spec)]
         pure (either (Left . pure . GeneratedHaskellEditionRefusal) Right prepared)
     executeCheckedScaffold editionMigration sidecarMoves preparedPackage =
+      case processReactionSnapshots service of
+        Left failures -> pure (Left [ProcessReactionRefusal (NE.toList failures)])
+        Right currentProcessReactions -> case processReactionRowsForService service of
+          Left failures -> pure (Left [ProcessReactionRefusal (NE.toList failures)])
+          Right processReactionRows -> executeCheckedScaffoldReady editionMigration sidecarMoves preparedPackage currentProcessReactions processReactionRows
+    executeCheckedScaffoldReady editionMigration sidecarMoves preparedPackage currentProcessReactions processReactionRows =
       case deriveBehaviorRequirementsForService service of
         Left errors -> pure (Left [BehaviorRefusal errors])
         Right requirements -> do
@@ -1155,7 +1162,6 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                                   semanticReport = semanticImpactForMappingDrift (previousRecord >>= (.semanticImpact)) currentSemanticImpact drift
                                   currentRouterSelections = routerSelectionSnapshots service
                                   selectionDrift = maybe [] (\previous -> routerSelectionDrift ((.routerSelections) previous) currentRouterSelections) previousRecord
-                                  currentProcessReactions = processReactionSnapshots service
                                   reactionDrift = maybe [] (\previous -> processReactionDrift (map processRecordSnapshot ((.processReactions) previous)) currentProcessReactions) previousRecord
                                   languageDrift = do
                                     previous <- previousRecord
@@ -1170,7 +1176,7 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                               dispositions <- mapM (writeModule out) modules
                               let manifestPath = out </> contextCabalFragmentFileName ((.context) spec)
                               TIO.writeFile manifestPath (renderManifestForServiceWithFacade facadeModule (T.pack specPath) modules service)
-                              TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact))
+                              TIO.writeFile recordPath (renderRecord (currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact processReactionRows))
                               packageReport <- traverse executePreparedConformancePackage preparedPackage
                               pure $
                                 Right
@@ -1197,7 +1203,7 @@ executeServiceScaffoldWithRuntimePackageAndMigrations runtimePackage applyNameMi
                                       generatedArtifactImpact = generatedArtifactImpact dispositions,
                                       sourceLanguageDrift = languageDrift,
                                       newHoles = newHoles,
-                                      processReactionRows = processReactionRowsForService service,
+                                      processReactionRows = processReactionRows,
                                       addedBehavior = addedBehavior,
                                       removedBehavior = removedBehavior,
                                       obsoleteOutputHooks = obsoleteGeneratedOutputHooksForService service,
@@ -1555,8 +1561,8 @@ staleAgainst out currentPathList previous = fmap concat $ mapM stillExists remov
                   else ExactGeneratedBannerMissing
           pure [StaleModule fileKind path evidence]
 
-currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> Bool -> [BehaviorRecordRow] -> SemanticImpactSnapshot -> ScaffoldRecord
-currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact =
+currentRecord :: FilePath -> SourceLanguage -> Context -> CheckedService -> [ScaffoldModule] -> Bool -> [BehaviorRecordRow] -> SemanticImpactSnapshot -> [ProcessReactionRecordRow] -> ScaffoldRecord
+currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline currentBehavior currentSemanticImpact processReactionRows =
   ScaffoldRecord
     { specPath = T.pack specPath,
       moduleRoot = (.moduleRoot) ctx,
@@ -1575,7 +1581,7 @@ currentRecord specPath sourceLanguage ctx service modules queryHistoryBaseline c
       queryContractBaseline = queryHistoryBaseline,
       queryContracts = either (const []) id (queryContractIdentitiesForService service),
       routerSelections = routerSelectionSnapshots service,
-      processReactions = processReactionRowsForService service,
+      processReactions = processReactionRows,
       semanticImpact = Just currentSemanticImpact
     }
 
@@ -1713,6 +1719,9 @@ renderRefusals allRefusals =
     render (GeneratedNameInvariantViolation violations) =
       ["error: generated Haskell name invariant violated -- refusing to scaffold; nothing was written"]
         <> map ("  " <>) violations
+    render (ProcessReactionRefusal reasons) =
+      ["error: process reaction metadata cannot be derived -- refusing to scaffold; nothing was written"]
+        <> map ("  " <>) reasons
     render (NameMigrationRequired moves) =
       [ "error: name migration required: legacy-v1 -> idiomatic-v1; nothing was written",
         "re-run scaffold with --apply-name-migrations after reviewing these source moves:"
