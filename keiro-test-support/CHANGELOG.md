@@ -6,6 +6,8 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+## 0.17.0.0 — 2026-09-17
+
 ### New Features
 
 - Add `withFreshResourceStorePrepared`, which clones a database, runs a

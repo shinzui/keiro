@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.17.0.0 — 2026-09-17
+
 ### Breaking Changes
 
 - `Keiro.Outbox.enqueueProducerEventTx` now takes the source `RecordedEvent` and

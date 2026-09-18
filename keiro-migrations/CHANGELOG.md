@@ -6,6 +6,8 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.17.0.0 — 2026-09-17
+
 ### Other Changes
 
 - No user-facing changes.

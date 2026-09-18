@@ -6,6 +6,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.17.0.0 — 2026-09-17
+
 ### Breaking Changes
 
 - `keiro`: `enqueueProducerEventTx` now takes a recorded source event and
@@ -96,6 +98,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `custom-unverified` reaction-ledger row, check reports append
   `processReactions`, and generated `QueuePolicy.hs` comments change without
   altering published-language behavior or fold identity.
+- `keiro-dsl`: candidate Language 6 reaction timers and fired events derive
+  UUIDv5 ids from length-prefixed fields under a frozen fingerprint encoder,
+  reaction evolution advisories carry `drain-required`, and
+  `keiro-dsl new <kind>` writes the published stable language even while a
+  candidate is registered.
+- `keiro-dsl`: the runtime-vocabulary test and structural-codec benchmark now
+  bound their internal `keiro` and `shibuya-core` dependencies.
 - Fix parser-scaling benchmark access to the current scaffold `path` and `text`
   fields, discovered by the full PGMQ 0.6 component build.
 - Reformat cabal files with cabal-gild and migrate to nix-haskell-flake v0.21.0.

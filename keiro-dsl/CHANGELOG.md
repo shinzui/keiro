@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.17.0.0 — 2026-09-17
+
 ### Breaking Changes
 
 - The public AST grows the Language 6 surface. `ProcessNode.input`, `.handle`,
