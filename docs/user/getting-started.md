@@ -6,7 +6,7 @@ docId: DOC-9
 tags: [keiro, getting-started, tutorial]
 generated:
   by: human:nadeem
-  at: 2026-07-14T04:12:12Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Getting Started
@@ -26,15 +26,18 @@ You need:
 - Application code that runs `Effectful` with Kiroku's `Store` effect and
   `Error StoreError` where command execution can fail.
 
-The repository uses local sibling packages for unreleased dependencies:
+Keiro and its Keiki and Kiroku dependencies are published on Hackage. Depend
+on the released packages that share one version:
 
 ```cabal
-packages:
-  .
-  /path/to/keiki
-  /path/to/keiki/keiki-codec-json
-  /path/to/kiroku/kiroku-store
+build-depends:
+  keiro-core ^>=0.17.0.0,
+  keiro ^>=0.17.0.0,
+  keiro-migrations ^>=0.17.0.0
 ```
+
+Add `keiro-pgmq ^>=0.17.0.0` for work queues and `keiro-dsl ^>=0.17.0.0` for
+the typed-spec toolchain.
 
 ## Add Keiro To An Application
 

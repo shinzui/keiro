@@ -6,7 +6,7 @@ docId: DOC-11
 tags: [keiro, dsl, guarantees, service-design]
 generated:
   by: human:nadeem
-  at: 2026-08-02T14:20:18Z
+  at: 2026-09-18T04:08:09Z
 ---
 
 # The Guarantee Ledger: DSL and Hand-Written Services
@@ -43,13 +43,13 @@ Keiro's evolution policy is to check a hazard at the earliest boundary with
 enough evidence, while later boundaries validate the runtime independently.
 [ADR 0004](../adr/0004-evolution-changes-are-gated-at-the-earliest-sound-boundary.md)
 records that architecture, and [The gates, at a glance](evolution-and-replayability.md#the-gates-at-a-glance)
-is its adopter-facing walkthrough (`docs/guides/evolution-and-replayability.md:62-113`).
+is its adopter-facing walkthrough.
 
 The six gates divide into two layers. The compiler is gate 1. DSL `check` and
 cross-version `diff` are gate 2, and the generated harness is gate 3. Validated
 event-stream construction at startup is gate 4, the real-log replay audit is
 gate 5, and typed runtime failures plus advisory verification telemetry are
-gate 6 (`docs/guides/evolution-and-replayability.md:67-110`). Gates 1, 4, 5,
+gate 6 (see [The gates, at a glance](evolution-and-replayability.md#the-gates-at-a-glance)). Gates 1, 4, 5,
 and 6 are available to every service. Gates 2 and 3 require a `.keiro` spec.
 No one gate checks everything.
 
@@ -178,10 +178,10 @@ snapshot with no error.
 Second, removing a field under a tolerant JSON decoder can still decode while
 silently changing meaning. DSL evolution classifies the unguarded removal as
 breaking; a hand-written service has no equivalent pre-deploy comparison
-(`docs/guides/evolution-and-replayability.md:567`). Third, reordering a durable
+([Changing an existing event's payload fields](evolution-and-replayability.md#changing-an-existing-events-payload-fields)). Third, reordering a durable
 workflow body without a recorded patch can pair journaled results with the
 wrong hand-written ordinal, also silently
-(`docs/guides/evolution-and-replayability.md:579`).
+([Evolving workflows](evolution-and-replayability.md#evolving-workflows)).
 
 ### Rank 2: the unrecoverable golden-capture window
 
@@ -230,15 +230,14 @@ the already-committed command still succeeds
 (`keiro/src/Keiro/Command.hs:238-252,282-297,873-895`). The runtime does not
 turn that witness into a deployment gate for you. If you do not collect and
 alert on `keiro.snapshot.apply.divergence`, the witness effectively does not
-exist for your operators (`docs/guides/evolution-and-replayability.md:99-110`).
+exist for your operators (gate 6 in [The gates, at a glance](evolution-and-replayability.md#the-gates-at-a-glance)).
 
 
 ## How this relates to the gate-coverage table
 
 The [gate-coverage summary](evolution-and-replayability.md#gate-coverage-summary)
-maps individual change classes to their static, startup/CI, and runtime gates
-(`docs/guides/evolution-and-replayability.md:556-579`). This ledger answers a
-different question: which layers an authoring path receives. Use the table to
+maps individual change classes to their static, startup/CI, and runtime gates.
+This ledger answers a different question: which layers an authoring path receives. Use the table to
 plan one concrete evolution; use this ledger to decide what evidence must be
 re-created when a service has no spec.
 

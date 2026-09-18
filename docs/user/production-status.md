@@ -6,7 +6,7 @@ docId: DOC-18
 tags: [keiro, production, maturity, reference]
 generated:
   by: human:nadeem
-  at: 2026-08-09T03:41:02Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Production Status
@@ -71,6 +71,9 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
 
 - event-sourced process managers, with snapshot-policy guidance and a tested
   PM-state-stream snapshot example;
+- typed process reactions (`Keiro.ProcessManager.Reaction`): explicit
+  no-advance and accepted-only follow-ups, atomic saga/timer mutation, and
+  target-keyed dispatch identity;
 - stateless, effectful fan-out routers;
 - durable timer storage and worker helpers, plus a stuck-row recovery API
   (find/requeue/cancel/dead-letter).
@@ -100,14 +103,20 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
 ### Messaging and integration
 
 - a transactional outbox with per-key ordering, backoff, and dead-lettering,
-  plus a Kafka producer adapter;
+  plus a Kafka producer adapter; canonical producers derive replay-safe
+  deterministic message IDs and report content drift through the
+  `keiro.outbox.identity.conflict` metric;
 - an idempotent inbox with claim/retry/release/dead transitions and GC, plus
-  Shibuya and Kafka consumer adapters;
+  Shibuya and Kafka consumer adapters, and delegated intake
+  (`Keiro.Inbox.Delegated`) when the downstream state transition owns the
+  durable receipt;
 - the cross-context integration-event envelope;
 - Postgres-native work queues (`keiro-pgmq`): typed PGMQ jobs with retry and
   dead-letter policy, continuous workers or bounded drains, per-group FIFO
-  delivery, standard/unlogged/partitioned provisioning, DLQ redrive and
-  archive-then-purge retention, and a one-span-per-delivery tracing contract;
+  delivery with `FifoHeads` safe batching of independent group heads,
+  standard/unlogged/partitioned provisioning, header-preserving DLQ redrive,
+  archive-then-purge retention with a purge that refuses while inspected rows
+  remain hidden, and a one-span-per-delivery tracing contract;
 - durable rejected-dispatch records plus idempotent replay of Kiroku
   subscription dead letters.
 
@@ -141,6 +150,9 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
   structural/opaque consumer mappings, total bindings, generated private-event
   codecs, safe scaffolding, conformance harnesses, compatibility-vector diffs,
   finite historical codec comparison, and supported-root coverage reports.
+  Languages 1 through 5 are published and frozen; Language 6 (process
+  reactions, delegated intake, `ordering fifo-heads`, nominal structural
+  leaves, and keyed maps) is a candidate, not yet a compatibility contract.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
 database.

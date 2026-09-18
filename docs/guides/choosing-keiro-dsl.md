@@ -6,7 +6,7 @@ docId: DOC-10
 tags: [keiro, dsl, adoption, decision-guide]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:08:09Z
 ---
 
 # Choosing `keiro-dsl`: Benefits, Costs, and Fit
@@ -81,7 +81,8 @@ the DSL.
 | An event-version conversion | An upcaster Hole | The contiguous version chain, codec dispatch, compatibility classification, and golden/replay checks | The conversion body and representative historical fixtures |
 | Read-model queries or event application | `ReadModelHoles` | Stable read-model identity, table/schema facts, consistency/feed configuration, and generated runtime wiring | Query and projection SQL/effects |
 | Dynamic router behavior outside the declarative subset, or callbacks | A typed resolver in `RouterHoles` | Router identity, target command contract, deterministic dispatch identity, worker policy, and an honest `custom-unverified` boundary | Arbitrary target resolution and declared callbacks; Language 5 instead generates checked bounded selection when its `resolve declarative` subset fits |
-| Process-manager reactions and timer behavior | `ProcessHoles` | Process/timer identity, categories, retry policy, and generated wiring | Reaction, deadline, and fire-command bodies |
+| Process-manager reactions and timer behavior (Language 1–5) | `ProcessHoles` | Process/timer identity, categories, retry policy, and generated wiring | Reaction, deadline, and fire-command bodies |
+| Decoding a source event into typed reaction input (candidate Language 6) | The create-once `RecordedEvent -> Maybe <Input>` decoder Hole | The input ADT, pure reactions, guards, follow-ups, timers, `ReactiveProcessManager`, worker wrapper, reaction version and fingerprint | Source-envelope decoding only |
 | A legacy version-1 aggregate transducer | The preserved whole-transducer Hole | Spec-visible types, codecs, evolution reports, and runtime validation | The full transducer and its manual fold-version discipline |
 
 At the broadest boundary, DSL-generated and hand-written `EventStream` values
@@ -185,6 +186,19 @@ conservatively `UnverifiedOpaque`; the enforcing successor ID contract below is
 what makes that domain exact. Keiro never treats an unrestricted `Text`
 projection as exact merely because its Haskell wrapper is nominal.
 
+Candidate Language 6 carries the same nominal types through structural
+surfaces. An `id`, `enum`, or `mapped nominal` declaration can be a leaf inside
+a structural record, union, or container, a typed workqueue field, or a
+read-model query input/result; `Map[DeclaredId] Value` gives an ID-keyed map;
+a contract event field can name a declared `id` instead of repeating
+`typeid "prefix"`; and aggregate guards and declarative router selection can
+traverse required structural paths to those leaves with same-declaration
+equality. A direct `Optional DeclaredId` aggregate field is still rejected: use
+a one-field `mapped structural` record whose field is
+`Optional DeclaredId optional on-missing=null`. See the
+[Language reference](../user/typed-spec-toolchain.md#mapped-type-expressions)
+for syntax and binding laws.
+
 ### ID prefixes become an evolution contract
 
 `language keiro-dsl 3` is the first enforcing contract. Under it, a generated ID prefix is not merely
@@ -240,6 +254,15 @@ Language contracts are deliberately frozen. Adopting a successor contract is
 an explicit migration rather than a silent upgrade, and older sources retain
 their released semantics. That protects history but adds fleet coordination
 when many specifications move together.
+
+Language 6 is a **candidate**, not a published contract. Languages 1–5 remain
+published and frozen, and `keiro-dsl new` writes the published stable
+Language 5. Declaring `language keiro-dsl 6` opts a specification into
+delegated inboxes, first-class process reactions, structural nominal leaves,
+declared contract IDs, keyed maps, and `ordering fifo-heads` (which requires
+Language 6; a Language 4 or 5 queue must keep a published ordering with batch
+size one). Because the candidate is unpublished, released-only services should
+stay on Language 5 until it is published.
 
 Canonical pretty printing is not a lossless formatter. The frontend retains exact ownership spans
 but intentionally drops comments and whitespace before lowering; tools that need trivia-preserving

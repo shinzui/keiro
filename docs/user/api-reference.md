@@ -6,7 +6,7 @@ docId: DOC-2
 tags: [keiro, api, modules, reference]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:05:10Z
 ---
 
 # API Reference
@@ -947,15 +947,22 @@ The producer-config adapter `deriveProducerIdentity` lives in `Keiro.Outbox`.
 ## `Keiro.Inbox`
 
 Idempotent inbox. Re-exports `Keiro.Inbox.Types` and exports
-`lookupInbox`, `listInbox`, `garbageCollectCompleted`, `countInboxBacklog`,
+`lookupInbox`, `listInbox`, `listCompletedInboxGcCandidates` (read-only
+retention preview), `garbageCollectCompleted`, `countInboxBacklog`,
 `sampleInboxBacklog`, `markFailedTx`, `runInboxTransaction`,
 `runInboxTransactionWithKey`, `runInboxTransactionWith`,
-`runInboxTransactionBatch`, and the bounded-retry family
+`runInboxTransactionBatch`, the bounded-retry family
 (`runInboxTransactionWithRetries`, `runInboxTransactionWithRetriesWith`,
-`runInboxTransactionWithRetriesKey`). `Keiro.Inbox.Kafka` adds the Kafka consumer
-adapter.
+`runInboxTransactionWithRetriesKey`), and the no-`Store` delegated-idempotence
+wrappers `runInboxDelegated`, `runInboxDelegatedWithRetries`, and
+`runInboxDelegatedBatch`, whose handlers return `DelegatedOutcome` and write no
+inbox row. `Keiro.Inbox.Delegated` exports the safe handler adapters
+`delegatedEventId`, `DelegatedCommandError (..)`, `delegatedCommand`, and
+`delegatedFromPMCommand`. `Keiro.Inbox.Kafka` adds the Kafka consumer adapter.
 
-Use it to deduplicate inbound integration events by `(source, dedupe_key)`.
+Use it to deduplicate inbound integration events by `(source, dedupe_key)`. See
+[Idempotent Inbox](inbox.md#delegated-idempotence) for when the downstream
+receipt can own idempotence instead.
 
 ## `Keiro.Telemetry`
 
@@ -992,6 +999,13 @@ and null summaries. Both commands are read-only, use
 `subscriptionCheckpointInventory` plus `storeHeadPosition`, and are available
 without an `AppHooks` capability.
 
+`pgmq dlq read|redrive|archive|purge --queue NAME` operates a Keiro job's
+dead-letter queue without a hook. `read` decodes visible entries, including
+`original_headers`; the three mutations preview first. Forced `purge` calls the
+guarded `purgeDlq` and fails without deleting when an inspection left rows
+hidden: the global `--force` authorizes the purge after preview but does not
+bypass that refusal. See [Operations](operations.md#pgmq-dead-letter-queues).
+
 ## `Keiro.ReplayAudit`
 
 Read-only real-log replay gate. Exports:
@@ -1026,12 +1040,28 @@ nodes and available directly:
 - `Keiro.PGMQ` — the umbrella module.
 - `Keiro.PGMQ.Job` — `Job (..)`, `RetryPolicy (..)`, `defaultRetryPolicy`,
   `mkRetryPolicy`, `JobPolling (..)`, `JobOrdering (..)`, `JobTuning (..)`, and
-  the job runner.
+  the job runner. Every `Job` declares `jobOrdering` (`Unordered`,
+  `FifoThroughput`, `FifoRoundRobin`, or `FifoHeads`); explicit tuning must match
+  it, and a mismatch, invalid raw tuning, or a legacy FIFO batch above one throws
+  `JobConsumptionConfigError` before any read. `FifoHeads` is the strict per-group
+  barrier over PGMQ grouped-head reads and batches one head per group.
+  `mkPartitionSpec` validates partitioned-queue settings before database access
+  and returns `PartitionSpecConfigError`; the raw `PartitionSpec` constructor
+  remains for server-specific values.
 - `Keiro.PGMQ.Codec` — `aesonJobCodec` (raw) and `keiroJobCodec` (the versioned
   `{v,t,data}` envelope whose `JobPayloadFromFuture` result drives the
   workers-before-producers rollout rule).
-- `Keiro.PGMQ.Dlq` — dead-letter queue provisioning and `redriveDlq`.
+- `Keiro.PGMQ.Dlq` — `readDlq` returns `DlqEntry` values (including
+  `originalHeaders`); `redriveDlq` republishes with those original headers;
+  `archiveDlq`, `archiveDlqEntries` (exact inspected IDs), `archiveDlqEntry`,
+  and `archiveDlqEntryById` retain rows; `purgeDlq` returns `PurgeDlqResult`
+  (`PurgeDlqPurged` or `PurgeDlqBlocked` when inspected rows are still hidden);
+  `purgeDlqForce` is the unconditional escape hatch.
 - `Keiro.PGMQ.Runtime` / `Keiro.PGMQ.Metrics` — worker wiring and instruments.
+
+The package requires the `pgmq-*` 0.6 family and `shibuya-pgmq-adapter ^>=0.16.0.0`.
+Grouped-head FIFO (`FifoHeads`) additionally needs a deployed PGMQ extension 1.12
+or later; other orderings add no server requirement.
 
 See [Work Queues](work-queues.md) for the authoring and operations reference,
 and [Deploy Ordering](deploy-ordering.md#3-upgrade-versioned-job-workers-before-producers)
@@ -1091,10 +1121,17 @@ when normalized freshness weakens or its waited head scope narrows: legacy
 `consistency`/`scope` and language 5 `freshness` are compared on one normalized axis.
 Languages 1–4 retain their frozen historical grammar.
 
+Candidate Language 6 grows the public AST: `ProcessNode` carries
+`body :: ProcessBody` (`LegacyProcessBody` or `ReactionProcessBody`),
+`IntakeNode` gains `idempotence :: IdempotenceMode`, `WqOrdering` gains
+`WqFifoHeads`, `ContractType` gains `CDeclaredId`, and `TypeExpr` gains
+`TKeyedMap`. Exhaustive matches and positional construction must handle them.
+`checkReport` and `workspaceCheckReport` take a `CheckedService`.
+
 Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `diff --since`, and `new <kind>`. The newer opt-in workflows include
 `check --explain-bindings`, `check|diff --coverage-report`,
-`diff --gate|--explain|--report-out`, and
+`diff --gate|--explain|--report-out`, repeatable `check|diff --deny CODE`, and
 `scaffold --codec-comparison ... --comparison-out ...`. See
 [Typed Specifications](typed-spec-toolchain.md).
 

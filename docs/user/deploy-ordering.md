@@ -6,7 +6,7 @@ docId: DOC-7
 tags: [keiro, deployment, compatibility, operations]
 generated:
   by: human:nadeem
-  at: 2026-09-18T02:05:25Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Deploy Ordering
@@ -86,6 +86,13 @@ temporary decoder that accepts both shapes.
 See [Work Queues](work-queues.md#payload-codecs-and-evolution),
 [`Keiro.PGMQ.Codec`](../../keiro-pgmq/src/Keiro/PGMQ/Codec.hs), and
 [`RetryPolicy`](../../keiro-pgmq/src/Keiro/PGMQ/Job.hs).
+
+Every `Job` now declares `jobOrdering`. Adopting `FifoHeads` requires PGMQ
+server 1.12 or later for grouped-head reads. Upgrade PGMQ, deploy consumers
+that carry the declared ordering, and only then change queue policy or producer
+assumptions. Legacy `FifoThroughput`/`FifoRoundRobin` consumers with a batch
+size above one now fail with `JobConsumptionConfigError` before reading. See
+[Work Queues](work-queues.md#fifo-groups-and-ordering).
 
 If this rule is violated, future-version bodies burn through retries and reach
 the dead-letter queue; changing envelope shape without a drain makes old
@@ -225,6 +232,20 @@ both old and new shapes, then deploy producers of the new shape, and retire the
 old decoder only after the backlog drains. Bump the contract
 `schemaVersion` whenever the DSL requires it. A new topic or explicit
 version-dispatch path is safer for changes that cannot be dual-decoded.
+
+Canonical producers now derive deterministic message IDs from the source event
+and emission index instead of minting random TypeIDs. There is no automatic
+bridge: before switching an existing producer, drain in-flight attempts and
+keep its committed checkpoint, or supply an application-owned old/new mapping,
+before any pre-cutover event is replayed. See
+[ADR-42](../adr/0042-producer-outbox-identity-is-a-versioned-source-event-contract.md)
+and [Migrating existing producers](outbox.md#migrating-existing-producers).
+
+Switching an intake between table and delegated idempotence is breaking
+(`IntakeIdempotenceModeChanged`): `keiro_inbox` rows and downstream receipt IDs
+are different histories. Drain in-flight delivery and define a replay boundary
+at cutover. See
+[Integration Events](integration-events.md#choosing-inbox-idempotence-ownership).
 
 See
 [`decodeJsonIntegrationEvent`](../../keiro-core/src/Keiro/Integration/Event.hs).

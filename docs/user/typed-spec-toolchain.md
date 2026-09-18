@@ -6,7 +6,7 @@ docId: DOC-23
 tags: [keiro, dsl, language-5, reference]
 generated:
   by: human:nadeem
-  at: 2026-09-18T02:05:25Z
+  at: 2026-09-18T04:05:10Z
 ---
 
 # Keiro DSL Language 5 Reference
@@ -2302,8 +2302,9 @@ cabal run -v0 keiro-dsl -- new KIND
 
 Valid kinds are `aggregate`, `process`, `router`, `contract`, `intake`, `emit`,
 `publisher`, `workqueue`, `dispatch`, `workflow`, and `operation`. Every starter
-is a complete, checked candidate Language 6 service because `new` currently
-uses `currentAuthoringLanguageVersion`. Coupled kinds include the nodes they
+is a complete, checked stable Language 5 service because `new` uses
+`currentStableLanguageVersion`, even while the Language 6 candidate is
+registered. Coupled kinds include the nodes they
 need; for example, the publisher starter includes a contract and emit. There is
 no standalone read-model starter; the workqueue starter includes read models.
 
@@ -2348,7 +2349,9 @@ either effective or an immediate error, never a decoration.
 `--report-out` writes `keiro-dsl/check-report/1` after source or workspace
 validation, on success or failure, creating missing parent directories. It
 records language provenance, enforcement flags, diagnostics and related
-locations, summary counts, and the validation outcome. Object and array-element
+locations, summary counts, the validation outcome, and an appended
+`processReactions` array (process, verification, version, fingerprint, hole
+obligations). Object and array-element
 keys are append-only; readers must ignore unknown keys. A parse failure and an
 unreadable or unparseable workspace manifest occur before any coded diagnostic
 exists and therefore write no report; a *composed* workspace refusal does write

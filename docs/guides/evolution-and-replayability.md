@@ -6,7 +6,7 @@ docId: DOC-26
 tags: [keiro, evolution, replay, guide]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:08:09Z
 ---
 
 # Evolution And Replayability
@@ -553,6 +553,33 @@ re-runs the *current* handler against the stored source event.
 > PM/router redelivery and replay any dead letters **before** deploying a decide
 > change (see [Deploy ordering](#deploy-ordering-rules)).
 
+**Candidate Language 6 reactions** change the id seed itself: reaction
+dispatch is keyed by physical target stream plus same-target occurrence, not
+the legacy positional emit index. `diff` therefore classifies these on the
+persisted-identity axis:
+
+- `ProcessDispatchIdentityModelChanged` (BREAKING): a process body moved
+  between the legacy form and reactions. Old target ids are not translated;
+  drain source redelivery, partial fan-out, pending timers, and permitted
+  replay first — see
+  [Cut Over As An Identity Migration](process-managers-and-timers.md#cut-over-as-an-identity-migration).
+- `ProcessTimerRemoved` / `ProcessTimerIdentityChanged` (BREAKING): scheduled
+  rows may still fire against a timer that no longer exists or no longer has
+  the same identity.
+- `ProcessReactionFingerprintChangedWithoutVersionBump` and
+  `ProcessReactionVersionDecreased` (BREAKING): semantic reaction changes must
+  increase `reactions version`. With the bump, the change is the
+  `ProcessReactionFingerprintChangedWithVersionBump` advisory; guard, arm-order,
+  fan-out, and removal changes are advisories carrying `drain-required`.
+
+Two neighbouring 0.17 surfaces follow the same logic. Switching an intake
+between `idempotence table` and candidate `idempotence delegated` is
+`IntakeIdempotenceModeChanged` (BREAKING): persisted dedupe history does not
+transfer between the inbox table and the downstream state machine. Changing a
+workqueue `ordering` — including to or from candidate `fifo-heads` — is
+`WqOrderingChanged` (BREAKING), because consumers were written against the old
+delivery-order contract.
+
 ## Changing typed domain outcomes
 
 Language 5 treats outcome annotations as forward command behavior,
@@ -788,6 +815,14 @@ The safe procedure is contract-first, additive-first:
 3. Never change `messageId`/`idempotencyKey` derivation on a live contract —
    `diff` flags both as BREAKING because they re-key dedupe identity, and
    redelivered messages stop matching their dedupe records (duplicates).
+   The same holds for a canonical producer's `name`, `source`, and
+   `messageIdPrefix`: `enqueueProducerEventTx` derives the outbox UUID and the
+   opaque `<prefix>_v1_<sha256-hex>` message ID from them plus the source-event
+   coordinates (`keiro/src/Keiro/Outbox/Identity.hs`). Renaming the name or
+   source re-keys every replayed emission, so consumers see new message IDs
+   for old events; changing only the prefix keeps the outbox UUID and surfaces
+   as `ProducerIdentityConflict` on replay. Treat all three as frozen, and plan
+   a drained checkpoint cutover (ADR-42) if one must change.
 
 > **Nothing catches this today.** `diff` sees one repository's spec. No gate
 > compares a consumer's contract block against the producer's, and no gate
@@ -857,7 +892,12 @@ The operator-facing reference, with definitions and failure signatures, is
   subscription redelivery quiesce and replay or explicitly discard dead
   letters before shipping a change to what a reaction dispatches; otherwise
   redelivered source events silently mix old and new fan-out under the same
-  deterministic ids.
+  deterministic ids. Moving a manager to candidate Language 6 reactions,
+  removing a reaction timer, or switching an intake's idempotence mode is
+  stricter: drain first, because the old identities are not honoured at all.
+- **Workqueue ordering changes (including `fifo-heads`):** drain the queue
+  under the old consumer before deploying the new ordering and its
+  provisioning.
 - **Fold changes with snapshots:** the generated fold fingerprint handles
   spec-visible edits; bump the stream's `FoldVersion` through
   `defaultStateCodecWithFold` (or manually bump `stateCodecVersion`) for
@@ -893,10 +933,15 @@ DSL-only gates do not exist for hand-authored services.
 | Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint; version-2 Hole changes require a per-transition `FoldVersion` bump | three-component discriminator and ownership/predicate-verification report | full replay on mismatch | **manual-bump residual** for version-1 Holes and other hand-written folds; an unbumped version-2 Hole is still a contract violation | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
 | Register slot change | n/a | register shape hash changes | full replay (benign) | mixed-deploy snapshot thrash | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | State type `s` structural change | n/a | state shape hash changes | full replay (benign) | same-shape semantic change needs manual bump | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
+| Legacy process ↔ candidate Language 6 reactions | `ProcessDispatchIdentityModelChanged` BREAKING | — | positional and target-keyed ids never match: duplicate target appends | none if drained first | Drain rule; [Cut Over As An Identity Migration](process-managers-and-timers.md#cut-over-as-an-identity-migration) |
+| Reaction timer removal / identity; reaction semantics without `reactions version` bump | `ProcessTimerRemoved`, `ProcessTimerIdentityChanged`, `ProcessReactionFingerprintChangedWithoutVersionBump`, `ProcessReactionVersionDecreased` BREAKING | — | scheduled rows fire against a missing timer | hole-owned input decoding | Candidate Language 6 |
+| Intake `idempotence table` ↔ `delegated` | `IntakeIdempotenceModeChanged` BREAKING | — | redelivered messages bypass the other side's dedupe history | none if drained first | Candidate Language 6 |
+| Workqueue `ordering` (incl. `fifo-heads`) | `WqOrderingChanged` BREAKING | — | mixed delivery-order assumptions | none if drained first | Candidate Language 6 for `fifo-heads` |
+| Producer `name` / `source` / `messageIdPrefix` | n/a (hand-owned producer) | — | re-keyed message IDs on replay (name/source); `ProducerIdentityConflict` (prefix only) | consumer dedupe misses replayed emissions | Manual rule; ADR-42 |
 | Timer payload shape | `ProcessTimerPayloadChanged` Advisory | — | timer dead-letter (loud/delayed) | hand-written: none | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) |
 | Workflow step result type | BREAKING (body) | — | `WorkflowStepDecodeError` → terminal fail; `resurrectFailedWorkflow` after a code fix | operator must notice the failed instance | Landed: [115](../plans/115-record-patch-sets-at-rotation-and-add-workflow-failure-recovery-and-lease-renewal.md) |
-| Mapped job payload | exact queue consumer plus `workqueue-history`; incompatible edits are breaking | generated structural/opaque payload codec and versioned `QueueCodec`; mutation gate covers required/null arms | future version retries; malformed shape dead-letters | queue drain or transitional codec remains operationally owned | Landed: [224](../plans/224-generate-typed-workqueue-payloads-with-owned-codecs-and-conformance.md), qualified by [228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) |
-| Mapped query input/result | exact `query-api` input/result and consumer-build consequence | generated aliases compile the hand-owned query body and callers | no persisted runtime conversion | caller rollout and SQL migrations remain application-owned; SQL shape is deliberately neutral | Landed: [225](../plans/225-generate-typed-read-model-query-contracts-without-claiming-sql-ownership.md), qualified by [228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) |
+| Mapped job payload | exact queue consumer plus `workqueue-history`; incompatible edits are breaking | generated structural/opaque payload codec and versioned `QueueCodec`; mutation gate covers required/null arms | future version retries; malformed shape dead-letters | queue drain or transitional codec remains operationally owned | Landed: [224](../plans/224-generate-mapped-workqueue-payloads-with-honest-persisted-wire-compatibility.md), qualified by [228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) |
+| Mapped query input/result | exact `query-api` input/result and consumer-build consequence | generated aliases compile the hand-owned query body and callers | no persisted runtime conversion | caller rollout and SQL migrations remain application-owned; SQL shape is deliberately neutral | Landed: [225](../plans/225-make-read-model-query-inputs-and-results-checked-mapped-types.md), qualified by [228](../plans/228-qualify-the-complete-mapped-consumer-surface-before-fleet-adoption.md) |
 | Projection catalog target/group/owner/source/policy change | dedicated `Catalog*` finding plus catalog replay-impact groups, targets, sources, and adapters; `CatalogCheckpointPolicyChanged` keeps persisted identity compatible while making the generated consumer build breaking | generated facade validates one closed catalog; resume requires exact stored fingerprint | managed writers fence at group state; mismatched resume fails before handlers; checkpoint-policy changes require stop-the-world rollout | arbitrary SQL target truth and application DDL remain consumer-owned | Landed: [212](../plans/212-generate-projection-catalogs-from-keiro-dsl-and-classify-their-evolution.md), explicit checkpoint policy: [216](../plans/216-generate-and-classify-missing-checkpoint-policy-in-candidate-language-5.md) |
 | Contract field change | BREAKING / advisory | — | consumer dead letters | cross-repo skew unchecked | [24](../masterplans/24-close-the-evolution-and-replayability-gate-gaps-surfaced-by-the-2026-07-evolution-review.md) (out of scope, manual rules here) |
 | Structural/opaque adoption coverage | Reporting-only named roots by default; optional existing-level or increase gate | Generated binding/codec conformance plus finite historical comparison | No runtime codec selector is added | Finite evidence cannot prove universal historical equivalence | Landed: [152](../plans/152-prove-migrations-with-shadow-codec-comparison-and-structural-coverage-reporting.md) |

@@ -7,7 +7,7 @@ docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
   by: human:nadeem
-  at: 2026-08-21T16:12:10Z
+  at: 2026-09-18T04:05:10Z
 ---
 
 # Operations
@@ -122,6 +122,29 @@ filtered, category, hard-deleted, and sharded histories may skip global
 positions. A true relevant-event lag needs a compatible source frontier and a
 definition supplied by the owning library, so there is deliberately no
 `projection lag` command.
+
+### PGMQ dead-letter queues
+
+`keiro-ops pgmq dlq` operates a Keiro job's dead-letter queue by its logical
+queue name and needs no application hook:
+
+```console
+keiro-ops pgmq dlq read --queue billing --limit 20
+keiro-ops pgmq dlq redrive --queue billing --limit 100
+keiro-ops pgmq dlq archive --queue billing --entry 42
+keiro-ops pgmq dlq archive --queue billing --limit 100
+keiro-ops pgmq dlq purge --queue billing
+```
+
+`read` is read-only and decodes visible entries; `--json` includes the
+preserved `original_headers`. `redrive`, `archive`, and `purge` are mutations: without
+`--force` they preview the affected depth and print the `--force`
+reinvocation. Reading, redriving, and count-based archiving hide each
+inspected row for 30 seconds. A forced `purge` also asks for the queue name in
+human mode, then calls the guarded `purgeDlq`: if a prior inspection left
+rows hidden, the command fails and deletes nothing. `--force` authorizes the
+purge after preview; it does not bypass that refusal. Archive the inspected
+IDs with `archive --entry` or wait for visibility to expire, then retry.
 
 ## Database Requirements
 

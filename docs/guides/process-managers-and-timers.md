@@ -6,7 +6,7 @@ docId: DOC-16
 tags: [keiro, process-managers, timers, guide]
 generated:
   by: human:nadeem
-  at: 2026-08-02T22:18:46Z
+  at: 2026-09-18T04:05:47Z
 ---
 
 # Process Managers And Timers
@@ -79,6 +79,14 @@ Local tests schedule the timer with `scheduleTimerTx`, call
 `runPaymentTimeoutWorker`, and assert that a due row was claimed. Production
 workers usually loop around `runTimerWorker`, append or submit a command from
 the timer payload, and return the event id that represents successful firing.
+
+A hand-written manager that must cancel a timer atomically with an append uses
+`Keiro.Timer.cancelTimerTx :: TimerId -> Tx.Transaction Bool`, the
+transaction-level form of `cancelTimer`, inside the same transaction as the
+append (for example next to `scheduleTimerTx`). It moves only a scheduled or
+firing row to `cancelled`, leaves terminal and foreground-owned rows alone, and
+returns `True` when a row changed. It cannot revoke a callback that already
+claimed the timer, so the target must still tolerate a late firing.
 
 ## Generated Language 6 Reactions
 

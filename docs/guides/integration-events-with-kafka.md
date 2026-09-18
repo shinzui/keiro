@@ -7,7 +7,7 @@ tags: [keiro, integration-events, kafka, guide]
 generated:
   by: human:nadeem
   at: 2026-07-24T13:06:07Z
-timestamp: 2026-09-15T20:23:47Z
+timestamp: 2026-09-18T04:05:47Z
 ---
 
 # Integration Events With Kafka
@@ -34,7 +34,7 @@ instance), see [Operational follow-ups](#operational-follow-ups).
   │                                                  │                │   ▼                                          │
   │  ▼                                               │                │  Keiro.Inbox.Kafka.integrationEventFromKafka │
   │  IntegrationProducer subscription                │                │   │                                          │
-  │   │  reads RecordedEvent, mints messageId,       │                │   ▼                                          │
+  │   │  reads RecordedEvent, derives messageId,     │                │   ▼                                          │
   │   │  builds IntegrationEvent, writes ONE         │                │  runInboxTransaction                         │
   │   │  keiro_outbox row in same txn as checkpoint  │                │   │                                          │
   │   ▼                                              │                │   ▼                                          │
@@ -95,10 +95,39 @@ ordersIntegrationProducer = IntegrationProducer
   }
 ```
 
-The mapper mints `messageId` as a TypeID-shaped UUIDv7 *when the
-outbox row is written*. The id is stable across publish retries
-because it lives on the row; Kafka topic/partition/offset are delivery
-metadata and are **not** the canonical dedupe key.
+The subscription handler enqueues each draft with
+`enqueueProducerEventTx producer recorded 0 draft` in the same transaction as
+its checkpoint. The helper *derives* `messageId` as an opaque
+`<messageIdPrefix>_v1_<sha256-hex>` value (not a TypeID) from the producer's
+source and name, the recorded event ID, and the emission index (`0` for a
+single-draft mapper). Replaying the same source event therefore yields the same
+id, and publish retries reuse it because it lives on the row. Kafka
+topic/partition/offset are delivery metadata and are **not** the canonical
+dedupe key.
+
+#### Replay-safe producer identity
+
+Build the producer with `mkIntegrationProducer`, which rejects an empty or
+malformed `messageIdPrefix`; direct record construction skips that check.
+`enqueueProducerEventTx` returns a `ProducerEnqueueOutcome`:
+
+- `ProducerInserted` — a new row was written.
+- `ProducerDuplicateIdentical` — a replay found the retained row with an
+  identical envelope; nothing changes.
+- `ProducerIdentityConflict` — a retained row with the same identity has a
+  different envelope. It lists the differing field classes (no values) and never
+  overwrites the retained row.
+
+On a conflict, call `Tx.condemn` so the checkpoint does not advance. After the
+transaction runner returns, call `recordProducerEnqueueOutcome metrics outcome`
+once to emit `keiro.outbox.identity.conflict`. Suppression lasts only while the
+row is retained in the outbox.
+
+The derived identity is a cutover (ADR-42). Historical rows carry random
+message IDs and there is no automatic bridge: drain in-flight attempts and keep
+the committed checkpoint, or supply an application-owned identity mapping,
+before replaying pre-cutover history. See [Durable Outbox](../user/outbox.md)
+("Schema and storage" and "Migrating existing producers").
 
 ### 3. publishClaimedOutbox drains the row into Kafka
 
@@ -142,12 +171,19 @@ runInboxIntake metrics event (Just kafkaRef) $ \dedupe delivered -> do
         dedupe
         target
         "apply-order"
-  delegatedCommand defaultRunCommandOptions target marker $ \prepared ->
+  outcome <- delegatedCommand defaultRunCommandOptions target marker $ \prepared ->
     runInvoiceCommand prepared target delivered
+  case outcome of
+    Right delegated -> pure delegated
+    -- Never wrap a Left in DelegatedFresh: that acknowledges a failed command.
+    Left err -> liftIO (throwIO (userError (show err)))
 ```
 
-The callback must inspect the typed `Either DelegatedCommandError` and turn a
-retryable failure into its application retry path. Do not acknowledge a `Left`.
+The callback must return `DelegatedOutcome a`, so it inspects the typed
+`Either DelegatedCommandError` from `delegatedCommand` and turns a `Left` into
+its application retry path. Throwing, as above, leaves the delivery
+unacknowledged; `runInboxDelegatedWithRetries` instead classifies synchronous
+exceptions as `InboxHandlerFailed` against a caller-owned attempt ceiling.
 On terminal failure, durably publish or store a DLQ record before acknowledging
 the Kafka delivery. Neither `runInboxDelegated` nor its retry/batch variants
 write an inbox failure or DLQ record.

@@ -7,7 +7,7 @@ docId: DOC-17
 tags: [keiro, process-managers, timers, coordination]
 generated:
   by: human:nadeem
-  at: 2026-08-10T19:19:35Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Process Managers And Timers
@@ -204,6 +204,36 @@ target cases and therefore has the same proportional-memory contract. Router
 workers use the same bounded strict summary and acknowledge typed rejection or
 no-op normally.
 
+## Reactions
+
+`Keiro.ProcessManager.Reaction` is an additive runner for managers whose
+decisions need typed outcomes and explicit timer control. A
+`ReactiveProcessManager` replaces `handle` with a pure
+`react :: input -> ReactionPlan ci targetCi` and advances its saga through a
+`sagaHandler :: DomainCommandHandler ...`:
+
+- `NoAdvance followUps` performs no saga read or append and runs only its
+  unconditional follow-ups;
+- `AdvanceReaction command followUps onAccepted` always runs `followUps`, and
+  adds `onAccepted` only after an accepted saga append or exact recovery of that
+  append's witness.
+
+Each `FollowUp` is `FollowDispatch`, `FollowSchedule Rearm|Once`, or
+`FollowCancel`. Timer follow-ups commit in one transaction, together with the
+saga append when the reaction advances (`FollowCancel` uses `cancelTimerTx`);
+target commands run afterwards, one transaction each.
+`NoAdvance` and silent outcomes leave no receipt, so their timer effects may
+repeat on redelivery; put acceptance-coupled effects in `onAccepted`.
+
+Target command ids come from `deterministicReactionCommandId`: manager name,
+correlation id, source event id, physical target stream, and zero-based
+occurrence among commands to that target. That identity family differs from
+the positional emit index above, so switching an existing manager name to
+`runReactiveProcessManagerOnce` or its worker is an identity migration that
+requires a drain; there is no fallback to legacy ids. See
+[API Reference](api-reference.md#keiroprocessmanagerreaction) and
+[Deploy Ordering](deploy-ordering.md#4-drain-process-manager-and-router-decide-changes).
+
 ## Snapshotting Manager State
 
 A long-running process manager accumulates events on its own `pm:<name>-<correlation>`
@@ -294,7 +324,9 @@ The low-level pieces are also available:
 
 - `claimDueTimer`;
 - `markTimerFired`;
-- `scheduleTimerTx`.
+- `scheduleTimerTx`;
+- `cancelTimerTx`, the transaction-level form of `cancelTimer`, for composing
+  guarded cancellation with an event append and other timer mutations.
 
 ## Timer Semantics
 
@@ -308,7 +340,7 @@ Operations.
 
 ## Inspecting Parked Timers
 
-The public `Keiro.Timer` module exposes additive reads (currently unreleased):
+The public `Keiro.Timer` module exposes additive reads:
 
 ```haskell
 lookupTimerInspection ::

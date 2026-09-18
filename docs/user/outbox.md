@@ -6,7 +6,7 @@ docId: DOC-16
 tags: [keiro, outbox, integration-events, reference]
 generated:
   by: human:nadeem
-  at: 2026-08-21T16:12:10Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Durable Outbox
@@ -324,8 +324,11 @@ for the frozen encoding and vector.
 ## A worked example
 
 ```haskell
+import Hasql.Transaction qualified as Tx
 import Keiro.Outbox
 import Keiro.Integration.Event
+import Keiro.Telemetry (KeiroMetrics)
+import Kiroku.Store.Transaction (runTransaction)
 
 -- 1. Define the producer subscription.
 ordersIntegrationProducer :: IntegrationProducer OrderEvent
@@ -360,7 +363,22 @@ ordersIntegrationProducer = IntegrationProducer
       _ -> Nothing
   }
 
--- 2. The publisher worker drains rows into Kafka.
+-- 2. The producer subscription enqueues and checkpoints in one transaction.
+--    Validate the producer once with mkIntegrationProducer at startup.
+handleOrderEvent :: Maybe KeiroMetrics -> RecordedEvent -> OrderEvent -> Eff es ()
+handleOrderEvent metrics recorded event =
+  for_ ((ordersIntegrationProducer ^. #mapEvent) recorded event) $ \draft -> do
+    outcome <- runTransaction $ do
+      outcome <- enqueueProducerEventTx ordersIntegrationProducer recorded 0 draft
+      saveCheckpoint (recorded ^. #globalPosition) -- application-owned
+      case outcome of
+        ProducerIdentityConflict {} -> Tx.condemn -- roll back the checkpoint too
+        _ -> pure ()
+      pure outcome
+    recordProducerEnqueueOutcome metrics outcome
+    -- On ProducerIdentityConflict, halt or dead-letter rather than advancing.
+
+-- 3. The publisher worker drains rows into Kafka.
 runPublisher :: Eff es ()
 runPublisher = void $
   publishClaimedOutbox
@@ -372,7 +390,7 @@ runPublisher = void $
       outcome <- liftIO (kafkaProduce (outboxRowToKafkaRecord row))
       pure (row ^. #outboxId, outcome)
 
--- 3. A slower maintenance worker reclaims crashed publishers and samples backlog.
+-- 4. A slower maintenance worker reclaims crashed publishers and samples backlog.
 runOutboxMaintenance :: Eff es ()
 runOutboxMaintenance = void $
   outboxMaintenancePass

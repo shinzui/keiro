@@ -6,7 +6,7 @@ docId: DOC-5
 tags: [keiro, concepts, event-sourcing]
 generated:
   by: human:nadeem
-  at: 2026-07-04T05:09:27Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Core Concepts
@@ -138,6 +138,11 @@ Keiro derives deterministic event ids from:
 - emitted command index.
 
 That makes repeated delivery idempotent.
+
+The additive `Keiro.ProcessManager.Reaction` runner keys target command ids by
+physical target stream and occurrence among commands to that target instead of
+the emit index, so moving an existing manager to it requires a drain. See
+[Process Managers And Timers](process-managers-and-timers.md#reactions).
 
 ## Timers
 

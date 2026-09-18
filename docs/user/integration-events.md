@@ -6,7 +6,7 @@ docId: DOC-11
 tags: [keiro, integration-events, messaging]
 generated:
   by: human:nadeem
-  at: 2026-07-24T13:06:07Z
+  at: 2026-09-18T04:05:10Z
 timestamp: 2026-09-15T20:23:47Z
 ---
 
@@ -58,9 +58,14 @@ without changing the outbox or inbox tables.
 
 ## Message identity
 
-`messageId` is an **application-level** identifier (UUIDv7 or equivalent
-time-ordered UUID) minted by the producer subscription when it writes
-the outbox row. It is:
+`messageId` is **opaque application-level text**. Canonical producers
+derive it deterministically with `enqueueProducerEventTx` from the
+producer's source, name, and `messageIdPrefix` plus the source event ID and
+emission index: the value is `<prefix>_v1_<sha256-hex>`, so replaying the
+same source event yields the same ID (`Keiro.Outbox.Identity`). It is not a
+TypeID or a time-ordered UUID, and consumers must not parse it. Callers
+that build envelopes explicitly (for example with `freshIntegrationEvent`)
+own their identity policy. It is:
 
 - **Stable across publish retries.** The outbox row keeps its
   `messageId` until it is marked `sent` (or `dead`); if the publisher
@@ -189,7 +194,7 @@ import Keiro.Integration.Event
 
 submitted :: IntegrationEvent
 submitted = IntegrationEvent
-  { messageId = "018f0f18-17aa-7000-8000-0000000000aa"  -- minted by producer subscription
+  { messageId = "ordering_v1_3f9a…c07e"  -- derived by enqueueProducerEventTx
   , source = "ordering"
   , destination = "billing.orders.v1"
   , key = Just "order-123"
@@ -217,8 +222,9 @@ wire = encodeJsonIntegrationEvent submitted (OrderSubmitted "order-123" 5)
 -- wire ^. #payloadBytes == "{\"orderId\":\"order-123\",\"quantity\":5}"
 ```
 
-The producer subscription in EP-20 mints `messageId`, sets
-`sourceEventId` / `sourceGlobalPosition` from the recorded event, and
+The producer subscription in EP-20 derives `messageId` from the source-event
+coordinates, defaults `sourceEventId` / `sourceGlobalPosition` from the
+recorded event, and
 inserts one outbox row per mapped private event in the same Postgres
 transaction that advances its checkpoint. The publisher worker drains
 the outbox into Kafka and marks each row `sent` (or, after

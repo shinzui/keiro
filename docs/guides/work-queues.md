@@ -6,7 +6,7 @@ docId: DOC-20
 tags: [keiro, pgmq, work-queues, tutorial]
 generated:
   by: human:nadeem
-  at: 2026-07-24T13:29:53Z
+  at: 2026-09-18T04:05:47Z
 ---
 
 # Work Queues
@@ -138,7 +138,14 @@ shipmentNoticeJob =
     }
 ```
 
-Four fields, and each is load-bearing.
+Five fields, and each is load-bearing.
+
+`jobOrdering` is required: the job declares its consumption ordering, and any
+explicit `JobTuning` must match it (`withOrdering job.jobOrdering` derives the
+matching tuning). Both consumer entry points, `jobProcessorWithContext` and
+`runJobOnceWithContext`, validate before building an adapter or reading, and
+throw `JobConsumptionConfigError` on non-positive tuning, an ordering mismatch,
+or a legacy `FifoThroughput`/`FifoRoundRobin` read with a batch larger than one.
 
 `queueRef` turns the logical name into PGMQ-legal physical names —
 `jitsurei_shipment_notices` and `jitsurei_shipment_notices_dlq`. PGMQ caps names
@@ -166,10 +173,13 @@ enqueueShipmentNotice notice =
   enqueueToGroup shipmentNoticeJob (orderIdText notice.orderId) notice
 ```
 
-Within one group, messages are delivered in send order; distinct group heads can
-be claimed together and remain independently eligible. Keiro's current handlers
-are serial, so this does not promise parallel execution. Ordering is not
-deduplication — delivery is still at-least-once.
+Within one group, messages are delivered in send order. `FifoHeads` leases only
+the absolute head of each group: a failed, invisible, or delayed head blocks its
+own successors, while distinct group heads can be claimed together and remain
+independently eligible. Keiro's current handlers are serial, so this does not
+promise parallel execution. Ordering is not deduplication — delivery is still
+at-least-once. `FifoHeads` needs `shibuya-pgmq-adapter ^>=0.16` and a PGMQ
+server at 1.12 or later.
 
 Grouped reads match against a GIN index on the queue's `headers` column, so
 ordered queues must be provisioned with it. That is what `ensureOrderedJobQueue`
@@ -302,6 +312,14 @@ noticeCount pool      `shouldReturn` 0   -- nothing was written
 mainQueueDepth runtime `shouldReturn` 0  -- the message left the main queue
 dlqDepth runtime       `shouldReturn` 1  -- and landed in the DLQ
 ```
+
+In production, operate that DLQ with archive-then-purge: PGMQ never expires DLQ
+rows. Archive exactly the IDs you inspected with `archiveDlqEntries`, then call
+`purgeDlq`, which returns `PurgeDlqPurged` or, while any row is still hidden by a
+recent read, refuses with `PurgeDlqBlocked` and deletes nothing. `purgeDlqForce` is the
+explicit unconditional escape hatch. `redriveDlq` republishes the original
+producer headers, so a redriven notice returns to its FIFO group (at the back).
+See [Operating the dead-letter queue](../user/work-queues.md#operating-the-dead-letter-queue).
 
 ## Migrations
 

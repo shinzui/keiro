@@ -6,7 +6,7 @@ docId: DOC-10
 tags: [keiro, inbox, idempotency, reference]
 generated:
   by: human:nadeem
-  at: 2026-07-24T13:06:07Z
+  at: 2026-09-18T04:05:10Z
 ---
 
 # Idempotent Inbox
@@ -89,6 +89,25 @@ safe default for most consumers.
 Failed rows are not deleted by `garbageCollectCompleted`; they remain
 in the table for operator inspection until manually resolved.
 
+## Delegated idempotence
+
+`runInboxDelegated`, `runInboxDelegatedWithRetries`, and
+`runInboxDelegatedBatch` are the no-`Store` alternative for consumers whose
+downstream state transition already records the durable receipt. They compute
+the same dedupe key, pass it to the handler, and write **no** `keiro_inbox`
+row; the handler reports `DelegatedFresh a` or `DelegatedDuplicate`, which map
+to `InboxProcessed` and `InboxDuplicate`. `runInboxDelegatedWithRetries` takes
+a caller-owned `DelegatedRetryContext` (built with `mkDelegatedRetryContext`).
+
+`Keiro.Inbox.Delegated` supplies the safe handler adapters:
+`delegatedEventId` derives the deterministic first-event receipt,
+`delegatedCommand` protects one atomic command append with it, and
+`delegatedFromPMCommand` adapts one deterministic process-manager dispatch.
+Both reject failed commands and commands that append no event with
+`DelegatedCommandError`. When to choose delegation, and what inspection surface
+it gives up, is covered in
+[Choosing inbox idempotence ownership](integration-events.md#choosing-inbox-idempotence-ownership).
+
 ## The Kafka decoder
 
 `Keiro.Inbox.Kafka.integrationEventFromKafka` reconstructs an
@@ -164,6 +183,7 @@ handleBillingMessage record = case integrationEventFromKafka record of
   Left err -> liftIO (logDecodeFailure err)
   Right (event, kafkaRef) -> do
     result <- runInboxTransaction
+      Nothing                      -- Maybe KeiroMetrics
       PreferIntegrationMessageId
       event
       (Just kafkaRef)

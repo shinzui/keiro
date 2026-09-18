@@ -6,7 +6,7 @@ docId: DOC-24
 tags: [keiro, migrations, upgrade, runbook]
 generated:
   by: human:nadeem
-  at: 2026-07-24T13:06:07Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Upgrading To The Keiro Schema
@@ -14,7 +14,7 @@ generated:
 `keiro-migrations 0.1.0.0` created Keiro's framework tables (`keiro_snapshots`,
 `keiro_read_models`, `keiro_timers`, `keiro_outbox`, `keiro_inbox`,
 `keiro_projection_dedup`, and the workflow tables) **inside kiroku's `kiroku`
-PostgreSQL schema**. From the next release forward, Keiro creates and owns a
+PostgreSQL schema**. From `keiro-migrations 0.2.0.0` forward, Keiro creates and owns a
 **dedicated `keiro` schema** and every migration is schema-qualified
 `keiro.<table>`.
 

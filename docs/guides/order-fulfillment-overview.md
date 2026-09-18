@@ -6,7 +6,7 @@ docId: DOC-2
 tags: [keiro, jitsurei, order-fulfillment, tutorial]
 generated:
   by: human:nadeem
-  at: 2026-07-24T13:29:53Z
+  at: 2026-09-18T04:05:47Z
 ---
 
 # Order Fulfillment Overview
@@ -74,6 +74,6 @@ Run the example tests from the repository root:
 cabal test jitsurei-test
 ```
 
-You should see twenty-one examples pass. If a guide claim is not backed by one of
+You should see twenty-five examples pass. If a guide claim is not backed by one of
 those tests or by a linked `jitsurei/src/` module, treat that as a documentation
 bug.

@@ -6,7 +6,7 @@ docId: DOC-1
 tags: [keiro, navigation, user-guide]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Keiro User Guide
@@ -73,6 +73,9 @@ pieces those modules import.
   runtime schema initialization, and owning application table migrations.
 - [Migration Ownership](migration-ownership.md): framework-owned vs
   application-owned migrations, combined-ledger composition, and operator checks.
+- [Upgrading To The Keiro Schema](upgrading-to-the-keiro-schema.md): the
+  one-time, lossless relocation of a `0.1.0.0` database's `keiro_*` tables into
+  the dedicated `keiro` schema.
 - [Deploy Ordering](deploy-ordering.md): which binaries must roll first for
   codec, queue, decide, timer, integration, and workflow changes.
 - [Operations](operations.md): database requirements, schema initialization,

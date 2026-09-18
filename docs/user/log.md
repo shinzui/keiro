@@ -1,6 +1,18 @@
 # Keiro User Documentation Log
 
 ## 2026-09-18
+* **Update**: Describe `messageId` as opaque text derived deterministically by `enqueueProducerEventTx` as `<prefix>_v1_<sha256-hex>`, with explicit callers owning their identity policy.
+* **Update**: Fix the `runInboxTransaction` example's missing metrics argument and add a Delegated idempotence section for `runInboxDelegated` and `Keiro.Inbox.Delegated`.
+* **Update**: Document delegated inbox wrappers, the guarded PGMQ DLQ API, `FifoHeads` job ordering, partition validation, pgmq 0.6 requirements, `keiro-ops pgmq dlq` commands, and candidate Language 6 DSL AST changes in the API reference.
+* **Update**: Add a PGMQ dead-letter queue runbook for `keiro-ops pgmq dlq`, stating that `--force` does not bypass the hidden-row purge refusal.
+* **Update**: Correct `new` starters to stable Language 5 and note the appended `processReactions` key in the check report.
+* **Update**: Add a Reactions section to process managers and timers, document `cancelTimerTx`, and drop the stale unreleased note on timer inspection reads.
+* **Update**: Note that reaction process managers key dispatch ids by target stream and occurrence, so migrating a manager requires a drain.
+* **Update**: Add deploy-ordering rules for `FifoHeads` and the PGMQ 1.12 requirement, the deterministic producer message-ID cutover (ADR-42), and switching an intake between table and delegated idempotence.
+* **Update**: List process reactions, delegated inbox intake, replay-safe producer identity, `FifoHeads` batching, and guarded DLQ purge in production status and the roadmap, restating the baseline as the published 0.17.0.0 line with Language 6 as a candidate.
+* **Update**: Extend the outbox worked example with the producer subscription step that enqueues, condemns on identity conflict, and records the enqueue outcome.
+* **Update**: Replace local sibling-package instructions in getting started with Hackage dependencies on the 0.17.0.0 release.
+* **Update**: Name `keiro-migrations 0.2.0.0` as the release that introduced the dedicated keiro schema and list the upgrade guide in the README.
 * **Update**: Document stable-language skeletons, framed UTF-8 reaction timer identity, canonical fingerprints, and reaction drain metadata.
 * **Update**: Document that `ordering fifo-heads` is Language 6 candidate syntax refused by published languages.
 * **Update**: Document guarded DLQ inspection, exact-ID archive verification, guarded and forced purge, and original-header redrive behavior.

@@ -6,7 +6,7 @@ docId: DOC-19
 tags: [keiro, routers, process-managers, incident-response]
 generated:
   by: human:nadeem
-  at: 2026-08-02T22:18:46Z
+  at: 2026-09-18T04:05:47Z
 ---
 
 # Coordinating Incident Response: Routers And Process Managers Together
@@ -242,6 +242,16 @@ and nothing is written. The *target aggregate's guards* resolve the race, which
 keeps both the timer worker and the process manager simple. This is a keiro
 idiom worth internalizing: push race resolution down to the aggregate that owns
 the invariant.
+
+A manager written against `Keiro.ProcessManager.Reaction` can also retire the
+timer on acknowledgement: put a `FollowCancel` for the incident's
+deterministic escalation `TimerId` (the UUIDv5 that `escalationTimerRequest`
+derives from the incident id) under `onAccepted` of the acknowledgement
+reaction, and the cancellation commits in the saga's append transaction. That only saves a wasted firing. Cancellation cannot revoke a
+callback that already claimed the timer, so the aggregate guard above is still
+what makes a late escalation harmless. Moving this manager to the reaction
+runner is an identity migration; see
+[Process Managers And Timers](process-managers-and-timers.md#reactions-with-optional-saga-advancement).
 
 ## The whole flow
 

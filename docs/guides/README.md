@@ -6,7 +6,7 @@ docId: DOC-1
 tags: [keiro, guides, navigation]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:08:09Z
 ---
 
 # Keiro Guides
@@ -48,7 +48,8 @@ are adopting:
   compatibility vectors, coverage reports, and historical comparison tooling.
 - [Choosing `keiro-dsl`](choosing-keiro-dsl.md) compares the benefits, costs,
   escape hatches, and best-fit service shapes after the language, nominal,
-  workspace, behavioral-conformance, and ID-domain repairs in MasterPlan 27.
+  workspace, behavioral-conformance, and ID-domain repairs in MasterPlan 27,
+  and what opting into candidate Language 6 means.
 - [The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md) explains
   which guarantees every validated service gets below the DSL, which exist only
   with a spec, and what a hand-written service must supply for itself.
@@ -60,13 +61,24 @@ are adopting:
   solver-visible scalars, lifecycle vertices, one stream per entity, authoring
   structural bindings from create-once skeletons or exact nominal derivation,
   and the goldens-first shadow-compared versioned migration path.
+- [Adopting Keiro From tan-event-source](adopting-keiro-from-tan-event-source.md)
+  migrates a tan-event-source service to Keiro in controlled compatibility stages.
+- [Adopting keiro-dsl idiomatic-v2](adopting-keiro-dsl-idiomatic-v2.md) adopts
+  the idiomatic-v2 generated Haskell surface and its compatibility gates.
+- [Migrating to the keiro-dsl 0.15 record API](migrating-keiro-dsl-record-api-0.15.md)
+  updates generated consumers and services for the 0.15 record API.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the
   version-1-to-version-2 upcaster.
+- [Evolution And Replayability](evolution-and-replayability.md) walks every
+  change class on a deployed service with its safe procedure and gate
+  coverage, including producer message-ID, reaction-identity, delegated-intake,
+  and workqueue-ordering changes.
 - [Project Read Models](project-read-models.md) builds the order read side from
   one validated catalog, including managed inline/async application, a
   brownfield-safe mixed-policy rebuild, fencing, repair, and resume.
 - [Process Managers And Timers](process-managers-and-timers.md) shows
-  replay-safe fulfillment coordination and a due timer worker.
+  replay-safe fulfillment coordination, a due timer worker, and the candidate
+  Language 6 reaction form with its identity-migration cutover.
 - [Durable Workflows](durable-workflows.md) walks a named-step durable workflow
   end to end — steps, a durable sleep, an awakeable, a child workflow, the resume
   worker, and the kill-and-restart durability proof.
@@ -77,7 +89,7 @@ are adopting:
   pairs a router (page the on-call roster) with a process manager (escalation
   saga + timer) reacting to the same event, and explains when to reach for each.
 - [Work Queues](work-queues.md) walks the shipment-notice queue: a versioned job
-  payload, per-order FIFO delivery, an idempotent handler, the retry-versus-poison
+  payload, per-order `FifoHeads` delivery, an idempotent handler, the retry-versus-poison
   decision, and why a queue is not an outbox.
 - [Snapshots And Hydration](snapshots-and-hydration.md) enables advisory
   snapshots for the order stream.
@@ -87,8 +99,9 @@ are adopting:
 - [Dead Letters And Replay](../user/dead-letters.md) is the operator reference
   for rejected dispatches and subscription replay.
 - [Integration Events With Kafka](integration-events-with-kafka.md) describes
-  the canonical two-context Kafka topology, the operational guarantees,
-  and when to deviate from the default ordering and retention policies.
+  the canonical two-context Kafka topology, deterministic producer message IDs,
+  the delegated inbox, the operational guarantees, and when to deviate from the
+  default ordering and retention policies.
 
 The full source is under [`../../jitsurei/`](../../jitsurei/). The executable
 tests are in [`../../jitsurei/test/Main.hs`](../../jitsurei/test/Main.hs).

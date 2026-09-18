@@ -6,7 +6,7 @@ docId: DOC-13
 tags: [keiro, brownfield, migration, transducers]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:08:09Z
 ---
 
 # Brownfield Migration And Transducer Modeling
@@ -257,6 +257,23 @@ section naming the exact symbol and field to add by hand. The tool reports the
 change but never parses, rewrites, or decides whether an existing Haskell body
 is complete. GHC and the generated harness remain the enforcement boundaries.
 
+
+### Keep domain IDs inside structural shapes (candidate Language 6)
+
+Under Languages 1–5 a brownfield type that nests a domain ID or enum inside a
+record had to either flatten it to `Text`/`typeid` or declare a `mapped opaque`
+twin. Candidate Language 6 (`language keiro-dsl 6`; not yet published) lets an
+existing `id`, `enum`, or `mapped nominal` declaration appear as a leaf in
+structural records, unions, containers, typed workqueue fields, and read-model
+query inputs/results, keyed maps as `Map[DeclaredId] Value`, and contract event
+fields as a declared `id` instead of repeated `typeid "prefix"`. Guards and
+declarative router selection may follow required structural paths to those
+leaves for same-declaration equality. An aggregate field that would be
+`Optional DeclaredId` still needs a one-field `mapped structural` wrapper whose
+field is `Optional DeclaredId optional on-missing=null`. Replacing an opaque twin
+is reported as `MappedFieldTypeChanged`; prove it with a historical codec
+comparison as described in
+[Migrating from an opaque ID workaround](../user/typed-spec-toolchain.md#migrating-from-an-opaque-id-workaround).
 
 ### Derive only exact nominal bindings
 

@@ -6,7 +6,7 @@ docId: DOC-21
 tags: [keiro, roadmap, planning, reference]
 generated:
   by: human:nadeem
-  at: 2026-08-09T03:41:02Z
+  at: 2026-09-18T04:06:27Z
 ---
 
 # Keiro Roadmap
@@ -18,14 +18,14 @@ which workflow features are deliberately later.
 
 This is not a date commitment. It is the intended order and shape of the work.
 
-The current baseline includes `0.1.0.0` plus the unreleased hardening described
-in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
+The current baseline is the published `0.17.0.0` package line described in
+`CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 
 ## At A Glance
 
 | Phase | Theme | User-visible outcome |
 |---|---|---|
-| Current baseline | Event-sourcing v1 core (repository source line 0.4.0.0) | The v1 substrate plus structural/opaque consumer mappings, compatibility-vector evolution reports, and migration-evidence tooling is prepared in the coordinated 0.4.0.0 package line; tags and publication remain part of the release train. |
+| Current baseline | Event-sourcing v1 core (published 0.17.0.0 line) | The v1 substrate plus structural/opaque consumer mappings, compatibility-vector evolution reports, migration-evidence tooling, process reactions, delegated intake, and replay-safe producer identity ship in the coordinated package line on Hackage. |
 | Phase 1 | Stabilize existing core | Complete: multi-event command output landed, the repository test suite exercises the core paths, and migrations/snapshots have production guidance. |
 | Phase 2 | Complete v1 workflow substrate | Complete: outbox, inbox, OpenTelemetry tracing and metrics, process-manager snapshot guidance, and the timer stuck-row recovery API and runbook. |
 | Phase 3 | Read-side maturity | Async projections, subscriptions, and position waits get stronger consistency and scaling options. |
@@ -42,18 +42,19 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 | Snapshots | Available now | The default codec uses `keiki-codec-json` and shape hashes; `defaultStateCodecWithFold` adds a hand-owned `FoldVersion`, and snapshot hydration plus tail replay is tested. |
 | Read models and projections | Available now | Inline is transactional and receives `RecordedEvent` metadata; async is at-least-once today. |
 | Process managers | Available now | V1 workflow substrate for sagas and choreography. |
+| Process reactions | Available now | `Keiro.ProcessManager.Reaction`: explicit no-advance and accepted-only follow-ups, atomic saga/timer mutation, and target-keyed dispatch identity. Moving an existing manager to it is a drained identity migration. |
 | Routers (effectful fan-out) | Available now | `Keiro.Router`: stateless content-based router / recipient list; targets resolved effectfully from read models. |
 | Durable timers | Available now | Polling worker, timer table, and a stuck-row recovery API (find/requeue/cancel/dead-letter) with an operations runbook. |
 | Native migrations | Available now | `keiro-migrate` composes Kiroku and Keiro `pg-migrate` components in dependency order, including `keiro_outbox`, `keiro_inbox`, and dispatch dead letters. |
-| Transactional outbox | Available now | `Keiro.Outbox` + `keiro_outbox`: per-key ordering, backoff, dead-lettering, and a Kafka producer adapter. |
-| Inbox deduplication | Available now | `Keiro.Inbox` + `keiro_inbox`: claim/retry/release/dead transitions, GC, and Shibuya + Kafka adapters. |
+| Transactional outbox | Available now | `Keiro.Outbox` + `keiro_outbox`: per-key ordering, backoff, dead-lettering, and a Kafka producer adapter. Canonical producers derive replay-safe deterministic message IDs and count content drift as `keiro.outbox.identity.conflict`. |
+| Inbox deduplication | Available now | `Keiro.Inbox` + `keiro_inbox`: claim/retry/release/dead transitions, GC, and Shibuya + Kafka adapters. `Keiro.Inbox.Delegated` lets a downstream state transition own the durable receipt instead. |
 | Integration events | Available now | `Keiro.Integration.Event`: canonical cross-context envelope with W3C trace context and Kafka header helpers. |
 | OpenTelemetry tracing | Available now | `Keiro.Telemetry`: Internal (command), Producer (outbox), and Consumer spans; opt-in via `RunCommandOptions.tracer`. |
 | Worker metrics | Available now | `Keiro.Telemetry` exposes opt-in OpenTelemetry metrics for the outbox, inbox, timer, and async-projection workers plus the command, snapshot, dispatch, and workflow paths. The full catalogue is in [Operations](operations.md#metric-catalogue). |
 | Push delivery and subscription sharding | Available now | `Keiro.Wake` wakes poll-loop workers from Kiroku's existing notifier (no new connections, durable poll fallback); `Keiro.Subscription.Shard` leases consumer-group buckets across a worker pool with coordinator-free failover. |
 | Pre-deploy replay audit | Available now | `Keiro.ReplayAudit` replays real streams through a candidate binary in `AuditTargeted` or `AuditFull` mode and blocks a deploy on `auditExitCode`. |
-| Postgres work queues | Available now | `keiro-pgmq`: PGMQ-backed job queues with retry/DLQ policy and the versioned `keiroJobCodec` envelope. See [Work Queues](work-queues.md). |
-| Typed service specifications | Available now | `keiro-dsl` adds structural/opaque consumer mappings, total bindings and generated codecs, binding skeletons/explanations, conformance harnesses, six-surface compatibility vectors, historical codec comparison, and supported-root coverage reporting alongside the existing node families. |
+| Postgres work queues | Available now | `keiro-pgmq`: PGMQ-backed job queues with retry/DLQ policy and the versioned `keiroJobCodec` envelope. `FifoHeads` safely batches independent group heads (PGMQ 1.12+), and DLQ purge refuses while inspected rows remain hidden. See [Work Queues](work-queues.md). |
+| Typed service specifications | Available now | `keiro-dsl` adds structural/opaque consumer mappings, total bindings and generated codecs, binding skeletons/explanations, conformance harnesses, six-surface compatibility vectors, historical codec comparison, and supported-root coverage reporting alongside the existing node families. Languages 1 through 5 are published; Language 6 (reactions, delegated intake, `fifo-heads`) is a candidate. |
 | Operator console | Available now | `keiro-ops` provides schema-checked inspection, preview/`--force` mutations, and stable JSON. Candidate applications mount workflow resume, timer drain, replay audit, and catalog rebuild commands through `AppHooks`. |
 | Exactly-once async projections | Planned v1.x / upstream-dependent | Blocks on transactional Shibuya/Kiroku checkpoint handling. |
 | Prefix subscriptions | Planned v1.x / upstream-dependent | Needed for `pm:` and future `wf:` stream families at scale. |
@@ -61,9 +62,9 @@ in `CHANGELOG.md`. See `docs/user/production-status.md` for adoption posture.
 
 ## Current Baseline
 
-Keiro v1 is a library-shaped event-sourcing framework on PostgreSQL. This
-working tree is aligned on the coordinated `0.4.0.0` source line; consult the
-release notes and package registry before choosing a published bound.
+Keiro v1 is a library-shaped event-sourcing framework on PostgreSQL. The
+packages share the coordinated `0.17.0.0` line; consult the release notes and
+package registry before choosing a published bound.
 
 Implemented today:
 
@@ -81,7 +82,8 @@ Implemented today:
 - advisory snapshots for faster hydration;
 - read-model metadata, inline projections (which receive `RecordedEvent`
   metadata), async projection helpers, position waits, and rebuild scaffolding;
-- event-sourced process managers;
+- event-sourced process managers and typed process reactions
+  (`Keiro.ProcessManager.Reaction`);
 - routers for stateless, effectful fan-out (`Keiro.Router`);
 - durable timer storage and polling workers;
 - a transactional outbox (`Keiro.Outbox`) with per-key ordering, backoff,

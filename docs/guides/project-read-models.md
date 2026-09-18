@@ -6,7 +6,7 @@ docId: DOC-15
 tags: [keiro, projections, read-models, guide]
 generated:
   by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  at: 2026-09-18T04:05:47Z
 ---
 
 # Project Read Models
@@ -54,8 +54,9 @@ record. New code expresses the same truthful contract with
 `immediateReadModel (ReadModelBlueprint { cursorAuthority = NoQueryCursor, ... })`:
 its inline projection commits with the command, and the query executes without
 polling because there is no asynchronous subscription cursor. The deprecated
-`defaultConsistency = Eventual` and `strongScope = EntireLog` fields are retained
-only so 0.11 direct-record callers compile during the 0.12 migration window.
+`defaultConsistency = Eventual` and `strongScope = EntireLog` fields remain
+exported while keiro-dsl's frozen Language 4 read-model generator still emits
+them; they are removed together with that generator in a later major release.
 
 The live handler is an `InlineProjection OrderEvent`, but it is not assembled
 through an independent startup list:
