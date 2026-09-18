@@ -222,7 +222,7 @@ in  Schema.Project::{
               , kind = Some Schema.DependencyKind.ThirdParty
               , source = Some Schema.DependencySource.Hackage
               , scope = Some Schema.DependencyScope.Regular
-              , versionConstraint = Some "^>=0.15.0.0"
+              , versionConstraint = Some "^>=0.16.0.0"
               }
           , Schema.Dependency.WithAugmentation
               { name = "shinzui/pgmq-hs:pgmq-config"

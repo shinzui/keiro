@@ -178,8 +178,8 @@ dependency that happens to sit at the same version as the outgoing shared one.
 At 0.14.0.0 that was `shibuya-pgmq-adapter`, which independently reached
 `^>=0.14.0.0`; a blind replace bumped it to a version that does not exist and the
 solver rejected the build. Diff each cabal file against `HEAD` before trusting
-the edit — every changed line must be a version, an internal bound, or
-`cabal-fmt` realignment.
+the edit — every changed line must be a version, an internal bound, or one-time
+`cabal-gild` normalization.
 
 `keiro`, `keiro-pgmq`, and `keiro-dsl` all depend on `keiro-core`. Set each to a
 PVP-compatible bound matching the new version: `keiro-core ^>=A.B.C.D`. Update
@@ -350,7 +350,7 @@ Run the project's canonical release gate. The test suites need PostgreSQL, which
 `just verify` provisions via process-compose:
 
 ```
-nix fmt           # treefmt: fourmolu + cabal-fmt + nixpkgs-fmt
+nix fmt           # treefmt: fourmolu + cabal-gild + nixpkgs-fmt
 just corpus-regen # restamp generated conformance provenance with the new version
 just verify       # process-compose-check + jitsurei + cabal build all + tests + diagrams --check + keiro-migrations-test
 nix flake check   # treefmt + pre-commit hooks gate
@@ -382,10 +382,10 @@ nix flake check   # treefmt + pre-commit hooks gate
   tree, and create the tags only once both pass. Amend the commit if they do not.
   Do not reach for `--allow-dirty`; it is for local iteration and defeats the check.
 - Run `nix fmt` first so formatting changes are in the tree before the checks.
-  Expect it to touch `.cabal` files you edited: `cabal-fmt` realigns the
-  `build-depends` version column whenever a bound's width changes (adding
-  `^>=A.B.C.D` to a previously unbounded dep reflows the whole stanza). This is
-  correct — keep it.
+  `cabal-gild` keeps each `build-depends` entry on its own line, so a bound edit
+  normally changes only that dependency line. If it rewrites more than the
+  edited lines, the file was not gild-formatted; review and commit that one-time
+  normalization rather than hiding it.
 - Newly created files (e.g. a new `CHANGELOG.md`) must be `git add`-ed before
   `nix flake check`, since Nix evaluates the git tree.
 - `just verify` runs the full build and every suite; it routinely exceeds 10

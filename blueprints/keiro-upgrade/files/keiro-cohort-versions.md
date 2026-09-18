@@ -9,12 +9,17 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.17.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.16.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.15.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.14.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.13.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.12.0.0 | `>=0.7 && <0.8` | `^>=0.3.2.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.11.0.0 | `>=0.7 && <0.8` | `^>=0.3.1.0` | `>=0.8 && <0.9` | `^>=0.9.0.0` |
+
+Keiro 0.17.0.0 also requires the pgmq 0.6 package family and
+`shibuya-pgmq-adapter` 0.16.0.0. Those packages are outside the stable substrate columns above;
+the 0.16.0.0 → 0.17.0.0 edge describes the source adaptations they introduce.
 
 Bounds are what the published `.cabal` files declare, not the exact versions a
 given project resolved. To read what *this* project actually resolved, prefer

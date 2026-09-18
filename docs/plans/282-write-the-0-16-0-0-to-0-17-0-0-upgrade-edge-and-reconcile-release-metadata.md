@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-16T18:25:28Z
+  revisions:
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-17T23:29:59Z
+      mode: "implement"
+      note: "Refreshed EP-2 for current Language 6 additions and began implementation"
 ---
 
 # Write the 0.16.0.0 to 0.17.0.0 upgrade edge and reconcile release metadata
@@ -47,22 +53,31 @@ installed copy, which must print exactly one step owned by `keiro-upgrade`.
 
 ## Progress
 
-- [ ] Milestone 1: `blueprints/keiro-upgrade/migrations/0.16.0.0-to-0.17.0.0.md` written with precondition, dependency alignment, code adaptation, DSL-consumer effects, and validation sections.
-- [ ] Milestone 1: the `ordering fifo-heads` paragraph of the edge reflects the outcome recorded in `docs/plans/284-gate-ordering-fifo-heads-to-language-6.md`.
-- [ ] Milestone 2: `blueprints/keiro-upgrade/blueprint.dhall` declares the `0.16.0.0 -> 0.17.0.0` migration and its `version` is `0.6.0`.
-- [ ] Milestone 2: `seihou-registry.dhall` mirrors version `0.6.0`.
-- [ ] Milestone 2: `blueprints/keiro-upgrade/README.md` version line and edge table updated.
-- [ ] Milestone 2: `blueprints/keiro-upgrade/files/keiro-cohort-versions.md` has the 0.17.0.0 row.
-- [ ] Milestone 3: `seihou validate-blueprint blueprints/keiro-upgrade` passes.
-- [ ] Milestone 3: synced-copy preview shows the new step; installed copy restored and the restore confirmed.
-- [ ] Milestone 4: `mori.dhall` `shibuya-pgmq-adapter` constraint is `^>=0.16.0.0`.
-- [ ] Milestone 4: `agents/skills/release/SKILL.md` describes cabal-gild instead of cabal-fmt.
-- [ ] `just verify` documentation validators and `nix flake check` pass on the changed tree.
+- [x] (2026-09-17 17:01 PDT) Milestone 1: `blueprints/keiro-upgrade/migrations/0.16.0.0-to-0.17.0.0.md` written with precondition, dependency alignment, code adaptation, DSL-consumer effects, and validation sections.
+- [x] (2026-09-17 17:01 PDT) Milestone 1: the `ordering fifo-heads` paragraph of the edge reflects the Language 6-only decision recorded in `docs/plans/284-gate-ordering-fifo-heads-to-language-6.md`.
+- [x] (2026-09-17 17:01 PDT) Milestone 2: `blueprints/keiro-upgrade/blueprint.dhall` declares the `0.16.0.0 -> 0.17.0.0` migration and its `version` is `0.6.0`.
+- [x] (2026-09-17 17:01 PDT) Milestone 2: `seihou-registry.dhall` mirrors version `0.6.0`.
+- [x] (2026-09-17 17:01 PDT) Milestone 2: `blueprints/keiro-upgrade/README.md` version line and edge table updated.
+- [x] (2026-09-17 17:01 PDT) Milestone 2: `blueprints/keiro-upgrade/files/keiro-cohort-versions.md` has the 0.17.0.0 row and pgmq cohort note.
+- [x] (2026-09-17 17:01 PDT) Milestone 3: `seihou validate-blueprint blueprints/keiro-upgrade` passes.
+- [x] (2026-09-17 17:01 PDT) Milestone 3: synced-copy preview showed the one new step with no entailment; installed copy restored to 0.1.0 and the restore confirmed.
+- [x] (2026-09-17 17:01 PDT) Milestone 4: `mori.dhall` `shibuya-pgmq-adapter` constraint is `^>=0.16.0.0`.
+- [x] (2026-09-17 17:01 PDT) Milestone 4: `agents/skills/release/SKILL.md` describes cabal-gild instead of cabal-fmt.
+- [x] (2026-09-17 17:01 PDT) The documentation validators, `nix fmt`, and `nix flake check` pass on the changed tree.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- Discovery: The Language 6 candidate grew after this plan was written. It now supports nominal
+  IDs and enums throughout mapped structural surfaces, declared IDs in contracts, nested nominal
+  expressions, and identifier-keyed maps. These additions do not force a 0.16 consumer to change
+  source, but the edge must identify them as opt-in candidate features so their absence from the
+  migration steps is deliberate.
+  Evidence: commits `7d235121`, `d2961ed0`, `74b9206b`, `6effec8d`, `99450583`, and `d5ff8e3f`.
+- Discovery: Mori locates Seihou at `mori://shinzui/seihou`, the adapter at
+  `mori://shinzui/shibuya-pgmq-adapter`, and pgmq-hs at `mori://shinzui/pgmq-hs`. The upstream
+  repositories expose tags `v0.16.0.0` and `v0.6.0.0`, confirming the bounds planned here refer
+  to released versions rather than unreleased local state.
 
 
 ## Decision Log
@@ -92,11 +107,26 @@ installed copy, which must print exactly one step owned by `keiro-upgrade`.
   forbids widening the release commit beyond versions, bounds, changelogs, and the edge, and
   leaving them for "later" is how the `mori.dhall` drift happened in the first place.
   Date: 2026-09-16
+- Decision: Mention the post-plan nominal-ID and identifier-keyed-map work as additive Language 6
+  candidate capability, without adding a mandatory migration step.
+  Rationale: Existing Language 1 through 5 specs do not adopt these constructs and therefore need
+  no source edit. Naming the capability prevents the edge from looking stale while preserving the
+  edge's purpose: required adaptations and behavior rechecks for 0.16 consumers.
+  Date: 2026-09-17
 
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The Keiro upgrade blueprint now carries a validated 0.16.0.0 to 0.17.0.0 edge and reports version
+0.6.0 consistently from its manifest, registry entry, README, and cohort map. The edge covers the
+required work-queue, DLQ, producer identity, telemetry, and DSL adaptations, while identifying the
+later Language 6 nominal-type work as opt-in. A synced installed-copy preview selected exactly one
+step owned by `keiro-upgrade`, with no entailed migration, and the installed 0.1.0 copy was restored.
+
+Release metadata now agrees with the shipped dependency surface: Mori reports
+`shibuya-pgmq-adapter ^>=0.16.0.0`, and the release skill describes cabal-gild's line-oriented
+normalization. Blueprint validation, all documentation validators, `nix fmt`, and
+`nix flake check` pass. No architecture decision changed, so this plan required no ADR amendment.
 
 
 ## Context and Orientation
@@ -469,3 +499,8 @@ It depends softly on `docs/plans/284-gate-ordering-fifo-heads-to-language-6.md` 
 for consistency of wording with the root changelog; neither blocks starting this plan. The
 tools used are `seihou` (installed at `~/.nix-profile/bin/seihou`), `rsync`, `just`, `nix`,
 and `mori`.
+
+
+Revision note (2026-09-17): Refreshed the edge scope for the nominal-ID and identifier-keyed-map
+Language 6 additions made after the plan was authored, and verified the planned dependency bounds
+against Mori-located source plus the upstream release tags.
