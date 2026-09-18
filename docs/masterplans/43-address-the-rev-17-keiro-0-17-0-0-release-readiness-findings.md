@@ -106,8 +106,8 @@ retiring the Language 4 read-model generator.
 | 2 | Write the 0.16.0.0 to 0.17.0.0 upgrade edge and reconcile release metadata | docs/plans/282-write-the-0-16-0-0-to-0-17-0-0-upgrade-edge-and-reconcile-release-metadata.md | None | EP-3, EP-4 | Complete |
 | 3 | Reconcile the 0.17.0.0 changelogs and user documentation with the shipped surfaces | docs/plans/283-reconcile-the-0-17-0-0-changelogs-and-user-documentation-with-the-shipped-surfaces.md | None | EP-1, EP-4, EP-6 | Complete |
 | 4 | Gate ordering fifo-heads to Language 6 | docs/plans/284-gate-ordering-fifo-heads-to-language-6.md | None | EP-1 | Complete |
-| 5 | Harden the Language 6 reaction candidate before it is published | docs/plans/285-harden-the-language-6-reaction-candidate-before-it-is-published.md | None | EP-1, EP-4 | In Progress |
-| 6 | Close the carried-over runtime, DSL diff, packaging, and benchmark follow-ups | docs/plans/286-close-the-carried-over-runtime-dsl-diff-packaging-and-benchmark-follow-ups.md | None | EP-3 | In Progress |
+| 5 | Harden the Language 6 reaction candidate before it is published | docs/plans/285-harden-the-language-6-reaction-candidate-before-it-is-published.md | None | EP-1, EP-4 | Complete |
+| 6 | Close the carried-over runtime, DSL diff, packaging, and benchmark follow-ups | docs/plans/286-close-the-carried-over-runtime-dsl-diff-packaging-and-benchmark-follow-ups.md | None | EP-3 | Complete |
 
 Phase 1 (gates the 0.17.0.0 tag): EP-1, EP-2, EP-3, EP-4. Phase 2 (before Language 6 is
 published or the next cycle closes): EP-5, EP-6.
@@ -218,16 +218,16 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
 - [x] EP-4: `WorkqueueFifoHeadsSyntax` registered in the Language 6 profile and the parser refuses the token under Languages 4 and 5 at its span
 - [x] EP-4: corpora and manifests proven unchanged or regenerated; all four policies pass
 - [x] EP-4: changelogs and user reference say the token needs the Language 6 candidate
-- [ ] EP-5: reaction template timer ids derive from length-prefixed UTF-8 seeds; candidate corpora regenerated; vectors pinned
-- [ ] EP-5: reaction diff codes carry the rollout and identity vectors their prose promises
-- [ ] EP-5: reaction fingerprint derives from a frozen canonical encoding that excludes operator text
-- [ ] EP-5: harness ownership fact, partial helpers, and skeleton default language corrected
-- [ ] EP-5: changelog, user documentation, ADR-24 amendment, and full gate
-- [ ] EP-6: dispatch-only reactions open no timer transaction
-- [ ] EP-6: semantically equivalent hand-simplified replay twins no longer draw `AggGuardTightened`
-- [ ] EP-6: read-model deprecation windows restated
-- [ ] EP-6: `keiro-dsl.cabal` non-conformance internal dependencies bounded
-- [ ] EP-6: delegated inbox benchmark first-run cost moved out of the timed action and fresh baselines re-recorded
+- [x] EP-5: reaction template timer ids derive from length-prefixed UTF-8 seeds; candidate corpora regenerated; vectors pinned
+- [x] EP-5: reaction diff codes carry the rollout and identity vectors their prose promises
+- [x] EP-5: reaction fingerprint derives from a frozen canonical encoding that excludes operator text
+- [x] EP-5: harness ownership fact, partial helpers, and skeleton default language corrected
+- [x] EP-5: changelog, user documentation, ADR-24 amendment, and full gate
+- [x] EP-6: dispatch-only reactions open no timer transaction
+- [x] EP-6: semantically equivalent hand-simplified replay twins no longer draw `AggGuardTightened`
+- [x] EP-6: read-model deprecation windows restated
+- [x] EP-6: `keiro-dsl.cabal` non-conformance internal dependencies bounded
+- [x] EP-6: delegated inbox benchmark first-run cost moved out of the timed action and fresh baselines re-recorded
 
 
 ## Surprises & Discoveries
@@ -244,6 +244,15 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
   than the 743 examples recorded when EP-1 was drafted. This is expected growth from the
   nominal-ID work and does not change the release criterion.
   Evidence: `just verify` exited 0 on 2026-09-17 from commit `e6183397` and left the tree clean.
+- Discovery: EP-5 and EP-6 brought the final main DSL count to 756 and exposed two stale
+  assumptions in the original decomposition: there are three reaction corpora and twelve
+  read-model deprecation pragmas. The child plans now record the current inventory.
+  Evidence: the final clean-tree `just verify` run on 2026-09-17 passed 756 examples, all 47
+  corpus invocations, the isolated reaction probe, and every package suite.
+- Discovery: prebuilding a large benchmark input pool increased live-heap pressure. Complete
+  untimed per-scenario warmups removed the cold-position variance while leaving steady-state
+  input construction in the measured action; the scoped inbox regression passed all 49 rows.
+  Evidence: five committed CSV runs and the dated delegated-inbox evidence addendum.
 
 
 ## Decision Log
@@ -288,4 +297,16 @@ the Language 4 read-model generator (an amendment to whichever ADR introduced
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+All six child plans are complete. The 0.17 release documentation, upgrade edge, grammar gates,
+candidate reaction identities, runtime timer fast path, semantic replay-twin coverage,
+deprecation policy, package bounds, and benchmark evidence now agree with the implemented tree.
+The refresh absorbed later nominal-ID work by using the current 47-corpus inventory, repairing
+three drifted nominal evolution fixtures, and counting the actual twelve compatibility
+deprecations rather than the ten recorded in REV-17.
+
+The final clean-tree `just verify` run passed every package suite, 756 main DSL examples, all
+conformance and policy checks, the mutation and hydration proofs, and 36 migration examples.
+`nix flake check` also passed. The scoped inbox benchmark regression passed all 49 rows after
+five serial evidence runs refreshed only the nine existing fresh baselines. The umbrella
+benchmark recipe later found unrelated cold-start failures in command benchmarks; no command
+baseline was relaxed or changed by this initiative.

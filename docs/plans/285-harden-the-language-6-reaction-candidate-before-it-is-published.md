@@ -66,7 +66,7 @@ This section must always reflect the actual current state of the work.
 - [x] (2026-09-17 19:00 PDT) M2: reaction advisory codes carry `RolloutDrainRequired`; `ProcessTimerRemoved`, `ProcessReactionVersionDecreased`, and `ProcessReactionFingerprintChangedWithoutVersionBump` use the persisted-identity vector; report-vector tests added.
 - [x] (2026-09-17 19:05 PDT) M3: reaction fingerprint computed from a frozen canonical encoding that excludes operator text; fixture hashes pinned; ceiling and dead-letter tests assert exactly `ProcessTimerCeilingChanged`; whitespace-only rewrites still produce no change.
 - [x] (2026-09-17 19:05 PDT) M4: harness `reactionOwnership` follows the checker; `processReactionRowsForService` and `processReactionSnapshots` return `Either`; all `keiro-dsl new` skeletons target and validate on the stable language.
-- [ ] M5: `keiro-dsl/CHANGELOG.md`, `docs/user/typed-spec-toolchain.md`, and `docs/user/deploy-ordering.md` updated and ADR-24 amended; full gate remains.
+- [x] (2026-09-17 20:45 PDT) M5: `keiro-dsl/CHANGELOG.md`, `docs/user/typed-spec-toolchain.md`, and `docs/user/deploy-ordering.md` updated; ADR-24 amended; `just verify` and `nix flake check` pass from the clean implementation commits.
 
 
 ## Surprises & Discoveries
@@ -146,7 +146,16 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+The unpublished Language 6 reaction surface now has one unambiguous persisted identity
+contract. Timer and fired-event IDs use framed UTF-8 seeds, rollout and persisted-identity
+vectors match their diagnostics, and the reaction fingerprint uses a frozen semantic encoder
+that excludes operator policy text. Generated harness ownership matches the checker, public
+metadata helpers return typed failures, and every starter skeleton uses the published stable
+language. Three current candidate reaction corpora were regenerated; Languages 1 through 5
+remain byte-stable. ADR-24 and the user and deployment references record the durable choices.
+
+Focused reaction, skeleton, corpus, and documentation checks passed, followed by the clean-tree
+`just verify` gate (756 main DSL examples plus all conformance suites) and `nix flake check`.
 
 
 ## Context and Orientation

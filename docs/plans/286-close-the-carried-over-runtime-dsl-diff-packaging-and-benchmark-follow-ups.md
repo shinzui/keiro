@@ -65,7 +65,7 @@ scoped inbox benchmark-regression run that passes on a quiet machine.
 - [x] M5: the fresh downstream rows in `keiro/bench/baseline-inbox.csv` are re-recorded from
       five paired runs on a quiet machine; historical rows are byte-identical; the evidence
       README carries a dated addendum; the scoped inbox regression passes all 49 rows.
-- [ ] Final: Outcomes & Retrospective written and the ADR distillation pass done; final clean-tree gate remains.
+- [x] Final: Outcomes & Retrospective written, the ADR distillation pass done, and `just verify` plus `nix flake check` pass from the clean implementation commit.
 
 
 ## Surprises & Discoveries
