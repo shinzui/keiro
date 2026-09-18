@@ -10,6 +10,10 @@
 -- shinzui/baikai) carry no `default` at all, and a rule named for what it does
 -- survives the next one being added.
 --
+-- The parser is split across Parser.hs and the modules under Parser/ --
+-- `reservedWords` and the lexer live in Parser/Core.hs -- so both are watched;
+-- watching only Parser.hs let keyword changes pass without a signal.
+--
 -- Kept separate from automation/release.dhall rather than merged into a
 -- directory: a directory is one automation split across files and every file
 -- must agree on `queued`. That one shells out and wants `queued = True`; this
@@ -24,6 +28,7 @@ in  Schema.Automation::{
         , name = "keiro-dsl-surface"
         , paths =
           [ "keiro-dsl/src/Keiro/Dsl/Parser.hs"
+          , "keiro-dsl/src/Keiro/Dsl/Parser/*.hs"
           , "keiro-dsl/src/Keiro/Dsl/Grammar.hs"
           , "keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs"
           , "keiro-dsl/test/fixtures/**/*.keiro"
