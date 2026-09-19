@@ -17,6 +17,17 @@ provenance:
       at: 2026-09-19T21:52:45Z
       mode: "update"
       note: "Link Mina intention and clarify retained-history, strict replay, audit-tail, and rollout obligations."
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-19T22:13:45Z
+      mode: "update"
+      note: "Specify Day wire token, package-release freeze point, Aeson writer parity; move consumer history to Plan 295."
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-19T22:13:44Z
+      verdict: "changes-requested"
+      note: "Day wire token and policy freeze point unspecified; consumer history mixed into a feature milestone. Aeson writer parity confirmed from source."
 ---
 
 # Add calendar-day mappings with a frozen lossless codec contract
@@ -50,6 +61,8 @@ None recorded during implementation yet.
 
 2026-09-19: Start with a structural Day leaf and a named bare Day mapping, including Optional Day through the common mechanism. Direct aggregate Day fields and nominal Day wrappers are deferred and must be rejected with useful guidance. The initial feature has no symbolic date operations. The user requires streams and workflows to retain replayability after refactors. Tests and explicit compatibility boundaries enforce that requirement without claiming arbitrary Haskell behavior is statically provable.
 
+2026-09-19 (validation review): Freeze the calendar-day v1 policy at first package release rather than at language publication, embed the policy identity in the `wireFingerprint` token so a policy change can never be replay-neutral, and complete this plan on repository fixtures, leaving real consumer history to Plan 295. Aeson's year writer was read from source and matches the chosen canonical form; the read side remains to be settled by vectors.
+
 
 ## Outcomes & Retrospective
 
@@ -81,19 +94,19 @@ The source request is [IR-43](../improvement-requests/support-calendar-day-scala
 ### Milestone 1 — Prove a frozen full-carrier date contract
 
 
-Add `keiro-core/src/Keiro/Codec/CalendarDay.hs`. Define a proleptic Gregorian representation with full integer-year support, no timezone and no normalization of invalid month/day combinations. First write a codec prototype and compatibility vectors against the actual consumer Aeson/date versions located via Mori. Canonical output uses a minimum four-digit absolute year, a minus sign for negative years, no plus sign, and two-digit month/day, including year zero; document larger positive years without truncation. Accept the canonical grammar with valid Gregorian dates. Test encoder/decoder totality on constructed Day values including negative and very large years. If historical Aeson accepts additional spellings, retain an explicitly versioned historical reader for those spellings rather than silently changing the v1 contract or claiming universal parity. Do not release until baseline canonical output and accepted historical inputs have been compared. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Add `keiro-core/src/Keiro/Codec/CalendarDay.hs`. Define a proleptic Gregorian representation with full integer-year support, no timezone and no normalization of invalid month/day combinations. First write a codec prototype and compatibility vectors against the actual consumer Aeson/date versions located via Mori. Canonical output uses a minimum four-digit absolute year, a minus sign for negative years, no plus sign, and two-digit month/day, including year zero; document larger positive years without truncation. Accept the canonical grammar with valid Gregorian dates. Test encoder/decoder totality on constructed Day values including negative and very large years. If historical Aeson accepts additional spellings, retain an explicitly versioned historical reader for those spellings rather than silently changing the v1 contract or claiming universal parity. Do not release until baseline canonical output and accepted historical inputs have been compared. The chosen canonical output is byte-compatible with Aeson's writer: `encodeYear` in project `mori://haskell/aeson`, project-relative `aeson/src/Data/Aeson/Encoding/Builder.hs` (artifact URI pending), writes the decimal year unpadded from 1000 upward, zero-padded to four digits from 0 to 999, a minus sign with four-digit padding down to -999, and an unpadded negative decimal below that, never a plus sign. Pin that equivalence with vectors rather than relying on this reading, and check the consumer's actual Aeson version. Parity on the read side is the open question the vectors must settle. The calendar-day v1 policy identity freezes at the first package release that contains this module, even while the language capability is still a candidate, because a consumer on the candidate language can write durable events from that release onward; any later correction is a v2 policy with the v1 reader retained. Commit the vectors and frozen goldens before such a release. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 2 — Lower Day only on complete supported surfaces
 
 
-Add Day to checked structural TypeExpr and bare-shape support in `Grammar.hs`, `TypeGraph.hs`, `MappedCodecPlan.hs`, `ConsumerTypePlan.hs`, `Scaffold.hs`, and their total folds. Use the Keiro-owned codec helper instead of acquiring arbitrary consumer JSON behavior. Add required imports/packages, deterministic sample dates, declared register initials, branch coverage, source capability checks, recursive fingerprints, and diff consequences. Name the codec domain/version in identity; policy changes are visible. Reject date guards, arithmetic, ordering, direct fields, and nominal wrappers outside this release scope rather than silently lowering Day through Text or UTCTime. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Add Day to checked structural TypeExpr and bare-shape support in `Grammar.hs`, `TypeGraph.hs`, `MappedCodecPlan.hs`, `ConsumerTypePlan.hs`, `Scaffold.hs`, and their total folds. Use the Keiro-owned codec helper instead of acquiring arbitrary consumer JSON behavior. Add required imports/packages, deterministic sample dates, declared register initials, branch coverage, source capability checks, recursive fingerprints, and diff consequences. Name the codec domain/version in identity; policy changes are visible. Concretely, the new `wireExpr` case in `wireFingerprint` (`TypeGraph.hs`) renders Day as a token that embeds the calendar-day policy identity and version, because `ReplayImpact.hs` turns token equality into a `replay-neutral` verdict and a replay-neutral deploy skips its audit. Test that a policy-version change, a Text-to-Day change, and a Time-to-Day change are each `replay-affected`, and that tokens for every existing declaration are byte-identical. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`. Reject date guards, arithmetic, ordering, direct fields, and nominal wrappers outside this release scope rather than silently lowering Day through Text or UTCTime. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 3 — Prove date and optional-date replay
 
 
-Add `keiro-dsl/test/fixtures/calendar-days.keiro` and registered `conformance-calendar-days` with bare Day, record fields, Optional Day, nested lists/maps, registers, queue fields, query results, and workspace bindings. Exercise leap-year boundaries (1900 invalid leap day, 2000 valid), month boundaries, year zero, negative/extended years, nulls and omissions. Compare old LocalDay/MaybeLocalDay codecs using genuine historical fixtures and Plan 289 reports. Verify a date parser narrowing and an accidental midnight conversion fail compatibility; retain explicit old-version readers when required. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Add `keiro-dsl/test/fixtures/calendar-days.keiro` and registered `conformance-calendar-days` with bare Day, record fields, Optional Day, nested lists/maps, registers, queue fields, query results, and workspace bindings. Exercise leap-year boundaries (1900 invalid leap day, 2000 valid), month boundaries, year zero, negative/extended years, nulls and omissions. Compare old LocalDay/MaybeLocalDay codecs through the existing codec-comparison path and Plan 289 reports, using committed payload fixtures modeled on the consumer's codec source as located through Mori. These are repository fixtures and must be labeled as such; evidence from the consumer's real retained history is owned by Plan 295 Milestone 3 and is not required to complete this plan. If the v1 reader accepts any spelling the encoder does not write, supply those spellings as cases for Plan 289's normalization law. Verify a date parser narrowing and an accidental midnight conversion fail compatibility; retain explicit old-version readers when required. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ## Concrete Steps
@@ -156,3 +169,5 @@ Use the existing checked graph and total folds rather than separate per-generato
 Before using dependency APIs run `mori registry list`, `mori registry search <package>`, `mori registry show <qualified-project> --full`, and `mori registry docs <qualified-project>`, then read the located source. Relevant projects are `mori://shinzui/keiki`, `mori://haskell/aeson`, and consumer `mori://shinzui/rei`. If changing a dependency bound, verify the authoritative package registry and upstream release tags first; local source is not release evidence. No Keiki dependency change is assumed. If required evidence cannot be expressed by the released API, stop capability promotion and coordinate an explicit upstream change, never substitute a dishonest witness.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
+
+Revision note (2026-09-19, validation review): Milestone 1 records the Aeson writer equivalence and the package-release freeze point. Milestone 2 specifies the Day wire token, its replay-verdict tests, and `capabilityFoldSegment = Nothing`. Milestone 3 separates repository codec-comparison fixtures from consumer history owned by Plan 295. No implementation has run.

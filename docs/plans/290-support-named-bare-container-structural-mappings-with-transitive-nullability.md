@@ -17,6 +17,17 @@ provenance:
       at: 2026-09-19T21:52:45Z
       mode: "update"
       note: "Link Mina intention and clarify retained-history, strict replay, audit-tail, and rollout obligations."
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-19T22:13:45Z
+      mode: "update"
+      note: "Specify bare wire token and verdict tests; extend on-missing defaults through bare references."
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-19T22:13:44Z
+      verdict: "changes-requested"
+      note: "Bare wire token unspecified; on-missing defaults cannot reach named aliases, so histories omitting absent optionals could not adopt."
 ---
 
 # Support named bare container structural mappings with transitive nullability
@@ -49,6 +60,10 @@ None recorded during implementation yet.
 
 
 2026-09-19: Add a checked bare-shape constructor with recursive nullability. Preserve named aggregate use sites and direct-container restrictions. An opaque-to-structural migration always requires explicit compatibility evidence. The user requires streams and workflows to retain replayability after refactors. Tests and explicit compatibility boundaries enforce that requirement without claiming arbitrary Haskell behavior is statically provable.
+
+2026-09-19 (validation review): Render a bare declaration's wire token as its inner expression, so tokens describe wire form rather than declaration structure. Inline-to-alias extraction is then honestly replay-neutral, which is the source-only refactor this initiative promises, while opaque-to-bare stays replay-affected.
+
+2026-09-19 (validation review): Admit on-missing defaults through bare references. Without this a consumer whose retained events omit the key for an absent optional could not adopt a named alias without losing the ability to read that history.
 
 
 ## Outcomes & Retrospective
@@ -87,13 +102,13 @@ Extend `Grammar.hs`, `Parser/Mapped.hs`, `PrettyPrint.hs`, `TypeGraph.hs`, and `
 ### Milestone 2 — Make nullability recursive and lower bare codecs
 
 
-Replace the structural-is-non-null assumption with graph-derived top-level nullability and invalid-optional facts, computed through references with cycle-safe traversal. Reject `Optional (Optional Text)`, the same shape hidden behind multiple aliases, and optional Json/opaque leaves. Lists/maps remain non-null while their element errors propagate. In `MappedCodecPlan.hs`, `ConsumerTypePlan.hs`, and `Scaffold.hs`, generate leaf shape modules and codecs without an object wrapper. Use domain/shape binding at consumer boundaries and shape codecs for nested structural references. Preserve field-presence behavior independently: a required field whose value is Optional must be present; explicit null is a value, not omission. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Replace the structural-is-non-null assumption with graph-derived top-level nullability and invalid-optional facts, computed through references with cycle-safe traversal. Reject `Optional (Optional Text)`, the same shape hidden behind multiple aliases, and optional Json/opaque leaves. Lists/maps remain non-null while their element errors propagate. In `MappedCodecPlan.hs`, `ConsumerTypePlan.hs`, and `Scaffold.hs`, generate leaf shape modules and codecs without an object wrapper. Use domain/shape binding at consumer boundaries and shape codecs for nested structural references. Preserve field-presence behavior independently: a required field whose value is Optional must be present; explicit null is a value, not omission. Extend `defaultMatches`, `defaultType`, and `referencedDefaultType` in `Validate.hs` through bare references: today `referencedDefaultType` returns `DefaultOther` for every non-enum shape, so a field declared `optional on-missing=null` cannot reference a named optional alias, and likewise `on-missing=[]` or an empty map cannot reference a named list or map alias. This matters for retained history, not only ergonomics. Consumer records written by Aeson with `omitNothingFields` omit the key for `Nothing`, and Aeson's generic reader accepts a missing key for a `Maybe` field, so a consumer replacing an opaque optional with a named alias must be able to declare the same missing-key policy or its old events stop decoding. Admit the on-missing default exactly when it would be admitted for the alias's inner expression written inline, and reject it otherwise. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 3 — Propagate identity and prove migration behavior
 
 
-Extend all TypeGraph folds, `MappedDiff.hs`, `FoldFingerprint.hs`, `Coverage.hs`, `Goldens.hs`, `StructuralConformance.hs`, and scaffold records. Add `keiro-dsl/test/fixtures/bare-containers.keiro` and a registered `conformance-bare-containers` suite with empty/present optionals, ordered duplicate lists, text maps, nested nominal values, unused declarations, register initials, workspace ownership, queues, and read-model query types. Queries remain Haskell-value contracts without invented JSON policy. Keep public-contract containers unsupported unless separately implemented. Compare old opaque codecs through `CodecCompare.hs` and Plan 289; do not turn finite parity into a structural proof for opaque leaves. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Extend all TypeGraph folds, `MappedDiff.hs`, `FoldFingerprint.hs`, `Coverage.hs`, `Goldens.hs`, `StructuralConformance.hs`, and scaffold records. The fold that matters most for replay is `wireFingerprint` in `TypeGraph.hs`: `ReplayImpact.hs` compares its tokens to decide between `replay-neutral` and `replay-affected`, and a replay-neutral deploy skips its audit. Render a bare declaration as the token of its inner expression with no wrapper and no declaration name. `RRef` already inlines a referenced declaration this way, so extracting an inline `Optional Text` field into a named alias is truthfully wire-neutral, while an opaque-to-bare change still differs because the opaque token is `opaque(identity,version)` and `MappedModeCrossed` fires. Tokens for every existing declaration stay byte-identical. Test all three: inline-to-alias is `replay-neutral`, opaque-to-bare is `replay-affected`, and inserting a record wrapper is `replay-affected`. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`, so services that do not use bare declarations keep their fold fingerprints. Add `keiro-dsl/test/fixtures/bare-containers.keiro` and a registered `conformance-bare-containers` suite with empty/present optionals, ordered duplicate lists, text maps, nested nominal values, unused declarations, register initials, workspace ownership, queues, and read-model query types. Queries remain Haskell-value contracts without invented JSON policy. Keep public-contract containers unsupported unless separately implemented. Compare old opaque codecs through `CodecCompare.hs` and Plan 289; do not turn finite parity into a structural proof for opaque leaves. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ## Concrete Steps
@@ -125,7 +140,7 @@ It must report no regeneration drift; this command deliberately refuses a dirty 
 ## Validation and Acceptance
 
 
-A Maybe Text mapping encodes Nothing as null and Just "x" as "x"; a list ["b","a","a"] keeps all three entries; a map encodes as an object. The checker refuses nullable aliases before scaffold writes anything. Missing required enclosing fields fail while present null succeeds. Serialized replay reproduces values and state. A changed source selector with unchanged wire identity passes the refactor gate; inserting a record wrapper fails.
+A Maybe Text mapping encodes Nothing as null and Just "x" as "x"; a list ["b","a","a"] keeps all three entries; a map encodes as an object. The checker refuses nullable aliases before scaffold writes anything. Missing required enclosing fields fail while present null succeeds. Serialized replay reproduces values and state. A changed source selector with unchanged wire identity passes the refactor gate; inserting a record wrapper fails. A field declared `optional on-missing=null` that references a named optional alias checks cleanly, decodes a payload that omits the key to the empty optional, and decodes an explicit null to the same value; the same on-missing default against a non-nullable alias is rejected by the checker.
 
 For every admitted value, generated encoding followed by decoding must recover the same domain value, and the generated binding must satisfy both inverse laws. Exercise forward execution followed by actual event-envelope serialization, decoding, and strict replay; compare control state and all durable registers at every completed transition. Include multi-event output, replay-only transitions, and a negative head-information-loss case. A same-version in-memory replay test alone does not pass this requirement.
 
@@ -156,3 +171,5 @@ Use the existing checked graph and total folds rather than separate per-generato
 Before using dependency APIs run `mori registry list`, `mori registry search <package>`, `mori registry show <qualified-project> --full`, and `mori registry docs <qualified-project>`, then read the located source. Relevant projects are `mori://shinzui/keiki`, `mori://haskell/aeson`, and consumer `mori://shinzui/rei`. If changing a dependency bound, verify the authoritative package registry and upstream release tags first; local source is not release evidence. No Keiki dependency change is assumed. If required evidence cannot be expressed by the released API, stop capability promotion and coordinate an explicit upstream change, never substitute a dishonest witness.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
+
+Revision note (2026-09-19, validation review): Milestone 2 now extends on-missing defaults through bare references so histories that omit absent optionals remain readable. Milestone 3 specifies the bare declaration's `wireFingerprint` token, the three replay-verdict tests, and the `capabilityFoldSegment = Nothing` decision. No implementation has run.

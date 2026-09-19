@@ -17,6 +17,17 @@ provenance:
       at: 2026-09-19T21:52:45Z
       mode: "update"
       note: "Link Mina intention and clarify retained-history, strict replay, audit-tail, and rollout obligations."
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-19T22:13:45Z
+      mode: "update"
+      note: "Specify refined wire token and freeze point; add permissive-reader and identity-stability checks; move consumer history to Plan 295."
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-19T22:13:44Z
+      verdict: "changes-requested"
+      note: "Refined wire token and freeze point unspecified; no check that canonicalization preserves hash-derived durable identities."
 ---
 
 # Add declarative base16 byte refinements with total consumer bindings
@@ -50,6 +61,10 @@ None recorded during implementation yet.
 
 2026-09-19: Use unrestricted bytes as the v1 representation, lowercase canonical hex output, case-insensitive valid hex input, and even-length validation. Accept empty bytes; do not impose digest length. Defer arbitrary predicates and optional length refinements to separately versioned work. The user requires streams and workflows to retain replayability after refactors. Tests and explicit compatibility boundaries enforce that requirement without claiming arbitrary Haskell behavior is statically provable.
 
+2026-09-19 (validation review): Freeze the base16-bytes v1 policy at first package release, give the refined declaration a `wireFingerprint` token distinct from text and nominal Text that embeds the policy identity, and check whether the consumer's historical reader was more permissive than this parser. Complete this plan on repository fixtures, leaving real consumer history to Plan 295.
+
+2026-09-19 (validation review): Require proof that canonicalization changes no durable identity. A hash whose hex text feeds a deterministic identity, stream name, or router key must produce the same identity from an uppercase historical payload after adoption as was recorded before it.
+
 
 ## Outcomes & Retrospective
 
@@ -81,19 +96,19 @@ The source request is [IR-45](../improvement-requests/support-explicit-refined-s
 ### Milestone 1 — Specify and implement a bounded refinement contract
 
 
-Add `keiro-core/src/Keiro/Codec/Refined.hs` containing the base16 bytes policy, stable typed failure categories, pure canonical encoder, and parser. Introduce an explicit refined declaration branch in the DSL rather than widening mapped nominal Text. Its checked facts name representation bytes, base16 wire policy/version, consumer provenance, binding version, fixtures, canonical type identity, and register initial where used. Retain total domain-to-bytes and bytes-to-domain binding laws; failures happen before bytes cross the binding. Reject odd length, non-hex, whitespace, and prefixes; accept uppercase/lowercase digits and empty input. Canonical output is lowercase. Pin examples against actual consumer libraries; historical differences require an old reader rather than a hidden policy change. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Add `keiro-core/src/Keiro/Codec/Refined.hs` containing the base16 bytes policy, stable typed failure categories, pure canonical encoder, and parser. Introduce an explicit refined declaration branch in the DSL rather than widening mapped nominal Text. Its checked facts name representation bytes, base16 wire policy/version, consumer provenance, binding version, fixtures, canonical type identity, and register initial where used. Retain total domain-to-bytes and bytes-to-domain binding laws; failures happen before bytes cross the binding. Reject odd length, non-hex, whitespace, and prefixes; accept uppercase/lowercase digits and empty input. Canonical output is lowercase. Pin examples against actual consumer libraries; historical differences require an old reader rather than a hidden policy change. Check in particular whether the consumer's historical reader was more permissive than this policy, for example a lenient base16 decoder that returned a partial result on invalid input instead of failing: a payload the old reader accepted and this parser rejects is a historical-read failure, and the remedy is a retained versioned reader, never a quietly widened v1. The base16-bytes v1 policy identity freezes at the first package release that contains this module, even while the language capability is still a candidate, because a consumer on the candidate language can write durable events from that release onward; a later correction is a v2 policy with the v1 reader retained. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 2 — Compose refinement through all admitted checked roots
 
 
-Extend TypeGraph and all total folds, MappedCodecPlan, ConsumerTypePlan, Scaffold, StructuralConformance, Coverage, MappedDiff, and fingerprints with refined representation and policy facts. Permit references inside existing structural expressions and named aggregate mappings, including optional/list/map compositions, queues, queries, and workspace consumers. Mark the JSON string representation non-null only because Keiro owns this parser/encoder. Keep symbolic equality/ordering/arithmetic and use as map keys unsupported initially. Reject arbitrary validation callbacks and length options with useful diagnostics; do not implement a generic callback escape hatch under a checked proof label. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Extend TypeGraph and all total folds, MappedCodecPlan, ConsumerTypePlan, Scaffold, StructuralConformance, Coverage, MappedDiff, and fingerprints with refined representation and policy facts. Permit references inside existing structural expressions and named aggregate mappings, including optional/list/map compositions, queues, queries, and workspace consumers. Mark the JSON string representation non-null only because Keiro owns this parser/encoder. Keep symbolic equality/ordering/arithmetic and use as map keys unsupported initially. Map keys stay excluded for a replay reason as well as a scope reason: two hex spellings of the same bytes would be one key after decoding but two keys on the wire. Render the refined declaration in `wireFingerprint` (`TypeGraph.hs`) as a token that is distinct from `text` and from a nominal Text scalar and embeds the base16-bytes policy identity and version, because `ReplayImpact.hs` turns token equality into a `replay-neutral` verdict and a replay-neutral deploy skips its audit. Test that nominal-Text-to-refined, opaque-to-refined, and a policy-version change are each `replay-affected`, and that tokens for every existing declaration are byte-identical. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`. Reject arbitrary validation callbacks and length options with useful diagnostics; do not implement a generic callback escape hatch under a checked proof label. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 3 — Prove byte identity and preserve old hash semantics
 
 
-Add `keiro-dsl/test/fixtures/refined-base16.keiro` and registered `conformance-refined-base16` suites with empty bytes, leading zero bytes, mixed-case input, odd-length/non-hex rejection, and lengths other than SHA-256. Prove decoder(encoder(bytes)) is identity and canonicalization preserves decoded bytes. Test consumer binding transposition/normalization mutations, optional composition, public unsupported surfaces, and serialized replay. Compare TaskContentHash/EmbedHash historical payloads using the existing codec-comparison path and Plan 289. A new length restriction, dropped leading zeros, or a hidden rejecting binding must fail. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Add `keiro-dsl/test/fixtures/refined-base16.keiro` and registered `conformance-refined-base16` suites with empty bytes, leading zero bytes, mixed-case input, odd-length/non-hex rejection, and lengths other than SHA-256. Prove decoder(encoder(bytes)) is identity and canonicalization preserves decoded bytes. Test consumer binding transposition/normalization mutations, optional composition, public unsupported surfaces, and serialized replay. Compare TaskContentHash/EmbedHash payloads using the existing codec-comparison path and Plan 289, with committed payload fixtures modeled on the consumer's codec source as located through Mori. These are repository fixtures and must be labeled as such; evidence from the consumer's real retained history is owned by Plan 295 Milestone 3 and is not required to complete this plan. Supply mixed-case and uppercase spellings as the non-canonical cases for Plan 289's shared normalization law. Add a case proving that no durable identity changes under canonicalization: where a hash value feeds a deterministic or content-derived identity, stream name, or router key, the identity computed after adoption from an uppercase historical payload must equal the identity recorded before adoption, or adoption is refused for that surface. A new length restriction, dropped leading zeros, or a hidden rejecting binding must fail. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ## Concrete Steps
@@ -156,3 +171,5 @@ Use the existing checked graph and total folds rather than separate per-generato
 Before using dependency APIs run `mori registry list`, `mori registry search <package>`, `mori registry show <qualified-project> --full`, and `mori registry docs <qualified-project>`, then read the located source. Relevant projects are `mori://shinzui/keiki`, `mori://haskell/aeson`, and consumer `mori://shinzui/rei`. If changing a dependency bound, verify the authoritative package registry and upstream release tags first; local source is not release evidence. No Keiki dependency change is assumed. If required evidence cannot be expressed by the released API, stop capability promotion and coordinate an explicit upstream change, never substitute a dishonest witness.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
+
+Revision note (2026-09-19, validation review): Milestone 1 adds the permissive-historical-reader check and the package-release freeze point. Milestone 2 specifies the refined wire token, its replay-verdict tests, the replay reason map keys stay excluded, and `capabilityFoldSegment = Nothing`. Milestone 3 separates repository fixtures from consumer history owned by Plan 295, supplies normalization-law cases, and adds the identity-stability case. No implementation has run.

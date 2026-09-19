@@ -3,10 +3,14 @@ type: Improvement Request
 title: Support structural set mappings
 description: >-
   Support structural set mappings while preserving explicit codec ownership and historical compatibility.
-timestamp: 2026-09-19T21:32:21Z
+timestamp: 2026-09-19T22:13:18Z
 requestId: IR-44
-status: proposed
+status: accepted
 origin: mori://shinzui/rei
+plan: docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md
+relatedPlans:
+  - docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md
+  - docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md
 reviews:
   - kind: model
     reviewer: codex-author
