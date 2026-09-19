@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-09-19
+* **Addition**: IR-42 requests named bare-container structural mappings with unchanged wire shapes.
+* **Addition**: IR-43 requests calendar-day scalars with explicit date codec semantics.
+* **Addition**: IR-44 requests structural set mappings with explicit ordering and duplicate policy.
+* **Addition**: IR-45 requests a separate, compatibility-visible refined scalar contract.
+* **Addition**: IR-46 requests explicit legacy ID admission domains while preserving the v7 default.
 * **Status**: IR-41 completed: docs/terminology publishes 27 TERM-N terms under okf-profiles v0.17.0's documentation.terminology profile, gated by just terminology-validate; the request's sidecar/slot-ledger premise was corrected to ADR-22's actual renames.
 
 ## 2026-09-18
