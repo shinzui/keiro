@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -87,6 +87,14 @@ user-documentation-validate:
     okf graph docs/user
     okf validate docs/guides --strict --profile mori/user-documentation-profile.dhall --profile-enforce --log-enforce
     okf graph docs/guides
+
+# Strict OKF enforcement for the published controlled vocabulary, then Mori's
+# repository gate: relation resolution, replaces/replacedBy mirrors, discouraged
+# wording, and file/doc/module anchors against this checkout.
+[group('docs')]
+terminology-validate:
+    okf validate docs/terminology --strict --profile mori/terminology-profile.dhall --profile-enforce --log-enforce
+    mori terms validate --path .
 
 [group('haskell')]
 haskell-build:

@@ -7,7 +7,14 @@ description: >-
   relations, succession, and code anchors, so agents and authors can query and cite it.
 timestamp: 2026-09-18T22:19:42Z
 requestId: IR-41
-status: proposed
+status: completed
+completedAt: 2026-09-19T03:09:21Z
+resolution: >-
+  Adopted by hand (okf-profiles deferred the adopt-terminology blueprint until this first
+  adoption): docs/terminology holds 27 TERM-N terms under okf-profiles v0.17.0's
+  documentation.terminology profile, bound in mori.dhall and gated by just terminology-validate.
+  The sidecar/slot-ledger premise was wrong and was not encoded: ADR-22 keeps "sidecar" as the
+  current umbrella word and retired "scaffold record" and "conformance record" instead.
 origin: mori://shinzui/mori/plans/268-specify-the-shared-terminology-contract-and-request-it-upstream
 reviews:
   - kind: model
@@ -30,10 +37,39 @@ reviews:
 
 ## Status
 
-**Proposed.** Requested by
+**Completed** on 2026-09-19, without an ExecPlan. The catalog lives at
+[`docs/terminology/`](../terminology/index.md), is pinned to okf-profiles v0.17.0, and is checked
+by `just terminology-validate` as part of `just verify`. Requested by
 `mori://shinzui/mori/plans/268-specify-the-shared-terminology-contract-and-request-it-upstream`
 as the first adopter of
 `mori://shinzui/mori/masterplans/36-publish-project-terminology-as-a-first-class-okf-catalog`.
+
+### Resolution Notes
+
+- **No blueprint existed.** okf-profiles v0.17.0 shipped the profile but deferred the
+  `adopt-terminology` blueprint until a first real adoption
+  (`mori://shinzui/okf-profiles/okf/improvement-requests/concepts/IR-6`). Keiro is that adoption,
+  so steps 2 to 5 were done by hand, following the user-documentation binding.
+- **The sidecar premise was wrong.** ADR-22 did not rename "sidecars" to "slot ledgers", and no
+  keiro artifact uses "slot ledger". ADR-22 keeps *sidecar* as the current umbrella word, and
+  `Keiro.Dsl.SidecarNames` is named for it. It renamed the individual sidecars: the scaffold
+  record became the scaffold ledger (TERM-22), the conformance record became the conformance
+  ledger (TERM-24), and the generated manifest became the Cabal fragment (TERM-26). So *sidecar*
+  (TERM-21) is `current`, *scaffold record* (TERM-23) and *conformance record* (TERM-25) are
+  `deprecated` and name their ledgers in `replacedBy`, and *scaffold manifest* is discouraged
+  wording on the Cabal fragment. `mori terms search sidecar` therefore returns TERM-21 and no
+  replacement, which departs from the last acceptance criterion on purpose.
+- **Decider is discouraged wording, not a deprecated term.** Keiro never had a decider concept.
+  The keiro/keiki contract was chosen over a Decider facade. *decider* and *decider facade* are
+  discouraged wording on *event stream* (TERM-2), the aggregate contract whose decision logic is
+  a Keiki `SymTransducer`.
+- **Keiki and Kiroku terms are referenced in prose only.** Neither project publishes a catalog
+  yet, and a `mori://` relation to an unregistered term fails `mori terms validate`.
+- **Live docs aligned.** The pages that still said "scaffold record" or "scaffold manifest"
+  (`docs/guides/brownfield-migration-and-transducer-modeling.md`,
+  `docs/guides/choosing-keiro-dsl.md`, `docs/user/api-reference.md`) now use the ledger and
+  Cabal-fragment names. ADRs, plans, and the legacy-migration passage in
+  `docs/user/typed-spec-toolchain.md` keep the old words as history.
 
 ## Dependency
 

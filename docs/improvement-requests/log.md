@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-19
+* **Status**: IR-41 completed: docs/terminology publishes 27 TERM-N terms under okf-profiles v0.17.0's documentation.terminology profile, gated by just terminology-validate; the request's sidecar/slot-ledger premise was corrected to ADR-22's actual renames.
+
 ## 2026-09-18
 * **Addition**: IR-41 requests publishing keiro's controlled vocabulary as a docs/terminology catalog under the shared documentation.terminology profile, hard-depending on okf-profiles IR-6 (requested by mori plan 268).
 
