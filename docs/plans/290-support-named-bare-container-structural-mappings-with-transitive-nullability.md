@@ -22,12 +22,22 @@ provenance:
       at: 2026-09-19T22:13:45Z
       mode: "update"
       note: "Specify bare wire token and verdict tests; extend on-missing defaults through bare references."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:09Z
+      mode: "update"
+      note: "Corrected wire-neutral alias versus full replay verdict; added executable API matrix and candidate-history obligations."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
       at: 2026-09-19T22:13:44Z
       verdict: "changes-requested"
       note: "Bare wire token unspecified; on-missing defaults cannot reach named aliases, so histories omitting absent optionals could not adopt."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:09Z
+      verdict: "approved"
+      note: "Corrected wire-neutral alias versus full replay verdict; added executable API matrix and candidate-history obligations."
 ---
 
 # Support named bare container structural mappings with transitive nullability
@@ -38,6 +48,8 @@ This ExecPlan is a living document. Keep its execution sections current; distill
 
 ## Purpose / Big Picture
 
+
+This is a pre-1.0 DSL/API work stream. The improvement request below is a concrete use case; success also requires a usable public authoring path and compatibility evidence that makes later implementation consolidation safe.
 
 Implement IR-42 so a named structural mapping can encode a bare optional value, list, or text-keyed map while retaining the consumer Haskell type and the existing total binding laws. Users can remove unnecessary opaque container boundaries without inserting an object wrapper or silently collapsing null alternatives.
 
@@ -55,15 +67,20 @@ Implement IR-42 so a named structural mapping can encode a bare optional value, 
 
 None recorded during implementation yet.
 
+The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
+
 
 ## Decision Log
 
 
 2026-09-19: Add a checked bare-shape constructor with recursive nullability. Preserve named aggregate use sites and direct-container restrictions. An opaque-to-structural migration always requires explicit compatibility evidence. The user requires streams and workflows to retain replayability after refactors. Tests and explicit compatibility boundaries enforce that requirement without claiming arbitrary Haskell behavior is statically provable.
 
-2026-09-19 (validation review): Render a bare declaration's wire token as its inner expression, so tokens describe wire form rather than declaration structure. Inline-to-alias extraction is then honestly replay-neutral, which is the source-only refactor this initiative promises, while opaque-to-bare stays replay-affected.
+2026-09-19 (validation review): Render a bare declaration's wire token as its inner expression, so tokens describe wire form rather than declaration structure. Inline-to-alias extraction then preserves wire identity, while opaque-to-bare changes it. Complete replay and snapshot verdicts still consider provenance and fold surfaces; wire equality alone must not suppress those findings.
 
 2026-09-19 (validation review): Admit on-missing defaults through bare references. Without this a consumer whose retained events omit the key for an absent optional could not adopt a named alias without losing the ability to read that history.
+
+
+2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
 
 ## Outcomes & Retrospective
@@ -108,7 +125,7 @@ Replace the structural-is-non-null assumption with graph-derived top-level nulla
 ### Milestone 3 — Propagate identity and prove migration behavior
 
 
-Extend all TypeGraph folds, `MappedDiff.hs`, `FoldFingerprint.hs`, `Coverage.hs`, `Goldens.hs`, `StructuralConformance.hs`, and scaffold records. The fold that matters most for replay is `wireFingerprint` in `TypeGraph.hs`: `ReplayImpact.hs` compares its tokens to decide between `replay-neutral` and `replay-affected`, and a replay-neutral deploy skips its audit. Render a bare declaration as the token of its inner expression with no wrapper and no declaration name. `RRef` already inlines a referenced declaration this way, so extracting an inline `Optional Text` field into a named alias is truthfully wire-neutral, while an opaque-to-bare change still differs because the opaque token is `opaque(identity,version)` and `MappedModeCrossed` fires. Tokens for every existing declaration stay byte-identical. Test all three: inline-to-alias is `replay-neutral`, opaque-to-bare is `replay-affected`, and inserting a record wrapper is `replay-affected`. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`, so services that do not use bare declarations keep their fold fingerprints. Add `keiro-dsl/test/fixtures/bare-containers.keiro` and a registered `conformance-bare-containers` suite with empty/present optionals, ordered duplicate lists, text maps, nested nominal values, unused declarations, register initials, workspace ownership, queues, and read-model query types. Queries remain Haskell-value contracts without invented JSON policy. Keep public-contract containers unsupported unless separately implemented. Compare old opaque codecs through `CodecCompare.hs` and Plan 289; do not turn finite parity into a structural proof for opaque leaves. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Extend all TypeGraph folds, `MappedDiff.hs`, `FoldFingerprint.hs`, `Coverage.hs`, `Goldens.hs`, `StructuralConformance.hs`, and scaffold records. The fold that matters most for replay is `wireFingerprint` in `TypeGraph.hs`: `ReplayImpact.hs` combines this wire identity with transitions, initial state, binding/fold provenance, and direct nominal surfaces. Render a bare declaration as the token of its inner expression with no wrapper and no declaration name. `RRef` already inlines a referenced declaration this way, so extracting an inline `Optional Text` field into a named alias preserves mapped wire identity, while an opaque-to-bare change still differs because the opaque token is `opaque(identity,version)` and `MappedModeCrossed` fires. Tokens for every existing declaration stay byte-identical. Test all three wire identities: inline-to-alias is equal, opaque-to-bare differs, and inserting a record wrapper differs. Also assert the full diff/replay and snapshot outcomes at actual use sites. An alias added inside a mapped event or register can preserve JSON while changing graph/provenance or register type identity; a conservative affected verdict or cache invalidation is legitimate and must not be suppressed to force a neutral result. The baseline/candidate semantic comparison, not a neutral label, establishes the refactor's compatibility. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`, so services that do not use bare declarations keep their fold fingerprints. Add `keiro-dsl/test/fixtures/bare-containers.keiro` and a registered `conformance-bare-containers` suite with empty/present optionals, ordered duplicate lists, text maps, nested nominal values, unused declarations, register initials, workspace ownership, queues, and read-model query types. Queries remain Haskell-value contracts without invented JSON policy. Keep public-contract containers unsupported unless separately implemented. Compare old opaque codecs through `CodecCompare.hs` and Plan 289; do not turn finite parity into a structural proof for opaque leaves. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ## Concrete Steps
@@ -140,13 +157,15 @@ It must report no regeneration drift; this command deliberately refuses a dirty 
 ## Validation and Acceptance
 
 
+Commit a supported-use matrix and compiled public-API example for this feature: bare and nested uses, aggregate commands/events/registers, queue payloads, query types, workspace ownership, public contracts, and process/workflow hand-owned codecs must each be supported with a tested path, explicitly unsupported with a located diagnostic, or explicitly application-owned. Do not imply that sharing a value type grants process/workflow codec ownership. Exercise clean generation and regeneration without editing generated modules, and document the smallest total consumer binding. Plan 295 reuses these examples. API convenience cannot weaken domain admission, binding laws, or replay validation.
+
 A Maybe Text mapping encodes Nothing as null and Just "x" as "x"; a list ["b","a","a"] keeps all three entries; a map encodes as an object. The checker refuses nullable aliases before scaffold writes anything. Missing required enclosing fields fail while present null succeeds. Serialized replay reproduces values and state. A changed source selector with unchanged wire identity passes the refactor gate; inserting a record wrapper fails. A field declared `optional on-missing=null` that references a named optional alias checks cleanly, decodes a payload that omits the key to the empty optional, and decodes an explicit null to the same value; the same on-missing default against a non-nullable alias is rejected by the checker.
 
 For every admitted value, generated encoding followed by decoding must recover the same domain value, and the generated binding must satisfy both inverse laws. Exercise forward execution followed by actual event-envelope serialization, decoding, and strict replay; compare control state and all durable registers at every completed transition. Include multi-event output, replay-only transitions, and a negative head-information-loss case. A same-version in-memory replay test alone does not pass this requirement.
 
 For each affected persisted surface, run the compatibility gate from Plan 289. Preserve genuine old bytes, tags, versions, and readers. Compare baseline and candidate interpretations under the same versioned, non-lossy observation contract; investigate the first divergent prefix. Test old-reader/new-writer compatibility separately. A narrowed domain, altered normalization, or opaque-to-checked conversion is never automatically replay-neutral. Keep historical adapters total for retained history; if history cannot be represented without loss, retain the old representation/handler and refuse adoption.
 
-Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown evidence stays unverified and blocks a release claiming preservation. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
+Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown required evidence stays unverified and blocks the preservation claim at the applicable feature, publication, adoption, or retirement gate. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
 
 Workflow adoption must additionally preserve journal semantics with actual application codecs. Run old journal prefixes through candidate continuation in an isolated test environment with recorded effects; do not execute production side effects in an audit. Persisted-result decode failure must fail clearly, never be treated as a missing step and rerun. Pure refactors must retain stable names and existing results without extra actions. No snapshot invalidation, token bump, or green finite fixture suite alone proves compatibility with all stored history.
 
@@ -158,7 +177,7 @@ Evidence is tied to the audited high-water marks. Concurrent writes beyond those
 ## Idempotence and Recovery
 
 
-All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep the feature on an unpublished capability until its evidence passes. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
+All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep new authoring capability promotion blocked until its evidence passes. Candidate status does not prevent durable writes: any package release containing a new wire policy requires committed compatibility vectors and freezes that policy identity. Removing an already-shipped candidate capability must preserve its historical read/replay path or be blocked. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
 
 
 ## Interfaces and Dependencies
@@ -173,3 +192,5 @@ Before using dependency APIs run `mori registry list`, `mori registry search <pa
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
 Revision note (2026-09-19, validation review): Milestone 2 now extends on-missing defaults through bare references so histories that omit absent optionals remain readable. Milestone 3 specifies the bare declaration's `wireFingerprint` token, the three replay-verdict tests, and the `capabilityFoldSegment = Nothing` decision. No implementation has run.
+
+Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.

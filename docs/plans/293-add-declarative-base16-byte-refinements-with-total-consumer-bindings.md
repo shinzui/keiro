@@ -22,12 +22,22 @@ provenance:
       at: 2026-09-19T22:13:45Z
       mode: "update"
       note: "Specify refined wire token and freeze point; add permissive-reader and identity-stability checks; move consumer history to Plan 295."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:10Z
+      mode: "update"
+      note: "Checked byte-refinement laws, identity preservation and parser policy; added API acceptance and retained-history release gates."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
       at: 2026-09-19T22:13:44Z
       verdict: "changes-requested"
       note: "Refined wire token and freeze point unspecified; no check that canonicalization preserves hash-derived durable identities."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:10Z
+      verdict: "approved"
+      note: "Checked byte-refinement laws, identity preservation and parser policy; added API acceptance and retained-history release gates."
 ---
 
 # Add declarative base16 byte refinements with total consumer bindings
@@ -38,6 +48,8 @@ This ExecPlan is a living document. Keep its execution sections current; distill
 
 ## Purpose / Big Picture
 
+
+This is a pre-1.0 DSL/API work stream. The improvement request below is a concrete use case; success also requires a usable public authoring path and compatibility evidence that makes later implementation consolidation safe.
 
 Implement the bounded initial slice of IR-45: byte-backed refined mappings with a declared base16 codec and total consumer bindings. Hash types can become inspectable schema declarations without treating arbitrary Text as valid or hiding consumer rejection in a structural binding.
 
@@ -55,6 +67,8 @@ Implement the bounded initial slice of IR-45: byte-backed refined mappings with 
 
 None recorded during implementation yet.
 
+The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
+
 
 ## Decision Log
 
@@ -64,6 +78,9 @@ None recorded during implementation yet.
 2026-09-19 (validation review): Freeze the base16-bytes v1 policy at first package release, give the refined declaration a `wireFingerprint` token distinct from text and nominal Text that embeds the policy identity, and check whether the consumer's historical reader was more permissive than this parser. Complete this plan on repository fixtures, leaving real consumer history to Plan 295.
 
 2026-09-19 (validation review): Require proof that canonicalization changes no durable identity. A hash whose hex text feeds a deterministic identity, stream name, or router key must produce the same identity from an uppercase historical payload after adoption as was recorded before it.
+
+
+2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
 
 ## Outcomes & Retrospective
@@ -102,7 +119,7 @@ Add `keiro-core/src/Keiro/Codec/Refined.hs` containing the base16 bytes policy, 
 ### Milestone 2 — Compose refinement through all admitted checked roots
 
 
-Extend TypeGraph and all total folds, MappedCodecPlan, ConsumerTypePlan, Scaffold, StructuralConformance, Coverage, MappedDiff, and fingerprints with refined representation and policy facts. Permit references inside existing structural expressions and named aggregate mappings, including optional/list/map compositions, queues, queries, and workspace consumers. Mark the JSON string representation non-null only because Keiro owns this parser/encoder. Keep symbolic equality/ordering/arithmetic and use as map keys unsupported initially. Map keys stay excluded for a replay reason as well as a scope reason: two hex spellings of the same bytes would be one key after decoding but two keys on the wire. Render the refined declaration in `wireFingerprint` (`TypeGraph.hs`) as a token that is distinct from `text` and from a nominal Text scalar and embeds the base16-bytes policy identity and version, because `ReplayImpact.hs` turns token equality into a `replay-neutral` verdict and a replay-neutral deploy skips its audit. Test that nominal-Text-to-refined, opaque-to-refined, and a policy-version change are each `replay-affected`, and that tokens for every existing declaration are byte-identical. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`. Reject arbitrary validation callbacks and length options with useful diagnostics; do not implement a generic callback escape hatch under a checked proof label. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Extend TypeGraph and all total folds, MappedCodecPlan, ConsumerTypePlan, Scaffold, StructuralConformance, Coverage, MappedDiff, and fingerprints with refined representation and policy facts. Permit references inside existing structural expressions and named aggregate mappings, including optional/list/map compositions, queues, queries, and workspace consumers. Mark the JSON string representation non-null only because Keiro owns this parser/encoder. Keep symbolic equality/ordering/arithmetic and use as map keys unsupported initially. Map keys stay excluded for a replay reason as well as a scope reason: two hex spellings of the same bytes would be one key after decoding but two keys on the wire. Render the refined declaration in `wireFingerprint` (`TypeGraph.hs`) as a token that is distinct from `text` and from a nominal Text scalar and embeds the base16-bytes policy identity and version, because `ReplayImpact.hs` uses wire identity alongside fold, transition, and direct nominal surfaces to classify aggregate replay impact. Test that nominal-Text-to-refined, opaque-to-refined, and a policy-version change are each `replay-affected`, and that tokens for every existing declaration are byte-identical. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`. Reject arbitrary validation callbacks and length options with useful diagnostics; do not implement a generic callback escape hatch under a checked proof label. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 3 — Prove byte identity and preserve old hash semantics
@@ -140,13 +157,15 @@ It must report no regeneration drift; this command deliberately refuses a dirty 
 ## Validation and Acceptance
 
 
+Commit a supported-use matrix and compiled public-API example for this feature: bare and nested uses, aggregate commands/events/registers, queue payloads, query types, workspace ownership, public contracts, and process/workflow hand-owned codecs must each be supported with a tested path, explicitly unsupported with a located diagnostic, or explicitly application-owned. Do not imply that sharing a value type grants process/workflow codec ownership. Exercise clean generation and regeneration without editing generated modules, and document the smallest total consumer binding. Plan 295 reuses these examples. API convenience cannot weaken domain admission, binding laws, or replay validation.
+
 "00aF" and "00af" decode to the same two bytes, which encode as "00af"; "", arbitrary-length valid hex, and leading zeros remain valid. "0", "0x00", "gg", and whitespace-bearing input fail. The domain/shape laws apply to byte values, not every accepted textual spelling. No digest recomputation or content normalization occurs during replay.
 
 For every admitted value, generated encoding followed by decoding must recover the same domain value, and the generated binding must satisfy both inverse laws. Exercise forward execution followed by actual event-envelope serialization, decoding, and strict replay; compare control state and all durable registers at every completed transition. Include multi-event output, replay-only transitions, and a negative head-information-loss case. A same-version in-memory replay test alone does not pass this requirement.
 
 For each affected persisted surface, run the compatibility gate from Plan 289. Preserve genuine old bytes, tags, versions, and readers. Compare baseline and candidate interpretations under the same versioned, non-lossy observation contract; investigate the first divergent prefix. Test old-reader/new-writer compatibility separately. A narrowed domain, altered normalization, or opaque-to-checked conversion is never automatically replay-neutral. Keep historical adapters total for retained history; if history cannot be represented without loss, retain the old representation/handler and refuse adoption.
 
-Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown evidence stays unverified and blocks a release claiming preservation. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
+Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown required evidence stays unverified and blocks the preservation claim at the applicable feature, publication, adoption, or retirement gate. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
 
 Workflow adoption must additionally preserve journal semantics with actual application codecs. Run old journal prefixes through candidate continuation in an isolated test environment with recorded effects; do not execute production side effects in an audit. Persisted-result decode failure must fail clearly, never be treated as a missing step and rerun. Pure refactors must retain stable names and existing results without extra actions. No snapshot invalidation, token bump, or green finite fixture suite alone proves compatibility with all stored history.
 
@@ -158,7 +177,7 @@ Evidence is tied to the audited high-water marks. Concurrent writes beyond those
 ## Idempotence and Recovery
 
 
-All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep the feature on an unpublished capability until its evidence passes. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
+All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep new authoring capability promotion blocked until its evidence passes. Candidate status does not prevent durable writes: any package release containing a new wire policy requires committed compatibility vectors and freezes that policy identity. Removing an already-shipped candidate capability must preserve its historical read/replay path or be blocked. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
 
 
 ## Interfaces and Dependencies
@@ -173,3 +192,5 @@ Before using dependency APIs run `mori registry list`, `mori registry search <pa
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
 Revision note (2026-09-19, validation review): Milestone 1 adds the permissive-historical-reader check and the package-release freeze point. Milestone 2 specifies the refined wire token, its replay-verdict tests, the replay reason map keys stay excluded, and `capabilityFoldSegment = Nothing`. Milestone 3 separates repository fixtures from consumer history owned by Plan 295, supplies normalization-law cases, and adds the identity-stability case. No implementation has run.
+
+Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.

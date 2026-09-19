@@ -22,12 +22,22 @@ provenance:
       at: 2026-09-19T22:13:45Z
       mode: "update"
       note: "State canonical order normatively as code-point order; specify set wire token, freeze point, normalization cases."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:10Z
+      mode: "update"
+      note: "Checked set normalization and total binding design; added complete-surface API acceptance and retained-history release gates."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
       at: 2026-09-19T22:13:44Z
       verdict: "changes-requested"
       note: "Canonical order deferred to the text library instead of a normative code-point definition; set wire token and freeze point unspecified."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:10Z
+      verdict: "approved"
+      note: "Checked set normalization and total binding design; added complete-surface API acceptance and retained-history release gates."
 ---
 
 # Add structural text sets with explicit canonical wire semantics
@@ -38,6 +48,8 @@ This ExecPlan is a living document. Keep its execution sections current; distill
 
 ## Purpose / Big Picture
 
+
+This is a pre-1.0 DSL/API work stream. The improvement request below is a concrete use case; success also requires a usable public authoring path and compatibility evidence that makes later implementation consolidation safe.
 
 Implement IR-44 as structural Set Text with canonical array output and explicit normalization of duplicate or unordered input. Users can replace opaque text-set mappings while live execution and replay operate on the same set value.
 
@@ -55,6 +67,8 @@ Implement IR-44 as structural Set Text with canonical array output and explicit 
 
 None recorded during implementation yet.
 
+The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
+
 
 ## Decision Log
 
@@ -64,6 +78,9 @@ None recorded during implementation yet.
 2026-09-19 (validation review): Define the canonical order normatively as lexicographic Unicode code-point order, superseding the earlier wording that deferred to the Data.Text `Ord` instance. The two agree today, confirmed empirically and in the text 2.1.4 source, but the text package changed its internal representation across major versions, so the durable contract must not be defined by reference to it. No Unicode normalization or case folding is performed.
 
 2026-09-19 (validation review): Freeze the text-set v1 policy at first package release, give the set a `wireFingerprint` token distinct from `list(text)` that embeds the policy identity, and supply duplicate and permuted arrays as cases for Plan 289's shared normalization law.
+
+
+2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
 
 ## Outcomes & Retrospective
@@ -102,7 +119,7 @@ Add a checked Set Text expression and a Keiro-owned codec helper in `keiro-core/
 ### Milestone 2 — Integrate total lowering and evolution consequences
 
 
-Extend grammar/parser/printing, graph folds, codec and consumer type plans, bare-shape admissibility, imports, deterministic samples, nullability, conformance, fingerprinting, coverage, diff, and scaffold history. Set is non-null and Optional Set is admissible. Use common whole-value storage and binding paths for aggregate named mappings, structural fields, registers, queues, queries, and workspace generation. Keep membership, size, ordering comparisons, insertion/removal expressions, and symbolic collection access unsupported. A change from List to Set is a semantic change even if some fixtures have equal JSON; classify it as affected historical interpretation. The mechanism is the `wireFingerprint` token in `TypeGraph.hs`: `ReplayImpact.hs` turns token equality into a `replay-neutral` verdict, and a replay-neutral deploy skips its audit. Render the set as a token that is distinct from `list(text)` and embeds the text-set policy identity and version. Test that List-to-Set, Set-to-List, opaque-to-Set, and a policy-version change are each `replay-affected`, and that tokens for every existing declaration are byte-identical. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
+Extend grammar/parser/printing, graph folds, codec and consumer type plans, bare-shape admissibility, imports, deterministic samples, nullability, conformance, fingerprinting, coverage, diff, and scaffold history. Set is non-null and Optional Set is admissible. Use common whole-value storage and binding paths for aggregate named mappings, structural fields, registers, queues, queries, and workspace generation. Keep membership, size, ordering comparisons, insertion/removal expressions, and symbolic collection access unsupported. A change from List to Set is a semantic change even if some fixtures have equal JSON; classify it as affected historical interpretation. The mechanism is the `wireFingerprint` token in `TypeGraph.hs`: `ReplayImpact.hs` consumes that identity alongside fold, transition, and direct nominal surfaces; the whole-service gate additionally checks process/workflow and application-owned behavior. Render the set as a token that is distinct from `list(text)` and embeds the text-set policy identity and version. Test that List-to-Set, Set-to-List, opaque-to-Set, and a policy-version change are each `replay-affected`, and that tokens for every existing declaration are byte-identical. The new `RuntimeCapability` constructor takes `capabilityFoldSegment = Nothing`, like `StructuralNominalLeaves`. Run the focused new tests in the components named under Concrete Steps; the milestone passes only when its positive behavior is observed and its negative case fails for the intended reason.
 
 
 ### Milestone 3 — Demonstrate normalization without replay divergence
@@ -140,13 +157,15 @@ It must report no regeneration drift; this command deliberately refuses a dirty 
 ## Validation and Acceptance
 
 
+Commit a supported-use matrix and compiled public-API example for this feature: bare and nested uses, aggregate commands/events/registers, queue payloads, query types, workspace ownership, public contracts, and process/workflow hand-owned codecs must each be supported with a tested path, explicitly unsupported with a located diagnostic, or explicitly application-owned. Do not imply that sharing a value type grants process/workflow codec ownership. Exercise clean generation and regeneration without editing generated modules, and document the smallest total consumer binding. Plan 295 reuses these examples. API convenience cannot weaken domain admission, binding laws, or replay validation.
+
 Both permutations and duplicates are accepted under the declared v1 policy; repeated encoding is stable. Ordered lists elsewhere remain unchanged. Invalid elements fail with a located parse error. Pure source refactors retain bytes and replay state. Removing a set element during encoding or changing duplicate policy is caught before adoption.
 
 For every admitted value, generated encoding followed by decoding must recover the same domain value, and the generated binding must satisfy both inverse laws. Exercise forward execution followed by actual event-envelope serialization, decoding, and strict replay; compare control state and all durable registers at every completed transition. Include multi-event output, replay-only transitions, and a negative head-information-loss case. A same-version in-memory replay test alone does not pass this requirement.
 
 For each affected persisted surface, run the compatibility gate from Plan 289. Preserve genuine old bytes, tags, versions, and readers. Compare baseline and candidate interpretations under the same versioned, non-lossy observation contract; investigate the first divergent prefix. Test old-reader/new-writer compatibility separately. A narrowed domain, altered normalization, or opaque-to-checked conversion is never automatically replay-neutral. Keep historical adapters total for retained history; if history cannot be represented without loss, retain the old representation/handler and refuse adoption.
 
-Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown evidence stays unverified and blocks a release claiming preservation. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
+Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown required evidence stays unverified and blocks the preservation claim at the applicable feature, publication, adoption, or retirement gate. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
 
 Workflow adoption must additionally preserve journal semantics with actual application codecs. Run old journal prefixes through candidate continuation in an isolated test environment with recorded effects; do not execute production side effects in an audit. Persisted-result decode failure must fail clearly, never be treated as a missing step and rerun. Pure refactors must retain stable names and existing results without extra actions. No snapshot invalidation, token bump, or green finite fixture suite alone proves compatibility with all stored history.
 
@@ -158,7 +177,7 @@ Evidence is tied to the audited high-water marks. Concurrent writes beyond those
 ## Idempotence and Recovery
 
 
-All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep the feature on an unpublished capability until its evidence passes. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
+All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep new authoring capability promotion blocked until its evidence passes. Candidate status does not prevent durable writes: any package release containing a new wire policy requires committed compatibility vectors and freezes that policy identity. Removing an already-shipped candidate capability must preserve its historical read/replay path or be blocked. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
 
 
 ## Interfaces and Dependencies
@@ -173,3 +192,5 @@ Before using dependency APIs run `mori registry list`, `mori registry search <pa
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
 Revision note (2026-09-19, validation review): Milestone 1 states the canonical order normatively with its verification and the package-release freeze point. Milestone 2 specifies the set wire token, its replay-verdict tests, and `capabilityFoldSegment = Nothing`. Milestone 3 ties the normalization cases to Plan 289's shared law and states why live execution and replay agree. No implementation has run.
+
+Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.

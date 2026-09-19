@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-09-15T22:33:25Z
+timestamp: 2026-09-19T22:31:32Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -208,8 +208,12 @@ The same evidence boundaries determine rollout ordering:
   benign duplicates, so mixed-version fan-out otherwise merges silently.
 - Timer payloads, cross-service integration payloads, and workflow step results
   have no automatic migration boundary. Firers/consumers must learn new shapes
-  before producers write them, old decoders remain until backlogs drain, and a
-  changed workflow result gets a new step name.
+  before producers write them. Retain old decoders for every permitted retained
+  history, not only the current backlog. A changed workflow result needs explicit
+  versioned decoding or a recorded patch branch that keeps old generations on
+  their old reader and key. Renaming an existing step can execute a new effect;
+  a new key is valid only for an intentional new action on the new branch, never
+  as an automatic decoder migration.
 - Tightening an unchanged public contract `typeid` field to language-4
   admission reverses that generic consumer-first order: every producer must
   emit the frozen TypeID-v7 domain first, then legacy-invalid in-flight
@@ -220,6 +224,11 @@ The same evidence boundaries determine rollout ordering:
 
 
 ## Consequences
+
+[ADR-47](0047-dsl-retirement-requires-complete-retained-history-evidence.md)
+extends these boundaries to complete old/new service inventories and separate
+process, workflow, publication, adoption, and implementation-retirement evidence.
+An aggregate-neutral result does not waive those independent obligations.
 
 - Hand-written streams receive the same codec fail-fast behavior as generated
   streams; generator validation is defense in depth, not the sole gate.

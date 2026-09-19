@@ -22,12 +22,22 @@ provenance:
       at: 2026-09-19T22:13:45Z
       mode: "update"
       note: "Thread admission domain through wire token, contract selectors, ledger rows, and diff finding; two-way validator/pattern property; rescope M4 to fixtures."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:10Z
+      mode: "update"
+      note: "Checked direct/nested domain propagation and exact evidence obligations; added API matrix and retained-history release gates."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
       at: 2026-09-19T22:13:44Z
       verdict: "changes-requested"
       note: "nominalWireToken and idDomainContractFor hard-wire v7, so a domain change could be reported replay-neutral; M4 duplicated Plan 295 consumer rehearsal."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-09-19T22:32:10Z
+      verdict: "approved"
+      note: "Checked direct/nested domain propagation and exact evidence obligations; added API matrix and retained-history release gates."
 ---
 
 # Add explicit versioned UUID admission domains with sound Keiki evidence
@@ -38,6 +48,8 @@ This ExecPlan is a living document. Keep its execution sections current; distill
 
 ## Purpose / Big Picture
 
+
+This is a pre-1.0 DSL/API work stream. The improvement request below is a concrete use case; success also requires a usable public authoring path and compatibility evidence that makes later implementation consolidation safe.
 
 Implement IR-46 so a declaration can explicitly admit canonical prefixed UUIDv5 and UUIDv7 values while existing ID declarations retain their released behavior. Runtime decoding, constructor admission, canonical equality, map keys, public IDs, and Keiki exact evidence must agree.
 
@@ -56,6 +68,8 @@ Implement IR-46 so a declaration can explicitly admit canonical prefixed UUIDv5 
 
 None recorded during implementation yet.
 
+The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
+
 
 ## Decision Log
 
@@ -69,6 +83,9 @@ None recorded during implementation yet.
 2026-09-19 (validation review): Derive the runtime check and the symbolic pattern from one table of admitted versions and prove two-way agreement by property test. The pattern is exact evidence; any text the runtime admits and the pattern excludes lets the solver prove impossible something that happens.
 
 2026-09-19 (validation review): Complete Milestone 4 on repository fixtures and move the consumer comparison to Plan 295 Milestone 3, so this plan is completable without consumer data and one plan owns consumer-history evidence.
+
+
+2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
 
 ## Outcomes & Retrospective
@@ -155,13 +172,15 @@ It must report no regeneration drift; this command deliberately refuses a dirty 
 ## Validation and Acceptance
 
 
+Commit a supported-use matrix and compiled public-API example for this feature: bare and nested uses, aggregate commands/events/registers, queue payloads, query types, workspace ownership, public contracts, and process/workflow hand-owned codecs must each be supported with a tested path, explicitly unsupported with a located diagnostic, or explicitly application-owned. Do not imply that sharing a value type grants process/workflow codec ownership. Exercise clean generation and regeneration without editing generated modules, and document the smallest total consumer binding. Plan 295 reuses these examples. API convenience cannot weaken domain admission, binding laws, or replay validation.
+
 Existing implicit-v7 declarations still reject v5; explicit-v5-or-v7 declarations accept valid samples of both and reject all tested wrong variants/prefixes/versions. Exact witness owner coverage includes historical reachable values, not only newly constructible IDs. A stale v7-only domain mutation fails conformance or remains unverified, never producing a successful proof. Mixed streams replay with identical identifiers and durable state. The symbolic pattern and the runtime validator admit exactly the same texts under the two-way property test. Changing a declaration's domain in either direction raises `IdDomainContractChanged` and yields a `replay-affected` verdict and a changed fold fingerprint, shown separately for an ID nested in a structural record (through `wireFingerprint`) and for an ID used as a direct event field and register (through the nominal replay surface); every declaration in the existing corpus keeps its fingerprint and ledger `id-domain` row byte-for-byte.
 
 For every admitted value, generated encoding followed by decoding must recover the same domain value, and the generated binding must satisfy both inverse laws. Exercise forward execution followed by actual event-envelope serialization, decoding, and strict replay; compare control state and all durable registers at every completed transition. Include multi-event output, replay-only transitions, and a negative head-information-loss case. A same-version in-memory replay test alone does not pass this requirement.
 
 For each affected persisted surface, run the compatibility gate from Plan 289. Preserve genuine old bytes, tags, versions, and readers. Compare baseline and candidate interpretations under the same versioned, non-lossy observation contract; investigate the first divergent prefix. Test old-reader/new-writer compatibility separately. A narrowed domain, altered normalization, or opaque-to-checked conversion is never automatically replay-neutral. Keep historical adapters total for retained history; if history cannot be represented without loss, retain the old representation/handler and refuse adoption.
 
-Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown evidence stays unverified and blocks a release claiming preservation. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
+Reject unsupported symbolic operations during checking. Exact-domain evidence must include concrete-owner membership and admitted-key reconstruction, not merely a successful solver model. Unknown required evidence stays unverified and blocks the preservation claim at the applicable feature, publication, adoption, or retirement gate. Published-language acceptance, generated bytes, and frozen identities remain unchanged unless an explicit migration is part of a separate reviewed change. Any opaque nested boundary keeps its unverified status; wrapping it in a checked container does not certify it.
 
 Workflow adoption must additionally preserve journal semantics with actual application codecs. Run old journal prefixes through candidate continuation in an isolated test environment with recorded effects; do not execute production side effects in an audit. Persisted-result decode failure must fail clearly, never be treated as a missing step and rerun. Pure refactors must retain stable names and existing results without extra actions. No snapshot invalidation, token bump, or green finite fixture suite alone proves compatibility with all stored history.
 
@@ -173,7 +192,7 @@ Evidence is tied to the audited high-water marks. Concurrent writes beyond those
 ## Idempotence and Recovery
 
 
-All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep the feature on an unpublished capability until its evidence passes. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
+All generation and tests run in the repository checkout or an isolated fixture database. Regenerate replaceable modules through the public corpus driver; preserve create-once bindings and historical fixtures. Retry failures after fixing the owning implementation, never by accepting new historical goldens. Do not rewrite production events, journal rows, IDs, step keys, or deterministic seeds. Keep new authoring capability promotion blocked until its evidence passes. Candidate status does not prevent durable writes: any package release containing a new wire policy requires committed compatibility vectors and freezes that policy identity. Removing an already-shipped candidate capability must preserve its historical read/replay path or be blocked. Before new-format writes, rollback can retain the previous readers; after incompatible writes, use a documented forward repair or retain compatible readers rather than assuming a binary downgrade is safe. A production migration, release, or cross-repository rollout is a separate authorized action.
 
 
 ## Interfaces and Dependencies
@@ -190,3 +209,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Context now names the four places that hard-wire the v7 domain and explains the version and variant character positions. Milestone 1 makes validation dispatch on the selector and records the identity, API, and freeze-point consequences. Milestone 2 derives validator and pattern from one table with a two-way property test. Milestone 3 threads the domain through the wire token, the contract selectors, the ledger rows, and the `IdDomainContractChanged` finding. Milestone 4 is rescoped to repository fixtures, with the consumer comparison moved to Plan 295. No implementation has run.
 
 Revision note (2026-09-19, validation review correction): A follow-up check found that directly-used declared IDs reach the replay surface and the fold fingerprint through `IdRepresentation`, which renders `id:<prefix>` with no domain. Context, Milestone 3, the acceptance criteria, and the Decision Log now require the domain on that path too, with separate nested and direct fixtures.
+
+Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-19
+* **Update**: ADR-4 clarifies retained workflow readers and forbids treating a step rename as decoder migration; ADR-47 establishes complete replay evidence and DSL retirement gates.
+
 ## 2026-09-18
 * **Update**: Extend ADR-24 with the candidate Language 6 framed UTF-8 reaction timer and fired-event derivation (plan 285).
 * **Update**: Tie removal of deprecated read-model compatibility APIs to retiring the frozen Language 4 generator in a later major release (plan 286).
