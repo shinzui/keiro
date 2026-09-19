@@ -1,12 +1,14 @@
 ---
 type: Term
 title: durable workflow
-description: A long-running process written as an ordinary imperative function whose named steps are journaled, so it can suspend and resume by re-running from the top while replaying completed steps.
+description: A long-running process written as a sequence of steps and waits whose progress is saved so it can resume after interruptions.
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: "2026-09-19T03:09:21Z"
 termId: TERM-13
 status: current
+tags:
+  - durable-workflows
 related:
   - TERM-14
   - TERM-15
@@ -22,7 +24,13 @@ anchors:
 
 # durable workflow
 
-A durable workflow survives crashes, redeployments, and idle waits. Its checkpoints live in a
-[journal](journal.md); it can sleep on a [timer](timer.md), wait on an
-[awakeable](awakeable.md), or spawn child workflows. Step effects are at-least-once, so they
-must be idempotent.
+A durable workflow can reserve stock, wait for payment confirmation, then arrange shipment,
+even if those steps span restarts or long idle periods. It saves named step results in a
+[journal](journal.md), and can wait on a [timer](timer.md), an
+[awakeable](awakeable.md), or a child workflow.
+
+On resumption, Keiro runs the function from the beginning and returns recorded results for
+completed steps. A step can run again if its external effect succeeded before its result
+was saved, so step effects must be idempotent. A [process manager](process-manager.md)
+expresses coordination as reactions to events; a workflow expresses it as sequential code.
+See [Durable Workflows](../guides/durable-workflows.md) for an example.

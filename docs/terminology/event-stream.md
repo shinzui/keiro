@@ -1,12 +1,14 @@
 ---
 type: Term
 title: event stream
-description: "The aggregate contract an application declares once per aggregate type: a Keiki symbolic transducer with its initial state and registers, an event codec, a stream-name resolver, and a snapshot policy."
+description: "Keiro's aggregate contract, defining how one kind of aggregate handles commands, produces events, and reconstructs state from its history."
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: "2026-09-19T03:09:21Z"
 termId: TERM-2
 status: current
+tags:
+  - modeling
 aliases:
   - aggregate contract
 discouraged:
@@ -32,14 +34,17 @@ anchors:
 
 # event stream
 
-An event stream (`EventStream phi rs s ci co`) is what keiro runs a command against. Its
-decision logic is a Keiki `SymTransducer`, not a decide/evolve pair; applications validate the
-record with `mkEventStream` and hand the resulting `ValidatedEventStream` to the command runner.
+In general event-sourcing usage, "event stream" often means a sequence of stored events.
+In this catalog, that is a [stream](stream.md). Keiro's `EventStream` instead describes
+the behavior and persistence rules shared by instances of an aggregate type.
 
-Do not call it a "decider". Keiro deliberately chose Keiki's native transducer over a Decider
-facade, and `Keiki.Decider` is a legacy facade keiro must not rely on (see `docs/why-keiro.md`,
-"The single-formalism claim"). The transducer itself is a Keiki concept, defined by
-`mori://shinzui/keiki`, not by this catalog.
+For example, one order event-stream contract defines which commands an order accepts and
+which events it produces; each individual order has its own stored stream. The contract
+also supplies the initial state, [codec](codec.md), stream naming, and
+[snapshot](snapshot.md) policy used by the [command cycle](command-cycle.md).
 
-Its events live in a [stream](stream.md), cross the storage boundary through a
-[codec](codec.md), and are processed by the [command cycle](command-cycle.md).
+Keiro expresses command handling and replay in one state-machine model, called a
+[symbolic transducer](symbolic-transducer.md), provided by `mori://shinzui/keiki`. Use "event stream" or "aggregate contract"
+for the Keiro contract; "decider" suggests a different API with separate decision and
+event-application functions. See [Core Concepts](../user/core-concepts.md#eventstream)
+for the types and validation, and [Why Keiro](../why-keiro.md) for the design rationale.

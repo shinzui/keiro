@@ -1,12 +1,14 @@
 ---
 type: Term
 title: domain event
-description: "A private fact recorded in one stream of one bounded context, free to change shape as that context's model evolves."
+description: A recorded business fact that belongs to a bounded context's internal model, such as an order being placed or a payment being received.
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: "2026-09-19T03:09:21Z"
 termId: TERM-16
 status: current
+tags:
+  - modeling
 related:
   - TERM-17
   - TERM-1
@@ -17,5 +19,9 @@ anchors:
 
 # domain event
 
-A domain event is internal. What another context may depend on is an
-[integration event](integration-event.md), which is mapped from domain events and kept stable.
+A domain event records something that happened, and replaying these facts reconstructs
+an aggregate's state. Its representation belongs to the context that owns the model.
+
+That context can evolve the event format, provided it can still read its stored history
+through its [codec](codec.md). Other contexts consume an explicitly published
+[integration event](integration-event.md), so they do not depend on the internal format.

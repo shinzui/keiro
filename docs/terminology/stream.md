@@ -1,12 +1,14 @@
 ---
 type: Term
 title: stream
-description: "An ordered, append-only sequence of events that records the history of one entity, addressed in Haskell by a typed `Stream a` handle over a Kiroku stream name."
+description: An ordered, append-only sequence of events recording the history of one aggregate instance or other entity.
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: "2026-09-19T03:09:21Z"
 termId: TERM-1
 status: current
+tags:
+  - modeling
 related:
   - TERM-2
   - TERM-4
@@ -22,9 +24,13 @@ anchors:
 
 # stream
 
-A stream is where one entity's history lives. Kiroku owns the storage, versions, and global
-positions; keiro adds the `Stream a` handle, whose phantom `a` lets code tell an order stream
-from an invoice stream even though the stored name is plain text.
+A stream holds one entity's history. For example, an order's stream might contain
+`OrderPlaced`, `PaymentReceived`, and `OrderShipped`. Replaying those events reconstructs
+the order's current state.
 
-Every command appends to exactly one stream, and the [event stream](event-stream.md) contract
-decides which stream a command targets.
+Each command targets one stream. Keiro uses typed stream handles so application code can
+distinguish an order stream from an invoice stream. A stream is the stored
+history; an [event stream](event-stream.md) is Keiro's contract for handling commands and
+replaying history for that kind of aggregate.
+
+See [Core Concepts](../user/core-concepts.md#stream) for the Haskell representation.

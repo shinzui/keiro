@@ -1,12 +1,14 @@
 ---
 type: Term
 title: journal
-description: "The event stream of one durable workflow instance, recording each completed named step and the workflow's terminal or rotation marker so a resumed run can replay them."
+description: The durable execution history of one workflow instance, used to recover its progress and reuse recorded step results.
 generated:
   by: anthropic-claude-code/claude-opus-5
   at: "2026-09-19T03:09:21Z"
 termId: TERM-14
 status: current
+tags:
+  - durable-workflows
 scope: durable workflows
 related:
   - TERM-13
@@ -20,6 +22,10 @@ anchors:
 
 # journal
 
-Each instance journals to `wf:<name>-<id>`, and a rotated generation `g` to
-`wf:<name>-<id>#<g>`. Suspension primitives record their completions as ordinary step records
-under reserved prefixes (`sleep:`, `awkid:`, `awk:`, `child:`) rather than as new event types.
+A journal records [durable workflow](durable-workflow.md) progress, including completed
+steps, their results, and how the workflow ended. If a stock reservation step has a
+recorded result, a resumed workflow can reuse that result instead of reserving stock again.
+
+The journal is stored as an event stream, but its purpose is execution recovery. An
+aggregate's domain history records business facts; the journal records how far the
+workflow ran. See [Durable Workflows](../user/durable-workflows.md) for storage details.
