@@ -44,7 +44,10 @@ library
     OverloadedRecordDot
     OverloadedStrings
 
-  exposed-modules: Keiro.Test.Postgres
+  exposed-modules:
+    Keiro.Test.Postgres
+    Keiro.Test.ReplayCompatibility
+
   hs-source-dirs: src
   build-depends:
     aeson >=2.2 && <2.3,
@@ -62,3 +65,22 @@ library
     stm >=2.5 && <2.6,
     text >=2.1 && <2.2,
     unix >=2.8 && <2.9,
+
+test-suite keiro-test-support-test
+  import: warnings
+  type: exitcode-stdio-1.0
+  default-language: GHC2024
+  default-extensions:
+    BlockArguments
+    OverloadedRecordDot
+    OverloadedStrings
+
+  hs-source-dirs: test
+  main-is: Main.hs
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    hspec >=2.11,
+    keiro-test-support,
+    text >=2.1 && <2.2,

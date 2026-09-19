@@ -26,6 +26,11 @@ provenance:
       at: 2026-09-19T22:32:09Z
       mode: "update"
       note: "Reviewed all seven children against 1.0 goals and runtime code; corrected incomplete inventory, missing process recovery, wire-equality overclaims, candidate removal, and absent retirement acceptance."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-19T22:42:14Z
+      mode: "implement"
+      note: "Begin Plan 289 compatibility evidence implementation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -76,7 +81,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 
 | Plan | Scope | Path | Hard dependencies | Soft dependencies | Status |
 |---|---|---|---|---|---|
-| 289 | Gate stream replay, process recovery, and workflow continuation across builds | [docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md](../plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md) | None | None | Not Started |
+| 289 | Gate stream replay, process recovery, and workflow continuation across builds | [docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md](../plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md) | None | None | In Progress |
 | 290 | Support named bare container structural mappings with transitive nullability | [docs/plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md](../plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md) | 289 | None | Not Started |
 | 291 | Add calendar-day mappings with a frozen lossless codec contract | [docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md](../plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md) | 289, 290 | None | Not Started |
 | 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Not Started |
@@ -126,7 +131,7 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 ## Progress
 
 
-- [ ] Plan 289: Define the compatibility report and capture contract.
+- [x] Plan 289: Define the compatibility report and capture contract.
 - [ ] Plan 289: Exercise serialized aggregate replay and meaningful refactors.
 - [ ] Plan 289: Exercise workflow refactors without repeating effects.
 - [ ] Plan 289: Compare process-manager redelivery and partial recovery across builds.
@@ -160,6 +165,8 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 None recorded during implementation yet. Research findings are included in the child contexts and are not implementation evidence.
 
 The 1.0 review found that `MappedConsequence` omits non-mapped changes and process reactions, while `replayImpactServices` compares aggregates only. `ProcessManager/Reaction.hs` recomputes follow-ups from decoded source input after recovering a saga witness, so equal saga state does not prove equal dispatch. The previous candidate-capability removal advice also omitted the retained-data obligation after a package release. These findings require a complete inventory, explicit process recovery evidence, and a separate retirement gate.
+
+Plan 289 Milestone 1 confirmed that one obligation may be discovered by several inputs. The stable report contract therefore keeps inventory derivation independent, requires an explicit applicability result from every v1 input, accepts duplicate case IDs only when their full definitions agree, and rejects missing, unverified, empty, or build-mismatched evidence.
 
 The 2026-09-19 validation review checked the plans' claims against the working tree at `ba36ce58`. Every file, recipe, Cabal component, ADR, improvement request, and Keiki ADR URI the plans name exists or resolves. The review found the following, none of which is implementation evidence:
 

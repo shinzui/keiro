@@ -27,6 +27,11 @@ provenance:
       at: 2026-09-19T22:32:09Z
       mode: "update"
       note: "Whole-service inventory now covers direct, transition, process and Hole changes; process continuation evidence and recurring verify gate specified."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-19T22:48:17Z
+      mode: "implement"
+      note: "Implement Milestone 1 compatibility report and independent inventory contract."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -55,7 +60,7 @@ Build the reusable pre-1.0 compatibility gate for DSL and API evolution, rejecti
 ## Progress
 
 
-- [ ] Milestone 1: Define the compatibility report and capture contract.
+- [x] (2026-09-19T22:48:01Z) Milestone 1: Defined the compatibility report and capture contract in `Keiro.Test.ReplayCompatibility`; 9 focused examples pass.
 - [ ] Milestone 2: Exercise serialized aggregate replay and meaningful refactors.
 - [ ] Milestone 3: Exercise workflow refactors without repeating effects.
 - [ ] Milestone 4: Compare process-manager redelivery and partial recovery across builds.
@@ -66,6 +71,8 @@ Build the reusable pre-1.0 compatibility gate for DSL and API evolution, rejecti
 
 
 None recorded during implementation yet.
+
+The evidence inventory cannot be inferred safely from report rows, but the same obligation can arise from several independent sources. The implementation therefore requires one explicit contribution from every v1 source and permits repeated case IDs only when their complete definitions agree. Evidence: the focused test rejects old-only, direct-ID, transition-only, process-only, and application-Hole omissions while a complete report passes.
 
 The 1.0 review found that `MappedConsequence` has no process-reaction or direct-nominal-only cases and `replayImpactServices` iterates aggregates. Deriving the complete report inventory from mapped changes alone can omit an incompatible process or direct-ID refactor. The runtime already tests same-build reaction recovery; this plan adds cross-build evidence and omission detection.
 
@@ -83,6 +90,8 @@ The 1.0 review found that `MappedConsequence` has no process-reaction or direct-
 
 
 2026-09-19 (1.0 review): Extend the existing layered replay gate to complete old/new inventories and process recovery, as required by ADR-47. Keep wire identity, aggregate replay impact, and whole-service compatibility separate. Routine `verify` must exercise omission and semantic-drift mutations so this protection survives future refactors.
+
+2026-09-19 (implementation): Represent each inventory input as applicable, not applicable with a reason, or unverified. Require all seven v1 inputs and bind the inventory plus both reports to one exact build pair. This makes absence explicit without forcing unrelated packages into `keiro-test-support`, and leaves DSL/runtime adapters responsible for translating their own findings into the stable contract.
 
 
 ## Outcomes & Retrospective
