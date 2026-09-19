@@ -250,7 +250,7 @@ then run the generated conformance harness. Never copy wire keys, tags,
 presence, nullability, or defaults into the binding: those remain in the
 `.keiro` declaration and its generated codec.
 
-Re-running scaffold skips every existing skeleton. The scaffold record retains
+Re-running scaffold skips every existing skeleton. The scaffold ledger retains
 one entry per binding field or constructor and per fixture/initial obligation,
 so a declaration change prints a `newly required holes since last scaffold`
 section naming the exact symbol and field to add by hand. The tool reports the
@@ -501,8 +501,8 @@ cabal run keiro-dsl -- scaffold service.keiro --out src \
 ```
 
 `--comparison-out` must be the exact generated module path under `--out`.
-Ordinary scaffold runs do not create this module, list it in the production
-manifest/scaffold record, or report it as stale. The writer refuses to replace
+Ordinary scaffold runs do not create this module, list it in the Cabal fragment
+or scaffold ledger, or report it as stale. The writer refuses to replace
 a file without its dedicated migration-evidence banner, and it refuses opaque
 or non-persisted selections. Comparison can add evidence to a structural claim;
 it can never upgrade an opaque declaration.

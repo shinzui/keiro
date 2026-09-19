@@ -1105,8 +1105,8 @@ and harness generation; consumers should not derive suppliers from backing targe
 declaration order. Its paired
 `<Context>.ProjectionCatalog.ProjectionCatalogHoles` file is create-once and
 contains application-owned live/replay apply, category decode, and idempotency
-functions. `Keiro.Dsl.Diff`, `Keiro.Dsl.ReplayImpact`, scaffold records, and
-workspace records expose the same stable catalog identities; consumers should
+functions. `Keiro.Dsl.Diff`, `Keiro.Dsl.ReplayImpact`, and the standalone and
+workspace scaffold ledgers expose the same stable catalog identities; consumers should
 not reconstruct a second inventory from generated module names.
 
 Language 5 projection owners declare `delivery = inline | subscription`.

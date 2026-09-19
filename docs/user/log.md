@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-09-19
+* **Update**: The API reference names standalone and workspace scaffold ledgers instead of the retired "scaffold records" and "workspace records" (TERM-22).
+
 ## 2026-09-18
 * **Update**: Describe `messageId` as opaque text derived deterministically by `enqueueProducerEventTx` as `<prefix>_v1_<sha256-hex>`, with explicit callers owning their identity policy.
 * **Update**: Fix the `runInboxTransaction` example's missing metrics argument and add a Delegated idempotence section for `runInboxDelegated` and `Keiro.Inbox.Delegated`.

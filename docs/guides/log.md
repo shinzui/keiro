@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-09-19
+* **Update**: Brownfield Migration And Transducer Modeling and Choosing Keiro DSL use ADR-22's sidecar names, scaffold ledger and Cabal fragment, in place of the retired "scaffold record" and "scaffold manifest" (TERM-22, TERM-26).
+
 ## 2026-09-18
 * **Update**: Integration Events With Kafka corrects the delegated-intake sample to handle `DelegatedCommandError` and documents replay-safe derived producer message IDs, enqueue outcomes, and the ADR-42 cutover.
 * **Update**: Work Queues documents the required five-field `Job` with `jobOrdering` validation, `FifoHeads` per-group guarantees and version requirements, and archive-then-purge DLQ operations.

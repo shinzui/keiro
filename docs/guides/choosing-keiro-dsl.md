@@ -213,7 +213,7 @@ tightening new admission does not make old persisted events unreadable. Version
 generated-ID semantics.
 
 The same checked ID-domain contract feeds runtime validation, symbolic
-equality, consumer binding conformance, fingerprints, scaffold records, explain
+equality, consumer binding conformance, fingerprints, scaffold ledgers, explain
 output, diff, and replay impact. A prefix or domain change is therefore visible
 at the command, event, snapshot, replay, and public-codec surfaces it actually
 affects. On version-2 to version-3 adoption, historical reads stay compatible,
@@ -244,7 +244,7 @@ reconstructing the same matrix for every service.
 
 ### There is another language and toolchain to operate
 
-The team must review `.keiro` syntax, generated Haskell, scaffold manifests,
+The team must review `.keiro` syntax, generated Haskell, Cabal fragments,
 Cabal module/dependency updates, and generated test targets. CI should run
 `check`, freshness or re-scaffold verification, the compiled harness, and
 `diff` when persisted contracts change. For a tiny service, that machinery can
