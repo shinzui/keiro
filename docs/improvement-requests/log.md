@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-20
+* **Implementation**: IR-42 through IR-46 move to in-progress after Plans 290–294 and Plan 295's integrated repository replay evidence land. Package/language publication eligibility is recorded separately; adoption by `mori://shinzui/rei` remains pending real retained-history capture, so none is marked completed.
+
 ## 2026-09-19
 * **Addition**: IR-42 requests named bare-container structural mappings with unchanged wire shapes.
 * **Addition**: IR-43 requests calendar-day scalars with explicit date codec semantics.

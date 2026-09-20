@@ -5,7 +5,7 @@ description: >-
   Support structural set mappings while preserving explicit codec ownership and historical compatibility.
 timestamp: 2026-09-19T22:13:18Z
 requestId: IR-44
-status: accepted
+status: in-progress
 origin: mori://shinzui/rei
 plan: docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md
 relatedPlans:
@@ -69,4 +69,13 @@ mechanism; set semantics need their own checked constructor.
 Source: mori://shinzui/rei, project-relative files domain/shared.keiro and
 rei-core/src/Rei/Domain/KeiroShapes.hs (artifact-level URIs pending).
 Review basis: local Keiro source at b284379c and the consumer declarations inspected
-on 2026-09-19. This request is proposed work, not independent review or implementation evidence.
+on 2026-09-19.
+
+## Implementation and adoption status
+
+Plan 292 implements checked `Set Text` with code-point ordering, duplicate and
+permutation normalization, total bindings, diff/replay consequences, and real
+generated replay. Plan 295's integrated repository replay suite is also green.
+Adoption by `mori://shinzui/rei` remains pending an authorized read-only export
+or isolated restored copy and independent baseline/candidate capture; repository
+fixtures are not consumer history.

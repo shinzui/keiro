@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-09-20
+* **Update**: Evolution And Replayability adds the four independent checked-mapping release gates, reader-before-writer rollout, and forward-only recovery after incompatible writes; Durable Workflows makes explicit that a step rename creates a new durable action and adds isolated retained-result adoption guidance.
+
 ## 2026-09-19
 * **Update**: Brownfield Migration And Transducer Modeling and Choosing Keiro DSL use ADR-22's sidecar names, scaffold ledger and Cabal fragment, in place of the retired "scaffold record" and "scaffold manifest" (TERM-22, TERM-26).
 * **Update**: Evolution And Replayability documents the cross-build retained-history report, independent evidence inventory, `just replay-compatibility` gate, and the high-water-mark limit of finite evidence.

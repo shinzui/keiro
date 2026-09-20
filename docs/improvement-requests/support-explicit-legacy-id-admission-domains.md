@@ -5,7 +5,7 @@ description: >-
   Support explicit legacy ID admission domains while preserving explicit codec ownership and historical compatibility.
 timestamp: 2026-09-19T22:13:18Z
 requestId: IR-46
-status: accepted
+status: in-progress
 origin: mori://shinzui/rei
 plan: docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md
 relatedPlans:
@@ -72,4 +72,13 @@ owns structural nominal composition. This request preserves both contracts.
 Source: mori://shinzui/rei, project-relative files domain/shared.keiro and
 rei-core/src/Rei/Domain/KeiroShapes.hs (artifact-level URIs pending).
 Review basis: local Keiro source at b284379c and the consumer declarations inspected
-on 2026-09-19. This request is proposed work, not independent review or implementation evidence.
+on 2026-09-19.
+
+## Implementation and adoption status
+
+Plan 294 implements explicit TypeID UUIDv5-or-v7 admission with one runtime and
+symbolic character authority, structural and keyed-map propagation, exact owner
+reconstruction, public contracts, and mixed-history replay. Plan 295's integrated
+repository replay suite is also green. Adoption by `mori://shinzui/rei` remains
+pending an authorized read-only export or isolated restored copy and independent
+baseline/candidate capture; repository fixtures are not consumer history.

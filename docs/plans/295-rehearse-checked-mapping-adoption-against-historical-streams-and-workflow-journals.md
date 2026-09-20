@@ -62,8 +62,8 @@ Complete the pre-1.0 DSL acceptance work with an executable adoption rehearsal f
 
 - [x] Milestone 1: Assemble one integrated workspace and historical corpus. (2026-09-20: registered the Language 6 workspace, generated conformance surface, retained non-canonical repository envelope, and Plan 289 inventory/report evidence.)
 - [x] Milestone 2: Prove refactor and evolution matrices. (2026-09-20: the integrated suite crosses the generated event parser/transducer and detects date, set, base16, ID, binding, event-shape, process-identity, and workflow-key mutations.)
-- [ ] Milestone 3: Run an isolated consumer adoption rehearsal.
-- [ ] Milestone 4: Close release gates and retain recovery paths.
+- [ ] Milestone 3: Run an isolated consumer adoption rehearsal. (2026-09-20: located `mori://shinzui/rei` clone/replay tooling, but no authorized immutable export or isolated restored source/scratch pair is available; adoption remains pending rather than being inferred from repository fixtures.)
+- [x] Milestone 4: Close release gates and retain recovery paths. (2026-09-20: committed a validated four-way release manifest, wired it into `replay-compatibility`, documented reader-before-writer and forward-recovery policy, and updated ADR-47 plus IR-42 through IR-46 without claiming consumer adoption.)
 - [ ] Milestone 5: Prove API adoption and rehearse bounded legacy-code retirement.
 
 
@@ -73,6 +73,8 @@ Complete the pre-1.0 DSL acceptance work with an executable adoption rehearsal f
 The combined envelope originally used `RetainedId` only as a keyed-map key. That exercised key parsing but left a generated value-level nominal import unused under the strict generated-output warning gate. Adding the same admitted identity as a direct structural field made both nominal use paths explicit, strengthened the fixture, and kept the generated component warning-clean without suppressing the gate.
 
 The retained envelope is repository history, not evidence from `mori://shinzui/rei`. It intentionally contains admitted non-canonical date, set, and base16 spellings plus UUIDv5/v7 identities. The candidate normalizes those bytes before the real multi-event transducer replay, while the separate report contract demonstrates that unverified consumer evidence blocks adoption.
+
+The Rei repository already provides explicit clone-and-replay tooling that requires separate source and scratch database URLs and rejects unsafe use. This checkout has neither an authorized immutable export nor an isolated restored source/scratch pair. Tool availability is not historical evidence, so Milestone 3 remains open without attempting a live connection or inspecting credentials.
 
 The 1.0 review found no existing milestone demonstrating removal of obsolete authoring support or process-manager compatibility. Candidate capabilities can also have durable history before language publication, so removal from a candidate profile alone cannot make retirement safe.
 
@@ -91,11 +93,13 @@ The 1.0 review found no existing milestone demonstrating removal of obsolete aut
 
 2026-09-20: Treat the committed integrated JSON envelope only as repository-history evidence. Its green report closes the repository fixture portion of Milestones 1 and 2; it cannot satisfy Milestone 3's consumer-history requirement.
 
+2026-09-20: Record package release, language publication, consumer adoption, and implementation retirement as independent machine-checked results. Repository evidence makes the first two eligible but performs neither action; missing authorized Rei history keeps adoption pending and therefore keeps dependent retirement pending.
+
 
 ## Outcomes & Retrospective
 
 
-Milestones 1 and 2 are implemented by `keiro-dsl-conformance-checked-mapping-replay`. The focused component passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. Consumer adoption, release-gate documentation, and retirement rehearsal remain open.
+Milestones 1, 2, and 4 are implemented. `keiro-dsl-conformance-checked-mapping-replay` passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. The `keiro.checked-mapping-release/v1` manifest separately reports package and publication eligibility while keeping consumer adoption and implementation retirement pending. Consumer adoption and the bounded retirement verdict remain open.
 
 
 ## Context and Orientation

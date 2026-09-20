@@ -196,19 +196,28 @@ has its own replay-skipping record, and the resolved payload is journaled under
 `awk:<opaque-uuid>`. A child contributes two entries: the `child:<id>` spawn
 record and the `child:<id>:result` completion the parent awaits.
 
-## Versioning a running workflow: rename a step, or patch
+## Versioning a running workflow: preserve a step, add a step, or patch
 
-Because step durability is keyed on the **name**, not the source position, the
-*common* way to evolve a workflow whose instances are already running needs no
-special API: **rename the step**. Change `step (StepName "charge") …` to
-`step (StepName "charge-v2") …` and the new name has no journaled history, so its
-action runs fresh on the next replay — exactly what you want when one step's
-behaviour changed. The rule of thumb: *if a single rename makes the change
-correct, rename.*
+Step durability is keyed on the **name**, not the source position. A pure source
+refactor must therefore keep the existing `StepName` and a result codec capable
+of decoding every retained result. Renaming `charge` to `charge-v2` creates a
+new durable action: an in-flight workflow that already recorded `charge` will
+not find `charge-v2` and will execute the action again. Use a new name only when
+that execution is intentional, its side effect is safe, and the rollout has
+explicitly accounted for all in-flight instances. A rename is not a decoder
+migration and never repairs an incompatible old result.
 
-The `patch` primitive is the escape hatch for the *rare* case a rename cannot
-express — a change that **cross-cuts several steps**, where an instance already
-past some of them must take one stable branch for the rest of its life:
+When adopting a checked mapped value as a step result, first run the old and new
+application-owned codecs over identical retained journal rows in an isolated
+database with outbound effects replaced by recorded interpreters. Compare the
+decoded result, generation, step/await/child/timer keys, patches, carried seed,
+and subsequent continuations. A stored-result decode failure must remain a
+failure; it must not be treated as a missing step and re-run. Keep the old result
+reader reachable for every retained generation.
+
+The `patch` primitive is the escape hatch for a change that **cross-cuts several
+steps**, where an instance already past some of them must take one stable branch
+for the rest of its life:
 
 ```haskell
 patch :: (Workflow :> es) => PatchId -> Eff es Bool

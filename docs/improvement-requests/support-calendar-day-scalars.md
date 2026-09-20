@@ -5,7 +5,7 @@ description: >-
   Support calendar-day scalars while preserving explicit codec ownership and historical compatibility.
 timestamp: 2026-09-19T22:13:18Z
 requestId: IR-43
-status: accepted
+status: in-progress
 origin: mori://shinzui/rei
 plan: docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md
 relatedPlans:
@@ -70,4 +70,13 @@ Bare optional date mappings depend on
 Source: mori://shinzui/rei, project-relative files domain/shared.keiro and
 rei-core/src/Rei/Domain/KeiroShapes.hs (artifact-level URIs pending).
 Review basis: local Keiro source at b284379c and the consumer declarations inspected
-on 2026-09-19. This request is proposed work, not independent review or implementation evidence.
+on 2026-09-19.
+
+## Implementation and adoption status
+
+Plan 291 implements the full-carrier Gregorian Day policy, including canonical
+extended years, old-reader/new-writer evidence, optional composition, and real
+generated replay. Plan 295's integrated repository replay suite is also green.
+Adoption by `mori://shinzui/rei` remains pending an authorized read-only export
+or isolated restored copy and independent baseline/candidate capture; repository
+fixtures are not consumer history.

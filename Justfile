@@ -59,6 +59,8 @@ process-reaction-proof:
 replay-compatibility:
     python3 scripts/check-replay-compatibility.py --baseline scripts/tests/fixtures/replay-compatibility/baseline-v1.json --candidate scripts/tests/fixtures/replay-compatibility/candidate-v1.json --inventory scripts/tests/fixtures/replay-compatibility/inventory-v1.json --require-all
     python3 -m unittest discover -s scripts/tests -p test_replay_compatibility.py
+    python3 scripts/check-checked-mapping-release.py keiro-dsl/test/fixtures/checked-mapping-replay-workspace/release-manifest.json
+    python3 -m unittest discover -s scripts/tests -p test_checked_mapping_release.py
 
 # Strict OKF enforcement for the research bundle (docs/research, registered as
 # OKF bundle "research" in mori.dhall). Stable RES-N handles and review

@@ -189,11 +189,39 @@ application can define a lossless observation of its domain. Keep the reports
 immutable: do not regenerate baseline evidence from candidate code merely to
 make the comparison pass.
 
+For the checked-mapping initiative, that recipe also validates
+`keiro-dsl/test/fixtures/checked-mapping-replay-workspace/release-manifest.json`.
+The manifest keeps four results independent: package-release eligibility,
+atomic candidate-language publication eligibility, adoption by a named
+consumer, and implementation retirement. Repository fixtures can make the
+first two eligible. They cannot turn missing consumer history into a passed
+adoption or authorize deletion of historical readers.
+
 This is scoped evidence for the captured corpus through its recorded
 high-water marks. It is not a theorem about arbitrary refactors or writes that
 arrive later. Audit the tail or control writer cutover before adoption, retain
 historical readers for every retained generation, and treat old-reader/new-
 writer compatibility as a separate rollout direction.
+
+### Roll out checked mapping readers before writers
+
+Treat a decoder expansion and a new canonical writer as separate changes.
+Deploy the candidate readers first while every writer continues to emit the old
+admitted form. Capture retained history with the baseline and candidate builds,
+then compare aggregate state, process continuations, workflow results and keys,
+and durable identities at identical high-water marks. Only after every old
+reader is gone may writers emit values that the old reader rejects—for example,
+an extended-year calendar day or a newly admitted UUID version.
+
+Before any new-format write, withdrawal means reverting the writer while
+keeping the expanded reader. After a new-format write, an old binary may no
+longer be a valid rollback target. Recover forward with the compatible reader,
+an explicit upcaster, or retained replay-only behavior; do not rewrite events,
+workflow results, IDs, timers, or journal keys to make the old binary work.
+Every Keiro-owned wire-policy identity freezes when it first ships in a package,
+even while its language profile is still candidate. A correction therefore
+needs a new policy identity and the old reader, not an in-place interpretation
+change.
 
 The summary table at the end of this guide maps every change class onto these
 gates.

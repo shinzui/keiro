@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: DSL retirement requires complete retained-history evidence
 description: DSL and API simplification must preserve aggregate replay, process recovery, and workflow continuation through complete compatibility evidence and an explicit implementation-retirement gate.
-timestamp: 2026-09-19T22:31:32Z
+timestamp: 2026-09-20T16:54:17Z
 docId: ADR-47
 status: Accepted
 date: 2026-09-19
@@ -82,9 +82,20 @@ be obtained by weakening validation or hiding manual compatibility obligations.
 
 ## Consequences
 
-Plans 289 and 295 implement the shared evidence contract, recurring verification,
-process continuation cases, API examples, and retirement rehearsal. This decision
-sets their acceptance requirements; those mechanisms are not yet implemented.
+Plan 289 now implements the shared evidence contract, recurring verification,
+and process/workflow continuation cases. Plan 295 adds the integrated checked-
+mapping corpus, real generated aggregate replay, negative semantic mutations,
+and a machine-checked manifest with separate package-release, language-
+publication, consumer-adoption, and implementation-retirement results. The
+repository evidence makes the first two eligible without performing either
+action. Adoption by `mori://shinzui/rei` and dependent retirement remain pending
+because no authorized immutable consumer capture was available; the manifest
+rejects promoting either result without its missing evidence.
+
+The clean adoption guide and bounded retirement rehearsal remain Plan 295 work.
+Until they pass, all historical readers, replay-only transitions, workflow
+branches, process identity families, and published-language implementations stay
+reachable.
 
 The 1.0 preparation can remove redundant code incrementally without coupling every
 new capability to access to every consumer database. A required historical reader,

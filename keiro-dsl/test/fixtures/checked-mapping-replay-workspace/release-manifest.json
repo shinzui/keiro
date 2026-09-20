@@ -1,0 +1,80 @@
+{
+  "schema": "keiro.checked-mapping-release/v1",
+  "initiative": "docs/masterplans/44-add-checked-value-mappings-while-preserving-stream-and-workflow-replay-across-refactors.md",
+  "verifiedAt": "2026-09-20",
+  "repositoryEvidence": {
+    "compatibilityPlan": "docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md",
+    "featurePlans": [
+      "docs/plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md",
+      "docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md",
+      "docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md",
+      "docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md",
+      "docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md"
+    ],
+    "integratedPlan": "docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md",
+    "integratedFixture": "keiro-dsl/test/conformance-checked-mapping-replay/fixtures/retained/mapping-recorded-v1.json",
+    "milestones": {
+      "integratedCorpus": true,
+      "evolutionMatrix": true,
+      "consumerHistory": false,
+      "retirementRehearsal": false
+    }
+  },
+  "wirePolicies": [
+    {
+      "identity": "keiro-calendar-day-v1",
+      "status": "frozen",
+      "vectors": ["keiro-dsl/test/conformance-calendar-days/Main.hs"],
+      "goldens": ["keiro-dsl/test/conformance-calendar-days/fixtures/codec-compare/historical-plus-year.json"]
+    },
+    {
+      "identity": "keiro-text-set-v1",
+      "status": "frozen",
+      "vectors": ["keiro-dsl/test/conformance-structural-text-sets/Main.hs"],
+      "goldens": ["keiro-dsl/test/conformance-checked-mapping-replay/fixtures/retained/mapping-recorded-v1.json"]
+    },
+    {
+      "identity": "keiro-base16-bytes-v1",
+      "status": "frozen",
+      "vectors": ["keiro-dsl/test/conformance-refined-base16/Main.hs"],
+      "goldens": ["keiro-dsl/test/conformance-refined-base16/fixtures/codec-compare/uppercase-leading-zero.json"]
+    },
+    {
+      "identity": "keiro-typeid-v5-or-v7-v1",
+      "status": "frozen",
+      "vectors": ["keiro-dsl/test/conformance-id-admission-domains/Main.hs"],
+      "goldens": ["keiro-dsl/test/conformance-checked-mapping-replay/fixtures/retained/mapping-recorded-v1.json"]
+    }
+  ],
+  "gates": {
+    "package-release": {
+      "result": "eligible",
+      "action": "not-performed",
+      "basis": "All policy vectors, frozen goldens, feature plans, and the repository replay gate are present. This is eligibility evidence, not a package publication."
+    },
+    "language-publication": {
+      "result": "eligible",
+      "action": "not-performed",
+      "basis": "The five feature plans and Plan 289 are complete, and Plan 295 repository Milestones 1 and 2 pass. Publication remains a separately authorized atomic action."
+    },
+    "consumer-adoption": {
+      "result": "pending",
+      "action": "not-performed",
+      "consumer": "mori://shinzui/rei",
+      "missingEvidence": [
+        "authorized-read-only-export-or-isolated-restored-copy",
+        "baseline-capture-report",
+        "candidate-capture-report",
+        "workflow-and-process-continuation-observations"
+      ],
+      "basis": "The consumer has clone-and-replay tooling, but this implementation session has no authorized source/scratch database pair or immutable capture bundle. Repository fixtures are not consumer history."
+    },
+    "implementation-retirement": {
+      "result": "pending",
+      "action": "not-performed",
+      "blockedBy": ["consumer-adoption"],
+      "legacyReadersRetained": true,
+      "basis": "No historical reader, replay-only edge, workflow branch, process identity family, or published-language implementation is deleted by this plan."
+    }
+  }
+}

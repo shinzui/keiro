@@ -5,7 +5,7 @@ description: >-
   Support explicit refined scalar mappings while preserving explicit codec ownership and historical compatibility.
 timestamp: 2026-09-19T22:13:18Z
 requestId: IR-45
-status: accepted
+status: in-progress
 origin: mori://shinzui/rei
 plan: docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md
 relatedPlans:
@@ -74,4 +74,13 @@ ADR 0012's refined-mode deferral is the basis for this request.
 Source: mori://shinzui/rei, project-relative files domain/shared.keiro and
 rei-core/src/Rei/Domain/KeiroShapes.hs (artifact-level URIs pending).
 Review basis: local Keiro source at b284379c and the consumer declarations inspected
-on 2026-09-19. This request is proposed work, not independent review or implementation evidence.
+on 2026-09-19.
+
+## Implementation and adoption status
+
+Plan 293 implements the bounded base16-bytes refinement, validation before the
+total consumer binding, normalization, compatibility consequences, and real
+generated replay. Plan 295's integrated repository replay suite is also green.
+Adoption by `mori://shinzui/rei` remains pending an authorized read-only export
+or isolated restored copy and independent baseline/candidate capture; repository
+fixtures are not consumer history.

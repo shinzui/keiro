@@ -200,7 +200,7 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 295: Assemble one integrated workspace and historical corpus.
 - [x] Plan 295: Prove refactor and evolution matrices.
 - [ ] Plan 295: Run an isolated consumer adoption rehearsal.
-- [ ] Plan 295: Close release gates and retain recovery paths.
+- [x] Plan 295: Close release gates and retain recovery paths.
 - [ ] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement.
 
 
