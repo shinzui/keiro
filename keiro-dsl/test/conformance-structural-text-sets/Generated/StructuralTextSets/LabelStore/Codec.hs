@@ -145,21 +145,21 @@ parseLabelStoreEvent (EventType tag) = mapLeftText . parseEither (withObject "La
           LabelsStored
             <$> ( LabelsStoredData
                     <$> explicitParseField parseTextLabelsMapped o "labels"
-                    <*> explicitParseField parseMaybeTextLabelsMapped o "optionalLabels"
+                    <*> parseOptionalField (parseMaybeTextLabelsMapped Null) parseMaybeTextLabelsMapped o "optionalLabels"
                     <*> explicitParseField parseLabelEnvelopeMapped o "envelope"
                 )
         "LabelsAudited" ->
           LabelsAudited
             <$> ( LabelsAuditedData
                     <$> explicitParseField parseTextLabelsMapped o "labels"
-                    <*> explicitParseField parseMaybeTextLabelsMapped o "optionalLabels"
+                    <*> parseOptionalField (parseMaybeTextLabelsMapped Null) parseMaybeTextLabelsMapped o "optionalLabels"
                     <*> explicitParseField parseLabelEnvelopeMapped o "envelope"
                 )
         "LegacyLabelsImported" ->
           LegacyLabelsImported
             <$> ( LegacyLabelsImportedData
                     <$> explicitParseField parseTextLabelsMapped o "labels"
-                    <*> explicitParseField parseMaybeTextLabelsMapped o "optionalLabels"
+                    <*> parseOptionalField (parseMaybeTextLabelsMapped Null) parseMaybeTextLabelsMapped o "optionalLabels"
                     <*> explicitParseField parseLabelEnvelopeMapped o "envelope"
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes labelStoreEventTypes)

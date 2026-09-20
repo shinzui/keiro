@@ -137,14 +137,14 @@ parseCalendarStoreEvent (EventType tag) = mapLeftText . parseEither (withObject 
           DateStored
             <$> ( DateStoredData
                     <$> explicitParseField parseLocalDayMapped o "day"
-                    <*> explicitParseField parseMaybeLocalDayMapped o "optionalDay"
+                    <*> parseOptionalField (parseMaybeLocalDayMapped Null) parseMaybeLocalDayMapped o "optionalDay"
                     <*> explicitParseField parseCalendarEnvelopeMapped o "envelope"
                 )
         "DateAudited" ->
           DateAudited
             <$> ( DateAuditedData
                     <$> explicitParseField parseLocalDayMapped o "day"
-                    <*> explicitParseField parseMaybeLocalDayMapped o "optionalDay"
+                    <*> parseOptionalField (parseMaybeLocalDayMapped Null) parseMaybeLocalDayMapped o "optionalDay"
                     <*> explicitParseField parseCalendarEnvelopeMapped o "envelope"
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes calendarStoreEventTypes)

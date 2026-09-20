@@ -163,7 +163,7 @@ parseBareStoreEvent (EventType tag) = mapLeftText . parseEither (withObject "Bar
         "StoredValue" ->
           StoredValue
             <$> ( StoredValueData
-                    <$> explicitParseField parseMaybeTextMapped o "optionalLabel"
+                    <$> parseOptionalField (parseMaybeTextMapped Null) parseMaybeTextMapped o "optionalLabel"
                     <*> explicitParseField parseTextListMapped o "labels"
                     <*> explicitParseField parseTextMapMapped o "attributes"
                     <*> explicitParseField parseBareEnvelopeMapped o "envelope"

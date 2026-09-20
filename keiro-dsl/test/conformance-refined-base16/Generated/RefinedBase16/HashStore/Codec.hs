@@ -145,21 +145,21 @@ parseHashStoreEvent (EventType tag) = mapLeftText . parseEither (withObject "Has
           HashStored
             <$> ( HashStoredData
                     <$> explicitParseField parseContentHashMapped o "hash"
-                    <*> explicitParseField parseMaybeContentHashMapped o "optionalHash"
+                    <*> parseOptionalField (parseMaybeContentHashMapped Null) parseMaybeContentHashMapped o "optionalHash"
                     <*> explicitParseField parseHashEnvelopeMapped o "envelope"
                 )
         "HashAudited" ->
           HashAudited
             <$> ( HashAuditedData
                     <$> explicitParseField parseContentHashMapped o "hash"
-                    <*> explicitParseField parseMaybeContentHashMapped o "optionalHash"
+                    <*> parseOptionalField (parseMaybeContentHashMapped Null) parseMaybeContentHashMapped o "optionalHash"
                     <*> explicitParseField parseHashEnvelopeMapped o "envelope"
                 )
         "LegacyHashImported" ->
           LegacyHashImported
             <$> ( LegacyHashImportedData
                     <$> explicitParseField parseContentHashMapped o "hash"
-                    <*> explicitParseField parseMaybeContentHashMapped o "optionalHash"
+                    <*> parseOptionalField (parseMaybeContentHashMapped Null) parseMaybeContentHashMapped o "optionalHash"
                     <*> explicitParseField parseHashEnvelopeMapped o "envelope"
                 )
         _ -> fail ("unknown event type " <> show tag <> "; expected one of: " <> renderExpectedEventTypes hashStoreEventTypes)
