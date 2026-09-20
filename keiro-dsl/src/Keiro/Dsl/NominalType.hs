@@ -272,10 +272,12 @@ rejectMany errors = maybe (Right ()) Left (NE.nonEmpty errors)
 
 mappedName :: MappedDecl -> Name
 mappedName MappedStructural {msName = name} = name
+mappedName MappedRefined {mrName = name} = name
 mappedName MappedOpaque {moName = name} = name
 
 mappedLoc :: MappedDecl -> Loc
 mappedLoc MappedStructural {msLoc = loc} = loc
+mappedLoc MappedRefined {mrLoc = loc} = loc
 mappedLoc MappedOpaque {moLoc = loc} = loc
 
 nodeIdentityLocal :: Node -> (Text, Name, Loc)

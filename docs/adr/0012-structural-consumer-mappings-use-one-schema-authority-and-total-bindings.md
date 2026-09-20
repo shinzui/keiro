@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-20T04:09:55Z
+timestamp: 2026-09-20T05:09:38Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -204,6 +204,23 @@ hide its `containers`, `text`, or Keiro codec dependency. Direct aggregate set f
 wrappers, membership/size/order/mutation expressions, and symbolic collection access remain
 unsupported. Public contracts and process/workflow journals remain application-owned codec
 boundaries; sharing the Haskell set type does not transfer those wire authorities to the DSL.
+
+Candidate Language 6 now also has a separate `mapped refined` declaration for unrestricted bytes
+under the frozen `keiro-core/base16-bytes/1` policy. The generated representation is strict
+`ByteString`; its reader accepts empty, even-length upper- or lowercase hexadecimal text and rejects
+odd lengths, prefixes, whitespace, non-hex digits, and non-string JSON before a consumer binding is
+called. Its writer always emits lowercase text and preserves every byte, including leading zeroes.
+The consumer binding remains a total isomorphism between its domain type and bytes. Arbitrary
+callbacks and digest-length options are not part of this checked contract; a future policy change is
+a new version with the v1 reader retained for any durable history written by a released package.
+
+The refined declaration is non-null because Keiro owns the complete JSON parser and writer, so it
+composes through existing optional, list, text-keyed map, aggregate, workqueue, query, workspace,
+conformance, and manifest folds. It cannot be a JSON object key: uppercase and lowercase spellings
+are distinct keys on the wire but the same decoded bytes. Equality, ordering, arithmetic, public
+contracts, and process/workflow journal ownership are likewise not inferred from `ByteString`.
+Generated private-event replay normalizes accepted spellings before the binding and transducer, while
+application-owned workflow codecs must prove their own retained-result compatibility.
 
 The landed spec layer exposes total folds over checked mapped declarations, structural shapes,
 and nested type expressions. Adding a new constructor therefore requires every checker, differ,

@@ -18,6 +18,7 @@ extra-args keiro-dsl/test/conformance-structural --codec-comparison ArtifactInfo
 extra-args keiro-dsl/test/conformance-structural-nominals --codec-comparison TemplateState --comparison-out keiro-dsl/test/conformance-structural-nominals/Generated/StructuralNominalLeaves/Structural/CodecCompare/TemplateState.hs
 extra-args keiro-dsl/test/conformance-bare-containers --codec-comparison MaybeText --comparison-out keiro-dsl/test/conformance-bare-containers/Generated/BareContainers/Structural/CodecCompare/MaybeText.hs
 extra-args keiro-dsl/test/conformance-calendar-days --codec-comparison MaybeLocalDay --comparison-out keiro-dsl/test/conformance-calendar-days/Generated/CalendarDays/Structural/CodecCompare/MaybeLocalDay.hs
+extra-args keiro-dsl/test/conformance-refined-base16 --codec-comparison ContentHash --comparison-out keiro-dsl/test/conformance-refined-base16/Generated/RefinedBase16/Structural/CodecCompare/ContentHash.hs
 
 # Reviewed legacy suites intentionally compile only the output surface under test.
 uncompiled-generated keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs

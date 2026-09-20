@@ -27,8 +27,17 @@ import Data.Text.Lazy qualified as LazyText
 import Data.Text.Lazy.Encoding qualified as LazyTextEncoding
 import Data.Time.Calendar (Day (ModifiedJulianDay), fromGregorian)
 import Data.Version (showVersion)
+import Data.Word (Word8)
 import Keiki.ProjectionDomain (matchesTextPattern)
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
+import Keiro.Codec.Base16Bytes
+  ( Base16BytesError (..),
+    base16BytesCodecPolicyIdentity,
+    decodeBase16BytesText,
+    encodeBase16Bytes,
+    parseBase16Bytes,
+    renderBase16Bytes,
+  )
 import Keiro.Codec.CalendarDay
   ( calendarDayCodecPolicyIdentity,
     encodeCalendarDay,
@@ -243,6 +252,35 @@ main = hspec $ do
       property $ \values ->
         let value = Set.fromList (map T.pack (values :: [String]))
          in parseEither parseTextSet (encodeTextSet value) == Right value
+
+  describe "base16-bytes codec policy v1" $ do
+    it "pins the stable identity and canonical lowercase writer" $ do
+      base16BytesCodecPolicyIdentity `shouldBe` "keiro-core/base16-bytes/1"
+      renderBase16Bytes (BS.pack [0, 175, 255]) `shouldBe` "00afff"
+      encodeBase16Bytes (BS.pack [0, 175, 255]) `shouldBe` Aeson.String "00afff"
+
+    it "accepts case-insensitive historical spellings without changing decoded bytes" $ do
+      decodeBase16BytesText "00aF" `shouldBe` Right (BS.pack [0, 175])
+      decodeBase16BytesText "00af" `shouldBe` Right (BS.pack [0, 175])
+      fmap renderBase16Bytes (decodeBase16BytesText "00AF") `shouldBe` Right "00af"
+      parseEither parseBase16Bytes (Aeson.String "00aF") `shouldBe` Right (BS.pack [0, 175])
+
+    it "accepts empty, leading-zero, and unrestricted-length byte strings" $ do
+      decodeBase16BytesText "" `shouldBe` Right BS.empty
+      decodeBase16BytesText "00" `shouldBe` Right (BS.singleton 0)
+      decodeBase16BytesText "0011223344" `shouldBe` Right (BS.pack [0, 17, 34, 51, 68])
+
+    it "rejects odd length, prefixes, whitespace, non-hex digits, and non-string JSON" $ do
+      decodeBase16BytesText "0" `shouldBe` Left (Base16BytesOddLength 1)
+      decodeBase16BytesText "0x00" `shouldBe` Left (Base16BytesInvalidDigit 1 'x')
+      decodeBase16BytesText "gg" `shouldBe` Left (Base16BytesInvalidDigit 0 'g')
+      decodeBase16BytesText "00 af" `shouldBe` Left (Base16BytesOddLength 5)
+      parseEither parseBase16Bytes Aeson.Null `shouldSatisfy` isLeft
+
+    it "round-trips arbitrary bytes" $
+      property $ \bytes ->
+        let value = BS.pack (bytes :: [Word8])
+         in decodeBase16BytesText (renderBase16Bytes value) == Right value
 
   describe "mapped consumer surface" $ do
     it "parses and canonically round-trips Language 5 queue and query expressions as atomic forms" $ do
@@ -4535,6 +4573,109 @@ main = hspec $ do
           assertAffected oldSpec = replayImpactSpecs oldSpec daySpec `shouldSatisfy` (/= ReplayNeutral)
       assertAffected (withPrimary TText)
       assertAffected (withPrimary TTime)
+
+    it "admits refined base16 bytes only in the candidate profile and freezes their distinct wire policy" $ do
+      source <- readTestText "test/fixtures/refined-base16.keiro"
+      parsed <- parsedSourceOf "test/fixtures/refined-base16.keiro"
+      let service = checkedSource parsed
+      let spec = checkedSpec service
+          refined = [(name, policy) | MappedRefined {mrName = name, mrPolicy = policy} <- (.mapped) spec]
+      refined `shouldContain` [("ContentHash", Base16BytesV1)]
+      parseSource "<refined-base16-roundtrip>" (renderSource parsed) `shouldBe` Right parsed
+      runtimeProfileHasCapability ((.runtimeProfile) (checkedLanguageContract service)) RefinedBase16Mappings `shouldBe` True
+      capabilityFoldSegment RefinedBase16Mappings `shouldBe` Nothing
+      graph <- shouldResolveTypeGraph spec
+      wireFingerprintForBase16BytesPolicy base16BytesCodecPolicyIdentity graph "ContentHash"
+        `shouldBe` wireFingerprint graph "ContentHash"
+      wireFingerprintForBase16BytesPolicy "keiro-core/base16-bytes/2" graph "ContentHash"
+        `shouldNotBe` wireFingerprint graph "ContentHash"
+      case parseSource "<refined-base16-language-5>" (T.replace "language keiro-dsl 6" "language keiro-dsl 5" source) of
+        Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        result -> expectationFailure ("expected refined base16 language refusal, got " <> show result)
+
+    it "plans refined base16 ByteString codecs across nested aggregate, queue, query, and manifest surfaces" $ do
+      service <- checkedServiceOf "test/fixtures/refined-base16.keiro"
+      let modules = scaffoldServiceModules (defaultContext "refined-base16") service
+          refinedShape = generatedTextEndingIn "Structural/Shape/ContentHash.hs" modules
+          envelopeShape = generatedTextEndingIn "Structural/Shape/HashEnvelope.hs" modules
+          aggregateCodec = generatedTextEndingIn "HashStore/Codec.hs" modules
+          queue = generatedTextEndingIn "HashJobs/Queue.hs" modules
+          queryContract = generatedTextEndingIn "HashLookup/QueryContract.hs" modules
+      refinedShape `shouldSatisfy` T.isInfixOf "type ContentHashShape = ByteString"
+      envelopeShape `shouldSatisfy` T.isInfixOf "primary :: !ContentHash.ContentHashShape"
+      aggregateCodec `shouldSatisfy` T.isInfixOf "import Keiro.Codec.Base16Bytes (encodeBase16Bytes, parseBase16Bytes)"
+      queue `shouldSatisfy` T.isInfixOf "encodeBase16Bytes"
+      queryContract `shouldSatisfy` T.isInfixOf "type HashLookupQueryInput = MaybeContentHash"
+      manifestDependenciesForService service
+        `shouldBe` ["aeson", "base", "bytestring", "effectful-core", "hasql-transaction", "keiki", "keiro", "keiro-core", "keiro-dsl", "keiro-pgmq", "kiroku-store", "text"]
+
+    it "classifies nominal-Text-to-refined, opaque-to-refined, and policy changes as replay-affected" $ do
+      source <- readTestText "test/fixtures/refined-base16.keiro"
+      refinedService <- checkedServiceFromText "refined-base16.keiro" source
+      nominalService <-
+        checkedServiceFromText
+          "refined-base16-nominal.keiro"
+          ( T.replace
+              "mapped refined ContentHash {"
+              "mapped nominal ContentHash : Text {"
+              (T.replace "  wire base16-bytes\n" "" source)
+          )
+      let refinedSpec = checkedSpec refinedService
+          nominalSpec = checkedSpec nominalService
+          opaque =
+            MappedOpaque
+              { moName = "ContentHash",
+                moHaskell = Just (HaskellSource "keiro-dsl" "Conformance.RefinedBase16.Domain" "ContentHash"),
+                moCodecId = Just "conformance.refined-base16.ContentHash.opaque",
+                moCodecVersion = Just "1",
+                moFixtures = Just "Conformance.RefinedBase16.Bindings.contentHashFixtures",
+                moInitial = Just "Conformance.RefinedBase16.Bindings.initialContentHash",
+                moLoc = noLoc
+              }
+          opaqueSpec =
+            specWithMapped
+              (opaque : [declaration | declaration <- refinedSpec.mapped, mappedDeclarationName declaration /= "ContentHash"])
+              refinedSpec
+      replayImpactSpecs nominalSpec refinedSpec `shouldSatisfy` (/= ReplayNeutral)
+      replayImpactSpecs opaqueSpec refinedSpec `shouldSatisfy` (/= ReplayNeutral)
+      graph <- shouldResolveTypeGraph refinedSpec
+      wireFingerprintForBase16BytesPolicy "keiro-core/base16-bytes/2" graph "ContentHash"
+        `shouldNotBe` wireFingerprint graph "ContentHash"
+
+    it "rejects refined base16 callbacks, length options, map keys, symbolic operations, and public-contract use" $ do
+      source <- readTestText "test/fixtures/refined-base16.keiro"
+      parseSource "<refined-base16-length>" (T.replace "wire base16-bytes" "wire base16-bytes length=32" source)
+        `shouldSatisfy` isLeft
+      parseSource "<refined-base16-callback>" (T.replace "wire base16-bytes" "wire custom Example.decodeHash" source)
+        `shouldSatisfy` isLeft
+      keyed <-
+        checkedServiceFromText
+          "<refined-base16-keyed-map>"
+          (T.replace "Map ContentHash required" "Map[ContentHash] Text required" source)
+      case resolveTypeGraph (checkedSpec keyed) of
+        Left errors ->
+          toList errors
+            `shouldSatisfy` any (\case TGUnsupportedNominalLeaf _ "ContentHash" "mapped map key" _ -> True; _ -> False)
+        Right _ -> expectationFailure "expected mapped refined map key refusal"
+      symbolic <-
+        checkedServiceFromText
+          "<refined-base16-symbolic>"
+          (T.replace "  Empty -- StoreHash -->\n" "  Empty -- StoreHash -->\n    guard cmd.hash == cmd.hash\n" source)
+      map (.code) (validateSpec (checkedSpec symbolic)) `shouldContain` [AggregateExpressionOperatorUnsupported]
+      publicContract <-
+        checkedServiceFromText
+          "<refined-base16-contract>"
+          ( source
+              <> T.unlines
+                [ "contract public_hashes {",
+                  "  schemaVersion 1",
+                  "  discriminator kind",
+                  "  topic events \"public.hashes\"",
+                  "  event HashPublished on events { hash: ContentHash }",
+                  "}"
+                ]
+          )
+      map (.code) (validateSpec (checkedSpec publicContract)) `shouldContain` [ContractIdUnknown]
 
     it "admits structural text sets only in the candidate profile and freezes their distinct wire policy" $ do
       source <- readTestText "test/fixtures/structural-text-sets.keiro"
@@ -13585,6 +13726,7 @@ removeMappedRegisterRequirements spec =
     }
   where
     removeInitial declaration@MappedStructural {} = declaration {msInitial = Nothing}
+    removeInitial declaration@MappedRefined {} = declaration {mrInitial = Nothing}
     removeInitial declaration@MappedOpaque {} = declaration {moInitial = Nothing}
     removeRegisters (NAggregate aggregate) =
       NAggregate
@@ -14700,6 +14842,8 @@ mappedWireMutations spec = case resolveTypeGraph spec of
           | (armIndex, arm) <- zip [0 :: Int ..] arms
           ]
         ShapeBare _ -> []
+        ShapeRefined _ -> []
+      MappedRefined {} -> []
       MappedOpaque {moName = declarationName, moCodecVersion = version} ->
         [ mutation
             graph
@@ -14833,6 +14977,7 @@ mapMappedDeclaration target transform spec =
 
 mappedDeclarationName :: MappedDecl -> Name
 mappedDeclarationName MappedStructural {msName = name} = name
+mappedDeclarationName MappedRefined {mrName = name} = name
 mappedDeclarationName MappedOpaque {moName = name} = name
 
 statusMapSpec :: T.Text -> T.Text

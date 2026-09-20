@@ -1255,10 +1255,12 @@ sharedDeclarations spec =
 
 mappedDeclName :: MappedDecl -> Name
 mappedDeclName MappedStructural {msName = name} = name
+mappedDeclName MappedRefined {mrName = name} = name
 mappedDeclName MappedOpaque {moName = name} = name
 
 mappedDeclLoc :: MappedDecl -> Loc
 mappedDeclLoc MappedStructural {msLoc = loc} = loc
+mappedDeclLoc MappedRefined {mrLoc = loc} = loc
 mappedDeclLoc MappedOpaque {moLoc = loc} = loc
 
 -- | Build the ownership index from members carrying their original locations.
@@ -1472,6 +1474,8 @@ instance HasLocs IntakeNode
 instance HasLocs MappedDecl
 
 instance HasLocs MappedShape
+
+instance HasLocs RefinedWirePolicy
 
 instance HasLocs Mapping
 

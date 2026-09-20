@@ -219,7 +219,8 @@ shapeHolePaths =
           [ ((.ctor) arm, maybe "constructor case" renderExprType ((.payload) arm))
           | arm <- arms
           ],
-        onBare = \expression -> [("value", renderExprType expression)]
+        onBare = \expression -> [("value", renderExprType expression)],
+        onRefined = const [("value", "ByteString")]
       }
 
 renderExprType :: ResolvedTypeExpr -> Text

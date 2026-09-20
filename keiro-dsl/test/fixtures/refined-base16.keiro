@@ -1,0 +1,115 @@
+language keiro-dsl 6
+context refined-base16
+
+mapped refined ContentHash {
+  haskell package=keiro-dsl module=Conformance.RefinedBase16.Domain type=ContentHash
+  binding = "Conformance.RefinedBase16.Bindings.contentHashBinding"
+  binding-version = "1"
+  canonical-type = "conformance.refined-base16.ContentHash.v1"
+  fixtures = "Conformance.RefinedBase16.Bindings.contentHashFixtures"
+  initial = "Conformance.RefinedBase16.Bindings.initialContentHash"
+  wire base16-bytes
+}
+
+mapped structural value MaybeContentHash {
+  haskell package=keiro-dsl module=Conformance.RefinedBase16.Domain type=MaybeContentHash
+  binding = "Conformance.RefinedBase16.Bindings.maybeContentHashBinding"
+  binding-version = "1"
+  canonical-type = "conformance.refined-base16.MaybeContentHash.v1"
+  fixtures = "Conformance.RefinedBase16.Bindings.maybeContentHashFixtures"
+  wire Optional ContentHash
+}
+
+mapped structural record HashEnvelope {
+  haskell package=keiro-dsl module=Conformance.RefinedBase16.Domain type=HashEnvelope
+  binding = "Conformance.RefinedBase16.Bindings.hashEnvelopeBinding"
+  binding-version = "1"
+  canonical-type = "conformance.refined-base16.HashEnvelope.v1"
+  fixtures = "Conformance.RefinedBase16.Bindings.hashEnvelopeFixtures"
+  wire object constructor=HashEnvelope unknown-fields=reject {
+    primary as "primary" : ContentHash required
+    optionalHash as "optionalHash" : Optional ContentHash optional on-missing=null
+    namedOptional as "namedOptional" : MaybeContentHash required
+    sequence as "sequence" : List ContentHash required
+    labelled as "labelled" : Map ContentHash required
+  }
+}
+
+aggregate HashStore
+  regs
+    current ContentHash = initial
+  states Empty Stored!
+
+  command StoreHash { hash:ContentHash optionalHash:MaybeContentHash envelope:HashEnvelope }
+  command ImportLegacyHash { hash:ContentHash optionalHash:MaybeContentHash envelope:HashEnvelope }
+  event HashStored = fields(StoreHash)
+  event HashAudited = fields(StoreHash)
+  event LegacyHashImported = fields(ImportLegacyHash)
+
+  Empty -- StoreHash -->
+    write current := hash
+    emit HashStored
+    emit HashAudited
+    goto Stored
+
+  replay-only Empty -- ImportLegacyHash -->
+    write current := hash
+    emit LegacyHashImported
+    goto Stored
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="refined-base16-v1"
+
+workqueue hash_jobs {
+  queue logical = "hash.jobs"
+  derive physical = "hash_jobs"
+         dlq = "hash_jobs_dlq"
+         table = "pgmq.q_hash_jobs"
+  payload HashJob {
+    hash -> "hash" : ContentHash
+    optionalHash -> "optional_hash" : MaybeContentHash
+    envelope -> "envelope" : HashEnvelope
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+target hash_table {
+  schema = "public"
+  table = "hash_values"
+  reset = clear
+}
+
+rebuild-group hash_rebuild {
+  targets = [ hash_table ]
+  order = [ hash_table ]
+}
+
+projection-owner hash_writer {
+  source = all
+  delivery = subscription
+  group = hash_rebuild
+  targets = [ hash_table ]
+  order = 10
+  subscription = "hash-writer"
+  dedup = "hash-writer-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel hash_lookup {
+  columns {}
+  query input = MaybeContentHash
+  query result = HashEnvelope
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head entire-log
+  group = hash_rebuild
+  targets = [ hash_table ]
+}

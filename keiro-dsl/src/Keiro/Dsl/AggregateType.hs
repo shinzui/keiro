@@ -322,7 +322,8 @@ aggregatePackages symbols resolved = case resolved of
             { onRecord = \_ _ fields -> any (exprUsesDay visited . (.valueType)) fields,
               onEnum = const False,
               onUnion = \_ arms -> any (maybe False (exprUsesDay visited) . (.payload)) arms,
-              onBare = exprUsesDay visited
+              onBare = exprUsesDay visited,
+              onRefined = const False
             }
           shape
     exprUsesDay visited =

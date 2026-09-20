@@ -27,6 +27,11 @@ provenance:
       at: 2026-09-19T22:32:10Z
       mode: "update"
       note: "Checked byte-refinement laws, identity preservation and parser policy; added API acceptance and retained-history release gates."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T04:40:21Z
+      mode: "implement"
+      note: "Begin Plan 293 declarative base16 byte-refinement implementation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"

@@ -228,6 +228,7 @@ conformanceImports rendering =
       RUnion _ arms -> any (maybe False isOptional . (.payload)) arms
       REnum {} -> False
       RBare expression -> isOptional expression
+      RRefined {} -> False
     isOptional ROptional {} = True
     isOptional _ = False
     bareCoverageUsesMap (_, RBare RMap {}) = True
@@ -239,6 +240,7 @@ conformanceImports rendering =
           RUnion _ arms -> any (maybe False exprUsesTargetKey . (.payload)) arms
           REnum {} -> False
           RBare expression -> exprUsesTargetKey expression
+          RRefined {} -> False
         exprUsesTargetKey = \case
           ROptional item -> exprUsesTargetKey item
           RList item -> exprUsesTargetKey item
@@ -346,7 +348,8 @@ structuralShapeReferences ctx declaration =
       { onRecord = \_constructor _ _fields -> [],
         onEnum = map (constructorRef . (.ctor)),
         onUnion = \_ -> map (constructorRef . (.ctor)),
-        onBare = const []
+        onBare = const [],
+        onRefined = const []
       }
   where
     moduleName = structuralShapeModuleName ctx ((.name) declaration)
@@ -462,6 +465,7 @@ generatedIdShapeExpression rendering target declaration shape candidate depth = 
         | (index, field) <- zip [0 :: Int ..] fields
         ]
   REnum _ -> "True"
+  RRefined {} -> "True"
   RUnion _ arms ->
     "(case " <> candidate <> " of " <> T.intercalate "; " (map renderArm arms) <> ")"
     where
@@ -595,6 +599,7 @@ coverageExpression rendering declaration shape = case obligations of
         ]
       RUnion _ arms -> concatMap (unionArmObligations rendering shapeModule) arms
       RBare expression -> bareObligations expression
+      RRefined {} -> []
 
     bareObligations = \case
       ROptional _ -> ["any isNothing shapes", "any isJust shapes"]

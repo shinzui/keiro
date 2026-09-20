@@ -149,6 +149,16 @@ docMapped MappedStructural {msName = name, msHaskell = haskell, msBinding = bind
       ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
       ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
       ++ [indent 2 (docMappedShape shape), "}"]
+docMapped MappedRefined {mrName = name, mrHaskell = haskell, mrBinding = binding, mrBindingVersion = bindingVersion, mrCanonical = canonical, mrFixtures = fixtures, mrInitial = initial, mrPolicy = policy} =
+  vsep $
+    ["mapped refined" <+> pretty name <+> "{"]
+      ++ maybe [] (pure . indent 2 . docHaskellSource) haskell
+      ++ maybe [] (pure . indent 2 . docQuotedFact "binding") binding
+      ++ maybe [] (pure . indent 2 . docQuotedFact "binding-version") bindingVersion
+      ++ maybe [] (pure . indent 2 . docQuotedFact "canonical-type") canonical
+      ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
+      ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
+      ++ [indent 2 ("wire" <+> docRefinedWirePolicy policy), "}"]
 docMapped MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codec, moCodecVersion = version, moFixtures = fixtures, moInitial = initial} =
   vsep $
     ["mapped opaque" <+> pretty name <+> "{"]
@@ -185,6 +195,7 @@ docShapeKind (ShapeRecord _ _ _) = "record"
 docShapeKind (ShapeEnum _) = "enum"
 docShapeKind (ShapeUnion _ _) = "union"
 docShapeKind (ShapeBare _) = "value"
+docShapeKind (ShapeRefined _) = "value"
 
 docHaskellSource :: HaskellSource -> Doc ann
 docHaskellSource source =
@@ -219,6 +230,10 @@ docMappedShape (ShapeUnion encoding arms) =
       ++ map (indent 2 . docWireArm) arms
       ++ ["}"]
 docMappedShape (ShapeBare expression) = "wire" <+> docTypeExpr expression
+docMappedShape (ShapeRefined policy) = "wire" <+> docRefinedWirePolicy policy
+
+docRefinedWirePolicy :: RefinedWirePolicy -> Doc ann
+docRefinedWirePolicy Base16BytesV1 = "base16-bytes"
 
 docUnknownFields :: UnknownFields -> Doc ann
 docUnknownFields RejectUnknown = "reject"

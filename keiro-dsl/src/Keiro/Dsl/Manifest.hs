@@ -144,6 +144,11 @@ mappedShapeDependencies service = case checkedTypeGraph service of
             ImportRequirement {package} <- requirements
           ]
           <> Set.fromList ["keiro-core" | any usesOwnedCodec (expressions graph)]
+          <> Set.fromList
+            [ package
+            | ResolvedStructural _ (RRefined Base16BytesV1) <- Map.elems ((.declarations) graph),
+              package <- ["bytestring", "keiro-core"]
+            ]
       )
   where
     expressions graph =
@@ -157,7 +162,8 @@ mappedShapeDependencies service = case checkedTypeGraph service of
           { onRecord = \_ _ fields -> map (.valueType) fields,
             onEnum = const [],
             onUnion = \_ arms -> [payload | arm <- arms, Just payload <- [(.payload) arm]],
-            onBare = pure
+            onBare = pure,
+            onRefined = const []
           }
     usesOwnedCodec =
       foldTypeExpr

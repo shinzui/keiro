@@ -76,6 +76,7 @@ data ShapeView
   | EnumView ![WireEnum]
   | UnionView !UnionEncoding ![ResolvedWireArm]
   | BareView !ExprView
+  | RefinedView !RefinedWirePolicy
 
 data ExprView
   = ExprText
@@ -110,7 +111,8 @@ shapeView =
       { onRecord = RecordView,
         onEnum = EnumView,
         onUnion = UnionView,
-        onBare = BareView . exprView
+        onBare = BareView . exprView,
+        onRefined = RefinedView
       }
 
 exprView :: ResolvedTypeExpr -> ExprView
@@ -271,6 +273,16 @@ diffShape paths declaration oldShape newShape = case (oldShape, newShape) of
       ++ diffUnion paths declaration oldArms newArms
   (BareView oldExpression, BareView newExpression) ->
     diffExprViews paths declaration "value" oldExpression newExpression
+  (RefinedView oldPolicy, RefinedView newPolicy)
+    | oldPolicy == newPolicy -> []
+    | otherwise ->
+        [ finding
+            paths
+            declaration
+            "value"
+            MappedFieldTypeChanged
+            "refined wire policy changed; retain the old reader and version every affected persisted surface"
+        ]
   _ ->
     [ finding
         paths

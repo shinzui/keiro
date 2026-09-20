@@ -227,7 +227,8 @@ sampleMappedShape graph =
                    | payload <- maybeToList ((.payload) firstArm)
                    ]
           [] -> emptyObject,
-        onBare = sampleMappedExpression graph
+        onBare = sampleMappedExpression graph,
+        onRefined = const (String "00af")
       }
   where
     includeField field = case (.presence) field of

@@ -725,6 +725,7 @@ declarationIdentity graph key declaration =
     structuralPresentation (RUnion _ arms) =
       "union:" <> T.intercalate "," [(.tag) arm | arm <- sortOn (.tag) arms]
     structuralPresentation (RBare expression) = "value:" <> expressionPresentation expression
+    structuralPresentation (RRefined Base16BytesV1) = "refined:base16-bytes-v1"
     expressionPresentation = \case
       RText -> "Text"
       RInt -> "Int"

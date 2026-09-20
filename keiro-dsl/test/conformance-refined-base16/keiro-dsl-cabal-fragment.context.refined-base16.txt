@@ -1,0 +1,60 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/refined-base16.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.RefinedBase16.Bindings
+    Generated.RefinedBase16.BehaviorSourceMap
+    Generated.RefinedBase16.HashJobs.Queue
+    Generated.RefinedBase16.HashJobs.QueueCodec
+    Generated.RefinedBase16.HashJobs.QueuePolicy
+    Generated.RefinedBase16.HashLookup.QueryContract
+    Generated.RefinedBase16.HashLookup.ReadModel
+    Generated.RefinedBase16.HashLookup.ReadModelHarness
+    Generated.RefinedBase16.HashLookup.ReadModelTable
+    Generated.RefinedBase16.HashStore.BehaviorContract
+    Generated.RefinedBase16.HashStore.Codec
+    Generated.RefinedBase16.HashStore.Domain
+    Generated.RefinedBase16.HashStore.EventStream
+    Generated.RefinedBase16.HashStore.Harness
+    Generated.RefinedBase16.HashStore.Projection
+    Generated.RefinedBase16.HashStore.Transducer
+    Generated.RefinedBase16.ProjectionCatalog
+    Generated.RefinedBase16.ReplayAudit
+    Generated.RefinedBase16.Structural.Shape.ContentHash
+    Generated.RefinedBase16.Structural.Shape.HashEnvelope
+    Generated.RefinedBase16.Structural.Shape.MaybeContentHash
+    Generated.RefinedBase16.StructuralConformance
+    RefinedBase16.HashLookup.ReadModelHoles
+    RefinedBase16.HashStore.BehaviorHoles
+    RefinedBase16.ProjectionCatalog.ProjectionCatalogHoles
+
+build-depends:
+    , aeson
+    , base
+    , bytestring
+    , containers
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , kiroku-store
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.RefinedBase16.Bindings
+    Conformance.RefinedBase16.Domain

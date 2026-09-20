@@ -606,7 +606,8 @@ jsonPathsFromShape graph visited =
             [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (jsonPathsFromExpr graph visited) ((.payload) arm))
             | arm <- arms
             ],
-        onBare = jsonPathsFromExpr graph visited
+        onBare = jsonPathsFromExpr graph visited,
+        onRefined = const []
       }
 
 jsonPathsFromExpr :: TypeGraph -> Set.Set MappedKey -> ResolvedTypeExpr -> [[PathSeg]]

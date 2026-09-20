@@ -935,7 +935,8 @@ branchSchemaFor graph =
                     ((.tagField) encoding)
                     ((.contentsField) encoding)
                     [BranchArm ((.tag) arm) (branchExpr graph <$> (.payload) arm) | arm <- arms],
-                onBare = branchExpr graph
+                onBare = branchExpr graph,
+                onRefined = const BranchScalar
               }
             shape,
         onOpaqueDecl = const BranchScalar
@@ -1157,7 +1158,8 @@ renderBinding importPlan ctx declaration shape obligation =
           { onRecord = \constructor _ fields -> [recordCase toShapeDirection constructor fields],
             onEnum = \entries -> map (enumCase toShapeDirection . (.ctor)) entries,
             onUnion = \_ arms -> map (unionCase toShapeDirection) arms,
-            onBare = \_ -> [bareCase toShapeDirection]
+            onBare = \_ -> [bareCase toShapeDirection],
+            onRefined = const [bareCase toShapeDirection]
           }
         shape
     bareCase toShapeDirection =
@@ -1245,7 +1247,8 @@ structuralConstructorNames =
       { onRecord = \constructor _ _ -> [constructor],
         onEnum = map (.ctor),
         onUnion = \_ -> map (.ctor),
-        onBare = const []
+        onBare = const [],
+        onRefined = const []
       }
 
 structuralShapeReferences :: Context -> StructuralDecl -> ResolvedMappedShape -> [HaskellReference]
@@ -1265,7 +1268,8 @@ structuralSelectorNames =
       { onRecord = \_ _ -> map (.haskell),
         onEnum = const [],
         onUnion = \_ _ -> [],
-        onBare = const []
+        onBare = const [],
+        onRefined = const []
       }
 
 nominalRepresentationEncoderReference :: Context -> ResolvedNominalType -> HaskellReference
@@ -1468,6 +1472,7 @@ structuralNominalLeafOwners ctx service graph =
     shapeExpressions (RUnion _ arms) = [payload | arm <- arms, payload <- maybe [] pure ((.payload) arm)]
     shapeExpressions REnum {} = []
     shapeExpressions (RBare expression) = [expression]
+    shapeExpressions RRefined {} = []
 
 emitStructuralNominalLeaves :: Context -> Set.Set Name -> [NominalLeaf] -> Text
 emitStructuralNominalLeaves ctx keyedNames leaves =
@@ -2320,6 +2325,7 @@ emitShape ctx graph declaration shape =
           <> ["Data.Time (UTCTime)" | ReqTime `elem` requirements]
           <> ["Data.Time.Calendar (Day)" | ReqDay `elem` requirements]
           <> ["Data.Set (Set)" | ReqSet `elem` requirements]
+          <> ["Data.ByteString (ByteString)" | ReqByteString `elem` requirements]
           <> ["GHC.Generics (Generic)" | shapeNeedsGeneric]
           <> ["Numeric.Natural (Natural)" | ReqNatural `elem` requirements]
     shapeDeclaration =
@@ -2347,14 +2353,17 @@ emitShape ctx graph declaration shape =
                     ["data " <> shapeType <> " = " <> renderArm firstArm]
                       <> ["  | " <> renderArm arm | arm <- rest]
                       <> ["  deriving stock (Eq, Generic, Show)"],
-            onBare = \expression -> "type " <> shapeType <> " = " <> renderShapeType importPlan ctx graph expression
+            onBare = \expression -> "type " <> shapeType <> " = " <> renderShapeType importPlan ctx graph expression,
+            onRefined = const ("type " <> shapeType <> " = ByteString")
           }
         shape
     shapeNeedsGeneric = case shape of
       RBare {} -> False
+      RRefined {} -> False
       _ -> True
     shapeExport = case shape of
       RBare {} -> shapeType
+      RRefined {} -> shapeType
       _ -> shapeType <> " (..)"
     renderArm arm = (.ctor) arm <> maybe "" ((" !" <>) . renderShapeType importPlan ctx graph) ((.payload) arm)
     importPlan =
@@ -2370,6 +2379,7 @@ data ShapeRequirement
   | ReqTime
   | ReqDay
   | ReqSet
+  | ReqByteString
   | ReqNatural
   | ReqReference !HaskellReference
   deriving stock (Eq, Ord, Show)
@@ -2381,7 +2391,8 @@ shapeRequirements ctx graph =
       { onRecord = \_ _ fields -> concatMap (exprRequirements ctx graph . (.valueType)) fields,
         onEnum = const [],
         onUnion = \_ arms -> concatMap (maybe [] (exprRequirements ctx graph) . (.payload)) arms,
-        onBare = exprRequirements ctx graph
+        onBare = exprRequirements ctx graph,
+        onRefined = const [ReqByteString]
       }
 
 exprRequirements :: Context -> TypeGraph -> ResolvedTypeExpr -> [ShapeRequirement]
@@ -2525,6 +2536,7 @@ projectionsForRoot graph root rootShape = case rootShape of
   REnum {} -> []
   RUnion {} -> []
   RBare {} -> []
+  RRefined {} -> []
   where
     walkField keys selectors field
       | (.presence) field /= PRequired = []
@@ -4420,6 +4432,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     usesTime = any typeUsesTime rootExpressions
     usesDay = any typeUsesDay allExpressions
     usesTextSet = any typeUsesTextSet allExpressions
+    usesBase16Bytes = any (\(_, shape) -> shape == RRefined Base16BytesV1) structuralDeclarations
     usesParseJson = any (typeUsesParseJson graph) allExpressions
     usesToJson = any (typeUsesToJson graph) allExpressions
     usesValueConstructors = usesOptionalValue || not (Set.null keyedMapNames) || any isEnumShape (map snd structuralDeclarations)
@@ -4449,6 +4462,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
         <> ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructural]
         <> ["import Keiro.Codec.CalendarDay (encodeCalendarDay, parseCalendarDay)" | usesDay]
         <> ["import Keiro.Codec.TextSet (encodeTextSet, parseTextSet)" | usesTextSet]
+        <> ["import Keiro.Codec.Base16Bytes (encodeBase16Bytes, parseBase16Bytes)" | usesBase16Bytes]
         <> [nominalLeafCodecImport ctx selectedNominals | not (Set.null selectedNominals)]
         <> [nominalLeafKeyCodecImport ctx keyedMapNames | not (Set.null keyedMapNames)]
         <> map ("import " <>) opaqueInstanceImports
@@ -7182,6 +7196,7 @@ emitCodec a =
       ++ ["import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)" | hasEnforcedConsumerNominalIdCodec a]
       ++ ["import Keiro.Codec.CalendarDay (encodeCalendarDay, parseCalendarDay)" | codecUsesDay a]
       ++ ["import Keiro.Codec.TextSet (encodeTextSet, parseTextSet)" | codecUsesTextSet a]
+      ++ ["import Keiro.Codec.Base16Bytes (encodeBase16Bytes, parseBase16Bytes)" | codecUsesBase16Bytes a]
       ++ codecNominalRuntimeImports a
       ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructuralMappedCodec a]
       ++ [ "import Keiro.Codec (Codec (..), EventType (..))",
@@ -7298,6 +7313,7 @@ codecUsesExplicitParseField aggregate =
       REnum {} -> False
       RUnion {} -> True
       RBare {} -> False
+      RRefined {} -> False
     structuralUsesExplicitParseField ResolvedOpaque {} = False
 
 codecUsesWithText :: Agg -> Bool
@@ -7314,6 +7330,7 @@ codecUsesWithText aggregate =
       RUnion {} -> True
       RRecord {} -> False
       RBare {} -> False
+      RRefined {} -> False
     mappedUsesWithText ResolvedOpaque {} = False
 
 codecUsesDotColon :: Agg -> Bool
@@ -7374,6 +7391,13 @@ codecUsesTextSet = any declarationUsesTextSet . codecMappedDeclarations
     declarationUsesTextSet (ResolvedStructural _ shape) = any typeUsesTextSet (shapeTypeExpressions shape)
     declarationUsesTextSet ResolvedOpaque {} = False
 
+codecUsesBase16Bytes :: Agg -> Bool
+codecUsesBase16Bytes = any declarationUsesBase16Bytes . codecMappedDeclarations
+  where
+    declarationUsesBase16Bytes (ResolvedStructural _ (RRefined Base16BytesV1)) = True
+    declarationUsesBase16Bytes ResolvedStructural {} = False
+    declarationUsesBase16Bytes ResolvedOpaque {} = False
+
 codecUsesToJSON :: Agg -> Bool
 codecUsesToJSON aggregate =
   any directOpaqueField (concatMap (.fields) ((.events) aggregate))
@@ -7399,6 +7423,7 @@ shapeTypeExpressions = \case
   REnum {} -> []
   RUnion _ arms -> mapMaybe (.payload) arms
   RBare expression -> [expression]
+  RRefined {} -> []
 
 typeUsesMap :: ResolvedTypeExpr -> Bool
 typeUsesMap =
@@ -7867,7 +7892,7 @@ codecImportPlan aggregate =
     nominalDefaultReferences =
       [ reference
       | ResolvedStructural _ shape <- codecMappedDeclarations aggregate,
-        field <- case shape of RRecord _ _ fields -> fields; REnum {} -> []; RUnion {} -> []; RBare {} -> [],
+        field <- case shape of RRecord _ _ fields -> fields; REnum {} -> []; RUnion {} -> []; RBare {} -> []; RRefined {} -> [],
         Just (leaf, constructor) <- [nominalConstructorDefault field],
         reference <- case (.ownership) leaf of
           GeneratedLeaf ->
@@ -7953,7 +7978,8 @@ directShapeRefs =
       { onRecord = \_ _ fields -> concatMap (exprRefs . (.valueType)) fields,
         onEnum = const [],
         onUnion = \_ arms -> concatMap (maybe [] exprRefs . (.payload)) arms,
-        onBare = exprRefs
+        onBare = exprRefs,
+        onRefined = const []
       }
 
 exprRefs :: ResolvedTypeExpr -> [MappedKey]
@@ -8033,7 +8059,9 @@ emitShapeEncoder importPlan ctx graph declaration =
             ["encode" <> name <> "Shape = \\case"]
               <> concatMap (unionEncodeArm encoding) arms,
         onBare = \expression ->
-          "encode" <> name <> "Shape value = " <> encodeShapeExpr graph expression "value"
+          "encode" <> name <> "Shape value = " <> encodeShapeExpr graph expression "value",
+        onRefined = \case
+          Base16BytesV1 -> "encode" <> name <> "Shape = encodeBase16Bytes"
       }
   where
     name = (.name) declaration
@@ -8085,7 +8113,9 @@ emitShapeDecoder importPlan ctx graph declaration =
                    "  | otherwise = " <> renderUnknownFailure (name <> " union tag") "tag" (map (.tag) arms)
                  ],
         onBare = \expression ->
-          "parse" <> name <> "Shape = " <> decodeShapeExpr graph expression
+          "parse" <> name <> "Shape = " <> decodeShapeExpr graph expression,
+        onRefined = \case
+          Base16BytesV1 -> "parse" <> name <> "Shape = parseBase16Bytes"
       }
   where
     name = (.name) declaration

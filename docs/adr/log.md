@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-09-20
+* **Update**: Record RefinedBase16Mappings as a non-fold capability whose frozen policy identity enters only mapped byte-refinement surfaces (plan 293).
+* **Implementation**: Added the explicit mapped refined base16-bytes v1 contract, total bytes binding boundary, supported composition paths, and unsupported key/symbolic/workflow ownership boundaries.
 * **Update**: Record TextSetMappings as a non-fold capability whose versioned policy identity enters only mapped set surfaces (plan 292).
 * **Update**: Record structural text-set schema authority, canonical normalization, transitive dependency planning, and application-owned boundaries (plan 292).
 * **Update**: Record CalendarDayMappings as a non-fold capability whose frozen codec identity enters only mapped wire surfaces that use Day (plan 291).

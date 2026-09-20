@@ -30,6 +30,7 @@ data MappedClause
   | MCCodec Text
   | MCCodecVersion Text
   | MCShape MappedShape
+  | MCRefinedPolicy RefinedWirePolicy
 
 pMappedTopItem :: FrontendContext -> P SurfaceTopItem
 pMappedTopItem context = do
@@ -43,6 +44,7 @@ pMappedTopItem context = do
           requireLanguageFeatureAt context NominalBindingSyntax (spanOf marker)
           fail "unreachable enabled nominal syntax in predecessor grammar",
       SurfaceMapped <$> pMappedStructural context loc,
+      SurfaceMapped <$> pMappedRefined context loc,
       SurfaceMapped <$> pMappedOpaque loc
     ]
 
@@ -97,6 +99,31 @@ pMappedOpaque loc = do
         moFixtures = fixtures,
         moInitial = initial,
         moLoc = loc
+      }
+
+pMappedRefined :: FrontendContext -> Loc -> P MappedDecl
+pMappedRefined context loc = do
+  languageFeatureKeyword context RefinedBase16Syntax "refined"
+  name <- ident
+  clauses <- braces (many pRefinedClause)
+  hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
+  binding <- oneClause "binding" (\case MCBinding value -> Just value; _ -> Nothing) clauses
+  bindingVersion <- oneClause "binding-version" (\case MCBindingVersion value -> Just value; _ -> Nothing) clauses
+  canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
+  fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
+  initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+  policy <- requiredClause "wire" (\case MCRefinedPolicy value -> Just value; _ -> Nothing) clauses
+  pure
+    MappedRefined
+      { mrName = name,
+        mrHaskell = hs,
+        mrBinding = binding,
+        mrBindingVersion = bindingVersion,
+        mrCanonical = canonical,
+        mrFixtures = fixtures,
+        mrInitial = initial,
+        mrPolicy = policy,
+        mrLoc = loc
       }
 
 pNominalScalarAfterMapped :: Loc -> P NominalScalarDecl
@@ -171,6 +198,18 @@ pOpaqueClause =
       MCCodecVersion <$> pQuotedFact "version",
       MCFixtures <$> pQuotedFact "fixtures",
       MCInitial <$> pQuotedFact "initial"
+    ]
+
+pRefinedClause :: P MappedClause
+pRefinedClause =
+  choice
+    [ MCHaskell <$> pHaskellSource,
+      MCBindingVersion <$> pQuotedFact "binding-version",
+      MCBinding <$> pQuotedFact "binding",
+      MCCanonical <$> pQuotedFact "canonical-type",
+      MCFixtures <$> pQuotedFact "fixtures",
+      MCInitial <$> pQuotedFact "initial",
+      MCRefinedPolicy Base16BytesV1 <$ (keyword "wire" *> keyword "base16-bytes")
     ]
 
 pHaskellSource :: P HaskellSource

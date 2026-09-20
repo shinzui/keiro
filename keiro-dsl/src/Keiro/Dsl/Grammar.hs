@@ -25,6 +25,7 @@ module Keiro.Dsl.Grammar
     UnionEncoding (..),
     WireEnum (..),
     WireArm (..),
+    RefinedWirePolicy (..),
     MappedShape (..),
     HaskellSource (..),
     NominalBindingDecl (..),
@@ -318,11 +319,18 @@ data WireArm = WireArm
   }
   deriving stock (Eq, Show, Generic)
 
+-- | Keiro-owned admission and canonicalization policies available to an
+-- explicit refined declaration. Each constructor is a frozen wire contract.
+data RefinedWirePolicy
+  = Base16BytesV1
+  deriving stock (Eq, Ord, Show, Generic)
+
 data MappedShape
   = ShapeRecord !Name !UnknownFields ![WireField]
   | ShapeEnum ![WireEnum]
   | ShapeUnion !UnionEncoding ![WireArm]
   | ShapeBare !TypeExpr
+  | ShapeRefined !RefinedWirePolicy
   deriving stock (Eq, Show, Generic)
 
 data HaskellSource = HaskellSource
@@ -370,6 +378,17 @@ data MappedDecl
         msInitial :: !(Maybe Text),
         msShape :: !MappedShape,
         msLoc :: !Loc
+      }
+  | MappedRefined
+      { mrName :: !Name,
+        mrHaskell :: !(Maybe HaskellSource),
+        mrBinding :: !(Maybe Text),
+        mrBindingVersion :: !(Maybe Text),
+        mrCanonical :: !(Maybe Text),
+        mrFixtures :: !(Maybe Text),
+        mrInitial :: !(Maybe Text),
+        mrPolicy :: !RefinedWirePolicy,
+        mrLoc :: !Loc
       }
   | MappedOpaque
       { moName :: !Name,

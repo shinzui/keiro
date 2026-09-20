@@ -66,6 +66,7 @@ module Keiro.Dsl.TypeGraph
     wireFingerprint,
     wireFingerprintForCalendarDayPolicy,
     wireFingerprintForTextSetPolicy,
+    wireFingerprintForBase16BytesPolicy,
     nominalWireFingerprint,
   )
 where
@@ -88,6 +89,7 @@ import Data.TypeID qualified as TypeID
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Keiro.Codec.CalendarDay (calendarDayCodecPolicyIdentity)
+import Keiro.Codec.Refined (base16BytesCodecPolicyIdentity)
 import Keiro.Codec.TextSet (textSetCodecPolicyIdentity)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (haskellKeywords)
@@ -370,6 +372,27 @@ checkMappedDecl MappedStructural {msName = name, msHaskell = haskell, msBinding 
           }
         shape
     )
+checkMappedDecl MappedRefined {mrName = name, mrHaskell = haskell, mrBinding = binding, mrBindingVersion = bindingVersion, mrCanonical = canonical, mrFixtures = fixtures, mrInitial = initial, mrPolicy = policy, mrLoc = loc} = do
+  checkedHaskell <- require (MissingHaskellSource name) haskell
+  checkedBinding <- require (MissingStructuralBinding name) binding >>= liftOne . mkQualifiedValueName
+  checkedBindingVersion <- require (MissingStructuralBindingVersion name) bindingVersion >>= liftOne . mkBindingVersion
+  checkedCanonical <- require (MissingCanonicalType name) canonical >>= liftOne . mkCanonicalTypeId
+  checkedFixtures <- require (MissingFixtureCases name) fixtures >>= liftOne . mkQualifiedValueName
+  checkedInitial <- traverse (liftOne . mkQualifiedValueName) initial
+  pure
+    ( CheckedStructural
+        StructuralDecl
+          { name = name,
+            haskell = checkedHaskell,
+            binding = checkedBinding,
+            bindingVersion = checkedBindingVersion,
+            canonical = checkedCanonical,
+            fixtures = checkedFixtures,
+            initial = checkedInitial,
+            loc = loc
+          }
+        (ShapeRefined policy)
+    )
 checkMappedDecl MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codecIdentity, moCodecVersion = codecVersion, moFixtures = fixtures, moInitial = initial, moLoc = loc} = do
   checkedHaskell <- require (MissingHaskellSource name) haskell
   checkedCodecIdentity <- require (MissingOpaqueCodecIdentity name) codecIdentity >>= liftOne . mkCodecIdentity
@@ -442,6 +465,7 @@ data ResolvedMappedShape
   | REnum ![WireEnum]
   | RUnion !UnionEncoding ![ResolvedWireArm]
   | RBare !ResolvedTypeExpr
+  | RRefined !RefinedWirePolicy
   deriving stock (Eq, Show, Generic)
 
 data ResolvedMappedDecl
@@ -654,6 +678,7 @@ rejectMany errors = maybe (Right ()) Left (NE.nonEmpty errors)
 
 rawName :: MappedDecl -> Name
 rawName MappedStructural {msName = name} = name
+rawName MappedRefined {mrName = name} = name
 rawName MappedOpaque {moName = name} = name
 
 checkedName :: CheckedMappedDecl -> Name
@@ -708,6 +733,7 @@ resolveShape keyByName nominalByName enumNames owner (ShapeUnion encoding arms) 
         <*> pure ((.loc) arm)
 resolveShape keyByName nominalByName enumNames owner (ShapeBare expression) =
   RBare <$> resolveExpr keyByName nominalByName enumNames owner noLoc expression
+resolveShape _ _ _ _ (ShapeRefined policy) = Right (RRefined policy)
 
 resolveExpr :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> Name -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
 resolveExpr _ _ _ _ _ TText = Right RText
@@ -775,7 +801,8 @@ refsInShape =
       { onRecord = \_ _ fields -> Set.unions (map (refsInExpr . (.valueType)) fields),
         onEnum = const Set.empty,
         onUnion = \_ arms -> Set.unions (map (maybe Set.empty refsInExpr . (.payload)) arms),
-        onBare = refsInExpr
+        onBare = refsInExpr,
+        onRefined = const Set.empty
       }
 
 refsInExpr :: ResolvedTypeExpr -> Set MappedKey
@@ -830,7 +857,8 @@ directNominalRefs =
               { onRecord = \_ _ fields -> Set.unions (map (nominalRefsInExpr . (.valueType)) fields),
                 onEnum = const Set.empty,
                 onUnion = \_ arms -> Set.unions (map (maybe Set.empty nominalRefsInExpr . (.payload)) arms),
-                onBare = nominalRefsInExpr
+                onBare = nominalRefsInExpr,
+                onRefined = const Set.empty
               }
             shape,
         onOpaqueDecl = const Set.empty
@@ -1030,7 +1058,8 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declaratio
                 [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (pathsInExpr visited) ((.payload) arm))
                 | arm <- arms
                 ],
-            onBare = pathsInExpr visited
+            onBare = pathsInExpr visited,
+            onRefined = const []
           }
 
     pathsInExpr visited = \case
@@ -1099,7 +1128,8 @@ nominalUsePaths graph targetName
                 [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (pathsInExpr visited) ((.payload) arm))
                 | arm <- arms
                 ],
-            onBare = pathsInExpr visited
+            onBare = pathsInExpr visited,
+            onRefined = const []
           }
 
     pathsInExpr visited = \case
@@ -1203,7 +1233,8 @@ data MappedShapeAlgebra a = MappedShapeAlgebra
   { onRecord :: Name -> UnknownFields -> [ResolvedWireField] -> a,
     onEnum :: [WireEnum] -> a,
     onUnion :: UnionEncoding -> [ResolvedWireArm] -> a,
-    onBare :: ResolvedTypeExpr -> a
+    onBare :: ResolvedTypeExpr -> a,
+    onRefined :: RefinedWirePolicy -> a
   }
 
 foldMappedShape :: MappedShapeAlgebra a -> ResolvedMappedShape -> a
@@ -1212,6 +1243,7 @@ foldMappedShape algebra = \case
   REnum entries -> (.onEnum) algebra entries
   RUnion encoding arms -> (.onUnion) algebra encoding arms
   RBare expression -> (.onBare) algebra expression
+  RRefined policy -> (.onRefined) algebra policy
 
 data MappedDeclAlgebra a = MappedDeclAlgebra
   { onStructuralDecl :: StructuralDecl -> ResolvedMappedShape -> a,
@@ -1224,24 +1256,30 @@ foldMappedDecl algebra = \case
   ResolvedOpaque declaration -> (.onOpaqueDecl) algebra declaration
 
 wireFingerprint :: TypeGraph -> Name -> Text
-wireFingerprint = wireFingerprintWithPolicies calendarDayCodecPolicyIdentity textSetCodecPolicyIdentity
+wireFingerprint = wireFingerprintWithPolicies calendarDayCodecPolicyIdentity textSetCodecPolicyIdentity base16BytesCodecPolicyIdentity
 
 -- | Compatibility-analysis seam for proving that a calendar-day policy bump
 -- changes persisted wire identity. Production callers use 'wireFingerprint',
 -- which always selects the released Keiro policy.
 wireFingerprintForCalendarDayPolicy :: Text -> TypeGraph -> Name -> Text
 wireFingerprintForCalendarDayPolicy calendarDayPolicy =
-  wireFingerprintWithPolicies calendarDayPolicy textSetCodecPolicyIdentity
+  wireFingerprintWithPolicies calendarDayPolicy textSetCodecPolicyIdentity base16BytesCodecPolicyIdentity
 
 -- | Compatibility-analysis seam for proving that a text-set policy bump
 -- changes persisted wire identity. Production callers use 'wireFingerprint',
 -- which always selects the released Keiro policy.
 wireFingerprintForTextSetPolicy :: Text -> TypeGraph -> Name -> Text
 wireFingerprintForTextSetPolicy =
-  wireFingerprintWithPolicies calendarDayCodecPolicyIdentity
+  \textSetPolicy -> wireFingerprintWithPolicies calendarDayCodecPolicyIdentity textSetPolicy base16BytesCodecPolicyIdentity
 
-wireFingerprintWithPolicies :: Text -> Text -> TypeGraph -> Name -> Text
-wireFingerprintWithPolicies calendarDayPolicy textSetPolicy graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
+-- | Compatibility-analysis seam for proving that a base16-bytes policy bump
+-- changes persisted wire identity. Production callers use 'wireFingerprint'.
+wireFingerprintForBase16BytesPolicy :: Text -> TypeGraph -> Name -> Text
+wireFingerprintForBase16BytesPolicy =
+  wireFingerprintWithPolicies calendarDayCodecPolicyIdentity textSetCodecPolicyIdentity
+
+wireFingerprintWithPolicies :: Text -> Text -> Text -> TypeGraph -> Name -> Text
+wireFingerprintWithPolicies calendarDayPolicy textSetPolicy base16BytesPolicy graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
   where
     declarations = (.declarations) graph
 
@@ -1275,7 +1313,9 @@ wireFingerprintWithPolicies calendarDayPolicy textSetPolicy graph name = fnv1a64
                 <> ";"
                 <> T.intercalate ";" (map (wireArm visited) (sortOn (.tag) arms))
                 <> ")",
-            onBare = wireExpr visited
+            onBare = wireExpr visited,
+            onRefined = \case
+              Base16BytesV1 -> "base16-bytes(" <> base16BytesPolicy <> ")"
           }
 
     wireField visited field =

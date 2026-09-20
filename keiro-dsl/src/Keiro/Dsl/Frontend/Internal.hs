@@ -274,6 +274,8 @@ setNominalScalarLoc loc NominalScalarDecl {name, representation, binding} =
 setMappedLoc :: Loc -> MappedDecl -> MappedDecl
 setMappedLoc loc (MappedStructural name haskell binding bindingVersion canonical fixtures initial shape _) =
   MappedStructural name haskell binding bindingVersion canonical fixtures initial shape loc
+setMappedLoc loc (MappedRefined name haskell binding bindingVersion canonical fixtures initial policy _) =
+  MappedRefined name haskell binding bindingVersion canonical fixtures initial policy loc
 setMappedLoc loc (MappedOpaque name haskell codecId codecVersion fixtures initial _) =
   MappedOpaque name haskell codecId codecVersion fixtures initial loc
 

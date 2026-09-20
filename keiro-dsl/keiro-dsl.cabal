@@ -826,6 +826,62 @@ test-suite keiro-dsl-conformance-structural-text-sets
     kiroku-store,
     text >=2.1 && <2.2,
 
+-- Plan 293 / IR-45: refined base16 bytes validate before total consumer
+-- bindings while preserving decoded bytes across normalization and replay.
+test-suite keiro-dsl-conformance-refined-base16
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs: test/conformance-refined-base16
+  main-is: Main.hs
+  other-modules:
+    Conformance.RefinedBase16.Bindings
+    Conformance.RefinedBase16.Domain
+    Conformance.RefinedBase16.Historical
+    Generated.RefinedBase16.BehaviorSourceMap
+    Generated.RefinedBase16.HashJobs.Queue
+    Generated.RefinedBase16.HashJobs.QueueCodec
+    Generated.RefinedBase16.HashJobs.QueuePolicy
+    Generated.RefinedBase16.HashLookup.QueryContract
+    Generated.RefinedBase16.HashLookup.ReadModel
+    Generated.RefinedBase16.HashLookup.ReadModelHarness
+    Generated.RefinedBase16.HashLookup.ReadModelTable
+    Generated.RefinedBase16.HashStore.BehaviorContract
+    Generated.RefinedBase16.HashStore.Codec
+    Generated.RefinedBase16.HashStore.Domain
+    Generated.RefinedBase16.HashStore.EventStream
+    Generated.RefinedBase16.HashStore.Harness
+    Generated.RefinedBase16.HashStore.Projection
+    Generated.RefinedBase16.HashStore.Transducer
+    Generated.RefinedBase16.ProjectionCatalog
+    Generated.RefinedBase16.ReplayAudit
+    Generated.RefinedBase16.Structural.CodecCompare.ContentHash
+    Generated.RefinedBase16.Structural.Shape.ContentHash
+    Generated.RefinedBase16.Structural.Shape.HashEnvelope
+    Generated.RefinedBase16.Structural.Shape.MaybeContentHash
+    Generated.RefinedBase16.StructuralConformance
+    RefinedBase16.HashLookup.ReadModelHoles
+    RefinedBase16.HashStore.BehaviorHoles
+    RefinedBase16.ProjectionCatalog.ProjectionCatalogHoles
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    effectful-core,
+    filepath >=1.4 && <1.6,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    keiro-test-support,
+    kiroku-store,
+    text >=2.1 && <2.2,
+
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural
 -- codec authority while preserving the queue schema-version-1 envelope.
 test-suite keiro-dsl-conformance-mapped-queue

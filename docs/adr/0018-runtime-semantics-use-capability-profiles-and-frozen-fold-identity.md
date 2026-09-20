@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-09-20T04:09:55Z
+timestamp: 2026-09-20T05:09:38Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -69,6 +69,14 @@ token distinct from `list(text)`, so only declarations that use the set acquire 
 identity. A future ordering, duplicate-admission, or normalization policy uses a new identity;
 changing the capability or Haskell `Set` implementation cannot silently redefine v1 bytes.
 
+Candidate Language 6's `RefinedBase16Mappings` capability also contributes no profile fold segment.
+It authorizes the explicit refined declaration and complete lowering through the frozen
+`keiro-core/base16-bytes/1` policy. The mapped wire expression uses a token distinct from text,
+nominal text, and opaque codecs and embeds the policy identity. Consequently only declarations that
+use the refinement acquire the new replay-visible surface, while unrelated fold bytes stay stable.
+Uppercase input normalization does not change decoded bytes or content-derived identity; any change
+to admission or canonical output requires a new policy token and retained historical reader.
+
 Persisted pre-hash bytes come only from `Keiro.Dsl.CanonicalEncoding`, whose
 expression and transition representations are frozen by complete surface
 goldens. Presentation pretty printing may evolve independently. Fold surface
@@ -122,6 +130,8 @@ cannot pair a replacement spec with stale derived state.
   compatibility work rather than a profile-wide fold-version shortcut.
 - Structural text-set syntax likewise leaves unrelated aggregate fingerprints unchanged;
   its versioned codec identity enters only mapped wire surfaces that use the set.
+- Refined base16 syntax leaves unrelated aggregate fingerprints unchanged; its versioned policy
+  enters only mapped declarations that use the byte refinement.
 - Pretty-printer changes do not alter persisted replay identity. Changing the
   canonical encoder or digest remains an explicit, golden-backed migration.
 - Invalid semantic graphs cannot receive truncated fingerprints or partial

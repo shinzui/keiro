@@ -1373,7 +1373,7 @@ mappedCodecHarnessExports aggregate =
   T.concat
     [ ", encode" <> (.name) declaration <> "Mapped, decode" <> (.name) declaration <> "Mapped"
     | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate,
-      case shape of RBare {} -> False; _ -> True
+      case shape of RBare {} -> False; RRefined {} -> False; _ -> True
     ]
 
 fixtureSample :: Agg -> QualifiedValueName -> Text
@@ -1561,6 +1561,7 @@ wirePolicyAssertions aggregate (declaration, shape) = case shape of
     map (unionArmAssertion aggregate declaration encoding) arms
       <> [unknownFieldAssertion aggregate declaration ((.unknownFields) encoding)]
   RBare {} -> []
+  RRefined {} -> []
 
 wirePoliciesUseIsLeft :: Maybe TypeGraph -> [(StructuralDecl, ResolvedMappedShape)] -> Bool
 wirePoliciesUseIsLeft graph = any $ \(_, shape) -> case shape of
@@ -1570,6 +1571,7 @@ wirePoliciesUseIsLeft graph = any $ \(_, shape) -> case shape of
   REnum {} -> True
   RUnion encoding _ -> (.unknownFields) encoding == RejectUnknown
   RBare {} -> False
+  RRefined {} -> False
 
 wirePoliciesUseIsRight :: Maybe TypeGraph -> [(StructuralDecl, ResolvedMappedShape)] -> Bool
 wirePoliciesUseIsRight graph = any $ \(_, shape) -> case shape of
@@ -1579,6 +1581,7 @@ wirePoliciesUseIsRight graph = any $ \(_, shape) -> case shape of
   REnum {} -> False
   RUnion encoding _ -> (.unknownFields) encoding == IgnoreUnknown
   RBare {} -> False
+  RRefined {} -> False
 
 isOptionalType :: Maybe TypeGraph -> ResolvedTypeExpr -> Bool
 isOptionalType graph = go Set.empty

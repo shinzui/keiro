@@ -1265,18 +1265,22 @@ mappedLine spec name =
 
 mappedName :: MappedDecl -> Name
 mappedName MappedStructural {msName = name} = name
+mappedName MappedRefined {mrName = name} = name
 mappedName MappedOpaque {moName = name} = name
 
 mappedLoc :: MappedDecl -> Loc
 mappedLoc MappedStructural {msLoc = loc} = loc
+mappedLoc MappedRefined {mrLoc = loc} = loc
 mappedLoc MappedOpaque {moLoc = loc} = loc
 
 mappedHaskell :: MappedDecl -> Maybe HaskellSource
 mappedHaskell MappedStructural {msHaskell = source} = source
+mappedHaskell MappedRefined {mrHaskell = source} = source
 mappedHaskell MappedOpaque {moHaskell = source} = source
 
 mappedCanonical :: MappedDecl -> Maybe Text
 mappedCanonical MappedStructural {msCanonical = canonical} = canonical
+mappedCanonical MappedRefined {mrCanonical = canonical} = canonical
 mappedCanonical MappedOpaque {} = Nothing
 
 mappedLexicalRules :: Spec -> [Diagnostic]
@@ -1300,6 +1304,8 @@ mappedLexicalRules spec = concatMap declarationRules ((.mapped) spec)
            ]
 
     qualifiedFacts MappedStructural {msBinding = binding, msFixtures = fixtures, msInitial = initial, msLoc = loc} =
+      concatMap (qualifiedRule loc) [("binding", binding), ("fixtures", fixtures), ("initial", initial)]
+    qualifiedFacts MappedRefined {mrBinding = binding, mrFixtures = fixtures, mrInitial = initial, mrLoc = loc} =
       concatMap (qualifiedRule loc) [("binding", binding), ("fixtures", fixtures), ("initial", initial)]
     qualifiedFacts MappedOpaque {moFixtures = fixtures, moInitial = initial, moLoc = loc} =
       concatMap (qualifiedRule loc) [("fixtures", fixtures), ("initial", initial)]
@@ -1330,6 +1336,8 @@ mappedLexicalRules spec = concatMap declarationRules ((.mapped) spec)
           not (constructorSafe ((.ctor) arm))
         ]
       MappedStructural {msShape = ShapeBare {}} -> []
+      MappedStructural {msShape = ShapeRefined {}} -> []
+      MappedRefined {} -> []
       MappedOpaque {} -> []
 
     constructorRule category value declaration =
@@ -1350,6 +1358,7 @@ mappedIdentityRules spec =
   ]
   where
     identityValues MappedStructural {msBindingVersion = bindingVersion, msCanonical = canonical} = present [bindingVersion, canonical]
+    identityValues MappedRefined {mrBindingVersion = bindingVersion, mrCanonical = canonical} = present [bindingVersion, canonical]
     identityValues MappedOpaque {moCodecId = codecIdentity, moCodecVersion = codecVersion} = present [codecIdentity, codecVersion]
     present = foldr (maybe id (:)) []
 
@@ -1408,7 +1417,8 @@ nominalLeafLanguageRules languageContract spec graph
                     onBare = \expression ->
                       [ languageError ((.loc) declaration) ("mapped declaration '" <> (.name) declaration <> "' bare value") nominal
                       | nominal <- Set.toAscList (nominalNamesInExpr expression)
-                      ]
+                      ],
+                    onRefined = const []
                   }
                 shape,
             onOpaqueDecl = const []
@@ -1569,7 +1579,8 @@ mappedGraphRules spec graph =
             ]
               ++ [ mappedError ((.loc) declaration) MappedNonInjectiveNullability declaration "bare value contains Optional around a null-capable Json, Optional, or opaque mapped value"
                  | hasNonInjectiveOptional graph expression
-                 ]
+                 ],
+          onRefined = const []
         }
 
     supportedBareRoot = \case
@@ -1680,7 +1691,8 @@ referencedDefaultType graph key = case Map.lookup key ((.declarations) graph) of
                 { onRecord = \_ _ _ -> DefaultOther,
                   onEnum = DefaultEnum . Set.fromList . map (.ctor),
                   onUnion = \_ _ -> DefaultOther,
-                  onBare = defaultType graph
+                  onBare = defaultType graph,
+                  onRefined = const DefaultOther
                 }
               shape,
           onOpaqueDecl = const DefaultOther
@@ -1732,7 +1744,8 @@ mappedRefNullability graph key = case Map.lookup key ((.declarations) graph) of
                 { onRecord = \_ _ _ -> NullabilityFacts False False,
                   onEnum = const (NullabilityFacts False False),
                   onUnion = \_ _ -> NullabilityFacts False False,
-                  onBare = nullabilityFacts graph
+                  onBare = nullabilityFacts graph,
+                  onRefined = const (NullabilityFacts False False)
                 }
               shape,
           onOpaqueDecl = const (NullabilityFacts True False)
@@ -2448,6 +2461,7 @@ validateContract languageContract spec contract =
       | any ((== declaredName) . rawMappedName) ((.mapped) spec) = "is a mapped declaration; contract declared-ID fields must name a declared id"
       | otherwise = "is not a declared id"
     rawMappedName MappedStructural {msName = name} = name
+    rawMappedName MappedRefined {mrName = name} = name
     rawMappedName MappedOpaque {moName = name} = name
     schemaVersionFloor =
       [ mkErr (locLine ((.loc) contract)) ContractSchemaVersionBelowMinimum $
