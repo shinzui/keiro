@@ -107,6 +107,8 @@ The 1.0 review found no existing milestone demonstrating removal of obsolete aut
 
 Milestones 1, 2, and 4 are implemented. The API-adoption half of Milestone 5 is also implemented: `just checked-mapping-adoption` passes from fresh and existing outputs, and the generated process reaction carries the integrated consumer type. `keiro-dsl-conformance-checked-mapping-replay` passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. The `keiro.checked-mapping-release/v1` manifest separately reports package and publication eligibility while keeping consumer adoption and implementation retirement pending. Milestone 3 and the successful bounded-deletion half of Milestone 5 remain open.
 
+Final repository validation through checked-corpus commit `8ed4442c` passed: `keiro-dsl:keiro-dsl-test` ran 790 examples with zero failures; `keiro:keiro-test` ran 711 examples with zero failures; `just conformance-corpus-policy` regenerated all 53 registered invocations with clean record/disk and Cabal inventories; and `just process-reaction-proof` passed the reaction mutation, hydration, replay-witness, timer, no-advance, and state-authority checks. `just checked-mapping-adoption` also preserved all seven hand-owned files across fresh and existing scaffolds while compiling the 39-module generated surface. `just replay-compatibility` matched all three reports, passed ten comparator tests, and passed seven release-manifest tests while truthfully reporting consumer adoption and retirement as pending.
+
 
 ## Context and Orientation
 
