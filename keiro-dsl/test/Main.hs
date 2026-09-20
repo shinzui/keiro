@@ -4729,6 +4729,47 @@ main = hspec $ do
           nodes -> expectationFailure ("unexpected node sequence: " <> show (map nodeTag nodes))
 
   describe "mapped types (EP-149)" $ do
+    it "preserves missing-key semantics when an event's only checked mapping is a bare optional value" $ do
+      service <-
+        checkedServiceFromText
+          "<bare-optional-event>"
+          ( T.unlines
+              [ "language keiro-dsl 6",
+                "context bare-optional-event",
+                "",
+                "mapped structural value MaybeText {",
+                "  haskell package=consumer module=Consumer.Domain type=MaybeText",
+                "  binding = \"Consumer.Bindings.maybeTextBinding\"",
+                "  binding-version = \"1\"",
+                "  canonical-type = \"consumer.MaybeText.v1\"",
+                "  fixtures = \"Consumer.Bindings.maybeTextFixtures\"",
+                "  initial = \"Consumer.Bindings.initialMaybeText\"",
+                "  wire Optional Text",
+                "}",
+                "",
+                "aggregate Reminder",
+                "  regs",
+                "    current MaybeText = initial",
+                "  states Empty Stored!",
+                "",
+                "  command Store { actor:MaybeText }",
+                "  event StoredValue = fields(Store)",
+                "",
+                "  Empty -- Store -->",
+                "    write current := actor",
+                "    emit StoredValue",
+                "    goto Stored",
+                "",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+          )
+      let codec =
+            generatedTextEndingIn
+              "Reminder/Codec.hs"
+              (scaffoldServiceModules (defaultContext "bare-optional-event") service)
+      codec `shouldSatisfy` T.isInfixOf "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
+      codec `shouldSatisfy` T.isInfixOf "parseOptionalField (parseMaybeTextMapped Null) parseMaybeTextMapped o \"actor\""
+
     it "admits calendar days only in the candidate profile and freezes their wire policy" $ do
       source <- readTestText "test/fixtures/calendar-days.keiro"
       service <- checkedServiceFromText "test/fixtures/calendar-days.keiro" source

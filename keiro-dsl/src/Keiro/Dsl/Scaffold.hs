@@ -7398,8 +7398,13 @@ codecUsesParserType aggregate =
 
 codecUsesExplicitParseField :: Agg -> Bool
 codecUsesExplicitParseField aggregate =
-  codecUsesWithText aggregate || any structuralUsesExplicitParseField (codecMappedDeclarations aggregate)
+  codecUsesWithText aggregate
+    || any structuralUsesExplicitParseField (codecMappedDeclarations aggregate)
+    || any eventFieldUsesExplicitParseField (concatMap (.fields) ((.events) aggregate))
   where
+    eventFieldUsesExplicitParseField (_, resolvedType) = case fieldCat aggregate resolvedType of
+      MappedStructuralCat {} -> True
+      _ -> False
     structuralUsesExplicitParseField (ResolvedStructural _ shape) = case shape of
       RRecord _ _ fields -> not (null fields)
       REnum {} -> False
@@ -7660,11 +7665,19 @@ typeUsesAesonConversion aggregate =
 codecUsesOptionalFieldHelper :: Agg -> Bool
 codecUsesOptionalFieldHelper aggregate =
   any structuralHasOptionalField (codecMappedDeclarations aggregate)
+    || any (mappedEventFieldAcceptsMissing aggregate . snd) (concatMap (.fields) ((.events) aggregate))
   where
     structuralHasOptionalField (ResolvedStructural _ (RRecord _ _ fields)) =
       any ((== POptional) . (.presence)) fields
     structuralHasOptionalField (ResolvedStructural _ _) = False
     structuralHasOptionalField ResolvedOpaque {} = False
+
+mappedEventFieldAcceptsMissing :: Agg -> ResolvedAggregateType -> Bool
+mappedEventFieldAcceptsMissing aggregate = \case
+  AggregateMapped key -> case (.typeGraph) aggregate >>= \graph -> Map.lookup key ((.declarations) graph) of
+    Just (ResolvedStructural _ (RBare (ROptional _))) -> True
+    _ -> False
+  _ -> False
 
 hasConsumerNominalCodec :: Agg -> Bool
 hasConsumerNominalCodec = not . null . codecConsumerNominals
@@ -7937,10 +7950,10 @@ emitDecode importPlan a =
     decodeMapped (AggregateMapped mappedKey) key = case (.typeGraph) a of
       Nothing -> error "mapped aggregate field has no resolved type graph"
       Just graph ->
-        "explicitParseField "
-          <> renderMappedParse graph ConsumerValueBoundary (mappedCodecPlanOrDie graph (RRef mappedKey))
-          <> " o "
-          <> tshow key
+        let parser = renderMappedParse graph ConsumerValueBoundary (mappedCodecPlanOrDie graph (RRef mappedKey))
+         in if mappedEventFieldAcceptsMissing a (AggregateMapped mappedKey)
+              then "parseOptionalField (" <> parser <> " Null) " <> parser <> " o " <> tshow key
+              else "explicitParseField " <> parser <> " o " <> tshow key
     decodeMapped _ _ = error "non-mapped aggregate type reached mapped codec lowering"
     decodeNominalField name nominal = case (.ownership) nominal of
       GeneratedNominal -> case (.representation) nominal of
