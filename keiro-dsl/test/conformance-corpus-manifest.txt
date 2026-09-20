@@ -16,6 +16,7 @@ frozen keiro-dsl/test/conformance-skeletons
 
 extra-args keiro-dsl/test/conformance-structural --codec-comparison ArtifactInfo --comparison-out keiro-dsl/test/conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs
 extra-args keiro-dsl/test/conformance-structural-nominals --codec-comparison TemplateState --comparison-out keiro-dsl/test/conformance-structural-nominals/Generated/StructuralNominalLeaves/Structural/CodecCompare/TemplateState.hs
+extra-args keiro-dsl/test/conformance-bare-containers --codec-comparison MaybeText --comparison-out keiro-dsl/test/conformance-bare-containers/Generated/BareContainers/Structural/CodecCompare/MaybeText.hs
 
 # Reviewed legacy suites intentionally compile only the output surface under test.
 uncompiled-generated keiro-dsl/test/conformance-aggregate-scalars/Generated/AggregateScalars/ScalarLedger/BehaviorContract.hs

@@ -659,6 +659,65 @@ test-suite keiro-dsl-conformance-structural-nominals
     shibuya-core,
     text >=2.1 && <2.2,
 
+-- Plan 290 / IR-42: checked named Optional, List, and text-keyed Map values
+-- retain their direct JSON forms across aggregate, queue, and query surfaces.
+test-suite keiro-dsl-conformance-bare-containers
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs: test/conformance-bare-containers
+  main-is: Main.hs
+  other-modules:
+    BareContainers.BareLookup.ReadModelHoles
+    BareContainers.BareStore.BehaviorHoles
+    BareContainers.ProjectionCatalog.ProjectionCatalogHoles
+    Conformance.BareContainers.Bindings
+    Conformance.BareContainers.Domain
+    Conformance.BareContainers.Historical
+    Generated.BareContainers.BareJobs.Queue
+    Generated.BareContainers.BareJobs.QueueCodec
+    Generated.BareContainers.BareJobs.QueuePolicy
+    Generated.BareContainers.BareLookup.QueryContract
+    Generated.BareContainers.BareLookup.ReadModel
+    Generated.BareContainers.BareLookup.ReadModelHarness
+    Generated.BareContainers.BareLookup.ReadModelTable
+    Generated.BareContainers.BareStore.BehaviorContract
+    Generated.BareContainers.BareStore.Codec
+    Generated.BareContainers.BareStore.Domain
+    Generated.BareContainers.BareStore.EventStream
+    Generated.BareContainers.BareStore.Harness
+    Generated.BareContainers.BareStore.Projection
+    Generated.BareContainers.BareStore.Transducer
+    Generated.BareContainers.BehaviorSourceMap
+    Generated.BareContainers.Nominals
+    Generated.BareContainers.Nominals.Internal
+    Generated.BareContainers.ProjectionCatalog
+    Generated.BareContainers.ReplayAudit
+    Generated.BareContainers.Structural.CodecCompare.MaybeText
+    Generated.BareContainers.Structural.NominalLeaves
+    Generated.BareContainers.Structural.Shape.BareEnvelope
+    Generated.BareContainers.Structural.Shape.MaybeText
+    Generated.BareContainers.Structural.Shape.NestedIds
+    Generated.BareContainers.Structural.Shape.TextList
+    Generated.BareContainers.Structural.Shape.TextMap
+    Generated.BareContainers.StructuralConformance
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    effectful-core,
+    filepath >=1.4 && <1.6,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    kiroku-store,
+    text >=2.1 && <2.2,
+
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural
 -- codec authority while preserving the queue schema-version-1 envelope.
 test-suite keiro-dsl-conformance-mapped-queue

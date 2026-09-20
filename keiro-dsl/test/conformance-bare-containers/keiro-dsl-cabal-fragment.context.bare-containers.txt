@@ -1,0 +1,63 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/bare-containers.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    BareContainers.BareLookup.ReadModelHoles
+    BareContainers.BareStore.BehaviorHoles
+    BareContainers.ProjectionCatalog.ProjectionCatalogHoles
+    Conformance.BareContainers.Bindings
+    Generated.BareContainers.BareJobs.Queue
+    Generated.BareContainers.BareJobs.QueueCodec
+    Generated.BareContainers.BareJobs.QueuePolicy
+    Generated.BareContainers.BareLookup.QueryContract
+    Generated.BareContainers.BareLookup.ReadModel
+    Generated.BareContainers.BareLookup.ReadModelHarness
+    Generated.BareContainers.BareLookup.ReadModelTable
+    Generated.BareContainers.BareStore.BehaviorContract
+    Generated.BareContainers.BareStore.Codec
+    Generated.BareContainers.BareStore.Domain
+    Generated.BareContainers.BareStore.EventStream
+    Generated.BareContainers.BareStore.Harness
+    Generated.BareContainers.BareStore.Projection
+    Generated.BareContainers.BareStore.Transducer
+    Generated.BareContainers.BehaviorSourceMap
+    Generated.BareContainers.Nominals
+    Generated.BareContainers.Nominals.Internal
+    Generated.BareContainers.ProjectionCatalog
+    Generated.BareContainers.ReplayAudit
+    Generated.BareContainers.Structural.NominalLeaves
+    Generated.BareContainers.Structural.Shape.BareEnvelope
+    Generated.BareContainers.Structural.Shape.MaybeText
+    Generated.BareContainers.Structural.Shape.NestedIds
+    Generated.BareContainers.Structural.Shape.TextList
+    Generated.BareContainers.Structural.Shape.TextMap
+    Generated.BareContainers.StructuralConformance
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , kiroku-store
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.BareContainers.Bindings
+    Conformance.BareContainers.Domain

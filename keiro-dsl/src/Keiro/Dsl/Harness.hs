@@ -1364,15 +1364,16 @@ mappedHarnessImports aggregate
     declarations = mappedHarnessDeclarationsResolved aggregate
     structuralWire = [(declaration, shape) | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate]
     eitherImports =
-      ["isLeft" | wirePoliciesUseIsLeft structuralWire]
-        <> ["isRight" | wirePoliciesUseIsRight structuralWire]
+      ["isLeft" | wirePoliciesUseIsLeft ((.typeGraph) aggregate) structuralWire]
+        <> ["isRight" | wirePoliciesUseIsRight ((.typeGraph) aggregate) structuralWire]
     renderImport moduleName names = "import " <> moduleName <> " (" <> T.intercalate ", " names <> ")"
 
 mappedCodecHarnessExports :: Agg -> Text
 mappedCodecHarnessExports aggregate =
   T.concat
     [ ", encode" <> (.name) declaration <> "Mapped, decode" <> (.name) declaration <> "Mapped"
-    | ResolvedStructural declaration _ <- codecMappedDeclarations aggregate
+    | ResolvedStructural declaration shape <- codecMappedDeclarations aggregate,
+      case shape of RBare {} -> False; _ -> True
     ]
 
 fixtureSample :: Agg -> QualifiedValueName -> Text
@@ -1561,27 +1562,34 @@ wirePolicyAssertions aggregate (declaration, shape) = case shape of
       <> [unknownFieldAssertion aggregate declaration ((.unknownFields) encoding)]
   RBare {} -> []
 
-wirePoliciesUseIsLeft :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
-wirePoliciesUseIsLeft = any $ \(_, shape) -> case shape of
+wirePoliciesUseIsLeft :: Maybe TypeGraph -> [(StructuralDecl, ResolvedMappedShape)] -> Bool
+wirePoliciesUseIsLeft graph = any $ \(_, shape) -> case shape of
   RRecord _ unknownFields fields ->
     unknownFields == RejectUnknown
-      || any (\field -> (.presence) field == POptional && not (isOptionalType ((.valueType) field))) fields
+      || any (\field -> (.presence) field == POptional && not (isOptionalType graph ((.valueType) field))) fields
   REnum {} -> True
   RUnion encoding _ -> (.unknownFields) encoding == RejectUnknown
   RBare {} -> False
 
-wirePoliciesUseIsRight :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
-wirePoliciesUseIsRight = any $ \(_, shape) -> case shape of
+wirePoliciesUseIsRight :: Maybe TypeGraph -> [(StructuralDecl, ResolvedMappedShape)] -> Bool
+wirePoliciesUseIsRight graph = any $ \(_, shape) -> case shape of
   RRecord _ unknownFields fields ->
     unknownFields == IgnoreUnknown
-      || any (\field -> (.presence) field == POptional && isOptionalType ((.valueType) field)) fields
+      || any (\field -> (.presence) field == POptional && isOptionalType graph ((.valueType) field)) fields
   REnum {} -> False
   RUnion encoding _ -> (.unknownFields) encoding == IgnoreUnknown
   RBare {} -> False
 
-isOptionalType :: ResolvedTypeExpr -> Bool
-isOptionalType ROptional {} = True
-isOptionalType _ = False
+isOptionalType :: Maybe TypeGraph -> ResolvedTypeExpr -> Bool
+isOptionalType graph = go Set.empty
+  where
+    go _ ROptional {} = True
+    go seen (RRef key)
+      | key `Set.member` seen = False
+      | otherwise = case graph >>= \resolved -> Map.lookup key ((.declarations) resolved) of
+          Just (ResolvedStructural _ (RBare expression)) -> go (Set.insert key seen) expression
+          _ -> False
+    go _ _ = False
 
 recordMissingAssertions :: Agg -> StructuralDecl -> ResolvedWireField -> [Text]
 recordMissingAssertions aggregate declaration field =
@@ -1622,9 +1630,10 @@ recordMissingAssertions aggregate declaration field =
     decoder = "decode" <> (.name) declaration <> "Mapped"
     fixtures = renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) declaration))
     encodedSample = encoder <> " (snd (NonEmpty.head (fixtureCases " <> fixtures <> ")))"
-    nullExpectation = case (.valueType) field of
-      ROptional _ -> "isRight"
-      _ -> "isLeft"
+    nullExpectation =
+      if isOptionalType ((.typeGraph) aggregate) ((.valueType) field)
+        then "isRight"
+        else "isLeft"
 
 missingExpectedValue :: Agg -> ResolvedWireField -> Text
 missingExpectedValue aggregate field = case (.onMissing) field of
