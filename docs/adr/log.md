@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-20
+* **Update**: ADR-12, ADR-18, and ADR-46 define named bare container authority, transitive nullability/defaults, fold-neutral runtime capability registration, and nested nominal admission (plan 290).
+
 ## 2026-09-19
 * **Update**: ADR-4 clarifies retained workflow readers and forbids treating a step rename as decoder migration; ADR-47 establishes complete replay evidence and DSL retirement gates.
 

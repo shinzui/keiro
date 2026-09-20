@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Nominal declarations are structural leaves with Keiro-owned admission
 description: Candidate Language 6 preserves declared nominal domain types inside structural shapes while generated leaf codecs retain TypeID, scalar, and declared-enum spelling authority across aggregate, queue, and query roots.
-timestamp: 2026-09-17T21:30:00Z
+timestamp: 2026-09-20T01:26:00Z
 docId: ADR-46
 status: Accepted
 date: 2026-09-17
@@ -44,6 +44,12 @@ and a generated representation whose parser and encoder own those same spellings
 instances never become the leaf wire authority. Query contracts reuse
 the checked nominal type and import authority but emit no JSON codec or leaf helper when they
 are the leaf's only consumer.
+
+A candidate Language 6 named bare container uses the same resolved expression algebra, so nominal
+leaves retain Keiro-owned admission inside direct lists, text-keyed maps, and optional positions.
+Naming the container does not create a nominal codec boundary: its direct shape codec still calls
+the generated nominal leaf parser at the nested path, and structural conformance pins canonical
+text for both the bare declaration and any record that references it.
 
 The structural wire fingerprint token is `nominal-id(<prefix>,<domain>)` for an ID and
 `nominal-scalar(<representation>)` for a scalar; enums use
@@ -118,3 +124,4 @@ not make IR-40 a supported production capability.
 - [IR-40](../improvement-requests/support-nominal-ids-inside-structural-mapped-types.md)
 - [ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md)
 - [ExecPlan 288](../plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md)
+- [ExecPlan 290](../plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md)

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-17T17:16:09Z
+timestamp: 2026-09-20T01:26:00Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -155,6 +155,21 @@ consumer binding. In version 1, `Optional T` may not wrap `Json`, another `Optio
 mapped declaration because those inner values may already encode as JSON null. Tagged-object tag
 and contents keys must be distinct. Parser declarations may be incomplete for useful diagnostics,
 but the resolved graph exposes only checked declarations with all mandatory facts present.
+
+Candidate Language 6 admits a named bare structural value whose root is `Optional`, `List`, or a
+text-keyed `Map`. Its generated shape is a type alias for the resolved expression and its codec
+encodes that expression directly, without an object wrapper. The declaration still owns a total
+consumer binding, canonical identity, fixtures, and binding-version provenance. Nullability and
+invalid nested-optionality are derived through the resolved reference graph, so an alias cannot
+hide `Optional (Optional T)`, optional `Json`, or optional opaque data. A bare alias has the same
+wire token as its inner expression: extracting an inline container behind a name is wire-neutral,
+while binding and fold provenance remain independently visible.
+
+Field presence remains orthogonal to value nullability. A required field whose bare alias encodes
+an optional must be present, although its value may be JSON null. An optional record field may use
+`on-missing=null`, `[]`, or `{}` through a bare alias exactly when the alias's resolved inner
+expression admits that default. This preserves old payloads that omitted absent values without
+turning omission into an implicit policy for every consumer root.
 
 The landed spec layer exposes total folds over checked mapped declarations, structural shapes,
 and nested type expressions. Adding a new constructor therefore requires every checker, differ,

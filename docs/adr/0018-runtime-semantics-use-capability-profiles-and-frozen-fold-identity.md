@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-09-15T22:33:25Z
+timestamp: 2026-09-20T01:26:00Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -46,6 +46,13 @@ replay behavior; there is no unknown-identifier fallback that creates identity.
 Capabilities for generated-ID admission and exact nominal equality share the
 released runtime-semantics-2 segment. Contract-ID admission and strict surface
 validation deliberately contribute no aggregate fold segment.
+
+Candidate Language 6's `BareStructuralMappings` capability also contributes no
+profile fold segment. The capability authorizes checked syntax and lowering; each
+aggregate's existing mapped shape, binding, initial-value, and use-site surfaces
+already carry the replay-relevant identity. Services that do not use a bare
+declaration therefore keep byte-identical fold fingerprints when the monotone
+profile gains this capability.
 
 Persisted pre-hash bytes come only from `Keiro.Dsl.CanonicalEncoding`, whose
 expression and transition representations are frozen by complete surface
