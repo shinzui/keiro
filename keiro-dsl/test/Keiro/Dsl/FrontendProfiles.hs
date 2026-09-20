@@ -202,7 +202,8 @@ featureCases =
     FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody,
     FeatureCase WorkqueueFifoHeadsSyntax "fifo-heads" (featureBody WorkqueueFifoHeadsSyntax),
     FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax),
-    FeatureCase BareStructuralMappingSyntax "value" (featureBody BareStructuralMappingSyntax)
+    FeatureCase BareStructuralMappingSyntax "value" (featureBody BareStructuralMappingSyntax),
+    FeatureCase CalendarDaySyntax "Day" (featureBody CalendarDaySyntax)
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -308,6 +309,18 @@ featureBody = \case
         "  wire Optional Text",
         "}"
       ]
+  CalendarDaySyntax ->
+    T.unlines
+      [ "context profile",
+        "mapped structural value ProfileDay {",
+        "  haskell package=profile module=Example.Profile type=ProfileDay",
+        "  binding = \"Example.Profile.profileDayBinding\"",
+        "  binding-version = \"1\"",
+        "  canonical-type = \"example.ProfileDay.v1\"",
+        "  fixtures = \"Example.Profile.profileDayFixtures\"",
+        "  wire Day",
+        "}"
+      ]
   KeyedMapSyntax ->
     T.unlines
       [ "context profile",
@@ -322,7 +335,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

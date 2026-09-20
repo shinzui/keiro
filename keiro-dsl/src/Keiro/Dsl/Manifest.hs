@@ -168,6 +168,7 @@ workqueueDependencies workqueue =
     isMap TKeyedMap {} = True
     isMap _ = False
     isTime TTime = True
+    isTime TDay = True
     isTime _ = False
     typeExprUses predicate expression =
       predicate expression
@@ -193,6 +194,7 @@ readModelDependencies readModel =
     isMap TKeyedMap {} = True
     isMap _ = False
     isTime TTime = True
+    isTime TDay = True
     isTime _ = False
     typeExprUses predicate expression =
       predicate expression

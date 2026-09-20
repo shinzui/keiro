@@ -21,6 +21,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Keiro.Codec.CalendarDay (calendarDayCodecPolicyIdentity)
 import Keiro.Dsl.Grammar
 import Numeric (showHex)
 import Prettyprinter
@@ -69,6 +70,7 @@ canonicalReactionSurface reaction =
       TBool -> scalar "bool"
       TNatural -> scalar "natural"
       TTime -> scalar "time"
+      TDay -> scalar ("calendar-day:" <> calendarDayCodecPolicyIdentity)
       TJson -> scalar "json"
       TOptional value -> record "optional" [typeExpr value]
       TList value -> record "list-type" [typeExpr value]

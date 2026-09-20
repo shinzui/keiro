@@ -273,6 +273,7 @@ pMappedTypeExpr context =
       TBool <$ keyword "Bool",
       TNatural <$ keyword "Natural",
       TTime <$ (keyword "Time" <|> keyword "UTCTime"),
+      TDay <$ languageFeatureKeyword context CalendarDaySyntax "Day",
       TJson <$ keyword "Json",
       TRef <$> ident
     ]
@@ -293,6 +294,7 @@ pMappedTypeExpr context =
           TBool <$ keyword "Bool",
           TNatural <$ keyword "Natural",
           TTime <$ (keyword "Time" <|> keyword "UTCTime"),
+          TDay <$ languageFeatureKeyword context CalendarDaySyntax "Day",
           TJson <$ keyword "Json",
           TRef <$> ident
         ]

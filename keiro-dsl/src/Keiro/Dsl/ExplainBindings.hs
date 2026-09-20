@@ -232,6 +232,7 @@ renderExprType =
         onBool = "Bool",
         onNatural = "Natural",
         onTime = "UTCTime",
+        onDay = "Day",
         onJson = "Value",
         onOptional = \value -> "Maybe (" <> value <> ")",
         onList = \value -> "[" <> value <> "]",

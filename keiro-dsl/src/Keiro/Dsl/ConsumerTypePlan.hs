@@ -72,6 +72,7 @@ planConsumerType graph expression = do
       RBool -> atom "Bool" []
       RNatural -> atom "Natural" [ImportRequirement "base" "Numeric.Natural" "Natural"]
       RTime -> atom "UTCTime" [ImportRequirement "time" "Data.Time" "UTCTime"]
+      RDay -> atom "Day" [ImportRequirement "time" "Data.Time.Calendar" "Day"]
       RJson -> atom "Value" [ImportRequirement "aeson" "Data.Aeson" "Value"]
       ROptional value -> application "Maybe" [ImportRequirement "base" "Data.Maybe" "Maybe"] <$> plan value
       RList value -> listType <$> plan value
@@ -184,6 +185,7 @@ renderConsumerType generatedNominalModule importPlan graph = fmap (HaskellTypeOc
       RBool -> pure (plainAtom "Bool")
       RNatural -> pure (plainAtom "Natural")
       RTime -> pure (plainAtom "UTCTime")
+      RDay -> pure (plainAtom "Day")
       RJson -> pure (plainAtom "Value")
       ROptional value -> application "Maybe" <$> render value
       RList value -> listType <$> render value

@@ -336,6 +336,7 @@ checkProcessReaction _languageContract graph spec process = case (.body) process
       "Bool" -> TBool
       "Natural" -> TNatural
       "Time" -> TTime
+      "Day" -> TDay
       name -> TRef name
     payloadName (PayloadConstant name _) = name
     payloadName (PayloadTyped name _) = name

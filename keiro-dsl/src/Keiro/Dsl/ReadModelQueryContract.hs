@@ -135,6 +135,7 @@ mappedClosure graph =
         onBool = Set.empty,
         onNatural = Set.empty,
         onTime = Set.empty,
+        onDay = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,

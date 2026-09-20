@@ -951,6 +951,7 @@ branchExpr graph =
         onBool = BranchScalar,
         onNatural = BranchScalar,
         onTime = BranchScalar,
+        onDay = BranchScalar,
         onJson = BranchScalar,
         onOptional = BranchOptional,
         onList = BranchList,
@@ -2316,6 +2317,7 @@ emitShape ctx graph declaration shape =
           <> ["Data.Map.Strict (Map)" | ReqMap `elem` requirements]
           <> ["Data.Text (Text)" | ReqText `elem` requirements]
           <> ["Data.Time (UTCTime)" | ReqTime `elem` requirements]
+          <> ["Data.Time.Calendar (Day)" | ReqDay `elem` requirements]
           <> ["GHC.Generics (Generic)" | shapeNeedsGeneric]
           <> ["Numeric.Natural (Natural)" | ReqNatural `elem` requirements]
     shapeDeclaration =
@@ -2364,6 +2366,7 @@ data ShapeRequirement
   | ReqMap
   | ReqText
   | ReqTime
+  | ReqDay
   | ReqNatural
   | ReqReference !HaskellReference
   deriving stock (Eq, Ord, Show)
@@ -2388,6 +2391,7 @@ exprRequirements ctx graph =
         onBool = [],
         onNatural = [ReqNatural],
         onTime = [ReqTime],
+        onDay = [ReqDay],
         onJson = [ReqJson],
         onOptional = id,
         onList = id,
@@ -2419,6 +2423,7 @@ renderShapeType importPlan ctx graph =
           onBool = atomicShapeType "Bool",
           onNatural = atomicShapeType "Natural",
           onTime = atomicShapeType "UTCTime",
+          onDay = atomicShapeType "Day",
           onJson = atomicShapeType "Value",
           onOptional = applicationShapeType . ("Maybe " <>) . renderStrictOrApplicationArgument,
           onList = atomicShapeType . ("[" <>) . (<> "]") . (.text),
@@ -2572,6 +2577,7 @@ projectionScalar = \case
   RInteger -> primitive "Integer"
   RBool -> primitive "Bool"
   RTime -> primitive "UTCTime"
+  RDay -> Nothing
   RNatural -> primitive "Natural"
   RJson -> Nothing
   ROptional {} -> Nothing
@@ -4406,6 +4412,7 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
     usesOptionalValue = any typeUsesOptional allExpressions
     usesNatural = any typeUsesNatural rootExpressions
     usesTime = any typeUsesTime rootExpressions
+    usesDay = any typeUsesDay allExpressions
     usesParseJson = any (typeUsesParseJson graph) allExpressions
     usesToJson = any (typeUsesToJson graph) allExpressions
     usesValueConstructors = usesOptionalValue || not (Set.null keyedMapNames) || any isEnumShape (map snd structuralDeclarations)
@@ -4427,10 +4434,12 @@ emitMappedWorkqueueGen ctx genPrefix graph workqueue =
         <> (if usesMap then ["import Data.Map.Strict (Map)", "import Data.Map.Strict qualified as Map"] else [])
         <> ["import Numeric.Natural (Natural)" | usesNatural]
         <> ["import Data.Time (UTCTime)" | usesTime]
+        <> ["import Data.Time.Calendar (Day)" | any typeUsesDay rootExpressions]
         <> [ "import Data.Text (Text)",
              "import qualified Data.Text as T"
            ]
         <> ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructural]
+        <> ["import Keiro.Codec.CalendarDay (encodeCalendarDay, parseCalendarDay)" | usesDay]
         <> [nominalLeafCodecImport ctx selectedNominals | not (Set.null selectedNominals)]
         <> [nominalLeafKeyCodecImport ctx keyedMapNames | not (Set.null keyedMapNames)]
         <> map ("import " <>) opaqueInstanceImports
@@ -4538,19 +4547,22 @@ queueLead 0 keyValue = "    [ " <> keyValue
 queueLead _ keyValue = "    , " <> keyValue
 
 typeUsesNatural :: ResolvedTypeExpr -> Bool
-typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False id id id (\_ -> id) (const False) (const False))
+typeUsesNatural = foldTypeExpr (TypeExprAlgebra False False False False True False False False id id id (\_ -> id) (const False) (const False))
 
 typeUsesTime :: ResolvedTypeExpr -> Bool
-typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False id id id (\_ -> id) (const False) (const False))
+typeUsesTime = foldTypeExpr (TypeExprAlgebra False False False False False True False False id id id (\_ -> id) (const False) (const False))
+
+typeUsesDay :: ResolvedTypeExpr -> Bool
+typeUsesDay = foldTypeExpr (TypeExprAlgebra False False False False False False True False id id id (\_ -> id) (const False) (const False))
 
 typeUsesText :: ResolvedTypeExpr -> Bool
-typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False id id (const True) (\_ -> id) (const False) (const False))
+typeUsesText = foldTypeExpr (TypeExprAlgebra True False False False False False False False id id (const True) (\_ -> id) (const False) (const False))
 
 typeUsesJson :: ResolvedTypeExpr -> Bool
-typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False True id id id (\_ -> id) (const False) (const False))
+typeUsesJson = foldTypeExpr (TypeExprAlgebra False False False False False False False True id id id (\_ -> id) (const False) (const False))
 
 typeUsesParserAnnotation :: ResolvedTypeExpr -> Bool
-typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False id (const True) (const True) (\_ _ -> True) (const False) (const False))
+typeUsesParserAnnotation = foldTypeExpr (TypeExprAlgebra False False False False False False False False id (const True) (const True) (\_ _ -> True) (const False) (const False))
 
 typeUsesParseJson :: TypeGraph -> ResolvedTypeExpr -> Bool
 typeUsesParseJson graph =
@@ -4562,6 +4574,7 @@ typeUsesParseJson graph =
         onBool = True,
         onNatural = True,
         onTime = True,
+        onDay = False,
         onJson = False,
         onOptional = id,
         onList = const True,
@@ -5498,13 +5511,14 @@ emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPai
           | expression <- expressions,
             leaf@NominalLeaf {ownership = GeneratedLeaf} <- directNominalLeaves expression
           ]
-    reservedNames = Set.fromList [queryInputType, queryResultType, "Map", "Natural", "Text", "UTCTime", "Value"]
+    reservedNames = Set.fromList [queryInputType, queryResultType, "Day", "Map", "Natural", "Text", "UTCTime", "Value"]
     importPlan = planImportsOrDie queryContractModule reservedNames references
     imports =
       ["import Data.Aeson (Value)" | any typeUsesJson expressions]
         <> ["import Data.Map.Strict (Map)" | any typeUsesMap expressions]
         <> ["import Data.Text (Text)" | any typeUsesText expressions]
         <> ["import Data.Time (UTCTime)" | any typeUsesTime expressions]
+        <> ["import Data.Time.Calendar (Day)" | any typeUsesDay expressions]
         <> ["import Numeric.Natural (Natural)" | any typeUsesNatural expressions]
         <> T.lines (renderPlannedImports importPlan)
     resolve position location expression =
@@ -5528,6 +5542,7 @@ emitReadModelQueryContract ctx queryContractModule graph stem readModel queryPai
             onBool = [],
             onNatural = [],
             onTime = [],
+            onDay = [],
             onJson = [],
             onOptional = id,
             onList = id,
@@ -7150,6 +7165,7 @@ emitCodec a =
          ]
       ++ ["import Data.KindID qualified as KindID" | hasConsumerNominalIdCodec a]
       ++ ["import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)" | hasEnforcedConsumerNominalIdCodec a]
+      ++ ["import Keiro.Codec.CalendarDay (encodeCalendarDay, parseCalendarDay)" | codecUsesDay a]
       ++ codecNominalRuntimeImports a
       ++ ["import Keiro.Codec.Structural (bindingFromShape, bindingToShape)" | hasStructuralMappedCodec a]
       ++ [ "import Keiro.Codec (Codec (..), EventType (..))",
@@ -7330,6 +7346,12 @@ codecUsesLocatedContainers = any declarationUsesLocatedContainer . codecMappedDe
 codecUsesParseJSON :: Agg -> Bool
 codecUsesParseJSON aggregate = any (declarationUsesAesonConversion aggregate) (codecMappedDeclarations aggregate)
 
+codecUsesDay :: Agg -> Bool
+codecUsesDay = any declarationUsesDay . codecMappedDeclarations
+  where
+    declarationUsesDay (ResolvedStructural _ shape) = any typeUsesDay (shapeTypeExpressions shape)
+    declarationUsesDay ResolvedOpaque {} = False
+
 codecUsesToJSON :: Agg -> Bool
 codecUsesToJSON aggregate =
   any directOpaqueField (concatMap (.fields) ((.events) aggregate))
@@ -7366,6 +7388,7 @@ typeUsesMap =
         onBool = False,
         onNatural = False,
         onTime = False,
+        onDay = False,
         onJson = False,
         onOptional = id,
         onList = id,
@@ -7388,6 +7411,7 @@ keyedMapNominalNames =
         onBool = Set.empty,
         onNatural = Set.empty,
         onTime = Set.empty,
+        onDay = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -7407,6 +7431,7 @@ typeUsesLocatedContainer =
         onBool = False,
         onNatural = False,
         onTime = False,
+        onDay = False,
         onJson = False,
         onOptional = id,
         onList = const True,
@@ -7426,6 +7451,7 @@ typeUsesOptional =
         onBool = False,
         onNatural = False,
         onTime = False,
+        onDay = False,
         onJson = False,
         onOptional = const True,
         onList = id,
@@ -7445,6 +7471,7 @@ typeUsesAesonConversion aggregate =
         onBool = True,
         onNatural = True,
         onTime = True,
+        onDay = False,
         onJson = False,
         onOptional = id,
         onList = const True,
@@ -7912,6 +7939,7 @@ exprRefs =
         onBool = [],
         onNatural = [],
         onTime = [],
+        onDay = [],
         onJson = [],
         onOptional = id,
         onList = id,

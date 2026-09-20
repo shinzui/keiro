@@ -64,6 +64,7 @@ module Keiro.Dsl.TypeGraph
     MappedDeclAlgebra (..),
     foldMappedDecl,
     wireFingerprint,
+    wireFingerprintForCalendarDayPolicy,
     nominalWireFingerprint,
   )
 where
@@ -85,6 +86,7 @@ import Data.Text qualified as T
 import Data.TypeID qualified as TypeID
 import Data.Word (Word64)
 import GHC.Generics (Generic)
+import Keiro.Codec.CalendarDay (calendarDayCodecPolicyIdentity)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (haskellKeywords)
 import Numeric (showHex)
@@ -404,6 +406,7 @@ data ResolvedTypeExpr
   | RBool
   | RNatural
   | RTime
+  | RDay
   | RJson
   | ROptional !ResolvedTypeExpr
   | RList !ResolvedTypeExpr
@@ -710,6 +713,7 @@ resolveExpr _ _ _ _ _ TInteger = Right RInteger
 resolveExpr _ _ _ _ _ TBool = Right RBool
 resolveExpr _ _ _ _ _ TNatural = Right RNatural
 resolveExpr _ _ _ _ _ TTime = Right RTime
+resolveExpr _ _ _ _ _ TDay = Right RDay
 resolveExpr _ _ _ _ _ TJson = Right RJson
 resolveExpr names nominals enums owner loc (TOptional value) = ROptional <$> resolveExpr names nominals enums owner loc value
 resolveExpr names nominals enums owner loc (TList value) = RList <$> resolveExpr names nominals enums owner loc value
@@ -780,6 +784,7 @@ refsInExpr =
         onBool = Set.empty,
         onNatural = Set.empty,
         onTime = Set.empty,
+        onDay = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -799,6 +804,7 @@ nominalRefsInExpr =
         onBool = Set.empty,
         onNatural = Set.empty,
         onTime = Set.empty,
+        onDay = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -953,6 +959,7 @@ collectUseSites keyByName nominalByName enumNames spec =
       RBool -> Nothing
       RNatural -> Nothing
       RTime -> Nothing
+      RDay -> Nothing
       RJson -> Nothing
       ROptional value -> prepend SegOptional (rootReference value)
       RList value -> prepend SegElem (rootReference value)
@@ -1026,6 +1033,7 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declaratio
       RBool -> []
       RNatural -> []
       RTime -> []
+      RDay -> []
       RJson -> []
       ROptional value -> map (SegOptional :) (pathsInExpr visited value)
       RList value -> map (SegElem :) (pathsInExpr visited value)
@@ -1093,6 +1101,7 @@ nominalUsePaths graph targetName
       RBool -> []
       RNatural -> []
       RTime -> []
+      RDay -> []
       RJson -> []
       ROptional value -> map (SegOptional :) (pathsInExpr visited value)
       RList value -> map (SegElem :) (pathsInExpr visited value)
@@ -1152,6 +1161,7 @@ data TypeExprAlgebra a = TypeExprAlgebra
     onBool :: a,
     onNatural :: a,
     onTime :: a,
+    onDay :: a,
     onJson :: a,
     onOptional :: a -> a,
     onList :: a -> a,
@@ -1169,6 +1179,7 @@ foldTypeExpr algebra = \case
   RBool -> (.onBool) algebra
   RNatural -> (.onNatural) algebra
   RTime -> (.onTime) algebra
+  RDay -> (.onDay) algebra
   RJson -> (.onJson) algebra
   ROptional value -> (.onOptional) algebra (foldTypeExpr algebra value)
   RList value -> (.onList) algebra (foldTypeExpr algebra value)
@@ -1202,7 +1213,13 @@ foldMappedDecl algebra = \case
   ResolvedOpaque declaration -> (.onOpaqueDecl) algebra declaration
 
 wireFingerprint :: TypeGraph -> Name -> Text
-wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
+wireFingerprint = wireFingerprintForCalendarDayPolicy calendarDayCodecPolicyIdentity
+
+-- | Compatibility-analysis seam for proving that a calendar-day policy bump
+-- changes persisted wire identity. Production callers use 'wireFingerprint',
+-- which always selects the released Keiro policy.
+wireFingerprintForCalendarDayPolicy :: Text -> TypeGraph -> Name -> Text
+wireFingerprintForCalendarDayPolicy calendarDayPolicy graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
   where
     declarations = (.declarations) graph
 
@@ -1257,6 +1274,7 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
       RBool -> "bool"
       RNatural -> "natural"
       RTime -> "time"
+      RDay -> "calendar-day(" <> calendarDayPolicy <> ")"
       RJson -> "json"
       ROptional value -> "optional(" <> wireExpr visited value <> ")"
       RList value -> "list(" <> wireExpr visited value <> ")"

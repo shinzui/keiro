@@ -265,6 +265,7 @@ docTypeExpr TInteger = "Integer"
 docTypeExpr TBool = "Bool"
 docTypeExpr TNatural = "Natural"
 docTypeExpr TTime = "Time"
+docTypeExpr TDay = "Day"
 docTypeExpr TJson = "Json"
 docTypeExpr (TOptional value) = "Optional" <+> docTypeArgument value
 docTypeExpr (TList value) = "List" <+> docTypeArgument value

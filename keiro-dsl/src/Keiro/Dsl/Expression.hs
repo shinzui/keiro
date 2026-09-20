@@ -457,6 +457,7 @@ resolveProjectionPath environment loc provenance fields = do
       RBool -> Right (AggregateBool, Nothing)
       RNatural -> Right (AggregateNatural, Nothing)
       RTime -> Right (AggregateTime, Nothing)
+      RDay -> unsupported "Day"
       RJson -> unsupported "Json"
       ROptional {} -> unsupported "Optional"
       RList {} -> unsupported "List"

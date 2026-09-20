@@ -1083,6 +1083,7 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       "Natural" -> TNatural
       "Time" -> TTime
       "UTCTime" -> TTime
+      "Day" -> TDay
       "Json" -> TJson
       _ -> TRef name
 
@@ -1126,6 +1127,7 @@ aggregateTypeDiagnostic spec aggregateError =
       InvalidRegisterInitial resolved detail ->
         "invalid " <> aggregateCanonicalName resolved <> " register initial: " <> detail
     unsupportedShapeGuidance = \case
+      TDay -> "; declare a named `mapped structural value` with `wire Day` and use that mapping as the aggregate field type"
       TOptional (TRef name)
         | name `Set.member` nominalNames ->
             "; declare `mapped structural record "
@@ -1444,6 +1446,7 @@ nominalNamesInExpr =
         onBool = Set.empty,
         onNatural = Set.empty,
         onTime = Set.empty,
+        onDay = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -1560,7 +1563,7 @@ mappedGraphRules spec graph =
                  ]
               ++ concatMap (armRules declaration) arms,
           onBare = \expression ->
-            [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "bare structural values must have Optional, List, or text-keyed Map as their outer constructor"
+            [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "bare structural values must have Day, Optional, List, or text-keyed Map as their outer constructor"
             | not (supportedBareRoot expression)
             ]
               ++ [ mappedError ((.loc) declaration) MappedNonInjectiveNullability declaration "bare value contains Optional around a null-capable Json, Optional, or opaque mapped value"
@@ -1572,6 +1575,7 @@ mappedGraphRules spec graph =
       ROptional {} -> True
       RList {} -> True
       RMap {} -> True
+      RDay -> True
       _ -> False
 
     fieldRules declaration field =
@@ -1648,6 +1652,7 @@ defaultType graph =
         onBool = DefaultBool,
         onNatural = DefaultNatural,
         onTime = DefaultOther,
+        onDay = DefaultOther,
         onJson = DefaultOther,
         onOptional = const DefaultOptional,
         onList = const DefaultList,
@@ -1697,6 +1702,7 @@ nullabilityFacts graph =
         onBool = nonNull,
         onNatural = nonNull,
         onTime = nonNull,
+        onDay = nonNull,
         onJson = nullable,
         onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
         onList = nestedNonNull,

@@ -137,6 +137,7 @@ resolveAggregateType symbols loc useSite expression = do
     TBool -> pure AggregateBool
     TNatural -> pure AggregateNatural
     TTime -> pure AggregateTime
+    TDay -> unsupportedShape
     TJson -> unsupportedShape
     TOptional {} -> unsupportedShape
     TList {} -> unsupportedShape
@@ -246,6 +247,7 @@ typeExprCanonicalName expression = case expression of
   TBool -> "Bool"
   TNatural -> "Natural"
   TTime -> "Time"
+  TDay -> "Day"
   TJson -> "Json"
   TOptional value -> "Optional(" <> typeExprCanonicalName value <> ")"
   TList value -> "List(" <> typeExprCanonicalName value <> ")"
@@ -301,12 +303,47 @@ aggregatePackages symbols resolved = case resolved of
     GeneratedNominal -> Set.empty
     ConsumerNominal binding -> Set.singleton ((.package) ((.haskell) binding))
   AggregateMapped key -> case Map.lookup key ((.mapped) symbols) of
-    Just declaration -> Set.singleton ((.package) (mappedHaskell declaration))
+    Just declaration ->
+      Set.insert
+        ((.package) (mappedHaskell declaration))
+        (if mappedUsesDay Set.empty declaration then Set.singleton "time" else Set.empty)
     Nothing -> Set.empty
   _ -> Set.empty
   where
     mappedHaskell (ResolvedStructural declaration _) = (.haskell) declaration
     mappedHaskell (ResolvedOpaque declaration) = (.haskell) declaration
+    mappedUsesDay visited = \case
+      ResolvedOpaque {} -> False
+      ResolvedStructural _ shape ->
+        foldMappedShape
+          MappedShapeAlgebra
+            { onRecord = \_ _ fields -> any (exprUsesDay visited . (.valueType)) fields,
+              onEnum = const False,
+              onUnion = \_ arms -> any (maybe False (exprUsesDay visited) . (.payload)) arms,
+              onBare = exprUsesDay visited
+            }
+          shape
+    exprUsesDay visited =
+      foldTypeExpr
+        TypeExprAlgebra
+          { onText = False,
+            onInt = False,
+            onInteger = False,
+            onBool = False,
+            onNatural = False,
+            onTime = False,
+            onDay = True,
+            onJson = False,
+            onOptional = id,
+            onList = id,
+            onMap = id,
+            onKeyedMap = \_ -> id,
+            onRef = \ref ->
+              if Set.member ref visited
+                then False
+                else maybe False (mappedUsesDay (Set.insert ref visited)) (Map.lookup ref ((.mapped) symbols)),
+            onNominal = const False
+          }
 
 aggregateSampleHaskell :: AggregateSymbols -> Text -> ResolvedAggregateType -> Text
 aggregateSampleHaskell symbols sampleName resolved = case resolved of

@@ -67,6 +67,7 @@ planMappedCodec graph expression = do
           onBool = Set.singleton PrimitiveAuthority,
           onNatural = Set.singleton PrimitiveAuthority,
           onTime = Set.singleton PrimitiveAuthority,
+          onDay = Set.singleton PrimitiveAuthority,
           onJson = Set.singleton ExplicitJsonAuthority,
           onOptional = id,
           onList = id,
@@ -89,6 +90,7 @@ renderMappedEncode graph boundary plan = render (0 :: Int) ((.resolvedExpression
       RBool -> primitive candidate
       RNatural -> primitive candidate
       RTime -> primitive candidate
+      RDay -> "encodeCalendarDay (" <> candidate <> ")"
       RJson -> candidate
       ROptional nested ->
         "maybe Null (\\" <> item depth <> " -> " <> render (depth + 1) nested (item depth) <> ") (" <> candidate <> ")"
@@ -139,6 +141,7 @@ renderMappedParse graph boundary plan = render (0 :: Int) ((.resolvedExpression)
       RBool -> "parseJSON"
       RNatural -> "parseJSON"
       RTime -> "parseJSON"
+      RDay -> "parseCalendarDay"
       RJson -> "pure"
       ROptional nested ->
         "\\" <> value depth <> " -> case " <> value depth <> " of Null -> pure Nothing; " <> other depth <> " -> Just <$> (" <> render (depth + 1) nested <> ") " <> other depth

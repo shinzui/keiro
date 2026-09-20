@@ -84,6 +84,7 @@ data ExprView
   | ExprBool
   | ExprNatural
   | ExprTime
+  | ExprDay
   | ExprJson
   | ExprOptional !ExprView
   | ExprList !ExprView
@@ -121,6 +122,7 @@ exprView =
         onBool = ExprBool,
         onNatural = ExprNatural,
         onTime = ExprTime,
+        onDay = ExprDay,
         onJson = ExprJson,
         onOptional = ExprOptional,
         onList = ExprList,

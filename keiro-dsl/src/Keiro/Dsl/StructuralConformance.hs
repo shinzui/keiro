@@ -187,7 +187,7 @@ conformanceImports rendering =
     <> ["import Data.Aeson.Types qualified as AesonTypes" | not (null generatedIdAssertions)]
     <> ["import Data.List (nub)" | not (null structural) || not (null opaque)]
     <> ["import Data.List.NonEmpty qualified as NonEmpty" | not (null structural) || not (null opaque) || not (null consumerNominals)]
-    <> ["import Data.Map.Strict qualified as Map" | any structuralUsesMap structural]
+    <> ["import Data.Map.Strict qualified as Map" | any bareCoverageUsesMap structural || any generatedIdUsesKeyedMap generatedIdAssertions]
     <> ["import Data.KindID qualified as KindID" | any (nominalNeedsOrderingLaw rendering) consumerNominals]
     <> ["import Data.Maybe (isJust, isNothing)" | any shapeUsesMaybe structural]
     <> ["import Data.Proxy (Proxy (..))" | not (null structural) || not (null consumerNominals)]
@@ -230,17 +230,24 @@ conformanceImports rendering =
       RBare expression -> isOptional expression
     isOptional ROptional {} = True
     isOptional _ = False
-    structuralUsesMap (_, shape) = any typeUsesMap (shapeExpressions shape)
-    shapeExpressions (RRecord _ _ fields) = map (.valueType) fields
-    shapeExpressions (RUnion _ arms) = [payload | arm <- arms, payload <- maybe [] pure ((.payload) arm)]
-    shapeExpressions REnum {} = []
-    shapeExpressions (RBare expression) = [expression]
-    typeUsesMap = \case
-      ROptional item -> typeUsesMap item
-      RList item -> typeUsesMap item
-      RMap {} -> True
-      RKeyedMap {} -> True
-      _ -> False
+    bareCoverageUsesMap (_, RBare RMap {}) = True
+    bareCoverageUsesMap _ = False
+    generatedIdUsesKeyedMap (_, shape, target) = shapeUsesTargetKey shape
+      where
+        shapeUsesTargetKey = \case
+          RRecord _ _ fields -> any (exprUsesTargetKey . (.valueType)) fields
+          RUnion _ arms -> any (maybe False exprUsesTargetKey . (.payload)) arms
+          REnum {} -> False
+          RBare expression -> exprUsesTargetKey expression
+        exprUsesTargetKey = \case
+          ROptional item -> exprUsesTargetKey item
+          RList item -> exprUsesTargetKey item
+          RMap item -> exprUsesTargetKey item
+          RKeyedMap key item -> (.name) key == (.name) target || exprUsesTargetKey item
+          RRef key -> case Map.lookup key ((.declarations) ((.graph) rendering)) of
+            Just (ResolvedStructural _ nestedShape) -> shapeUsesTargetKey nestedShape
+            _ -> False
+          _ -> False
 
 lastSegment :: Text -> Text
 lastSegment = last . T.splitOn "."

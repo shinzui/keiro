@@ -63,7 +63,7 @@ Implement IR-43 with a genuine calendar-day value, preserving complete date valu
 
 
 - [x] (2026-09-20T02:25:52Z) Milestone 1: Prove a frozen full-carrier date contract.
-- [ ] Milestone 2: Lower Day only on complete supported surfaces.
+- [x] (2026-09-20T03:00:14Z) Milestone 2: Lower Day only on complete supported surfaces.
 - [ ] Milestone 3: Prove date and optional-date replay.
 
 
@@ -71,6 +71,8 @@ Implement IR-43 with a genuine calendar-day value, preserving complete date valu
 
 
 The Aeson 2.2 source discovered through `mori://haskell/aeson` accepts an optional year sign and at least four year digits, but its parser deliberately caps the year at 15 digits even though `Data.Time.Calendar.Day` has an unbounded `Integer` carrier. Keiro therefore cannot delegate the checked Day reader to Aeson without making the advertised carrier partial. `Keiro.Codec.CalendarDay` owns an unbounded parser, retains Aeson's non-canonical plus-sign and leading-zero read spellings for historical inputs, and normalizes all accepted values through the Aeson-compatible canonical writer. Focused evidence: `nix develop -c cabal test keiro-dsl:keiro-dsl-test --test-options='--match calendar-day'` passed 4 examples and 100 generated full-carrier round trips.
+
+Generated aggregate modules expose a dependency edge that raw aggregate fields do not: a named mapped declaration can lower transitively to `Day` even though the aggregate surface mentions only the consumer type. Manifest dependency inference therefore must traverse the checked mapped graph and add `time`; inspecting only direct aggregate type constructors produced a Cabal fragment that compiled the consumer binding but omitted `Data.Time.Calendar.Day` from generated shape modules.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -86,6 +88,8 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
 2026-09-20 (Milestone 1): Make `keiro-core/calendar-day/1` the frozen policy identity. Its writer is byte-for-byte equal to Aeson's `Day` writer over the complete carrier. Its historical-compatible reader accepts Aeson 2.2's signed and redundant-zero spellings but removes the implementation-specific 15-digit cap; a separate canonical parser distinguishes writer output from accepted historical input. This keeps the normalization law explicit without acquiring Aeson's partial carrier.
+
+2026-09-20 (Milestone 2): Admit `Day` only through structural mappings, including named bare `Day` and recursive `Optional`, `List`, and text-keyed `Map` positions. Lower every supported surface to `Data.Time.Calendar.Day` plus `Keiro.Codec.CalendarDay`, keep direct aggregate fields, nominal wrappers, scalar paths, guards, ordering, and arithmetic rejected, and make the wire fingerprint policy-parametric for compatibility proof while production always selects the released v1 identity. The calendar capability contributes no fold segment because it changes generated codecs rather than transition semantics.
 
 
 ## Outcomes & Retrospective

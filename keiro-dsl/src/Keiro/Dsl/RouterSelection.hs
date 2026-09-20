@@ -519,6 +519,7 @@ selectionTypeFromResolved = \case
   RBool -> Just SelectionBool
   RNatural -> Just SelectionNatural
   RTime -> Just SelectionTime
+  RDay -> Nothing
   RJson -> Nothing
   ROptional {} -> Nothing
   RList {} -> Nothing
@@ -619,6 +620,7 @@ canonicalResolvedType = \case
   RBool -> atom "Bool"
   RNatural -> atom "Natural"
   RTime -> atom "Time"
+  RDay -> atom "Day"
   RJson -> atom "Json"
   ROptional value -> tuple [atom "Optional", canonicalResolvedType value]
   RList value -> tuple [atom "List", canonicalResolvedType value]

@@ -1804,6 +1804,7 @@ main = hspec $ do
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
             "bare-containers.keiro",
+            "calendar-days.keiro",
             "catalog-readmodel-backing-required.keiro",
             "catalog-readmodel-backing-unobserved.keiro",
             "catalog-readmodel-physical-override.keiro",
@@ -4464,6 +4465,83 @@ main = hspec $ do
           nodes -> expectationFailure ("unexpected node sequence: " <> show (map nodeTag nodes))
 
   describe "mapped types (EP-149)" $ do
+    it "admits calendar days only in the candidate profile and freezes their wire policy" $ do
+      source <- readTestText "test/fixtures/calendar-days.keiro"
+      service <- checkedServiceFromText "test/fixtures/calendar-days.keiro" source
+      let spec = checkedSpec service
+          bareShapes = [(name, shape) | MappedStructural {msName = name, msShape = shape@ShapeBare {}} <- (.mapped) spec]
+      bareShapes `shouldContain` [("LocalDay", ShapeBare TDay), ("MaybeLocalDay", ShapeBare (TOptional TDay))]
+      runtimeProfileHasCapability ((.runtimeProfile) (checkedLanguageContract service)) CalendarDayMappings `shouldBe` True
+      capabilityFoldSegment CalendarDayMappings `shouldBe` Nothing
+      graph <- shouldResolveTypeGraph spec
+      wireFingerprintForCalendarDayPolicy calendarDayCodecPolicyIdentity graph "LocalDay"
+        `shouldBe` wireFingerprint graph "LocalDay"
+      wireFingerprintForCalendarDayPolicy "keiro-core/calendar-day/2" graph "LocalDay"
+        `shouldNotBe` wireFingerprint graph "LocalDay"
+      case parseSource "<calendar-days-language-5>" (T.replace "language keiro-dsl 6" "language keiro-dsl 5" source) of
+        Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        result -> expectationFailure ("expected calendar-day language refusal, got " <> show result)
+
+    it "classifies Text-to-Day and Time-to-Day mapped changes as replay-affected" $ do
+      daySpec <- specOf "test/fixtures/calendar-days.keiro"
+      let withPrimary replacement =
+            specWithMapped
+              [ rewrite declaration
+              | declaration <- daySpec.mapped
+              ]
+              daySpec
+            where
+              rewrite declaration@MappedStructural {msName = "CalendarEnvelope", msShape = ShapeRecord constructor unknown fields} =
+                declaration
+                  { msShape =
+                      ShapeRecord
+                        constructor
+                        unknown
+                        [ if field.haskell == "primary" then field {valueType = replacement} else field
+                        | field <- fields
+                        ]
+                  }
+              rewrite declaration = declaration
+          assertAffected oldSpec = replayImpactSpecs oldSpec daySpec `shouldSatisfy` (/= ReplayNeutral)
+      assertAffected (withPrimary TText)
+      assertAffected (withPrimary TTime)
+
+    it "rejects direct aggregate and nominal Day shapes with located guidance" $ do
+      direct <-
+        parseInlineSpec
+          "<direct-day>"
+          ( T.unlines
+              [ "language keiro-dsl 6",
+                "context direct-day",
+                "aggregate Calendar",
+                "  regs",
+                "  states Open",
+                "  command Record { day:Day }",
+                "  event Recorded = fields(Record)",
+                "  Open -- Record --> emit Recorded ; goto Open",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+          )
+      let directErrors = [diagnostic | diagnostic <- validateSpec direct, (.severity) diagnostic == Error]
+      map (.code) directErrors `shouldContain` [AggregateTypeUnsupportedAtUse]
+      map (.message) directErrors `shouldSatisfy` any (T.isInfixOf "wire Day")
+      nominal <-
+        parseInlineSpec
+          "<nominal-day>"
+          ( T.unlines
+              [ "language keiro-dsl 6",
+                "context nominal-day",
+                "mapped nominal Birthday : Day {",
+                "  haskell package=example module=Example.Domain type=Birthday",
+                "  binding = \"Example.Bindings.birthdayBinding\"",
+                "  binding-version = \"1\"",
+                "  canonical-type = \"example.Birthday.v1\"",
+                "  fixtures = \"Example.Bindings.birthdayFixtures\"",
+                "}"
+              ]
+          )
+      map (.code) (validateSpec nominal) `shouldContain` [NominalUnsupportedRepresentation]
+
     it "round-trips candidate bare container mappings and gates their declaration kind" $ do
       source <- readTestText "test/fixtures/bare-containers.keiro"
       parsed <- checkedServiceFromText "test/fixtures/bare-containers.keiro" source
@@ -14308,6 +14386,7 @@ expressionTags =
       onBool = ["bool"],
       onNatural = ["natural"],
       onTime = ["time"],
+      onDay = ["day"],
       onJson = ["json"],
       onOptional = ("optional" :),
       onList = ("list" :),

@@ -619,6 +619,7 @@ jsonPathsFromExpr graph visited =
         onBool = [],
         onNatural = [],
         onTime = [],
+        onDay = [],
         onJson = [[]],
         onOptional = map (SegOptional :),
         onList = map (SegElem :),

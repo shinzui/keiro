@@ -244,6 +244,7 @@ sampleMappedExpression graph =
         onBool = Bool True,
         onNatural = Number 1,
         onTime = String "2026-01-01T00:00:00Z",
+        onDay = String "2000-02-29",
         onJson = emptyObject,
         onOptional = id,
         onList = \value -> Array (pure value),
