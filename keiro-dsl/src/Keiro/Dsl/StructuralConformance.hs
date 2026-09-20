@@ -187,7 +187,7 @@ conformanceImports rendering =
     <> ["import Data.Aeson.Types qualified as AesonTypes" | not (null generatedIdAssertions)]
     <> ["import Data.List (nub)" | not (null structural) || not (null opaque)]
     <> ["import Data.List.NonEmpty qualified as NonEmpty" | not (null structural) || not (null opaque) || not (null consumerNominals)]
-    <> ["import Data.Map.Strict qualified as Map" | any structuralUsesKeyedMap structural]
+    <> ["import Data.Map.Strict qualified as Map" | any structuralUsesMap structural]
     <> ["import Data.KindID qualified as KindID" | any (nominalNeedsOrderingLaw rendering) consumerNominals]
     <> ["import Data.Maybe (isJust, isNothing)" | any shapeUsesMaybe structural]
     <> ["import Data.Proxy (Proxy (..))" | not (null structural) || not (null consumerNominals)]
@@ -227,16 +227,18 @@ conformanceImports rendering =
       RRecord _ _ fields -> any (isOptional . (.valueType)) fields
       RUnion _ arms -> any (maybe False isOptional . (.payload)) arms
       REnum {} -> False
+      RBare expression -> isOptional expression
     isOptional ROptional {} = True
     isOptional _ = False
-    structuralUsesKeyedMap (_, shape) = any typeUsesKeyedMap (shapeExpressions shape)
+    structuralUsesMap (_, shape) = any typeUsesMap (shapeExpressions shape)
     shapeExpressions (RRecord _ _ fields) = map (.valueType) fields
     shapeExpressions (RUnion _ arms) = [payload | arm <- arms, payload <- maybe [] pure ((.payload) arm)]
     shapeExpressions REnum {} = []
-    typeUsesKeyedMap = \case
-      ROptional item -> typeUsesKeyedMap item
-      RList item -> typeUsesKeyedMap item
-      RMap item -> typeUsesKeyedMap item
+    shapeExpressions (RBare expression) = [expression]
+    typeUsesMap = \case
+      ROptional item -> typeUsesMap item
+      RList item -> typeUsesMap item
+      RMap {} -> True
       RKeyedMap {} -> True
       _ -> False
 
@@ -336,7 +338,8 @@ structuralShapeReferences ctx declaration =
     MappedShapeAlgebra
       { onRecord = \_constructor _ _fields -> [],
         onEnum = map (constructorRef . (.ctor)),
-        onUnion = \_ -> map (constructorRef . (.ctor))
+        onUnion = \_ -> map (constructorRef . (.ctor)),
+        onBare = const []
       }
   where
     moduleName = structuralShapeModuleName ctx ((.name) declaration)
@@ -463,6 +466,7 @@ generatedIdShapeExpression rendering target declaration shape candidate depth = 
               | nominalOccursIn rendering target payload ->
                   " payload" <> tshow depth <> " -> " <> generatedIdTypeExpression rendering target payload ("payload" <> tshow depth) (depth + 1)
               | otherwise -> " _ -> True"
+  RBare expression -> generatedIdTypeExpression rendering target expression candidate depth
 
 generatedIdTypeExpression :: ConformanceRendering -> NominalLeaf -> ResolvedTypeExpr -> Text -> Int -> Text
 generatedIdTypeExpression rendering target expression candidate depth = case expression of
@@ -583,6 +587,13 @@ coverageExpression rendering declaration shape = case obligations of
         | entry <- entries
         ]
       RUnion _ arms -> concatMap (unionArmObligations rendering shapeModule) arms
+      RBare expression -> bareObligations expression
+
+    bareObligations = \case
+      ROptional _ -> ["any isNothing shapes", "any isJust shapes"]
+      RList _ -> ["any null shapes", "any (not . null) shapes"]
+      RMap _ -> ["any Map.null shapes", "any (not . Map.null) shapes"]
+      _ -> []
 
 recordFieldObligation :: ConformanceRendering -> Text -> ResolvedWireField -> [Text]
 recordFieldObligation _rendering _shapeModule field = case (.valueType) field of

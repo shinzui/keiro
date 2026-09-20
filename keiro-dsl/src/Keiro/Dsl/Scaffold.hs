@@ -934,7 +934,8 @@ branchSchemaFor graph =
                   BranchUnion
                     ((.tagField) encoding)
                     ((.contentsField) encoding)
-                    [BranchArm ((.tag) arm) (branchExpr graph <$> (.payload) arm) | arm <- arms]
+                    [BranchArm ((.tag) arm) (branchExpr graph <$> (.payload) arm) | arm <- arms],
+                onBare = branchExpr graph
               }
             shape,
         onOpaqueDecl = const BranchScalar
@@ -1153,9 +1154,14 @@ renderBinding importPlan ctx declaration shape obligation =
         MappedShapeAlgebra
           { onRecord = \constructor _ fields -> [recordCase toShapeDirection constructor fields],
             onEnum = \entries -> map (enumCase toShapeDirection . (.ctor)) entries,
-            onUnion = \_ arms -> map (unionCase toShapeDirection) arms
+            onUnion = \_ arms -> map (unionCase toShapeDirection) arms,
+            onBare = \_ -> [bareCase toShapeDirection]
           }
         shape
+    bareCase toShapeDirection =
+      variable <> " -> " <> holeFor toShapeDirection "value"
+      where
+        variable = if toShapeDirection then "_domainValue" else "_shapeValue"
     recordCase toShapeDirection constructor fields =
       sourceCtor
         <> arguments variables
@@ -1236,7 +1242,8 @@ structuralConstructorNames =
     MappedShapeAlgebra
       { onRecord = \constructor _ _ -> [constructor],
         onEnum = map (.ctor),
-        onUnion = \_ -> map (.ctor)
+        onUnion = \_ -> map (.ctor),
+        onBare = const []
       }
 
 structuralShapeReferences :: Context -> StructuralDecl -> ResolvedMappedShape -> [HaskellReference]
@@ -1255,7 +1262,8 @@ structuralSelectorNames =
     MappedShapeAlgebra
       { onRecord = \_ _ -> map (.haskell),
         onEnum = const [],
-        onUnion = \_ _ -> []
+        onUnion = \_ _ -> [],
+        onBare = const []
       }
 
 nominalRepresentationEncoderReference :: Context -> ResolvedNominalType -> HaskellReference
@@ -1457,6 +1465,7 @@ structuralNominalLeafOwners ctx service graph =
     shapeExpressions (RRecord _ _ fields) = map (.valueType) fields
     shapeExpressions (RUnion _ arms) = [payload | arm <- arms, payload <- maybe [] pure ((.payload) arm)]
     shapeExpressions REnum {} = []
+    shapeExpressions (RBare expression) = [expression]
 
 emitStructuralNominalLeaves :: Context -> Set.Set Name -> [NominalLeaf] -> Text
 emitStructuralNominalLeaves ctx keyedNames leaves =
@@ -2289,7 +2298,7 @@ emitShape ctx graph declaration shape =
   nl $
     languagePragmas
       <> [ generatedBanner,
-           "module " <> moduleName <> " (" <> shapeType <> " (..)) where",
+           "module " <> moduleName <> " (" <> shapeExport <> ") where",
            ""
          ]
       <> map ("import " <>) imports
@@ -2307,7 +2316,7 @@ emitShape ctx graph declaration shape =
           <> ["Data.Map.Strict (Map)" | ReqMap `elem` requirements]
           <> ["Data.Text (Text)" | ReqText `elem` requirements]
           <> ["Data.Time (UTCTime)" | ReqTime `elem` requirements]
-          <> ["GHC.Generics (Generic)"]
+          <> ["GHC.Generics (Generic)" | shapeNeedsGeneric]
           <> ["Numeric.Natural (Natural)" | ReqNatural `elem` requirements]
     shapeDeclaration =
       foldMappedShape
@@ -2333,9 +2342,16 @@ emitShape ctx graph declaration shape =
                   firstArm : rest ->
                     ["data " <> shapeType <> " = " <> renderArm firstArm]
                       <> ["  | " <> renderArm arm | arm <- rest]
-                      <> ["  deriving stock (Eq, Generic, Show)"]
+                      <> ["  deriving stock (Eq, Generic, Show)"],
+            onBare = \expression -> "type " <> shapeType <> " = " <> renderShapeType importPlan ctx graph expression
           }
         shape
+    shapeNeedsGeneric = case shape of
+      RBare {} -> False
+      _ -> True
+    shapeExport = case shape of
+      RBare {} -> shapeType
+      _ -> shapeType <> " (..)"
     renderArm arm = (.ctor) arm <> maybe "" ((" !" <>) . renderShapeType importPlan ctx graph) ((.payload) arm)
     importPlan =
       planImportsOrDie
@@ -2358,7 +2374,8 @@ shapeRequirements ctx graph =
     MappedShapeAlgebra
       { onRecord = \_ _ fields -> concatMap (exprRequirements ctx graph . (.valueType)) fields,
         onEnum = const [],
-        onUnion = \_ arms -> concatMap (maybe [] (exprRequirements ctx graph) . (.payload)) arms
+        onUnion = \_ arms -> concatMap (maybe [] (exprRequirements ctx graph) . (.payload)) arms,
+        onBare = exprRequirements ctx graph
       }
 
 exprRequirements :: Context -> TypeGraph -> ResolvedTypeExpr -> [ShapeRequirement]
@@ -2497,6 +2514,7 @@ projectionsForRoot graph root rootShape = case rootShape of
   RRecord _ _ fields -> concatMap (walkField [] []) fields
   REnum {} -> []
   RUnion {} -> []
+  RBare {} -> []
   where
     walkField keys selectors field
       | (.presence) field /= PRequired = []
@@ -7247,6 +7265,7 @@ codecUsesExplicitParseField aggregate =
       RRecord _ _ fields -> not (null fields)
       REnum {} -> False
       RUnion {} -> True
+      RBare {} -> False
     structuralUsesExplicitParseField ResolvedOpaque {} = False
 
 codecUsesWithText :: Agg -> Bool
@@ -7262,6 +7281,7 @@ codecUsesWithText aggregate =
       REnum {} -> True
       RUnion {} -> True
       RRecord {} -> False
+      RBare {} -> False
     mappedUsesWithText ResolvedOpaque {} = False
 
 codecUsesDotColon :: Agg -> Bool
@@ -7334,6 +7354,7 @@ shapeTypeExpressions = \case
   RRecord _ _ fields -> map (.valueType) fields
   REnum {} -> []
   RUnion _ arms -> mapMaybe (.payload) arms
+  RBare expression -> [expression]
 
 typeUsesMap :: ResolvedTypeExpr -> Bool
 typeUsesMap =
@@ -7792,7 +7813,7 @@ codecImportPlan aggregate =
     nominalDefaultReferences =
       [ reference
       | ResolvedStructural _ shape <- codecMappedDeclarations aggregate,
-        field <- case shape of RRecord _ _ fields -> fields; REnum {} -> []; RUnion {} -> [],
+        field <- case shape of RRecord _ _ fields -> fields; REnum {} -> []; RUnion {} -> []; RBare {} -> [],
         Just (leaf, constructor) <- [nominalConstructorDefault field],
         reference <- case (.ownership) leaf of
           GeneratedLeaf ->
@@ -7877,7 +7898,8 @@ directShapeRefs =
     MappedShapeAlgebra
       { onRecord = \_ _ fields -> concatMap (exprRefs . (.valueType)) fields,
         onEnum = const [],
-        onUnion = \_ arms -> concatMap (maybe [] exprRefs . (.payload)) arms
+        onUnion = \_ arms -> concatMap (maybe [] exprRefs . (.payload)) arms,
+        onBare = exprRefs
       }
 
 exprRefs :: ResolvedTypeExpr -> [MappedKey]
@@ -7953,7 +7975,9 @@ emitShapeEncoder importPlan ctx graph declaration =
         onUnion = \encoding arms ->
           nl $
             ["encode" <> name <> "Shape = \\case"]
-              <> concatMap (unionEncodeArm encoding) arms
+              <> concatMap (unionEncodeArm encoding) arms,
+        onBare = \expression ->
+          "encode" <> name <> "Shape value = " <> encodeShapeExpr graph expression "value"
       }
   where
     name = (.name) declaration
@@ -8003,7 +8027,9 @@ emitShapeDecoder importPlan ctx graph declaration =
                    "validate" <> name <> "Tag tag",
                    "  | tag `elem` " <> renderTextList (map (.tag) arms) <> " = pure tag",
                    "  | otherwise = " <> renderUnknownFailure (name <> " union tag") "tag" (map (.tag) arms)
-                 ]
+                 ],
+        onBare = \expression ->
+          "parse" <> name <> "Shape = " <> decodeShapeExpr graph expression
       }
   where
     name = (.name) declaration

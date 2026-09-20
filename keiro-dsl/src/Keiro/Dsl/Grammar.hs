@@ -320,6 +320,7 @@ data MappedShape
   = ShapeRecord !Name !UnknownFields ![WireField]
   | ShapeEnum ![WireEnum]
   | ShapeUnion !UnionEncoding ![WireArm]
+  | ShapeBare !TypeExpr
   deriving stock (Eq, Show, Generic)
 
 data HaskellSource = HaskellSource

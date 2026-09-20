@@ -218,7 +218,8 @@ shapeHolePaths =
         onUnion = \_ arms ->
           [ ((.ctor) arm, maybe "constructor case" renderExprType ((.payload) arm))
           | arm <- arms
-          ]
+          ],
+        onBare = \expression -> [("value", renderExprType expression)]
       }
 
 renderExprType :: ResolvedTypeExpr -> Text

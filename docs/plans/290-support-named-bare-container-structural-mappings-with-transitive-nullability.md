@@ -27,6 +27,11 @@ provenance:
       at: 2026-09-19T22:32:09Z
       mode: "update"
       note: "Corrected wire-neutral alias versus full replay verdict; added executable API matrix and candidate-history obligations."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T01:11:01Z
+      mode: "implement"
+      note: "Implement named bare-container mappings, recursive nullability, lowering, and compatibility evidence."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -57,15 +62,17 @@ Implement IR-42 so a named structural mapping can encode a bare optional value, 
 ## Progress
 
 
-- [ ] Milestone 1: Introduce checked bare-expression declarations.
-- [ ] Milestone 2: Make nullability recursive and lower bare codecs.
+- [x] (2026-09-20T01:11:01Z) Milestone 1: Introduced the language-6 `mapped structural value` declaration, checked graph branch, pretty-print round trip, and candidate syntax/runtime capabilities.
+- [x] (2026-09-20T01:11:01Z) Milestone 2: Derived nullability and missing-value defaults transitively through bare aliases, rejected nested nullable forms, and lowered direct-container aliases/codecs without object wrappers.
 - [ ] Milestone 3: Propagate identity and prove migration behavior.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
+The existing resolved-expression algebra already carried every recursive container and nominal-leaf case needed by bare declarations. Reusing it kept dependency traversal, Haskell type selection, and nested codec lowering authoritative rather than introducing a parallel allowlist.
+
+The shape renderer parenthesizes a top-level container expression (`type MaybeTextShape = (Maybe Text)`). This is presentation-only; the checked wire token remains exactly the inner expression and therefore stays equal to the inline form.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -81,6 +88,8 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 
 2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
+
+2026-09-20 (implementation): Spell the new declaration `mapped structural value Name { ... wire <TypeExpr> }`. `value` is a language-6-gated declaration kind, while `wire` reuses the existing mapped expression grammar. Bare mappings are restricted to Optional, List, and text-keyed Map roots; nested expressions and references use the checked graph recursively.
 
 
 ## Outcomes & Retrospective

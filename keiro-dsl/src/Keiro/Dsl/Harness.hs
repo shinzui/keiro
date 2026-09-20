@@ -1559,6 +1559,7 @@ wirePolicyAssertions aggregate (declaration, shape) = case shape of
   RUnion encoding arms ->
     map (unionArmAssertion aggregate declaration encoding) arms
       <> [unknownFieldAssertion aggregate declaration ((.unknownFields) encoding)]
+  RBare {} -> []
 
 wirePoliciesUseIsLeft :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
 wirePoliciesUseIsLeft = any $ \(_, shape) -> case shape of
@@ -1567,6 +1568,7 @@ wirePoliciesUseIsLeft = any $ \(_, shape) -> case shape of
       || any (\field -> (.presence) field == POptional && not (isOptionalType ((.valueType) field))) fields
   REnum {} -> True
   RUnion encoding _ -> (.unknownFields) encoding == RejectUnknown
+  RBare {} -> False
 
 wirePoliciesUseIsRight :: [(StructuralDecl, ResolvedMappedShape)] -> Bool
 wirePoliciesUseIsRight = any $ \(_, shape) -> case shape of
@@ -1575,6 +1577,7 @@ wirePoliciesUseIsRight = any $ \(_, shape) -> case shape of
       || any (\field -> (.presence) field == POptional && isOptionalType ((.valueType) field)) fields
   REnum {} -> False
   RUnion encoding _ -> (.unknownFields) encoding == IgnoreUnknown
+  RBare {} -> False
 
 isOptionalType :: ResolvedTypeExpr -> Bool
 isOptionalType ROptional {} = True

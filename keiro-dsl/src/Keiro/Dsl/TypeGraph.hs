@@ -435,6 +435,7 @@ data ResolvedMappedShape
   = RRecord !Name !UnknownFields ![ResolvedWireField]
   | REnum ![WireEnum]
   | RUnion !UnionEncoding ![ResolvedWireArm]
+  | RBare !ResolvedTypeExpr
   deriving stock (Eq, Show, Generic)
 
 data ResolvedMappedDecl
@@ -699,6 +700,8 @@ resolveShape keyByName nominalByName enumNames owner (ShapeUnion encoding arms) 
         ((.tag) arm)
         <$> traverse (resolveExpr keyByName nominalByName enumNames owner ((.loc) arm)) ((.payload) arm)
         <*> pure ((.loc) arm)
+resolveShape keyByName nominalByName enumNames owner (ShapeBare expression) =
+  RBare <$> resolveExpr keyByName nominalByName enumNames owner noLoc expression
 
 resolveExpr :: Map Name MappedKey -> Map Name NominalLeaf -> Set Name -> Name -> Loc -> TypeExpr -> Either TypeGraphError ResolvedTypeExpr
 resolveExpr _ _ _ _ _ TText = Right RText
@@ -763,7 +766,8 @@ refsInShape =
     MappedShapeAlgebra
       { onRecord = \_ _ fields -> Set.unions (map (refsInExpr . (.valueType)) fields),
         onEnum = const Set.empty,
-        onUnion = \_ arms -> Set.unions (map (maybe Set.empty refsInExpr . (.payload)) arms)
+        onUnion = \_ arms -> Set.unions (map (maybe Set.empty refsInExpr . (.payload)) arms),
+        onBare = refsInExpr
       }
 
 refsInExpr :: ResolvedTypeExpr -> Set MappedKey
@@ -813,7 +817,8 @@ directNominalRefs =
             MappedShapeAlgebra
               { onRecord = \_ _ fields -> Set.unions (map (nominalRefsInExpr . (.valueType)) fields),
                 onEnum = const Set.empty,
-                onUnion = \_ arms -> Set.unions (map (maybe Set.empty nominalRefsInExpr . (.payload)) arms)
+                onUnion = \_ arms -> Set.unions (map (maybe Set.empty nominalRefsInExpr . (.payload)) arms),
+                onBare = nominalRefsInExpr
               }
             shape,
         onOpaqueDecl = const Set.empty
@@ -1010,7 +1015,8 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declaratio
               concat
                 [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (pathsInExpr visited) ((.payload) arm))
                 | arm <- arms
-                ]
+                ],
+            onBare = pathsInExpr visited
           }
 
     pathsInExpr visited = \case
@@ -1076,7 +1082,8 @@ nominalUsePaths graph targetName
               concat
                 [ map (SegArm ((.ctor) arm) ((.tag) arm) :) (maybe [] (pathsInExpr visited) ((.payload) arm))
                 | arm <- arms
-                ]
+                ],
+            onBare = pathsInExpr visited
           }
 
     pathsInExpr visited = \case
@@ -1173,7 +1180,8 @@ foldTypeExpr algebra = \case
 data MappedShapeAlgebra a = MappedShapeAlgebra
   { onRecord :: Name -> UnknownFields -> [ResolvedWireField] -> a,
     onEnum :: [WireEnum] -> a,
-    onUnion :: UnionEncoding -> [ResolvedWireArm] -> a
+    onUnion :: UnionEncoding -> [ResolvedWireArm] -> a,
+    onBare :: ResolvedTypeExpr -> a
   }
 
 foldMappedShape :: MappedShapeAlgebra a -> ResolvedMappedShape -> a
@@ -1181,6 +1189,7 @@ foldMappedShape algebra = \case
   RRecord constructor unknownFields fields -> (.onRecord) algebra constructor unknownFields fields
   REnum entries -> (.onEnum) algebra entries
   RUnion encoding arms -> (.onUnion) algebra encoding arms
+  RBare expression -> (.onBare) algebra expression
 
 data MappedDeclAlgebra a = MappedDeclAlgebra
   { onStructuralDecl :: StructuralDecl -> ResolvedMappedShape -> a,
@@ -1226,7 +1235,8 @@ wireFingerprint graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
                 <> renderUnknown ((.unknownFields) encoding)
                 <> ";"
                 <> T.intercalate ";" (map (wireArm visited) (sortOn (.tag) arms))
-                <> ")"
+                <> ")",
+            onBare = wireExpr visited
           }
 
     wireField visited field =

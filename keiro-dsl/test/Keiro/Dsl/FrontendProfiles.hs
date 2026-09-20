@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings]
                    ]
       map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -81,6 +81,7 @@ frontendProfilesSpec = do
               WorkqueueFifoHeadsSyntax -> version 6
               ContractDeclaredIdSyntax -> version 6
               KeyedMapSyntax -> version 6
+              BareStructuralMappingSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -200,7 +201,8 @@ featureCases =
     FeatureCase DelegatedInboxSyntax "idempotence" delegatedInboxFeatureBody,
     FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody,
     FeatureCase WorkqueueFifoHeadsSyntax "fifo-heads" (featureBody WorkqueueFifoHeadsSyntax),
-    FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax)
+    FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax),
+    FeatureCase BareStructuralMappingSyntax "value" (featureBody BareStructuralMappingSyntax)
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -294,6 +296,18 @@ featureBody = \case
         "  event ProfileChanged on events { profileId: ProfileId }",
         "}"
       ]
+  BareStructuralMappingSyntax ->
+    T.unlines
+      [ "context profile",
+        "mapped structural value OptionalLabel {",
+        "  haskell package=profile module=Example.Profile type=OptionalLabel",
+        "  binding = \"Example.Profile.optionalLabelBinding\"",
+        "  binding-version = \"1\"",
+        "  canonical-type = \"example.OptionalLabel.v1\"",
+        "  fixtures = \"Example.Profile.optionalLabelFixtures\"",
+        "  wire Optional Text",
+        "}"
+      ]
   KeyedMapSyntax ->
     T.unlines
       [ "context profile",
@@ -308,7 +322,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

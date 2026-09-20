@@ -226,7 +226,8 @@ sampleMappedShape graph =
                 <> [ (Key.fromText ((.contentsField) encoding), sampleMappedExpression graph payload)
                    | payload <- maybeToList ((.payload) firstArm)
                    ]
-          [] -> emptyObject
+          [] -> emptyObject,
+        onBare = sampleMappedExpression graph
       }
   where
     includeField field = case (.presence) field of

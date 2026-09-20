@@ -75,6 +75,7 @@ data ShapeView
   = RecordView !Name !UnknownFields ![ResolvedWireField]
   | EnumView ![WireEnum]
   | UnionView !UnionEncoding ![ResolvedWireArm]
+  | BareView !ExprView
 
 data ExprView
   = ExprText
@@ -106,7 +107,8 @@ shapeView =
     MappedShapeAlgebra
       { onRecord = RecordView,
         onEnum = EnumView,
-        onUnion = UnionView
+        onUnion = UnionView,
+        onBare = BareView . exprView
       }
 
 exprView :: ResolvedTypeExpr -> ExprView
@@ -263,6 +265,8 @@ diffShape paths declaration oldShape newShape = case (oldShape, newShape) of
     | oldEncoding /= newEncoding
     ]
       ++ diffUnion paths declaration oldArms newArms
+  (BareView oldExpression, BareView newExpression) ->
+    diffExprViews paths declaration "value" oldExpression newExpression
   _ ->
     [ finding
         paths

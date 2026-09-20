@@ -18,7 +18,7 @@ import Text.Megaparsec
 -- Consumer-owned mapped and nominal types
 --------------------------------------------------------------------------------
 
-data MappedKind = MappedRecord | MappedEnum | MappedUnion
+data MappedKind = MappedRecord | MappedEnum | MappedUnion | MappedBare
 
 data MappedClause
   = MCHaskell HaskellSource
@@ -53,7 +53,8 @@ pMappedStructural context loc = do
     choice
       [ MappedRecord <$ keyword "record",
         MappedEnum <$ keyword "enum",
-        MappedUnion <$ keyword "union"
+        MappedUnion <$ keyword "union",
+        MappedBare <$ languageFeatureKeyword context BareStructuralMappingSyntax "value"
       ]
   name <- ident
   clauses <- braces (many (pStructuralClause context kind))
@@ -215,6 +216,7 @@ pMappedShape context kind = do
       unknownFields <- pUnknownFieldsFact
       arms <- braces (many (pWireArm context))
       pure (ShapeUnion (TaggedObject tagField contentsField unknownFields) arms)
+    MappedBare -> ShapeBare <$> pMappedTypeExpr context
 
 pUnknownFieldsFact :: P UnknownFields
 pUnknownFieldsFact = do

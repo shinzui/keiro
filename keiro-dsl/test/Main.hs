@@ -4419,6 +4419,78 @@ main = hspec $ do
           nodes -> expectationFailure ("unexpected node sequence: " <> show (map nodeTag nodes))
 
   describe "mapped types (EP-149)" $ do
+    it "round-trips candidate bare container mappings and gates their declaration kind" $ do
+      source <- readTestText "test/fixtures/bare-containers.keiro"
+      parsed <- checkedServiceFromText "test/fixtures/bare-containers.keiro" source
+      let spec = checkedSpec parsed
+          bareShapes = [shape | MappedStructural {msShape = shape@ShapeBare {}} <- (.mapped) spec]
+      bareShapes
+        `shouldBe` [ ShapeBare (TOptional TText),
+                     ShapeBare (TList TText),
+                     ShapeBare (TMap TText),
+                     ShapeBare (TList (TOptional (TRef "ItemId")))
+                   ]
+      case parseSource "<bare-containers-round-trip>" ("language keiro-dsl 6\n" <> renderSpec spec) of
+        Left failure -> expectationFailure (T.unpack (renderParseFailure failure))
+        Right reparsed -> reparsed.spec `shouldBe` spec
+      case parseSource "<bare-containers-language-5>" (T.replace "language keiro-dsl 6" "language keiro-dsl 5" source) of
+        Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        result -> expectationFailure ("expected bare-mapping language refusal, got " <> show result)
+    it "derives nullability and on-missing defaults through bare aliases" $ do
+      let maybeText = completeStructural "MaybeText" (ShapeBare (TOptional TText))
+          listText = completeStructural "TextList" (ShapeBare (TList TText))
+          mapText = completeStructural "TextMap" (ShapeBare (TMap TText))
+          validEnvelope =
+            completeStructural
+              "Envelope"
+              ( ShapeRecord
+                  "Envelope"
+                  RejectUnknown
+                  [ WireField "label" "label" (TRef "MaybeText") POptional (Just OmNull) noLoc,
+                    WireField "labels" "labels" (TRef "TextList") POptional (Just OmEmptyList) noLoc,
+                    WireField "attributes" "attributes" (TRef "TextMap") POptional (Just OmEmptyMap) noLoc
+                  ]
+              )
+          nullableAlias = completeStructural "NullableAlias" (ShapeBare (TOptional (TRef "MaybeText")))
+          nestedNullable = completeStructural "NestedNullable" (ShapeBare (TOptional (TOptional TText)))
+          invalidDefault =
+            completeStructural
+              "InvalidDefault"
+              (ShapeRecord "InvalidDefault" RejectUnknown [WireField "labels" "labels" (TRef "TextList") POptional (Just OmNull) noLoc])
+      errorCodes (mappedSpec [maybeText, listText, mapText, validEnvelope]) `shouldBe` []
+      errorCodes (mappedSpec [maybeText, nullableAlias]) `shouldContain` [MappedNonInjectiveNullability]
+      errorCodes (mappedSpec [nestedNullable]) `shouldContain` [MappedNonInjectiveNullability]
+      errorCodes (mappedSpec [listText, invalidDefault]) `shouldContain` [MappedDefaultIllTyped]
+    it "lowers bare shapes without an object wrapper and preserves wire identity on alias extraction" $ do
+      service <- checkedServiceOf "test/fixtures/bare-containers.keiro"
+      let spec = checkedSpec service
+          modules = scaffoldModules (defaultContext (spec.context)) spec
+          maybeShape = generatedTextEndingIn "Structural/Shape/MaybeText.hs" modules
+          codec = generatedTextEndingIn "BareStore/Codec.hs" modules
+      maybeShape `shouldSatisfy` T.isInfixOf "type MaybeTextShape = (Maybe Text)"
+      maybeShape `shouldNotSatisfy` T.isInfixOf "data MaybeTextShape"
+      codec `shouldSatisfy` T.isInfixOf "encodeMaybeTextShape value = maybe Null"
+      codec `shouldSatisfy` T.isInfixOf "parseMaybeTextShape = \\value0 -> case value0 of Null -> pure Nothing"
+      let inlineEnvelope = completeStructural "Envelope" (recordShape [TOptional TText])
+          alias = completeStructural "MaybeText" (ShapeBare (TOptional TText))
+          aliasedEnvelope = completeStructural "Envelope" (recordShape [TRef "MaybeText"])
+          opaqueAlias =
+            MappedOpaque
+              { moName = "MaybeText",
+                moHaskell = Just (HaskellSource "mapped-test" "Example.Mapped" "MaybeText"),
+                moCodecId = Just "example.maybe-text",
+                moCodecVersion = Just "1",
+                moFixtures = Just "Example.Mapped.maybeTextCases",
+                moInitial = Nothing,
+                moLoc = noLoc
+              }
+      inlineGraph <- shouldResolveTypeGraph (mappedSpec [inlineEnvelope])
+      aliasGraph <- shouldResolveTypeGraph (mappedSpec [alias, aliasedEnvelope])
+      opaqueGraph <- shouldResolveTypeGraph (mappedSpec [opaqueAlias])
+      wrappedGraph <- shouldResolveTypeGraph (mappedSpec [completeStructural "MaybeText" (recordShape [TOptional TText])])
+      wireFingerprint inlineGraph "Envelope" `shouldBe` wireFingerprint aliasGraph "Envelope"
+      wireFingerprint aliasGraph "MaybeText" `shouldNotBe` wireFingerprint opaqueGraph "MaybeText"
+      wireFingerprint aliasGraph "MaybeText" `shouldNotBe` wireFingerprint wrappedGraph "MaybeText"
     it "round-trips the canonical structural and opaque consumer fixture" $ do
       source <- TIO.readFile "test/fixtures/consumer-types.keiro"
       spec <- parseInlineSpec "test/fixtures/consumer-types.keiro" source
@@ -14342,6 +14414,7 @@ mappedWireMutations spec = case resolveTypeGraph spec of
               (mutateUnionArm declarationIndex armIndex (\value -> wireArmWithTag (value.tag <> "__mutated") value) spec)
           | (armIndex, arm) <- zip [0 :: Int ..] arms
           ]
+        ShapeBare _ -> []
       MappedOpaque {moName = declarationName, moCodecVersion = version} ->
         [ mutation
             graph

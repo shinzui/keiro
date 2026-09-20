@@ -1327,6 +1327,7 @@ mappedLexicalRules spec = concatMap declarationRules ((.mapped) spec)
         | arm <- arms,
           not (constructorSafe ((.ctor) arm))
         ]
+      MappedStructural {msShape = ShapeBare {}} -> []
       MappedOpaque {} -> []
 
     constructorRule category value declaration =
@@ -1401,6 +1402,10 @@ nominalLeafLanguageRules languageContract spec graph
                       | arm <- arms,
                         payload <- maybeToList ((.payload) arm),
                         nominal <- Set.toAscList (nominalNamesInExpr payload)
+                      ],
+                    onBare = \expression ->
+                      [ languageError ((.loc) declaration) ("mapped declaration '" <> (.name) declaration <> "' bare value") nominal
+                      | nominal <- Set.toAscList (nominalNamesInExpr expression)
                       ]
                   }
                 shape,
@@ -1553,8 +1558,21 @@ mappedGraphRules spec graph =
                  | arm <- arms,
                    T.null ((.tag) arm)
                  ]
-              ++ concatMap (armRules declaration) arms
+              ++ concatMap (armRules declaration) arms,
+          onBare = \expression ->
+            [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "bare structural values must have Optional, List, or text-keyed Map as their outer constructor"
+            | not (supportedBareRoot expression)
+            ]
+              ++ [ mappedError ((.loc) declaration) MappedNonInjectiveNullability declaration "bare value contains Optional around a null-capable Json, Optional, or opaque mapped value"
+                 | hasNonInjectiveOptional graph expression
+                 ]
         }
+
+    supportedBareRoot = \case
+      ROptional {} -> True
+      RList {} -> True
+      RMap {} -> True
+      _ -> False
 
     fieldRules declaration field =
       defaultRules declaration field
@@ -1653,7 +1671,8 @@ referencedDefaultType graph key = case Map.lookup key ((.declarations) graph) of
               MappedShapeAlgebra
                 { onRecord = \_ _ _ -> DefaultOther,
                   onEnum = DefaultEnum . Set.fromList . map (.ctor),
-                  onUnion = \_ _ -> DefaultOther
+                  onUnion = \_ _ -> DefaultOther,
+                  onBare = defaultType graph
                 }
               shape,
           onOpaqueDecl = const DefaultOther
@@ -1666,37 +1685,47 @@ data NullabilityFacts = NullabilityFacts
   }
 
 hasNonInjectiveOptional :: TypeGraph -> ResolvedTypeExpr -> Bool
-hasNonInjectiveOptional graph =
-  (.badOptional)
-    . foldTypeExpr
-      TypeExprAlgebra
-        { onText = nonNull,
-          onInt = nonNull,
-          onInteger = nonNull,
-          onBool = nonNull,
-          onNatural = nonNull,
-          onTime = nonNull,
-          onJson = nullable,
-          onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
-          onList = nestedNonNull,
-          onMap = nestedNonNull,
-          onKeyedMap = \_ -> nestedNonNull,
-          onRef = \key -> if mappedRefIsOpaque graph key then nullable else nonNull,
-          onNominal = const nonNull
-        }
+hasNonInjectiveOptional graph = (.badOptional) . nullabilityFacts graph
+
+nullabilityFacts :: TypeGraph -> ResolvedTypeExpr -> NullabilityFacts
+nullabilityFacts graph =
+  foldTypeExpr
+    TypeExprAlgebra
+      { onText = nonNull,
+        onInt = nonNull,
+        onInteger = nonNull,
+        onBool = nonNull,
+        onNatural = nonNull,
+        onTime = nonNull,
+        onJson = nullable,
+        onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
+        onList = nestedNonNull,
+        onMap = nestedNonNull,
+        onKeyedMap = \_ -> nestedNonNull,
+        onRef = mappedRefNullability graph,
+        onNominal = const nonNull
+      }
   where
     nonNull = NullabilityFacts False False
     nullable = NullabilityFacts True False
     nestedNonNull child = NullabilityFacts False ((.badOptional) child)
 
-mappedRefIsOpaque :: TypeGraph -> MappedKey -> Bool
-mappedRefIsOpaque graph key = case Map.lookup key ((.declarations) graph) of
-  Nothing -> False
+mappedRefNullability :: TypeGraph -> MappedKey -> NullabilityFacts
+mappedRefNullability graph key = case Map.lookup key ((.declarations) graph) of
+  Nothing -> NullabilityFacts False False
   Just declaration ->
     foldMappedDecl
       MappedDeclAlgebra
-        { onStructuralDecl = \_ _ -> False,
-          onOpaqueDecl = const True
+        { onStructuralDecl = \_ shape ->
+            foldMappedShape
+              MappedShapeAlgebra
+                { onRecord = \_ _ _ -> NullabilityFacts False False,
+                  onEnum = const (NullabilityFacts False False),
+                  onUnion = \_ _ -> NullabilityFacts False False,
+                  onBare = nullabilityFacts graph
+                }
+              shape,
+          onOpaqueDecl = const (NullabilityFacts True False)
         }
       declaration
 

@@ -1,0 +1,124 @@
+language keiro-dsl 6
+context bare-containers
+
+id ItemId prefix=item
+
+mapped structural value MaybeText {
+  haskell package=keiro-dsl module=Conformance.BareContainers.Domain type=MaybeText
+  binding = "Conformance.BareContainers.Bindings.maybeTextBinding"
+  binding-version = "1"
+  canonical-type = "conformance.bare-containers.MaybeText.v1"
+  fixtures = "Conformance.BareContainers.Bindings.maybeTextFixtures"
+  initial = "Conformance.BareContainers.Bindings.initialMaybeText"
+  wire Optional Text
+}
+
+mapped structural value TextList {
+  haskell package=keiro-dsl module=Conformance.BareContainers.Domain type=TextList
+  binding = "Conformance.BareContainers.Bindings.textListBinding"
+  binding-version = "1"
+  canonical-type = "conformance.bare-containers.TextList.v1"
+  fixtures = "Conformance.BareContainers.Bindings.textListFixtures"
+  wire List Text
+}
+
+mapped structural value TextMap {
+  haskell package=keiro-dsl module=Conformance.BareContainers.Domain type=TextMap
+  binding = "Conformance.BareContainers.Bindings.textMapBinding"
+  binding-version = "1"
+  canonical-type = "conformance.bare-containers.TextMap.v1"
+  fixtures = "Conformance.BareContainers.Bindings.textMapFixtures"
+  wire Map Text
+}
+
+mapped structural value NestedIds {
+  haskell package=keiro-dsl module=Conformance.BareContainers.Domain type=NestedIds
+  binding = "Conformance.BareContainers.Bindings.nestedIdsBinding"
+  binding-version = "1"
+  canonical-type = "conformance.bare-containers.NestedIds.v1"
+  fixtures = "Conformance.BareContainers.Bindings.nestedIdsFixtures"
+  wire List (Optional ItemId)
+}
+
+mapped structural record BareEnvelope {
+  haskell package=keiro-dsl module=Conformance.BareContainers.Domain type=BareEnvelope
+  binding = "Conformance.BareContainers.Bindings.bareEnvelopeBinding"
+  binding-version = "1"
+  canonical-type = "conformance.bare-containers.BareEnvelope.v1"
+  fixtures = "Conformance.BareContainers.Bindings.bareEnvelopeFixtures"
+  wire object constructor=BareEnvelope unknown-fields=reject {
+    optionalLabel as "optionalLabel" : MaybeText optional on-missing=null
+    labels as "labels" : TextList optional on-missing=[]
+    attributes as "attributes" : TextMap optional on-missing={}
+    nestedIds as "nestedIds" : NestedIds required
+  }
+}
+
+aggregate BareStore
+  regs
+    current MaybeText = initial
+  states Empty Stored!
+
+  command Store { optionalLabel:MaybeText labels:TextList attributes:TextMap envelope:BareEnvelope }
+  event StoredValue = fields(Store)
+
+  Empty -- Store -->
+    write current := optionalLabel
+    emit StoredValue
+    goto Stored
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="bare-containers-v1"
+
+workqueue bare_jobs {
+  queue logical = "bare.jobs"
+  derive physical = "bare_jobs"
+         dlq = "bare_jobs_dlq"
+         table = "pgmq.q_bare_jobs"
+  payload BareJob {
+    optionalLabel -> "optional_label" : MaybeText
+    labels -> "labels" : TextList
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+target bare_table {
+  schema = "public"
+  table = "bare_values"
+  reset = clear
+}
+
+rebuild-group bare_rebuild {
+  targets = [ bare_table ]
+  order = [ bare_table ]
+}
+
+projection-owner bare_writer {
+  source = all
+  delivery = subscription
+  group = bare_rebuild
+  targets = [ bare_table ]
+  order = 10
+  subscription = "bare-writer"
+  dedup = "bare-writer-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel bare_lookup {
+  columns {}
+  query input = MaybeText
+  query result = List TextList
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head entire-log
+  group = bare_rebuild
+  targets = [ bare_table ]
+}

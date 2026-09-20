@@ -184,6 +184,7 @@ docShapeKind :: MappedShape -> Doc ann
 docShapeKind (ShapeRecord _ _ _) = "record"
 docShapeKind (ShapeEnum _) = "enum"
 docShapeKind (ShapeUnion _ _) = "union"
+docShapeKind (ShapeBare _) = "value"
 
 docHaskellSource :: HaskellSource -> Doc ann
 docHaskellSource source =
@@ -217,6 +218,7 @@ docMappedShape (ShapeUnion encoding arms) =
     ]
       ++ map (indent 2 . docWireArm) arms
       ++ ["}"]
+docMappedShape (ShapeBare expression) = "wire" <+> docTypeExpr expression
 
 docUnknownFields :: UnknownFields -> Doc ann
 docUnknownFields RejectUnknown = "reject"

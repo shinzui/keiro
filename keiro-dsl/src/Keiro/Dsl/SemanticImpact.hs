@@ -724,6 +724,21 @@ declarationIdentity graph key declaration =
       "enum:" <> T.intercalate "," [(.ctor) entry <> "=" <> (.tag) entry | entry <- sortOn (.tag) entries]
     structuralPresentation (RUnion _ arms) =
       "union:" <> T.intercalate "," [(.tag) arm | arm <- sortOn (.tag) arms]
+    structuralPresentation (RBare expression) = "value:" <> expressionPresentation expression
+    expressionPresentation = \case
+      RText -> "Text"
+      RInt -> "Int"
+      RInteger -> "Integer"
+      RBool -> "Bool"
+      RNatural -> "Natural"
+      RTime -> "Time"
+      RJson -> "Json"
+      ROptional value -> "Optional(" <> expressionPresentation value <> ")"
+      RList value -> "List(" <> expressionPresentation value <> ")"
+      RMap value -> "Map(" <> expressionPresentation value <> ")"
+      RKeyedMap key value -> "Map[" <> (.name) key <> "](" <> expressionPresentation value <> ")"
+      RRef reference -> "Ref(" <> unMappedKey reference <> ")"
+      RNominal nominal -> "Nominal(" <> (.name) nominal <> ")"
 
 mappedConsumerIdentity :: MappedConsumer -> Name
 mappedConsumerIdentity (AggregateConsumer aggregate) = aggregate
