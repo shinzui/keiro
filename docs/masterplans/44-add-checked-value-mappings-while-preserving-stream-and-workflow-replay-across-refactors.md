@@ -93,7 +93,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 |---|---|---|---|---|---|
 | 289 | Gate stream replay, process recovery, and workflow continuation across builds | [docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md](../plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md) | None | None | Complete |
 | 290 | Support named bare container structural mappings with transitive nullability | [docs/plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md](../plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md) | 289 | None | Complete |
-| 291 | Add calendar-day mappings with a frozen lossless codec contract | [docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md](../plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md) | 289, 290 | None | In Progress |
+| 291 | Add calendar-day mappings with a frozen lossless codec contract | [docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md](../plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md) | 289, 290 | None | Complete |
 | 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Not Started |
 | 293 | Add declarative base16 byte refinements with total consumer bindings | [docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md](../plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md) | 289, 290 | None | Not Started |
 | 294 | Add explicit versioned UUID admission domains with sound Keiki evidence | [docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md) | 289 | None | Not Started |
@@ -149,9 +149,9 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 290: Introduce checked bare-expression declarations.
 - [x] Plan 290: Make nullability recursive and lower bare codecs.
 - [x] Plan 290: Propagate identity and prove migration behavior.
-- [ ] Plan 291: Prove a frozen full-carrier date contract.
-- [ ] Plan 291: Lower Day only on complete supported surfaces.
-- [ ] Plan 291: Prove date and optional-date replay.
+- [x] Plan 291: Prove a frozen full-carrier date contract.
+- [x] Plan 291: Lower Day only on complete supported surfaces.
+- [x] Plan 291: Prove date and optional-date replay.
 - [ ] Plan 292: Define native checked text-set values and wire policy.
 - [ ] Plan 292: Integrate total lowering and evolution consequences.
 - [ ] Plan 292: Demonstrate normalization without replay divergence.
@@ -179,6 +179,10 @@ Plan 289 Milestone 1 confirmed that one obligation may be discovered by several 
 Plan 289 completed without changing existing generated corpus bytes. The normalization helper is now available for concrete quotient codecs, while Plans 291–293 remain responsible for activating it with their non-canonical values. Real PostgreSQL workflow and process-manager cases demonstrated that durable keys, accepted witnesses, and partial recovery need semantic observations beyond codec round trips.
 
 Plan 290 reused the resolved expression algebra for bare containers, but its first generated harness exposed a syntactic-nullability assumption: an alias of `Optional T` was treated as non-null when choosing the expected explicit-null result. Following bare references through the checked graph aligned harness evidence with validation and codec behavior. The completed corpus then regenerated all 48 registered invocations without byte drift.
+
+Plan 291 found that Aeson 2.2's `Day` writer already matches Keiro's desired full-carrier canonical spelling, but its reader deliberately rejects years longer than 15 digits even though `Day` stores an unbounded `Integer`. Keiro therefore owns an unbounded historical-compatible reader instead of delegating admission to Aeson. The resulting old-reader/new-writer asymmetry is retained as executable evidence and requires producer-last rollout for extended-year writes.
+
+Plan 291 also exposed a transitive build dependency: an aggregate field can mention only a consumer mapped type while its generated structural shape lowers to `Data.Time.Calendar.Day`. Manifest inference now follows the checked mapped graph so generated modules acquire `time`; direct aggregate-constructor inspection was insufficient.
 
 The 2026-09-19 validation review checked the plans' claims against the working tree at `ba36ce58`. Every file, recipe, Cabal component, ADR, improvement request, and Keiki ADR URI the plans name exists or resolves. The review found the following, none of which is implementation evidence:
 
@@ -231,11 +235,13 @@ The 2026-09-19 validation review checked the plans' claims against the working t
 
 2026-09-20 (Plan 290 implementation): Adopt `mapped structural value Name { wire <TypeExpr> }` for candidate Language 6, restricted initially to Optional, List, and text-keyed Map roots. Derive nullability, defaults, harness expectations, codecs, and wire identity transitively from the checked graph; register `BareStructuralMappings` without a fold segment.
 
+2026-09-20 (Plan 291 implementation): Freeze `keiro-core/calendar-day/1` as the full-carrier proleptic-Gregorian policy, matching Aeson's writer while retaining an unbounded historical-compatible reader. Admit `Day` only through checked structural mappings, embed the policy in mapped wire identity, and register `CalendarDayMappings` without a fold segment. Repository replay evidence completes the feature; real Rei history and workflow adoption remain assigned to Plan 295.
+
 
 ## Outcomes & Retrospective
 
 
-Plans 289 and 290 are complete. The shared report/inventory contract is in place, and named checked Optional/List/Map values now have candidate syntax, recursive validation, direct codecs, exhaustive identity propagation, a compiled public example, serialized replay evidence, and historical opaque-codec parity. Plans 291–295 remain open, so calendar days, sets, refinements, UUID domains, integrated consumer adoption, publication, and legacy retirement are not complete. Unavailable consumer data remains an outstanding adoption or retirement obligation; it cannot be counted as completed validation.
+Plans 289–291 are complete. The shared report/inventory contract is in place; named checked Optional/List/Map values have candidate syntax and recursive lowering; and checked calendar days now have a frozen full-carrier codec, exhaustive mapped lowering, a compiled public example, serialized multi-event replay, historical Aeson comparison, and explicit rolling-upgrade limits. Plans 292–295 remain open, so sets, refinements, UUID domains, integrated consumer adoption, publication, and legacy retirement are not complete. Rei's retained streams and workflow journals remain Plan 295 evidence; repository fixtures do not substitute for that audit.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
@@ -248,3 +254,5 @@ Revision note (2026-09-19, 1.0 review): Reframed the initiative around DSL corre
 Revision note (2026-09-20, Plan 289 implementation): Completed the shared replay-evidence child plan, marked its five milestones and registry row complete, and recorded the feature-plan obligations that remain. No checked-value capability, consumer adoption, release, or retirement was performed.
 
 Revision note (2026-09-20, Plan 290 implementation): Completed named bare Optional/List/Map mappings with transitive nullability and defaults, direct lowering, wire-identity propagation, a compiled conformance corpus, historical codec comparison, and repository-wide validation. Marked Plan 290 complete; Language 6 publication, consumer adoption, and retirement remain open.
+
+Revision note (2026-09-20, Plan 291 implementation): Completed frozen full-carrier calendar-day mappings, exhaustive checked lowering, policy-versioned wire identity, compiled corpus and replay evidence, and ADR updates. Marked Plan 291 complete; consumer-history adoption, candidate publication, and retirement remain open.

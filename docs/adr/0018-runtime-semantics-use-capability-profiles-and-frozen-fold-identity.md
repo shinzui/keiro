@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-09-20T01:26:00Z
+timestamp: 2026-09-20T03:07:55Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -54,6 +54,14 @@ already carry the replay-relevant identity. Services that do not use a bare
 declaration therefore keep byte-identical fold fingerprints when the monotone
 profile gains this capability.
 
+Candidate Language 6's `CalendarDayMappings` capability likewise contributes no
+profile fold segment. It authorizes the checked `Day` structural leaf and complete
+lowering through the frozen `keiro-core/calendar-day/1` codec. The calendar policy
+identity is embedded in the mapped wire expression, so an aggregate that actually
+uses `Day` acquires replay-visible identity through its mapped surface while every
+unrelated aggregate retains its existing fold bytes. A future calendar policy must
+use a new identity and cannot be hidden behind the same capability or Haskell type.
+
 Persisted pre-hash bytes come only from `Keiro.Dsl.CanonicalEncoding`, whose
 expression and transition representations are frozen by complete surface
 goldens. Presentation pretty printing may evolve independently. Fold surface
@@ -102,6 +110,9 @@ cannot pair a replacement spec with stale derived state.
   consumer names the capability it requires and monotonicity is tested.
 - A non-fold capability does not invalidate snapshots; adding any capability
   requires an explicit fold-segment decision.
+- Calendar-day syntax does not globally invalidate snapshots. Its frozen codec
+  identity enters only the mapped wire surfaces that use it, and a policy change is
+  compatibility work rather than a profile-wide fold-version shortcut.
 - Pretty-printer changes do not alter persisted replay identity. Changing the
   canonical encoder or digest remains an explicit, golden-backed migration.
 - Invalid semantic graphs cannot receive truncated fingerprints or partial

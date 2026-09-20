@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-20T01:26:00Z
+timestamp: 2026-09-20T03:07:55Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -170,6 +170,23 @@ an optional must be present, although its value may be JSON null. An optional re
 `on-missing=null`, `[]`, or `{}` through a bare alias exactly when the alias's resolved inner
 expression admits that default. This preserves old payloads that omitted absent values without
 turning omission into an implicit policy for every consumer root.
+
+Candidate Language 6 also admits `Day` as a structural leaf and as a named bare root. It lowers to
+`Data.Time.Calendar.Day` only through the checked structural graph, including recursive
+`Optional`, `List`, and text-keyed `Map` positions. Keiro's frozen
+`keiro-core/calendar-day/1` policy, not the consumer's Aeson instance, owns private-event JSON:
+the canonical writer uses a signed proleptic-Gregorian year with a minimum of four digits and
+two-digit month/day, while the historical-compatible reader accepts redundant leading zeroes and
+an explicit plus sign before normalizing. Both reader and writer cover `Day`'s unbounded integer
+year carrier and reject invalid Gregorian dates. A consumer binding is the total identity of this
+`Day` representation; it cannot narrow years, convert to midnight, attach a timezone, or normalize
+through a partial text constructor.
+
+This admission is deliberately structural. Direct aggregate `Day` fields, nominal `Day` wrappers,
+scalar paths, guards, ordering, and arithmetic remain unsupported. Aggregate command, event,
+register, queue, and query surfaces reach `Day` only through an admitted mapped declaration, so
+every generated codec uses the same policy. The mapped wire token includes the policy identity;
+changing the policy is therefore compatibility work even when the Haskell type remains `Day`.
 
 The landed spec layer exposes total folds over checked mapped declarations, structural shapes,
 and nested type expressions. Adding a new constructor therefore requires every checker, differ,
@@ -372,6 +389,10 @@ the totality and ownership requirements above.
   evidence.
 - A queue or query expression cannot pass `check` until its surface-specific lowering is total;
   registering syntax and roots does not authorize partial generation.
+- A checked calendar-day mapping has one full-carrier, timezone-free wire authority across every
+  admitted consumer surface. Narrowing the accepted year domain or converting dates to instants
+  is a visible compatibility change, and an old reader that cannot consume new extended-year
+  writes requires a producer-last rollout rather than a replay-neutral classification.
 - Canonical aggregate identities feed diff, replay-impact, and fold/snapshot
   fingerprints, so source aliases do not create compatibility churn while real
   type or initial changes remain visible.

@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-09-20
+* **Update**: Record CalendarDayMappings as a non-fold capability whose frozen codec identity enters only mapped wire surfaces that use Day (plan 291).
+* **Update**: Record candidate Language 6 calendar-day mappings as a Keiro-owned, full-carrier structural leaf with total bindings and explicit producer-last rollout limits (plan 291).
 * **Update**: ADR-12, ADR-18, and ADR-46 define named bare container authority, transitive nullability/defaults, fold-neutral runtime capability registration, and nested nominal admission (plan 290).
 
 ## 2026-09-19
