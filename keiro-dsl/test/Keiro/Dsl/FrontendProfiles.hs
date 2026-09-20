@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings, CalendarDayMappings]
                    ]
       map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -82,6 +82,7 @@ frontendProfilesSpec = do
               ContractDeclaredIdSyntax -> version 6
               KeyedMapSyntax -> version 6
               BareStructuralMappingSyntax -> version 6
+              CalendarDaySyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -312,13 +313,15 @@ featureBody = \case
   CalendarDaySyntax ->
     T.unlines
       [ "context profile",
-        "mapped structural value ProfileDay {",
+        "mapped structural record ProfileDay {",
         "  haskell package=profile module=Example.Profile type=ProfileDay",
         "  binding = \"Example.Profile.profileDayBinding\"",
         "  binding-version = \"1\"",
         "  canonical-type = \"example.ProfileDay.v1\"",
         "  fixtures = \"Example.Profile.profileDayFixtures\"",
-        "  wire Day",
+        "  wire object constructor=ProfileDay unknown-fields=reject {",
+        "    day as \"day\" : Day required",
+        "  }",
         "}"
       ]
   KeyedMapSyntax ->

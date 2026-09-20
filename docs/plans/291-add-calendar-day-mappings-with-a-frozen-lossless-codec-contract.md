@@ -76,6 +76,8 @@ Generated aggregate modules expose a dependency edge that raw aggregate fields d
 
 The public corpus fixture also exposed the most important rolling-upgrade asymmetry: Keiro's full-carrier writer can emit a year that Aeson 2.2's `Day` reader rejects at its 15-digit implementation limit. Historical reads remain lossless, but old-reader/new-writer compatibility is not universal. The fixture keeps that failed direction executable and documents a producer-last rollout that disables extended-year writes until old readers have been removed.
 
+The full DSL suite caught two frozen frontend-profile expectations outside the feature-focused tests: the exact candidate capability list and the isolated syntax-marker body. The latter originally used a bare mapped value, so older languages correctly rejected `value` before reaching `Day`; using an ordinary structural record isolates the calendar gate and keeps the two capability diagnostics independent.
+
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
 
