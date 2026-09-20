@@ -32,6 +32,11 @@ provenance:
       at: 2026-09-20T03:34:56Z
       mode: "implement"
       note: "Begin Plan 292 structural text-set implementation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T04:38:08Z
+      mode: "implement"
+      note: "Complete Plan 292 with canonical text-set lowering, serialized replay evidence, corpus verification, and ADR updates."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -63,8 +68,8 @@ Implement IR-44 as structural Set Text with canonical array output and explicit 
 
 
 - [x] Milestone 1: Define native checked text-set values and wire policy. (2026-09-19: added the versioned Keiro codec, code-point-order vectors, duplicate/permutation normalization, invalid-input checks, and arbitrary round trips.)
-- [ ] Milestone 2: Integrate total lowering and evolution consequences.
-- [ ] Milestone 3: Demonstrate normalization without replay divergence.
+- [x] Milestone 2: Integrate total lowering and evolution consequences. (2026-09-20: threaded `Set Text` through the checked graph, consumer/codecs/scaffolds, dependency planning, fingerprints, diffs, coverage, unsupported-expression diagnostics, and candidate capability registry.)
+- [x] Milestone 3: Demonstrate normalization without replay divergence. (2026-09-20: added the compiled 50th corpus suite with binding laws, historical comparison, raw serialized multi-event and replay-only normalization, head-information-loss and mutant failures, and an application-owned workflow codec example.)
 
 
 ## Surprises & Discoveries
@@ -75,6 +80,10 @@ The resolved `text-2.1.4` implementation compares UTF-8 bytes, whose lexicograph
 The existing Aeson `Set` instance has the same operational quotient—`Set.toList` on write and `Set.fromList` on read—but Keiro needs its own versioned policy identity so declaration fingerprints can distinguish this set from both ordered lists and future set-policy revisions.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
+
+The existing manifest planner inspected direct node expressions, so named structural mappings could hide primitive build dependencies from their aggregate, queue, or query roots. Resolving dependencies once from every checked structural declaration fixed text sets and also corrected missing `containers` entries in the existing bare-container, calendar-day, and structural-nominal corpus fragments.
+
+The shared normalization law can exercise the generated runtime rather than a codec-only model: the conformance callback injects non-canonical arrays into actual generated event values, parses them through the generated codec, and applies the generated transducer. A replay-only transition and a missing-first-event-field mutation cover the retained-history and head-information boundaries separately.
 
 
 ## Decision Log
@@ -91,11 +100,15 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 2026-09-19 (implementation): Own the structural text-set quotient in `Keiro.Codec.TextSet` with policy identity `keiro-core/text-set/1`. Add `Set Text` as a checked expression in the existing candidate language; give `TextSetMappings` no capability fold segment because its declaration-level wire token carries the policy identity.
 
+2026-09-20 (implementation): Derive generated package dependencies from the complete resolved structural graph, not only direct node roots. Keep public-contract and process/workflow serialization application-owned; the conformance package demonstrates the required total application codec without claiming DSL ownership of those journals.
+
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record results and remaining adoption obligations here; plan creation is not implementation completion.
+Plan 292 is complete. Candidate Language 6 accepts checked `Set Text` structural mappings backed by frozen policy `keiro-core/text-set/1`; the generated representation is `Set Text`, canonical writers emit ascending unique arrays in Unicode code-point order, and readers normalize duplicates and permutations before binding or execution. The policy identity participates in declaration wire fingerprints, List/Set and opaque/checked crossings remain replay-affected, direct aggregate sets and symbolic set operations remain explicitly unsupported, and generated dependency planning follows named structural declarations transitively.
+
+The new compiled conformance package covers bare and nested values, optionals, aggregates, multi-event and replay-only streams, workqueues, queries, historical Aeson parity, invalid elements, mutation failures, and the application-owned workflow boundary. Validation finished with 775 DSL examples and 711 core runtime examples passing, every compiled `keiro-dsl:tests` component green, all 50 corpus invocations drift-free on a clean committed tree, and all 47 ADR concepts strictly valid. No package release, language publication, production migration, or consumer-history audit was performed. Real retained streams, queues, projections, process recovery, and workflow journals—including consumer `mori://shinzui/rei`—remain Plan 295 adoption evidence.
 
 
 ## Context and Orientation
@@ -203,3 +216,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Milestone 1 states the canonical order normatively with its verification and the package-release freeze point. Milestone 2 specifies the set wire token, its replay-verdict tests, and `capabilityFoldSegment = Nothing`. Milestone 3 ties the normalization cases to Plan 289's shared law and states why live execution and replay agree. No implementation has run.
 
 Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Completed the frozen text-set codec, exhaustive checked lowering and dependency inference, policy-versioned wire identity, public conformance package, serialized normalization/replay evidence, negative compatibility mutations, and ADR updates. Marked all milestones complete after the 50-entry clean corpus policy and full DSL/runtime suites passed; consumer adoption and publication remain outside this plan.
