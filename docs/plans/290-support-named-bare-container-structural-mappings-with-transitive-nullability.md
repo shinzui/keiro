@@ -64,7 +64,7 @@ Implement IR-42 so a named structural mapping can encode a bare optional value, 
 
 - [x] (2026-09-20T01:11:01Z) Milestone 1: Introduced the language-6 `mapped structural value` declaration, checked graph branch, pretty-print round trip, and candidate syntax/runtime capabilities.
 - [x] (2026-09-20T01:11:01Z) Milestone 2: Derived nullability and missing-value defaults transitively through bare aliases, rejected nested nullable forms, and lowered direct-container aliases/codecs without object wrappers.
-- [ ] Milestone 3: Propagate identity and prove migration behavior.
+- [x] (2026-09-20T01:43:40Z) Milestone 3: Propagated the bare branch through every checked fold and generated surface, registered a compiled conformance corpus, proved direct wire encodings and replay, and compared the historical opaque optional codec with the generated codec.
 
 
 ## Surprises & Discoveries
@@ -73,6 +73,8 @@ Implement IR-42 so a named structural mapping can encode a bare optional value, 
 The existing resolved-expression algebra already carried every recursive container and nominal-leaf case needed by bare declarations. Reusing it kept dependency traversal, Haskell type selection, and nested codec lowering authoritative rather than introducing a parallel allowlist.
 
 The shape renderer parenthesizes a top-level container expression (`type MaybeTextShape = (Maybe Text)`). This is presentation-only; the checked wire token remains exactly the inner expression and therefore stays equal to the inline form.
+
+Harness null-policy generation previously recognized only a syntactic `ROptional`. Once an optional value could be named, the generated assertion incorrectly expected explicit null to fail. The harness now follows bare references through the checked graph, matching the codec and validator's transitive interpretation.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -95,7 +97,13 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 ## Outcomes & Retrospective
 
 
-Not implemented. Record results and remaining adoption obligations here; plan creation is not implementation completion.
+Implemented in commits `a6110a94`, `b171f8cc`, `2b7b658c`, and `eab7ce10`. Candidate Language 6 now accepts `mapped structural value` declarations rooted at Optional, List, or text-keyed Map. The checked graph derives nullability and defaults through aliases, direct shape aliases and codecs avoid object wrappers, wire fingerprints inline the inner expression, and every existing traversal handles the new branch exhaustively.
+
+The committed `conformance-bare-containers` public example covers empty and present optionals, ordered duplicate lists, text maps, nested nominal IDs, an unused declaration inventory, aggregate command/event/register and snapshot surfaces, a workqueue, read-model query aliases, projection ownership, total bindings, historical opaque-codec comparison, required-key versus explicit-null behavior, serialized event replay, and register agreement. ADR-12, ADR-18, and ADR-46 record the durable authority, fold-neutral capability, and nominal-leaf consequences.
+
+Validation completed with 16 focused EP-149 examples, 65 compiled bare-container assertions, 760 `keiro-dsl-test` examples, the complete `keiro-dsl:tests` component set, 711 `keiro-test` examples, all 48 conformance-corpus regeneration invocations, and strict validation of all 47 ADR concepts. The generated corpus reproduced byte-for-byte from a clean committed baseline.
+
+This completes the repository feature gate only. Language 6 remains a candidate; no package was released, no production data was changed, and no consumer adoption or legacy retirement is claimed. Plan 295 still owns real consumer-history captures, high-water marks, public API adoption, and retirement rehearsal.
 
 
 ## Context and Orientation
@@ -203,3 +211,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Milestone 2 now extends on-missing defaults through bare references so histories that omit absent optionals remain readable. Milestone 3 specifies the bare declaration's `wireFingerprint` token, the three replay-verdict tests, and the `capabilityFoldSegment = Nothing` decision. No implementation has run.
 
 Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Completed all three milestones, added the candidate syntax and checked semantics, compiled the public conformance package and historical codec comparison, updated ADR-12/18/46, and passed the repository validation matrix. Consumer adoption, publication, and retirement remain assigned to Plan 295.
