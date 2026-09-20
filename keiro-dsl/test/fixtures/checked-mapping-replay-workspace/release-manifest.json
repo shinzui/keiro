@@ -46,6 +46,48 @@
       "goldens": ["keiro-dsl/test/conformance-checked-mapping-replay/fixtures/retained/mapping-recorded-v1.json"]
     }
   ],
+  "retainedImplementations": [
+    {
+      "role": "calendar-day historical reader",
+      "path": "keiro-core/src/Keiro/Codec/CalendarDay.hs",
+      "anchor": "parseCalendarDayText :: Text -> Either Text Day"
+    },
+    {
+      "role": "text-set historical reader",
+      "path": "keiro-core/src/Keiro/Codec/TextSet.hs",
+      "anchor": "parseTextSet :: Value -> Parser (Set Text)"
+    },
+    {
+      "role": "base16 historical reader",
+      "path": "keiro-core/src/Keiro/Codec/Base16Bytes.hs",
+      "anchor": "parseBase16Bytes :: Value -> Parser ByteString"
+    },
+    {
+      "role": "admitted-id legacy decoder",
+      "path": "keiro-dsl/test/conformance-checked-mapping-replay/Generated/CheckedMappingReplay/Nominals/Internal.hs",
+      "anchor": "unsafeRetainedIdFromLegacyText :: Text -> RetainedId"
+    },
+    {
+      "role": "retired-event replay-only edge",
+      "path": "keiro-dsl/test/conformance-checked-mapping-replay/Generated/CheckedMappingReplay/ReplayLedger/Transducer.hs",
+      "anchor": "B.replayOnly"
+    },
+    {
+      "role": "workflow stored-result decoder",
+      "path": "keiro/src/Keiro/Workflow.hs",
+      "anchor": "decodeStored :: (Aeson.FromJSON a) => Text -> Aeson.Value -> Eff es a"
+    },
+    {
+      "role": "pre-UTF-8 deterministic identity probe",
+      "path": "keiro/src/Keiro/DeterministicId.hs",
+      "anchor": "deterministicIdProbes :: Text -> NonEmpty UUID"
+    },
+    {
+      "role": "positional process-manager identity",
+      "path": "keiro/src/Keiro/ProcessManager.hs",
+      "anchor": "legacyDeterministicCommandId :: Text -> Text -> EventId -> Int -> EventId"
+    }
+  ],
   "gates": {
     "package-release": {
       "result": "eligible",

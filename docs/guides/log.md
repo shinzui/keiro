@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-09-20
+* **Addition**: DOC-28 documents the public clean-scaffold path for candidate checked mappings, total binding and file-ownership obligations, generated process-reaction use, application-owned workflow codecs, and reader-first rollout.
 * **Update**: Evolution And Replayability adds the four independent checked-mapping release gates, reader-before-writer rollout, and forward-only recovery after incompatible writes; Durable Workflows makes explicit that a step rename creates a new durable action and adds isolated retained-result adoption guidance.
 
 ## 2026-09-19

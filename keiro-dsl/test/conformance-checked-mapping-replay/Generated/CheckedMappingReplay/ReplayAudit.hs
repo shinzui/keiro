@@ -9,6 +9,7 @@
 module Generated.CheckedMappingReplay.ReplayAudit (auditTargets) where
 
 import Generated.CheckedMappingReplay.ReplayLedger.EventStream qualified as ReplayLedger
+import Generated.CheckedMappingReplay.ReplayTarget.EventStream qualified as ReplayTarget
 import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)
 import Keiro.Stream qualified as Stream
 
@@ -19,5 +20,11 @@ auditTargets =
         { eventStream = ReplayLedger.replayLedgerEventStream
         , category = Stream.categoryText ReplayLedger.replayLedgerCategory
         , mkStream = streamInCategory (Stream.categoryText ReplayLedger.replayLedgerCategory)
+        }
+  , SomeAuditTarget
+      AuditTarget
+        { eventStream = ReplayTarget.replayTargetEventStream
+        , category = Stream.categoryText ReplayTarget.replayTargetCategory
+        , mkStream = streamInCategory (Stream.categoryText ReplayTarget.replayTargetCategory)
         }
   ]

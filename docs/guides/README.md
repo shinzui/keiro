@@ -65,6 +65,9 @@ are adopting:
   migrates a tan-event-source service to Keiro in controlled compatibility stages.
 - [Adopting keiro-dsl idiomatic-v2](adopting-keiro-dsl-idiomatic-v2.md) adopts
   the idiomatic-v2 generated Haskell surface and its compatibility gates.
+- [Checked Mapping Adoption](checked-mapping-adoption.md) runs the candidate
+  Language 6 checked-value example from a clean scaffold, fills total bindings,
+  preserves create-once code, and stages replay-safe reader-first rollout.
 - [Migrating to the keiro-dsl 0.15 record API](migrating-keiro-dsl-record-api-0.15.md)
   updates generated consumers and services for the 0.15 record API.
 - [Evolve Events Safely](evolve-events-safely.md) shows the event codec and the

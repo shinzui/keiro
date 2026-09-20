@@ -70,6 +70,12 @@ class CheckedMappingReleaseTest(unittest.TestCase):
         manifest["gates"]["package-release"]["action"] = "performed"
         self.assertTrue(any("must remain not-performed" in error for error in self.errors(manifest)))
 
+    def test_removing_a_required_historical_reader_fails_the_gate(self) -> None:
+        manifest = copy.deepcopy(self.manifest)
+        manifest["retainedImplementations"][0]["anchor"] = "removedCalendarDayReader"
+        errors = self.errors(manifest)
+        self.assertTrue(any("retained implementation anchor missing" in error for error in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()

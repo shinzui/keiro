@@ -30,6 +30,30 @@ aggregate ReplayLedger
   snapshot every 1
     state-codec version=1 shape-hash="checked-mapping-replay-v1"
 
+aggregate ReplayTarget
+  regs
+    latest ReplayEnvelope = initial
+  states Ready
+  command Store { retainedId:RetainedId envelope:ReplayEnvelope }
+  event Stored = fields(Store)
+  Ready -- Store --> write latest := envelope ; emit Stored ; goto Ready
+
+process ReplayReaction
+  name "checked-mapping-replay-reaction"
+  reactions version 1
+  input ReplayRequested { retainedId:RetainedId envelope:ReplayEnvelope }
+  correlate input.retainedId via idText
+  saga ReplayLedger category "checkedMappingReplaySaga"
+  target ReplayTarget
+  projections [ ]
+  on ReplayRequested
+    advance Record { retainedId envelope }
+    dispatch ReplayTarget@input.retainedId Store { retainedId envelope }
+      on-appended AckOk ; on-duplicate AckOk ; on-failed Retry
+  dispatch-id strategy=uuidv5 from=(name, correlationId, sourceEventId, targetStreamName, occurrence)
+  rejected => halt
+  poison => halt
+
 workqueue replay_jobs {
   queue logical = "checked.mapping.replay"
   derive physical = "checked_mapping_replay"

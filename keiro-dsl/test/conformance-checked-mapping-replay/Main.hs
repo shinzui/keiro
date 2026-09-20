@@ -23,6 +23,9 @@ import Generated.CheckedMappingReplay.ReplayLedger.EventStream (replayLedgerSnap
 import Generated.CheckedMappingReplay.ReplayLedger.Harness (harnessAssertions)
 import Generated.CheckedMappingReplay.ReplayLedger.Transducer (replayLedgerTransducer)
 import Generated.CheckedMappingReplay.ReplayLookup.QueryContract (ReplayLookupQueryInput, ReplayLookupQueryResult)
+import Generated.CheckedMappingReplay.ReplayReaction.Input (ReplayReactionInput (ReplayRequested))
+import Generated.CheckedMappingReplay.ReplayReaction.ProcessHarness (processHarnessValues)
+import Generated.CheckedMappingReplay.ReplayTarget.Harness qualified as ReplayTarget
 import Generated.CheckedMappingReplay.StructuralConformance (structuralConformanceAssertions)
 import Keiki.Core (applyEventsEither, (!))
 import Keiro.Codec (EventType (..))
@@ -37,11 +40,14 @@ main = do
       assertions =
         [("structural/" <> label, passed) | (label, passed) <- structuralConformanceAssertions]
           <> harnessAssertions
+          <> [("target/" <> label, passed) | (label, passed) <- ReplayTarget.harnessAssertions]
           <> [ ("retained JSON fixture crosses the generated event parser and transducer", retainedReplay),
                ("admitted historical spellings normalize to canonical bytes and identical state", retainedNormalization),
                ("replay-only history preserves UUIDv5 and all checked mappings", replayOnlyHistory),
                ("serialized UUIDv5 and UUIDv7 event history retains exact identities", identifierHistory),
                ("queue, query, and contract surfaces preserve the integrated envelope", generatedSurfaceAgreement),
+               ("generated process input carries the integrated envelope", processReactionInputAgreement),
+               ("generated process reaction decisions remain pinned", processReactionHarnessAgreement),
                ("application-owned workflow result codec preserves the integrated envelope", workflowCodecAgreement),
                ("snapshot discriminator remains explicit in the integrated evidence", replayLedgerSnapshotFixture == (1, "checked-mapping-replay-v1")),
                ("baseline and candidate replay evidence satisfy the release comparator", releaseReady integratedInventory baselineReport candidateReport),
@@ -147,6 +153,38 @@ encodeWorkflowResult = encodeReplayEnvelopeMapped
 
 decodeWorkflowResult :: Value -> Either Text Domain.ReplayEnvelope
 decodeWorkflowResult = decodeReplayEnvelopeMapped
+
+processReactionInputAgreement :: Bool
+processReactionInputAgreement = processReactionInputDecode == Aeson.Success processReactionInput
+
+processReactionInputDecode :: Aeson.Result ReplayReactionInput
+processReactionInputDecode = Aeson.fromJSON (Aeson.toJSON processReactionInput)
+
+processReactionInput :: ReplayReactionInput
+processReactionInput = ReplayRequested retainedV5 processEnvelope
+
+-- Process input decoding is application-owned. This value deliberately stays
+-- inside the consumer codec's admitted Day range; retained extended-year bytes
+-- are exercised through the generated event codec above.
+processEnvelope :: Domain.ReplayEnvelope
+processEnvelope =
+  Domain.ReplayEnvelope
+    (Domain.MaybeLabel (Just "process"))
+    (Domain.ImportantDays [fromGregorian 2000 2 29])
+    (Domain.TextLabels (Set.fromList ["a", "b"]))
+    (Domain.MaybeContentHash (Just (Domain.ContentHash (BS.pack [0, 175]))))
+    retainedV5
+    identityMap
+    (Just (Set.fromList ["process", "reaction"]))
+
+processReactionHarnessAgreement :: Bool
+processReactionHarnessAgreement =
+  processHarnessValues
+    == [ ("reactionOwnership", "generated-declarative"),
+         ("reactionVersion", "1"),
+         ("reactionFingerprint", "cc73d755be55b8a2d237ac02752ad8d425a50c5fb9f7c3bab8b5f5ada239b1c8"),
+         ("reaction.ReplayRequested.0", "guard=always;advance=Record;followUps=dispatch:ReplayTarget.Store;accepted=")
+       ]
 
 informationLossRejected :: Bool
 informationLossRejected =

@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -61,6 +61,10 @@ replay-compatibility:
     python3 -m unittest discover -s scripts/tests -p test_replay_compatibility.py
     python3 scripts/check-checked-mapping-release.py keiro-dsl/test/fixtures/checked-mapping-replay-workspace/release-manifest.json
     python3 -m unittest discover -s scripts/tests -p test_checked_mapping_release.py
+
+[group('meta')]
+checked-mapping-adoption:
+    bash keiro-dsl/test/checked-mapping-adoption-test.sh
 
 # Strict OKF enforcement for the research bundle (docs/research, registered as
 # OKF bundle "research" in mori.dhall). Stable RES-N handles and review

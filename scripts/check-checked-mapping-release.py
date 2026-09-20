@@ -92,6 +92,39 @@ def validate(manifest: dict[str, Any], root: Path) -> list[str]:
                 if not isinstance(policy.get(field), list) or not policy[field]:
                     errors.append(f"wire policy {identity!r} has no {field}")
 
+    retained = manifest.get("retainedImplementations")
+    if not isinstance(retained, list) or not retained:
+        errors.append("retainedImplementations must be a non-empty array")
+    else:
+        roles: set[str] = set()
+        for implementation in retained:
+            if not isinstance(implementation, dict):
+                errors.append("retainedImplementations contains a non-object entry")
+                continue
+            role = implementation.get("role")
+            relative = implementation.get("path")
+            anchor = implementation.get("anchor")
+            if not isinstance(role, str) or not role:
+                errors.append("retained implementation is missing role")
+            elif role in roles:
+                errors.append(f"duplicate retained implementation role: {role}")
+            else:
+                roles.add(role)
+            if not isinstance(relative, str) or not relative:
+                errors.append(f"retained implementation {role!r} is missing path")
+                continue
+            if Path(relative).is_absolute():
+                errors.append(f"retained implementation path must be repository-relative: {relative}")
+                continue
+            implementation_path = root / relative
+            if not implementation_path.is_file():
+                errors.append(f"retained implementation path does not exist: {relative}")
+                continue
+            if not isinstance(anchor, str) or not anchor:
+                errors.append(f"retained implementation {role!r} is missing anchor")
+            elif anchor not in implementation_path.read_text(encoding="utf-8"):
+                errors.append(f"retained implementation anchor missing for {role!r}: {anchor}")
+
     for relative in repository_paths(manifest):
         if Path(relative).is_absolute():
             errors.append(f"evidence path must be repository-relative: {relative}")

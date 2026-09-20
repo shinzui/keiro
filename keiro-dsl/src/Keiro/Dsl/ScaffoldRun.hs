@@ -336,7 +336,7 @@ scaffoldServiceModulesWithBehaviorSource goldens sourceEntries ctx service =
       <> concat
         [ case node of
             NAggregate agg -> scaffoldAggregateForService ctx service agg <> harnessForServiceWithGoldens goldens ctx service agg
-            NProcess process -> scaffoldProcess ctx process <> harnessProcessForService ctx service process
+            NProcess process -> scaffoldProcessForService ctx service process <> harnessProcessForService ctx service process
             NRouter router -> scaffoldRouterForService ctx service router <> harnessRouterForService ctx service router
             NContract contract -> scaffoldContractForService ctx service contract
             NIntake intake -> scaffoldIntake ctx intake

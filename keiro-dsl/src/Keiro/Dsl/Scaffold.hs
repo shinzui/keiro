@@ -52,6 +52,7 @@ module Keiro.Dsl.Scaffold
     obsoleteGeneratedOutputHooks,
     obsoleteGeneratedOutputHooksForService,
     scaffoldProcess,
+    scaffoldProcessForService,
     scaffoldRouter,
     scaffoldRouterForService,
     scaffoldContract,
@@ -6282,14 +6283,23 @@ workerOptionsLines valueName rejected poison =
 -- dangerous @defaultTimerWorkerOptions@ (@Nothing@) default.
 scaffoldProcess :: Context -> ProcessNode -> [ScaffoldModule]
 scaffoldProcess ctx p = case (.body) p of
-  ReactionProcessBody reaction -> scaffoldReactionProcess ctx p reaction
+  ReactionProcessBody reaction -> scaffoldReactionProcess ctx Nothing p reaction
   LegacyProcessBody {} -> scaffoldLegacyProcess ctx p
 
-scaffoldReactionProcess :: Context -> ProcessNode -> ReactionBody -> [ScaffoldModule]
-scaffoldReactionProcess ctx process reaction =
+scaffoldProcessForService :: Context -> CheckedService -> ProcessNode -> [ScaffoldModule]
+scaffoldProcessForService ctx service p = case (.body) p of
+  ReactionProcessBody reaction -> scaffoldReactionProcess ctx (Just graph) p reaction
+  LegacyProcessBody {} -> scaffoldLegacyProcess ctx p
+  where
+    graph = case checkedTypeGraph service of
+      Left errors -> error ("checked process type graph failed: " <> show errors)
+      Right value -> value
+
+scaffoldReactionProcess :: Context -> Maybe TypeGraph -> ProcessNode -> ReactionBody -> [ScaffoldModule]
+scaffoldReactionProcess ctx typeGraph process reaction =
   [ ScaffoldModule
       { path = modulePath inputPrefix "Input",
-        text = emitReactionInput ctx inputPrefix process reaction,
+        text = emitReactionInput ctx typeGraph inputPrefix process reaction,
         kind = Generated,
         origin = nodeOrigin "process input" ((.id) process) ((.loc) process)
       },
@@ -6311,8 +6321,8 @@ scaffoldReactionProcess ctx process reaction =
     holePrefix = holePrefixFor ctx ((.id) process)
     modulePath prefix leaf = T.unpack (T.replace "." "/" prefix <> "/" <> leaf <> ".hs")
 
-emitReactionInput :: Context -> Text -> ProcessNode -> ReactionBody -> Text
-emitReactionInput ctx genPrefix process reaction =
+emitReactionInput :: Context -> Maybe TypeGraph -> Text -> ProcessNode -> ReactionBody -> Text
+emitReactionInput ctx maybeGraph genPrefix process reaction =
   nl $
     renderGeneratedLanguagePragmas [ExtDeriveAnyClass, ExtDuplicateRecordFields]
       <> [ generatedBanner,
@@ -6326,6 +6336,7 @@ emitReactionInput ctx genPrefix process reaction =
          ]
       <> ["import Numeric.Natural (Natural)" | usesType [Just "Natural"]]
       <> ["import " <> contextGeneratedPrefix ctx <> ".Nominals qualified as N" | usesNominal]
+      <> [renderPlannedImports mappedImportPlan | not (Set.null mappedReferences)]
       <> [ "",
            "data " <> inputType
          ]
@@ -6335,12 +6346,33 @@ emitReactionInput ctx genPrefix process reaction =
     inputType = pascal ((.id) process) <> "Input"
     inputFields = concatMap (.fields) (NE.toList ((.inputs) reaction))
     usesType candidates = any ((`elem` candidates) . (.valueType)) inputFields
-    usesNominal = any (\field -> maybe False (`notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"]) ((.valueType) field)) inputFields
     renderCtor index input =
       [ (if index == 0 then "  = " else "  | ") <> (.name) input,
-        "      { " <> T.intercalate "\n      , " [(.name) field <> " :: !" <> renderReactionFieldType field | field <- (.fields) input],
+        "      { " <> T.intercalate "\n      , " [(.name) field <> " :: !" <> renderFieldType field | field <- (.fields) input],
         "      }"
       ]
+    mappedDeclaration name = maybe Nothing (Map.lookup (MappedKey name) . (.declarations)) maybeGraph
+    mappedSourceReference declaration = case declaration of
+      ResolvedStructural value _ -> haskellTypeReference ((.haskell) value)
+      ResolvedOpaque value -> haskellTypeReference ((.haskell) value)
+    mappedReferences =
+      Set.fromList
+        [ mappedSourceReference declaration
+        | field <- inputFields,
+          Just name <- [(.valueType) field],
+          Just declaration <- [mappedDeclaration name]
+        ]
+    mappedImportPlan = planImportsOrDie (genPrefix <> ".Input") (Set.singleton inputType) mappedReferences
+    renderFieldType field = case (.valueType) field >>= mappedDeclaration of
+      Just declaration -> renderReferenceOrDie mappedImportPlan (mappedSourceReference declaration)
+      Nothing -> renderReactionFieldType field
+    usesNominal =
+      any
+        ( \field -> case (.valueType) field of
+            Just name -> name `notElem` ["Text", "Int", "Integer", "Bool", "Natural", "Time"] && isNothing (mappedDeclaration name)
+            Nothing -> False
+        )
+        inputFields
 
 renderReactionFieldType :: Field -> Text
 renderReactionFieldType field = renderReactionTypeName ((.valueType) field)

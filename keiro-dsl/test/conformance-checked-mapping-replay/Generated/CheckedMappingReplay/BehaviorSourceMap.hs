@@ -18,6 +18,7 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
   "behavior-v1-00d5b6d8d0fc6ef2" -> Just (BehaviorSourceLocation "domain/service.keiro" 23 3)
+  "behavior-v1-756d75346570c343" -> Just (BehaviorSourceLocation "domain/service.keiro" 39 3)
   "behavior-v1-9846660db9e83048" -> Just (BehaviorSourceLocation "domain/service.keiro" 8 10)
   "behavior-v1-cf9c72cd877a5085" -> Just (BehaviorSourceLocation "domain/service.keiro" 16 3)
   "behavior-v1-e88b4f5c37ef8bf2" -> Just (BehaviorSourceLocation "domain/service.keiro" 8 16)
