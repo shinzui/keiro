@@ -61,6 +61,16 @@ provenance:
       at: 2026-09-20T05:39:29Z
       mode: "implement"
       note: "Complete Plan 293 declarative base16 byte refinements and advance the next implementable child to Plan 294."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T13:48:15Z
+      mode: "implement"
+      note: "Begin Plan 294 explicit UUID admission-domain implementation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T15:26:22Z
+      mode: "implement"
+      note: "Complete Plan 294 explicit UUID admission domains and advance the next implementable child to Plan 295."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -116,7 +126,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 | 291 | Add calendar-day mappings with a frozen lossless codec contract | [docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md](../plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md) | 289, 290 | None | Complete |
 | 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Complete |
 | 293 | Add declarative base16 byte refinements with total consumer bindings | [docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md](../plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md) | 289, 290 | None | Complete |
-| 294 | Add explicit versioned UUID admission domains with sound Keiki evidence | [docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md) | 289 | None | Not Started |
+| 294 | Add explicit versioned UUID admission domains with sound Keiki evidence | [docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md) | 289 | None | Complete |
 | 295 | Rehearse integrated replay, public API adoption, and legacy retirement | [docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md) | 289, 290, 291, 292, 293, 294 | None | Not Started |
 
 
@@ -178,10 +188,10 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 293: Specify and implement a bounded refinement contract.
 - [x] Plan 293: Compose refinement through all admitted checked roots.
 - [x] Plan 293: Prove byte identity and preserve old hash semantics.
-- [ ] Plan 294: Define explicit domain identity and canonical membership.
-- [ ] Plan 294: Prove runtime and symbolic agreement before exposing equality.
-- [ ] Plan 294: Propagate admission to nested and public consumers.
-- [ ] Plan 294: Rehearse mixed-domain history and immutable identities.
+- [x] Plan 294: Define explicit domain identity and canonical membership.
+- [x] Plan 294: Prove runtime and symbolic agreement before exposing equality.
+- [x] Plan 294: Propagate admission to nested and public consumers.
+- [x] Plan 294: Rehearse mixed-domain history and immutable identities.
 - [ ] Plan 295: Assemble one integrated workspace and historical corpus.
 - [ ] Plan 295: Prove refactor and evolution matrices.
 - [ ] Plan 295: Run an isolated consumer adoption rehearsal.
@@ -211,6 +221,10 @@ Plan 292 also showed that the shared normalization law can cross the real genera
 Plan 293 confirmed that checked refinement can reuse the structural binding contract without pretending raw JSON text is the consumer representation. The generated codec validates and canonicalizes base16 into bytes first, then applies a total consumer binding; malformed spellings therefore cannot hide a partial constructor behind a structural proof label.
 
 Plan 293's strict generated package surfaced two useful completeness checks. Harness imports must be selected from the declarations the harness actually asserts or warning-clean packages fail, and candidate fixtures plus compiled components must be added to the repository's closed language and conformance inventories. Graph-wide dependency inference already carried the nested `Map Text` dependency once refined leaves joined the common type graph.
+
+Plan 294 confirmed that the TypeID dependency's generic parser is suitable for syntax and canonicality while Keiro must own the frozen UUID-version and RFC-variant decision. One shared character table now drives both runtime admission and exact Keiki text patterns, and the existing v7 failure text stays byte-identical despite the broader internal validator.
+
+Plan 294's generated-output gate exposed a narrow import-planning distinction: typed Keiki nominal projections need their nominal type in scope, while write-only nominal expressions do not. Selecting generated literal and projected nominals exactly keeps both the existing projected-ID corpus and the new broad-ID component warning-clean.
 
 The 2026-09-19 validation review checked the plans' claims against the working tree at `ba36ce58`. Every file, recipe, Cabal component, ADR, improvement request, and Keiki ADR URI the plans name exists or resolves. The review found the following, none of which is implementation evidence:
 
@@ -269,11 +283,13 @@ The 2026-09-19 validation review checked the plans' claims against the working t
 
 2026-09-20 (Plan 293 implementation): Freeze `keiro-core/base16-bytes/1` as the unrestricted-byte policy with lowercase output and case-insensitive valid input. Admit it only through explicit `mapped refined` declarations backed by total `domain <-> ByteString` bindings, embed the policy in mapped wire identity, register `RefinedBase16Mappings` without a fold segment, reject map-key/symbolic/callback/length extensions, and keep public contracts plus process/workflow persistence outside generated ownership. Repository replay and historical-codec evidence complete the feature; real consumer history and publication remain assigned to Plan 295.
 
+2026-09-20 (Plan 294 implementation): Freeze `keiro-dsl/id-domain/typeid-v5-or-v7/1` beside the unchanged implicit-v7 identity. Derive runtime and exact symbolic membership from one version/variant table; thread declaration admission through direct and nested replay identities, ledgers, diffs, generated codecs, map keys, queues, and public contracts; keep ID generation unchanged and process/workflow persistence application-owned. Repository mixed-history evidence completes the feature; real consumer history and publication remain assigned to Plan 295.
+
 
 ## Outcomes & Retrospective
 
 
-Plans 289–293 are complete. The shared report/inventory contract is in place; named checked Optional/List/Map values have recursive lowering; calendar days, structural text sets, and unrestricted base16 byte refinements each have a frozen Keiro-owned wire policy, declaration-scoped replay identity, compiled public examples, and serialized normalization/replay evidence. Plan 293 closed with all 51 corpus invocations drift-free, all 53 DSL test components green, 784 main DSL examples and 711 runtime examples passing, its 79-assertion compiled corpus green, and all 47 ADR concepts strictly valid. Plans 294–295 remain open, so explicit UUID admission domains, integrated consumer adoption, Language 6 publication, and legacy retirement are not complete. Rei's retained streams and workflow journals remain Plan 295 evidence; repository fixtures do not substitute for that audit. Plan 294 is the next implementable child.
+Plans 289–294 are complete. The shared report/inventory contract is in place; named checked Optional/List/Map values have recursive lowering; calendar days, structural text sets, unrestricted base16 byte refinements, and explicit UUIDv5-or-v7 admission each have frozen Keiro-owned identities, declaration-scoped replay visibility, compiled public examples, and serialized repository evidence. Plan 294 closed with all 52 corpus invocations consistent, the full DSL component set green, 790 main DSL examples and 711 runtime examples passing, its 36-assertion compiled corpus green, and all 47 ADR concepts strictly valid. Plan 295 remains open, so integrated consumer adoption, Language 6 publication, and legacy retirement are not complete. Rei's retained identifiers, streams, and workflow journals remain Plan 295 evidence; repository fixtures do not substitute for that audit. Plan 295 is the next implementable child.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
@@ -292,3 +308,5 @@ Revision note (2026-09-20, Plan 291 implementation): Completed frozen full-carri
 Revision note (2026-09-20, Plan 292 implementation): Completed frozen structural text-set mappings, graph-wide dependency inference, policy-versioned wire identity, a compiled supported-use matrix, serialized normalization/replay evidence, mutation checks, and ADR updates. Marked Plan 292 complete after full test and clean-corpus validation; Plan 293 is the next implementable child, while consumer adoption, publication, and retirement remain open.
 
 Revision note (2026-09-20, Plan 293 implementation): Completed frozen base16 byte refinements with explicit syntax, total byte bindings, exhaustive checked lowering, declaration-scoped wire identity, compiled supported-use and historical-codec evidence, serialized replay and normalization checks, mutation tests, and ADR updates. Marked Plan 293 complete after full regression and clean-corpus validation; Plan 294 is next, while consumer adoption, publication, and retirement remain open.
+
+Revision note (2026-09-20, Plan 294 implementation): Completed explicit UUIDv5-or-v7 admission with shared runtime/symbolic membership, conservative Keiki overlap evidence, direct and nested replay identity propagation, generated and public consumers, compiled mixed-history fixtures, supported-use documentation, and ADR updates. Marked Plan 294 complete after full regression and corpus validation; Plan 295 is next and still owns consumer-history adoption, Language 6 publication, and legacy retirement.

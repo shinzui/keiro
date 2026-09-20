@@ -167,7 +167,7 @@ sampleValue :: Maybe TypeGraph -> Spec -> Agg -> ResolvedAggregateType -> Value
 sampleValue graph spec _aggregate resolvedType =
   case resolvedType of
     AggregateNominal nominal -> case (.representation) nominal of
-      IdRepresentation prefix -> String (prefix <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
+      IdRepresentation prefix _ -> String (prefix <> "_01hzy3v7q2e8kaw2m5x0d41n9c")
       EnumRepresentation constructors -> String (snd (NE.head constructors))
       ScalarRepresentation NominalText -> String "sample"
       ScalarRepresentation NominalInt -> Number 1
@@ -258,7 +258,7 @@ sampleMappedExpression graph =
 
 sampleNominalLeaf :: NominalLeaf -> Value
 sampleNominalLeaf leaf = case (.kind) leaf of
-  NominalIdLeaf prefix -> String (prefix <> "_01h455vb4pex5vsknk084sn02q")
+  NominalIdLeaf prefix _ -> String (prefix <> "_01h455vb4pex5vsknk084sn02q")
   NominalEnumLeaf constructors -> String (snd (NE.head constructors))
   NominalScalarLeaf NominalText -> String "sample"
   NominalScalarLeaf NominalInt -> Number 1

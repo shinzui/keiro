@@ -11,6 +11,7 @@ module Keiro.Dsl.Grammar
     noLoc,
 
     -- * Shared declarations
+    IdAdmission (..),
     IdDecl (..),
     EnumDecl (..),
     RuleDecl (..),
@@ -190,6 +191,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
+import Keiro.Codec.IdDomain (IdAdmission (..))
 import Numeric.Natural (Natural)
 
 -- | An identifier in the notation: a type name, register name, command/event
@@ -215,10 +217,12 @@ noLoc :: Loc
 noLoc = Loc 0
 
 -- | @id TransferReservationId prefix=rsv@ — declares an id newtype over 'Text'
--- and its prefix tag.
+-- and its prefix tag. Candidate syntax may explicitly widen admission to
+-- @domain=typeid-v5-or-v7@ without changing generation policy.
 data IdDecl = IdDecl
   { name :: !Name,
     prefix :: !Text,
+    admission :: !IdAdmission,
     binding :: !(Maybe NominalBindingDecl),
     loc :: !Loc
   }

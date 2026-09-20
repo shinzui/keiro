@@ -1,0 +1,53 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/id-admission-domains.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.IdAdmissionDomains.Bindings
+    Generated.IdAdmissionDomains.BehaviorSourceMap
+    Generated.IdAdmissionDomains.Identities.Contract
+    Generated.IdAdmissionDomains.IdentityLedger.BehaviorContract
+    Generated.IdAdmissionDomains.IdentityLedger.Codec
+    Generated.IdAdmissionDomains.IdentityLedger.Domain
+    Generated.IdAdmissionDomains.IdentityLedger.EventStream
+    Generated.IdAdmissionDomains.IdentityLedger.Harness
+    Generated.IdAdmissionDomains.IdentityLedger.Projection
+    Generated.IdAdmissionDomains.IdentityLedger.Transducer
+    Generated.IdAdmissionDomains.IdentityWork.Queue
+    Generated.IdAdmissionDomains.IdentityWork.QueueCodec
+    Generated.IdAdmissionDomains.IdentityWork.QueuePolicy
+    Generated.IdAdmissionDomains.Nominals
+    Generated.IdAdmissionDomains.Nominals.Internal
+    Generated.IdAdmissionDomains.ReplayAudit
+    Generated.IdAdmissionDomains.Structural.NominalLeaves
+    Generated.IdAdmissionDomains.Structural.Shape.IdentityEnvelope
+    Generated.IdAdmissionDomains.StructuralConformance
+    Generated.IdAdmissionDomains.StructuralProjections
+    IdAdmissionDomains.IdentityLedger.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , containers
+    , keiki
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , mmzk-typeid
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.IdAdmissionDomains.Bindings
+    Conformance.IdAdmissionDomains.Domain

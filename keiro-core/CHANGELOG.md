@@ -6,6 +6,22 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `IdDomainContract` gains an explicit closed `IdAdmission` selector, and
+  `IdDomainFailure` gains failures for a value outside an admitted UUID version
+  set or RFC variant. Exhaustive matches and positional construction must handle
+  the new constructors and field.
+
+### New Features
+
+- `Keiro.Codec.IdDomain` adds the frozen
+  `keiro-dsl/id-domain/typeid-v5-or-v7/1` contract and domain-parameterized
+  `parseKindIdText`/`parseKindIdValue` entry points. Runtime validation and
+  Keiki text-pattern evidence now derive their UUID version and variant
+  positions from the same admission table. Existing v7 entry points and
+  identity bytes are unchanged.
+
 ## 0.17.0.0 — 2026-09-17
 
 ### Other Changes

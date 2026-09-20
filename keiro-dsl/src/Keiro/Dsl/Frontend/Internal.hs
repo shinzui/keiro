@@ -259,7 +259,7 @@ spanLoc :: SourceSpan -> Loc
 spanLoc sourceSpan = Loc (startLine sourceSpan)
 
 setIdLoc :: Loc -> IdDecl -> IdDecl
-setIdLoc loc IdDecl {name, prefix, binding} = IdDecl {name, prefix, binding, loc}
+setIdLoc loc IdDecl {name, prefix, admission, binding} = IdDecl {name, prefix, admission, binding, loc}
 
 setEnumLoc :: Loc -> EnumDecl -> EnumDecl
 setEnumLoc loc EnumDecl {name, ctors, binding} = EnumDecl {name, ctors, binding, loc}

@@ -16,7 +16,8 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Keiro.Dsl.Grammar (HaskellSource (..), Spec)
+import Keiro.Codec.IdDomain (v5OrV7IdDomainVersion)
+import Keiro.Dsl.Grammar (HaskellSource (..), IdAdmission (..), Spec)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
@@ -236,7 +237,8 @@ nominalCategory nominal = case (.representation) nominal of
 
 nominalRepresentationIdentity :: ResolvedNominalType -> Text
 nominalRepresentationIdentity nominal = case (.representation) nominal of
-  IdRepresentation prefix -> "KindID:" <> prefix
+  IdRepresentation prefix TypeIdV7 -> "KindID:" <> prefix
+  IdRepresentation prefix TypeIdV5OrV7 -> "KindID:" <> prefix <> ":" <> v5OrV7IdDomainVersion
   EnumRepresentation constructors ->
     "enum:" <> T.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
   ScalarRepresentation representation -> case representation of

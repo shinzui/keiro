@@ -39,8 +39,8 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
-import Data.TypeID qualified as TypeID
 import GHC.Generics (Generic)
+import Keiro.Codec.IdDomain (typeIdV5OrV7Domain, typeIdV7Domain, validateIdDomainText)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (LanguageFeature (DeclarativeRouterSelectionSyntax), languageSupportsFeature)
@@ -455,13 +455,14 @@ resolveSelectionExpr graph inputType rowType expected expression = case expressi
       _ -> False
 
     resolveIdLiteral loc typeName value = case Map.lookup typeName ((.nominalLeaves) graph) of
-      Just NominalLeaf {kind = NominalIdLeaf prefix} -> case TypeID.parseText value of
+      Just NominalLeaf {kind = NominalIdLeaf prefix admission} -> case validateIdDomainText (contract admission prefix) value of
         Left parseError -> selectionFailure loc SelectionExpressionTypeMismatch ("invalid " <> typeName <> " literal: " <> T.pack (show parseError))
-        Right parsed
-          | TypeID.getPrefix parsed /= prefix -> selectionFailure loc SelectionExpressionTypeMismatch ("ID literal prefix must be '" <> prefix <> "'")
-          | otherwise -> literal loc (SelectionNominal typeName) (CheckedIdLiteral typeName value)
+        Right () -> literal loc (SelectionNominal typeName) (CheckedIdLiteral typeName value)
       Just _ -> selectionFailure loc SelectionExpressionTypeMismatch ("selection ID literal type '" <> typeName <> "' is not a declared ID")
       Nothing -> selectionFailure loc SelectionExpressionTypeMismatch ("unknown selection ID literal type '" <> typeName <> "'")
+
+    contract TypeIdV7 = typeIdV7Domain
+    contract TypeIdV5OrV7 = typeIdV5OrV7Domain
 
 resolvePath :: TypeGraph -> Loc -> ResolvedTypeExpr -> [Name] -> Either (NonEmpty RouterSelectionDiagnostic) (SelectionScalarType, [CheckedSelectionPathSegment])
 resolvePath graph diagnosticLoc = go []

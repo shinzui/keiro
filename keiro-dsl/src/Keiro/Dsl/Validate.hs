@@ -47,7 +47,7 @@ import Keiro.Dsl.Expression
 import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
-import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractFor)
+import Keiro.Dsl.IdDomain (contractIdDomainContractFor, idDomainContractForDeclaration)
 import Keiro.Dsl.LanguageVersion (LanguageVersion, RuntimeCapability (..), SourceLanguage (..), effectiveLanguageVersion, languageVersionText, runtimeProfileHasCapability, sourceFormText)
 import Keiro.Dsl.NominalType qualified as Nominal
 import Keiro.Dsl.ProcessReaction qualified as ProcessReaction
@@ -873,7 +873,7 @@ validateNominal languageContract spec = domainErrors <> resolutionErrors
       [ mkErr (locLine ((.loc) declaration)) NominalInvalidIdPrefix $
           "id '" <> (.name) declaration <> "' has invalid TypeID prefix '" <> (.prefix) declaration <> "': " <> T.pack (show reason)
       | declaration <- (.ids) spec,
-        Just _ <- [idDomainContractFor languageContract ((.prefix) declaration)],
+        Just _ <- [idDomainContractForDeclaration languageContract declaration],
         Just reason <- [TypeID.checkPrefix ((.prefix) declaration)]
       ]
     resolutionErrors = case Nominal.resolveNominalTypes spec of
@@ -2082,8 +2082,10 @@ validateNames languageContract typeGraphResult spec =
             [ ((.name) nominal, nominal)
             | (_, AggregateNominal nominal) <- resolvedHarnessFields,
               Nominal.GeneratedNominal <- [(.ownership) nominal],
-              Nominal.IdRepresentation prefix <- [(.representation) nominal],
-              idDomainContractFor languageContract prefix /= Nothing
+              Nominal.IdRepresentation {} <- [(.representation) nominal],
+              declaration <- (.ids) spec,
+              (.name) declaration == (.name) nominal,
+              idDomainContractForDeclaration languageContract declaration /= Nothing
             ]
         timeFields = [field | (field, AggregateTime) <- resolvedHarnessFields]
         timeSample = case filter ((== "observedAt") . (.name)) timeFields of

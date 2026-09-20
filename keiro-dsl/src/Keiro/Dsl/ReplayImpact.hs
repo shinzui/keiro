@@ -30,6 +30,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
+import Keiro.Codec.IdDomain (v5OrV7IdDomainVersion)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CanonicalEncoding (canonicalExpr, canonicalTransition)
 import Keiro.Dsl.FieldIdentity (ResolvedFieldIdentity (..), resolveAggregateFieldIdentity)
@@ -336,7 +337,8 @@ nominalSurface nominal =
 
 nominalRepresentationSurface :: NominalRepresentation -> Text
 nominalRepresentationSurface representation = case representation of
-  IdRepresentation prefix -> "id:" <> prefix
+  IdRepresentation prefix TypeIdV7 -> "id:" <> prefix
+  IdRepresentation prefix TypeIdV5OrV7 -> "id:" <> prefix <> ";domain=" <> v5OrV7IdDomainVersion
   EnumRepresentation constructors -> "enum:" <> Text.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
   ScalarRepresentation scalar -> case scalar of
     NominalText -> "scalar:Text"

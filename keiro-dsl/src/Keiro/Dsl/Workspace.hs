@@ -1455,6 +1455,9 @@ instance HasLocs HaskellSource
 
 instance HasLocs Hole
 
+instance HasLocs IdAdmission where
+  traverseLocs _ = pure
+
 instance HasLocs IdDecl
 
 instance HasLocs IdExpr

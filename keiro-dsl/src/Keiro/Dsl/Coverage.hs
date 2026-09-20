@@ -42,6 +42,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Codec.IdDomain (enforcedIdDomainVersion, v5OrV7IdDomainVersion)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.SemanticContract (CheckedService, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact
@@ -479,8 +480,8 @@ nominalBoundaryInventory graph =
           position = if SegMapKey `elem` (.segments) path then "key" else "value",
           nominal = (.name) leaf,
           kind = case (.kind) leaf of NominalIdLeaf {} -> "id"; NominalEnumLeaf {} -> "enum"; NominalScalarLeaf {} -> "scalar",
-          prefix = case (.kind) leaf of NominalIdLeaf value -> Just value; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
-          domainVersion = case (.kind) leaf of NominalIdLeaf {} -> Just "keiro-dsl/id-domain/typeid-v7/1"; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
+          prefix = case (.kind) leaf of NominalIdLeaf value _ -> Just value; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
+          domainVersion = case (.kind) leaf of NominalIdLeaf _ TypeIdV7 -> Just enforcedIdDomainVersion; NominalIdLeaf _ TypeIdV5OrV7 -> Just v5OrV7IdDomainVersion; NominalEnumLeaf {} -> Nothing; NominalScalarLeaf {} -> Nothing,
           canonicalType = case (.ownership) leaf of GeneratedLeaf -> Nothing; ConsumerLeaf binding -> Just (unCanonicalTypeId ((.canonical) binding)),
           ownership = case (.ownership) leaf of GeneratedLeaf -> "generated"; ConsumerLeaf {} -> "consumer"
         }

@@ -10,7 +10,6 @@ module Generated.IdDomainMigration.OrderBook.Transducer
 
 import Generated.IdDomainMigration.OrderBook.Domain
 import Data.Text (Text)
-import Generated.IdDomainMigration.Nominals (OrderId)
 import Keiki.Builder qualified as B
 import Keiki.Core (HsPred, SymTransducer)
 import Keiki.Core qualified as K

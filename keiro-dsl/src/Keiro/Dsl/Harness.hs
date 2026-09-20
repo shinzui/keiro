@@ -56,7 +56,7 @@ import Keiro.Dsl.Goldens (GoldenPayload (..))
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.HaskellName qualified as HaskellName
-import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainSampleText)
+import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainContractForAdmission, idDomainSampleText)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.PrettyPrint (renderExpr)
 import Keiro.Dsl.ProcessReaction (CheckedProcessReaction (..), checkProcessReaction, processReactionFingerprintFrom)
@@ -1035,11 +1035,11 @@ harnessSampleDeclarations aggregate =
     generatedIds =
       [ nominal
       | nominal <- generatedNominalHarnessTypes aggregate,
-        IdRepresentation prefix <- [(.representation) nominal],
+        IdRepresentation prefix _ <- [(.representation) nominal],
         idDomainContractFor ((.languageContract) aggregate) prefix /= Nothing
       ]
     generatedIdDeclaration nominal = case (.representation) nominal of
-      IdRepresentation prefix -> case idDomainContractFor ((.languageContract) aggregate) prefix of
+      IdRepresentation prefix admission -> case idDomainContractForAdmission ((.languageContract) aggregate) admission prefix of
         Just contract ->
           let typeName = (.name) nominal
               constantName = generatedIdSampleName nominal
@@ -1218,12 +1218,22 @@ nominalHarnessImports aggregate
       ]
         <> ( if null enforcedIds
                then []
-               else ["import Data.KindID qualified as KindID", "import Data.Text qualified as T", "import Keiro.Codec.IdDomain (typeIdV7Domain, validateIdDomainText)"]
+               else
+                 [ "import Data.KindID qualified as KindID",
+                   "import Data.Text qualified as T",
+                   "import Keiro.Codec.IdDomain (" <> T.intercalate ", " (idDomainConstructors <> ["validateIdDomainText"]) <> ")"
+                 ]
            )
         <> ["import " <> nominalProjectionModule ((.context) aggregate) <> " qualified as NominalProjections" | not (null (nominalScalarHarnessTypes aggregate)) || not (null enforcedIds)]
   where
     nominals = consumerNominalHarnessTypes aggregate
     enforcedIds = enforcedConsumerNominalIdHarnessTypes aggregate
+    idDomainConstructors =
+      ["typeIdV7Domain" | any (hasAdmission TypeIdV7) enforcedIds]
+        <> ["typeIdV5OrV7Domain" | any (hasAdmission TypeIdV5OrV7) enforcedIds]
+    hasAdmission admission nominal = case (.representation) nominal of
+      IdRepresentation _ selected -> selected == admission
+      _ -> False
 
 hasNominalHarness :: Agg -> Bool
 hasNominalHarness = not . null . consumerNominalHarnessTypes
@@ -1253,7 +1263,7 @@ enforcedConsumerNominalIdHarnessTypes :: Agg -> [ResolvedNominalType]
 enforcedConsumerNominalIdHarnessTypes aggregate =
   [ nominal
   | nominal <- consumerNominalHarnessTypes aggregate,
-    IdRepresentation prefix <- [(.representation) nominal],
+    IdRepresentation prefix _ <- [(.representation) nominal],
     idDomainContractFor ((.languageContract) aggregate) prefix /= Nothing
   ]
 
@@ -1296,8 +1306,8 @@ nominalHarnessDeclarations aggregate
           fixtureName = renderHarnessReference aggregate (harnessQualifiedValueReference ((.fixtures) binding))
           fixtures = "(NonEmpty.toList (nominalFixtureCases " <> fixtureName <> "))"
     idDomainAssertions name bindingName fixtures nominal = case (.representation) nominal of
-      IdRepresentation prefix
-        | Just contract <- idDomainContractFor ((.languageContract) aggregate) prefix ->
+      IdRepresentation prefix admission
+        | Just contract <- idDomainContractForAdmission ((.languageContract) aggregate) admission prefix ->
             let firstSample = idDomainSampleText contract
                 samples = [firstSample, T.dropEnd 1 firstSample <> "r"]
                 wrongPrefix = "wrong_" <> T.drop (T.length prefix + 1) firstSample
@@ -1310,8 +1320,8 @@ nominalHarnessDeclarations aggregate
                       <> fixtures
                   ),
                   ( "nominal ID fixture domain agreement: " <> name,
-                    "all (\\fixture -> case validateIdDomainText (typeIdV7Domain "
-                      <> tshow prefix
+                    "all (\\fixture -> case validateIdDomainText ("
+                      <> idDomainExpression admission prefix
                       <> ") (KindID.toText (nominalToRepresentation "
                       <> bindingName
                       <> " (nominalFixtureDomain fixture))) of Right () -> True; Left _ -> False) "
@@ -1325,12 +1335,12 @@ nominalHarnessDeclarations aggregate
                       <> "]"
                   ),
                   ( "nominal ID boundary rejects wrong-prefix and normalized text: " <> name,
-                    "case (validateIdDomainText (typeIdV7Domain "
-                      <> tshow prefix
+                    "case (validateIdDomainText ("
+                      <> idDomainExpression admission prefix
                       <> ") "
                       <> tshow wrongPrefix
-                      <> ", validateIdDomainText (typeIdV7Domain "
-                      <> tshow prefix
+                      <> ", validateIdDomainText ("
+                      <> idDomainExpression admission prefix
                       <> ") (T.toUpper "
                       <> tshow firstSample
                       <> ")) of (Left _, Left _) -> True; _ -> False"
@@ -1344,6 +1354,8 @@ nominalHarnessDeclarations aggregate
             <> " "
             <> tshow value
             <> " of Right parsed -> parsed; Left _ -> error \"generated canonical ID conformance probe failed to parse\")"
+        idDomainExpression TypeIdV7 prefix = "typeIdV7Domain " <> tshow prefix
+        idDomainExpression TypeIdV5OrV7 prefix = "typeIdV5OrV7Domain " <> tshow prefix
     renderList values =
       [ (if index == (0 :: Int) then "  [ " else "  , ") <> "(" <> tshow labelText <> ", " <> expression <> ")"
       | (index, (labelText, expression)) <- zip [0 ..] values

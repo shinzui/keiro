@@ -109,12 +109,20 @@ docLayout CollocatedLeaf = "collocated"
 docId :: IdDecl -> Doc ann
 docId d =
   case (.binding) d of
-    Nothing -> "id" <+> pretty ((.name) d) <+> ("prefix=" <> pretty ((.prefix) d))
+    Nothing -> idHeader
     Just binding ->
       vsep $
-        ["id" <+> pretty ((.name) d) <+> ("prefix=" <> pretty ((.prefix) d)) <+> "using" <+> "{"]
+        [idHeader <+> "using" <+> "{"]
           ++ map (indent 2) (docNominalBindingFacts binding)
           ++ ["}"]
+  where
+    idHeader =
+      "id"
+        <+> pretty ((.name) d)
+        <+> ("prefix=" <> pretty ((.prefix) d))
+        <> case (.admission) d of
+          TypeIdV7 -> mempty
+          TypeIdV5OrV7 -> " domain=typeid-v5-or-v7"
 
 docEnum :: EnumDecl -> Doc ann
 docEnum d =

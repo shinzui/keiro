@@ -89,6 +89,7 @@ import Data.TypeID qualified as TypeID
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Keiro.Codec.CalendarDay (calendarDayCodecPolicyIdentity)
+import Keiro.Codec.IdDomain (enforcedIdDomainVersion, v5OrV7IdDomainVersion)
 import Keiro.Codec.Refined (base16BytesCodecPolicyIdentity)
 import Keiro.Codec.TextSet (textSetCodecPolicyIdentity)
 import Keiro.Dsl.Grammar
@@ -184,7 +185,7 @@ data ConsumerNominalBinding = ConsumerNominalBinding
   deriving stock (Eq, Ord, Show, Generic)
 
 data NominalLeafKind
-  = NominalIdLeaf !Text
+  = NominalIdLeaf !Text !IdAdmission
   | NominalEnumLeaf !(NonEmpty (Name, Text))
   | NominalScalarLeaf !NominalScalarRepresentation
   deriving stock (Eq, Ord, Show, Generic)
@@ -228,7 +229,7 @@ checkIdLeaf declaration = do
       Right
         NominalLeaf
           { name = (.name) declaration,
-            kind = NominalIdLeaf ((.prefix) declaration),
+            kind = NominalIdLeaf ((.prefix) declaration) ((.admission) declaration),
             ownership = ownership,
             loc = (.loc) declaration
           }
@@ -1371,7 +1372,7 @@ nominalWireFingerprint = fnv1a64 . nominalWireToken
 
 nominalWireToken :: NominalLeaf -> Text
 nominalWireToken leaf = case (.kind) leaf of
-  NominalIdLeaf prefix -> "nominal-id(" <> prefix <> "," <> nominalIdDomainVersion <> ")"
+  NominalIdLeaf prefix admission -> "nominal-id(" <> prefix <> "," <> idAdmissionVersion admission <> ")"
   NominalEnumLeaf constructors ->
     "nominal-enum(" <> T.intercalate ";" (sort (map snd (NE.toList constructors))) <> ")"
   NominalScalarLeaf representation -> "nominal-scalar(" <> scalarToken representation <> ")"
@@ -1383,11 +1384,9 @@ nominalWireToken leaf = case (.kind) leaf of
       NominalBool -> "Bool"
       NominalTime -> "Time"
 
--- Kept byte-identical to Keiro.Dsl.IdDomain.enforcedIdDomainVersion.  This
--- low-level graph module cannot import IdDomain because that module reads
--- CheckedService, whose analysis contains this graph.
-nominalIdDomainVersion :: Text
-nominalIdDomainVersion = "keiro-dsl/id-domain/typeid-v7/1"
+idAdmissionVersion :: IdAdmission -> Text
+idAdmissionVersion TypeIdV7 = enforcedIdDomainVersion
+idAdmissionVersion TypeIdV5OrV7 = v5OrV7IdDomainVersion
 
 fnv1a64 :: Text -> Text
 fnv1a64 input =

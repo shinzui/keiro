@@ -18,7 +18,7 @@ where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
 import Data.Bifunctor (first)
-import Data.List (groupBy, sortOn)
+import Data.List (find, groupBy, sortOn)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -26,7 +26,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
-import Keiro.Dsl.IdDomain (idDomainContractFor, idDomainVersion)
+import Keiro.Dsl.IdDomain (idDomainContractForDeclaration, idDomainVersion)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.TypeGraph
@@ -316,7 +316,7 @@ nominalObligationsFor service graph nominal = case (.ownership) nominal of
         EnumRepresentation {} -> "nominal-enum"
         ScalarRepresentation {} -> "nominal-scalar"
       representation = case (.representation) nominal of
-        IdRepresentation prefix -> "(KindID " <> quoted prefix <> ")"
+        IdRepresentation prefix _ -> "(KindID " <> quoted prefix <> ")"
         EnumRepresentation {} -> nominalEnumRepresentationModule spec name <> "." <> name <> "Representation"
         ScalarRepresentation NominalText -> "Text"
         ScalarRepresentation NominalInt -> "Int"
@@ -326,7 +326,9 @@ nominalObligationsFor service graph nominal = case (.ownership) nominal of
       canonical = Just (unCanonicalTypeId ((.canonical) binding))
       equalityContract = nominalEqualityIdentityForService (checkedLanguageContract service) nominal
       idContract = case (.representation) nominal of
-        IdRepresentation prefix -> idDomainVersion <$> idDomainContractFor (checkedLanguageContract service) prefix
+        IdRepresentation {} -> do
+          declaration <- find ((== name) . (.name)) ((.ids) spec)
+          idDomainVersion <$> idDomainContractForDeclaration (checkedLanguageContract service) declaration
         _ -> Nothing
       bindingEntry = nominalObligation name binding category ((.binding) binding) BindingValue ("NominalBinding " <> consumerType <> " " <> representation) paths (Just (unBindingVersion ((.bindingVersion) binding))) canonical equalityContract idContract
       fixtureEntry = nominalObligation name binding category ((.fixtures) binding) FixtureValue ("NominalFixtureCases " <> consumerType) paths Nothing canonical Nothing Nothing

@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings, CalendarDayMappings, TextSetMappings, RefinedBase16Mappings]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings, CalendarDayMappings, TextSetMappings, RefinedBase16Mappings, ExplicitIdAdmissionDomains]
                    ]
       map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -85,6 +85,7 @@ frontendProfilesSpec = do
               CalendarDaySyntax -> version 6
               TextSetSyntax -> version 6
               RefinedBase16Syntax -> version 6
+              ExplicitIdAdmissionDomainSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -188,7 +189,8 @@ data FeatureCase = FeatureCase
 
 featureCases :: [FeatureCase]
 featureCases =
-  [ FeatureCase NominalBindingSyntax "using" (featureBody NominalBindingSyntax),
+  [ FeatureCase ExplicitIdAdmissionDomainSyntax "domain" (featureBody ExplicitIdAdmissionDomainSyntax),
+    FeatureCase NominalBindingSyntax "using" (featureBody NominalBindingSyntax),
     FeatureCase IntegerScalarSyntax "Integer" (featureBody IntegerScalarSyntax),
     FeatureCase TypedAggregateExpressionSyntax "cmd." (featureBody TypedAggregateExpressionSyntax),
     FeatureCase ExplicitTransitionImplementationSyntax "implementation hole" (featureBody ExplicitTransitionImplementationSyntax),
@@ -213,6 +215,7 @@ featureCases =
 
 featureBody :: LanguageFeature -> Text
 featureBody = \case
+  ExplicitIdAdmissionDomainSyntax -> T.unlines ["context profile", "id ProfileId prefix=profile domain=typeid-v5-or-v7"]
   NominalBindingSyntax -> T.unlines ["context profile", "id ProfileId prefix=profile using {}"]
   IntegerScalarSyntax -> T.unlines ["context profile", "aggregate Counter", "  regs", "    count Integer = 0", "  states Open"]
   TypedAggregateExpressionSyntax ->
@@ -368,7 +371,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
+allFeatures = [ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

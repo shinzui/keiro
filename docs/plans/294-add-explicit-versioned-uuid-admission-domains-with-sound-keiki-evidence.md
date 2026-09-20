@@ -27,6 +27,16 @@ provenance:
       at: 2026-09-19T22:32:10Z
       mode: "update"
       note: "Checked direct/nested domain propagation and exact evidence obligations; added API matrix and retained-history release gates."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T13:49:09Z
+      mode: "implement"
+      note: "Begin explicit UUID admission-domain implementation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T15:26:22Z
+      mode: "implement"
+      note: "Complete explicit UUIDv5-or-v7 admission with exact Keiki evidence, replay-visible identity, public conformance coverage, and full validation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -57,16 +67,20 @@ Implement IR-46 so a declaration can explicitly admit canonical prefixed UUIDv5 
 ## Progress
 
 
-- [ ] Milestone 1: Define explicit domain identity and canonical membership.
-- [ ] Milestone 2: Prove runtime and symbolic agreement before exposing equality.
-- [ ] Milestone 3: Propagate admission to nested and public consumers.
-- [ ] Milestone 4: Rehearse mixed-domain history and immutable identities.
+- [x] (2026-09-20T15:26:22Z) Milestone 1: Define explicit domain identity and canonical membership.
+- [x] (2026-09-20T15:26:22Z) Milestone 2: Prove runtime and symbolic agreement before exposing equality.
+- [x] (2026-09-20T15:26:22Z) Milestone 3: Propagate admission to nested and public consumers.
+- [x] (2026-09-20T15:26:22Z) Milestone 4: Rehearse mixed-domain history and immutable identities.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
+The released TypeID dependency exposes generic parsing but its v7 checker collapses all UUID failures to `Invalid UUID part!`. Keiro therefore owns the UUID version and RFC-variant character table for both runtime admission and the exact text pattern, while retaining the old v7 failure constructor and rendered text byte-for-byte.
+
+Generated transducers need unqualified nominal types only when a nominal projection adds a typed `Index` annotation or a literal constructor/parser is rendered. Importing every nominal expression makes write-only IDs fail the generated-output unused-import gate; excluding all enforced IDs makes projected guards fail to compile. Selecting precisely literal and projected nominals keeps both cases warning-clean.
+
+The full DSL suite's closed inventories caught the new candidate fixture and compiled conformance component, as intended. The final corpus contains 52 registered invocations and regenerates without drift beyond the committed new fixture plus the removal of one pre-existing unused generated import.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -87,11 +101,17 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
+2026-09-20 (implementation): Freeze `keiro-dsl/id-domain/typeid-v5-or-v7/1` beside the unchanged `keiro-dsl/id-domain/typeid-v7/1`. Keep implicit declarations byte-identical, add explicit Language-6 syntax for the wider admission, derive runtime and symbolic membership from the same version/variant table, and carry the selected identity through direct and nested replay surfaces, ledgers, diffs, generated codecs, keys, queues, and public contracts. Generation remains unchanged and process/workflow persistence remains application-owned.
+
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record results and remaining adoption obligations here; plan creation is not implementation completion.
+Keiro now supports `domain=typeid-v5-or-v7` on Language-6 ID declarations while preserving the implicit v7 default and all released v7 identities. The runtime accepts only canonical prefixed Crockford encodings with UUID version 5 or 7 and an RFC variant; generated exact Keiki domains use the same table. A focused solver test proves a v5-only guard overlap satisfiable, rejects a deliberately stale v7 witness through the owner law, and leaves an opaque proof path unverified.
+
+The compiled `id-admission-domains` corpus passes 36 assertions across direct aggregate fields and registers, required and optional nested IDs, ID-keyed maps, queue payloads, public contract payloads, mixed v5/v7 multi-event serialization, replay-only history, first-event information-loss rejection, strict replay, binding laws, projection agreement, wrong prefixes, and excluded versions. Direct and nested admission changes in either direction change their fold/replay identities, raise `IdDomainContractChanged`, and produce direction-specific rollout guidance; existing implicit-v7 bytes and fingerprints remain pinned.
+
+Validation completed with `keiro-dsl:keiro-dsl-test` at 790 examples and zero failures, all `keiro-dsl:tests` components green, `keiro:keiro-test` at 711 examples and zero failures, all 52 corpus invocations regenerated consistently, and strict validation of all 47 ADR concepts. Real retained consumer identifiers, streams, process recovery, and workflow journals remain assigned to Plan 295; this repository proof neither claims that audit nor publishes Language 6.
 
 
 ## Context and Orientation
@@ -211,3 +231,5 @@ Revision note (2026-09-19, validation review): Context now names the four places
 Revision note (2026-09-19, validation review correction): A follow-up check found that directly-used declared IDs reach the replay surface and the fold fingerprint through `IdRepresentation`, which renders `id:<prefix>` with no domain. Context, Milestone 3, the acceptance criteria, and the Decision Log now require the domain on that path too, with separate nested and direct fixtures.
 
 Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Completed the explicit UUIDv5-or-v7 admission domain, shared runtime/symbolic membership table, conservative Keiki proof cases, direct and nested replay identity propagation, generated/public/keyed-map/queue consumers, compiled repository history, supported-use documentation, and ADR updates. Marked Plan 294 complete after full regression and corpus validation; consumer history, Language 6 publication, and retirement remain Plan 295 work.

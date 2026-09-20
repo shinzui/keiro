@@ -17,6 +17,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Keiro.Codec.IdDomain (v5OrV7IdDomainVersion)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CanonicalEncoding (canonicalExpr, foldFingerprint128)
 import Keiro.Dsl.EventOutput
@@ -103,10 +104,10 @@ aggregateFoldSurfaceForService service aggregate = do
         Just declaration <- [Map.lookup (MappedKey typeName) ((.declarations) graph)]
       ]
     nominalSegments registry =
-      [ nominalUseSegment useSite nominal binding
+      [ segment
       | (useSite, typeName) <- nominalUseNames aggregate,
         Just nominal <- [lookupNominalType typeName registry],
-        ConsumerNominal binding <- [(.ownership) nominal]
+        segment <- nominalUseSegments useSite nominal
       ]
     nestedNominalSegments graph =
       [ nestedNominalUseSegment path leaf
@@ -154,7 +155,7 @@ nestedNominalUseSegment path leaf =
 
 nominalLeafRepresentationSegment :: NominalLeafKind -> Text
 nominalLeafRepresentationSegment = \case
-  NominalIdLeaf prefix -> "id:" <> prefix
+  NominalIdLeaf prefix admission -> idRepresentationSegment prefix admission
   NominalEnumLeaf constructors ->
     "enum:" <> T.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
   NominalScalarLeaf representation -> case representation of
@@ -247,9 +248,28 @@ nominalUseSegment useSite nominal binding =
       "initial=" <> maybe "(none)" unQualifiedValueName ((.initial) binding)
     ]
 
+-- Released generated IDs contributed no direct-use segment. Preserve that
+-- exact surface for implicit v7 while making the candidate wider domain visible
+-- on direct registers and event fields. Consumer-owned nominal segments already
+-- existed and now carry the selected domain through their representation.
+nominalUseSegments :: Text -> ResolvedNominalType -> [Text]
+nominalUseSegments useSite nominal = case (.ownership) nominal of
+  ConsumerNominal binding -> [nominalUseSegment useSite nominal binding]
+  GeneratedNominal -> case (.representation) nominal of
+    IdRepresentation _ TypeIdV5OrV7 ->
+      [ T.intercalate
+          "|"
+          [ "nominal-use:" <> useSite,
+            "name=" <> (.name) nominal,
+            "representation=" <> nominalRepresentationSegment ((.representation) nominal),
+            "owner=generated"
+          ]
+      ]
+    _ -> []
+
 nominalRepresentationSegment :: NominalRepresentation -> Text
 nominalRepresentationSegment representation = case representation of
-  IdRepresentation prefix -> "id:" <> prefix
+  IdRepresentation prefix admission -> idRepresentationSegment prefix admission
   EnumRepresentation constructors -> "enum:" <> T.intercalate "," [constructor <> "=" <> wire | (constructor, wire) <- NE.toList constructors]
   ScalarRepresentation scalar -> case scalar of
     NominalText -> "Text"
@@ -257,6 +277,10 @@ nominalRepresentationSegment representation = case representation of
     NominalNatural -> "Natural"
     NominalBool -> "Bool"
     NominalTime -> "Time"
+
+idRepresentationSegment :: Text -> IdAdmission -> Text
+idRepresentationSegment prefix TypeIdV7 = "id:" <> prefix
+idRepresentationSegment prefix TypeIdV5OrV7 = "id:" <> prefix <> ";domain=" <> v5OrV7IdDomainVersion
 
 mappedRegisterSegment :: TypeGraph -> ResolvedMappedDecl -> Text
 mappedRegisterSegment graph (ResolvedStructural declaration _) =

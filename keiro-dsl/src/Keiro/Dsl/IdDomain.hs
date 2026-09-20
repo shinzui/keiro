@@ -1,11 +1,18 @@
 -- | Semantic selection of the published ID runtime contract.
 module Keiro.Dsl.IdDomain
-  ( IdNormalization (..),
+  ( IdAdmission (..),
+    IdNormalization (..),
     IdDomainContract (..),
     IdDomainFailure (..),
     enforcedIdDomainVersion,
+    v5OrV7IdDomainVersion,
+    typeIdV7Domain,
+    typeIdV5OrV7Domain,
     idDomainContractFor,
+    idDomainContractForAdmission,
+    idDomainContractForDeclaration,
     contractIdDomainContractFor,
+    contractIdDomainContractForAdmission,
     idDomainIdentity,
     idDomainIdentitiesForService,
     idDomainAcceptsText,
@@ -25,12 +32,23 @@ import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..
 
 -- | Versions 1 and 2 intentionally return 'Nothing': their generated IDs
 -- admitted arbitrary text. Runtime-semantics generation 2 is the first
--- enforcing contract.
+-- enforcing contract. The candidate explicit-domain capability lets a
+-- declaration select the wider frozen v5-or-v7 policy.
 idDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDomainContract
 idDomainContractFor languageContract prefix
   | runtimeProfileHasCapability ((.runtimeProfile) languageContract) GeneratedIdDomainTypeIdV7 =
       Just (typeIdV7Domain prefix)
   | otherwise = Nothing
+
+idDomainContractForAdmission :: EffectiveLanguageContract -> IdAdmission -> Text -> Maybe IdDomainContract
+idDomainContractForAdmission languageContract admission prefix
+  | runtimeProfileHasCapability ((.runtimeProfile) languageContract) GeneratedIdDomainTypeIdV7 =
+      Just (contractForAdmission admission prefix)
+  | otherwise = Nothing
+
+idDomainContractForDeclaration :: EffectiveLanguageContract -> IdDecl -> Maybe IdDomainContract
+idDomainContractForDeclaration languageContract declaration =
+  idDomainContractForAdmission languageContract ((.admission) declaration) ((.prefix) declaration)
 
 -- | Public contract DTOs adopt the frozen TypeID-v7 admission contract only
 -- in runtime semantics 3. Aggregate IDs retain the independent selector above.
@@ -38,6 +56,15 @@ contractIdDomainContractFor :: EffectiveLanguageContract -> Text -> Maybe IdDoma
 contractIdDomainContractFor languageContract prefix
   | runtimeProfileHasCapability ((.runtimeProfile) languageContract) ContractIdDomainTypeIdV7 = Just (typeIdV7Domain prefix)
   | otherwise = Nothing
+
+contractIdDomainContractForAdmission :: EffectiveLanguageContract -> IdAdmission -> Text -> Maybe IdDomainContract
+contractIdDomainContractForAdmission languageContract admission prefix
+  | runtimeProfileHasCapability ((.runtimeProfile) languageContract) ContractIdDomainTypeIdV7 = Just (contractForAdmission admission prefix)
+  | otherwise = Nothing
+
+contractForAdmission :: IdAdmission -> Text -> IdDomainContract
+contractForAdmission TypeIdV7 = typeIdV7Domain
+contractForAdmission TypeIdV5OrV7 = typeIdV5OrV7Domain
 
 -- | Durable identity for the runtime admission domain of one declaration.
 -- This is deliberately separate from nominal equality: IDs without equality
@@ -63,17 +90,17 @@ idDomainIdentitiesForService service =
     aggregateIdentities =
       [ idDomainIdentity ((.name) declaration) contract
       | declaration <- (.ids) spec,
-        Just contract <- [idDomainContractFor languageContract ((.prefix) declaration)]
+        Just contract <- [idDomainContractForDeclaration languageContract declaration]
       ]
     contractIdentities =
       [ idDomainIdentity ("contract:" <> (.name) contractNode <> "." <> (.name) event <> "." <> (.name) field) contract
       | NContract contractNode <- (.nodes) spec,
         event <- (.events) contractNode,
         field <- (.fields) event,
-        Just prefix <- [contractFieldPrefix field],
-        Just contract <- [contractIdDomainContractFor languageContract prefix]
+        Just (admission, prefix) <- [contractFieldAdmission field],
+        Just contract <- [contractIdDomainContractForAdmission languageContract admission prefix]
       ]
-    contractFieldPrefix field = case (.valueType) field of
-      CTypeId prefix -> Just prefix
-      CDeclaredId name -> (.prefix) <$> find ((== name) . (.name)) ((.ids) spec)
+    contractFieldAdmission field = case (.valueType) field of
+      CTypeId prefix -> Just (TypeIdV7, prefix)
+      CDeclaredId name -> (\declaration -> ((.admission) declaration, (.prefix) declaration)) <$> find ((== name) . (.name)) ((.ids) spec)
       _ -> Nothing

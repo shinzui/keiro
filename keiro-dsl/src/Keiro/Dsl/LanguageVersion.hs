@@ -147,6 +147,7 @@ data RuntimeCapability
   | CalendarDayMappings
   | TextSetMappings
   | RefinedBase16Mappings
+  | ExplicitIdAdmissionDomains
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -187,6 +188,9 @@ capabilityFoldSegment CalendarDayMappings = Nothing
 capabilityFoldSegment TextSetMappings = Nothing
 -- Refined base16 mappings change generated codecs, not transition/fold semantics.
 capabilityFoldSegment RefinedBase16Mappings = Nothing
+-- Admission identity is declaration-scoped so unrelated candidate services
+-- retain their existing fold fingerprints.
+capabilityFoldSegment ExplicitIdAdmissionDomains = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {capabilities} =
@@ -315,7 +319,7 @@ profileV5 :: SyntaxProfile
 profileV5 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/5"
-    (Set.insert RefinedBase16Syntax (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4))))))))))
+    (Set.insert ExplicitIdAdmissionDomainSyntax (Set.insert RefinedBase16Syntax (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4)))))))))))
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
@@ -354,7 +358,7 @@ runtimeProfileV5 :: RuntimeSemanticsProfile
 runtimeProfileV5 =
   RuntimeSemanticsProfile
     "keiro-dsl/runtime-semantics/5"
-    (Set.insert RefinedBase16Mappings (Set.insert TextSetMappings (Set.insert CalendarDayMappings (Set.insert BareStructuralMappings (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4)))))))
+    (Set.insert ExplicitIdAdmissionDomains (Set.insert RefinedBase16Mappings (Set.insert TextSetMappings (Set.insert CalendarDayMappings (Set.insert BareStructuralMappings (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4))))))))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -408,6 +412,7 @@ data LanguageFeature
   | CalendarDaySyntax
   | TextSetSyntax
   | RefinedBase16Syntax
+  | ExplicitIdAdmissionDomainSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

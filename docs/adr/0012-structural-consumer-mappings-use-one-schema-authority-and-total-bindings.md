@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-20T05:09:38Z
+timestamp: 2026-09-20T14:34:41Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -124,12 +124,18 @@ unrestricted `Text`, so their concrete equality is type-safe but their symbolic
 projection is deliberately one-way and conservatively unverified. Language-3
 generated IDs restrict public construction and current JSON decoding through
 `keiro-dsl/id-domain/typeid-v7/1`, so they use the same exact full-string domain
-and reconstruction evidence as consumer-bound IDs.
+and reconstruction evidence as consumer-bound IDs. Candidate Language 6 may
+explicitly select `keiro-dsl/id-domain/typeid-v5-or-v7/1`; omission preserves
+the v7 contract and all released identity bytes.
 
 Keiro, not the consumer binding, owns that ID admission domain. The checked
 contract fixes the prefix, separator, canonical lowercase normalization,
-26-character Crockford suffix, maximum length, UUIDv7 version/variant bits, and
-JSON text representation. Consumer conversion runs only after this validation.
+26-character Crockford suffix, maximum length, the declaration's closed UUID
+version set, RFC variant bits, and JSON text representation. Consumer conversion
+runs only after this validation. Runtime admission and Keiki's exact text pattern
+derive from the same version and variant table. The wider Language 6 contract
+admits only UUIDv5 or UUIDv7; it does not delegate version policy to the TypeID
+dependency and does not change identifier generation.
 Generated conformance checks fixture agreement and distinct canonical
 representations through both total binding directions, so a binding that
 normalizes or quotients valid representations turns the gate red. The stable

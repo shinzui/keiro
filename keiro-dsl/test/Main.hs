@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+
 -- | Test driver for keiro-dsl. EP-1 milestone 1 tests: the @parse . pretty@
 -- round-trip property over generated specs, and a unit test pinning the shape
 -- of the canonical Reservation fixture.
@@ -28,7 +30,10 @@ import Data.Text.Lazy.Encoding qualified as LazyTextEncoding
 import Data.Time.Calendar (Day (ModifiedJulianDay), fromGregorian)
 import Data.Version (showVersion)
 import Data.Word (Word8)
+import Keiki.Core qualified as Keiki
 import Keiki.ProjectionDomain (matchesTextPattern)
+import Keiki.ProjectionDomain qualified as ProjectionDomain
+import Keiki.Symbolic qualified as KeikiSymbolic
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
 import Keiro.Codec.Base16Bytes
   ( Base16BytesError (..),
@@ -46,7 +51,7 @@ import Keiro.Codec.CalendarDay
     parseCanonicalCalendarDayText,
     renderCalendarDay,
   )
-import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
+import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdText, parseKindIdV7Text, parseKindIdV7Value, typeIdV5OrV7Domain, typeIdV7Domain, validateIdDomainText)
 import Keiro.Codec.TextSet (encodeTextSet, parseTextSet, textSetCodecPolicyIdentity)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
@@ -73,7 +78,6 @@ import Keiro.Dsl.FrontendSurface (frontendSurfaceSpec)
 import Keiro.Dsl.GeneratedHaskellLanguage (RewriteState (..), modernizeGeneratedHaskellSourceWithState)
 import Keiro.Dsl.Goldens (GoldenEvidence (..), GoldenPayload (..), emitGoldenPayloads, goldenRelativePath, goldensForDiff)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.Grammar qualified as Grammar
 import Keiro.Dsl.Harness (harnessFor, harnessForService, harnessForWithGoldens, harnessReadModel, harnessRouter, harnessWorkflow)
 import Keiro.Dsl.HaskellImport
 import Keiro.Dsl.HaskellSourceMove
@@ -99,7 +103,6 @@ import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldMod
 import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), GeneratedHaskellEditionImpact (..), GeneratedHaskellEditionUse (..), HoleUseForm (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndMigrations, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
-import Keiro.Dsl.SemanticImpact qualified as SemanticImpact
 import Keiro.Dsl.ServiceHarness
 import Keiro.Dsl.SidecarMigration
 import Keiro.Dsl.SidecarNames
@@ -109,7 +112,6 @@ import Keiro.Dsl.SourceIndex
 import Keiro.Dsl.TypeGraph
 import Keiro.Dsl.Validate (Diagnostic (..), DiagnosticCode (..), Severity (..), derivedQueueTrio, diagnosticCodeText, parseDiagnosticCode, renderDiagnostic, validateService, validateSpec)
 import Keiro.Dsl.Workspace
-import Keiro.Dsl.Workspace qualified as Workspace
 import Keiro.Dsl.WorkspaceAdoption
 import Keiro.Dsl.WorkspaceDiff hiding (diffWorkspaces)
 import Keiro.Dsl.WorkspaceDiff qualified as CheckedWorkspaceDiff
@@ -125,6 +127,58 @@ import System.IO (hClose, openTempFile)
 import System.Process (readProcessWithExitCode)
 import Test.Hspec hiding (Spec)
 import Test.QuickCheck
+
+newtype AdmissionDomainOwner = AdmissionDomainOwner T.Text
+  deriving stock (Eq, Show)
+
+data WideAdmissionDomainText
+
+wideAdmissionDomainPattern :: ProjectionDomain.TextPattern
+wideAdmissionDomainPattern =
+  either (error . show) id (idDomainTextPattern (typeIdV5OrV7Domain "req"))
+
+instance Keiki.FieldProjection WideAdmissionDomainText where
+  type FieldName WideAdmissionDomainText = "id"
+  type FieldOwner WideAdmissionDomainText = AdmissionDomainOwner
+  type FieldResult WideAdmissionDomainText = T.Text
+  fieldShapeId _ = "keiro-dsl.test.id-domain.v5-or-v7"
+  projectFieldValue _ (AdmissionDomainOwner value) = value
+
+instance Keiki.ExactFieldProjection WideAdmissionDomainText where
+  fieldProjectionDomain _ = ProjectionDomain.textProjectionDomain wideAdmissionDomainPattern
+  reconstructFieldOwner _ value
+    | matchesTextPattern wideAdmissionDomainPattern value = Just (AdmissionDomainOwner value)
+    | otherwise = Nothing
+
+wideAdmissionDomainWitness :: Keiki.FieldWitness WideAdmissionDomainText
+wideAdmissionDomainWitness = Keiki.exactFieldWitness @WideAdmissionDomainText
+
+data StaleV7AdmissionDomainText
+
+staleV7AdmissionDomainPattern :: ProjectionDomain.TextPattern
+staleV7AdmissionDomainPattern =
+  either (error . show) id (idDomainTextPattern (typeIdV7Domain "req"))
+
+instance Keiki.FieldProjection StaleV7AdmissionDomainText where
+  type FieldName StaleV7AdmissionDomainText = "id"
+  type FieldOwner StaleV7AdmissionDomainText = AdmissionDomainOwner
+  type FieldResult StaleV7AdmissionDomainText = T.Text
+  fieldShapeId _ = "keiro-dsl.test.id-domain.stale-v7"
+  projectFieldValue _ (AdmissionDomainOwner value) = value
+
+instance Keiki.ExactFieldProjection StaleV7AdmissionDomainText where
+  fieldProjectionDomain _ = ProjectionDomain.textProjectionDomain staleV7AdmissionDomainPattern
+  reconstructFieldOwner _ value
+    | matchesTextPattern staleV7AdmissionDomainPattern value = Just (AdmissionDomainOwner value)
+    | otherwise = Nothing
+
+staleV7AdmissionDomainWitness :: Keiki.FieldWitness StaleV7AdmissionDomainText
+staleV7AdmissionDomainWitness = Keiki.exactFieldWitness @StaleV7AdmissionDomainText
+
+type AdmissionDomainRegisters = '[ '("owner", AdmissionDomainOwner)]
+
+admissionDomainOwnerIndex :: Keiki.Index AdmissionDomainRegisters AdmissionDomainOwner
+admissionDomainOwnerIndex = Keiki.ZIdx
 
 resolvedFold :: Either FoldSurfaceError value -> value
 resolvedFold = either (error . ("unexpected fold-surface failure in checked fixture: " <>) . show) id
@@ -1887,6 +1941,7 @@ main = hspec $ do
             "direct-optional-id.keiro",
             "domain-command-outcomes.keiro",
             "hospital-surge-reactions.keiro",
+            "id-admission-domains.keiro",
             "id-domain-migration-v3.keiro",
             "intake-delegated.keiro",
             "language-duplicate.keiro",
@@ -1923,6 +1978,7 @@ main = hspec $ do
             "projection-catalog-unrelated.keiro",
             "projection-catalog.keiro",
             "projection-owner-multi-query.keiro",
+            "refined-base16.keiro",
             "structural-nominal-leaves-enum-spelling.keiro",
             "structural-nominal-leaves-binding-change.keiro",
             "structural-nominal-leaves-keyed-map-key-change.keiro",
@@ -2933,6 +2989,24 @@ main = hspec $ do
       contractIdDomainContractFor v3Contract "req" `shouldBe` Nothing
       contractIdDomainContractFor v4Contract "req" `shouldBe` Just (typeIdV7Domain "req")
 
+    it "gates explicit admission syntax to language 6 and round-trips its checked choice" $ do
+      let explicitSource versionNumber =
+            T.unlines
+              [ "language keiro-dsl " <> T.pack (show versionNumber),
+                "context explicit-id-admission",
+                "id LegacyId prefix=legacy domain=typeid-v5-or-v7"
+              ]
+      parsed <- parseRight "explicit-id-admission-v6.keiro" (explicitSource (6 :: Int))
+      case (.ids) (checkedSpec (checkedSource parsed)) of
+        [declaration] -> (.admission) declaration `shouldBe` TypeIdV5OrV7
+        declarations -> expectationFailure ("expected one ID declaration, got " <> show (length declarations))
+      parseSource "explicit-id-admission-round-trip.keiro" (renderSource parsed) `shouldBe` Right parsed
+      parseSource "explicit-id-admission-v5.keiro" (explicitSource (5 :: Int))
+        `shouldSatisfy` \case
+          Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic == LanguageFeatureRequiresVersion
+          Left _ -> False
+          Right _ -> False
+
     it "constructs typed KindIDs only after the frozen four-way admission policy" $ do
       let valid = "req_01h455vb4pex5vsknk084sn02q"
           uppercase = "req_01H455VB4PEX5VSKNK084SN02Q"
@@ -2952,6 +3026,26 @@ main = hspec $ do
         `shouldSatisfy` \case
           Left problem -> "not canonical lowercase" `T.isInfixOf` T.pack problem
           Right _ -> False
+
+    it "admits canonical UUIDv5 and UUIDv7 only through the explicit wider domain" $ do
+      let v5 = "req_58kj0y515rbwebzaxwzzknjqnk"
+          v7 = "req_01h455vb4pex5vsknk084sn02q"
+          wide = typeIdV5OrV7Domain "req"
+      validateIdDomainText wide v5 `shouldBe` Right ()
+      validateIdDomainText wide v7 `shouldBe` Right ()
+      validateIdDomainText (typeIdV7Domain "req") v5 `shouldSatisfy` \case
+        Left IdDomainNotUuidV7 {} -> True
+        _ -> False
+      (KindID.toText @"req" <$> parseKindIdText @"req" wide v5) `shouldBe` Right v5
+      parseKindIdText @"other" wide v5 `shouldBe` Left (IdDomainWrongPrefix "other" "req")
+      let excludedVersion = T.take 14 v5 <> "c" <> T.drop 15 v5
+          excludedVariant = T.take 17 v5 <> "c" <> T.drop 18 v5
+      validateIdDomainText wide excludedVersion `shouldSatisfy` \case
+        Left IdDomainVersionNotAdmitted {} -> True
+        _ -> False
+      validateIdDomainText wide excludedVariant `shouldSatisfy` \case
+        Left IdDomainVariantNotRfc4122 {} -> True
+        _ -> False
 
     it "validates contract TypeID prefixes only at the language-4 boundary" $ do
       let source versionNumber =
@@ -3045,6 +3139,106 @@ main = hspec $ do
           ( counterexample (T.unpack value) (validateIdDomainText contract value == Right () && matchesTextPattern patternValue value)
               : [counterexample (T.unpack invalid) (isLeft (validateIdDomainText contract invalid) && not (matchesTextPattern patternValue invalid)) | invalid <- invalidValues]
           )
+
+    it "keeps each runtime validator exactly equal to its symbolic text domain" $ property $ do
+      let crockford = "0123456789abcdefghjkmnpqrstvwxyz"
+          segment count = vectorOf count (elements crockford)
+      leading <- elements "01234567"
+      beforeVersion <- segment 9
+      version <- elements crockford
+      beforeVariant <- segment 2
+      variantDigit <- elements crockford
+      afterVariant <- segment 12
+      let value = T.pack ("req_" <> [leading] <> beforeVersion <> [version] <> beforeVariant <> [variantDigit] <> afterVariant)
+          contracts = [typeIdV7Domain "req", typeIdV5OrV7Domain "req"]
+          agrees contract =
+            let patternValue = either (error . show) id (idDomainTextPattern contract)
+             in isRight (validateIdDomainText contract value) == matchesTextPattern patternValue value
+      pure (conjoin [counterexample (show contract <> " disagreed on " <> T.unpack value) (agrees contract) | contract <- contracts])
+
+    it "exposes a stale v7-only witness for a UUIDv5-reachable declaration" $ do
+      let v5 = "req_58kj0y515rbwebzaxwzzknjqnk"
+          widePattern = either (error . show) id (idDomainTextPattern (typeIdV5OrV7Domain "req"))
+          stalePattern = either (error . show) id (idDomainTextPattern (typeIdV7Domain "req"))
+      validateIdDomainText (typeIdV5OrV7Domain "req") v5 `shouldBe` Right ()
+      matchesTextPattern widePattern v5 `shouldBe` True
+      matchesTextPattern stalePattern v5 `shouldBe` False
+
+    it "keeps v5-only guard overlap visible and proof-unknown paths conservative" $ do
+      let v5 = "req_58kj0y515rbwebzaxwzzknjqnk"
+          owner = AdmissionDomainOwner v5
+          projected = Keiki.regProj wideAdmissionDomainWitness admissionDomainOwnerIndex
+          v5Guard = Keiki.PEq projected (Keiki.TLit v5)
+          opaqueV5Guard = Keiki.PEq (Keiki.TApp1 id projected) (Keiki.TLit v5)
+      Keiki.checkFieldProjectionOwner wideAdmissionDomainWitness owner `shouldBe` Right ()
+      Keiki.checkFieldProjectionKey wideAdmissionDomainWitness v5 `shouldBe` Right owner
+      Keiki.checkFieldProjectionOwner staleV7AdmissionDomainWitness owner
+        `shouldBe` Left Keiki.ProjectedKeyOutsideDeclaredDomain
+      KeikiSymbolic.verifyPredicate (Keiki.PAnd v5Guard v5Guard)
+        `shouldReturn` KeikiSymbolic.VerifiedSatisfiable
+      KeikiSymbolic.verifyPredicate (Keiki.PAnd v5Guard opaqueV5Guard)
+        `shouldReturn` KeikiSymbolic.UnverifiedOpaque
+
+    it "marks direct and nested admission changes replay-affected in both directions" $ do
+      let declaration TypeIdV7 = "id EntityId prefix=entity"
+          declaration TypeIdV5OrV7 = "id EntityId prefix=entity domain=typeid-v5-or-v7"
+          directSource admission =
+            T.unlines
+              [ "language keiro-dsl 6",
+                "context direct-id-admission",
+                declaration admission,
+                "aggregate EntityLedger",
+                "  regs",
+                "    current EntityId = placeholder",
+                "  states Open",
+                "  command Record { entityId:EntityId }",
+                "  event Recorded = fields(Record)",
+                "  Open -- Record --> write current := cmd.entityId ; emit Recorded ; goto Open"
+              ]
+          nestedSource admission =
+            T.unlines
+              [ "language keiro-dsl 6",
+                "context nested-id-admission",
+                declaration admission,
+                "mapped structural record EntityEnvelope {",
+                "  haskell package=example module=Example.Entity type=EntityEnvelope",
+                "  binding = \"Example.Entity.entityEnvelopeBinding\"",
+                "  binding-version = \"1\"",
+                "  canonical-type = \"example.EntityEnvelope.v1\"",
+                "  fixtures = \"Example.Entity.entityEnvelopeFixtures\"",
+                "  wire object constructor=EntityEnvelope unknown-fields=reject {",
+                "    entityId as \"entityId\" : EntityId required",
+                "  }",
+                "}",
+                "aggregate EntityLedger",
+                "  regs",
+                "  states Open",
+                "  command Record { envelope:EntityEnvelope }",
+                "  event Recorded = fields(Record)",
+                "  Open -- Record --> emit Recorded ; goto Open"
+              ]
+          checked name source = checkedSource <$> parseRight name source
+          assertChanged oldService newService expectedDetail = do
+            validateService oldService `shouldBe` []
+            validateService newService `shouldBe` []
+            let oldAggregate = onlyAggregate (checkedSpec oldService)
+                newAggregate = onlyAggregate (checkedSpec newService)
+                findings = [kindOfChange change | change <- diffServices oldService newService, changeCode change == IdDomainContractChanged]
+            aggregateFoldFingerprintForService oldService oldAggregate
+              `shouldNotBe` aggregateFoldFingerprintForService newService newAggregate
+            resolvedFold (ReplayImpact.replayImpactServices oldService newService) `shouldSatisfy` \case
+              ReplayImpact.ReplayAffected impacts -> Map.member "EntityLedger" impacts
+              ReplayImpact.ReplayNeutral -> False
+            findings `shouldSatisfy` (not . null)
+            map (.detail) findings `shouldSatisfy` any (T.isInfixOf expectedDetail)
+      directV7 <- checked "direct-id-v7.keiro" (directSource TypeIdV7)
+      directWide <- checked "direct-id-wide.keiro" (directSource TypeIdV5OrV7)
+      nestedV7 <- checked "nested-id-v7.keiro" (nestedSource TypeIdV7)
+      nestedWide <- checked "nested-id-wide.keiro" (nestedSource TypeIdV5OrV7)
+      assertChanged directV7 directWide "old-reader/new-writer hazard"
+      assertChanged directWide directV7 "retained UUIDv5 history may stop decoding"
+      assertChanged nestedV7 nestedWide "old-reader/new-writer hazard"
+      assertChanged nestedWide nestedV7 "retained UUIDv5 history may stop decoding"
 
     it "enforces the same contract before consumer binding conversion and explains its version" $ do
       v2Source <- readTestText "test/fixtures/nominal-scalars.keiro"
@@ -4607,7 +4801,7 @@ main = hspec $ do
       queue `shouldSatisfy` T.isInfixOf "encodeBase16Bytes"
       queryContract `shouldSatisfy` T.isInfixOf "type HashLookupQueryInput = MaybeContentHash"
       manifestDependenciesForService service
-        `shouldBe` ["aeson", "base", "bytestring", "effectful-core", "hasql-transaction", "keiki", "keiro", "keiro-core", "keiro-dsl", "keiro-pgmq", "kiroku-store", "text"]
+        `shouldBe` ["aeson", "base", "bytestring", "containers", "effectful-core", "hasql-transaction", "keiki", "keiro", "keiro-core", "keiro-dsl", "keiro-pgmq", "kiroku-store", "text"]
 
     it "classifies nominal-Text-to-refined, opaque-to-refined, and policy changes as replay-affected" $ do
       source <- readTestText "test/fixtures/refined-base16.keiro"
@@ -5057,7 +5251,7 @@ main = hspec $ do
               AggregateBool,
               AggregateTime,
               AggregateNatural,
-              AggregateNominal (ResolvedNominalType "EntityId" (IdRepresentation "ent") GeneratedNominal noLoc),
+              AggregateNominal (ResolvedNominalType "EntityId" (IdRepresentation "ent" TypeIdV7) GeneratedNominal noLoc),
               AggregateNominal (ResolvedNominalType "Status" (EnumRepresentation (("Active", "active") :| [])) GeneratedNominal noLoc),
               AggregateNominal (ResolvedNominalType "Amount" (ScalarRepresentation NominalInt) (consumerNominalFor "Amount") noLoc),
               AggregateNominal (ResolvedNominalType "Label" (ScalarRepresentation NominalText) (consumerNominalFor "Label") noLoc),
@@ -5245,7 +5439,7 @@ main = hspec $ do
     it "resolves existing ids and enums as nominal leaves" $ do
       let withId =
             (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingId"])])
-              { ids = [IdDecl "ExistingId" "id" Nothing noLoc]
+              { ids = [IdDecl "ExistingId" "id" TypeIdV7 Nothing noLoc]
               }
           withEnum =
             (mappedSpec [completeStructural "A" (recordShape [TRef "ExistingEnum"])])
@@ -15853,7 +16047,7 @@ consumerNominalFor name =
       }
 
 genId :: Gen IdDecl
-genId = IdDecl <$> genName <*> genWire <*> pure Nothing <*> pure noLoc
+genId = IdDecl <$> genName <*> genWire <*> pure TypeIdV7 <*> pure Nothing <*> pure noLoc
 
 genEnum :: Gen EnumDecl
 genEnum = EnumDecl <$> genName <*> smallList ((,) <$> genName <*> genWire) <*> pure Nothing <*> pure noLoc
@@ -16241,7 +16435,7 @@ regDeclWithValueType :: TypeExpr -> RegDecl -> RegDecl
 regDeclWithValueType valueType (RegDecl name _ initial loc) = RegDecl name valueType initial loc
 
 idDeclWithBinding :: Maybe NominalBindingDecl -> IdDecl -> IdDecl
-idDeclWithBinding binding (IdDecl name prefix _ loc) = IdDecl name prefix binding loc
+idDeclWithBinding binding (IdDecl name prefix admission _ loc) = IdDecl name prefix admission binding loc
 
 nominalBindingWithVersion :: Maybe T.Text -> NominalBindingDecl -> NominalBindingDecl
 nominalBindingWithVersion bindingVersion (NominalBindingDecl haskell binding _ canonicalType fixtures initial loc) =

@@ -6,6 +6,25 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- The public ID declaration and resolved nominal ASTs carry an `IdAdmission`.
+  `LanguageFeature` and `RuntimeCapability` gain the Language 6 explicit-ID
+  admission constructors. Exhaustive matches and positional construction must
+  handle the new fields and constructors.
+
+### New Features
+
+- Candidate Language 6 ID declarations accept
+  `domain=typeid-v5-or-v7`. The selected domain propagates through direct and
+  nested aggregate fields, structural and keyed-map codecs, workqueues,
+  read-model query types, router identities, and declared public-contract
+  fields. Omitting the option keeps the released TypeID-v7 behavior.
+- Admission changes now alter direct and nested fold/replay identity, raise a
+  direction-specific `IdDomainContractChanged` finding, and are always reported
+  replay-affected. The generated conformance corpus includes committed UUIDv5
+  and UUIDv7 history with serialized forward/replay equality.
+
 ## 0.17.0.0 — 2026-09-17
 
 ### Breaking Changes

@@ -36,13 +36,13 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Generics (Generic)
 import Keiro.Dsl.Grammar
-import Keiro.Dsl.IdDomain (enforcedIdDomainVersion)
+import Keiro.Dsl.IdDomain (enforcedIdDomainVersion, v5OrV7IdDomainVersion)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec)
 import Keiro.Dsl.TypeGraph
 
 data NominalRepresentation
-  = IdRepresentation !Text
+  = IdRepresentation !Text !IdAdmission
   | EnumRepresentation !(NonEmpty (Name, Text))
   | ScalarRepresentation !NominalScalarRepresentation
   deriving stock (Eq, Ord, Show, Generic)
@@ -62,7 +62,7 @@ data NominalEqualityKey
 data NominalEqualityDomain
   = LegacyUnrestrictedTextDomain
   | TypeIdTextDomain !Text
-  | EnforcedTypeIdV7TextDomain !Text !Text
+  | EnforcedTypeIdTextDomain !Text !Text
   | FiniteTextDomain !(NonEmpty Text)
   deriving stock (Eq, Ord, Show, Generic)
 
@@ -103,13 +103,13 @@ lookupNominalType name = Map.lookup name . nominalTypes
 
 nominalEqualityContractForService :: EffectiveLanguageContract -> ResolvedNominalType -> Maybe CheckedNominalEquality
 nominalEqualityContractForService languageContract nominal = case (.representation) nominal of
-  IdRepresentation prefix ->
+  IdRepresentation prefix admission ->
     Just
       CheckedNominalEquality
         { keyRepresentation = NominalTextEqualityKey,
           domain =
             if enforcesNominalEqualityV2
-              then EnforcedTypeIdV7TextDomain prefix enforcedIdDomainVersion
+              then EnforcedTypeIdTextDomain prefix (idAdmissionVersion admission)
               else case (.ownership) nominal of
                 GeneratedNominal -> LegacyUnrestrictedTextDomain
                 ConsumerNominal {} -> TypeIdTextDomain prefix,
@@ -148,8 +148,14 @@ nominalEqualityIdentityForService languageContract nominal = do
     renderEqualityKey NominalTextEqualityKey = "Text"
     renderEqualityDomain LegacyUnrestrictedTextDomain = "legacy-unrestricted-text"
     renderEqualityDomain (TypeIdTextDomain prefix) = "typeid-text:" <> prefix
-    renderEqualityDomain (EnforcedTypeIdV7TextDomain prefix contractVersion) =
-      "typeid-v7-text:" <> prefix <> ":" <> contractVersion
+    renderEqualityDomain (EnforcedTypeIdTextDomain prefix contractVersion) =
+      ( if contractVersion == enforcedIdDomainVersion
+          then "typeid-v7-text:"
+          else "typeid-v5-or-v7-text:"
+      )
+        <> prefix
+        <> ":"
+        <> contractVersion
     renderEqualityDomain (FiniteTextDomain values) = "finite-text:" <> T.intercalate "," (NE.toList values)
     renderOwnership GeneratedNominal = "owner=generated"
     renderOwnership (ConsumerNominal binding) =
@@ -245,7 +251,7 @@ resolvedFromLeaf leaf =
   ResolvedNominalType
     { name = (.name) leaf,
       representation = case (.kind) leaf of
-        NominalIdLeaf prefix -> IdRepresentation prefix
+        NominalIdLeaf prefix admission -> IdRepresentation prefix admission
         NominalEnumLeaf constructors -> EnumRepresentation constructors
         NominalScalarLeaf representation -> ScalarRepresentation representation,
       ownership = case (.ownership) leaf of
@@ -299,3 +305,7 @@ nodeIdentityLocal = \case
   NProjectionOwner value -> ("projection-owner", (.name) value, (.loc) value)
   NWorkflow value -> ("workflow", (.id) value, workflowNodeLoc value)
   NOperation value -> ("operation", (.name) value, (.loc) value)
+
+idAdmissionVersion :: IdAdmission -> Text
+idAdmissionVersion TypeIdV7 = enforcedIdDomainVersion
+idAdmissionVersion TypeIdV5OrV7 = v5OrV7IdDomainVersion

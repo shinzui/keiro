@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: Nominal declarations are structural leaves with Keiro-owned admission
-description: Candidate Language 6 preserves declared nominal domain types inside structural shapes while generated leaf codecs retain TypeID, scalar, and declared-enum spelling authority across aggregate, queue, and query roots.
-timestamp: 2026-09-20T01:26:00Z
+description: Candidate Language 6 preserves declared nominal domain types and explicit versioned ID admission inside structural shapes while generated leaf codecs retain TypeID, scalar, and declared-enum spelling authority across aggregate, queue, contract, and query roots.
+timestamp: 2026-09-20T14:34:41Z
 docId: ADR-46
 status: Accepted
 date: 2026-09-17
@@ -36,7 +36,7 @@ as `ClaimId` has Haskell type `ClaimId`, not `KindID "claim"` or `Text`.
 
 One context-owned generated `Structural.NominalLeaves` module supplies leaf encoders and parsers
 to generated structural, aggregate, and queue codecs. Generated IDs use their existing checked
-API. Consumer-bound IDs parse through Keiro's canonical TypeID-v7 admission before their total
+API. Consumer-bound IDs parse through the declaration's Keiro-owned canonical TypeID admission before their total
 nominal binding runs. Nominal scalars convert through their declared exact representation
 binding. Generated enums encode through their generated declared-spelling function and parse
 only their declared wire spellings. Consumer-bound enums convert through their nominal binding
@@ -67,9 +67,27 @@ complete value.
 
 Public contract event fields may name a declared ID directly. The payload uses the declared
 generated or consumer-bound Haskell type while the declaration remains the sole prefix and
-TypeID-v7 admission authority. Moving between a literal `typeid` and a declaration with the
+TypeID admission authority. Moving between a literal `typeid` and a declaration with the
 same prefix preserves JSON bytes but changes the consumer build type; changing the prefix is a
 public wire break.
+
+Candidate Language 6 ID declarations may explicitly select the frozen
+`keiro-dsl/id-domain/typeid-v5-or-v7/1` contract. Omitting the option preserves
+`keiro-dsl/id-domain/typeid-v7/1` and all existing generated tokens, ledgers,
+fingerprints, and public behavior. Both domains keep canonical prefixed TypeID
+text and RFC variant admission; the wider domain adds only UUIDv5 alongside
+UUIDv7. Runtime validation and exact Keiki text evidence use one version/variant
+table, so a solver domain cannot silently exclude a runtime-reachable value.
+Admission does not choose generation policy or permit regenerating an identity.
+
+The selected domain travels with both the direct nominal representation and a
+nested nominal leaf. It therefore enters direct aggregate replay/fold identity,
+nested structural wire identity, keyed-map keys, queues, router recipients, and
+declared public-contract codecs. Widening is an old-reader/new-writer hazard;
+narrowing is a retained-history read hazard. Either direction is a breaking
+domain finding and replay-affected. Process and workflow journals, child/timer
+identities, stream names, event IDs, and content-derived IDs remain
+application-owned and immutable across admission adoption.
 
 Required structural record paths may terminate at nominal IDs, enums, and scalar leaves in
 aggregate expressions and declarative router selection. Equality requires the same nominal
@@ -116,7 +134,7 @@ canonical encoded text.
 
 Published Languages 1 through 5 remain unchanged. This is preview support until Language 6 is
 published and downstream adoption/replay evidence exists; implementation completion alone does
-not make IR-40 a supported production capability.
+not make IR-40 or IR-46 a supported production capability.
 
 ## References
 
@@ -125,3 +143,5 @@ not make IR-40 a supported production capability.
 - [ExecPlan 287](../plans/287-support-nominal-ids-inside-structural-mapped-types.md)
 - [ExecPlan 288](../plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md)
 - [ExecPlan 290](../plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md)
+- [IR-46](../improvement-requests/support-explicit-legacy-id-admission-domains.md)
+- [ExecPlan 294](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md)

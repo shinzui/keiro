@@ -6,6 +6,7 @@ module Keiro.Dsl.Parser.Declaration
   )
 where
 
+import Data.Maybe (fromMaybe)
 import Keiro.Dsl.Frontend.Internal (FrontendContext)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
@@ -14,7 +15,7 @@ import Keiro.Dsl.Parser.Expression (pExpr)
 import Keiro.Dsl.Parser.Mapped (pUsingNominalBinding)
 import Keiro.Dsl.Source (Located, mapLocated)
 import Keiro.Dsl.Syntax (SurfaceElement (..))
-import Text.Megaparsec (many, sepBy1)
+import Text.Megaparsec (choice, many, sepBy1)
 
 pIdDecl :: FrontendContext -> P IdDecl
 pIdDecl context = do
@@ -24,8 +25,20 @@ pIdDecl context = do
   _ <- symbol "prefix"
   _ <- symbol "="
   pfx <- wireWord
+  admission <-
+    fromMaybe TypeIdV7
+      <$> optionalLanguageFeature context ExplicitIdAdmissionDomainSyntax "domain" pIdAdmission
   binding <- optionalLanguageFeature context NominalBindingSyntax "using" pUsingNominalBinding
-  pure IdDecl {name = name, prefix = pfx, binding = binding, loc = loc}
+  pure IdDecl {name = name, prefix = pfx, admission = admission, binding = binding, loc = loc}
+
+pIdAdmission :: P IdAdmission
+pIdAdmission = do
+  keyword "domain"
+  _ <- symbol "="
+  choice
+    [ TypeIdV5OrV7 <$ symbol "typeid-v5-or-v7",
+      TypeIdV7 <$ symbol "typeid-v7"
+    ]
 
 pEnumDecl :: FrontendContext -> P EnumDecl
 pEnumDecl context = do

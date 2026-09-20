@@ -1,0 +1,63 @@
+language keiro-dsl 6
+context id-admission-domains
+
+id LegacyId prefix=legacy domain=typeid-v5-or-v7
+
+mapped structural record IdentityEnvelope {
+  haskell package=keiro-dsl module=Conformance.IdAdmissionDomains.Domain type=IdentityEnvelope
+  binding = "Conformance.IdAdmissionDomains.Bindings.identityEnvelopeBinding"
+  binding-version = "1"
+  canonical-type = "conformance.id-admission-domains.IdentityEnvelope.v1"
+  fixtures = "Conformance.IdAdmissionDomains.Bindings.identityEnvelopeFixtures"
+  wire object constructor=IdentityEnvelope unknown-fields=reject {
+    legacyId as "legacyId" : LegacyId required
+    previousId as "previousId" : Optional LegacyId optional on-missing=null
+    labelsById as "labelsById" : Map[LegacyId] Text required
+  }
+}
+
+aggregate IdentityLedger
+  regs
+    current LegacyId = placeholder
+  states Open
+  command RecordIdentity { legacyId:LegacyId envelope:IdentityEnvelope }
+  command ImportLegacyIdentity { legacyId:LegacyId envelope:IdentityEnvelope }
+  event IdentityRecorded = fields(RecordIdentity)
+  event IdentityAudited = fields(RecordIdentity)
+  event LegacyIdentityImported = fields(ImportLegacyIdentity)
+  Open -- RecordIdentity -->
+    write current := cmd.legacyId
+    emit IdentityRecorded
+    emit IdentityAudited
+    goto Open
+  replay-only Open -- ImportLegacyIdentity -->
+    write current := cmd.legacyId
+    emit LegacyIdentityImported
+    goto Open
+
+workqueue identity_work {
+  queue logical = "identity.work"
+  derive physical = "identity_work"
+         dlq = "identity_work_dlq"
+         table = "pgmq.q_identity_work"
+  payload IdentityWork {
+    legacyId -> "legacy_id" : LegacyId
+    envelope -> "envelope" : IdentityEnvelope
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+contract identities {
+  schemaVersion 1
+  discriminator messageType
+  topic identityEvents "identity.events"
+  event IdentityLinked on identityEvents {
+    legacyId: LegacyId
+  }
+}

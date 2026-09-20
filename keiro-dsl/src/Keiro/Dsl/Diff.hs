@@ -77,7 +77,7 @@ import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName qualified as HaskellName
-import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, idDomainContractFor)
+import Keiro.Dsl.IdDomain (IdDomainContract (..), contractIdDomainContractFor, contractIdDomainContractForAdmission, idDomainContractForDeclaration)
 import Keiro.Dsl.LanguageVersion (ParsedSource (..), SourceLanguage (..), declaredLanguageVersionMaybe, languageVersionText, renderParseFailure, sourceFormText)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped, renderMappedSubject)
 import Keiro.Dsl.Parser (parseSource)
@@ -839,15 +839,15 @@ diffServices oldService newService = do
             : [nominalUseChange use IdDomainContractChanged detail | use <- nominalBoundaryUses oldSpec newSpec ((.name) newDeclaration)]
         | newDeclaration <- (.ids) newSpec,
           Just oldDeclaration <- [find ((== (.name) newDeclaration) . (.name)) ((.ids) oldSpec)],
-          let oldContract = idDomainContractFor (checkedLanguageContract oldService) ((.prefix) oldDeclaration),
-          let newContract = idDomainContractFor (checkedLanguageContract newService) ((.prefix) newDeclaration),
+          let oldContract = idDomainContractForDeclaration (checkedLanguageContract oldService) oldDeclaration,
+          let newContract = idDomainContractForDeclaration (checkedLanguageContract newService) newDeclaration,
           oldContract /= newContract,
           let detail =
                 "ID admission contract changed "
                   <> renderIdDomainContract oldContract
                   <> " -> "
                   <> renderIdDomainContract newContract
-                  <> "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots miss and rebuild from readable events, while rebuilt state that still contains legacy-invalid text remains intentionally uncacheable until overwritten or explicitly migrated"
+                  <> renderIdDomainDirection oldContract newContract
         ]
     contractTypeIdDomainChanges =
       [ breaking
@@ -898,8 +898,22 @@ renderIdDomainContract (Just contract) =
 contractFieldIdDomain :: Spec -> EffectiveLanguageContract -> ContractField -> Maybe IdDomainContract
 contractFieldIdDomain spec languageContract field = case (.valueType) field of
   CTypeId prefix -> contractIdDomainContractFor languageContract prefix
-  CDeclaredId name -> contractTypePrefix spec (CDeclaredId name) >>= contractIdDomainContractFor languageContract
+  CDeclaredId name -> do
+    declaration <- find ((== name) . (.name)) ((.ids) spec)
+    contractIdDomainContractForAdmission languageContract ((.admission) declaration) ((.prefix) declaration)
   _ -> Nothing
+
+renderIdDomainDirection :: Maybe IdDomainContract -> Maybe IdDomainContract -> Text
+renderIdDomainDirection (Just oldContract) (Just newContract) =
+  case (idDomainAdmission oldContract, idDomainAdmission newContract) of
+    (TypeIdV7, TypeIdV5OrV7) ->
+      "; admission widens: retained values remain readable, but new UUIDv5 writes are an old-reader/new-writer hazard until every old reader is retired"
+    (TypeIdV5OrV7, TypeIdV7) ->
+      "; admission narrows: retained UUIDv5 history may stop decoding, so the old reader must remain reachable until audited history proves the narrowing safe"
+    _ ->
+      "; public construction, command decoding, current JSON codecs, and literals use the new contract; audit retained history and rolling-reader compatibility before adoption"
+renderIdDomainDirection _ _ =
+  "; public construction, command decoding, current JSON codecs, and literals use the new contract; historical event replay retains its legacy decoder; old snapshots miss and rebuild from readable events, while rebuilt state that still contains legacy-invalid text remains intentionally uncacheable until overwritten or explicitly migrated"
 
 renderContractIdDomainChange :: Maybe Text -> ContractType -> Maybe IdDomainContract -> Maybe IdDomainContract -> Text
 renderContractIdDomainChange resolvedPrefix valueType oldContract newContract =
