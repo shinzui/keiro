@@ -1,0 +1,84 @@
+-- keiro-dsl build manifest for service.keiro-workspace
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    CheckedMappingReplay.ProjectionCatalog.ProjectionCatalogHoles
+    CheckedMappingReplay.ReplayLedger.BehaviorHoles
+    CheckedMappingReplay.ReplayLookup.ReadModelHoles
+    CheckedMappingReplay.ReplayReaction.ProcessHoles
+    CheckedMappingReplay.ReplayTarget.BehaviorHoles
+    Conformance.CheckedMappingReplay.Bindings
+    Generated.CheckedMappingReplay.BehaviorSourceMap
+    Generated.CheckedMappingReplay.Nominals
+    Generated.CheckedMappingReplay.Nominals.Internal
+    Generated.CheckedMappingReplay.ProjectionCatalog
+    Generated.CheckedMappingReplay.ReplayAudit
+    Generated.CheckedMappingReplay.ReplayEvents.Contract
+    Generated.CheckedMappingReplay.ReplayJobs.Queue
+    Generated.CheckedMappingReplay.ReplayJobs.QueueCodec
+    Generated.CheckedMappingReplay.ReplayJobs.QueuePolicy
+    Generated.CheckedMappingReplay.ReplayLedger.BehaviorContract
+    Generated.CheckedMappingReplay.ReplayLedger.Codec
+    Generated.CheckedMappingReplay.ReplayLedger.Domain
+    Generated.CheckedMappingReplay.ReplayLedger.EventStream
+    Generated.CheckedMappingReplay.ReplayLedger.Harness
+    Generated.CheckedMappingReplay.ReplayLedger.Projection
+    Generated.CheckedMappingReplay.ReplayLedger.Transducer
+    Generated.CheckedMappingReplay.ReplayLookup.QueryContract
+    Generated.CheckedMappingReplay.ReplayLookup.ReadModel
+    Generated.CheckedMappingReplay.ReplayLookup.ReadModelHarness
+    Generated.CheckedMappingReplay.ReplayLookup.ReadModelTable
+    Generated.CheckedMappingReplay.ReplayReaction.Input
+    Generated.CheckedMappingReplay.ReplayReaction.Process
+    Generated.CheckedMappingReplay.ReplayReaction.ProcessHarness
+    Generated.CheckedMappingReplay.ReplayTarget.BehaviorContract
+    Generated.CheckedMappingReplay.ReplayTarget.Codec
+    Generated.CheckedMappingReplay.ReplayTarget.Domain
+    Generated.CheckedMappingReplay.ReplayTarget.EventStream
+    Generated.CheckedMappingReplay.ReplayTarget.Harness
+    Generated.CheckedMappingReplay.ReplayTarget.Projection
+    Generated.CheckedMappingReplay.ReplayTarget.Transducer
+    Generated.CheckedMappingReplay.Structural.NominalLeaves
+    Generated.CheckedMappingReplay.Structural.Shape.ContentHash
+    Generated.CheckedMappingReplay.Structural.Shape.ImportantDays
+    Generated.CheckedMappingReplay.Structural.Shape.MaybeContentHash
+    Generated.CheckedMappingReplay.Structural.Shape.MaybeLabel
+    Generated.CheckedMappingReplay.Structural.Shape.ReplayEnvelope
+    Generated.CheckedMappingReplay.Structural.Shape.TextLabels
+    Generated.CheckedMappingReplay.StructuralConformance
+    Generated.CheckedMappingReplay.StructuralProjections
+
+build-depends:
+    , aeson
+    , base
+    , bytestring
+    , containers
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , kiroku-store
+    , mmzk-typeid
+    , shibuya-core
+    , text
+    , time
+    , uuid
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.CheckedMappingReplay.Bindings
+    Conformance.CheckedMappingReplay.Domain
