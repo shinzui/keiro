@@ -1926,6 +1926,8 @@ main = hspec $ do
             "aggregate-scalar-expressions-v1-rejects.keiro",
             "bare-containers.keiro",
             "calendar-days.keiro",
+            "checked-mapping-replay-workspace/domain/service.keiro",
+            "checked-mapping-replay-workspace/domain/values.keiro",
             "catalog-readmodel-backing-required.keiro",
             "catalog-readmodel-backing-unobserved.keiro",
             "catalog-readmodel-physical-override.keiro",

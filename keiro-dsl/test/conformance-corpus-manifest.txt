@@ -9,6 +9,7 @@ keiro-dsl conformance corpus manifest v1
 
 workspace keiro-dsl/test/fixtures/workspace-nominals/service.keiro-workspace keiro-dsl/test/conformance-workspace-nominals
 workspace keiro-dsl/test/conformance-service-package/service.keiro-workspace keiro-dsl/test/conformance-service-package/runtime/src
+workspace keiro-dsl/test/fixtures/checked-mapping-replay-workspace/service.keiro-workspace keiro-dsl/test/conformance-checked-mapping-replay
 
 # This published-language-4 fixture proves compatibility and must not be rewritten
 # when `keiro-dsl new` advances to an unreleased candidate authoring language.

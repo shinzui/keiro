@@ -1,0 +1,67 @@
+language keiro-dsl 6
+context checked-mapping-replay
+
+id RetainedId prefix=retained domain=typeid-v5-or-v7
+
+mapped structural value MaybeLabel {
+  haskell package=keiro-dsl module=Conformance.CheckedMappingReplay.Domain type=MaybeLabel
+  binding = "Conformance.CheckedMappingReplay.Bindings.maybeLabelBinding"
+  binding-version = "1"
+  canonical-type = "conformance.checked-mapping-replay.MaybeLabel.v1"
+  fixtures = "Conformance.CheckedMappingReplay.Bindings.maybeLabelFixtures"
+  wire Optional Text
+}
+
+mapped structural value ImportantDays {
+  haskell package=keiro-dsl module=Conformance.CheckedMappingReplay.Domain type=ImportantDays
+  binding = "Conformance.CheckedMappingReplay.Bindings.importantDaysBinding"
+  binding-version = "1"
+  canonical-type = "conformance.checked-mapping-replay.ImportantDays.v1"
+  fixtures = "Conformance.CheckedMappingReplay.Bindings.importantDaysFixtures"
+  wire List Day
+}
+
+mapped structural value TextLabels {
+  haskell package=keiro-dsl module=Conformance.CheckedMappingReplay.Domain type=TextLabels
+  binding = "Conformance.CheckedMappingReplay.Bindings.textLabelsBinding"
+  binding-version = "1"
+  canonical-type = "conformance.checked-mapping-replay.TextLabels.v1"
+  fixtures = "Conformance.CheckedMappingReplay.Bindings.textLabelsFixtures"
+  wire Set Text
+}
+
+mapped refined ContentHash {
+  haskell package=keiro-dsl module=Conformance.CheckedMappingReplay.Domain type=ContentHash
+  binding = "Conformance.CheckedMappingReplay.Bindings.contentHashBinding"
+  binding-version = "1"
+  canonical-type = "conformance.checked-mapping-replay.ContentHash.v1"
+  fixtures = "Conformance.CheckedMappingReplay.Bindings.contentHashFixtures"
+  wire base16-bytes
+}
+
+mapped structural value MaybeContentHash {
+  haskell package=keiro-dsl module=Conformance.CheckedMappingReplay.Domain type=MaybeContentHash
+  binding = "Conformance.CheckedMappingReplay.Bindings.maybeContentHashBinding"
+  binding-version = "1"
+  canonical-type = "conformance.checked-mapping-replay.MaybeContentHash.v1"
+  fixtures = "Conformance.CheckedMappingReplay.Bindings.maybeContentHashFixtures"
+  wire Optional ContentHash
+}
+
+mapped structural record ReplayEnvelope {
+  haskell package=keiro-dsl module=Conformance.CheckedMappingReplay.Domain type=ReplayEnvelope
+  binding = "Conformance.CheckedMappingReplay.Bindings.replayEnvelopeBinding"
+  binding-version = "1"
+  canonical-type = "conformance.checked-mapping-replay.ReplayEnvelope.v1"
+  fixtures = "Conformance.CheckedMappingReplay.Bindings.replayEnvelopeFixtures"
+  initial = "Conformance.CheckedMappingReplay.Bindings.initialReplayEnvelope"
+  wire object constructor=ReplayEnvelope unknown-fields=reject {
+    label as "label" : MaybeLabel required
+    days as "days" : ImportantDays required
+    labels as "labels" : TextLabels required
+    contentHash as "contentHash" : MaybeContentHash required
+    primary as "primary" : RetainedId required
+    identities as "identities" : Map[RetainedId] Text required
+    optionalLabels as "optionalLabels" : Optional (Set Text) optional on-missing=null
+  }
+}

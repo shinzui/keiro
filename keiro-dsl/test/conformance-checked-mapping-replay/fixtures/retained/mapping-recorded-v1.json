@@ -1,0 +1,12 @@
+{
+  "label": "retained",
+  "days": ["+002000-02-29", "12345678901234567890-06-30"],
+  "labels": ["b", "a", "a"],
+  "contentHash": "00AF",
+  "primary": "retained_58kj0y515rbwebzaxwzzknjqnk",
+  "identities": {
+    "retained_58kj0y515rbwebzaxwzzknjqnk": "historical-v5",
+    "retained_01h455vb4pex5vsknk084sn02q": "current-v7"
+  },
+  "optionalLabels": ["z", "a", "a"]
+}

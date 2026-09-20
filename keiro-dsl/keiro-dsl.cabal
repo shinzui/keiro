@@ -2062,3 +2062,65 @@ test-suite keiro-dsl-conformance-id-admission-domains
     keiro-pgmq,
     mmzk-typeid >=0.7 && <0.8,
     text >=2.1 && <2.2,
+
+-- Plan 295: integrated retained-history rehearsal for the checked mappings
+-- introduced by Plans 290-294, including replay-evidence mutation detection.
+test-suite keiro-dsl-conformance-checked-mapping-replay
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs: test/conformance-checked-mapping-replay
+  main-is: Main.hs
+  other-modules:
+    CheckedMappingReplay.ProjectionCatalog.ProjectionCatalogHoles
+    CheckedMappingReplay.ReplayLedger.BehaviorHoles
+    CheckedMappingReplay.ReplayLookup.ReadModelHoles
+    Conformance.CheckedMappingReplay.Bindings
+    Conformance.CheckedMappingReplay.Domain
+    Generated.CheckedMappingReplay.BehaviorSourceMap
+    Generated.CheckedMappingReplay.Nominals
+    Generated.CheckedMappingReplay.Nominals.Internal
+    Generated.CheckedMappingReplay.ProjectionCatalog
+    Generated.CheckedMappingReplay.ReplayAudit
+    Generated.CheckedMappingReplay.ReplayEvents.Contract
+    Generated.CheckedMappingReplay.ReplayJobs.Queue
+    Generated.CheckedMappingReplay.ReplayJobs.QueueCodec
+    Generated.CheckedMappingReplay.ReplayJobs.QueuePolicy
+    Generated.CheckedMappingReplay.ReplayLedger.BehaviorContract
+    Generated.CheckedMappingReplay.ReplayLedger.Codec
+    Generated.CheckedMappingReplay.ReplayLedger.Domain
+    Generated.CheckedMappingReplay.ReplayLedger.EventStream
+    Generated.CheckedMappingReplay.ReplayLedger.Harness
+    Generated.CheckedMappingReplay.ReplayLedger.Projection
+    Generated.CheckedMappingReplay.ReplayLedger.Transducer
+    Generated.CheckedMappingReplay.ReplayLookup.QueryContract
+    Generated.CheckedMappingReplay.ReplayLookup.ReadModel
+    Generated.CheckedMappingReplay.ReplayLookup.ReadModelHarness
+    Generated.CheckedMappingReplay.ReplayLookup.ReadModelTable
+    Generated.CheckedMappingReplay.Structural.NominalLeaves
+    Generated.CheckedMappingReplay.Structural.Shape.ContentHash
+    Generated.CheckedMappingReplay.Structural.Shape.ImportantDays
+    Generated.CheckedMappingReplay.Structural.Shape.MaybeContentHash
+    Generated.CheckedMappingReplay.Structural.Shape.MaybeLabel
+    Generated.CheckedMappingReplay.Structural.Shape.ReplayEnvelope
+    Generated.CheckedMappingReplay.Structural.Shape.TextLabels
+    Generated.CheckedMappingReplay.StructuralConformance
+    Generated.CheckedMappingReplay.StructuralProjections
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    bytestring >=0.12 && <0.13,
+    containers >=0.6 && <0.8,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    keiro-test-support,
+    kiroku-store,
+    mmzk-typeid >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,

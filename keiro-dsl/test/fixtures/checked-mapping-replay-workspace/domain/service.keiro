@@ -1,0 +1,92 @@
+language keiro-dsl 6
+context checked-mapping-replay
+
+aggregate ReplayLedger
+  regs
+    current ReplayEnvelope = initial
+    currentId RetainedId = placeholder
+  states Empty Recorded!
+
+  command Record { retainedId:RetainedId envelope:ReplayEnvelope }
+  command ImportLegacy { retainedId:RetainedId envelope:ReplayEnvelope }
+  event MappingRecorded = fields(Record)
+  event MappingAudited = fields(Record)
+  event LegacyMappingImported = fields(ImportLegacy)
+
+  Empty -- Record -->
+    write current := envelope
+    write currentId := retainedId
+    emit MappingRecorded
+    emit MappingAudited
+    goto Recorded
+
+  replay-only Empty -- ImportLegacy -->
+    write current := envelope
+    write currentId := retainedId
+    emit LegacyMappingImported
+    goto Recorded
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="checked-mapping-replay-v1"
+
+workqueue replay_jobs {
+  queue logical = "checked.mapping.replay"
+  derive physical = "checked_mapping_replay"
+         dlq = "checked_mapping_replay_dlq"
+         table = "pgmq.q_checked_mapping_replay"
+  payload ReplayJob {
+    retainedId -> "retained_id" : RetainedId
+    envelope -> "envelope" : ReplayEnvelope
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+target replay_table {
+  schema = "public"
+  table = "checked_mapping_replay"
+  reset = clear
+}
+
+rebuild-group replay_rebuild {
+  targets = [ replay_table ]
+  order = [ replay_table ]
+}
+
+projection-owner replay_writer {
+  source = all
+  delivery = subscription
+  group = replay_rebuild
+  targets = [ replay_table ]
+  order = 10
+  subscription = "checked-mapping-replay-writer"
+  dedup = "checked-mapping-replay-writer-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel replay_lookup {
+  columns {}
+  query input = ReplayEnvelope
+  query result = List ReplayEnvelope
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head entire-log
+  group = replay_rebuild
+  targets = [ replay_table ]
+}
+
+contract replay_events {
+  schemaVersion 1
+  discriminator messageType
+  topic replayEvents "checked.mapping.replay.events"
+  event ReplayLinked on replayEvents {
+    retainedId: RetainedId
+  }
+}

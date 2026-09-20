@@ -71,6 +71,11 @@ provenance:
       at: 2026-09-20T15:26:22Z
       mode: "implement"
       note: "Complete Plan 294 explicit UUID admission domains and advance the next implementable child to Plan 295."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T16:30:55Z
+      mode: "implement"
+      note: "Begin Plan 295 integrated adoption, publication, and retirement-gate implementation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -127,7 +132,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 | 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Complete |
 | 293 | Add declarative base16 byte refinements with total consumer bindings | [docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md](../plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md) | 289, 290 | None | Complete |
 | 294 | Add explicit versioned UUID admission domains with sound Keiki evidence | [docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md) | 289 | None | Complete |
-| 295 | Rehearse integrated replay, public API adoption, and legacy retirement | [docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md) | 289, 290, 291, 292, 293, 294 | None | Not Started |
+| 295 | Rehearse integrated replay, public API adoption, and legacy retirement | [docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md) | 289, 290, 291, 292, 293, 294 | None | In Progress |
 
 
 ## Dependency Graph
@@ -192,8 +197,8 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 294: Prove runtime and symbolic agreement before exposing equality.
 - [x] Plan 294: Propagate admission to nested and public consumers.
 - [x] Plan 294: Rehearse mixed-domain history and immutable identities.
-- [ ] Plan 295: Assemble one integrated workspace and historical corpus.
-- [ ] Plan 295: Prove refactor and evolution matrices.
+- [x] Plan 295: Assemble one integrated workspace and historical corpus.
+- [x] Plan 295: Prove refactor and evolution matrices.
 - [ ] Plan 295: Run an isolated consumer adoption rehearsal.
 - [ ] Plan 295: Close release gates and retain recovery paths.
 - [ ] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement.

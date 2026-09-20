@@ -1,0 +1,3 @@
+service checked-mapping-replay
+spec domain/values.keiro
+spec domain/service.keiro
