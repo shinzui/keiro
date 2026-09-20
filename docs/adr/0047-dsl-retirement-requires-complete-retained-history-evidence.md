@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: DSL retirement requires complete retained-history evidence
 description: DSL and API simplification must preserve aggregate replay, process recovery, and workflow continuation through complete compatibility evidence and an explicit implementation-retirement gate.
-timestamp: 2026-09-20T16:54:17Z
+timestamp: 2026-09-20T20:55:54Z
 docId: ADR-47
 status: Accepted
 date: 2026-09-19
@@ -82,20 +82,31 @@ be obtained by weakening validation or hiding manual compatibility obligations.
 
 ## Consequences
 
-Plan 289 now implements the shared evidence contract, recurring verification,
-and process/workflow continuation cases. Plan 295 adds the integrated checked-
+Plan 289 implements the shared evidence contract, recurring verification, and
+process/workflow continuation cases. Plan 295 adds the integrated checked-
 mapping corpus, real generated aggregate replay, negative semantic mutations,
 and a machine-checked manifest with separate package-release, language-
 publication, consumer-adoption, and implementation-retirement results. The
 repository evidence makes the first two eligible without performing either
-action. Adoption by `mori://shinzui/rei` and dependent retirement remain pending
-because no authorized immutable consumer capture was available; the manifest
-rejects promoting either result without its missing evidence.
+action.
 
-The clean adoption guide and bounded retirement rehearsal remain Plan 295 work.
-Until they pass, all historical readers, replay-only transitions, workflow
-branches, process identity families, and published-language implementations stay
-reachable.
+An immutable rehearsal for `mori://shinzui/rei` now makes that consumer's
+adoption eligible. Identical baseline and candidate restores selected 10,061
+retained streams, produced byte-identical replay reports with zero unexpected
+failures, inventoried the five adopted value families, and completed
+effect-isolated process redelivery without changing durable observations or
+creating dead letters. Rei's workflow inventory was verified as empty and is
+reported explicitly as `not-applicable-empty-history`, rather than as missing
+access or a synthetic continuation pass. Private payloads remain outside this
+repository.
+
+The same rehearsal approves one exact bounded retirement: replace Rei's
+`ActionId mapped opaque rei.disruption.ActionId.json@1` authoring declaration
+and its 40 mapped-surface expectations with the checked v5-or-v7 nominal path.
+The rehearsal does not authorize deletion of Keiro's generic mapped-opaque
+support, any historical reader, replay-only transition, workflow branch,
+process identity family, or published-language implementation. The consumer
+source edit and deployment remain separately authorized actions.
 
 The 1.0 preparation can remove redundant code incrementally without coupling every
 new capability to access to every consumer database. A required historical reader,

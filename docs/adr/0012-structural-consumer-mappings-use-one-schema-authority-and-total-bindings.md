@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-20T14:34:41Z
+timestamp: 2026-09-20T20:55:54Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -171,11 +171,20 @@ hide `Optional (Optional T)`, optional `Json`, or optional opaque data. A bare a
 wire token as its inner expression: extracting an inline container behind a name is wire-neutral,
 while binding and fold provenance remain independently visible.
 
-Field presence remains orthogonal to value nullability. A required field whose bare alias encodes
-an optional must be present, although its value may be JSON null. An optional record field may use
-`on-missing=null`, `[]`, or `{}` through a bare alias exactly when the alias's resolved inner
-expression admits that default. This preserves old payloads that omitted absent values without
-turning omission into an implicit policy for every consumer root.
+Field presence remains orthogonal to value nullability inside declared structural records. A
+required record field whose bare alias encodes an optional must be present, although its value may
+be JSON null. An optional record field may use `on-missing=null`, `[]`, or `{}` through a bare alias
+exactly when the alias's resolved inner expression admits that default. Generated private-event
+envelopes retain one historical Aeson compatibility rule: when a direct mapped event field resolves
+at its root to `Optional`, an omitted key and an explicit JSON null both decode through the declared
+optional parser. Direct mapped non-optional event fields remain required. This exception preserves
+old event bytes without turning omission into an implicit policy for structural record fields or
+non-optional consumer roots.
+
+A Haskell type alias cannot own a canonical type identity distinct from an existing instance for
+its carrier. Such a checked declaration reuses the carrier identity; a consumer that needs a
+separate durable canonical identity introduces a newtype with its own instance and total binding.
+Overlapping instances are not an identity-versioning mechanism.
 
 Candidate Language 6 also admits `Day` as a structural leaf and as a named bare root. It lowers to
 `Data.Time.Calendar.Day` only through the checked structural graph, including recursive

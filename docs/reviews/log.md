@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-20
+* **Addition**: REV-19 approves replacing exactly Rei's obsolete ActionId mapped-opaque declaration with the checked v5-or-v7 nominal path after immutable old-history replay and effect-isolated process continuation pass; generic opaque support and historical readers remain.
 * **Addition**: REV-18 requests changes for checked-mapping implementation retirement: clean public adoption and the required-reader negative gate pass, but every examined legacy path remains a supported authoring bridge or retained-history implementation.
 
 ## 2026-09-16

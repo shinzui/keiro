@@ -16,8 +16,75 @@
     "milestones": {
       "integratedCorpus": true,
       "evolutionMatrix": true,
-      "consumerHistory": false,
-      "retirementRehearsal": false
+      "consumerHistory": true,
+      "retirementRehearsal": true
+    },
+    "consumerHistoryEvidence": {
+      "consumer": "mori://shinzui/rei",
+      "consumerPlan": "mori://shinzui/rei/plans/239-prove-the-keiro-adoption-on-restored-history-and-close-the-practice-audits",
+      "archiveSourceRevision": "825117f620ba2d474e00b0546960caa7c8d73794",
+      "archiveSha256": "4d63da93222516dba418ffbc251a24f738fb5d0e9d0a759a693eaec711c94c9a",
+      "baselineBinarySha256": "ae9664e50f066dd6813cf952dad7465d9e3a1de75dc54c03cc28f4a9885ff6a2",
+      "candidateBaseRevision": "06556c0aa7265126a5afedd83700db7e00403635",
+      "candidatePatchSha256": "38a8ec9e1227e55bf2ef7ebe94cf6b668ae6f6d2b7027a70506e9eb816f4be2f",
+      "candidateBinarySha256": "6c777caed8953d28783da4c22d72e82810f3d9aaf58f5c9a07ee4e4eb55e15a0",
+      "processHarnessBinarySha256": "073c6c6ae14a9b291bded7798ba77729a87294523a2d8674ab7a9e53a83b85bb",
+      "baselineCandidateReportSha256": "863d98c9624e9ecca5226de6de57f4c801189cc5018f3a1908158cb1d4e72a8c",
+      "privatePayloadsCommitted": false,
+      "streamReplay": {
+        "storeStreams": 10318,
+        "selectedStreams": 10061,
+        "outsideRegisteredCategories": 257,
+        "declaredExcludedStreams": 13,
+        "declaredExcludedEvents": 89,
+        "unexpectedFailures": 0,
+        "baselineCandidateReportsIdentical": true
+      },
+      "retainedValueInventory": {
+        "actionIds": {"total": 3958, "uuidV5": 1594, "uuidV7": 2364},
+        "base16Hashes": {"total": 1214, "rejectedSpellings": 0},
+        "calendarDays": {"total": 3521, "rejectedSpellings": 0},
+        "textSets": {"total": 666, "acceptedNonCanonicalSpellings": 12},
+        "taskCompletedOptionalActor": {"total": 67, "missingKey": 28, "explicitNull": 39}
+      },
+      "processContinuation": {
+        "sourceSubscription": "rei-note-task-propagation",
+        "checkpointBefore": 33237,
+        "checkpointRewoundTo": 28879,
+        "checkpointAfter": 33237,
+        "processStreams": 506,
+        "processStreamVersions": 2323,
+        "targetStreams": 53,
+        "targetStreamVersions": 281,
+        "eventCountBeforeAfter": 33717,
+        "eventDigestBeforeAfter": "13da9a50ba218e1202e1c2fd47870c6d",
+        "streamLinkCountBeforeAfter": 67434,
+        "streamLinkDigestBeforeAfter": "cc8fd398862d0d03e5cc579785e20ee9",
+        "timerCountBeforeAfter": 3917,
+        "timerDigestBeforeAfter": "99b91d4ed4c5a692617c95711dd438c5",
+        "deadLettersBeforeAfter": 0,
+        "outboundEffectsEnabled": false,
+        "workerShape": {"asyncProjections": 0, "processManagers": 1, "timerWorkers": 0}
+      },
+      "workflowInventory": {
+        "registeredWorkflows": 0,
+        "instances": 0,
+        "steps": 0,
+        "children": 0,
+        "result": "not-applicable-empty-history"
+      }
+    },
+    "retirementEvidence": {
+      "consumer": "mori://shinzui/rei",
+      "authoringPath": "mori://shinzui/rei with project-relative domain/shared.keiro (artifact-level URI pending)",
+      "removedPath": "ActionId mapped opaque rei.disruption.ActionId.json@1",
+      "replacement": "checked id ActionId prefix=action domain=typeid-v5-or-v7 using",
+      "removedMappedSurfaceExpectations": 40,
+      "candidatePatchSha256": "38a8ec9e1227e55bf2ef7ebe94cf6b668ae6f6d2b7027a70506e9eb816f4be2f",
+      "oldHistoryPassed": true,
+      "processContinuationPassed": true,
+      "requiredReaderNegativeMutationPassed": true,
+      "genericOpaqueSupportRetained": true
     }
   },
   "wirePolicies": [
@@ -100,23 +167,16 @@
       "basis": "The five feature plans and Plan 289 are complete, and Plan 295 repository Milestones 1 and 2 pass. Publication remains a separately authorized atomic action."
     },
     "consumer-adoption": {
-      "result": "pending",
+      "result": "eligible",
       "action": "not-performed",
       "consumer": "mori://shinzui/rei",
-      "missingEvidence": [
-        "authorized-read-only-export-or-isolated-restored-copy",
-        "baseline-capture-report",
-        "candidate-capture-report",
-        "workflow-and-process-continuation-observations"
-      ],
-      "basis": "The consumer has clone-and-replay tooling, but this implementation session has no authorized source/scratch database pair or immutable capture bundle. Repository fixtures are not consumer history."
+      "basis": "Identical immutable restores produced byte-identical baseline/candidate replay reports over 10,061 selected streams; retained value inventories are complete for the five adopted declarations, process redelivery was effect-isolated and state-neutral, and the workflow inventory is an explicit successful empty-history result. Consumer source edits and deployment remain separately authorized."
     },
     "implementation-retirement": {
-      "result": "pending",
+      "result": "eligible",
       "action": "not-performed",
-      "blockedBy": ["consumer-adoption"],
       "legacyReadersRetained": true,
-      "basis": "No historical reader, replay-only edge, workflow branch, process identity family, or published-language implementation is deleted by this plan."
+      "basis": "The isolated consumer patch replaces exactly the obsolete ActionId mapped-opaque authoring declaration with the checked v5-or-v7 nominal contract and removes its 40 obsolete mapped-surface expectations while old-history replay and process continuation stay green. Generic mapped-opaque support and every historical reader, replay-only edge, workflow branch, and identity family remain retained; an actual consumer change is not performed here."
     }
   }
 }

@@ -76,6 +76,11 @@ provenance:
       at: 2026-09-20T16:30:55Z
       mode: "implement"
       note: "Begin Plan 295 integrated adoption, publication, and retirement-gate implementation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T20:56:10Z
+      mode: "implement"
+      note: "Complete Plan 295 and the checked-value mapping initiative after immutable consumer replay and bounded retirement evidence."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -132,7 +137,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 | 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Complete |
 | 293 | Add declarative base16 byte refinements with total consumer bindings | [docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md](../plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md) | 289, 290 | None | Complete |
 | 294 | Add explicit versioned UUID admission domains with sound Keiki evidence | [docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md) | 289 | None | Complete |
-| 295 | Rehearse integrated replay, public API adoption, and legacy retirement | [docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md) | 289, 290, 291, 292, 293, 294 | None | In Progress |
+| 295 | Rehearse integrated replay, public API adoption, and legacy retirement | [docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md) | 289, 290, 291, 292, 293, 294 | None | Complete |
 
 
 ## Dependency Graph
@@ -199,15 +204,21 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 294: Rehearse mixed-domain history and immutable identities.
 - [x] Plan 295: Assemble one integrated workspace and historical corpus.
 - [x] Plan 295: Prove refactor and evolution matrices.
-- [ ] Plan 295: Run an isolated consumer adoption rehearsal.
+- [x] Plan 295: Run an isolated consumer adoption rehearsal.
 - [x] Plan 295: Close release gates and retain recovery paths.
-- [ ] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement. (Clean adoption and removal-negative gating pass; REV-18 found no legacy path yet demonstrably removable.)
+- [x] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement. (REV-19 approves the isolated Rei candidate's replacement of exactly its obsolete ActionId mapped-opaque declaration and 40 mapped-surface expectations while retained replay and process continuation stay green; generic mapped-opaque support and historical readers remain.)
 
 
 ## Surprises & Discoveries
 
 
 The 1.0 review found that `MappedConsequence` omits non-mapped changes and process reactions, while `replayImpactServices` compares aggregates only. `ProcessManager/Reaction.hs` recomputes follow-ups from decoded source input after recovering a saga witness, so equal saga state does not prove equal dispatch. The previous candidate-capability removal advice also omitted the retained-data obligation after a package release. These findings require a complete inventory, explicit process recovery evidence, and a separate retirement gate.
+
+The final consumer rehearsal found retained payloads using both omitted keys and explicit null for a direct mapped value whose checked root is `Optional`. Preserving old Aeson semantics required the generated event decoder to use the optional-field helper for that exact root shape while keeping non-optional roots strict. The added regression brings the DSL suite to 791 examples.
+
+The same retained corpus exercised all five value families: v5/v7 IDs, canonical base16 and calendar values, 12 non-canonical text-set spellings, and optional actor absence. Baseline and candidate reports were byte-identical over 10,061 selected streams. Rei had no stored workflows, so the complete workflow verdict is explicitly `not-applicable-empty-history`; its process inventory was non-empty and passed effect-isolated redelivery with unchanged durable observations.
+
+REV-18's broad retirement refusal remains correct, but restored consumer evidence exposed one exact bounded authoring path: Rei's `ActionId mapped opaque rei.disruption.ActionId.json@1` declaration and 40 expectations can be replaced by the checked v5-or-v7 nominal contract. This does not authorize deleting generic mapped-opaque support or any retained-history implementation in Keiro.
 
 Plan 289 Milestone 1 confirmed that one obligation may be discovered by several inputs. The stable report contract therefore keeps inventory derivation independent, requires an explicit applicability result from every v1 input, accepts duplicate case IDs only when their full definitions agree, and rejects missing, unverified, empty, or build-mismatched evidence.
 
@@ -290,11 +301,19 @@ The 2026-09-19 validation review checked the plans' claims against the working t
 
 2026-09-20 (Plan 294 implementation): Freeze `keiro-dsl/id-domain/typeid-v5-or-v7/1` beside the unchanged implicit-v7 identity. Derive runtime and exact symbolic membership from one version/variant table; thread declaration admission through direct and nested replay identities, ledgers, diffs, generated codecs, map keys, queues, and public contracts; keep ID generation unchanged and process/workflow persistence application-owned. Repository mixed-history evidence completes the feature; real consumer history and publication remain assigned to Plan 295.
 
+2026-09-20 (Plan 295 completion): Treat a root-`Optional` mapped event field as historically omission-compatible: missing and explicit null decode through the same declared parser. Keep non-optional mapped roots strict and keep required-field semantics inside declared structural records unchanged.
+
+2026-09-20 (Plan 295 completion): Accept an explicit zero-count workflow inventory as complete `not-applicable-empty-history` evidence, separate from unavailable access. Require independently applicable process evidence to pass rather than using the empty workflow result as a substitute.
+
+2026-09-20 (Plan 295 completion): Approve retirement only for the named Rei ActionId opaque authoring declaration demonstrated by the isolated candidate patch. Retain generic opaque support, every historical reader and replay-only path, process identity families, and workflow branches. Consumer source mutation and deployment remain separate actions.
+
 
 ## Outcomes & Retrospective
 
 
-Plans 289–294 are complete. Plan 295 now has an integrated retained-envelope corpus, refactor/evolution mutations, four independent release results, a fresh/existing public scaffold proof, a compiled mapped process reaction, create-once preservation, and a required-reader removal-negative gate. Repository evidence makes package and Language 6 publication eligible but performs neither action. Consumer adoption remains pending because no authorized immutable Rei history or isolated restored source/scratch pair was available. REV-18 also found no legacy authoring or historical implementation path demonstrably removable: the smallest apparent wrappers remain supported version-1 compatibility, while runtime candidates depend on retained history. Plan 295 therefore remains in progress with consumer adoption and a successful bounded deletion rehearsal open.
+Plans 289–295 are complete. The final child adds an integrated retained-envelope corpus, refactor/evolution mutations, four independent release results, a fresh/existing public scaffold proof, a compiled mapped process reaction, create-once preservation, an immutable Rei baseline/candidate replay, effect-isolated process continuation, an explicit empty workflow inventory, and both positive bounded-retirement and required-reader negative gates.
+
+The immutable consumer rehearsal selected 10,061 retained streams and produced byte-identical baseline/candidate reports with zero unexpected failures. It inventoried all five adopted value families and found the optional missing-key compatibility case repaired in the generator. The isolated Rei patch converts all five declarations and proves that the exact ActionId mapped-opaque authoring path can be retired while generic opaque support and every historical compatibility path remain. The release manifest therefore reports package release, Language 6 publication, Rei adoption, and that bounded retirement as independently eligible, while performing none of those externally authorized actions. No package was published, no production data or consumer checkout was changed, and no generic compatibility implementation was deleted.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
@@ -317,3 +336,5 @@ Revision note (2026-09-20, Plan 293 implementation): Completed frozen base16 byt
 Revision note (2026-09-20, Plan 294 implementation): Completed explicit UUIDv5-or-v7 admission with shared runtime/symbolic membership, conservative Keiki overlap evidence, direct and nested replay identity propagation, generated and public consumers, compiled mixed-history fixtures, supported-use documentation, and ADR updates. Marked Plan 294 complete after full regression and corpus validation; Plan 295 is next and still owns consumer-history adoption, Language 6 publication, and legacy retirement.
 
 Revision note (2026-09-20, Plan 295 partial implementation): Completed integrated repository replay, the mutation matrix, four independent release results, recovery guidance, clean public adoption, mapped process-reaction compilation, create-once preservation, and the legacy-retirement inventory/negative gate. Package and language publication are eligible but not performed. Plan 295 remains in progress because authorized Rei consumer history is unavailable and REV-18 found no bounded obsolete path safe to remove.
+
+Revision note (2026-09-20, Plan 295 completion): Completed immutable Rei baseline/candidate replay, retained-value inventory, effect-isolated process continuation, explicit empty workflow accounting, the root-optional missing-key compatibility fix, and the exact Rei ActionId opaque-to-checked retirement rehearsal. Marked all child plans complete without publishing, deploying, editing the consumer checkout, or deleting generic compatibility support.

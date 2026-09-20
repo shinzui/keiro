@@ -31,7 +31,7 @@ class CheckedMappingReleaseTest(unittest.TestCase):
     def errors(self, manifest=None) -> list[str]:
         return CHECKER.validate(self.manifest if manifest is None else manifest, ROOT)
 
-    def test_truthful_pending_consumer_and_retirement_gates_pass(self) -> None:
+    def test_complete_consumer_and_retirement_evidence_passes(self) -> None:
         self.assertEqual(self.errors(), [])
 
     def test_cli_reports_all_four_independent_gates(self) -> None:
@@ -53,17 +53,36 @@ class CheckedMappingReleaseTest(unittest.TestCase):
 
     def test_consumer_adoption_cannot_pass_without_real_history(self) -> None:
         manifest = copy.deepcopy(self.manifest)
-        manifest["gates"]["consumer-adoption"]["result"] = "eligible"
+        manifest["repositoryEvidence"]["milestones"]["consumerHistory"] = False
+        manifest["repositoryEvidence"].pop("consumerHistoryEvidence")
         errors = self.errors(manifest)
         self.assertTrue(any("consumerHistory" in error for error in errors), errors)
-        self.assertTrue(any("missingEvidence" in error for error in errors), errors)
+        self.assertTrue(any("structured consumerHistoryEvidence" in error for error in errors), errors)
 
     def test_retirement_cannot_pass_while_adoption_is_pending(self) -> None:
         manifest = copy.deepcopy(self.manifest)
-        manifest["gates"]["implementation-retirement"]["result"] = "eligible"
+        manifest["gates"]["consumer-adoption"]["result"] = "pending"
+        manifest["gates"]["consumer-adoption"]["missingEvidence"] = ["consumer-history"]
         errors = self.errors(manifest)
         self.assertTrue(any("requires consumer-adoption" in error for error in errors), errors)
-        self.assertTrue(any("requires a retirement rehearsal" in error for error in errors), errors)
+
+    def test_process_continuation_must_be_effect_isolated(self) -> None:
+        manifest = copy.deepcopy(self.manifest)
+        manifest["repositoryEvidence"]["consumerHistoryEvidence"]["processContinuation"]["outboundEffectsEnabled"] = True
+        errors = self.errors(manifest)
+        self.assertTrue(any("disable outbound effects" in error for error in errors), errors)
+
+    def test_empty_workflow_history_must_be_explicit(self) -> None:
+        manifest = copy.deepcopy(self.manifest)
+        manifest["repositoryEvidence"]["consumerHistoryEvidence"]["workflowInventory"]["result"] = "passed"
+        errors = self.errors(manifest)
+        self.assertTrue(any("empty workflow history" in error for error in errors), errors)
+
+    def test_retirement_must_use_the_replayed_candidate_patch(self) -> None:
+        manifest = copy.deepcopy(self.manifest)
+        manifest["repositoryEvidence"]["retirementEvidence"]["candidatePatchSha256"] = "0" * 64
+        errors = self.errors(manifest)
+        self.assertTrue(any("adopted candidate patch" in error for error in errors), errors)
 
     def test_repository_manifest_never_claims_a_release_action(self) -> None:
         manifest = copy.deepcopy(self.manifest)

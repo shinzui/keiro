@@ -32,6 +32,11 @@ provenance:
       at: 2026-09-20T16:31:16Z
       mode: "implement"
       note: "Begin integrated replay, consumer adoption, release-gate, and retirement rehearsal."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T20:56:10Z
+      mode: "implement"
+      note: "Complete immutable Rei adoption, optional-field compatibility, and bounded ActionId retirement rehearsal."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -62,9 +67,9 @@ Complete the pre-1.0 DSL acceptance work with an executable adoption rehearsal f
 
 - [x] Milestone 1: Assemble one integrated workspace and historical corpus. (2026-09-20: registered the Language 6 workspace, generated conformance surface, retained non-canonical repository envelope, and Plan 289 inventory/report evidence.)
 - [x] Milestone 2: Prove refactor and evolution matrices. (2026-09-20: the integrated suite crosses the generated event parser/transducer and detects date, set, base16, ID, binding, event-shape, process-identity, and workflow-key mutations.)
-- [ ] Milestone 3: Run an isolated consumer adoption rehearsal. (2026-09-20: located `mori://shinzui/rei` clone/replay tooling, but no authorized immutable export or isolated restored source/scratch pair is available; adoption remains pending rather than being inferred from repository fixtures.)
+- [x] Milestone 3: Run an isolated consumer adoption rehearsal. (2026-09-20: restored one immutable Rei archive into separate baseline/candidate databases, compared 10,061 selected retained streams with identical reports and zero unexpected failures, inventoried all five retained value families, replayed the sole applicable process manager with outbound effects disabled, and recorded the workflow inventory as a successful empty-history result.)
 - [x] Milestone 4: Close release gates and retain recovery paths. (2026-09-20: committed a validated four-way release manifest, wired it into `replay-compatibility`, documented reader-before-writer and forward-recovery policy, and updated ADR-47 plus IR-42 through IR-46 without claiming consumer adoption.)
-- [ ] Milestone 5: Prove API adoption and rehearse bounded legacy-code retirement. (2026-09-20: clean fresh/existing scaffold adoption, create-once preservation, a compiled mapped process reaction, and the required-reader removal-negative gate pass. REV-18 found no bounded legacy path demonstrably removable, so retirement acceptance remains open.)
+- [x] Milestone 5: Prove API adoption and rehearse bounded legacy-code retirement. (2026-09-20: clean fresh/existing scaffold adoption, create-once preservation, a compiled mapped process reaction, and the required-reader removal-negative gate pass. REV-19 approves the isolated Rei candidate's replacement of exactly the obsolete `ActionId mapped opaque rei.disruption.ActionId.json@1` declaration and its 40 mapped-surface expectations with the checked v5-or-v7 nominal path while retained replay and process continuation remain green; generic opaque support and historical readers remain.)
 
 
 ## Surprises & Discoveries
@@ -74,13 +79,21 @@ The combined envelope originally used `RetainedId` only as a keyed-map key. That
 
 The retained envelope is repository history, not evidence from `mori://shinzui/rei`. It intentionally contains admitted non-canonical date, set, and base16 spellings plus UUIDv5/v7 identities. The candidate normalizes those bytes before the real multi-event transducer replay, while the separate report contract demonstrates that unverified consumer evidence blocks adoption.
 
-The Rei repository already provides explicit clone-and-replay tooling that requires separate source and scratch database URLs and rejects unsafe use. This checkout has neither an authorized immutable export nor an isolated restored source/scratch pair. Tool availability is not historical evidence, so Milestone 3 remains open without attempting a live connection or inspecting credentials.
+An immutable Rei archive subsequently became available for the bounded rehearsal. Restoring the same archive into separately named baseline and candidate databases made the comparison reproducible without reading a live deployment or committing private payloads. The earlier absence was a truthful pending result, not evidence of incompatibility; the release manifest now records only revisions, counts, high-water checkpoints, and digests.
+
+The retained corpus contained both spellings of absence for a bare optional mapped event value: 28 omitted `actor` keys and 39 explicit nulls. Generated decoding had made the direct mapped field strict even though historical Aeson decoding treated both as `Nothing`. Root `Optional` mapped event fields now use the optional-field helper and retain that equivalence; non-optional mapped roots remain strict. This raised the DSL suite from 790 to 791 examples.
+
+The retained text-set inventory contained 12 accepted non-canonical order or duplicate cases among 666 values. Candidate decoding normalized them before binding and replay, confirming that the declared quotient policy is exercised by real retained data rather than only repository fixtures.
+
+Rei's `MaybeText` is a type alias. It therefore cannot define a consumer-specific `CanonicalTypeName` instance distinct from the existing `Maybe Text` instance without an overlapping-instance conflict. The checked declaration truthfully uses the carrier identity `Maybe(Text)`; a distinct durable canonical identity would require a consumer newtype.
+
+The workflow inventory was explicitly empty: zero registered workflows, instances, steps, and children. That is complete successful evidence with result `not-applicable-empty-history`, not unavailable evidence. Process evidence was independently applicable: effect-isolated redelivery advanced `rei-note-task-propagation` from the deliberate scratch-only rewind back to checkpoint 33237 without changing event, stream-link, target-stream, timer, or dead-letter observations.
 
 Adding the required process reaction exposed a service-aware lowering gap: validation accepted a mapped process input, but the generated input module looked for that consumer type in `Generated.*.Nominals`. Threading the checked type graph through process scaffolding now plans the consumer import correctly. The create-once decoder still owns the source event contract, while the generated reaction owns its deterministic follow-up facts.
 
 The apparent smallest removal candidate, the spec-only `scaffoldAggregate` bridge, delegates entirely to `scaffoldAggregateForService` and has only test callers in this repository. Plan 235 nevertheless retained this wrapper family as supported version-1 compatibility. Mori's dependent registry cannot prove external symbol non-use, so a scratch deletion would demonstrate only edited internal callers, not a safe public retirement.
 
-The 1.0 review found no existing milestone demonstrating removal of obsolete authoring support or process-manager compatibility. Candidate capabilities can also have durable history before language publication, so removal from a candidate profile alone cannot make retirement safe.
+The 1.0 review found no existing milestone demonstrating removal of obsolete authoring support or process-manager compatibility. Candidate capabilities can also have durable history before language publication, so removal from a candidate profile alone cannot make retirement safe. The restored Rei history made a narrower candidate visible: its `ActionId` declaration can stop using the opaque authoring form because the checked v5-or-v7 nominal replacement accepts every retained identifier and preserves continuation behavior. This is evidence for that exact consumer declaration, not permission to delete Keiro's generic mapped-opaque implementation.
 
 
 ## Decision Log
@@ -101,13 +114,23 @@ The 1.0 review found no existing milestone demonstrating removal of obsolete aut
 
 2026-09-20: Keep Milestone 5 open even though clean API adoption passes. REV-18 found no authoring path that is both obsolete by policy and independent of unavailable retained-history evidence. The required-reader anchor mutation is a valid negative retirement gate, but it is not a successful bounded deletion rehearsal.
 
+2026-09-20 (consumer rehearsal): Preserve historical Aeson omission behavior for a direct mapped event field whose checked root resolves to `Optional`: missing and explicit null both decode through the declared optional parser. Keep every non-optional mapped root strict. This is a persisted-event compatibility rule, not a general weakening of required structural record fields.
+
+2026-09-20 (consumer rehearsal): A Haskell type alias reuses the carrier's canonical type identity because it cannot own a distinct non-overlapping `CanonicalTypeName` instance. Consumers that need a separate canonical identity use a newtype and a total binding.
+
+2026-09-20 (consumer rehearsal): Count an explicitly verified empty workflow inventory as complete `not-applicable-empty-history` evidence. Do not report it as passed workflow continuation, and do not treat it as missing access.
+
+2026-09-20 (retirement follow-up): Approve retirement only for the exact Rei `ActionId mapped opaque rei.disruption.ActionId.json@1` authoring declaration and its 40 obsolete mapped-surface expectations. Retain generic mapped-opaque support, all old readers, replay-only behavior, process identity families, and workflow branches. The actual consumer change remains separately authorized.
+
 
 ## Outcomes & Retrospective
 
 
-Milestones 1, 2, and 4 are implemented. The API-adoption half of Milestone 5 is also implemented: `just checked-mapping-adoption` passes from fresh and existing outputs, and the generated process reaction carries the integrated consumer type. `keiro-dsl-conformance-checked-mapping-replay` passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. The `keiro.checked-mapping-release/v1` manifest separately reports package and publication eligibility while keeping consumer adoption and implementation retirement pending. Milestone 3 and the successful bounded-deletion half of Milestone 5 remain open.
+All five milestones are implemented. `just checked-mapping-adoption` passes from fresh and existing outputs, and the generated process reaction carries the integrated consumer type. `keiro-dsl-conformance-checked-mapping-replay` passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. The `keiro.checked-mapping-release/v1` manifest now records all four gates independently as eligible while performing none of their release, publication, consumer-edit, deployment, or main-tree-retirement actions.
 
-Final repository validation through checked-corpus commit `8ed4442c` passed: `keiro-dsl:keiro-dsl-test` ran 790 examples with zero failures; `keiro:keiro-test` ran 711 examples with zero failures; `just conformance-corpus-policy` regenerated all 53 registered invocations with clean record/disk and Cabal inventories; and `just process-reaction-proof` passed the reaction mutation, hydration, replay-witness, timer, no-advance, and state-authority checks. `just checked-mapping-adoption` also preserved all seven hand-owned files across fresh and existing scaffolds while compiling the 39-module generated surface. `just replay-compatibility` matched all three reports, passed ten comparator tests, and passed seven release-manifest tests while truthfully reporting consumer adoption and retirement as pending.
+The consumer rehearsal used archive source revision `825117f620ba2d474e00b0546960caa7c8d73794` with SHA-256 `4d63da93222516dba418ffbc251a24f738fb5d0e9d0a759a693eaec711c94c9a`. Baseline and candidate each selected 10,061 of 10,318 streams, declared 13 journal-entry exclusions covering 89 events, and produced the identical report SHA-256 `863d98c9624e9ecca5226de6de57f4c801189cc5018f3a1908158cb1d4e72a8c` with zero unexpected failures. Retained inventories covered 3,958 v5/v7 action IDs, 1,214 base16 hashes, 3,521 calendar days, 666 text sets, and 67 optional actor values. Effect-isolated process redelivery restored checkpoint 33237 with state digests unchanged and zero dead letters; workflows were explicitly absent.
+
+The isolated candidate patch SHA-256 `38a8ec9e1227e55bf2ef7ebe94cf6b668ae6f6d2b7027a70506e9eb816f4be2f` converts all five consumer examples and removes only the obsolete Rei ActionId opaque declaration surface. Its conformance suite, baseline/candidate replay, process continuation, and required-reader negative mutation pass. This closes the bounded retirement rehearsal without deleting Keiro's generic compatibility implementation or changing `mori://shinzui/rei` in this plan.
 
 
 ## Context and Orientation
@@ -238,4 +261,6 @@ Revision note (2026-09-19, validation review): Milestone 3 now owns all consumer
 
 Revision note (2026-09-19, 1.0 review): Added process continuation coverage, safe candidate removal, clean API adoption, and an explicit legacy-retirement inventory and bounded deletion rehearsal. See ADR-47. No implementation or historical audit has run.
 
-Revision note (2026-09-20, implementation): Completed the integrated repository corpus, refactor/evolution matrix, four-way release manifest, recovery documentation, fresh/existing public scaffold proof, mapped process-reaction lowering, compiled adoption guide, dependent inventory, and required-reader removal-negative gate. Consumer adoption remains pending without an authorized immutable Rei history, and REV-18 found no bounded legacy path demonstrably removable, so Milestones 3 and 5 remain open.
+Revision note (2026-09-20, implementation): Completed the integrated repository corpus, refactor/evolution matrix, four-way release manifest, recovery documentation, fresh/existing public scaffold proof, mapped process-reaction lowering, compiled adoption guide, dependent inventory, and required-reader removal-negative gate.
+
+Revision note (2026-09-20, consumer rehearsal): Restored identical immutable Rei history into isolated baseline/candidate databases, closed retained stream/value/process evidence, recorded an explicit empty workflow inventory, preserved missing-key semantics for root-optional mapped event fields, and completed the exact Rei ActionId opaque-to-checked retirement rehearsal. No release, publication, consumer source edit, deployment, or main-tree compatibility deletion was performed.

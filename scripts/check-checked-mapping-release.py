@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ GATES = {
     "consumer-adoption",
     "implementation-retirement",
 }
+SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -137,6 +139,8 @@ def validate(manifest: dict[str, Any], root: Path) -> list[str]:
     publication = gates.get("language-publication", {})
     adoption = gates.get("consumer-adoption", {})
     retirement = gates.get("implementation-retirement", {})
+    consumer_evidence = evidence.get("consumerHistoryEvidence") if isinstance(evidence, dict) else None
+    retirement_evidence = evidence.get("retirementEvidence") if isinstance(evidence, dict) else None
 
     if package.get("result") == "eligible" and errors:
         errors.append("package-release cannot be eligible while repository evidence is invalid")
@@ -150,6 +154,41 @@ def validate(manifest: dict[str, Any], root: Path) -> list[str]:
             errors.append("consumer-adoption eligibility requires consumerHistory evidence")
         if adoption.get("missingEvidence"):
             errors.append("consumer-adoption eligibility cannot retain missingEvidence")
+        if not isinstance(consumer_evidence, dict):
+            errors.append("consumer-adoption eligibility requires structured consumerHistoryEvidence")
+        else:
+            for field in (
+                "archiveSha256",
+                "baselineBinarySha256",
+                "candidatePatchSha256",
+                "candidateBinarySha256",
+                "processHarnessBinarySha256",
+                "baselineCandidateReportSha256",
+            ):
+                if not SHA256.fullmatch(str(consumer_evidence.get(field, ""))):
+                    errors.append(f"consumerHistoryEvidence has invalid {field}")
+            if consumer_evidence.get("consumer") != adoption.get("consumer"):
+                errors.append("consumerHistoryEvidence consumer must match the adoption gate")
+            if consumer_evidence.get("privatePayloadsCommitted") is not False:
+                errors.append("consumer history evidence must not commit private payloads")
+            stream_replay = consumer_evidence.get("streamReplay", {})
+            if stream_replay.get("baselineCandidateReportsIdentical") is not True:
+                errors.append("consumer adoption requires identical baseline/candidate replay reports")
+            if stream_replay.get("unexpectedFailures") != 0:
+                errors.append("consumer adoption requires zero unexpected replay failures")
+            process = consumer_evidence.get("processContinuation", {})
+            if process.get("outboundEffectsEnabled") is not False:
+                errors.append("consumer process continuation must disable outbound effects")
+            if process.get("checkpointAfter") != process.get("checkpointBefore"):
+                errors.append("consumer process continuation must restore the retained checkpoint")
+            if process.get("deadLettersBeforeAfter") != 0:
+                errors.append("consumer process continuation must not create dead letters")
+            workflow = consumer_evidence.get("workflowInventory", {})
+            if workflow.get("instances") == 0:
+                if workflow.get("result") != "not-applicable-empty-history":
+                    errors.append("empty workflow history must be reported explicitly as not applicable")
+            elif workflow.get("result") != "passed":
+                errors.append("non-empty workflow history requires a passed continuation result")
     elif adoption.get("result") == "pending" and not adoption.get("missingEvidence"):
         errors.append("pending consumer-adoption must name missingEvidence")
     if retirement.get("result") == "eligible":
@@ -157,6 +196,20 @@ def validate(manifest: dict[str, Any], root: Path) -> list[str]:
             errors.append("implementation-retirement eligibility requires consumer-adoption eligibility")
         if not milestones.get("retirementRehearsal"):
             errors.append("implementation-retirement eligibility requires a retirement rehearsal")
+        if not isinstance(retirement_evidence, dict):
+            errors.append("implementation-retirement eligibility requires structured retirementEvidence")
+        else:
+            if retirement_evidence.get("oldHistoryPassed") is not True:
+                errors.append("retirement rehearsal requires old-history replay")
+            if retirement_evidence.get("processContinuationPassed") is not True:
+                errors.append("retirement rehearsal requires process continuation")
+            if retirement_evidence.get("requiredReaderNegativeMutationPassed") is not True:
+                errors.append("retirement rehearsal requires the reader-removal negative mutation")
+            if retirement_evidence.get("genericOpaqueSupportRetained") is not True:
+                errors.append("bounded retirement must retain generic opaque support")
+            adopted_patch = consumer_evidence.get("candidatePatchSha256") if isinstance(consumer_evidence, dict) else None
+            if retirement_evidence.get("candidatePatchSha256") != adopted_patch:
+                errors.append("retirement rehearsal must use the adopted candidate patch")
     elif retirement.get("result") == "pending" and "consumer-adoption" not in retirement.get("blockedBy", []):
         errors.append("pending implementation-retirement must remain blocked by consumer-adoption")
     if retirement.get("legacyReadersRetained") is not True:

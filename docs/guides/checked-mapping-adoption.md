@@ -6,7 +6,7 @@ docId: DOC-28
 tags: [keiro, dsl, mappings, adoption]
 generated:
   by: process:codex-cli
-  at: 2026-09-20T17:05:51Z
+  at: 2026-09-20T20:55:54Z
 ---
 
 # Checked Mapping Adoption
@@ -102,6 +102,18 @@ binding inverse laws for every fixture. Do not use a partial constructor or
 hide validation in `bindingFromShape`; if not every admitted shape has a domain
 value, narrow the declared shape or introduce an explicit versioned policy.
 
+A Haskell `type` alias cannot own a canonical identity distinct from its
+carrier when the carrier already has a `CanonicalTypeName` instance. Reuse the
+carrier identity (for example `Maybe(Text)`) or introduce a `newtype` with its
+own instance and a total binding; do not add an overlapping instance merely to
+match a declaration label.
+
+For generated private events, a direct mapped field whose checked root resolves
+to `Optional` preserves the historical Aeson equivalence between an omitted key
+and an explicit JSON null. A direct mapped non-optional field remains required.
+This event-envelope compatibility rule does not make required fields inside a
+declared structural record optional.
+
 ## Know which files you own
 
 `Generated/` modules are overwritten on every scaffold. They own private-event
@@ -165,7 +177,10 @@ opaque `Json` merely to make the check pass: that changes the claim from checked
 wire authority to an explicit unverified boundary.
 
 The committed release manifest reports four results independently. Package and
-language publication are eligible on repository evidence; adoption for
-`mori://shinzui/rei` remains pending until an authorized immutable history is
-captured; implementation retirement remains pending behind that adoption and a
-successful bounded removal rehearsal.
+language publication are eligible on repository evidence. An immutable
+baseline/candidate rehearsal also makes adoption for `mori://shinzui/rei`
+eligible, and proves retirement of exactly that consumer's obsolete `ActionId`
+mapped-opaque declaration in favor of the checked v5-or-v7 nominal path.
+Generic mapped-opaque support and every historical reader remain retained. The
+manifest performs no release, publication, consumer edit, deployment, or
+main-tree deletion.

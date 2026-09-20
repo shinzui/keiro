@@ -1,7 +1,8 @@
 # Bundle Update Log
 
 ## 2026-09-20
-* **Update**: ADR-47 records the implemented replay contract and four-way release manifest: package/language publication are eligible from repository evidence, while `mori://shinzui/rei` adoption and implementation retirement remain pending real retained-history evidence and the bounded retirement rehearsal (plan 295).
+* **Update**: ADR-12 preserves historical missing-key semantics for root-optional mapped event fields and records the type-alias canonical-identity boundary; ADR-47 records the immutable Rei adoption proof, explicit empty workflow result, and exact bounded ActionId authoring retirement (plan 295).
+* **Initial update**: ADR-47 recorded package/language eligibility while `mori://shinzui/rei` adoption and implementation retirement were still pending; the later Plan 295 entry above supersedes that interim state after the immutable rehearsal.
 * **Update**: ADR-12 and ADR-46 record explicit UUIDv5-or-v7 admission, exact runtime/symbolic agreement, direct and nested replay identity, and application-owned immutable identity boundaries (plan 294).
 * **Update**: Record RefinedBase16Mappings as a non-fold capability whose frozen policy identity enters only mapped byte-refinement surfaces (plan 293).
 * **Implementation**: Added the explicit mapped refined base16-bytes v1 contract, total bytes binding boundary, supported composition paths, and unsupported key/symbolic/workflow ownership boundaries.
