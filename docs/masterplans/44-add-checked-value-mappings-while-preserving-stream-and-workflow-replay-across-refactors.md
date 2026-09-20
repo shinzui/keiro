@@ -201,7 +201,7 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 295: Prove refactor and evolution matrices.
 - [ ] Plan 295: Run an isolated consumer adoption rehearsal.
 - [x] Plan 295: Close release gates and retain recovery paths.
-- [ ] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement.
+- [ ] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement. (Clean adoption and removal-negative gating pass; REV-18 found no legacy path yet demonstrably removable.)
 
 
 ## Surprises & Discoveries
@@ -294,7 +294,7 @@ The 2026-09-19 validation review checked the plans' claims against the working t
 ## Outcomes & Retrospective
 
 
-Plans 289–294 are complete. The shared report/inventory contract is in place; named checked Optional/List/Map values have recursive lowering; calendar days, structural text sets, unrestricted base16 byte refinements, and explicit UUIDv5-or-v7 admission each have frozen Keiro-owned identities, declaration-scoped replay visibility, compiled public examples, and serialized repository evidence. Plan 294 closed with all 52 corpus invocations consistent, the full DSL component set green, 790 main DSL examples and 711 runtime examples passing, its 36-assertion compiled corpus green, and all 47 ADR concepts strictly valid. Plan 295 remains open, so integrated consumer adoption, Language 6 publication, and legacy retirement are not complete. Rei's retained identifiers, streams, and workflow journals remain Plan 295 evidence; repository fixtures do not substitute for that audit. Plan 295 is the next implementable child.
+Plans 289–294 are complete. Plan 295 now has an integrated retained-envelope corpus, refactor/evolution mutations, four independent release results, a fresh/existing public scaffold proof, a compiled mapped process reaction, create-once preservation, and a required-reader removal-negative gate. Repository evidence makes package and Language 6 publication eligible but performs neither action. Consumer adoption remains pending because no authorized immutable Rei history or isolated restored source/scratch pair was available. REV-18 also found no legacy authoring or historical implementation path demonstrably removable: the smallest apparent wrappers remain supported version-1 compatibility, while runtime candidates depend on retained history. Plan 295 therefore remains in progress with consumer adoption and a successful bounded deletion rehearsal open.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
@@ -315,3 +315,5 @@ Revision note (2026-09-20, Plan 292 implementation): Completed frozen structural
 Revision note (2026-09-20, Plan 293 implementation): Completed frozen base16 byte refinements with explicit syntax, total byte bindings, exhaustive checked lowering, declaration-scoped wire identity, compiled supported-use and historical-codec evidence, serialized replay and normalization checks, mutation tests, and ADR updates. Marked Plan 293 complete after full regression and clean-corpus validation; Plan 294 is next, while consumer adoption, publication, and retirement remain open.
 
 Revision note (2026-09-20, Plan 294 implementation): Completed explicit UUIDv5-or-v7 admission with shared runtime/symbolic membership, conservative Keiki overlap evidence, direct and nested replay identity propagation, generated and public consumers, compiled mixed-history fixtures, supported-use documentation, and ADR updates. Marked Plan 294 complete after full regression and corpus validation; Plan 295 is next and still owns consumer-history adoption, Language 6 publication, and legacy retirement.
+
+Revision note (2026-09-20, Plan 295 partial implementation): Completed integrated repository replay, the mutation matrix, four independent release results, recovery guidance, clean public adoption, mapped process-reaction compilation, create-once preservation, and the legacy-retirement inventory/negative gate. Package and language publication are eligible but not performed. Plan 295 remains in progress because authorized Rei consumer history is unavailable and REV-18 found no bounded obsolete path safe to remove.

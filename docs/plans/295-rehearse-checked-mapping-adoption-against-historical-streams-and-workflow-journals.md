@@ -64,7 +64,7 @@ Complete the pre-1.0 DSL acceptance work with an executable adoption rehearsal f
 - [x] Milestone 2: Prove refactor and evolution matrices. (2026-09-20: the integrated suite crosses the generated event parser/transducer and detects date, set, base16, ID, binding, event-shape, process-identity, and workflow-key mutations.)
 - [ ] Milestone 3: Run an isolated consumer adoption rehearsal. (2026-09-20: located `mori://shinzui/rei` clone/replay tooling, but no authorized immutable export or isolated restored source/scratch pair is available; adoption remains pending rather than being inferred from repository fixtures.)
 - [x] Milestone 4: Close release gates and retain recovery paths. (2026-09-20: committed a validated four-way release manifest, wired it into `replay-compatibility`, documented reader-before-writer and forward-recovery policy, and updated ADR-47 plus IR-42 through IR-46 without claiming consumer adoption.)
-- [ ] Milestone 5: Prove API adoption and rehearse bounded legacy-code retirement.
+- [ ] Milestone 5: Prove API adoption and rehearse bounded legacy-code retirement. (2026-09-20: clean fresh/existing scaffold adoption, create-once preservation, a compiled mapped process reaction, and the required-reader removal-negative gate pass. REV-18 found no bounded legacy path demonstrably removable, so retirement acceptance remains open.)
 
 
 ## Surprises & Discoveries
@@ -75,6 +75,10 @@ The combined envelope originally used `RetainedId` only as a keyed-map key. That
 The retained envelope is repository history, not evidence from `mori://shinzui/rei`. It intentionally contains admitted non-canonical date, set, and base16 spellings plus UUIDv5/v7 identities. The candidate normalizes those bytes before the real multi-event transducer replay, while the separate report contract demonstrates that unverified consumer evidence blocks adoption.
 
 The Rei repository already provides explicit clone-and-replay tooling that requires separate source and scratch database URLs and rejects unsafe use. This checkout has neither an authorized immutable export nor an isolated restored source/scratch pair. Tool availability is not historical evidence, so Milestone 3 remains open without attempting a live connection or inspecting credentials.
+
+Adding the required process reaction exposed a service-aware lowering gap: validation accepted a mapped process input, but the generated input module looked for that consumer type in `Generated.*.Nominals`. Threading the checked type graph through process scaffolding now plans the consumer import correctly. The create-once decoder still owns the source event contract, while the generated reaction owns its deterministic follow-up facts.
+
+The apparent smallest removal candidate, the spec-only `scaffoldAggregate` bridge, delegates entirely to `scaffoldAggregateForService` and has only test callers in this repository. Plan 235 nevertheless retained this wrapper family as supported version-1 compatibility. Mori's dependent registry cannot prove external symbol non-use, so a scratch deletion would demonstrate only edited internal callers, not a safe public retirement.
 
 The 1.0 review found no existing milestone demonstrating removal of obsolete authoring support or process-manager compatibility. Candidate capabilities can also have durable history before language publication, so removal from a candidate profile alone cannot make retirement safe.
 
@@ -95,11 +99,13 @@ The 1.0 review found no existing milestone demonstrating removal of obsolete aut
 
 2026-09-20: Record package release, language publication, consumer adoption, and implementation retirement as independent machine-checked results. Repository evidence makes the first two eligible but performs neither action; missing authorized Rei history keeps adoption pending and therefore keeps dependent retirement pending.
 
+2026-09-20: Keep Milestone 5 open even though clean API adoption passes. REV-18 found no authoring path that is both obsolete by policy and independent of unavailable retained-history evidence. The required-reader anchor mutation is a valid negative retirement gate, but it is not a successful bounded deletion rehearsal.
+
 
 ## Outcomes & Retrospective
 
 
-Milestones 1, 2, and 4 are implemented. `keiro-dsl-conformance-checked-mapping-replay` passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. The `keiro.checked-mapping-release/v1` manifest separately reports package and publication eligibility while keeping consumer adoption and implementation retirement pending. Consumer adoption and the bounded retirement verdict remain open.
+Milestones 1, 2, and 4 are implemented. The API-adoption half of Milestone 5 is also implemented: `just checked-mapping-adoption` passes from fresh and existing outputs, and the generated process reaction carries the integrated consumer type. `keiro-dsl-conformance-checked-mapping-replay` passes its total-binding, generated-surface, serialized multi-event, replay-only, workflow-codec, evidence-completeness, and negative-mutation assertions. The `keiro.checked-mapping-release/v1` manifest separately reports package and publication eligibility while keeping consumer adoption and implementation retirement pending. Milestone 3 and the successful bounded-deletion half of Milestone 5 remain open.
 
 
 ## Context and Orientation
@@ -229,3 +235,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Milestone 3 now owns all consumer-history evidence, including the v5/v7 identifier comparison moved from Plan 294, and states that missing access blocks only that consumer's adoption. Milestone 4 adds the publication predicate, the remove-before-publish rule for the shared candidate language, and the per-release wire-policy freeze check. No implementation or historical audit has run.
 
 Revision note (2026-09-19, 1.0 review): Added process continuation coverage, safe candidate removal, clean API adoption, and an explicit legacy-retirement inventory and bounded deletion rehearsal. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Completed the integrated repository corpus, refactor/evolution matrix, four-way release manifest, recovery documentation, fresh/existing public scaffold proof, mapped process-reaction lowering, compiled adoption guide, dependent inventory, and required-reader removal-negative gate. Consumer adoption remains pending without an authorized immutable Rei history, and REV-18 found no bounded legacy path demonstrably removable, so Milestones 3 and 5 remain open.

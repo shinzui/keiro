@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-20
+* **Addition**: REV-18 requests changes for checked-mapping implementation retirement: clean public adoption and the required-reader negative gate pass, but every examined legacy path remains a supported authoring bridge or retained-history implementation.
+
 ## 2026-09-16
 * **Addition**: REV-17 requests changes for the 0.17.0.0 release: the increment's runtime, PGMQ, and DSL changes review as correct and within approved performance guards, but `just verify` fails three ways at HEAD (store-ambiguous keiki in two tests, stale record-migration manifests, hand-edited frozen corpora), the 0.16 to 0.17 upgrade edge is missing, changelogs omit shipped and breaking surfaces, the DLQ user reference is stale, and `fifo-heads` widens the published languages.
 
