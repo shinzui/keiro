@@ -1,0 +1,105 @@
+{
+  "inventoryVersion": "keiro.replay-compatibility/inventory/v1",
+  "inventoryId": "module-rename-fixture-v1",
+  "buildPair": {
+    "baseline": {
+      "sourceRevision": "baseline-revision",
+      "languageProfile": "keiro-dsl-language-5",
+      "runtimeProfile": "keiro-runtime-0.17",
+      "dependencyPlanHash": "baseline-plan"
+    },
+    "candidate": {
+      "sourceRevision": "candidate-module-rename",
+      "languageProfile": "keiro-dsl-language-5",
+      "runtimeProfile": "keiro-runtime-0.17",
+      "dependencyPlanHash": "candidate-plan"
+    }
+  },
+  "contributions": [
+    {
+      "source": "baseline-persisted-surfaces",
+      "applicability": {"status": "applicable"},
+      "cases": [
+        {
+          "caseId": "aggregate/order/prefix-1",
+          "caseKind": "semantic-equivalence",
+          "surface": {"kind": "aggregate-stream", "owner": "Order", "identity": "order-events:v1"}
+        },
+        {
+          "caseId": "process/billing/partial-recovery",
+          "caseKind": "process-manager",
+          "surface": {"kind": "process-manager", "owner": "Billing", "identity": "billing-reaction:v1"}
+        },
+        {
+          "caseId": "workflow/checkout/step-charge",
+          "caseKind": "workflow",
+          "surface": {"kind": "workflow-journal", "owner": "Checkout", "identity": "charge:v1"}
+        }
+      ]
+    },
+    {
+      "source": "candidate-persisted-surfaces",
+      "applicability": {"status": "applicable"},
+      "cases": [
+        {
+          "caseId": "aggregate/order/prefix-1",
+          "caseKind": "semantic-equivalence",
+          "surface": {"kind": "aggregate-stream", "owner": "Order", "identity": "order-events:v1"}
+        },
+        {
+          "caseId": "process/billing/partial-recovery",
+          "caseKind": "process-manager",
+          "surface": {"kind": "process-manager", "owner": "Billing", "identity": "billing-reaction:v1"}
+        },
+        {
+          "caseId": "workflow/checkout/step-charge",
+          "caseKind": "workflow",
+          "surface": {"kind": "workflow-journal", "owner": "Checkout", "identity": "charge:v1"}
+        }
+      ]
+    },
+    {
+      "source": "ordinary-compatibility-findings",
+      "applicability": {"status": "not-applicable", "reason": "module rename has no ordinary wire finding"},
+      "cases": []
+    },
+    {
+      "source": "aggregate-replay-impacts",
+      "applicability": {"status": "applicable"},
+      "cases": [
+        {
+          "caseId": "aggregate/order/prefix-1",
+          "caseKind": "semantic-equivalence",
+          "surface": {"kind": "aggregate-stream", "owner": "Order", "identity": "order-events:v1"}
+        }
+      ]
+    },
+    {
+      "source": "mapped-consequences",
+      "applicability": {"status": "not-applicable", "reason": "fixture has no mapped declaration change"},
+      "cases": []
+    },
+    {
+      "source": "checked-process-reactions",
+      "applicability": {"status": "applicable"},
+      "cases": [
+        {
+          "caseId": "process/billing/partial-recovery",
+          "caseKind": "process-manager",
+          "surface": {"kind": "process-manager", "owner": "Billing", "identity": "billing-reaction:v1"}
+        }
+      ]
+    },
+    {
+      "source": "application-owned-obligations",
+      "applicability": {"status": "applicable"},
+      "cases": [
+        {
+          "caseId": "workflow/checkout/step-charge",
+          "caseKind": "workflow",
+          "surface": {"kind": "workflow-journal", "owner": "Checkout", "identity": "charge:v1"}
+        }
+      ]
+    }
+  ]
+}

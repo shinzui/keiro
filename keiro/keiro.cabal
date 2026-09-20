@@ -196,11 +196,14 @@ test-suite keiro-test
     Paths_keiro
     PreCanonicalRecoverySpec
     PreimageSpec
+    ProcessManagerReplayCompatibilitySpec
     ProjectionReplaySpec
     ReactionExample
     ReadModelSpec
+    ReplayCompatibilitySpec
     VersionedRebuildSpec
     VersionedTargetPostgresSpec
+    WorkflowReplayCompatibilitySpec
 
   ghc-options:
     -threaded

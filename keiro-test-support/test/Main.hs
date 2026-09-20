@@ -6,6 +6,7 @@ module Main (main) where
 import Data.Aeson (Value (String))
 import Data.Aeson qualified as Aeson
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Keiro.Test.ReplayCompatibility
 import Test.Hspec
 
@@ -88,6 +89,16 @@ main = hspec do
                             "source is unverified: Hole source hash changed without a capture"
                         ]
 
+  describe "Normalization law" do
+    it "accepts a non-canonical spelling only when it normalizes before replay" do
+      checkNormalizationLaw decodeDecimal show replaySum ["2"] "01" "1" ["3"] `shouldBe` []
+
+    it "rejects a decoder that preserves non-canonical information" do
+      let lossyDecode "01" = Right (10 :: Int)
+          lossyDecode value = decodeDecimal value
+      checkNormalizationLaw lossyDecode show replaySum [] "01" "1" []
+        `shouldContain` [CanonicalEncodingMismatch]
+
 addCases :: [(InventorySource, RequiredCase)] -> InventoryContribution -> InventoryContribution
 addCases additions contribution =
   contribution
@@ -158,3 +169,11 @@ baselineReport = report BaselineCapture
 
 candidateReport :: CaptureReport
 candidateReport = report CandidateCapture
+
+decodeDecimal :: String -> Either Text Int
+decodeDecimal value = case reads value of
+  [(number, "")] -> Right number
+  _ -> Left "invalid decimal"
+
+replaySum :: [String] -> Either Text Int
+replaySum = fmap sum . traverse decodeDecimal

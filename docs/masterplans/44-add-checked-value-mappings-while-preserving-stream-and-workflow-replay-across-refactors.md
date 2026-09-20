@@ -81,7 +81,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 
 | Plan | Scope | Path | Hard dependencies | Soft dependencies | Status |
 |---|---|---|---|---|---|
-| 289 | Gate stream replay, process recovery, and workflow continuation across builds | [docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md](../plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md) | None | None | In Progress |
+| 289 | Gate stream replay, process recovery, and workflow continuation across builds | [docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md](../plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md) | None | None | Complete |
 | 290 | Support named bare container structural mappings with transitive nullability | [docs/plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md](../plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md) | 289 | None | Not Started |
 | 291 | Add calendar-day mappings with a frozen lossless codec contract | [docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md](../plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md) | 289, 290 | None | Not Started |
 | 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Not Started |
@@ -132,10 +132,10 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 
 
 - [x] Plan 289: Define the compatibility report and capture contract.
-- [ ] Plan 289: Exercise serialized aggregate replay and meaningful refactors.
-- [ ] Plan 289: Exercise workflow refactors without repeating effects.
-- [ ] Plan 289: Compare process-manager redelivery and partial recovery across builds.
-- [ ] Plan 289: Enforce complete evidence in routine verification and document the limits.
+- [x] Plan 289: Exercise serialized aggregate replay and meaningful refactors.
+- [x] Plan 289: Exercise workflow refactors without repeating effects.
+- [x] Plan 289: Compare process-manager redelivery and partial recovery across builds.
+- [x] Plan 289: Enforce complete evidence in routine verification and document the limits.
 - [ ] Plan 290: Introduce checked bare-expression declarations.
 - [ ] Plan 290: Make nullability recursive and lower bare codecs.
 - [ ] Plan 290: Propagate identity and prove migration behavior.
@@ -162,11 +162,11 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet. Research findings are included in the child contexts and are not implementation evidence.
-
 The 1.0 review found that `MappedConsequence` omits non-mapped changes and process reactions, while `replayImpactServices` compares aggregates only. `ProcessManager/Reaction.hs` recomputes follow-ups from decoded source input after recovering a saga witness, so equal saga state does not prove equal dispatch. The previous candidate-capability removal advice also omitted the retained-data obligation after a package release. These findings require a complete inventory, explicit process recovery evidence, and a separate retirement gate.
 
 Plan 289 Milestone 1 confirmed that one obligation may be discovered by several inputs. The stable report contract therefore keeps inventory derivation independent, requires an explicit applicability result from every v1 input, accepts duplicate case IDs only when their full definitions agree, and rejects missing, unverified, empty, or build-mismatched evidence.
+
+Plan 289 completed without changing existing generated corpus bytes. The normalization helper is now available for concrete quotient codecs, while Plans 291–293 remain responsible for activating it with their non-canonical values. Real PostgreSQL workflow and process-manager cases demonstrated that durable keys, accepted witnesses, and partial recovery need semantic observations beyond codec round trips.
 
 The 2026-09-19 validation review checked the plans' claims against the working tree at `ba36ce58`. Every file, recipe, Cabal component, ADR, improvement request, and Keiki ADR URI the plans name exists or resolves. The review found the following, none of which is implementation evidence:
 
@@ -215,11 +215,13 @@ The 2026-09-19 validation review checked the plans' claims against the working t
 
 2026-09-19 (1.0 review): Supersede the earlier “single replay-verdict authority” and mapped-only inventory claims. Wire identity is one input; whole-service evidence includes direct types, folds, process coordination, workflows, and application-owned code. Candidate removal must preserve already-written history. Record the durable contract in ADR-47.
 
+2026-09-20 (Plan 289 implementation): Adopt report v1 and its seven-source independent inventory as the shared feature evidence boundary. Keep concrete quotient-codec cases in their feature plans, compare process continuations through canonical durable observations, and run an independent Python comparator from routine `verify`. These choices implement ADR-47 without changing it.
+
 
 ## Outcomes & Retrospective
 
 
-Planning only. Seven child plans were created; no capability, migration, or historical replay check has been implemented by this document. Completion requires all child acceptance evidence, a working API-adoption example, a reviewed retirement inventory and bounded rehearsal, and ADR distillation. Unavailable consumer data remains an outstanding adoption or retirement obligation; it cannot be counted as completed validation.
+Plan 289 is complete. The shared report/inventory contract, serialized aggregate checks, workflow and process continuation regressions, and recurring compatibility comparator are implemented and passing. Plans 290–295 remain open, so no checked-value capability, consumer adoption, release, or legacy retirement is complete. Initiative completion still requires all feature evidence, the integrated API-adoption example, consumer captures where applicable, and the reviewed retirement rehearsal. Unavailable consumer data remains an outstanding adoption or retirement obligation; it cannot be counted as completed validation.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
@@ -228,3 +230,5 @@ Revision note (2026-09-19, validation review): Verified the plans' claims agains
 Revision note (2026-09-19, validation review correction): Added the direct-ID path (`IdRepresentation`, `nominalRepresentationSurface`, `nominalRepresentationSegment`) to the wire-token integration point, discoveries, and the `capabilityFoldSegment` decision, and cascaded it into Plan 294. The first pass covered only IDs nested in mapped declarations.
 
 Revision note (2026-09-19, 1.0 review): Reframed the initiative around DSL correctness and adoption before 1.0; added process-manager coverage, complete evidence derivation, candidate-history retention, and a distinct legacy-retirement gate. Corrected wire-fingerprint overclaims and assigned shared gate/API ownership. Cascaded into all seven children and ADR-47. Planning only.
+
+Revision note (2026-09-20, Plan 289 implementation): Completed the shared replay-evidence child plan, marked its five milestones and registry row complete, and recorded the feature-plan obligations that remain. No checked-value capability, consumer adoption, release, or retirement was performed.

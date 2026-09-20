@@ -154,6 +154,47 @@ evolution. Context/module/layout/service authority changes are likewise reported
    asynchronously verifies one in 1000 accepted seeds by default; disagreement
    increments `keiro.snapshot.seed.divergence`.
 
+### Compare retained-history evidence across builds
+
+For a refactor that must preserve stored meaning, capture the baseline and
+candidate with separate binaries, then compare the reports against an
+independently derived inventory:
+
+```bash
+python3 scripts/check-replay-compatibility.py \
+  --baseline build/replay-baseline.json \
+  --candidate build/replay-candidate.json \
+  --inventory build/replay-inventory.json \
+  --require-all
+```
+
+The inventory binds the exact build pair and lists obligations from both
+persisted-surface inventories, ordinary compatibility findings, aggregate
+replay impact, mapped consequences, checked process reactions, and
+application-owned workflows or `Hole` implementations. Every source must be
+present as applicable, not applicable with a reason, or unverified. Unverified
+and missing evidence fail the gate. A wire-neutral DSL result does not remove an
+application-owned obligation after a binding, `Hole`, or dependency edit.
+
+Each capture records its corpus hash, stream high-water marks, determinism
+inputs, selected surfaces, and versioned semantic observations. Observations
+include durable state and identities, continuations such as follow-up commands
+or retries, and separately identified fresh allocations. The comparator
+requires matching case and surface coverage and reports the first divergent
+prefix or key. Two empty observations cannot establish compatibility.
+
+Run the repository fixture and mutation suite with `just replay-compatibility`.
+Consumer repositories own database access and capture tools because only the
+application can define a lossless observation of its domain. Keep the reports
+immutable: do not regenerate baseline evidence from candidate code merely to
+make the comparison pass.
+
+This is scoped evidence for the captured corpus through its recorded
+high-water marks. It is not a theorem about arbitrary refactors or writes that
+arrive later. Audit the tail or control writer cutover before adoption, retain
+historical readers for every retained generation, and treat old-reader/new-
+writer compatibility as a separate rollout direction.
+
 The summary table at the end of this guide maps every change class onto these
 gates.
 

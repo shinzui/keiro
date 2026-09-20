@@ -1,0 +1,85 @@
+{
+  "reportVersion": "keiro.replay-compatibility/report/v1",
+  "role": "candidate",
+  "buildPair": {
+    "baseline": {
+      "sourceRevision": "baseline-revision",
+      "languageProfile": "keiro-dsl-language-5",
+      "runtimeProfile": "keiro-runtime-0.17",
+      "dependencyPlanHash": "baseline-plan"
+    },
+    "candidate": {
+      "sourceRevision": "candidate-module-rename",
+      "languageProfile": "keiro-dsl-language-5",
+      "runtimeProfile": "keiro-runtime-0.17",
+      "dependencyPlanHash": "candidate-plan"
+    }
+  },
+  "inventoryId": "module-rename-fixture-v1",
+  "corpusHash": "retained-history-corpus-v1",
+  "observationContractVersion": "checkout-observation/v1",
+  "highWaterMarks": [
+    {"stream": "order-42", "revision": 2},
+    {"stream": "pm:billing-order-42", "revision": 1},
+    {"stream": "wf:checkout-order-42", "revision": 3}
+  ],
+  "selectedSurfaces": [
+    {"kind": "aggregate-stream", "owner": "Order", "identity": "order-events:v1"},
+    {"kind": "process-manager", "owner": "Billing", "identity": "billing-reaction:v1"},
+    {"kind": "workflow-journal", "owner": "Checkout", "identity": "charge:v1"}
+  ],
+  "determinismInputs": {
+    "clock": "2026-09-19T00:00:00Z",
+    "randomness": "fixture-seed-v1",
+    "externalResponsesHash": "external-responses-v1",
+    "failureScheduleHash": "failure-schedule-v1"
+  },
+  "results": [
+    {
+      "requiredCase": {
+        "caseId": "aggregate/order/prefix-1",
+        "caseKind": "semantic-equivalence",
+        "surface": {"kind": "aggregate-stream", "owner": "Order", "identity": "order-events:v1"}
+      },
+      "verdict": {"status": "passed"},
+      "observation": {
+        "durableState": {"register.total": 12, "vertex": "Open"},
+        "continuations": [{"command": "Reserve", "amount": 3}],
+        "durableIdentities": {"stream": "order-42", "event": "event-0002"},
+        "freshAllocations": []
+      }
+    },
+    {
+      "requiredCase": {
+        "caseId": "process/billing/partial-recovery",
+        "caseKind": "process-manager",
+        "surface": {"kind": "process-manager", "owner": "Billing", "identity": "billing-reaction:v1"}
+      },
+      "verdict": {"status": "passed"},
+      "observation": {
+        "durableState": {
+          "saga": {"status": "accepted", "witness": "source-event-9"},
+          "target": [{"occurrence": 0, "payload": {"amount": 12}, "result": "appended"}],
+          "timer": {"id": "timer-7", "status": "scheduled", "payload": {"attempt": 1}}
+        },
+        "continuations": [{"ack": "retry", "reason": "target-1-pending"}],
+        "durableIdentities": {"manager": "billing", "source": "source-event-9", "target-0": "command-17"},
+        "freshAllocations": []
+      }
+    },
+    {
+      "requiredCase": {
+        "caseId": "workflow/checkout/step-charge",
+        "caseKind": "workflow",
+        "surface": {"kind": "workflow-journal", "owner": "Checkout", "identity": "charge:v1"}
+      },
+      "verdict": {"status": "passed"},
+      "observation": {
+        "durableState": {"generation": 0, "step.charge": {"receipt": "paid-42"}},
+        "continuations": [{"kind": "replayed", "step": "charge"}],
+        "durableIdentities": {"workflow": "checkout/order-42", "step": "charge"},
+        "freshAllocations": []
+      }
+    }
+  ]
+}

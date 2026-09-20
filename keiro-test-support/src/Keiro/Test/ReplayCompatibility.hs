@@ -28,13 +28,16 @@ module Keiro.Test.ReplayCompatibility
     CaseResult (..),
     CaptureReport (..),
     CompatibilityFailure (..),
+    NormalizationFailure (..),
     inventorySourcesV1,
     inventoryVersionV1,
     reportVersionV1,
     requiredCases,
     validateCompatibility,
+    compareObservation,
     releaseReady,
     renderCompatibilityFailure,
+    checkNormalizationLaw,
   )
 where
 
@@ -335,6 +338,50 @@ data CompatibilityFailure
   | HighWaterMarkMismatch
   deriving stock (Eq, Show)
 
+-- | Failures for a codec whose decoder intentionally admits non-canonical wire
+-- forms. The law covers normalization, the whole domain round trip, and replay
+-- of the raw historical chain versus its canonical replacement.
+data NormalizationFailure
+  = NonCanonicalDecodeFailed Text
+  | CanonicalEncodingMismatch
+  | CanonicalDecodeFailed Text
+  | DomainRoundTripFailed
+  | NonCanonicalReplayFailed Text
+  | CanonicalReplayFailed Text
+  | NormalizedReplayDiverged
+  deriving stock (Eq, Show)
+
+-- | Check the shared normalization law for one non-canonical wire value.
+--
+-- The supplied replay function receives raw wire values, so a generated harness
+-- can exercise its real parser and transducer rather than proving equality only
+-- after both inputs have already been normalized.
+checkNormalizationLaw ::
+  (Eq wire, Eq domain, Eq observation) =>
+  (wire -> Either Text domain) ->
+  (domain -> wire) ->
+  ([wire] -> Either Text observation) ->
+  [wire] ->
+  wire ->
+  wire ->
+  [wire] ->
+  [NormalizationFailure]
+checkNormalizationLaw decode encode replay prefix nonCanonical canonical suffix =
+  case decode nonCanonical of
+    Left problem -> [NonCanonicalDecodeFailed problem]
+    Right decoded ->
+      [CanonicalEncodingMismatch | encode decoded /= canonical]
+        <> case decode canonical of
+          Left problem -> [CanonicalDecodeFailed problem]
+          Right canonicalDomain ->
+            [DomainRoundTripFailed | canonicalDomain /= decoded || decode (encode decoded) /= Right decoded]
+              <> replayFailures
+  where
+    replayFailures = case (replay (prefix <> [nonCanonical] <> suffix), replay (prefix <> [canonical] <> suffix)) of
+      (Left problem, _) -> [NonCanonicalReplayFailed problem]
+      (_, Left problem) -> [CanonicalReplayFailed problem]
+      (Right historical, Right normalized) -> [NormalizedReplayDiverged | historical /= normalized]
+
 -- | Union the independently supplied inventory contributions. Identical cases
 -- may be required by more than one source. Conflicting definitions are reported
 -- by 'validateCompatibility'.
@@ -357,6 +404,13 @@ validateCompatibility inventory baselineReport candidateReport =
       reportCaseFailures inventory candidateReport,
       observationFailures inventory baselineReport candidateReport
     ]
+
+-- | Compare one baseline/candidate semantic observation outside the report
+-- envelope. Runtime regression suites use this while constructing reports so
+-- the same mismatch vocabulary covers aggregate, workflow, and process traces.
+compareObservation :: Text -> Observation -> Observation -> [CompatibilityFailure]
+compareObservation caseId baselineObservation candidateObservation =
+  [ObservationMismatch caseId | baselineObservation /= candidateObservation]
 
 releaseReady :: EvidenceInventory -> CaptureReport -> CaptureReport -> Bool
 releaseReady inventory baselineReport candidateReport =

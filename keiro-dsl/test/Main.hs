@@ -8443,6 +8443,11 @@ main = hspec $ do
         forM_ changes $ \change ->
           remediationFor ((kindOfChange change).context) ((.code) (kindOfChange change))
             `shouldSatisfy` (not . null)
+    it "never classifies a mapped mode crossing or opaque codec-version change as replay-neutral" $ do
+      modeCrossed <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-mode-cross.keiro"
+      opaqueVersionChanged <- replayImpactFixtures "test/fixtures/consumer-types.keiro" "test/fixtures/consumer-types-opaque-version.keiro"
+      modeCrossed `shouldSatisfy` (/= ReplayNeutral)
+      opaqueVersionChanged `shouldSatisfy` (/= ReplayNeutral)
     it "classifies nested nominal changes at event, snapshot, queue, and query boundaries" $ do
       prefixChanges <-
         diffFixtures

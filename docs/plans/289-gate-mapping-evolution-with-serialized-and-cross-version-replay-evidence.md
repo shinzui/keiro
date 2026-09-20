@@ -61,20 +61,22 @@ Build the reusable pre-1.0 compatibility gate for DSL and API evolution, rejecti
 
 
 - [x] (2026-09-19T22:48:01Z) Milestone 1: Defined the compatibility report and capture contract in `Keiro.Test.ReplayCompatibility`; 9 focused examples pass.
-- [ ] Milestone 2: Exercise serialized aggregate replay and meaningful refactors.
-- [ ] Milestone 3: Exercise workflow refactors without repeating effects.
-- [ ] Milestone 4: Compare process-manager redelivery and partial recovery across builds.
-- [ ] Milestone 5: Enforce complete evidence in routine verification and document the limits.
+- [x] (2026-09-20T00:39:15Z) Milestone 2: Added the shared normalization law, actual event-envelope serialization, complete-prefix observations, replay failure mutations, and mapped-mode/opaque-version verdict regressions.
+- [x] (2026-09-20T00:39:15Z) Milestone 3: Added seven PostgreSQL-backed workflow continuation cases covering stable keys, fail-closed and semantic decoder drift, patch branches, await reuse, and carried rotation seeds.
+- [x] (2026-09-20T00:39:15Z) Milestone 4: Added an actual cross-build partial-recovery comparison plus reusable process observation mutations for identities, witnesses, timers, ordering, and payloads.
+- [x] (2026-09-20T00:39:15Z) Milestone 5: Added the independent report comparator, frozen v1 fixtures, ten mutation tests, the recurring `replay-compatibility` verification recipe, and user guidance.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
-
 The evidence inventory cannot be inferred safely from report rows, but the same obligation can arise from several independent sources. The implementation therefore requires one explicit contribution from every v1 source and permits repeated case IDs only when their complete definitions agree. Evidence: the focused test rejects old-only, direct-ID, transition-only, process-only, and application-Hole omissions while a complete report passes.
 
 The 1.0 review found that `MappedConsequence` has no process-reaction or direct-nominal-only cases and `replayImpactServices` iterates aggregates. Deriving the complete report inventory from mapped changes alone can omit an incompatible process or direct-ID refactor. The runtime already tests same-build reaction recovery; this plan adds cross-build evidence and omission detection.
+
+The plan-147 generated harness already crosses generated JSON codecs for current declarations. Adding another generated assertion before the quotient constructors exist would change the published corpus without adding a real non-canonical case. The implementation therefore supplies the reusable law in `keiro-test-support`; Plans 291–293 activate it with their concrete non-canonical values. `just conformance-corpus-policy` remained at 47 of 47 with no generated drift.
+
+The existing process-reaction PostgreSQL fixtures are private to `keiro/test/Main.hs`. The actual partial-recovery comparison therefore lives beside those fixtures, while `ProcessManagerReplayCompatibilitySpec` owns the reusable observation mutation matrix. This preserves real storage coverage without exporting test-only runtime types.
 
 
 ## Decision Log
@@ -93,11 +95,19 @@ The 1.0 review found that `MappedConsequence` has no process-reaction or direct-
 
 2026-09-19 (implementation): Represent each inventory input as applicable, not applicable with a reason, or unverified. Require all seven v1 inputs and bind the inventory plus both reports to one exact build pair. This makes absence explicit without forcing unrelated packages into `keiro-test-support`, and leaves DSL/runtime adapters responsible for translating their own findings into the stable contract.
 
+2026-09-20 (implementation): Keep the normalization law generic in `Keiro.Test.ReplayCompatibility` and defer generated invocations until Plans 291–293 introduce constructors with real non-canonical wire forms. Existing generated fixture bytes remain unchanged.
+
+2026-09-20 (implementation): Compare process recovery through a canonical durable observation containing saga/witness, target commands and results, timers, and worker outcome. Exercise one isolated PostgreSQL continuation and a pure mutation matrix so storage behavior and first-coordinate diagnostics are both covered.
+
+2026-09-20 (implementation): Implement the report-v1 comparator independently in Python. It rejects duplicate JSON keys, unsupported versions, stale build pairs, corpus/high-water drift, missing inventory inputs or cases, empty observations, and the first recursive observation divergence. This keeps routine verification independent from the Haskell capture implementation.
+
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record results and remaining adoption obligations here; plan creation is not implementation completion.
+Completed on 2026-09-20. The repository now has a versioned compatibility report and independent inventory contract, reusable normalization and observation helpers, serialized aggregate-prefix coverage, isolated workflow continuation coverage, process-manager partial-recovery coverage, and a recurring comparator gate. The full DSL target passed with 757 examples in its main suite, the full runtime target passed with 711 examples, the test-support target passed with 11 examples, the comparator's 10 mutation tests passed, and the conformance corpus remained 47 of 47 without generated drift.
+
+This is scoped repository evidence rather than proof for arbitrary application code or production history. Plans 290–294 must supply feature-specific normalization and replay cases; Plan 295 still owns the integrated corpus, consumer captures, adoption rehearsal, and retirement decision. No package release, production migration, or external consumer mutation occurred. Existing ADR-47 already records the durable evidence and retirement contract, so this implementation required no architectural-decision change.
 
 
 ## Context and Orientation
@@ -231,3 +241,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Added the existing-coverage baseline (plan-147 harness check, `MappedModeCrossed`, fail-closed `decodeStored`) and the wire-token verdict authority to Context. Milestone 1 now derives the required-evidence inventory from `MappedConsequence`. Milestone 2 is rescoped as a delta that owns the shared normalization law, keeps published-language harness output byte-identical, and pins replay verdicts with diff-level regressions. Milestone 3 records that the decode-failure case pins existing behavior. No implementation has run.
 
 Revision note (2026-09-19, 1.0 review): Expanded required evidence beyond mapped changes, added cross-build process-manager recovery and routine verification, and corrected wire-identity and candidate-release assumptions. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Completed all five milestones. Added report-v1 enforcement, aggregate/workflow/process continuation evidence, the shared normalization law, frozen comparator fixtures and mutations, routine verification wiring, and scoped-evidence guidance. Repository fixtures passed; production and consumer histories remain owned by Plan 295.

@@ -240,6 +240,7 @@ import Keiro.Test.Postgres
     withFreshStores2,
     withMigratedSuite,
   )
+import Keiro.Test.ReplayCompatibility qualified as ReplayEvidence
 import Keiro.Timer
 import Keiro.Timer qualified as Timer
 import Keiro.Wake
@@ -409,9 +410,11 @@ import OpenTelemetry.Trace.Core
 import Paths_keiro qualified as Package
 import PreCanonicalRecoverySpec qualified
 import PreimageSpec qualified
+import ProcessManagerReplayCompatibilitySpec qualified
 import ProjectionReplaySpec qualified
 import ReactionExample qualified
 import ReadModelSpec qualified
+import ReplayCompatibilitySpec qualified
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..), DeadLetterReason (..), HaltReason (..), RetryDelay (..), deadLetterCodeText, deadLetterReasonCode, deadLetterReasonDetail, renderDeadLetterReason)
 import Shibuya.Core.AckHandle (AckHandle (..))
@@ -424,6 +427,7 @@ import System.Timeout (timeout)
 import Test.Hspec
 import VersionedRebuildSpec qualified
 import VersionedTargetPostgresSpec qualified
+import WorkflowReplayCompatibilitySpec qualified
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 main :: IO ()
@@ -437,8 +441,11 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   VersionedTargetPostgresSpec.spec fixture
   VersionedRebuildSpec.spec fixture
   PreCanonicalRecoverySpec.spec fixture
+  ProcessManagerReplayCompatibilitySpec.spec
   ProjectionReplaySpec.spec fixture
   ReadModelSpec.spec
+  ReplayCompatibilitySpec.spec fixture
+  WorkflowReplayCompatibilitySpec.spec fixture
 
   describe "catalog-fenced inline projections" $ around (withFreshResourceStore fixture) $ do
     it "rolls back the event append and target write while its group rebuilds" $ \(_storeHandle, StoreRunner runStore) -> do
@@ -4572,6 +4579,83 @@ main = withMigratedSuite $ \fixture -> hspec $ do
       Right events <- runner $ Store.readStreamForward (StreamName "reaction-strict-target:order") (StreamVersion 0) 10
       traverse (decodeRecorded feasibilityGateCodec) (Vector.toList events)
         `shouldBe` Right [GateOpened, GateAccepted 7]
+
+    it "compares cross-build partial recovery traces and locates changed command meaning" $ \(_storeHandle, StoreRunner runner) -> do
+      let sourceEvent = recordedFromEventId (EventId sampleUuid) (CounterAdded 1)
+          runScenario correlation targetName timerId candidateAmount = do
+            let target = stream targetName :: Stream FeasibilityGateCommand
+                committedTimer = counterTimerRequest & #timerId .~ timerId
+                plan acceptedAmount =
+                  Reaction.AdvanceReaction
+                    (Add 1)
+                    [ Reaction.FollowSchedule Reaction.Once committedTimer,
+                      Reaction.FollowDispatch (PMCommand target (TryAccept acceptedAmount)),
+                      Reaction.FollowDispatch (PMCommand target OpenGate)
+                    ]
+                    []
+            Right (Right first) <-
+              runner $
+                Reaction.runReactiveProcessManagerOnce
+                  defaultRunCommandOptions
+                  strictTargetReactionManager
+                  sourceEvent
+                  (correlation, plan 7)
+            first ^. #commandResults `shouldSatisfy` \case
+              [PMCommandFailed _ CommandRejected, PMCommandAppended {}] -> True
+              _ -> False
+            first ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 1 1 0
+            Right (Right recovered) <-
+              runner $
+                Reaction.runReactiveProcessManagerOnce
+                  defaultRunCommandOptions
+                  strictTargetReactionManager
+                  sourceEvent
+                  (correlation, plan candidateAmount)
+            recovered ^. #managerResult `shouldSatisfy` \case
+              Reaction.ReactionDuplicate {} -> True
+              _ -> False
+            recovered ^. #commandResults `shouldSatisfy` \case
+              [PMCommandAppended {}, PMCommandDuplicate {}] -> True
+              _ -> False
+            recovered ^. #timerEffects `shouldBe` Reaction.ReactionTimerEffects 0 0 0
+            Right sagaEvents <-
+              runner $
+                Store.readStreamForward
+                  (StreamName ("reaction-strict-saga:" <> correlation))
+                  (StreamVersion 0)
+                  10
+            Right targetEvents <-
+              runner $
+                Store.readStreamForward (StreamName targetName) (StreamVersion 0) 10
+            Right decodedSaga <- pure (traverse (decodeRecorded counterCodec) (Vector.toList sagaEvents))
+            Right decodedTarget <- pure (traverse (decodeRecorded feasibilityGateCodec) (Vector.toList targetEvents))
+            Right timer <- runner (lookupTimer timerId)
+            let timerTrace = case timer of
+                  Just row -> Text.pack (show (row ^. #status, row ^. #payload))
+                  Nothing -> "missing"
+            pure
+              ReplayEvidence.Observation
+                { durableState =
+                    Map.fromList
+                      [ ("saga-events", Aeson.toJSON (map (Text.pack . show) decodedSaga)),
+                        ("target-events", Aeson.toJSON (map (Text.pack . show) decodedTarget)),
+                        ("timer-state", Aeson.toJSON timerTrace)
+                      ],
+                  continuations = [],
+                  durableIdentities =
+                    Map.fromList
+                      [ ("manager", "strict-target-reaction"),
+                        ("source-event", Text.pack (show (sourceEvent ^. #eventId))),
+                        ("target-occurrences", "logical-target:0,logical-target:1")
+                      ],
+                  freshAllocations = []
+                }
+      baseline <- runScenario "cross-build-baseline" "cross-build-target-baseline" (TimerId (UUID.fromWords 0 0 0 201)) 7
+      refactored <- runScenario "cross-build-refactored" "cross-build-target-refactored" (TimerId (UUID.fromWords 0 0 0 202)) 7
+      changed <- runScenario "cross-build-changed" "cross-build-target-changed" (TimerId (UUID.fromWords 0 0 0 203)) 8
+      ReplayEvidence.compareObservation "process/partial-recovery" baseline refactored `shouldBe` []
+      ReplayEvidence.compareObservation "process/partial-recovery" baseline changed
+        `shouldBe` [ReplayEvidence.ObservationMismatch "process/partial-recovery"]
 
     it "reconciles a concurrent target loser that rehydrates to a silent result" $ \(_storeHandle, StoreRunner runner) -> do
       arrivals <- newMVar (0 :: Int)

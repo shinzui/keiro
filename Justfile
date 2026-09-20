@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -54,6 +54,11 @@ conformance-corpus-policy:
 process-reaction-proof:
     bash keiro-dsl/test/process-reaction-mutation-test.sh
     bash keiro-dsl/test/process-hydration-test.sh
+
+[group('meta')]
+replay-compatibility:
+    python3 scripts/check-replay-compatibility.py --baseline scripts/tests/fixtures/replay-compatibility/baseline-v1.json --candidate scripts/tests/fixtures/replay-compatibility/candidate-v1.json --inventory scripts/tests/fixtures/replay-compatibility/inventory-v1.json --require-all
+    python3 -m unittest discover -s scripts/tests -p test_replay_compatibility.py
 
 # Strict OKF enforcement for the research bundle (docs/research, registered as
 # OKF bundle "research" in mori.dhall). Stable RES-N handles and review
