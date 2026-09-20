@@ -1759,6 +1759,7 @@ main = hspec $ do
         `shouldBe` sort
           [ "aggregate-collection-expressions-v2-rejects.keiro",
             "aggregate-scalar-expressions-v1-rejects.keiro",
+            "bare-containers.keiro",
             "catalog-readmodel-backing-required.keiro",
             "catalog-readmodel-backing-unobserved.keiro",
             "catalog-readmodel-physical-override.keiro",
