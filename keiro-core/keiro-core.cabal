@@ -47,6 +47,7 @@ library
   import: warnings, shared
   exposed-modules:
     Keiro.Codec
+    Keiro.Codec.CalendarDay
     Keiro.Codec.IdDomain
     Keiro.Codec.Nominal
     Keiro.Codec.Structural

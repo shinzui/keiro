@@ -243,6 +243,7 @@ test-suite keiro-dsl-test
     mmzk-typeid >=0.7 && <0.8,
     process >=1.6 && <1.7,
     text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
 
 test-suite keiro-dsl-import-planning-test
   import: warnings, shared

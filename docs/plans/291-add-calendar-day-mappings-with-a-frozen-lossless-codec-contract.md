@@ -27,6 +27,11 @@ provenance:
       at: 2026-09-19T22:32:09Z
       mode: "update"
       note: "Checked full-carrier Day design, codec versioning, complete-surface API acceptance and retained-reader release gates."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T02:20:36Z
+      mode: "implement"
+      note: "Implement frozen calendar-day codec, lowering, and replay evidence."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -57,7 +62,7 @@ Implement IR-43 with a genuine calendar-day value, preserving complete date valu
 ## Progress
 
 
-- [ ] Milestone 1: Prove a frozen full-carrier date contract.
+- [x] (2026-09-20T02:25:52Z) Milestone 1: Prove a frozen full-carrier date contract.
 - [ ] Milestone 2: Lower Day only on complete supported surfaces.
 - [ ] Milestone 3: Prove date and optional-date replay.
 
@@ -65,7 +70,7 @@ Implement IR-43 with a genuine calendar-day value, preserving complete date valu
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
+The Aeson 2.2 source discovered through `mori://haskell/aeson` accepts an optional year sign and at least four year digits, but its parser deliberately caps the year at 15 digits even though `Data.Time.Calendar.Day` has an unbounded `Integer` carrier. Keiro therefore cannot delegate the checked Day reader to Aeson without making the advertised carrier partial. `Keiro.Codec.CalendarDay` owns an unbounded parser, retains Aeson's non-canonical plus-sign and leading-zero read spellings for historical inputs, and normalizes all accepted values through the Aeson-compatible canonical writer. Focused evidence: `nix develop -c cabal test keiro-dsl:keiro-dsl-test --test-options='--match calendar-day'` passed 4 examples and 100 generated full-carrier round trips.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -79,6 +84,8 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 
 2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
+
+2026-09-20 (Milestone 1): Make `keiro-core/calendar-day/1` the frozen policy identity. Its writer is byte-for-byte equal to Aeson's `Day` writer over the complete carrier. Its historical-compatible reader accepts Aeson 2.2's signed and redundant-zero spellings but removes the implementation-specific 15-digit cap; a separate canonical parser distinguishes writer output from accepted historical input. This keeps the normalization law explicit without acquiring Aeson's partial carrier.
 
 
 ## Outcomes & Retrospective

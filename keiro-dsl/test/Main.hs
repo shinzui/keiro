@@ -25,9 +25,18 @@ import Data.Text.Encoding qualified as TextEncoding
 import Data.Text.IO qualified as TIO
 import Data.Text.Lazy qualified as LazyText
 import Data.Text.Lazy.Encoding qualified as LazyTextEncoding
+import Data.Time.Calendar (Day (ModifiedJulianDay), fromGregorian)
 import Data.Version (showVersion)
 import Keiki.ProjectionDomain (matchesTextPattern)
 import Keiro.Codec (Codec (..), EventType (..), decodeRaw)
+import Keiro.Codec.CalendarDay
+  ( calendarDayCodecPolicyIdentity,
+    encodeCalendarDay,
+    parseCalendarDay,
+    parseCalendarDayText,
+    parseCanonicalCalendarDayText,
+    renderCalendarDay,
+  )
 import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
@@ -170,6 +179,41 @@ main = hspec $ do
   frontendCompatibilitySpec
   frontendSurfaceSpec
   frontendProfilesSpec
+
+  describe "calendar-day codec policy v1" $ do
+    it "pins the stable identity and Aeson-compatible full-carrier writer" $ do
+      calendarDayCodecPolicyIdentity `shouldBe` "keiro-core/calendar-day/1"
+      let vectors =
+            [ (fromGregorian 2000 2 29, "2000-02-29"),
+              (fromGregorian 0 1 2, "0000-01-02"),
+              (fromGregorian (-1) 12 31, "-0001-12-31"),
+              (fromGregorian (-1000) 1 1, "-1000-01-01"),
+              (fromGregorian 10000 1 1, "10000-01-01"),
+              (fromGregorian 1000000000000000 12 31, "1000000000000000-12-31")
+            ]
+      forM_ vectors $ \(value, expectedText) -> do
+        renderCalendarDay value `shouldBe` expectedText
+        encodeCalendarDay value `shouldBe` Aeson.toJSON value
+        parseCalendarDayText expectedText `shouldBe` Right value
+
+    it "accepts historical Aeson reader spellings and normalizes them" $ do
+      parseCalendarDayText "+2026-09-19" `shouldBe` Right (fromGregorian 2026 9 19)
+      parseCalendarDayText "02026-09-19" `shouldBe` Right (fromGregorian 2026 9 19)
+      parseCanonicalCalendarDayText "+2026-09-19" `shouldSatisfy` isLeft
+      parseCanonicalCalendarDayText "02026-09-19" `shouldSatisfy` isLeft
+      parseEither parseCalendarDay (Aeson.String "+2026-09-19")
+        `shouldBe` Right (fromGregorian 2026 9 19)
+
+    it "rejects invalid dates and non-string JSON" $ do
+      parseCalendarDayText "1900-02-29" `shouldSatisfy` isLeft
+      parseCalendarDayText "2026-02-30" `shouldSatisfy` isLeft
+      parseCalendarDayText "2026-2-03" `shouldSatisfy` isLeft
+      parseEither parseCalendarDay Aeson.Null `shouldSatisfy` isLeft
+
+    it "round-trips arbitrary Day values without a four-digit-year limit" $
+      property $ \modifiedJulianDay ->
+        let value = ModifiedJulianDay modifiedJulianDay
+         in parseCalendarDayText (renderCalendarDay value) == Right value
 
   describe "mapped consumer surface" $ do
     it "parses and canonically round-trips Language 5 queue and query expressions as atomic forms" $ do
