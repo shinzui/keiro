@@ -64,7 +64,7 @@ Implement IR-43 with a genuine calendar-day value, preserving complete date valu
 
 - [x] (2026-09-20T02:25:52Z) Milestone 1: Prove a frozen full-carrier date contract.
 - [x] (2026-09-20T03:00:14Z) Milestone 2: Lower Day only on complete supported surfaces.
-- [ ] Milestone 3: Prove date and optional-date replay.
+- [x] (2026-09-20T03:07:55Z) Milestone 3: Prove date and optional-date replay.
 
 
 ## Surprises & Discoveries
@@ -73,6 +73,8 @@ Implement IR-43 with a genuine calendar-day value, preserving complete date valu
 The Aeson 2.2 source discovered through `mori://haskell/aeson` accepts an optional year sign and at least four year digits, but its parser deliberately caps the year at 15 digits even though `Data.Time.Calendar.Day` has an unbounded `Integer` carrier. Keiro therefore cannot delegate the checked Day reader to Aeson without making the advertised carrier partial. `Keiro.Codec.CalendarDay` owns an unbounded parser, retains Aeson's non-canonical plus-sign and leading-zero read spellings for historical inputs, and normalizes all accepted values through the Aeson-compatible canonical writer. Focused evidence: `nix develop -c cabal test keiro-dsl:keiro-dsl-test --test-options='--match calendar-day'` passed 4 examples and 100 generated full-carrier round trips.
 
 Generated aggregate modules expose a dependency edge that raw aggregate fields do not: a named mapped declaration can lower transitively to `Day` even though the aggregate surface mentions only the consumer type. Manifest dependency inference therefore must traverse the checked mapped graph and add `time`; inspecting only direct aggregate type constructors produced a Cabal fragment that compiled the consumer binding but omitted `Data.Time.Calendar.Day` from generated shape modules.
+
+The public corpus fixture also exposed the most important rolling-upgrade asymmetry: Keiro's full-carrier writer can emit a year that Aeson 2.2's `Day` reader rejects at its 15-digit implementation limit. Historical reads remain lossless, but old-reader/new-writer compatibility is not universal. The fixture keeps that failed direction executable and documents a producer-last rollout that disables extended-year writes until old readers have been removed.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -91,11 +93,17 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 2026-09-20 (Milestone 2): Admit `Day` only through structural mappings, including named bare `Day` and recursive `Optional`, `List`, and text-keyed `Map` positions. Lower every supported surface to `Data.Time.Calendar.Day` plus `Keiro.Codec.CalendarDay`, keep direct aggregate fields, nominal wrappers, scalar paths, guards, ordering, and arithmetic rejected, and make the wire fingerprint policy-parametric for compatibility proof while production always selects the released v1 identity. The calendar capability contributes no fold segment because it changes generated codecs rather than transition semantics.
 
+2026-09-20 (Milestone 3): Treat the calendar-day corpus as repository evidence, not consumer-history evidence. Cover bare and nested shapes, aggregate command/event/register/snapshot paths, a two-event serialized transition, queue and query surfaces, normalization, invalid input, and explicit compatibility failures. Keep processes and workflows application-owned until Plan 295 supplies real consumer codecs and retained-history replay.
+
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record results and remaining adoption obligations here; plan creation is not implementation completion.
+Implemented the frozen `keiro-core/calendar-day/1` codec and the candidate-language `CalendarDayMappings` capability. Checked mappings lower `Day` and recursive optional/list/map occurrences through the Keiro-owned codec on all admitted structural, aggregate, queue, query, workspace, and public-contract surfaces. Unsupported direct aggregate fields, nominal wrappers, scalar paths, guards, ordering, and arithmetic fail during checking.
+
+The registered `conformance-calendar-days` package supplies a compiled public example and 70 passing assertions. It proves total consumer bindings; canonical and historical-compatible decoding; leap, month, null/omission, year-zero, negative-year, and unbounded extended-year behavior; Aeson-writer parity; multi-event envelope serialization followed by strict replay with equal control state and registers; queue/query preservation; and negative narrowing and midnight-conversion classifications. The generated corpus regenerated without drift, and the matched conformance baseline passed 29 examples.
+
+This completes repository-level feature evidence only. Plan 295 still owns Rei's real retained-event and workflow-journal audit, high-water marks, continuation checks, rollout authorization, and final adoption. The executable old-reader/new-writer failure requires producer-last deployment for extended-year writes; this plan does not authorize production migration or release.
 
 
 ## Context and Orientation
@@ -203,3 +211,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Milestone 1 records the Aeson writer equivalence and the package-release freeze point. Milestone 2 specifies the Day wire token, its replay-verdict tests, and `capabilityFoldSegment = Nothing`. Milestone 3 separates repository codec-comparison fixtures from consumer history owned by Plan 295. No implementation has run.
 
 Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Implemented all three milestones with a frozen full-carrier codec, checked lowering, registered corpus evidence, replay and compatibility tests, and an explicit producer-last rollout limitation. Real consumer-history evidence remains assigned to Plan 295.

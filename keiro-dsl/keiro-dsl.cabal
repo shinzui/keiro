@@ -719,6 +719,61 @@ test-suite keiro-dsl-conformance-bare-containers
     kiroku-store,
     text >=2.1 && <2.2,
 
+-- Plan 291 / IR-43: frozen full-carrier calendar-day mappings preserve their
+-- canonical bytes across aggregate replay, queue, query, and historical codecs.
+test-suite keiro-dsl-conformance-calendar-days
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs: test/conformance-calendar-days
+  main-is: Main.hs
+  other-modules:
+    CalendarDays.CalendarLookup.ReadModelHoles
+    CalendarDays.CalendarStore.BehaviorHoles
+    CalendarDays.ProjectionCatalog.ProjectionCatalogHoles
+    Conformance.CalendarDays.Bindings
+    Conformance.CalendarDays.Domain
+    Conformance.CalendarDays.Historical
+    Generated.CalendarDays.BehaviorSourceMap
+    Generated.CalendarDays.CalendarJobs.Queue
+    Generated.CalendarDays.CalendarJobs.QueueCodec
+    Generated.CalendarDays.CalendarJobs.QueuePolicy
+    Generated.CalendarDays.CalendarLookup.QueryContract
+    Generated.CalendarDays.CalendarLookup.ReadModel
+    Generated.CalendarDays.CalendarLookup.ReadModelHarness
+    Generated.CalendarDays.CalendarLookup.ReadModelTable
+    Generated.CalendarDays.CalendarStore.BehaviorContract
+    Generated.CalendarDays.CalendarStore.Codec
+    Generated.CalendarDays.CalendarStore.Domain
+    Generated.CalendarDays.CalendarStore.EventStream
+    Generated.CalendarDays.CalendarStore.Harness
+    Generated.CalendarDays.CalendarStore.Projection
+    Generated.CalendarDays.CalendarStore.Transducer
+    Generated.CalendarDays.ProjectionCatalog
+    Generated.CalendarDays.ReplayAudit
+    Generated.CalendarDays.Structural.CodecCompare.MaybeLocalDay
+    Generated.CalendarDays.Structural.Shape.CalendarEnvelope
+    Generated.CalendarDays.Structural.Shape.LocalDay
+    Generated.CalendarDays.Structural.Shape.MaybeLocalDay
+    Generated.CalendarDays.StructuralConformance
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    effectful-core,
+    filepath >=1.4 && <1.6,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    kiroku-store,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural
 -- codec authority while preserving the queue schema-version-1 envelope.
 test-suite keiro-dsl-conformance-mapped-queue

@@ -1,0 +1,59 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/calendar-days.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    CalendarDays.CalendarLookup.ReadModelHoles
+    CalendarDays.CalendarStore.BehaviorHoles
+    CalendarDays.ProjectionCatalog.ProjectionCatalogHoles
+    Conformance.CalendarDays.Bindings
+    Generated.CalendarDays.BehaviorSourceMap
+    Generated.CalendarDays.CalendarJobs.Queue
+    Generated.CalendarDays.CalendarJobs.QueueCodec
+    Generated.CalendarDays.CalendarJobs.QueuePolicy
+    Generated.CalendarDays.CalendarLookup.QueryContract
+    Generated.CalendarDays.CalendarLookup.ReadModel
+    Generated.CalendarDays.CalendarLookup.ReadModelHarness
+    Generated.CalendarDays.CalendarLookup.ReadModelTable
+    Generated.CalendarDays.CalendarStore.BehaviorContract
+    Generated.CalendarDays.CalendarStore.Codec
+    Generated.CalendarDays.CalendarStore.Domain
+    Generated.CalendarDays.CalendarStore.EventStream
+    Generated.CalendarDays.CalendarStore.Harness
+    Generated.CalendarDays.CalendarStore.Projection
+    Generated.CalendarDays.CalendarStore.Transducer
+    Generated.CalendarDays.ProjectionCatalog
+    Generated.CalendarDays.ReplayAudit
+    Generated.CalendarDays.Structural.Shape.CalendarEnvelope
+    Generated.CalendarDays.Structural.Shape.LocalDay
+    Generated.CalendarDays.Structural.Shape.MaybeLocalDay
+    Generated.CalendarDays.StructuralConformance
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiki
+    , keiro
+    , keiro-core
+    , keiro-dsl
+    , keiro-pgmq
+    , kiroku-store
+    , text
+    , time
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.CalendarDays.Bindings
+    Conformance.CalendarDays.Domain
