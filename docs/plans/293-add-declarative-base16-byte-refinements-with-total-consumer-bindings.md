@@ -32,6 +32,11 @@ provenance:
       at: 2026-09-20T04:40:21Z
       mode: "implement"
       note: "Begin Plan 293 declarative base16 byte-refinement implementation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T05:39:29Z
+      mode: "implement"
+      note: "Complete Plan 293 with the frozen base16-bytes policy, exhaustive checked lowering, compiled replay evidence, and clean-corpus validation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -62,15 +67,21 @@ Implement the bounded initial slice of IR-45: byte-backed refined mappings with 
 ## Progress
 
 
-- [ ] Milestone 1: Specify and implement a bounded refinement contract.
-- [ ] Milestone 2: Compose refinement through all admitted checked roots.
-- [ ] Milestone 3: Prove byte identity and preserve old hash semantics.
+- [x] Milestone 1: Specify and implement a bounded refinement contract.
+- [x] Milestone 2: Compose refinement through all admitted checked roots.
+- [x] Milestone 3: Prove byte identity and preserve old hash semantics.
 
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
+Strict generated-module warnings exposed that a refined-only scaffold had inherited codec imports for declarations its harness did not assert. Restricting harness codec imports to the declarations it actually exercises kept generated modules warning-clean without weakening coverage.
+
+The conformance package uses `NoFieldSelectors`, so the total consumer binding must unwrap the byte wrapper by constructor pattern rather than through a generated selector. The create-once domain module also had to export its constructor so the generated projection hole could remain a total application-owned boundary; corpus regeneration preserved that hand-owned edit.
+
+The nested `HashEnvelope` example requires `containers` even though its aggregate root mentions only a consumer type. Existing graph-wide dependency inference handled the transitive `Map Text` shape once the new refined leaf participated in the same checked graph.
+
+The full DSL suite's closed inventories caught both integration omissions immediately: the new compiled component needed a conformance-baseline row, and the Language-6 fixture needed inclusion in the explicit non-Language-4 fixture list.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -87,11 +98,19 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
 
+2026-09-20 (implementation): Add explicit `mapped refined` syntax with `wire base16-bytes`, represented in the checked graph as `RRefined Base16BytesV1` and lowered through a total `StructuralBinding domain ByteString`. Freeze policy identity `keiro-core/base16-bytes/1`; write lowercase, read case-insensitively, preserve empty values, arbitrary lengths, and leading zeroes, and reject malformed JSON before the consumer binding.
+
+2026-09-20 (implementation): Register `RefinedBase16Mappings` only in candidate Language 6 with no capability-wide fold segment. Carry the policy identity in each declaration's wire fingerprint, keep map keys and symbolic operations unsupported, reject callback/length escape hatches, and leave public contracts plus process/workflow persistence application-owned.
+
 
 ## Outcomes & Retrospective
 
 
-Not implemented. Record results and remaining adoption obligations here; plan creation is not implementation completion.
+Implemented in `e548fffd`. Keiro now exposes a frozen base16-bytes codec and public refined-codec façade; the DSL parses, checks, pretty-prints, diffs, fingerprints, scaffolds, manifests, and records explicit refined declarations through the same exhaustive graph algebras as other checked mappings.
+
+The compiled `refined-base16` corpus passes 79 assertions covering empty and leading-zero bytes, arbitrary lengths, mixed-case normalization, malformed-input rejection before binding, both total binding laws, nested optional/list/map values, aggregate commands/events/registers, queue and query consumers, multi-event serialized replay, replay-only history, head-information-loss and transposing-binding mutations, historical codec parity, generated codec comparison, and content-derived identity stability. Its supported-use matrix marks public contracts unsupported and workflow codecs application-owned.
+
+Validation completed with all 53 `keiro-dsl:tests` components green, the main DSL suite at 784 examples with zero failures, the runtime suite at 711 examples with zero failures, strict validation of all 47 ADR concepts, and a clean 51-invocation conformance corpus with no drift. Real retained consumer streams and workflow journals remain deliberately assigned to Plan 295; this repository proof does not claim that audit or publish Language 6.
 
 
 ## Context and Orientation
@@ -199,3 +218,5 @@ Revision note (2026-09-19): Linked the Mina-created intention and clarified reta
 Revision note (2026-09-19, validation review): Milestone 1 adds the permissive-historical-reader check and the package-release freeze point. Milestone 2 specifies the refined wire token, its replay-verdict tests, the replay reason map keys stay excluded, and `capabilityFoldSegment = Nothing`. Milestone 3 separates repository fixtures from consumer history owned by Plan 295, supplies normalization-law cases, and adds the identity-stability case. No implementation has run.
 
 Revision note (2026-09-19, 1.0 review): Added the pre-1.0 API acceptance contract, complete evidence obligations, and safe candidate-policy retention. Accepted language and runtime behavior remain unchanged. See ADR-47. No implementation or historical audit has run.
+
+Revision note (2026-09-20, implementation): Completed the frozen unrestricted-byte base16 policy, explicit refined syntax, exhaustive checked-graph lowering, policy-versioned replay identity, compiled supported-use matrix, historical codec comparison, serialized normalization/replay evidence, mutation checks, ADR updates, full regression suites, and clean-corpus validation. Consumer retained-history adoption, candidate publication, and legacy retirement remain open in Plan 295.
