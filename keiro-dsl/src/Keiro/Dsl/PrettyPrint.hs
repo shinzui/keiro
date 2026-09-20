@@ -266,6 +266,7 @@ docTypeExpr TBool = "Bool"
 docTypeExpr TNatural = "Natural"
 docTypeExpr TTime = "Time"
 docTypeExpr TDay = "Day"
+docTypeExpr TTextSet = "Set Text"
 docTypeExpr TJson = "Json"
 docTypeExpr (TOptional value) = "Optional" <+> docTypeArgument value
 docTypeExpr (TList value) = "List" <+> docTypeArgument value

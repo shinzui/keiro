@@ -38,6 +38,7 @@ import Keiro.Codec.CalendarDay
     renderCalendarDay,
   )
 import Keiro.Codec.IdDomain (IdDomainFailure (..), idDomainSampleText, idDomainTextPattern, parseKindIdV7Text, parseKindIdV7Value, typeIdV7Domain, validateIdDomainText)
+import Keiro.Codec.TextSet (encodeTextSet, parseTextSet, textSetCodecPolicyIdentity)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.BehaviorSourceMap qualified as BehaviorSource
@@ -214,6 +215,34 @@ main = hspec $ do
       property $ \modifiedJulianDay ->
         let value = ModifiedJulianDay modifiedJulianDay
          in parseCalendarDayText (renderCalendarDay value) == Right value
+
+  describe "text-set codec policy v1" $ do
+    it "pins the stable identity and Unicode code-point order" $ do
+      textSetCodecPolicyIdentity `shouldBe` "keiro-core/text-set/1"
+      let values = Set.fromList ["\x10000", "\xE000", "ä", "a\x0308", "a", "A"]
+          expected = ["A", "a", "a\x0308", "ä", "\xE000", "\x10000"] :: [T.Text]
+      encodeTextSet values `shouldBe` Aeson.toJSON expected
+      Aeson.encode (encodeTextSet values)
+        `shouldBe` Aeson.encode expected
+
+    it "normalizes permutations and duplicates before exposing the value" $ do
+      let nonCanonical = Aeson.toJSON (["b", "a", "a"] :: [T.Text])
+          canonical = Aeson.toJSON (["a", "b"] :: [T.Text])
+          expected = Set.fromList ["a", "b"]
+      parseEither parseTextSet nonCanonical `shouldBe` Right expected
+      parseEither parseTextSet canonical `shouldBe` Right expected
+      fmap encodeTextSet (parseEither parseTextSet nonCanonical) `shouldBe` Right canonical
+
+    it "rejects non-arrays and reports the index of non-string elements" $ do
+      parseEither parseTextSet Aeson.Null `shouldSatisfy` isLeft
+      case parseEither parseTextSet (Aeson.toJSON ([Aeson.String "a", Aeson.Number 1] :: [Value])) of
+        Left failure -> failure `shouldContain` "[1]"
+        Right value -> expectationFailure ("unexpected text set: " <> show value)
+
+    it "round-trips arbitrary text sets" $
+      property $ \values ->
+        let value = Set.fromList (map T.pack (values :: [String]))
+         in parseEither parseTextSet (encodeTextSet value) == Right value
 
   describe "mapped consumer surface" $ do
     it "parses and canonically round-trips Language 5 queue and query expressions as atomic forms" $ do
@@ -1863,6 +1892,7 @@ main = hspec $ do
             "structural-nominal-leaves-prefix-change.keiro",
             "structural-nominal-leaves-text-to-nominal.keiro",
             "structural-nominal-leaves.keiro",
+            "structural-text-sets.keiro",
             "process-reactions-accepted-requires-event.keiro",
             "process-reactions-accepted-unverified.keiro",
             "process-reactions-badmapping.keiro",
@@ -4505,6 +4535,136 @@ main = hspec $ do
           assertAffected oldSpec = replayImpactSpecs oldSpec daySpec `shouldSatisfy` (/= ReplayNeutral)
       assertAffected (withPrimary TText)
       assertAffected (withPrimary TTime)
+
+    it "admits structural text sets only in the candidate profile and freezes their distinct wire policy" $ do
+      source <- readTestText "test/fixtures/structural-text-sets.keiro"
+      service <- checkedServiceFromText "test/fixtures/structural-text-sets.keiro" source
+      let spec = checkedSpec service
+          bareShapes = [(name, shape) | MappedStructural {msName = name, msShape = shape@ShapeBare {}} <- (.mapped) spec]
+      bareShapes
+        `shouldContain` [ ("TextLabels", ShapeBare TTextSet),
+                          ("MaybeTextLabels", ShapeBare (TOptional TTextSet))
+                        ]
+      runtimeProfileHasCapability ((.runtimeProfile) (checkedLanguageContract service)) TextSetMappings `shouldBe` True
+      capabilityFoldSegment TextSetMappings `shouldBe` Nothing
+      graph <- shouldResolveTypeGraph spec
+      wireFingerprintForTextSetPolicy textSetCodecPolicyIdentity graph "TextLabels"
+        `shouldBe` wireFingerprint graph "TextLabels"
+      wireFingerprintForTextSetPolicy "keiro-core/text-set/2" graph "TextLabels"
+        `shouldNotBe` wireFingerprint graph "TextLabels"
+      let listSpec =
+            specWithMapped
+              [ case declaration of
+                  value@MappedStructural {msName = "TextLabels"} -> value {msShape = ShapeBare (TList TText)}
+                  value -> value
+              | declaration <- spec.mapped
+              ]
+              spec
+      listGraph <- shouldResolveTypeGraph listSpec
+      wireFingerprint graph "TextLabels" `shouldNotBe` wireFingerprint listGraph "TextLabels"
+      case parseSource "<structural-text-sets-language-5>" (T.replace "language keiro-dsl 6" "language keiro-dsl 5" source) of
+        Left (SourceLanguageFailure diagnostic) -> (.errorCode) diagnostic `shouldBe` LanguageFeatureRequiresVersion
+        result -> expectationFailure ("expected structural text-set language refusal, got " <> show result)
+
+    it "plans Set Text imports and generated codecs across aggregate, queue, query, and manifest surfaces" $ do
+      service <- checkedServiceOf "test/fixtures/structural-text-sets.keiro"
+      graph <- shouldResolveTypeGraph (checkedSpec service)
+      let modules = scaffoldServiceModules (defaultContext "structural-text-sets") service
+          shape = generatedTextEndingIn "Structural/Shape/LabelEnvelope.hs" modules
+          aggregateCodec = generatedTextEndingIn "LabelStore/Codec.hs" modules
+          queue = generatedTextEndingIn "LabelJobs/Queue.hs" modules
+          queryContract = generatedTextEndingIn "LabelLookup/QueryContract.hs" modules
+      case planConsumerType graph RTextSet of
+        Left problem -> expectationFailure (show problem)
+        Right planned -> do
+          unHaskellTypeOccurrence planned.haskellType `shouldBe` "Set Text"
+          planned.imports
+            `shouldBe` [ ImportRequirement "containers" "Data.Set" "Set",
+                         ImportRequirement "text" "Data.Text" "Text"
+                       ]
+      shape `shouldSatisfy` T.isInfixOf "import Data.Set (Set)"
+      shape `shouldSatisfy` T.isInfixOf "primary :: !(Set Text)"
+      aggregateCodec `shouldSatisfy` T.isInfixOf "import Keiro.Codec.TextSet (encodeTextSet, parseTextSet)"
+      queue `shouldSatisfy` T.isInfixOf "encodeTextSet"
+      queryContract `shouldSatisfy` T.isInfixOf "type LabelLookupQueryInput = MaybeTextLabels"
+      manifestDependenciesForService service
+        `shouldBe` ["aeson", "base", "containers", "effectful-core", "hasql-transaction", "keiki", "keiro", "keiro-core", "keiro-dsl", "keiro-pgmq", "kiroku-store", "text"]
+
+    it "classifies List-to-Set, Set-to-List, opaque-to-Set, and policy changes as replay-affected" $ do
+      setSpec <- specOf "test/fixtures/structural-text-sets.keiro"
+      let withTextLabels replacement =
+            specWithMapped
+              [ case declaration of
+                  value@MappedStructural {msName = "TextLabels"} -> value {msShape = ShapeBare replacement}
+                  value -> value
+              | declaration <- setSpec.mapped
+              ]
+              setSpec
+          listSpec = withTextLabels (TList TText)
+          opaque =
+            MappedOpaque
+              { moName = "TextLabels",
+                moHaskell = Just (HaskellSource "keiro-dsl" "Conformance.StructuralTextSets.Domain" "TextLabels"),
+                moCodecId = Just "conformance.structural-text-sets.TextLabels.opaque",
+                moCodecVersion = Just "1",
+                moFixtures = Just "Conformance.StructuralTextSets.Bindings.textLabelsFixtures",
+                moInitial = Just "Conformance.StructuralTextSets.Bindings.initialTextLabels",
+                moLoc = noLoc
+              }
+          opaqueSpec =
+            specWithMapped
+              (opaque : [declaration | declaration <- setSpec.mapped, mappedDeclarationName declaration /= "TextLabels"])
+              setSpec
+      replayImpactSpecs listSpec setSpec `shouldSatisfy` (/= ReplayNeutral)
+      replayImpactSpecs setSpec listSpec `shouldSatisfy` (/= ReplayNeutral)
+      replayImpactSpecs opaqueSpec setSpec `shouldSatisfy` (/= ReplayNeutral)
+      graph <- shouldResolveTypeGraph setSpec
+      wireFingerprintForTextSetPolicy "keiro-core/text-set/2" graph "TextLabels"
+        `shouldNotBe` wireFingerprint graph "TextLabels"
+
+    it "rejects direct aggregate Set Text fields with located guidance" $ do
+      direct <-
+        parseInlineSpec
+          "<direct-text-set>"
+          ( T.unlines
+              [ "language keiro-dsl 6",
+                "context direct-text-set",
+                "aggregate Labels",
+                "  regs",
+                "  states Open",
+                "  command Record { labels:Set Text }",
+                "  event Recorded = fields(Record)",
+                "  Open -- Record --> emit Recorded ; goto Open",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+          )
+      let directErrors = [diagnostic | diagnostic <- validateSpec direct, (.severity) diagnostic == Error]
+      map (.code) directErrors `shouldContain` [AggregateTypeUnsupportedAtUse]
+      map (.message) directErrors `shouldSatisfy` any (T.isInfixOf "Set(Text)")
+      symbolic <-
+        parseInlineSpec
+          "<symbolic-text-set>"
+          ( T.unlines
+              [ "language keiro-dsl 6",
+                "context symbolic-text-set",
+                "mapped structural value TextLabels {",
+                "  haskell package=example module=Example.Domain type=TextLabels",
+                "  binding = \"Example.Bindings.textLabelsBinding\"",
+                "  binding-version = \"1\"",
+                "  canonical-type = \"example.TextLabels.v1\"",
+                "  fixtures = \"Example.Bindings.textLabelsFixtures\"",
+                "  wire Set Text",
+                "}",
+                "aggregate Labels",
+                "  regs",
+                "  states Open",
+                "  command Record { labels:TextLabels }",
+                "  event Recorded = fields(Record)",
+                "  Open -- Record --> guard cmd.labels == cmd.labels ; emit Recorded ; goto Open",
+                "  wire kind=ctorName fields=camelCase schemaVersion=1"
+              ]
+          )
+      map (.code) (validateSpec symbolic) `shouldContain` [AggregateExpressionOperatorUnsupported]
 
     it "rejects direct aggregate and nominal Day shapes with located guidance" $ do
       direct <-
@@ -14387,6 +14547,7 @@ expressionTags =
       onNatural = ["natural"],
       onTime = ["time"],
       onDay = ["day"],
+      onTextSet = ["text-set"],
       onJson = ["json"],
       onOptional = ("optional" :),
       onList = ("list" :),

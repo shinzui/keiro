@@ -52,6 +52,7 @@ library
     Keiro.Codec.Nominal
     Keiro.Codec.Structural
     Keiro.Codec.Structural.Generic
+    Keiro.Codec.TextSet
     Keiro.EventStream
     Keiro.EventStream.Validate
     Keiro.Integration.Event
@@ -66,6 +67,7 @@ library
     aeson-casing >=0.2 && <0.3,
     base >=4.21 && <5,
     bytestring >=0.11 && <0.13,
+    containers >=0.6 && <0.8,
     deepseq >=1.5 && <1.6,
     generic-lens >=2.2 && <2.4,
     keiki >=0.9 && <0.10,

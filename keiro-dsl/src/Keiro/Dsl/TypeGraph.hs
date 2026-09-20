@@ -65,6 +65,7 @@ module Keiro.Dsl.TypeGraph
     foldMappedDecl,
     wireFingerprint,
     wireFingerprintForCalendarDayPolicy,
+    wireFingerprintForTextSetPolicy,
     nominalWireFingerprint,
   )
 where
@@ -87,6 +88,7 @@ import Data.TypeID qualified as TypeID
 import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Keiro.Codec.CalendarDay (calendarDayCodecPolicyIdentity)
+import Keiro.Codec.TextSet (textSetCodecPolicyIdentity)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.HaskellName (haskellKeywords)
 import Numeric (showHex)
@@ -407,6 +409,7 @@ data ResolvedTypeExpr
   | RNatural
   | RTime
   | RDay
+  | RTextSet
   | RJson
   | ROptional !ResolvedTypeExpr
   | RList !ResolvedTypeExpr
@@ -714,6 +717,7 @@ resolveExpr _ _ _ _ _ TBool = Right RBool
 resolveExpr _ _ _ _ _ TNatural = Right RNatural
 resolveExpr _ _ _ _ _ TTime = Right RTime
 resolveExpr _ _ _ _ _ TDay = Right RDay
+resolveExpr _ _ _ _ _ TTextSet = Right RTextSet
 resolveExpr _ _ _ _ _ TJson = Right RJson
 resolveExpr names nominals enums owner loc (TOptional value) = ROptional <$> resolveExpr names nominals enums owner loc value
 resolveExpr names nominals enums owner loc (TList value) = RList <$> resolveExpr names nominals enums owner loc value
@@ -785,6 +789,7 @@ refsInExpr =
         onNatural = Set.empty,
         onTime = Set.empty,
         onDay = Set.empty,
+        onTextSet = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -805,6 +810,7 @@ nominalRefsInExpr =
         onNatural = Set.empty,
         onTime = Set.empty,
         onDay = Set.empty,
+        onTextSet = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -960,6 +966,7 @@ collectUseSites keyByName nominalByName enumNames spec =
       RNatural -> Nothing
       RTime -> Nothing
       RDay -> Nothing
+      RTextSet -> Nothing
       RJson -> Nothing
       ROptional value -> prepend SegOptional (rootReference value)
       RList value -> prepend SegElem (rootReference value)
@@ -1034,6 +1041,7 @@ usePaths graph targetName = case Map.lookup (MappedKey targetName) ((.declaratio
       RNatural -> []
       RTime -> []
       RDay -> []
+      RTextSet -> []
       RJson -> []
       ROptional value -> map (SegOptional :) (pathsInExpr visited value)
       RList value -> map (SegElem :) (pathsInExpr visited value)
@@ -1102,6 +1110,7 @@ nominalUsePaths graph targetName
       RNatural -> []
       RTime -> []
       RDay -> []
+      RTextSet -> []
       RJson -> []
       ROptional value -> map (SegOptional :) (pathsInExpr visited value)
       RList value -> map (SegElem :) (pathsInExpr visited value)
@@ -1162,6 +1171,7 @@ data TypeExprAlgebra a = TypeExprAlgebra
     onNatural :: a,
     onTime :: a,
     onDay :: a,
+    onTextSet :: a,
     onJson :: a,
     onOptional :: a -> a,
     onList :: a -> a,
@@ -1180,6 +1190,7 @@ foldTypeExpr algebra = \case
   RNatural -> (.onNatural) algebra
   RTime -> (.onTime) algebra
   RDay -> (.onDay) algebra
+  RTextSet -> (.onTextSet) algebra
   RJson -> (.onJson) algebra
   ROptional value -> (.onOptional) algebra (foldTypeExpr algebra value)
   RList value -> (.onList) algebra (foldTypeExpr algebra value)
@@ -1213,13 +1224,24 @@ foldMappedDecl algebra = \case
   ResolvedOpaque declaration -> (.onOpaqueDecl) algebra declaration
 
 wireFingerprint :: TypeGraph -> Name -> Text
-wireFingerprint = wireFingerprintForCalendarDayPolicy calendarDayCodecPolicyIdentity
+wireFingerprint = wireFingerprintWithPolicies calendarDayCodecPolicyIdentity textSetCodecPolicyIdentity
 
 -- | Compatibility-analysis seam for proving that a calendar-day policy bump
 -- changes persisted wire identity. Production callers use 'wireFingerprint',
 -- which always selects the released Keiro policy.
 wireFingerprintForCalendarDayPolicy :: Text -> TypeGraph -> Name -> Text
-wireFingerprintForCalendarDayPolicy calendarDayPolicy graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
+wireFingerprintForCalendarDayPolicy calendarDayPolicy =
+  wireFingerprintWithPolicies calendarDayPolicy textSetCodecPolicyIdentity
+
+-- | Compatibility-analysis seam for proving that a text-set policy bump
+-- changes persisted wire identity. Production callers use 'wireFingerprint',
+-- which always selects the released Keiro policy.
+wireFingerprintForTextSetPolicy :: Text -> TypeGraph -> Name -> Text
+wireFingerprintForTextSetPolicy =
+  wireFingerprintWithPolicies calendarDayCodecPolicyIdentity
+
+wireFingerprintWithPolicies :: Text -> Text -> TypeGraph -> Name -> Text
+wireFingerprintWithPolicies calendarDayPolicy textSetPolicy graph name = fnv1a64 (wireDecl Set.empty (MappedKey name))
   where
     declarations = (.declarations) graph
 
@@ -1275,6 +1297,7 @@ wireFingerprintForCalendarDayPolicy calendarDayPolicy graph name = fnv1a64 (wire
       RNatural -> "natural"
       RTime -> "time"
       RDay -> "calendar-day(" <> calendarDayPolicy <> ")"
+      RTextSet -> "text-set(" <> textSetPolicy <> ")"
       RJson -> "json"
       ROptional value -> "optional(" <> wireExpr visited value <> ")"
       RList value -> "list(" <> wireExpr visited value <> ")"

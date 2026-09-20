@@ -1,0 +1,115 @@
+language keiro-dsl 6
+context structural-text-sets
+
+mapped structural value TextLabels {
+  haskell package=keiro-dsl module=Conformance.StructuralTextSets.Domain type=TextLabels
+  binding = "Conformance.StructuralTextSets.Bindings.textLabelsBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-text-sets.TextLabels.v1"
+  fixtures = "Conformance.StructuralTextSets.Bindings.textLabelsFixtures"
+  initial = "Conformance.StructuralTextSets.Bindings.initialTextLabels"
+  wire Set Text
+}
+
+mapped structural value MaybeTextLabels {
+  haskell package=keiro-dsl module=Conformance.StructuralTextSets.Domain type=MaybeTextLabels
+  binding = "Conformance.StructuralTextSets.Bindings.maybeTextLabelsBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-text-sets.MaybeTextLabels.v1"
+  fixtures = "Conformance.StructuralTextSets.Bindings.maybeTextLabelsFixtures"
+  wire Optional (Set Text)
+}
+
+mapped structural record LabelEnvelope {
+  haskell package=keiro-dsl module=Conformance.StructuralTextSets.Domain type=LabelEnvelope
+  binding = "Conformance.StructuralTextSets.Bindings.labelEnvelopeBinding"
+  binding-version = "1"
+  canonical-type = "conformance.structural-text-sets.LabelEnvelope.v1"
+  fixtures = "Conformance.StructuralTextSets.Bindings.labelEnvelopeFixtures"
+  wire object constructor=LabelEnvelope unknown-fields=reject {
+    primary as "primary" : Set Text required
+    optionalLabels as "optionalLabels" : Optional (Set Text) optional on-missing=null
+    namedOptional as "namedOptional" : MaybeTextLabels required
+    sequence as "sequence" : List (Set Text) required
+    labelled as "labelled" : Map (Set Text) required
+  }
+}
+
+aggregate LabelStore
+  regs
+    current TextLabels = initial
+  states Empty Stored!
+
+  command StoreLabels { labels:TextLabels optionalLabels:MaybeTextLabels envelope:LabelEnvelope }
+  command ImportLegacyLabels { labels:TextLabels optionalLabels:MaybeTextLabels envelope:LabelEnvelope }
+  event LabelsStored = fields(StoreLabels)
+  event LabelsAudited = fields(StoreLabels)
+  event LegacyLabelsImported = fields(ImportLegacyLabels)
+
+  Empty -- StoreLabels -->
+    write current := labels
+    emit LabelsStored
+    emit LabelsAudited
+    goto Stored
+
+  replay-only Empty -- ImportLegacyLabels -->
+    write current := labels
+    emit LegacyLabelsImported
+    goto Stored
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
+  snapshot every 1
+    state-codec version=1 shape-hash="structural-text-sets-v1"
+
+workqueue label_jobs {
+  queue logical = "label.jobs"
+  derive physical = "label_jobs"
+         dlq = "label_jobs_dlq"
+         table = "pgmq.q_label_jobs"
+  payload LabelJob {
+    labels -> "labels" : TextLabels
+    optionalLabels -> "optional_labels" : MaybeTextLabels
+    envelope -> "envelope" : LabelEnvelope
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}
+
+target label_table {
+  schema = "public"
+  table = "label_values"
+  reset = clear
+}
+
+rebuild-group label_rebuild {
+  targets = [ label_table ]
+  order = [ label_table ]
+}
+
+projection-owner label_writer {
+  source = all
+  delivery = subscription
+  group = label_rebuild
+  targets = [ label_table ]
+  order = 10
+  subscription = "label-writer"
+  dedup = "label-writer-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel label_lookup {
+  columns {}
+  query input = MaybeTextLabels
+  query result = LabelEnvelope
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head entire-log
+  group = label_rebuild
+  targets = [ label_table ]
+}

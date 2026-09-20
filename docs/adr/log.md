@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-09-20
+* **Update**: Record TextSetMappings as a non-fold capability whose versioned policy identity enters only mapped set surfaces (plan 292).
+* **Update**: Record structural text-set schema authority, canonical normalization, transitive dependency planning, and application-owned boundaries (plan 292).
 * **Update**: Record CalendarDayMappings as a non-fold capability whose frozen codec identity enters only mapped wire surfaces that use Day (plan 291).
 * **Update**: Record candidate Language 6 calendar-day mappings as a Keiro-owned, full-carrier structural leaf with total bindings and explicit producer-last rollout limits (plan 291).
 * **Update**: ADR-12, ADR-18, and ADR-46 define named bare container authority, transitive nullability/defaults, fold-neutral runtime capability registration, and nested nominal admission (plan 290).

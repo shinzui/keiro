@@ -733,6 +733,7 @@ declarationIdentity graph key declaration =
       RNatural -> "Natural"
       RTime -> "Time"
       RDay -> "Day"
+      RTextSet -> "Set(Text)"
       RJson -> "Json"
       ROptional value -> "Optional(" <> expressionPresentation value <> ")"
       RList value -> "List(" <> expressionPresentation value <> ")"

@@ -138,6 +138,7 @@ resolveAggregateType symbols loc useSite expression = do
     TNatural -> pure AggregateNatural
     TTime -> pure AggregateTime
     TDay -> unsupportedShape
+    TTextSet -> unsupportedShape
     TJson -> unsupportedShape
     TOptional {} -> unsupportedShape
     TList {} -> unsupportedShape
@@ -248,6 +249,7 @@ typeExprCanonicalName expression = case expression of
   TNatural -> "Natural"
   TTime -> "Time"
   TDay -> "Day"
+  TTextSet -> "Set(Text)"
   TJson -> "Json"
   TOptional value -> "Optional(" <> typeExprCanonicalName value <> ")"
   TList value -> "List(" <> typeExprCanonicalName value <> ")"
@@ -333,6 +335,7 @@ aggregatePackages symbols resolved = case resolved of
             onNatural = False,
             onTime = False,
             onDay = True,
+            onTextSet = False,
             onJson = False,
             onOptional = id,
             onList = id,

@@ -1447,6 +1447,7 @@ nominalNamesInExpr =
         onNatural = Set.empty,
         onTime = Set.empty,
         onDay = Set.empty,
+        onTextSet = Set.empty,
         onJson = Set.empty,
         onOptional = id,
         onList = id,
@@ -1563,7 +1564,7 @@ mappedGraphRules spec graph =
                  ]
               ++ concatMap (armRules declaration) arms,
           onBare = \expression ->
-            [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "bare structural values must have Day, Optional, List, or text-keyed Map as their outer constructor"
+            [ mappedError ((.loc) declaration) MappedUnsupportedEncoding declaration "bare structural values must have Day, Set Text, Optional, List, or text-keyed Map as their outer constructor"
             | not (supportedBareRoot expression)
             ]
               ++ [ mappedError ((.loc) declaration) MappedNonInjectiveNullability declaration "bare value contains Optional around a null-capable Json, Optional, or opaque mapped value"
@@ -1576,6 +1577,7 @@ mappedGraphRules spec graph =
       RList {} -> True
       RMap {} -> True
       RDay -> True
+      RTextSet -> True
       _ -> False
 
     fieldRules declaration field =
@@ -1653,6 +1655,7 @@ defaultType graph =
         onNatural = DefaultNatural,
         onTime = DefaultOther,
         onDay = DefaultOther,
+        onTextSet = DefaultOther,
         onJson = DefaultOther,
         onOptional = const DefaultOptional,
         onList = const DefaultList,
@@ -1703,6 +1706,7 @@ nullabilityFacts graph =
         onNatural = nonNull,
         onTime = nonNull,
         onDay = nonNull,
+        onTextSet = nonNull,
         onJson = nullable,
         onOptional = \child -> NullabilityFacts True ((.topNull) child || (.badOptional) child),
         onList = nestedNonNull,

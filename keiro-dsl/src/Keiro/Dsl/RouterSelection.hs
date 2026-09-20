@@ -520,6 +520,7 @@ selectionTypeFromResolved = \case
   RNatural -> Just SelectionNatural
   RTime -> Just SelectionTime
   RDay -> Nothing
+  RTextSet -> Nothing
   RJson -> Nothing
   ROptional {} -> Nothing
   RList {} -> Nothing
@@ -621,6 +622,7 @@ canonicalResolvedType = \case
   RNatural -> atom "Natural"
   RTime -> atom "Time"
   RDay -> atom "Day"
+  RTextSet -> atom "Set(Text)"
   RJson -> atom "Json"
   ROptional value -> tuple [atom "Optional", canonicalResolvedType value]
   RList value -> tuple [atom "List", canonicalResolvedType value]

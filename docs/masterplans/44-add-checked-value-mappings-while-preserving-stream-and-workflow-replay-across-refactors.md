@@ -41,6 +41,11 @@ provenance:
       at: 2026-09-20T02:17:24Z
       mode: "implement"
       note: "Begin Plan 291 calendar-day mapping implementation."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T03:34:56Z
+      mode: "implement"
+      note: "Begin Plan 292 structural text-set implementation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -94,7 +99,7 @@ Workflow persistence is a separate boundary. `keiro/src/Keiro/Workflow.hs` store
 | 289 | Gate stream replay, process recovery, and workflow continuation across builds | [docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md](../plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md) | None | None | Complete |
 | 290 | Support named bare container structural mappings with transitive nullability | [docs/plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md](../plans/290-support-named-bare-container-structural-mappings-with-transitive-nullability.md) | 289 | None | Complete |
 | 291 | Add calendar-day mappings with a frozen lossless codec contract | [docs/plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md](../plans/291-add-calendar-day-mappings-with-a-frozen-lossless-codec-contract.md) | 289, 290 | None | Complete |
-| 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | Not Started |
+| 292 | Add structural text sets with explicit canonical wire semantics | [docs/plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md](../plans/292-add-structural-text-sets-with-explicit-canonical-wire-semantics.md) | 289, 290 | None | In Progress |
 | 293 | Add declarative base16 byte refinements with total consumer bindings | [docs/plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md](../plans/293-add-declarative-base16-byte-refinements-with-total-consumer-bindings.md) | 289, 290 | None | Not Started |
 | 294 | Add explicit versioned UUID admission domains with sound Keiki evidence | [docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md](../plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md) | 289 | None | Not Started |
 | 295 | Rehearse integrated replay, public API adoption, and legacy retirement | [docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md) | 289, 290, 291, 292, 293, 294 | None | Not Started |
@@ -152,7 +157,7 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 291: Prove a frozen full-carrier date contract.
 - [x] Plan 291: Lower Day only on complete supported surfaces.
 - [x] Plan 291: Prove date and optional-date replay.
-- [ ] Plan 292: Define native checked text-set values and wire policy.
+- [x] Plan 292: Define native checked text-set values and wire policy.
 - [ ] Plan 292: Integrate total lowering and evolution consequences.
 - [ ] Plan 292: Demonstrate normalization without replay divergence.
 - [ ] Plan 293: Specify and implement a bounded refinement contract.

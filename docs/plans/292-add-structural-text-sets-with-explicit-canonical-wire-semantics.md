@@ -27,6 +27,11 @@ provenance:
       at: 2026-09-19T22:32:10Z
       mode: "update"
       note: "Checked set normalization and total binding design; added complete-surface API acceptance and retained-history release gates."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-20T03:34:56Z
+      mode: "implement"
+      note: "Begin Plan 292 structural text-set implementation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -57,7 +62,7 @@ Implement IR-44 as structural Set Text with canonical array output and explicit 
 ## Progress
 
 
-- [ ] Milestone 1: Define native checked text-set values and wire policy.
+- [x] Milestone 1: Define native checked text-set values and wire policy. (2026-09-19: added the versioned Keiro codec, code-point-order vectors, duplicate/permutation normalization, invalid-input checks, and arbitrary round trips.)
 - [ ] Milestone 2: Integrate total lowering and evolution consequences.
 - [ ] Milestone 3: Demonstrate normalization without replay divergence.
 
@@ -65,7 +70,9 @@ Implement IR-44 as structural Set Text with canonical array output and explicit 
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
+The resolved `text-2.1.4` implementation compares UTF-8 bytes, whose lexicographic order is Unicode code-point order, but that is an implementation fact rather than the durable contract. Upstream tag `2.1.4` matches the resolved package, so the codec uses `Set.toAscList` while its public policy remains library-independent.
+
+The existing Aeson `Set` instance has the same operational quotient—`Set.toList` on write and `Set.fromList` on read—but Keiro needs its own versioned policy identity so declaration fingerprints can distinguish this set from both ordered lists and future set-policy revisions.
 
 The 1.0 review clarified that mapped wire equality is only one compatibility input and candidate-language status does not prevent persisted writes. This feature must contribute its complete supported-surface cases to Plan 289 and its public adoption example to Plan 295.
 
@@ -81,6 +88,8 @@ The 1.0 review clarified that mapped wire equality is only one compatibility inp
 
 
 2026-09-19 (1.0 review): Follow [ADR-47](../adr/0047-dsl-retirement-requires-complete-retained-history-evidence.md): report complete affected surfaces, preserve any already-written candidate history, and supply an executable public API example for the final adoption and retirement rehearsal. Wire equality never waives changed binding/fold or application-owned continuation evidence.
+
+2026-09-19 (implementation): Own the structural text-set quotient in `Keiro.Codec.TextSet` with policy identity `keiro-core/text-set/1`. Add `Set Text` as a checked expression in the existing candidate language; give `TextSetMappings` no capability fold segment because its declaration-level wire token carries the policy identity.
 
 
 ## Outcomes & Retrospective

@@ -233,6 +233,7 @@ renderExprType =
         onNatural = "Natural",
         onTime = "UTCTime",
         onDay = "Day",
+        onTextSet = "Set Text",
         onJson = "Value",
         onOptional = \value -> "Maybe (" <> value <> ")",
         onList = \value -> "[" <> value <> "]",

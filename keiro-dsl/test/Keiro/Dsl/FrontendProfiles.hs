@@ -33,7 +33,7 @@ frontendProfilesSpec = do
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation],
                      [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy],
-                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings, CalendarDayMappings]
+                     [GeneratedIdDomainTypeIdV7, NominalEqualityV2, ContractIdDomainTypeIdV7, StrictSpecSurfaceValidation, ProjectionCatalogRuntime, TypedDomainCommandOutcomes, SeparatedProjectionQueryPolicy, DelegatedInboxRuntime, StructuralNominalLeaves, BareStructuralMappings, CalendarDayMappings, TextSetMappings]
                    ]
       map (runtimeProfileFoldSegments . (.runtimeSemanticsProfile)) (NE.toList languageRegistry)
         `shouldBe` [ [],
@@ -83,6 +83,7 @@ frontendProfilesSpec = do
               KeyedMapSyntax -> version 6
               BareStructuralMappingSyntax -> version 6
               CalendarDaySyntax -> version 6
+              TextSetSyntax -> version 6
               FieldAliasSyntax -> version 4
               _ -> version 2
         languageFeatureMinimumVersion feature `shouldBe` minimumVersion
@@ -204,7 +205,8 @@ featureCases =
     FeatureCase WorkqueueFifoHeadsSyntax "fifo-heads" (featureBody WorkqueueFifoHeadsSyntax),
     FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax),
     FeatureCase BareStructuralMappingSyntax "value" (featureBody BareStructuralMappingSyntax),
-    FeatureCase CalendarDaySyntax "Day" (featureBody CalendarDaySyntax)
+    FeatureCase CalendarDaySyntax "Day" (featureBody CalendarDaySyntax),
+    FeatureCase TextSetSyntax "Set" (featureBody TextSetSyntax)
   ]
 
 featureBody :: LanguageFeature -> Text
@@ -324,6 +326,20 @@ featureBody = \case
         "  }",
         "}"
       ]
+  TextSetSyntax ->
+    T.unlines
+      [ "context profile",
+        "mapped structural record ProfileLabels {",
+        "  haskell package=profile module=Example.Profile type=ProfileLabels",
+        "  binding = \"Example.Profile.profileLabelsBinding\"",
+        "  binding-version = \"1\"",
+        "  canonical-type = \"example.ProfileLabels.v1\"",
+        "  fixtures = \"Example.Profile.profileLabelsFixtures\"",
+        "  wire object constructor=ProfileLabels unknown-fields=reject {",
+        "    labels as \"labels\" : Set Text required",
+        "  }",
+        "}"
+      ]
   KeyedMapSyntax ->
     T.unlines
       [ "context profile",
@@ -338,7 +354,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax]
+allFeatures = [NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

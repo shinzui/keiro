@@ -774,6 +774,58 @@ test-suite keiro-dsl-conformance-calendar-days
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,
 
+-- Plan 292 / IR-44: checked structural text sets normalize duplicates and
+-- permutations before aggregate execution and replay.
+test-suite keiro-dsl-conformance-structural-text-sets
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs: test/conformance-structural-text-sets
+  main-is: Main.hs
+  other-modules:
+    Conformance.StructuralTextSets.Bindings
+    Conformance.StructuralTextSets.Domain
+    Conformance.StructuralTextSets.Historical
+    Generated.StructuralTextSets.BehaviorSourceMap
+    Generated.StructuralTextSets.LabelJobs.Queue
+    Generated.StructuralTextSets.LabelJobs.QueueCodec
+    Generated.StructuralTextSets.LabelJobs.QueuePolicy
+    Generated.StructuralTextSets.LabelLookup.QueryContract
+    Generated.StructuralTextSets.LabelLookup.ReadModel
+    Generated.StructuralTextSets.LabelLookup.ReadModelHarness
+    Generated.StructuralTextSets.LabelLookup.ReadModelTable
+    Generated.StructuralTextSets.LabelStore.BehaviorContract
+    Generated.StructuralTextSets.LabelStore.Codec
+    Generated.StructuralTextSets.LabelStore.Domain
+    Generated.StructuralTextSets.LabelStore.EventStream
+    Generated.StructuralTextSets.LabelStore.Harness
+    Generated.StructuralTextSets.LabelStore.Projection
+    Generated.StructuralTextSets.LabelStore.Transducer
+    Generated.StructuralTextSets.ProjectionCatalog
+    Generated.StructuralTextSets.ReplayAudit
+    Generated.StructuralTextSets.Structural.Shape.LabelEnvelope
+    Generated.StructuralTextSets.Structural.Shape.MaybeTextLabels
+    Generated.StructuralTextSets.Structural.Shape.TextLabels
+    Generated.StructuralTextSets.StructuralConformance
+    StructuralTextSets.LabelLookup.ReadModelHoles
+    StructuralTextSets.LabelStore.BehaviorHoles
+    StructuralTextSets.ProjectionCatalog.ProjectionCatalogHoles
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    keiro-pgmq,
+    keiro-test-support,
+    kiroku-store,
+    text >=2.1 && <2.2,
+
 -- Plan 224: candidate language-5 mapped workqueue payloads share structural
 -- codec authority while preserving the queue schema-version-1 envelope.
 test-suite keiro-dsl-conformance-mapped-queue

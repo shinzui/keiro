@@ -50,6 +50,7 @@ other-modules:
 build-depends:
     , aeson
     , base
+    , containers
     , effectful-core
     , hasql-transaction
     , keiki

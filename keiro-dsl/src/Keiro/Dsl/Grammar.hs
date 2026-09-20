@@ -258,6 +258,7 @@ data TypeExpr
   | TNatural
   | TTime
   | TDay
+  | TTextSet
   | TJson
   | TOptional !TypeExpr
   | TList !TypeExpr

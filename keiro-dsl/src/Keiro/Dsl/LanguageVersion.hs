@@ -145,6 +145,7 @@ data RuntimeCapability
   | StructuralNominalLeaves
   | BareStructuralMappings
   | CalendarDayMappings
+  | TextSetMappings
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | An immutable, explicitly named set of runtime capabilities.  The
@@ -181,6 +182,8 @@ capabilityFoldSegment StructuralNominalLeaves = Nothing
 capabilityFoldSegment BareStructuralMappings = Nothing
 -- Calendar-day mappings change generated codecs, not transition/fold semantics.
 capabilityFoldSegment CalendarDayMappings = Nothing
+-- Text-set mappings change generated codecs, not transition/fold semantics.
+capabilityFoldSegment TextSetMappings = Nothing
 
 runtimeProfileFoldSegments :: RuntimeSemanticsProfile -> [Text]
 runtimeProfileFoldSegments RuntimeSemanticsProfile {capabilities} =
@@ -309,7 +312,7 @@ profileV5 :: SyntaxProfile
 profileV5 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/5"
-    (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4))))))))
+    (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4)))))))))
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
@@ -348,7 +351,7 @@ runtimeProfileV5 :: RuntimeSemanticsProfile
 runtimeProfileV5 =
   RuntimeSemanticsProfile
     "keiro-dsl/runtime-semantics/5"
-    (Set.insert CalendarDayMappings (Set.insert BareStructuralMappings (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4)))))
+    (Set.insert TextSetMappings (Set.insert CalendarDayMappings (Set.insert BareStructuralMappings (Set.insert StructuralNominalLeaves (Set.insert DelegatedInboxRuntime ((.capabilities) runtimeProfileV4))))))
 
 -- | Supported versions, derived from 'languageRegistry'.
 supportedLanguageVersions :: NonEmpty LanguageVersion
@@ -400,6 +403,7 @@ data LanguageFeature
   | KeyedMapSyntax
   | BareStructuralMappingSyntax
   | CalendarDaySyntax
+  | TextSetSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-20T03:07:55Z
+timestamp: 2026-09-20T04:09:55Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -187,6 +187,23 @@ scalar paths, guards, ordering, and arithmetic remain unsupported. Aggregate com
 register, queue, and query surfaces reach `Day` only through an admitted mapped declaration, so
 every generated codec uses the same policy. The mapped wire token includes the policy identity;
 changing the policy is therefore compatibility work even when the Haskell type remains `Day`.
+
+Candidate Language 6 additionally admits `Set Text` as a structural leaf and named bare root.
+The domain and generated shape are both `Data.Set.Set Text`, so the total binding cannot retain
+wire order or multiplicity. Keiro's frozen `keiro-core/text-set/1` policy writes an ascending
+unique JSON array in lexicographic Unicode code-point order. Its reader accepts array permutations
+and duplicates, constructs the set before binding or transducer execution, and performs neither
+Unicode normalization nor case folding. Invalid elements fail at their array position. The policy
+identity is part of the mapped wire token and is distinct from `List Text`; changing ordering,
+duplicate admission, or normalization requires a new policy identity with the v1 reader retained.
+
+Text sets compose through the same checked `Optional`, `List`, text-keyed `Map`, aggregate mapped,
+workqueue, read-model query, workspace, and generated conformance paths as other structural values.
+Generated dependency planning follows the resolved declaration graph, so a named reference cannot
+hide its `containers`, `text`, or Keiro codec dependency. Direct aggregate set fields, nominal set
+wrappers, membership/size/order/mutation expressions, and symbolic collection access remain
+unsupported. Public contracts and process/workflow journals remain application-owned codec
+boundaries; sharing the Haskell set type does not transfer those wire authorities to the DSL.
 
 The landed spec layer exposes total folds over checked mapped declarations, structural shapes,
 and nested type expressions. Adding a new constructor therefore requires every checker, differ,

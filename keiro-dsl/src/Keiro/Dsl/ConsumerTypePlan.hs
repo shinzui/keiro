@@ -73,6 +73,7 @@ planConsumerType graph expression = do
       RNatural -> atom "Natural" [ImportRequirement "base" "Numeric.Natural" "Natural"]
       RTime -> atom "UTCTime" [ImportRequirement "time" "Data.Time" "UTCTime"]
       RDay -> atom "Day" [ImportRequirement "time" "Data.Time.Calendar" "Day"]
+      RTextSet -> textSetType
       RJson -> atom "Value" [ImportRequirement "aeson" "Data.Aeson" "Value"]
       ROptional value -> application "Maybe" [ImportRequirement "base" "Data.Maybe" "Maybe"] <$> plan value
       RList value -> listType <$> plan value
@@ -110,6 +111,13 @@ planConsumerType graph expression = do
         value
 
     listType value = replaceRenderedType ("[" <> value.rendered <> "]") AtomicType value.requirements value
+
+    textSetType =
+      atom
+        "Set Text"
+        [ ImportRequirement "containers" "Data.Set" "Set",
+          ImportRequirement "text" "Data.Text" "Text"
+        ]
 
     mapType value =
       replaceRenderedType
@@ -186,6 +194,10 @@ renderConsumerType generatedNominalModule importPlan graph = fmap (HaskellTypeOc
       RNatural -> pure (plainAtom "Natural")
       RTime -> pure (plainAtom "UTCTime")
       RDay -> pure (plainAtom "Day")
+      RTextSet -> do
+        setType <- plannedReference (reference "Data.Set" "Set")
+        textType <- plannedReference (reference "Data.Text" "Text")
+        pure (RenderedType (setType <> " " <> textType) ApplicationType Set.empty Set.empty Set.empty)
       RJson -> pure (plainAtom "Value")
       ROptional value -> application "Maybe" <$> render value
       RList value -> listType <$> render value

@@ -274,6 +274,7 @@ pMappedTypeExpr context =
       TNatural <$ keyword "Natural",
       TTime <$ (keyword "Time" <|> keyword "UTCTime"),
       TDay <$ languageFeatureKeyword context CalendarDaySyntax "Day",
+      TTextSet <$ pTextSet,
       TJson <$ keyword "Json",
       TRef <$> ident
     ]
@@ -295,9 +296,13 @@ pMappedTypeExpr context =
           TNatural <$ keyword "Natural",
           TTime <$ (keyword "Time" <|> keyword "UTCTime"),
           TDay <$ languageFeatureKeyword context CalendarDaySyntax "Day",
+          TTextSet <$ pTextSet,
           TJson <$ keyword "Json",
           TRef <$> ident
         ]
+    pTextSet = do
+      languageFeatureKeyword context TextSetSyntax "Set"
+      keyword "Text"
 
 languageFeatureKeyword :: FrontendContext -> LanguageFeature -> Text -> P ()
 languageFeatureKeyword context feature spelling = do

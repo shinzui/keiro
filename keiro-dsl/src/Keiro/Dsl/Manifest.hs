@@ -38,10 +38,12 @@ module Keiro.Dsl.Manifest
 where
 
 import Data.List (nub, sort)
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.ConsumerTypePlan (ConsumerTypePlan (..), ImportRequirement (..), planConsumerType)
 import Keiro.Dsl.GeneratedHaskellLanguage (generatedHaskellDefaultExtensions, generatedHaskellDefaultLanguage)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.IdDomain (contractIdDomainContractFor)
@@ -49,6 +51,7 @@ import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), consumerPlanForService)
 import Keiro.Dsl.NominalType
 import Keiro.Dsl.Scaffold (ScaffoldModule (..))
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedSpec, checkedTypeGraph, legacyCheckedService)
+import Keiro.Dsl.TypeGraph
 
 -- | Render a Cabal-pasteable manifest from the modules a scaffold run produced
 -- plus the node kinds present (which imply the dependency set). The first argument
@@ -120,9 +123,61 @@ manifestDependencies = manifestDependenciesForService . legacyCheckedService
 
 manifestDependenciesForService :: CheckedService -> [Text]
 manifestDependenciesForService service =
-  sort (nub ("base" : (.packages) (consumerPlanForService service) <> concatMap (depsForNode service) ((.nodes) spec)))
+  sort (nub ("base" : (.packages) (consumerPlanForService service) <> mappedShapeDependencies service <> concatMap (depsForNode service) ((.nodes) spec)))
   where
     spec = checkedSpec service
+
+-- Generated structural shapes and codecs compile even when their primitive
+-- dependencies are only reachable through a named mapping. Account for every
+-- declaration here rather than asking each aggregate, queue, and query root to
+-- rediscover the graph transitively.
+mappedShapeDependencies :: CheckedService -> [Text]
+mappedShapeDependencies service = case checkedTypeGraph service of
+  Left _ -> []
+  Right graph ->
+    Set.toAscList
+      ( Set.fromList
+          [ package
+          | ResolvedStructural _ shape <- Map.elems ((.declarations) graph),
+            expression <- shapeExpressions shape,
+            Right ConsumerTypePlan {imports = requirements} <- [planConsumerType graph expression],
+            ImportRequirement {package} <- requirements
+          ]
+          <> Set.fromList ["keiro-core" | any usesOwnedCodec (expressions graph)]
+      )
+  where
+    expressions graph =
+      [ expression
+      | ResolvedStructural _ shape <- Map.elems ((.declarations) graph),
+        expression <- shapeExpressions shape
+      ]
+    shapeExpressions =
+      foldMappedShape
+        MappedShapeAlgebra
+          { onRecord = \_ _ fields -> map (.valueType) fields,
+            onEnum = const [],
+            onUnion = \_ arms -> [payload | arm <- arms, Just payload <- [(.payload) arm]],
+            onBare = pure
+          }
+    usesOwnedCodec =
+      foldTypeExpr
+        TypeExprAlgebra
+          { onText = False,
+            onInt = False,
+            onInteger = False,
+            onBool = False,
+            onNatural = False,
+            onTime = False,
+            onDay = True,
+            onTextSet = True,
+            onJson = False,
+            onOptional = id,
+            onList = id,
+            onMap = id,
+            onKeyedMap = \_ -> id,
+            onRef = const False,
+            onNominal = const False
+          }
 
 -- | The dependencies a single node kind implies (see the module header table).
 depsForNode :: CheckedService -> Node -> [Text]
@@ -160,13 +215,17 @@ depsForNode service n = case n of
 
 workqueueDependencies :: WorkqueueNode -> [Text]
 workqueueDependencies workqueue =
-  ["containers" | any (typeExprUses isMap) expressions]
+  ["containers" | any (typeExprUses isContainer) expressions]
+    <> ["text" | any (typeExprUses isTextSet) expressions]
     <> ["time" | any (typeExprUses isTime) expressions]
   where
     expressions = [expression | field <- (.payload) workqueue, TypedQueueExpression expression <- [(.valueType) field]]
-    isMap TMap {} = True
-    isMap TKeyedMap {} = True
-    isMap _ = False
+    isContainer TMap {} = True
+    isContainer TKeyedMap {} = True
+    isContainer TTextSet = True
+    isContainer _ = False
+    isTextSet TTextSet = True
+    isTextSet _ = False
     isTime TTime = True
     isTime TDay = True
     isTime _ = False
@@ -182,7 +241,8 @@ workqueueDependencies workqueue =
 readModelDependencies :: ReadModelNode -> [Text]
 readModelDependencies readModel =
   ["aeson" | any (typeExprUses isJson) expressions]
-    <> ["containers" | any (typeExprUses isMap) expressions]
+    <> ["containers" | any (typeExprUses isContainer) expressions]
+    <> ["text" | any (typeExprUses isTextSet) expressions]
     <> ["time" | any (typeExprUses isTime) expressions]
   where
     expressions = case (.queryTypes) readModel of
@@ -190,9 +250,12 @@ readModelDependencies readModel =
       Just queryPair -> [(.input) queryPair, (.result) queryPair]
     isJson TJson = True
     isJson _ = False
-    isMap TMap {} = True
-    isMap TKeyedMap {} = True
-    isMap _ = False
+    isContainer TMap {} = True
+    isContainer TKeyedMap {} = True
+    isContainer TTextSet = True
+    isContainer _ = False
+    isTextSet TTextSet = True
+    isTextSet _ = False
     isTime TTime = True
     isTime TDay = True
     isTime _ = False
