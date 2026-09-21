@@ -81,6 +81,11 @@ provenance:
       at: 2026-09-20T20:56:10Z
       mode: "implement"
       note: "Complete Plan 295 and the checked-value mapping initiative after immutable consumer replay and bounded retirement evidence."
+    - model: "gpt-5.6-sol"
+      harness: "codex-cli"
+      at: 2026-09-21T19:35:35Z
+      mode: "update"
+      note: "Reconcile MasterPlan closure with Keiro 0.18.0.0 publication, Rei production adoption, final replay evidence, and ADR distillation."
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -207,6 +212,13 @@ Workflow codecs, step keys, generations, seeds, patch sets, await/index fallback
 - [x] Plan 295: Run an isolated consumer adoption rehearsal.
 - [x] Plan 295: Close release gates and retain recovery paths.
 - [x] Plan 295: Prove API adoption and rehearse bounded legacy-code retirement. (REV-19 approves the isolated Rei candidate's replacement of exactly its obsolete ActionId mapped-opaque declaration and 40 mapped-surface expectations while retained replay and process continuation stay green; generic mapped-opaque support and historical readers remain.)
+- [x] Release the coherent seven-package Keiro 0.18.0.0 cohort from commit
+  `b12bbdd7abc8c1a59e7a09891471ef182a4d801a`; all seven remote tags peel to that commit and
+  Hackage lists 0.18.0.0 as the latest normal version of every package.
+- [x] Complete production adoption through
+  `mori://shinzui/rei/plans/241-adopt-checked-keiro-value-mappings-with-a-reader-first-rollout`;
+  the repaired candidate passed genuine traffic observation and the final twin-clone replay gate,
+  and its Rei intention is complete.
 
 
 ## Surprises & Discoveries
@@ -241,6 +253,14 @@ Plan 293's strict generated package surfaced two useful completeness checks. Har
 Plan 294 confirmed that the TypeID dependency's generic parser is suitable for syntax and canonicality while Keiro must own the frozen UUID-version and RFC-variant decision. One shared character table now drives both runtime admission and exact Keiki text patterns, and the existing v7 failure text stays byte-identical despite the broader internal validator.
 
 Plan 294's generated-output gate exposed a narrow import-planning distinction: typed Keiki nominal projections need their nominal type in scope, while write-only nominal expressions do not. Selecting generated literal and projected nominals exactly keeps both the existing projected-ID corpus and the new broad-ID component warning-clean.
+
+The production adoption after Plan 295 exposed duplicate `ReminderCompleted` effects from two
+overlapping Rei routers. This was an application routing defect rather than a checked-mapping or
+wire-compatibility failure. The rollout correctly remained open until Rei revision
+`742c461a95d668df7df5577c3603bbe832ecbdae` assigned one terminal owner to each direct reminder
+source and a fresh twin-clone audit again reported zero unexpected replay failures. Genuine-traffic
+observation therefore caught an effect-ownership bug that repository fixtures and read-only replay
+could not expose, without weakening or changing the checked-mapping contracts.
 
 The 2026-09-19 validation review checked the plans' claims against the working tree at `ba36ce58`. Every file, recipe, Cabal component, ADR, improvement request, and Keiki ADR URI the plans name exists or resolves. The review found the following, none of which is implementation evidence:
 
@@ -307,13 +327,45 @@ The 2026-09-19 validation review checked the plans' claims against the working t
 
 2026-09-20 (Plan 295 completion): Approve retirement only for the named Rei ActionId opaque authoring declaration demonstrated by the isolated candidate patch. Retain generic opaque support, every historical reader and replay-only path, process identity families, and workflow branches. Consumer source mutation and deployment remain separate actions.
 
+2026-09-21 (operational closure): Treat Keiro 0.18.0.0 publication and Rei's production rollout as
+execution of the distinct release and adoption predicates that Plan 295 made eligible, not as a
+retroactive expansion of that child's implementation scope. Close the initiative only after all
+seven package releases and tags are present, the consumer's reader-first rollout and genuine
+traffic observation are complete, and the final cross-build replay comparison passes. Preserve
+Keiro's generic mapped-opaque implementation and all historical compatibility paths; the bounded
+retirement remains limited to Rei's replaced ActionId authoring declaration.
+
 
 ## Outcomes & Retrospective
 
 
 Plans 289–295 are complete. The final child adds an integrated retained-envelope corpus, refactor/evolution mutations, four independent release results, a fresh/existing public scaffold proof, a compiled mapped process reaction, create-once preservation, an immutable Rei baseline/candidate replay, effect-isolated process continuation, an explicit empty workflow inventory, and both positive bounded-retirement and required-reader negative gates.
 
-The immutable consumer rehearsal selected 10,061 retained streams and produced byte-identical baseline/candidate reports with zero unexpected failures. It inventoried all five adopted value families and found the optional missing-key compatibility case repaired in the generator. The isolated Rei patch converts all five declarations and proves that the exact ActionId mapped-opaque authoring path can be retired while generic opaque support and every historical compatibility path remain. The release manifest therefore reports package release, Language 6 publication, Rei adoption, and that bounded retirement as independently eligible, while performing none of those externally authorized actions. No package was published, no production data or consumer checkout was changed, and no generic compatibility implementation was deleted.
+The immutable consumer rehearsal selected 10,061 retained streams and produced byte-identical baseline/candidate reports with zero unexpected failures. It inventoried all five adopted value families and found the optional missing-key compatibility case repaired in the generator. The isolated Rei patch converts all five declarations and proves that the exact ActionId mapped-opaque authoring path can be retired while generic opaque support and every historical compatibility path remain. At Plan 295 completion, the release manifest therefore reported package release, Language 6 publication, Rei adoption, and that bounded retirement as independently eligible; the child itself performed none of those externally authorized actions. No package was published, no production data or consumer checkout was changed, and no generic compatibility implementation was deleted by Plan 295.
+
+The later release workflow published `keiro-core`, `keiro`, `keiro-pgmq`, `keiro-migrations`,
+`keiro-test-support`, `keiro-dsl`, and `keiro-ops` together as 0.18.0.0. Their remote tags peel to
+release commit `b12bbdd7abc8c1a59e7a09891471ef182a4d801a`, which contains the checked-mapping
+implementation, and Hackage's preferred-version metadata lists 0.18.0.0 as the latest normal
+version for all seven packages.
+
+Rei then executed the reader-first production rollout in
+`mori://shinzui/rei/plans/241-adopt-checked-keiro-value-mappings-with-a-reader-first-rollout`.
+The final repaired build at `742c461a95d668df7df5577c3603bbe832ecbdae` remained healthy under
+ordinary traffic and completed a twin-clone comparison at event-store high-water 42,667. Both
+readers selected 11,152 of 11,460 streams, retained the same 13-stream/89-event documented
+exclusion, and reported zero unexpected failures. The checked-value inventory had zero rejections,
+the Note-to-Task continuation preserved durable state, and the explicitly empty workflow history
+remained `not-applicable-empty-history`. This completes the separately authorized consumer source
+change, bounded ActionId authoring retirement, and production adoption without deleting Keiro's
+generic compatibility support.
+
+The completion distillation found no unrecorded Keiro architecture decision. ADR-47 already owns
+the distinct release, publication, adoption, and retirement predicates and the complete
+retained-history evidence contract; ADR-12, ADR-18, ADR-24, ADR-41, and ADR-46 retain their more
+specific schema, fold, identity, process-recovery, and nominal-admission rules. The reminder-router
+repair is consumer-local operational evidence, so it belongs in this retrospective rather than a
+new Keiro ADR.
 
 Revision note (2026-09-19): Linked the Mina-created intention and clarified retained-reader, strict-failure, audit-tail, and rolling-reader obligations during authoring review. No implementation or historical audit has run.
 
@@ -338,3 +390,9 @@ Revision note (2026-09-20, Plan 294 implementation): Completed explicit UUIDv5-o
 Revision note (2026-09-20, Plan 295 partial implementation): Completed integrated repository replay, the mutation matrix, four independent release results, recovery guidance, clean public adoption, mapped process-reaction compilation, create-once preservation, and the legacy-retirement inventory/negative gate. Package and language publication are eligible but not performed. Plan 295 remains in progress because authorized Rei consumer history is unavailable and REV-18 found no bounded obsolete path safe to remove.
 
 Revision note (2026-09-20, Plan 295 completion): Completed immutable Rei baseline/candidate replay, retained-value inventory, effect-isolated process continuation, explicit empty workflow accounting, the root-optional missing-key compatibility fix, and the exact Rei ActionId opaque-to-checked retirement rehearsal. Marked all child plans complete without publishing, deploying, editing the consumer checkout, or deleting generic compatibility support.
+
+Revision note (2026-09-21, operational closure): Reconciled the completed MasterPlan with the
+subsequent coherent Keiro 0.18.0.0 release and Rei ExecPlan 241 production adoption. Recorded the
+genuine-traffic reminder discovery and repair, the final twin-clone replay evidence, and the ADR
+distillation result. All implementation, release, adoption, and bounded-retirement outcomes are now
+complete; generic compatibility support remains intact.
