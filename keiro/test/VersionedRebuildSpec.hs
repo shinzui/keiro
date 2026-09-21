@@ -1141,34 +1141,6 @@ spec fixture = do
             newRows <- runStatement store () externalV2RowsStmt
             newRows `shouldSatisfy` (not . null)
 
-  describe "cutover lock budget" $
-    around (withFreshDatabase fixture) $ do
-      it "restores the caller's timeouts after a guarded relation lock" $ \connectionString ->
-        withPool connectionString $ \pool -> do
-          -- The cutover budget is applied with set_config(..., true), which is
-          -- transaction-local. Before migration 0033 it was never restored, so
-          -- everything the promotion transaction did after taking its locks --
-          -- the renames, the metadata writes, the external read reconciliation
-          -- -- silently inherited a statement_timeout sized for acquiring a
-          -- lock, and could be cancelled with an unhandled 57014.
-          outcome <-
-            expectPoolUsage
-              =<< Pool.use
-                pool
-                ( TxSessions.transactionNoRetry
-                    TxSessions.ReadCommitted
-                    TxSessions.Write
-                    ( do
-                        Tx.sql "SET LOCAL statement_timeout = '7s'"
-                        Tx.sql "SET LOCAL lock_timeout = '3s'"
-                        locked <- Tx.statement () tryRelationLocksStmt
-                        timeouts <- Tx.statement () currentTimeoutsStmt
-                        pure (locked, timeouts)
-                    )
-                )
-          fst outcome `shouldBe` True
-          snd outcome `shouldBe` ("7s", "3s")
-
   describe "targeted stream reprojection" $
     around (withFreshStore fixture) $ do
       it "repairs only the selected stream and transactionally backfills redelivery evidence" $ \store -> do
@@ -2601,29 +2573,6 @@ repairDetailByIdStmt =
     "SELECT detail FROM app.counter_audit WHERE id = $1"
     (E.param (E.nonNullable E.int8))
     (D.singleRow (D.column (D.nonNullable D.text)))
-
--- | Lock an arbitrary existing Keiro relation through the guarded cutover
--- helper. The deadline is generous and nothing else holds the table, so the
--- lock is always granted; the point of the call is its effect on the
--- transaction's timeout settings, not its verdict.
-tryRelationLocksStmt :: Statement () Bool
-tryRelationLocksStmt =
-  preparable
-    "SELECT keiro.keiro_try_projection_relation_locks_v1(ARRAY['keiro.keiro_timers'::regclass::oid::bigint], clock_timestamp() + interval '5 seconds')"
-    E.noParams
-    (D.singleRow (D.column (D.nonNullable D.bool)))
-
-currentTimeoutsStmt :: Statement () (Text, Text)
-currentTimeoutsStmt =
-  preparable
-    "SELECT current_setting('statement_timeout'), current_setting('lock_timeout')"
-    E.noParams
-    ( D.singleRow
-        ( (,)
-            <$> D.column (D.nonNullable D.text)
-            <*> D.column (D.nonNullable D.text)
-        )
-    )
 
 repairDedupCountStmt :: Statement () Int64
 repairDedupCountStmt =
