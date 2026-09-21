@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility checked-mapping-adoption
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -30,6 +30,16 @@ extension-policy:
 [group('meta')]
 dsl-api-boundaries:
     python3 scripts/check-keiro-dsl-api-boundaries.py
+
+# A consumer of a generated service is expected to need one direct `keiro`
+# dependency, but the scaffolder emits `keiro-core` imports as string literals,
+# so nothing forces `keiro` to re-export a newly exposed module. The in-repo
+# conformance suites depend on keiro-core directly and cannot catch it. This
+# gap shipped in 0.7.0.0 and was caught only at the 0.18.0.0 release gate.
+[group('meta')]
+keiro-reexports:
+    python3 scripts/check-keiro-reexports.py
+    python3 -m unittest discover -s scripts/tests -p test_keiro_reexports.py
 
 # Repository-only migration inventories and omission detectors. This policy
 # identifies serialized surfaces for review; exact byte contracts live in the

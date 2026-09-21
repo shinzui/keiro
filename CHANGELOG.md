@@ -18,6 +18,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   rather than the documented `VersionedCutoverDeadlineExceeded`. Migration
   `0033` restores the caller's settings after each guarded attempt.
 
+### Other Changes
+
+- New `keiro-reexports` verification policy fails the build when generated code
+  imports a `keiro-core` module that `keiro` does not re-export. The in-repo
+  conformance suites depend on `keiro-core` directly and structurally cannot
+  catch that omission, which shipped in 0.7.0.0 and was caught only at the
+  0.18.0.0 release gate.
+
 ## 0.18.0.0 — 2026-09-20
 
 ### Breaking Changes
