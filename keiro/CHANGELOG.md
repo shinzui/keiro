@@ -6,6 +6,19 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- A versioned promotion no longer inherits its cutover lock budget as a
+  statement timeout for the remainder of the transaction. Generation identity
+  verification, the promotion object map check, the table renames, the promotion
+  metadata writes, and external read reconciliation all ran under a
+  `statement_timeout` sized for acquiring a lock, so a promotion that had
+  already taken its `ACCESS EXCLUSIVE` locks could be cancelled partway through
+  and surface an opaque `UnexpectedServerError "57014"` instead of the
+  documented `VersionedCutoverDeadlineExceeded`. Larger promotions were likelier
+  to hit it, because the remaining budget shrinks as the attempt proceeds while
+  the work after the lock does not. Requires `keiro-migrations` migration `0033`.
+
 ## 0.18.0.0 — 2026-09-20
 
 

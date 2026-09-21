@@ -6,6 +6,14 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Migration `0033` restores the caller's `lock_timeout` and `statement_timeout`
+  after each guarded cutover attempt. `0029` applied the cutover budget with
+  `set_config(..., true)`, which is transaction-local, and never restored it, so
+  the budget stayed in force for the rest of the promotion transaction. The
+  guarded statements keep exactly the bounds they had; only the leak is removed.
+
 ## 0.18.0.0 — 2026-09-20
 
 
