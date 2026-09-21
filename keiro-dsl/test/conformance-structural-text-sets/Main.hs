@@ -43,7 +43,8 @@ main = do
                ("a strict duplicate reader requires versioned compatibility work", strictDuplicateReaderRejected),
                ("historical Aeson Set writer and reader remain compatible", historicalCodecParity),
                ("invalid set elements fail at their array position", invalidElementRejected),
-               ("optional sets preserve null and required-field omission", optionalPresence),
+               ("root optional set fields treat omission and null alike", rootOptionalAbsenceEquivalence),
+               ("non-optional set fields still reject omission", nonOptionalRootStrict),
                ("nested list and map sets round-trip", nestedRoundTrip),
                ("queue payloads preserve structural text sets", queueRoundTrip),
                ("query contracts preserve structural text-set domain types", queryAgreement),
@@ -177,10 +178,27 @@ invalidElementRejected =
     Left problem -> "[1]" `T.isInfixOf` problem
     Right _ -> False
 
-optionalPresence :: Bool
-optionalPresence =
-  isLeft (parseLabelStoreEvent kind (deleteObjectField "optionalLabels" encoded))
+-- | Plan 295 found both spellings of absence in retained history -- omitted keys
+-- and explicit nulls -- which historical Aeson decoding had always read as
+-- 'Nothing'. A root 'Optional' mapped set field must therefore accept an omitted
+-- key and decode it exactly as an explicit null.
+rootOptionalAbsenceEquivalence :: Bool
+rootOptionalAbsenceEquivalence =
+  parseLabelStoreEvent kind (deleteObjectField "optionalLabels" encoded) == Right event
     && parseLabelStoreEvent kind (replaceObjectField "optionalLabels" Null encoded) == Right event
+  where
+    event = LabelsStored (LabelsStoredData labels (MaybeTextLabels Nothing) sampleEnvelope)
+    kind = eventType labelStoreCodec event
+    encoded = encodeLabelStoreEvent event
+    labels = TextLabels (Set.fromList ["a", "b"])
+
+-- | The equivalence above is scoped to root 'Optional' mapped fields. A
+-- non-optional mapped root carries no absent spelling, so omitting it stays a
+-- decode failure rather than defaulting.
+nonOptionalRootStrict :: Bool
+nonOptionalRootStrict =
+  isLeft (parseLabelStoreEvent kind (deleteObjectField "labels" encoded))
+    && isLeft (parseLabelStoreEvent kind (deleteObjectField "envelope" encoded))
   where
     event = LabelsStored (LabelsStoredData labels (MaybeTextLabels Nothing) sampleEnvelope)
     kind = eventType labelStoreCodec event

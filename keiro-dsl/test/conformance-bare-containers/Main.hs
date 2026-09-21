@@ -34,7 +34,8 @@ main = do
                ("bare list preserves order and duplicates", textListWire),
                ("bare text map encodes as an object", textMapWire),
                ("missing optional alias fields apply their declared defaults", missingAliasDefaults),
-               ("required optional-valued event fields reject omission and accept null", requiredOptionalPresence),
+               ("root optional mapped event fields treat omission and null alike", rootOptionalAbsenceEquivalence),
+               ("non-optional mapped event fields still reject omission", nonOptionalRootStrict),
                ("queue payloads preserve bare aliases", queueRoundTrip),
                ("query aliases preserve bare domain types", queryAliasAgreement),
                ("historical opaque MaybeText codec has parity with the generated codec", reportSucceeded comparison)
@@ -71,10 +72,33 @@ missingAliasDefaults =
   where
     withoutDefaults = object ["nestedIds" .= ([] :: [Value])]
 
-requiredOptionalPresence :: Bool
-requiredOptionalPresence =
-  isLeft (parseBareStoreEvent kind (deleteObjectField "optionalLabel" encoded))
+-- | Plan 295 found both spellings of absence in retained history -- 28 omitted
+-- keys and 39 explicit nulls -- which historical Aeson decoding had always read
+-- as 'Nothing'. A root 'Optional' mapped event field must therefore accept an
+-- omitted key and decode it exactly as an explicit null.
+rootOptionalAbsenceEquivalence :: Bool
+rootOptionalAbsenceEquivalence =
+  parseBareStoreEvent kind (deleteObjectField "optionalLabel" encoded) == Right event
     && parseBareStoreEvent kind (insertObjectField "optionalLabel" Null encoded) == Right event
+  where
+    event =
+      StoredValue
+        ( StoredValueData
+            (MaybeText Nothing)
+            (TextList ["b", "a", "a"])
+            (TextMap Map.empty)
+            (BareEnvelope (MaybeText Nothing) (TextList []) (TextMap Map.empty) (NestedIds []))
+        )
+    kind = eventType bareStoreCodec event
+    encoded = encodeBareStoreEvent event
+
+-- | The equivalence above is scoped to root 'Optional' mapped fields. A
+-- non-optional mapped root carries no absent spelling, so omitting it stays a
+-- decode failure rather than defaulting.
+nonOptionalRootStrict :: Bool
+nonOptionalRootStrict =
+  isLeft (parseBareStoreEvent kind (deleteObjectField "labels" encoded))
+    && isLeft (parseBareStoreEvent kind (deleteObjectField "attributes" encoded))
   where
     event =
       StoredValue

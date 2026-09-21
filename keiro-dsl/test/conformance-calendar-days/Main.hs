@@ -39,7 +39,8 @@ main = do
                ("historical non-canonical spellings normalize", historicalSpellingsNormalize),
                ("a narrowed date reader is compatibility work", narrowedReaderRefused),
                ("a date-to-midnight conversion is compatibility work", midnightConversionRefused),
-               ("optional dates preserve null and required-field omission", optionalPresence),
+               ("root optional date fields treat omission and null alike", rootOptionalAbsenceEquivalence),
+               ("non-optional date fields still reject omission", nonOptionalRootStrict),
                ("nested list and map dates round-trip", nestedRoundTrip),
                ("queue payloads preserve calendar-day mappings", queueRoundTrip),
                ("query contracts preserve calendar-day domain types", queryAgreement),
@@ -104,10 +105,28 @@ midnightConversionRefused =
     Right (RequiresVersionWork _) -> True
     _ -> False
 
-optionalPresence :: Bool
-optionalPresence =
-  isLeft (parseCalendarStoreEvent kind (deleteObjectField "optionalDay" encoded))
+-- | Plan 295 found both spellings of absence in retained history -- omitted keys
+-- and explicit nulls -- which historical Aeson decoding had always read as
+-- 'Nothing'. A root 'Optional' mapped date field must therefore accept an
+-- omitted key and decode it exactly as an explicit null.
+rootOptionalAbsenceEquivalence :: Bool
+rootOptionalAbsenceEquivalence =
+  parseCalendarStoreEvent kind (deleteObjectField "optionalDay" encoded) == Right event
     && parseCalendarStoreEvent kind (insertObjectField "optionalDay" Null encoded) == Right event
+  where
+    event = DateStored (DateStoredData day (MaybeLocalDay Nothing) envelope)
+    kind = eventType calendarStoreCodec event
+    encoded = encodeCalendarStoreEvent event
+    day = LocalDay (fromGregorian 2000 2 29)
+    envelope = sampleEnvelope
+
+-- | The equivalence above is scoped to root 'Optional' mapped fields. A
+-- non-optional mapped root carries no absent spelling, so omitting it stays a
+-- decode failure rather than defaulting.
+nonOptionalRootStrict :: Bool
+nonOptionalRootStrict =
+  isLeft (parseCalendarStoreEvent kind (deleteObjectField "day" encoded))
+    && isLeft (parseCalendarStoreEvent kind (deleteObjectField "envelope" encoded))
   where
     event = DateStored (DateStoredData day (MaybeLocalDay Nothing) envelope)
     kind = eventType calendarStoreCodec event
