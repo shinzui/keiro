@@ -6,6 +6,17 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
+
+### Other Changes
+
+- Both test suites require `ephemeral-pg >=0.3.1 && <0.4` and start their
+  clusters under a stable per-user temporary root. The legacy suite uses
+  `withCachedConfig` in place of its hand-rolled `startCached`/`finally`
+  bracket. No migration payload changed, so no recorded checksum moves and no
+  ledger fixup is required.
+
 ## 0.17.0.0 — 2026-09-17
 
 ### Other Changes

@@ -6,12 +6,23 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
 ### Breaking Changes
 
 - The public ID declaration and resolved nominal ASTs carry an `IdAdmission`.
   `LanguageFeature` and `RuntimeCapability` gain the Language 6 explicit-ID
   admission constructors. Exhaustive matches and positional construction must
   handle the new fields and constructors.
+- The checked value mappings widen the public grammar and resolved ASTs.
+  `TypeExpr` gains `TDay` and `TTextSet`; `MappedShape` gains `ShapeBare` and
+  `ShapeRefined`; the new `RefinedWirePolicy` type is exported from
+  `Keiro.Dsl.Grammar` alongside matching constructors on the resolved type,
+  expression, and requirement vocabularies (`RBare`, `RRefined`, `RDay`,
+  `RTextSet`, `ExprDay`, `ExprTextSet`, `ReqDay`, `ReqSet`, `ReqByteString`,
+  `MappedRefined`, `MCRefinedPolicy`). `LanguageFeature` and
+  `RuntimeCapability` each gain one constructor per mapping family. Exhaustive
+  matches over any of these types must be extended.
 
 ### New Features
 
@@ -24,6 +35,32 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   direction-specific `IdDomainContractChanged` finding, and are always reported
   replay-affected. The generated conformance corpus includes committed UUIDv5
   and UUIDv7 history with serialized forward/replay equality.
+- Candidate Language 6 adds four checked value mapping families. Each lowers to
+  a frozen `keiro-core` wire policy rather than a consumer validation callback,
+  so the schema authority and the binding stay total:
+  - **Bare containers** — a `mapped structural value` declaration may name a
+    container shape directly, as in `wire Optional Text`, `wire List Text`, or
+    `wire Map Text Text`. Nullability propagates transitively through nested
+    declarations.
+  - **Calendar days** — `wire Day`, lowered to `Keiro.Codec.CalendarDay`.
+  - **Text sets** — `wire Set Text`, lowered to `Keiro.Codec.TextSet`.
+  - **Refined base16 bytes** — the new `mapped refined` declaration with
+    `wire base16-bytes`, lowered to `Keiro.Codec.Base16Bytes`.
+
+  Each family reports its own runtime capability, carries generated
+  conformance coverage with committed replay history, and is inert for a spec
+  that does not use it. Language 6 remains a candidate contract; released
+  Language 5 specs are unaffected.
+- A root `Optional` mapped event field accepts an omitted key and decodes it
+  exactly as an explicit `null`, matching what historical Aeson decoding always
+  did for such a field. Non-optional mapped roots remain strict and still reject
+  omission.
+
+### Other Changes
+
+- Every generated artifact is restamped with the `0.18.0.0` provenance banner.
+  The stamp is recognized for any released version, so a consumer's existing
+  generated tree keeps compiling and only changes on its next scaffold run.
 
 ## 0.17.0.0 — 2026-09-17
 

@@ -6,6 +6,17 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
+
+### New Features
+
+- Re-export `Keiro.Codec.Base16Bytes`, `Keiro.Codec.CalendarDay`, and
+  `Keiro.Codec.TextSet` from `keiro-core`. Generated codecs import these
+  modules directly whenever a spec declares a base16, calendar-day, or text-set
+  mapping, so a consumer of a generated service continues to need only a single
+  direct `keiro` dependency.
+
 ## 0.17.0.0 — 2026-09-17
 
 ### Breaking Changes

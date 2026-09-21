@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.18.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.17.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.16.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.15.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
@@ -17,9 +18,15 @@ edit. What to edit is in the edge prompt.
 | 0.12.0.0 | `>=0.7 && <0.8` | `^>=0.3.2.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.11.0.0 | `>=0.7 && <0.8` | `^>=0.3.1.0` | `>=0.8 && <0.9` | `^>=0.9.0.0` |
 
-Keiro 0.17.0.0 also requires the pgmq 0.6 package family and
+Keiro 0.17.0.0 and 0.18.0.0 also require the pgmq 0.6 package family and
 `shibuya-pgmq-adapter` 0.16.0.0. Those packages are outside the stable substrate columns above;
-the 0.16.0.0 → 0.17.0.0 edge describes the source adaptations they introduce.
+the 0.16.0.0 → 0.17.0.0 edge describes the source adaptations they introduce. 0.18.0.0 moves no
+upstream cohort member.
+
+From 0.18.0.0, `keiro-test-support` requires `ephemeral-pg >=0.3.1 && <0.4`. That is a test-only
+dependency, but `pg-migrate-test-support 1.1.0.0` still caps it below 0.3, so a build plan holding
+both needs `allow-newer: pg-migrate-test-support:ephemeral-pg`. The 0.17.0.0 → 0.18.0.0 edge
+covers it.
 
 Bounds are what the published `.cabal` files declare, not the exact versions a
 given project resolved. To read what *this* project actually resolved, prefer

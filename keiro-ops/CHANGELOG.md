@@ -6,6 +6,13 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
+
+No changes this release. The version moves in lockstep with the rest of the
+packages, and the `keiro`, `keiro-pgmq`, and `keiro-migrations` bounds are
+raised accordingly.
+
 ## 0.17.0.0 — 2026-09-17
 
 ### Breaking Changes

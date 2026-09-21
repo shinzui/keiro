@@ -6,13 +6,28 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
+
+### New Features
+
+- New exposed module `Keiro.Test.ReplayCompatibility` defines the versioned,
+  build-bound replay capture report and the independently derived inventory
+  contract that gate mapping evolution. A report that is missing, unverified,
+  empty, duplicated, or divergent from its required observations is rejected
+  rather than silently accepted. The package now carries its own
+  `keiro-test-support-test` suite covering those rejections.
+
 ### Other Changes
 
 - Require `ephemeral-pg >=0.3.1 && <0.4`. The suite fixture now starts its
   server under a stable per-user temporary root, `/tmp/ephpg-keiro-<uid>`,
   instead of `$TMPDIR`, so ephemeral-pg's startup sweep reclaims PostgreSQL
   clusters abandoned by earlier killed runs even when `$TMPDIR` is per-session
-  (`nix develop`, some CI runners).
+  (`nix develop`, some CI runners). Consumers whose build plan also pulls in
+  `pg-migrate-test-support 1.1.0.0` need
+  `allow-newer: pg-migrate-test-support:ephemeral-pg` in their `cabal.project`
+  until a Hackage revision widens that cap.
 
 ## 0.17.0.0 — 2026-09-17
 

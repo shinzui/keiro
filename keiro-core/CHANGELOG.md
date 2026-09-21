@@ -6,6 +6,9 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
+
 ### Breaking Changes
 
 - `IdDomainContract` gains an explicit closed `IdAdmission` selector, and
@@ -21,6 +24,27 @@ All notable changes to `keiro-core` are recorded here. The format follows
   Keiki text-pattern evidence now derive their UUID version and variant
   positions from the same admission table. Existing v7 entry points and
   identity bytes are unchanged.
+- Four new exposed modules publish the frozen wire policies that `keiro-dsl`'s
+  checked value mappings lower to. Each is a total codec owned by Keiro, not a
+  consumer validation callback:
+  - `Keiro.Codec.CalendarDay` — proleptic Gregorian days. The writer matches
+    Aeson's `Day` writer exactly; the reader additionally accepts the
+    historically permitted leading plus sign and non-canonical leading zeroes,
+    normalizing every accepted spelling. No timezone, locale, clock, or instant
+    conversion occurs.
+  - `Keiro.Codec.TextSet` — sets of Unicode text. The writer emits one JSON
+    string per distinct element in code-point order; the reader accepts any
+    array order and duplicate strings. No Unicode normalization or case folding
+    occurs.
+  - `Keiro.Codec.Base16Bytes` — unrestricted bytes as base16 text. The reader
+    accepts upper- and lowercase digits and the empty string; the writer always
+    emits lowercase. Prefixes, whitespace, odd-length inputs, and
+    non-hexadecimal digits are rejected before a consumer binding receives the
+    decoded bytes.
+  - `Keiro.Codec.Refined` — the public entry point for Keiro-owned refined
+    representation policies, kept separate from the structural and nominal
+    codecs so that consumer validation callbacks cannot masquerade as total
+    bindings.
 
 ## 0.17.0.0 — 2026-09-17
 

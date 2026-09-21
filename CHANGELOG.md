@@ -6,6 +6,81 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.18.0.0 — 2026-09-20
+
+### Breaking Changes
+
+- `keiro-core`: `IdDomainContract` gains an explicit closed `IdAdmission`
+  selector, and `IdDomainFailure` gains failures for a value outside an
+  admitted UUID version set or RFC variant. Exhaustive matches and positional
+  construction must handle the new constructors and field.
+- `keiro-dsl`: the public grammar and resolved ASTs widen for candidate
+  Language 6's checked value mappings and explicit ID admission. `TypeExpr`
+  gains `TDay` and `TTextSet`; `MappedShape` gains `ShapeBare` and
+  `ShapeRefined`; `RefinedWirePolicy` is a new exported type; the ID
+  declaration and resolved nominal ASTs carry an `IdAdmission`; and
+  `LanguageFeature` and `RuntimeCapability` each gain one constructor per
+  mapping family plus the admission constructors. Exhaustive matches must be
+  extended.
+- `keiro-test-support`: the library requires `ephemeral-pg >=0.3.1 && <0.4`,
+  up from `>=0.2 && <0.3`. A consumer whose build plan also pulls in
+  `pg-migrate-test-support 1.1.0.0` needs
+  `allow-newer: pg-migrate-test-support:ephemeral-pg` in its `cabal.project`
+  until a Hackage revision widens that cap.
+
+### New Features
+
+- `keiro-dsl`: candidate Language 6 adds four checked value mapping families,
+  each lowered to a frozen `keiro-core` wire policy rather than a consumer
+  validation callback — bare containers (`wire Optional Text`, `wire List Text`,
+  `wire Map Text Text`, with transitive nullability), calendar days
+  (`wire Day`), text sets (`wire Set Text`), and refined base16 bytes (the new
+  `mapped refined` declaration with `wire base16-bytes`). Each reports its own
+  runtime capability, carries generated conformance coverage with committed
+  replay history, and is inert for a spec that does not use it. A root `Optional`
+  mapped event field accepts an omitted key and decodes it exactly as an
+  explicit `null`, matching historical Aeson decoding; non-optional mapped roots
+  remain strict.
+- `keiro-core`: four new exposed modules publish those policies —
+  `Keiro.Codec.CalendarDay`, `Keiro.Codec.TextSet`, `Keiro.Codec.Base16Bytes`,
+  and `Keiro.Codec.Refined`. Each is a total codec with an explicitly stated
+  accepted-input set and a single canonical writer.
+- `keiro`: re-export `Keiro.Codec.Base16Bytes`, `Keiro.Codec.CalendarDay`, and
+  `Keiro.Codec.TextSet`, so a consumer of a generated service that uses these
+  mappings still needs only a single direct `keiro` dependency.
+- `keiro-dsl`: candidate Language 6 ID declarations accept
+  `domain=typeid-v5-or-v7`, propagating the selected domain through direct and
+  nested aggregate fields, structural and keyed-map codecs, workqueues,
+  read-model query types, router identities, and declared public-contract
+  fields. Admission changes alter fold/replay identity and raise a
+  direction-specific `IdDomainContractChanged` finding. Omitting the option
+  keeps released TypeID-v7 behavior.
+- `keiro-test-support`: new exposed module `Keiro.Test.ReplayCompatibility`
+  defines the versioned, build-bound replay capture report and the
+  independently derived inventory contract that gate mapping evolution. A
+  report that is missing, unverified, empty, duplicated, or divergent from its
+  required observations is rejected.
+- `keiro`: serialized aggregate, workflow, and process-manager replay
+  comparisons run as part of the test suite, and a versioned report comparator
+  (`scripts/check-replay-compatibility.py`) is wired into routine verification.
+
+### Other Changes
+
+- Publish Keiro's controlled vocabulary as `docs/terminology`, an OKF v0.2
+  bundle of 27 Term concepts governed by okf-profiles v0.17.0's
+  `documentation.terminology` profile, bound in `mori.dhall` and validated by a
+  `terminology-validate` recipe wired into `just verify`. Per ADR-22 the
+  catalog records "sidecar" as the current umbrella word and retires "scaffold
+  record" and "conformance record"; the guides and API reference now say
+  scaffold ledger and Cabal fragment.
+- `keiro-migrations`: both test suites require `ephemeral-pg >=0.3.1 && <0.4`
+  and start their clusters under a stable per-user temporary root. No migration
+  payload changed, so no recorded checksum moves and no ledger fixup is
+  required to cross this release.
+- The mori automation that signals `mori://shinzui/keiro-syntax` now watches
+  `keiro-dsl`'s `Parser/` modules, which own `reservedWords` and the lexer
+  since they moved out of `Parser.hs`.
+
 ## 0.17.0.0 — 2026-09-17
 
 ### Breaking Changes
