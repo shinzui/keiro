@@ -1,5 +1,11 @@
 # Bundle Update Log
 
+## 2026-09-22
+* **Addition**: IR-48 requests version-aware, read-only modernization linting for Keiro DSL. It
+  separates provable replacements from consumer-evidence candidates and blockers, reports stable
+  source-located diagnostics against an explicit target language, and leaves source rewriting to
+  IR-5.
+
 ## 2026-09-21
 * **Addition**: IR-47 requests that the versioned-cutover lock budget be bounded to its guarded statements. Migration 0029 applies it transaction-locally and never restores it, so the rest of the promotion transaction — including the table renames and external read reconciliation — inherits a statement timeout sized for acquiring a lock. A first fix (migration 0033) was reverted: it makes VersionedRebuildSpec's two-contended-relation bound fail 5/5 at ~0.779s against a shared 500ms deadline, and the ~280ms overshoot is unexplained.
 
