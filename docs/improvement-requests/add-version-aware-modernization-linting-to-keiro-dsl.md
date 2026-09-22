@@ -37,6 +37,17 @@ different authoring question: “Which usages are valid but outdated relative to
 preparing to adopt, and what evidence is still needed before replacing them?” No plan implements
 this request.
 
+Scope (revised 2026-09-22): the linter supports only Language 5 (stable) and Language 6
+(candidate) sources. Languages 1–4 and unversioned sources are being retired and their code
+removed, so the linter adds no rules, fixtures, or advisories for them. It rejects such a source
+with the ordinary language-contract diagnostic and does not produce a modernization verdict. The
+only version pair in scope is a Language 5 source linted against target Language 6, plus a
+Language 6 source linted against itself. Both the target and the source must be one of these two
+languages. Moving the preamble from 5 to 6 is covered by the tested check-and-diff recipe in
+[Plan 296](../plans/296-add-checked-dsl-source-upgrades-and-mori-fleet-planning.md). The lint
+value that remains is in the body: finding opaque mappings and workarounds that a Language 6
+checked construct may replace.
+
 ## Problem and evidence
 
 `keiro-dsl check` is primarily a correctness gate. `--min-language N` rejects a source below an
@@ -65,7 +76,8 @@ such as `MaybeText` would turn an authoring convenience into a compatibility haz
 This request is separate from
 [IR-5](add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md). IR-5 requests sequential,
 atomic source rewrites. IR-48 requests a read-only inventory and explanation layer that can guide a
-human or become an input to a future upgrade planner; it never rewrites `.keiro` files.
+human; it never rewrites `.keiro` files. IR-5 no longer plans an upgrade engine: Plan 296
+narrowed it to a documented check-and-diff recipe.
 
 ## Requested behavior
 
@@ -85,12 +97,11 @@ replacement or next investigation, and one of these evidence levels:
 - `blocked`: the available facts show why the apparent modernization is unsound, such as
   non-injective nullability or a wire shape the target construct cannot represent.
 
-The first rule set should cover three classes. First, report legacy-unversioned and
-compatibility-only language contracts relative to the explicit target without describing them as
-invalid. Second, report source forms accepted under an older contract that have a target-language
-replacement, using the source-aware frontend so every diagnostic points to the owning member and
-span. Third, improve opaque-mapping advice: correlate coverage roots with target checked-mapping
-capabilities and explain which declaration families are now available, while keeping the result at
+The first rule set should cover two classes. First, report Language 5 source forms that have a
+Language 6 replacement, using the source-aware frontend so every diagnostic points to the owning
+member and span. Include a rule only when it has a real instance; do not invent a `definite`
+rule just to populate the evidence level. Second, improve opaque-mapping advice: correlate
+coverage roots with target checked-mapping capabilities and explain which declaration families are now available, while keeping the result at
 `candidate` until consumer evidence proves a specific wire shape and total binding. If an optional
 machine-readable evidence input is introduced, it must record the proposed representation and
 codec/binding observations; finite fixtures alone must never be promoted to proof of all values or
@@ -112,15 +123,16 @@ matrix.
 
 ## Acceptance criteria
 
-1. A fixture corpus spanning every supported source-language contract produces deterministic lint
-   results against an explicit target. A source already using the target's preferred constructs is
-   clean, and repeating the command produces byte-identical JSON.
-2. Legacy-unversioned and compatibility-only sources receive a stable advisory that distinguishes
-   “still supported” from “recommended for new authoring”; the linter does not redefine release or
-   language-support policy.
-3. At least one statically provable old source form receives a `definite` replacement with an exact
-   source span and target-language example. Single-file and multi-member workspace results agree
-   on the same owned construct.
+1. Language 5 and Language 6 fixtures produce deterministic lint results against an explicit
+   target of 6. A source already using the target's preferred constructs is clean, and repeating
+   the command produces byte-identical JSON. A source or target outside Languages 5–6 is refused
+   with the existing language-contract diagnostic, not linted.
+2. (Withdrawn 2026-09-22: legacy-unversioned and compatibility-only advisories are out of scope
+   because Languages 1–4 are being retired.)
+3. If a statically provable Language 5 form has a Language 6 replacement, it receives a `definite`
+   finding with an exact source span and target-language example. The `definite` evidence level
+   stays in the schema even if no rule uses it yet. Single-file and multi-member workspace results
+   agree on the same owned construct.
 4. A representative opaque optional/container/hash/ID mapping receives a `candidate` finding that
    names the applicable target capability and requires a total binding, byte comparison, Keiro
    compatibility diff, and retained-history audit. It is never presented as an automatic safe fix.
@@ -133,7 +145,7 @@ matrix.
 7. Parser, checker, formatter, scaffolder, diff, and generated output remain unchanged by running
    lint. Published language contracts and their compatibility diagnostics stay byte-stable.
 8. Documentation explains how lint differs from `check`, `--min-language`, coverage opacity,
-   historical-codec comparison, `diff`, and the future IR-5 rewrite workflow.
+   historical-codec comparison, `diff`, and the Language 5 → 6 check-and-diff upgrade recipe.
 
 ## Requested deliverables
 
@@ -141,8 +153,8 @@ matrix.
   runtime-capability registries.
 - A read-only CLI with human and versioned JSON output, stable codes, evidence levels, and selective
   policy gates.
-- Rules and fixtures for language support, superseded source forms, and checked-mapping candidates
-  with explicit blocked cases.
+- Rules and fixtures for Language 5 → 6 superseded source forms and checked-mapping candidates,
+  with explicit blocked cases; none for Languages 1–4.
 - Integration with existing source locations, coverage paths, binding explanations, and
   compatibility terminology.
 - An authoring guide and changelog entry that keep detection, compatibility proof, and source

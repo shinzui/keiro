@@ -1,6 +1,11 @@
 # Bundle Update Log
 
 ## 2026-09-22
+* **Revision**: IR-48 is narrowed to Language 5 and Language 6 sources because Languages 1–4 are
+  being retired. The legacy-unversioned and compatibility-only advisory class and acceptance item 2
+  are withdrawn. Sources outside 5–6 are refused, not linted. A `definite` rule is required only
+  when a real Language 5 → 6 instance exists. Preamble upgrades are covered by Plan 296's
+  check-and-diff recipe.
 * **Addition**: IR-48 requests version-aware, read-only modernization linting for Keiro DSL. It
   separates provable replacements from consumer-evidence candidates and blockers, reports stable
   source-located diagnostics against an explicit target language, and leaves source rewriting to
