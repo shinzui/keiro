@@ -1,21 +1,22 @@
 # Bundle Update Log
 
 ## 2026-09-24
+* **Addition**: IR-50 requests that keiro-dsl diff classify the removal of a command together with its emitted event and target state instead of failing fold output resolution; raised from mori://tan/notification-hub plan 81.
 * **Added**: Proposed atomic rejection of sharded subscription count mismatches after external reproduction.
 
 ## 2026-09-22
 * **Revision**: IR-48 is narrowed to Language 5 and Language 6 sources because Languages 1–4 are
-  being retired. The legacy-unversioned and compatibility-only advisory class and acceptance item 2
-  are withdrawn. Sources outside 5–6 are refused, not linted. A `definite` rule is required only
-  when a real Language 5 → 6 instance exists. Preamble upgrades are covered by Plan 296's
-  check-and-diff recipe.
+being retired. The legacy-unversioned and compatibility-only advisory class and acceptance item 2
+are withdrawn. Sources outside 5–6 are refused, not linted. A `definite` rule is required only
+when a real Language 5 → 6 instance exists. Preamble upgrades are covered by Plan 296's
+check-and-diff recipe.
 * **Addition**: IR-48 requests version-aware, read-only modernization linting for Keiro DSL. It
-  separates provable replacements from consumer-evidence candidates and blockers, reports stable
-  source-located diagnostics against an explicit target language, and leaves source rewriting to
-  IR-5.
+separates provable replacements from consumer-evidence candidates and blockers, reports stable
+source-located diagnostics against an explicit target language, and leaves source rewriting to
+IR-5.
 
 ## 2026-09-21
-* **Addition**: IR-47 requests that the versioned-cutover lock budget be bounded to its guarded statements. Migration 0029 applies it transaction-locally and never restores it, so the rest of the promotion transaction — including the table renames and external read reconciliation — inherits a statement timeout sized for acquiring a lock. A first fix (migration 0033) was reverted: it makes VersionedRebuildSpec's two-contended-relation bound fail 5/5 at ~0.779s against a shared 500ms deadline, and the ~280ms overshoot is unexplained.
+* **Addition**: IR-47 requests that the versioned-cutover lock budget be bounded to its guarded statements. Migration 0029 applies it transaction-locally and never restores it, so the rest of the promotion transaction — including the table renames and external read reconciliation — inherits a statement timeout sized for acquiring a lock. A first fix (migration 0033) was reverted: it makes VersionedRebuildSpec's two-contended-relation bound fail 5/5 at \~0.779s against a shared 500ms deadline, and the \~280ms overshoot is unexplained.
 
 ## 2026-09-20
 * **Implementation**: IR-42 through IR-46 move to in-progress after Plans 290–294 and Plan 295's integrated repository replay evidence land. Package/language publication eligibility is recorded separately; adoption by `mori://shinzui/rei` remains pending real retained-history capture, so none is marked completed.
