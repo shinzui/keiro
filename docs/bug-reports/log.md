@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-24
+* **Addition**: BUG-7 records a pre-handler retry-ceiling DLQ delivery that has no per-message process span despite traced enqueue.
 * **Addition**: BUG-6 records a six-processor long-poll stall on the fixed three-connection job runtime pool; a one-processor replacement recovered the queued job.
 * **Report**: Recorded a durable stale-publisher finalization race after outbox maintenance reclaims a row.
 * **Addition**: BUG-3 records a continuous job worker exiting after polling backend termination; BUG-4 records long-poll read attempts consumed without handler delivery after process death. Both were reproduced by the Kenshou queue scenarios and remain reported pending upstream investigation.

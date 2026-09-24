@@ -10,3 +10,4 @@ okf_version: "0.2"
 - [Long-poll job worker consumes a read attempt without handler delivery](4-long-poll-job-worker-consumes-read-attempt-without-handler.md) - Long polling can consume retry budget after process death without a corresponding handler call.
 - [Stale outbox publisher finalizes another publisher's reclaimed claim](5-stale-outbox-publisher-finalizes-reclaimed-claim.md) - A resumed publisher can mark a newer claim failed or dead after its publisher reported success.
 - [Six long-poll processors can leave a job queued on the three-connection runtime pool](6-long-poll-processors-starve-the-job-runtime-pool.md) - Excess long-poll processors can leave a job queued until a smaller worker takes over.
+- [Continuous worker dead-letters an exhausted job without a process span](7-pre-handler-dead-letter-has-no-process-span.md) - A pre-handler retry-ceiling dead letter emits no per-message process span.
