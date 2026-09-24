@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-09-24
+* **Addition**: BUG-3 records a continuous job worker exiting after polling backend termination; BUG-4 records long-poll read attempts consumed without handler delivery after process death. Both were reproduced by the Kenshou queue scenarios and remain reported pending upstream investigation.
 * **Update**: BUG-1 and BUG-2 are tracked by ExecPlans 297 and 298, which attribute the retention across keiro, kiroku, and the Kenshou harness before any fix.
 * **Addition**: BUG-1 records process-manager and router worker heap growth in
 the steady write-side soak; BUG-2 records command-workload heap growth with
