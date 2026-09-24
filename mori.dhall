@@ -584,6 +584,25 @@ in  Schema.Project::{
             "Commit-pinned records of adversarial code, API, and release-blocker reviews"
         }
       , Schema.OkfBundle::{
+        , name = "bug-reports"
+        , path = "docs/bug-reports"
+        , profile = Some "mori/bug-reports-profile.dhall"
+        , profileBinding = Some
+            ( Schema.ProfileBinding.Published
+                Schema.PinnedImport::{
+                , publisher = "shinzui/okf-profiles"
+                , publisherRef = Some Schema.MoriRef::{ namespace = "shinzui", name = "okf-profiles" }
+                , export = Some "coordination.bugReports"
+                , version = Some "v0.18.0"
+                , pin = Some
+                    "sha256:7d3a4a22be12fd0e697d6012ed1eb2efe4cb5dc4700d08fd49aa5e4c0e523df8"
+                }
+            )
+        , okfVersion = "0.2"
+        , description = Some
+            "Reproducible defects in behavior Keiro already provides"
+        }
+      , Schema.OkfBundle::{
         , name = "user-documentation"
         , path = "docs/user"
         , profile = Some "mori/user-documentation-profile.dhall"

@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility checked-mapping-adoption
+verify: process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -93,11 +93,17 @@ capabilities-validate:
     okf graph docs/capabilities
 
 # Strict OKF enforcement for the assurance.reviews bundle. Every record names
-# one exact subject and immutable reviewed commit; findings remain in the review
-# body until the owning bug-report profile is adopted.
+# one exact subject and immutable reviewed commit. Findings in existing reviews
+# remain there until each can be filed with bug-report reproduction evidence.
 [group('docs')]
 reviews-validate:
     okf validate docs/reviews --strict --profile docs/reviews/profile.dhall --profile-enforce --log-enforce
+
+# Strict enforcement for defects in behavior Keiro already provides. Each
+# report uses a stable BUG-N handle, observable consequence, and reproduction.
+[group('docs')]
+bug-reports-validate:
+    okf validate docs/bug-reports --strict --profile mori/bug-reports-profile.dhall --profile-enforce --log-enforce
 
 # Strict OKF enforcement for user-facing documentation. Both bundles share the
 # published documentation.userDocumentation profile while retaining independent
