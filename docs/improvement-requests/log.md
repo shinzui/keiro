@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-24
+* **Added**: Proposed atomic rejection of sharded subscription count mismatches after external reproduction.
+
 ## 2026-09-22
 * **Revision**: IR-48 is narrowed to Language 5 and Language 6 sources because Languages 1–4 are
   being retired. The legacy-unversioned and compatibility-only advisory class and acceptance item 2
