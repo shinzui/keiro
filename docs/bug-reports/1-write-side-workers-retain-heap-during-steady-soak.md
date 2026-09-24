@@ -3,8 +3,8 @@ type: Bug Report
 title: Process-manager and router worker heaps grow during steady write-side load
 description: Process-manager and router workers retain increasing post-major-GC heap during a five-minute steady write-side workload.
 generated:
-  by: process:codex
-  at: "2026-09-24T02:28:32Z"
+  by: process:claude-code
+  at: "2026-09-24T02:56:08Z"
 bugId: BUG-1
 status: reported
 severity: degraded
@@ -50,3 +50,6 @@ identify the component. The original evidence is in
 `mori://shinzui/keiro-runtime-kenshou` at
 `docs/findings/1-keiro-write-side-worker-heap-growth.md` (artifact-level URI
 pending).
+
+Tracked by [plan 297](../plans/297-isolate-and-fix-write-side-worker-heap-retention-under-steady-subscription-load.md),
+which attributes the retention across keiro, kiroku, and the harness before fixing it.

@@ -3,8 +3,8 @@ type: Bug Report
 title: Command workload retains heap with seed verification disabled
 description: Post-major-GC live heap grows during a command soak with a 10000-event history even when seed verification is disabled.
 generated:
-  by: process:codex
-  at: "2026-09-24T02:28:32Z"
+  by: process:claude-code
+  at: "2026-09-24T02:56:08Z"
 bugId: BUG-2
 status: reported
 severity: degraded
@@ -51,3 +51,7 @@ and retaining-object profile are needed. The original evidence is in
 `mori://shinzui/keiro-runtime-kenshou` at
 `docs/findings/2-keiro-seed-backlog-heap-growth.md` (artifact-level URI
 pending).
+
+Tracked by [plan 298](../plans/298-isolate-and-fix-command-runner-heap-retention-over-long-snapshotted-histories.md),
+which reuses the retention harness of plan 297 for the command runner over a long
+snapshotted history.
