@@ -16,6 +16,11 @@ provenance:
       at: 2026-09-24T03:08:03Z
       mode: "discuss"
       note: "Recorded the agreed verification-bound decisions: process-wide default limit of one, same-seed dedupe deferred, no replay timeout"
+    - model: "gpt-6-sol"
+      harness: "codex-cli"
+      at: 2026-09-25T21:01:52Z
+      mode: "discuss"
+      note: "Recorded Kiroku BUG-3 as a command-soak hypothesis and required a matched source-fix comparison before duplicate closure"
   reviews:
     - model: "gpt-6-sol"
       harness: "codex-cli"
@@ -59,13 +64,15 @@ BUG-2 closes with a status grounded in the evidence: `fixed`, `duplicate` of an 
 report, or `cannot-reproduce` with the analysis written into the report.
 
 This plan is the second of two written for the two heap reports Kenshou filed on
-2026-09-24. It depends on the retention harness that
+2026-09-24. It uses the retention harness that
 [plan 297](297-isolate-and-fix-write-side-worker-heap-retention-under-steady-subscription-load.md)
-builds in its Milestone 1 (the `keiro-retention` test suite and its `Retention.Measure`
-module) and adds command-runner legs to it. If plan 297's Milestone 2 attributes the growth
-to a layer that both workloads share, Milestone 2 here reduces to confirming that
-attribution with the command legs; Milestone 4 (bounding verifications) stays in scope
-because it is keiro-owned regardless.
+delivered (the `keiro-retention` test suite and its `Retention.Measure` module) and adds
+command-runner legs to it. Plan 297 found an idle-publisher position thunk in Kiroku,
+recorded as `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`, and fixed it on
+Kiroku master. The command soak also opens a store without subscribers and appends once
+per command, so that fix is a strong hypothesis for its headline growth. A matched run
+with only the Kiroku fix must confirm attribution before BUG-2 is closed. Milestone 4
+(bounding verifications) stays in scope because it is keiro-owned regardless.
 
 
 ## Progress
@@ -73,7 +80,8 @@ because it is keiro-owned regardless.
 
 - [x] (2026-09-24) Link this plan from the BUG-2 report body and record the link in `docs/bug-reports/log.md`; the bundle validated under `--strict`.
 - [ ] Milestone 0: run Kenshou's closure-type profile of the reduced seed-backlog soak (main process, verification off) and record the growing bands in Surprises & Discoveries; run the info-table variant if the bands are byte arrays or thunks.
-- [ ] Milestone 1: confirm plan 297's `keiro-retention` suite exists (or land its Milestone 1 first), then add the snapshotted ledger fixture and the seeding helper.
+- [ ] Milestone 0: compare the released command soak with the same cohort using only the Kiroku BUG-3 strict-position fix; capture resolved package versions and post-major live and large-object trends before assigning BUG-2 ownership.
+- [ ] Milestone 1: add the snapshotted ledger fixture and the seeding helper to plan 297's existing `keiro-retention` suite.
 - [ ] Milestone 1: add the `command-long-history`, `hydrate-only`, `kiroku-read-tail`, and `command-short-history` legs; run them in report-only mode and record the tables.
 - [ ] Milestone 1: add the informational `command-long-history-verify-every` leg and record its thread column before Milestone 4.
 - [ ] Milestone 2: decide attribution from Milestones 0 and 1 together with plan 297's outcome, record it, and move BUG-2 to `confirmed` or to its terminal status.
@@ -85,7 +93,16 @@ because it is keiro-owned regardless.
 ## Surprises & Discoveries
 
 
-(None yet.)
+- 2026-09-25: Plan 297 attributed the write-side worker profiles to Kiroku's
+  empty-subscriber publisher position thunk and filed
+  `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`. The strict update
+  passed a Kiroku regression test that failed before the change and reduced
+  large-object retention in an isolated 20,000-append Keiro control. Kenshou's
+  command soak calls `withFixtureTelemetryEnv`, which opens one Kiroku store
+  without subscribing, and every measured `Deposit` command appends one event.
+  Its 21,527-command run reached 85.8 MB of large objects. This makes BUG-3
+  a plausible shared cause, but the command soak has not been rerun with the
+  fix; its larger per-command growth may include another source.
 
 
 ## Decision Log
@@ -97,6 +114,16 @@ because it is keiro-owned regardless.
   kiroku read path, and the harness. Plan 297 is checked in, so this plan incorporates it by
   reference and restates only what its legs need.
   Date: 2026-09-24
+
+- Decision: test the Kiroku BUG-3 fix against the exact command-soak cohort
+  before classifying BUG-2 as an upstream duplicate or investigating Keiro's
+  hydration path as the primary retaining site.
+  Rationale: the reported soak has no publisher queue subscribers and appends
+  once per successful command, so it exercises the same Kiroku path that plan
+  297 isolated. The store's strict-position fix is on master but is unreleased;
+  a backport onto the released 0.8.0.1 source in an otherwise identical cohort
+  is needed to test causality. The verification fan-out remains independent.
+  Date: 2026-09-25
 
 - Decision: seed the long history with raw appends and one command, not with ten thousand
   commands.
@@ -292,10 +319,12 @@ Haskell threads: that is the unbounded verification fan-out Milestone 4 removes.
 
 Consequences for this plan:
 
-1. The per-command retention is most likely in a layer shared with the write-side workers:
-   the kiroku store's connection layer or Kenshou's own process wrappers. Keiro is on the
-   path, so keiro ownership is not excluded, and the harness must separate the command
-   runner from kiroku's read path and from the harness itself.
+1. The command soak is likely exercising the same Kiroku idle-publisher
+   retention as the write-side workers: it has no publisher queue subscribers
+   and each successful command appends. This is a hypothesis until a matched
+   run with the Kiroku fix flattens the trend. Keiro or Kenshou may contribute
+   additional growth, so the harness must still separate the command runner
+   from Kiroku's read path and from the harness itself.
 2. Because the retained objects are large, a closure-type profile names them directly
    (`ARR_WORDS`, `STACK`, `THUNK`, or a constructor whose module prefix attributes it).
 3. Verification fan-out is a separate, keiro-owned defect with direct evidence.
@@ -307,14 +336,13 @@ hasql's per-connection prepared-statement registry is bounded and not a candidat
 ### Existing tooling this plan reuses
 
 
-- Plan 297, Milestone 1, defines the `keiro-retention` test suite under `keiro/retention/`
+- Plan 297 delivered the `keiro-retention` test suite under `keiro/retention/`
   with `Retention.Measure` (forced major collection, `GHC.Stats` sample, least-squares slope,
   `Bounded`/`Retained` verdict, table rendering, and the environment variables
   `KEIRO_RETENTION_OPERATIONS`, `KEIRO_RETENTION_BLOCKS`, `KEIRO_RETENTION_LEGS`,
   `KEIRO_RETENTION_REPORT_ONLY`), `Retention.Fixture`, and `Retention.Legs` with a `Leg`
-  record and `allLegs`. This plan adds a fixture and legs to those modules. If plan 297's
-  Milestone 1 has not landed when this plan starts, implement it first exactly as plan 297
-  specifies; the interfaces this plan needs are restated under Interfaces and Dependencies.
+  record and `allLegs`. This plan adds a fixture and legs to those modules; the
+  interfaces it needs are restated under Interfaces and Dependencies.
 - `keiro-test-support/src/Keiro/Test/Postgres.hs`: `withMigratedSuite` and
   `withFreshResourceStore` give each leg a fresh migrated ephemeral database and a
   `StoreRunner`.
@@ -337,8 +365,9 @@ hasql's per-connection prepared-statement registry is bounded and not a candidat
 ### Architecture decision records
 
 
-No local ADR covers heap retention or memory gates; plan 297 creates one and this plan
-extends it in Milestone 5. Three local records constrain the work:
+[ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
+now defines the post-major-GC retention gate and its isolated legs; this plan extends it
+in Milestone 5. Three other local records constrain the work:
 
 - [ADR-3](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md): a
   snapshot is reused only when codec version, register-layout hash, and control-state hash
@@ -375,6 +404,18 @@ end, Surprises & Discoveries holds the top growing closure types and the Decisio
 a first hypothesis. The forced-collection knob is unnecessary here because `-hT -i5` already
 forces a census every five seconds.
 
+Also compare the original released cohort with a detached checkout of
+`mori://shinzui/kiroku` at tag `kiroku-store-v0.8.0.1` carrying only BUG-3's
+strict-position update. Keep
+Keiro, Kenshou, PostgreSQL settings, load model, command history length,
+verification sample rate zero, and duration identical. Use a temporary Cabal
+project to substitute that local `kiroku-store` package and inspect the resolved
+Cabal plan to confirm that this is the only source change. Record post-major
+live-byte and large-object series for both runs. Kiroku master uses a later
+schema, so substituting its whole package into the released cohort would not
+be an equivalent comparison. If the fixed run still grows, continue with the
+profile and command legs to isolate the remainder.
+
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro-runtime-kenshou
 nix develop -c just diagnose-tools
@@ -408,7 +449,9 @@ nix develop -c "$BIN" diagnose profile \
 Acceptance: the profile directory exists under `.dev/profiles` in the Kenshou checkout, the
 bands are summarised in this plan with the directory name, and the Decision Log records the
 hypothesis. If the run cannot start on this machine, record why and continue; Milestone 1
-does not depend on it.
+does not depend on it. For the matched comparison, record both run directories,
+resolved Kiroku versions, and post-major slopes; do not infer duplication from
+the shared code path alone.
 
 
 ### Milestone 1: command-runner legs in the retention harness
@@ -482,11 +525,12 @@ plan 297's Milestone 2 outcome. The decision tree:
   runner retains independently of history. If plan 297's `kiroku-append-probe` also
   retains, the store layer owns it; otherwise set `status: confirmed` and go to Milestone 3
   with `domainCommandAttempts` and `recordCommandOutcome` as the first suspects.
-- `kiroku-read-tail` retains, or plan 297 attributed the growth to kiroku: file a kiroku bug
-  report in `/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku` (its reports use the
-  `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-N` shape) with the retaining leg as
-  the reproduction, and close BUG-2 as `duplicate` with `duplicateOf` naming that report
-  and a `resolution`. Skip Milestone 3.
+- The matched command soak flattens with only the BUG-3 fix: close BUG-2 as
+  `duplicate` of `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`, citing
+  both slopes and the version-locked comparison. Skip Milestone 3. If the
+  matched run still retains, use the command legs and profile to assign the
+  remaining growth; file a distinct Kiroku report only if they isolate a
+  distinct Kiroku defect.
 - Every leg bounded at the default size and at `KEIRO_RETENTION_OPERATIONS=20000` for
   `command-long-history`, and Milestone 0's bands name only `Kenshou.*` closures or
   executor stacks: close BUG-2 as `cannot-reproduce` with a `resolution` citing the tables
@@ -593,9 +637,10 @@ and counters, "Bug Fixes" for a keiro-owned retention fix naming BUG-2, and "Oth
 for the new legs. When keiro owned the retention, set the report to `status: fixed`,
 `fixedVersion: unreleased`, with `resolution`, log it, and validate. Write the Kenshou
 hand-off in Outcomes & Retrospective: scenario id, knobs, the expected verdict change, and
-the note that Kenshou's `cohort/head.project` must point at the fixing commit before the
-reduced soak can re-verify it. Extend plan 297's ADR (or, if that ADR is not yet written,
-write it as plan 297 specifies) with the command-runner gate and with the decision that
+the note that Kenshou's comparison project must resolve the fixing Kiroku source
+or Keiro commit before the reduced soak can re-verify it. Extend
+[ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)
+with the command-runner gate and with the decision that
 snapshot-seed verification is bounded per process; run `okf log add docs/adr ...` and
 `just adr-validate`.
 
@@ -610,7 +655,9 @@ All commands run from `/Users/shinzui/Keikaku/bokuno/keiro` inside `nix develop`
 Milestone 0 commands, which run from the Kenshou checkout as shown.
 
 The tracking link in the report was added when this plan was created (see Progress), so
-start at Milestone 0.
+start at Milestone 0. Compare the unchanged released command soak with the
+single-change Kiroku BUG-3 backport before closing BUG-2; follow the same
+Kenshou scenario command and settings shown under Milestone 0 in each cohort.
 
 Build and run the new legs (Milestone 1):
 
@@ -681,6 +728,8 @@ The plan is complete when all of the following hold:
 4. `just verify` passes, including the retention suite, replay compatibility, and the
    bug-report, ADR, and user-documentation bundle validations.
 5. The report body names the legs and verdicts so a reader can rerun the attribution.
+6. BUG-2 is not marked `duplicate` of Kiroku BUG-3 unless the matched command
+   soak's post-major live and large-object trends flatten with only that fix.
 
 
 ## Idempotence and Recovery
@@ -699,7 +748,7 @@ than by rewriting the log.
 ## Interfaces and Dependencies
 
 
-From plan 297 (must exist first), in `keiro/retention/Retention/Measure.hs`:
+Delivered by plan 297, in `keiro/retention/Retention/Measure.hs`:
 
 ```haskell
 data HeapSample = HeapSample
@@ -774,3 +823,8 @@ before treating the harness as equivalent to the failing cohort, and record the 
   ever) because an in-memory memo would be unbounded and the durable one is a schema and
   semantics change; add no replay timeout. No milestone, interface, or acceptance text
   changed, because the plan already matched the agreed design.
+
+- 2026-09-25: recorded Kiroku BUG-3 as a strong candidate for the command-soak
+  growth after verifying the soak appends without subscribers. Added a
+  version-locked, single-change Kiroku comparison before assigning BUG-2
+  ownership; kept the independent verification-bound milestone in scope.
