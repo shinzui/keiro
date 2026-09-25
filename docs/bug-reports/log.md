@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-25
+* **Update**: BUG-1 is a duplicate of mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3: both released worker profiles identify the Kiroku publisher thunk, and a strict-update comparison removes the large-object growth.
+
 ## 2026-09-24
 * **Addition**: BUG-7 records a pre-handler retry-ceiling DLQ delivery that has no per-message process span despite traced enqueue.
 * **Addition**: BUG-6 records a six-processor long-poll stall on the fixed three-connection job runtime pool; a one-processor replacement recovered the queued job.

@@ -3,10 +3,19 @@ type: Bug Report
 title: Process-manager and router worker heaps grow during steady write-side load
 description: Process-manager and router workers retain increasing post-major-GC heap during a five-minute steady write-side workload.
 generated:
-  by: process:claude-code
-  at: "2026-09-24T02:56:08Z"
+  by: process:codex
+  at: "2026-09-25T20:28:57Z"
 bugId: BUG-1
-status: reported
+status: duplicate
+duplicateOf: mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3
+resolution: >-
+  Exact released-cohort info-table profiles of both live workers identify the same
+  growing Kiroku EventPublisher cheapAdvance thunk at line 251 and a Hasql decoder
+  closure. Kiroku's empty-subscriber path stores an unevaluated max in its position
+  TVar, retaining earlier append results. A 20,000-append Kiroku-only control grew
+  16.92 MiB with 15.03 MiB of large objects; forcing the scalar position in an
+  isolated Kiroku 0.9.0.0 worktree held large objects near 0.30 MiB. The upstream
+  defect is tracked as Kiroku BUG-3; no released Kiroku fix exists yet.
 severity: degraded
 origin: mori://shinzui/keiro-runtime-kenshou
 affects: mori://shinzui/keiro
@@ -31,6 +40,16 @@ reviews:
     model: GPT-6
     effort: medium
     context: Checked the report against the Kenshou finding and the OKF bug-report profile; component ownership remains unproven.
+  - kind: model
+    reviewer: process:codex
+    reviewed_at: "2026-09-25T20:28:57Z"
+    document_timestamp: "2026-09-25T20:28:57Z"
+    scope: content-and-metadata
+    outcome: commented
+    provider: OpenAI
+    model: GPT-6
+    effort: medium
+    context: Checked both released-cohort info-table profiles, Kiroku 0.8.0.1 and 0.9.0.0 publisher source, the isolated strict-update comparison, and upstream BUG-3.
 ---
 
 # Process-manager and router worker heaps grow during steady write-side load
@@ -53,3 +72,26 @@ pending).
 
 Tracked by [plan 297](../plans/297-isolate-and-fix-write-side-worker-heap-retention-under-steady-subscription-load.md),
 which attributes the retention across keiro, kiroku, and the harness before fixing it.
+
+## Attribution
+
+The exact released-cohort process-manager and router profiles both name
+`Kiroku.Store.Subscription.EventPublisher` line 251 and a Hasql decoder as
+growing allocation sites. The Kiroku-only 20,000-operation direct append leg
+retained 16.92 MiB at 1,184 bytes per operation, with large objects reaching
+15.03 MiB. A detached Kiroku 0.9.0.0 worktree that forced the publisher's next
+global position before the TVar write reduced that leg to 332 bytes per
+operation and kept large objects near 0.30 MiB. Kiroku 0.8.0.1, used by the
+reported cohort, contains the same lazy update. The worker retention therefore
+duplicates `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`.
+
+At the default 1,500 operations, `baseline-no-store`,
+`kiroku-append-probe`, `kiroku-append-only`, `kiroku-append-tx`,
+`kiroku-probe-only`, `kiroku-subscribe-ack`, `hand-bridge-ack`,
+`shibuya-adapter-ack`, `pm-worker`, `router-worker`, and
+`projection-apply` were all `bounded`. Both worker legs were also bounded at
+20,000 operations; the longer router run used snapshots every 100 target
+events. Those worker legs consume pre-appended source events, so their samples
+do not reproduce the reporter's live feed into the publisher. The separate
+Kiroku control and matching live worker profiles provide the attribution;
+they do not mean that a released upstream fix is available.

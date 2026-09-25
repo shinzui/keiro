@@ -74,21 +74,29 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 
 - [x] (2026-09-24) Link this plan from the BUG-1 report body and record the link in `docs/bug-reports/log.md`; the bundle validated under `--strict`.
 - [x] (2026-09-25) Milestone 0: attempt Kenshou's closure-type profile for `keiro/pm-worker`; the run failed before a worker became ready and produced no event log.
-- [x] (2026-09-25) Milestone 0: attempt the same profile for `keiro/router-worker`; it failed at the same point. Per the milestone's recovery rule, proceed to the in-repo harness without closure bands.
+- [x] (2026-09-25) Milestone 0: attempt the same profile for `keiro/router-worker`; it failed at the same point. Per the milestone's recovery rule, proceed to the in-repo harness without closure bands while investigating profile startup.
 - [x] (2026-09-25) Milestone 1: add the `keiro-retention` test suite skeleton (`keiro/retention/Main.hs`, `Retention.Measure`) and prove the probe reports stable heap for the no-store baseline leg.
 - [x] (2026-09-25) Milestone 1: add `Retention.Fixture` (target aggregate, process manager, router, ack-coupled adapter) and the kiroku-only legs.
 - [x] (2026-09-25) Milestone 1: add an adapter-only leg using released Shibuya–Kiroku adapter 0.5.1.2 and compare it with the hand-built bridge.
-- [x] (2026-09-25) Milestone 1: add the process-manager, router, and projection legs; run all seven legs in report-only mode at 60 and 1,500 operations and record the per-leg tables.
-- [ ] Milestone 2: run the worker legs at 20,000 operations, investigate the positive append/probe and process-manager slopes, and obtain closure evidence after the Kenshou profile failure.
-- [ ] Milestone 2: decide attribution from the Milestone 0 and Milestone 1 evidence, record the decision, and re-status BUG-1 only when the evidence supports it.
-- [ ] Milestone 3 (only if keiro owns the retention): profile the retained leg with `-hT` and the info-table build, fix the retaining code, and turn the leg into an asserting gate.
-- [ ] Milestone 4: wire `cabal test keiro-retention` into `just haskell-test`, update `keiro/CHANGELOG.md`, close or re-status BUG-1 with `resolution`, validate the bundle, and distill an ADR.
+- [x] (2026-09-25) Milestone 1: add the process-manager, router, and projection legs; run the original seven legs in report-only mode at 60 and 1,500 operations and record the per-leg tables.
+- [x] (2026-09-25) Add a distinct hand-built ack bridge control, so the raw subscription, bridge, and released adapter can be compared without conflating their costs.
+- [x] (2026-09-25) Add append-only, transactional-append, and probe-only controls after the combined Kiroku control showed large-object growth during a 20,000-operation burst.
+- [x] (2026-09-25) Milestone 2: run the process-manager leg at 20,000 operations; its earlier positive slope settled.
+- [x] (2026-09-25) Run the final eight-leg asserting default suite after the bridge control and router policy change; all eight passed in 93.9 seconds.
+- [x] (2026-09-25) Run the expanded eleven-leg asserting default suite after adding append-only, transactional-append, and probe-only controls; all eleven passed in 112.2 seconds.
+- [x] (2026-09-25) Milestone 2: profile both worker roles on the exact released cohort and record their major-GC and closure-type series.
+- [x] (2026-09-25) Milestone 2: complete info-table profiles for both released-cohort worker roles, pace the direct append control, and verify a strict Kiroku publisher update against the 20,000-append control.
+- [x] (2026-09-25) Milestone 2: attribute the shared worker growth to Kiroku's lazy publisher position update, file `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`, and close Keiro BUG-1 as its duplicate.
+- [x] (2026-09-25) Milestone 3: skipped because both worker profiles name the Kiroku-owned publisher site and the isolated strict Kiroku update removes the distinctive large-object growth; no Keiro worker code is implicated.
+- [x] (2026-09-25) Milestone 4: wire `cabal test keiro-retention` into `just haskell-test`, update `keiro/CHANGELOG.md`, close BUG-1 as an upstream duplicate with a resolution, validate both local bundles, record ADR-48, and pass `just verify` end to end.
 
 
 ## Surprises & Discoveries
 
 
 - 2026-09-25: The two closure-type sessions, `.dev/profiles/profile-20260925T184247Z-closure-type` and `.dev/profiles/profile-20260925T184421Z-closure-type` in the Kenshou checkout, each exited 4 with `reason: "user error (worker did not become ready)"` and a zero-byte event log. There are no closure bands to attribute. The Kenshou checkout had unrelated pre-existing edits in `docs/layers/pgmq.md` and `kenshou-pgmq/src/Kenshou/Suite/Pgmq/Concurrency/Runner.hs`; this plan did not change them.
+
+- 2026-09-25: The generated worker stderr in the first failed profile says `initEventLogFileWriter: can't open .dev/profiles/.../worker-keiro/pm-worker-93016.eventlog: No such file or directory`. Kenshou's `reexecWithWorkerRts` uses the slash-bearing worker role directly in the event-log filename, so it needs a `worker-keiro` directory inside each generated profile session. The failed profile is a path-construction issue, not evidence about worker heap. A temporary directory in the generated session should allow a rerun without changing Kenshou source.
 
 - 2026-09-25: The current Keiro tree is version 0.18.0.0 and requires `kiroku-store >=0.9 && <0.10` with `shibuya-core ^>=0.9.0.0`. Hackage's latest released `shibuya-kiroku-adapter` is 0.5.1.4, also tagged upstream, but it requires `shibuya-core >=0.10 && <0.11`. The cohort adapter 0.5.1.2 requires `kiroku-store ^>=0.8` and `shibuya-core >=0.9 && <0.10`; version 0.5.1.3 already requires Shibuya 0.10. No published adapter version has bounds for the current Keiro combination. The 0.8.0.1 to 0.8.0.2 subscription diff adds cancellation masking and test hooks; the 0.5.1.2 to 0.5.1.3 adapter diff changes the supervised handler contract and consumer-group acquisition, so the cohort comparison needs explicit version context.
 
@@ -110,6 +118,40 @@ projection-apply          1762040 1757960 1802360 1817840 1861256 1877208       
 ```
 
   The no-store large-object reading was flat at 151,200 bytes and its thread count stayed 28. The append/probe large-object reading rose from 413,440 to 1,735,248 bytes with threads flat at 28. The process-manager large-object reading varied from 411,184 to 509,272 bytes with threads flat at 28; its live-byte slope therefore does not yet match the append/probe's large-object signature. The router's live heap fell as the run progressed. The raw subscription and real adapter matched each other closely. All operations succeeded and the worker target event counts matched the expected counts. Sampling inside callbacks remains provisional; post-return live-byte readings were 1,694,080 (raw subscription), 2,164,504 (adapter), 4,543,152 (manager), 1,594,864 (router), and 1,638,512 (projection).
+
+- 2026-09-25: At 20,000 operations over eight blocks of 2,500, the process-manager live-byte samples were 3,055,344; 2,474,120; 2,587,128; 2,437,312; 2,124,648; 1,925,352; 1,773,168; and 1,526,536. The fitted slope was -71 B/op with zero kept-sample growth and flat 23-thread count. The post-return live heap was 1,466,296 bytes. The positive 1,500-operation slope was transient warm-up, not sustained worker retention in this fixture.
+
+- 2026-09-25: The unsnapshotted four-target router run was interrupted after about ten minutes before completing 20,000 operations. Each dispatch repeatedly replayed one of four growing target streams, so command history cost dominated the worker measurement. The default 1,500-operation router leg remains unsnapshotted. For longer runs, the fixture switches target streams to `Every 100` snapshots and reports that policy. That longer result tests worker retention under sustained subscription load, but cannot substitute for a profile of the original unsnapshotted Kenshou workload when assigning BUG-1 ownership.
+
+- 2026-09-25: With `Every 100` target snapshots, the router completed 20,000 operations in 162.8 seconds. Its eight live-byte samples were 7,061,896; 7,281,208; 7,471,672; 7,905,288; 7,983,824; 8,442,840; 8,427,312; and 8,766,136. The fitted slope was 99 B/op and kept-sample growth 1.42 MiB, below both retention floors. The post-return live heap was 7,198,304 bytes. Threads increased from 22 to 25 during the run, so this result remains bounded by the test's live-byte criterion but merits comparison with the original Kenshou profile before report closure.
+
+- 2026-09-25: The final eight-leg asserting run at 1,500 operations passed in 93.9 seconds. The new hand-built bridge had a fitted slope of 8 B/op and 0.01 MiB growth, matching the raw Kiroku and released adapter controls. Baseline was 6 B/op and 0.01 MiB; append/probe 1,684 B/op and 1.61 MiB; raw ack 8 B/op and 0.01 MiB; released adapter 8 B/op and 0.01 MiB; process manager 1,007 B/op and 0.94 MiB; unsnapshotted router -2,932 B/op with zero growth; projection 119 B/op and 0.11 MiB. All verdicts were `bounded` under the configured two-floor gate, and target event assertions passed. The positive append/probe short-run slope still needs a longer control run.
+
+- 2026-09-25: A 20,000-operation append/probe control completed in about five seconds and grew 21.93 MiB across kept samples at 1,538 B/op, with large-object bytes reaching 19.79 MiB. An immediate post-return sample stayed at 30.89 MiB live and 19.79 MiB large objects. Holding one `StoreRunner` effect invocation across the whole loop did not change this signature: the control still reached 30.71 MiB live and 19.62 MiB large objects, and the asserting long-run leg failed. Its `-hT` profile, however, named growing `GHC.Internal.Event.PSQ.Bin` (2.71 MiB), list cells (2.58 MiB), `TVAR` (2.54 MiB), `GHC.Internal.Conc.Sync.TVar` (1.27 MiB), and `FUN_1_0` (1.27 MiB) across eight samples. These are event-manager and STM-shaped structures, not Kiroku event payload constructors; the five-second burst may be keeping pending timeouts alive.
+
+- 2026-09-25: The 60-second settling measurement reduced combined append/probe live bytes from 29.84 MiB to 20.99 MiB, but large-object bytes remained at 18.74 MiB. The append-only leg retained 16.92 MiB across kept samples at 1,184 B/op, with large objects rising to 15.03 MiB. The probe-only leg's large-object bytes stayed flat at 15.19 MiB after its preloading append phase; its probe slope was 112 B/op with 1.60 MiB growth, below the gate floors. The transactional-append leg also retained 16.47 MiB at 1,152 B/op with large objects reaching 14.67 MiB. Thus both append paths grow during a roughly five-second burst, while existence probes do not add large objects. The process-manager path performs 20,000 events over several minutes and settles, so burst results cannot be directly attributed to its steady-load behavior.
+
+- 2026-09-25: Supplying a `worker-keiro` directory inside a generated Kenshou profile session let the process-manager profile run. The child event log had 22 closure-type samples over 274.6 seconds. Its RTS major-GC live bytes grew to about 25.6 MiB and large-object bytes to 22.9 MiB, reproducing the original signal, but the closure census totaled only 0.89 to 2.19 MiB. Its largest visible growing bands were ByteString `BS` wrappers (+318,720 bytes), generic `THUNK_2_0` (+318,688), `THUNK_1_0` (+239,040), `ARR_WORDS` (+224,976), and `PlainPtr` (+159,360). Those bands do not account for the much larger RTS large-object growth, so closure type alone cannot assign ownership. The shared Kenshou checkout's active Cabal project had also moved to its head cohort, which pins an unreleased Shibuya core commit; the profile's `dist-newstyle/cache/plan.json` confirmed that source. A detached worktree from the tracked Kenshou HEAD, with `cohort/active.project` importing `released.project`, is being built for exact released-cohort profiles without changing the shared checkout.
+
+- 2026-09-25: The detached worktree's dependency plan confirmed the original released versions: Keiro 0.17.0.0, Kiroku Store 0.8.0.1, Shibuya core 0.9.0.3, and Shibuya–Kiroku adapter 0.5.1.2, all registry tarballs. Its five-minute process-manager profile again failed the scenario leak verdict but produced a usable child event log, with 21 closure-type samples over 275 seconds. RTS major-GC live bytes rose from 446,368 to 24,708,088 and large-object bytes from 308,392 to 23,138,848. The closure census totaled 930,800 to 2,132,744 bytes; top visible growth was `THUNK_2_0` (+311,136), ByteString `BS` (+311,136), `THUNK_1_0` (+233,352), `ARR_WORDS` (+203,896), and `PlainPtr` (+155,568). This reproduces the same signature on the exact released cohort, but the closure-type census still does not account for the large-object bytes.
+
+- 2026-09-25: The exact released-cohort router profile also failed the scenario leak verdict. Its child event log had 22 closure-type samples over 272.8 seconds. RTS major-GC live bytes rose from 435,664 to 22,366,576 and large-object bytes from 309,440 to 16,264,208. The closure census totaled 718,960 to 1,931,648 bytes. Its largest growing bands were `THUNK_2_0` (+315,168), ByteString `BS` (+315,168), `THUNK_1_0` (+236,352), `ARR_WORDS` (+163,904), and `PlainPtr` (+157,584). The common band shapes across two different workers point to a shared path, but neither closure-type census accounts for the larger RTS large-object growth. An info-table build is underway to identify the generic allocation sites.
+
+- 2026-09-25: Pacing the isolated `kiroku-append-only` leg at 20 operations per second for 3,000 operations (about 160 seconds) still produced a positive 942 B/op fitted live-heap slope. The six post-major live-byte samples were 983,424; 1,430,952; 1,859,416; 2,285,360; 2,814,000; and 3,308,024, with large-object bytes rising from 679,968 to 2,719,592. The two-floor verdict was `bounded` because kept-sample growth was 1.79 MiB, just below the 2 MiB floor. This control shows rate alone does not flatten append-path growth over this interval; a longer run or an ownership profile is needed before classifying it as lasting retention.
+
+- 2026-09-25: The expanded eleven-leg suite passed in asserting mode at the default 1,500 operations in 112.2 seconds. The unsnapshotted router's slope was -2,382 B/op with zero kept-sample growth; process manager 721 B/op and 0.59 MiB; projection 119 B/op and 0.11 MiB. All eleven verdicts were `bounded`, including the new direct append, transactional append, and probe-only controls. The long burst behavior remains a separate diagnostic rather than a default-size failure.
+
+- 2026-09-25: A standalone threaded GHC 9.12.4 control registered 3,000 30-second STM delays, sampling after each 500 registrations with forced major GC. Live bytes reached only 378,568 and large-object bytes 28,688; after 60 seconds idle they fell to 75,920 and 61,456 respectively. Repeated `registerDelay` alone does not reproduce the multi-megabyte large-object signature, despite the Event.PSQ and TVar bands in the closure profile. The timer hypothesis is therefore insufficient without another retaining reference or workload component.
+
+- 2026-09-25: The exact released-cohort process-manager info-table profile in the detached Kenshou worktree, `.dev/profiles/profile-20260925T200534Z-info-table`, again failed the scenario leak verdict and produced a 150 MiB child event log. Its 21 info-table samples span 268.3 seconds; the sampled closure census grew from 919,912 to 2,162,536 bytes. The largest mapped growth sites were a Kiroku publisher thunk at `Kiroku.Store.Subscription.EventPublisher` line 251 (+307,488 bytes) and a Hasql value-decoder closure at `Hasql.Codecs.Decoders.Value` lines 97–98 (+230,616 bytes). A boot-library closure with no info-table map grew by the same 307,488 bytes as the publisher thunk. The worker RTS series rose from 468,400 to 21,344,576 post-major live bytes and from 347,336 to 19,930,464 large-object bytes while its thread count stayed 11 to 10. The released Kiroku 0.8.0.1 and current 0.9.0.0 source both use `writeTVar posVar (GlobalPosition (max cur tailPos))` at that publisher site when no queue subscriber is registered. Because `GlobalPosition` is a non-strict newtype over `Int64`, the TVar can hold a chain of unevaluated `max` calls and their Hasql results. Category subscriptions do not register publisher queue subscribers, so this path remains active during both worker roles.
+
+- 2026-09-25: A detached Kiroku 0.9.0.0 worktree changed only the publisher's empty-subscriber update to force `nextPos = max cur tailPos` before `writeTVar`. The same Keiro `kiroku-append-only` 20,000-operation burst then measured 332 B/op, 4.75 MiB kept-sample live growth, and large-object bytes flat at about 0.30 MiB across blocks 2–8; the post-return large-object reading was 309,368 bytes. The released build measured 1,184 B/op, 16.92 MiB live growth, and 15.03 MiB large objects. The strict update removes the distinctive large-object accumulation without changing Keiro code. The patch is an isolated experiment; no Kiroku release includes it yet.
+
+- 2026-09-25: The exact released-cohort router info-table profile, `.dev/profiles/profile-20260925T201406Z-info-table`, independently found the same Kiroku publisher line 251 (+323,392 bytes) and Hasql decoder lines 97–98 (+242,544 bytes) among 22 samples spanning 279.3 seconds. Its closure census rose from 722,800 to 1,965,632 bytes; the worker RTS series rose from 469,296 to 18,059,016 post-major live bytes and from 343,592 to 16,616,720 large-object bytes, with threads 11 to 10. Both worker roles therefore point to the same Kiroku-owned retaining path. The in-repo worker legs were bounded because they consume source events pre-appended before sampling, while Kenshou supplies them live; that fixture difference explains why the Keiro gate did not reproduce the combined worker trend.
+
+- 2026-09-25: The new upstream BUG-3 report, bundle index, and log were committed in `mori://shinzui/kiroku` and passed `okf validate` with profile and log enforcement. Kiroku's `--strict` bundle check still reports missing review metadata in its two pre-existing bug reports; BUG-3 itself has review metadata and is not among those diagnostics. Keiro's BUG-1 bundle passes its own strict validation. `mori path` cannot yet resolve BUG-3's intended canonical artifact URI because the local registry or artifact coverage has not incorporated the new report.
+
+- 2026-09-25: The two exact released-cohort closure-type sessions and the two info-table sessions were copied from the detached profiling worktree to the main Kenshou checkout's `.dev/profiles/` directory. Their child event logs and run reports are retained there under the profile directory names above; no tracked Kenshou source or cohort file was changed.
 
 
 ## Decision Log
@@ -151,11 +193,64 @@ projection-apply          1762040 1757960 1802360 1817840 1861256 1877208       
   Rationale: the specified 20,000-operation investigation is not divisible by the six-block default, while the gate needs at least five samples after warm-up and equal block sizes. This yields six blocks for 1,500 operations and eight for 20,000; an explicit blocks override remains available.
   Date: 2026-09-25
 
+- Decision: keep separate controls for the raw Kiroku ack stream, the hand-built adapter bridge, and the released Shibuya adapter.
+  Rationale: the raw stream tests delivery and ack bookkeeping, the bridge adds envelope and decision conversion, and the released adapter adds its own implementation. Comparing all three is stronger than treating a direct raw-stream consumer as if it exercised the bridge.
+  Date: 2026-09-25
+
+- Decision: split the combined Kiroku append/probe control into direct-append, transactional-append, and probe-only diagnostics while retaining the original combined leg.
+  Rationale: the 20,000-operation combined burst retained large-object bytes even after a 60-second idle period, whereas the process-manager worker remained bounded. Separate controls are needed to distinguish direct append from duplicate probes and to compare the transactional append path the worker actually uses. The original combined leg remains a regression signal for the earlier observation.
+  Date: 2026-09-25
+
+- Decision: use unsnapshotted router targets in the default gate and `Every 100` target snapshots above 1,500 operations.
+  Rationale: the ordinary gate preserves the reported workload's unsnapshotted targets. At 20,000 events and four fixed targets, repeated command history replay made the long diagnostic prohibitively expensive and entangled worker retention with plan 298's history question. The snapshotted variant keeps the same subscription, adapter, routing, fan-out, and ack path while bounding target replay cost. Record the policy with each result; do not use that variant alone to close BUG-1.
+  Date: 2026-09-25
+
+- Decision: assign the shared live-worker heap growth to Kiroku's empty-subscriber publisher update and close Keiro BUG-1 as a duplicate of `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`.
+  Rationale: both exact released-cohort worker info-table profiles name the same Kiroku `cheapAdvance` thunk and Hasql decoder, the Kiroku-only append path reproduces the large-object trend, and forcing that one scalar position in an isolated Kiroku 0.9.0.0 worktree holds large-object bytes flat. The expression is unchanged from the reported Kiroku 0.8.0.1 cohort to the current 0.9.0.0 release. Keiro's pre-appended worker controls test dispatch and ack retention but do not recreate the reporter's live publisher load. The upstream BUG-3 report and strict-update experiment are the hand-off; the temporary patch is not a released fix.
+  Date: 2026-09-25
+
+- Decision: keep Keiro's dependency versions for this plan.
+  Rationale: upgrading Kiroku 0.8.0.1 to the latest released 0.9.0.0 does not remove the lazy publisher update, and the newer released Shibuya adapter versions require Shibuya 0.10 while Keiro uses 0.9. A dependency change would not fix the identified retention and would confound the released-cohort comparison.
+  Date: 2026-09-25
+
 
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+The in-repository `keiro-retention` suite now runs eleven isolated legs and prints
+post-major live bytes, large-object bytes, thread counts, slope, growth, and a
+two-floor verdict. All eleven default-size legs passed in asserting mode in
+112.2 seconds; the process-manager and router legs were also bounded at 20,000
+operations, with the router's long run explicitly snapshotted. The suite runs
+from `just verify`, and ADR-48 records the measurement rule. The exact live
+workload still reproduced both reported worker trends, so a passing pre-appended
+worker leg alone would have been misleading. The complete `just verify` gate
+passed on 2026-09-25 after the suite and report updates.
+
+Both released-cohort worker info-table profiles identify the same Kiroku
+publisher `cheapAdvance` thunk and Hasql decoder closures. Kiroku 0.8.0.1 and
+0.9.0.0 both store the unevaluated `max` of the previous and new global
+positions in a TVar when there is no all-stream queue subscriber. A direct
+Kiroku append control reproduced the large-object growth, and a temporary
+strict update in an isolated Kiroku worktree removed it in the same control.
+Keiro BUG-1 is therefore a duplicate of
+`mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`, which remains confirmed
+upstream. No Keiro runtime patch or package upgrade can remove the defect in
+the current released Kiroku version. The temporary Kiroku patch is not part of
+this repository or a release.
+
+Kenshou hand-off: rerun
+`keiro/command/soak/write-side-steady-state-reduced` for five minutes at
+`command.rate-per-second=20`, `command.accounts=16`, `router.fanout=4`,
+`projection.prune-interval-seconds=60`, and `pg.durability=durable`, profiling
+both `keiro/pm-worker` and `keiro/router-worker`. Point its `cohort/head.project`
+at a future Kiroku commit or release that forces the publisher position, while
+preserving the released cohort as the failing baseline. The expected change is
+that both child post-major live-byte slopes and large-object series settle and
+the worker leak verdicts stop reporting growth; the nine durable SQL checks
+must still pass. Kenshou's finding and `knownDefect` references can then be
+updated by that repository. Mori cannot yet resolve BUG-3's artifact URI until
+the registry is refreshed, but the canonical URI is recorded in both reports.
 
 
 ## Context and Orientation
@@ -452,7 +547,6 @@ leg=pm-worker operations=1500 blocks=6 block=250
 block  ops   live_bytes   large_objects_bytes  threads
     1  250    2,113,400            1,204,224       12
     2  500    2,120,984            1,204,224       12
-    ...
 slope=  31 B/op  growth= 0.02 MiB  verdict=bounded
 ```
 
@@ -460,18 +554,21 @@ The fixture (`keiro/retention/Retention/Fixture.hs`). It defines, following
 `keiro/bench/Main.hs`:
 
 - A target aggregate `RetentionTarget` with commands `Credit Int` and events
-  `Credited Int`, one control state, no registers, `snapshotPolicy = Never`, and
-  `stateCodec = Nothing`, validated with `mkEventStreamOrThrow "retention-target"`. Target
-  stream names are `retention-target-<k>` for `k` in `0 .. 15`, so sixteen targets share the
-  load like the sixteen Kenshou accounts.
+  `Credited Int`, one control state, and no registers. The default target has
+  `snapshotPolicy = Never` and `stateCodec = Nothing`; the longer router diagnostic
+  uses an `Every 100` variant with a state codec. Both are validated with
+  `mkEventStreamOrThrow`. Target stream names are `retentiontarget-<k>` for `k`
+  in `0 .. 15`, so sixteen targets share the process-manager load like the sixteen
+  Kenshou accounts. Kiroku treats the prefix before the first hyphen as the
+  category, so the target and source prefixes must differ.
 - A source event type `Signal { signalId :: Text, account :: Int }` stored in category
-  `retention-source` (stream `retention-source-<signalId>`, one event per stream, so every
+  `retentionsource` (stream `retentionsource-<signalId>`, one event per stream, so every
   source event has its own correlation id as Kenshou's transfers do) and a decoder
   `decodeSignal :: RecordedEvent -> Maybe (RecordedEvent, Signal)`.
 - A process manager `retentionManager :: ProcessManager Signal ...` whose own aggregate is
   a one-state saga with command `Seen` and event `SeenRecorded`, `correlate = signalId`,
   `streamFor id = stream ("pm:retention-" <> id)`, and `handle signal = ProcessManagerAction
-  { command = Seen, commands = [PMCommand (stream ("retention-target-" <> account)) (Credit 1)],
+  { command = Seen, commands = [PMCommand (stream ("retentiontarget-" <> account)) (Credit 1)],
   timers = [] }`, with `targetProjections = const []`.
 - A router `retentionRouter :: Router Signal ...` with `key = signalId` and
   `resolve signal = pure [PMCommand (targetFor k) (Credit 1) | k <- [0..3]]` (fan-out four).
@@ -496,24 +593,33 @@ The legs (`keiro/retention/Retention/Legs.hs`), each a function from the fixture
 1. `baseline-no-store`: allocate and discard a small list per operation, no database. This
    proves the probe itself is flat.
 2. `kiroku-append-probe`: per operation, `appendToStream` one event to
-   `retention-plain-<k mod 16>` with `AnyVersion` and then `eventExistsInStream` for that
+   `retentionplain-<k mod 16>` with `AnyVersion` and then `eventExistsInStream` for that
    id. Kiroku and hasql only.
-3. `kiroku-subscribe-ack`: before the loop, append `operations` source events; the loop is
+3. `kiroku-append-only`: repeat the direct append without the existence probe.
+4. `kiroku-append-tx`: use `runTransactionAppendingResource` for the same events,
+   matching the worker's transactional append path.
+5. `kiroku-probe-only`: preload the events, then perform the existence probes
+   during measurement, so append allocations do not count toward its slope.
+6. `kiroku-subscribe-ack`: before the loop, append `operations` source events; the loop is
    the consumer side of `subscriptionAckStream` replying `Continue` to every item, with the
    sampler driven every `blockSize` items. Kiroku's subscription worker and bridge only.
-4. `shibuya-adapter-ack`: use `Shibuya.Adapter.Kiroku.kirokuAdapter` with
-   `defaultKirokuAdapterConfig` targeting only `retention-source`; consume its source,
+7. `hand-bridge-ack`: use the fixture's `ackAdapter` to convert the raw Kiroku
+   ack stream into `Ingested` items, then consume and finalize them as `AckOk`.
+8. `shibuya-adapter-ack`: use `Shibuya.Adapter.Kiroku.kirokuAdapter` with
+   `defaultKirokuAdapterConfig` targeting only `retentionsource`; consume its source,
    finalize each item as `AckOk`, and call its `shutdown` at the operation limit. This
    measures the released adapter's envelope and ack conversion on the same kiroku
    subscription, without keiro dispatch. Match subscription configuration and fixture
    events across this leg and the worker legs.
-5. `pm-worker`: pre-append the source events, then `runProcessManagerWorkerWith
+9. `pm-worker`: pre-append the source events, then `runProcessManagerWorkerWith
    defaultWorkerOptions defaultRunCommandOptions retentionManager (sampleOnAck ...
    realAdapter) decodeSignal`, where `realAdapter` comes from `kirokuAdapter`. One
    operation is one delivered source event, which performs the
    manager append, the duplicate probes, and one target dispatch.
-6. `router-worker`: as 5 with `runRouterWorkerWith` and fan-out four.
-7. `projection-apply`: register a read model named `retention-activity` with
+10. `router-worker`: as 9 with `runRouterWorkerWith` and fan-out four; use
+   unsnapshotted targets at the default size and `Every 100` target snapshots
+   above 1,500 operations, printing the policy for each run.
+11. `projection-apply`: register a read model named `retention-activity` with
    `Keiro.ReadModel.Schema.registerReadModel` (as `keiro/test/CatalogSpec.hs` does for its
    fixtures), define an `AsyncProjection` whose `applyRecorded` does nothing and whose
    `idempotencyKey` is the event id (the same shape as `catalogAsyncProjection` at
@@ -528,7 +634,7 @@ hspec program under `withMigratedSuite`, one `it` per leg wrapped in
 
 Acceptance: from the repository root,
 `KEIRO_RETENTION_REPORT_ONLY=1 cabal test keiro-retention --test-show-details=direct` prints
-seven tables and exits 0; the `baseline-no-store` table shows growth under 0.5 MiB. Tables for
+eleven tables and exits 0; the `baseline-no-store` table shows growth under 0.5 MiB. Tables for
 the other legs are copied into Surprises & Discoveries.
 
 
@@ -556,7 +662,7 @@ for another focused profile and leaves the report open. The outcomes are:
   and the worker, then file the upstream report against the adapter only if the growing
   closures match. Keep BUG-1 open if the worker has additional growth.
 - Every leg is bounded at the default size and at `KEIRO_RETENTION_OPERATIONS=20000` for
-  the two worker legs, and the Milestone 0 bands name only `Kenshou.*` closures or thread
+  the two worker legs (the longer router run uses snapshotted target histories), and the Milestone 0 bands name only `Kenshou.*` closures or thread
   stacks of Kenshou threads: close BUG-1 as `cannot-reproduce` with a `resolution` that
   cites the leg tables and the profile bands, and write the hand-off text for Kenshou (the
   finding record and the scenario's `knownDefect` are theirs to update). Skip Milestone 3.
@@ -669,7 +775,7 @@ block  ops   live_bytes   large_objects_bytes  threads
 slope=   0 B/op  growth= 0.00 MiB  verdict=bounded
   kiroku-append-probe
 ...
-6 examples, 0 failures
+11 examples, 0 failures
 ```
 
 Scale a leg for investigation:
@@ -692,17 +798,19 @@ Intention: intention_01m38mx70deekbhtqefq54bpxx
 
 The plan is complete when all of the following hold:
 
-1. `cabal test keiro-retention` runs the seven legs from an empty ephemeral database and
+1. `cabal test keiro-retention` runs the eleven legs from an empty ephemeral database and
    prints one table per leg. With the default sizes the run finishes in well under five
    minutes on a laptop; if it does not, reduce `blockSize` before reducing `blocks`, because
    the verdict needs at least five kept samples.
 2. `baseline-no-store`, `kiroku-append-probe`, `kiroku-subscribe-ack`, and
    `shibuya-adapter-ack` are `bounded`, or the plan's Decision Log records matching upstream
-   attribution and BUG-1 is `duplicate` with a
-   resolvable `duplicateOf`.
+   attribution and BUG-1 is `duplicate` with the canonical upstream
+   `duplicateOf` URI. Mori resolution may await artifact coverage or a
+   refreshed registry.
 3. `pm-worker` and `router-worker` are `bounded` at the default size and at 20,000
-   operations, either because they always were (then BUG-1 is `cannot-reproduce` with the
-   profile evidence) or because Milestone 3 fixed them (then BUG-1 is `fixed`).
+   operations, with the router's long run labeled as snapshotted. A terminal BUG-1
+   status additionally needs a successful profile or equivalent matching evidence
+   from the reported workload; a bounded snapshotted run alone does not supply it.
 4. `just verify` passes, which includes the new suite, the bug-report bundle validation, and
    the ADR bundle validation.
 5. The report body names the legs and verdicts so a reader can rerun the attribution.
@@ -796,11 +904,11 @@ versions in this workspace when the plan was written: kiroku-store 0.8.0.2, shib
 0.9.0.3, hasql 1.10.3.7, hasql-pool 1.4.2.3, streamly-core 0.3.1, effectful 2.6.1.0, GHC
 9.12.4. The failing Kenshou cohort used kiroku-store 0.8.0.1, shibuya-kiroku-adapter
 0.5.1.2, and keiro 0.17.0.0. This plan read the workspace trees, not the released tags; the
-versions differ only by patch releases, but before treating the harness as equivalent to
-the failing cohort, diff the tags in the kiroku checkout
+versions differ, so the implementation diffed the release tags in the kiroku checkout
 (`git diff kiroku-store-v0.8.0.1 kiroku-store-v0.8.0.2 -- kiroku-store/src/Kiroku/Store/Subscription`
-and the same for `shibuya-kiroku-adapter-v0.5.1.2..v0.5.1.3`) and record the result in
-Surprises & Discoveries.
+and the same for `shibuya-kiroku-adapter-v0.5.1.2..v0.5.1.3`). The results are in
+Surprises & Discoveries above. The actual Keiro checkout now uses Kiroku 0.9.0.0,
+which is a material version difference from the 0.8.0.1 failing cohort.
 
 
 ## Revision Notes
@@ -810,3 +918,12 @@ Surprises & Discoveries.
   now requires matching worker evidence before closing BUG-1 as an upstream duplicate;
   samples inside ack finalization are explicitly treated as provisional. This addresses
   the gap between the hand-built adapter and Kenshou's actual worker path.
+- 2026-09-25: Recorded the implemented controls and measurements, added a distinct
+  hand-built ack bridge leg, and defined a snapshotted target variant for the
+  20,000-operation router diagnostic after unsnapshotted history replay dominated
+  that run. The default gate remains unsnapshotted, and attribution still requires
+  matching evidence from the original workload.
+- 2026-09-25: Completed exact released-cohort info-table profiles for both worker
+  roles, compared an isolated strict Kiroku publisher update with the released
+  append control, filed upstream BUG-3, and closed Keiro BUG-1 as its duplicate.
+  Recorded the repo gate, ADR, and Kenshou re-verification hand-off.
