@@ -59,7 +59,7 @@ library
     hasql >=1.10 && <1.11,
     hasql-pool >=1.2 && <1.5,
     keiro-migrations ^>=0.18.0.0,
-    kiroku-store >=0.9 && <0.10,
+    kiroku-store >=0.9.0.1 && <0.10,
     kiroku-store-migrations ^>=0.6.0.0,
     pg-migrate ^>=1.2.0.0,
     stm >=2.5 && <2.6,

@@ -79,15 +79,18 @@ with only the Kiroku fix must confirm attribution before BUG-2 is closed. Milest
 
 
 - [x] (2026-09-24) Link this plan from the BUG-2 report body and record the link in `docs/bug-reports/log.md`; the bundle validated under `--strict`.
-- [ ] Milestone 0: run Kenshou's closure-type profile of the reduced seed-backlog soak (main process, verification off) and record the growing bands in Surprises & Discoveries; run the info-table variant if the bands are byte arrays or thunks.
-- [ ] Milestone 0: compare the released command soak with the same cohort using only the Kiroku BUG-3 strict-position fix; capture resolved package versions and post-major live and large-object trends before assigning BUG-2 ownership.
-- [ ] Milestone 1: add the snapshotted ledger fixture and the seeding helper to plan 297's existing `keiro-retention` suite.
-- [ ] Milestone 1: add the `command-long-history`, `hydrate-only`, `kiroku-read-tail`, and `command-short-history` legs; run them in report-only mode and record the tables.
-- [ ] Milestone 1: add the informational `command-long-history-verify-every` leg and record its thread column before Milestone 4.
-- [ ] Milestone 2: decide attribution from Milestones 0 and 1 together with plan 297's outcome, record it, and move BUG-2 to `confirmed` or to its terminal status.
-- [ ] Milestone 3 (only if keiro owns the retention): profile the retained leg, fix the retaining code, and make the leg an asserting gate.
-- [ ] Milestone 4: bound in-flight snapshot-seed verifications per process, count skipped samples, cover with tests, and document the bound.
-- [ ] Milestone 5: changelog, documentation, report closure with `resolution`, bundle validation, and ADR distillation.
+- [x] (2026-09-25) Milestone 0: profile the original reduced command soak with `-hT` and `-hi`, and record the growing closure bands, post-major series, and matched Kiroku-only comparison.
+- [x] (2026-09-25) Reproduce the reduced seed-backlog soak with verification off under Kenshou's info-table diagnostic build; retain its profile and post-major series.
+- [x] (2026-09-25) Compare the released command soak with the same cohort using only the Kiroku BUG-3 strict-position fix; the patched run is stable.
+- [x] (2026-09-25) Publish the Kiroku fix as `kiroku-store` 0.9.0.1 and four dependent patch releases; raise Keiro's minimum store bound to the fixed version.
+- [x] (2026-09-25) Add the snapshotted ledger fixture and the raw-append seeding helper to plan 297's existing `keiro-retention` suite.
+- [x] (2026-09-25) Add the `command-long-history`, `hydrate-only`, `kiroku-read-tail`, and `command-short-history` legs; the four 1,500-operation report-only controls pass correctness.
+- [x] (2026-09-25) Run the asserting 20,000-operation `command-long-history` leg against published `kiroku-store` 0.9.0.1; post-major heap and large objects are bounded.
+- [x] (2026-09-25) Milestone 1: add the informational `command-long-history-verify-every` leg; compare its active-thread column with the original unbounded Kenshou rate-one run.
+- [x] (2026-09-25) Attribute the main command-soak retention to the Kiroku BUG-3 publisher position thunk using a single-source matched comparison; close BUG-2 as an upstream duplicate.
+- [x] (2026-09-25) Milestone 3 is inapplicable because the matched Kiroku-only change removes the reported growth; no Keiro append or hydration fix is justified.
+- [x] (2026-09-25) Milestone 4: bound in-flight snapshot-seed verifications per process, count skipped samples and unexpected failures, pass the three targeted examples, and keep the informational leg's active-thread column flat.
+- [x] (2026-09-25) Milestone 5: update the changelog, user docs, BUG-1/BUG-2 closure, and ADR-48; pass the strict bundle validations and full `nix develop -c just verify` gate.
 
 
 ## Surprises & Discoveries
@@ -103,6 +106,102 @@ with only the Kiroku fix must confirm attribution before BUG-2 is closed. Milest
   Its 21,527-command run reached 85.8 MB of large objects. This makes BUG-3
   a plausible shared cause, but the command soak has not been rerun with the
   fix; its larger per-command growth may include another source.
+
+- 2026-09-25: Kenshou's released cohort, `keiro` 0.17.0.0 with
+  `kiroku-store` 0.8.0.1, reproduced the reduced command soak with
+  `snapshot.seed-verify-sample-rate=0`, 10,000 seed events, and a three-minute
+  steady window. The profile is in
+  `mori://shinzui/keiro-runtime-kenshou` at
+  `.dev/profiles/profile-20260925T211351Z-info-table` (artifact-level URI pending).
+  It completed 21,639 measured commands with no command errors and passed the
+  durable ledger checks, while post-major live bytes grew from 4,309,304 to
+  97,439,640 over 182 seconds (13 samples, 1.82 GB/hour fitted slope).
+  Haskell threads stayed at 11, OS threads at 9, and native-byte median was
+  flat. The diagnostic command exits 1 because it correctly marks the live
+  heap `leak-suspected`; the correctness checks passed. The info-table HTML
+  lists several address-only bands, so it does not yet attribute their module.
+
+- 2026-09-25: The original cohort's closure-type profile is in
+  `mori://shinzui/keiro-runtime-kenshou` at
+  `.dev/profiles/profile-20260925T215533Z-closure-type` (artifact-level URI
+  pending). It resolved `kiroku-store` 0.8.0.1 from Hackage, completed the
+  four durable checks with no command failures, and correctly exited 1 for
+  its `leak-suspected` verdict. Twelve post-major samples grew from 4,319,608
+  to 92,075,176 live bytes over 166 seconds, with stable native memory. In
+  the rendered `-hT` census between 14 and 168 seconds, `THUNK_1_0` grew
+  100,464 to 1,016,040 sampled bytes, `THUNK_2_0` 53,632 to 665,376,
+  `ARR_WORDS` 1,598,384 to 2,434,728, and `Data.ByteString.Internal.Type.BS`
+  54,784 to 666,432; `STACK` stayed at 264,808. The census and RTS totals
+  use different accounting and are not interchangeable. These bands show
+  growing thunks with backing byte arrays but do not name the owning module;
+  the info-table render gives address-only bands. The matched strict-position
+  comparison below supplies the causal attribution.
+
+- 2026-09-25: At 1,500 operations with the new retention fixture against the
+  currently released `kiroku-store` 0.9.0.0, the four report-only legs passed
+  correctness. `command-long-history` rose 1.97 MiB across kept samples at
+  2,045 bytes/operation; `command-short-history` rose 1.58 MiB at 1,645
+  bytes/operation. `hydrate-only` rose 0.32 MiB at 340 bytes/operation and
+  `kiroku-read-tail` rose 0.22 MiB at 230 bytes/operation. The 2 MiB growth
+  floor keeps the 1,500-operation command legs `bounded`; a longer run is
+  needed before treating the trend as a regression result.
+
+- 2026-09-25: With Keiro's dependency floor raised to published
+  `kiroku-store` 0.9.0.1, the asserting `command-long-history` leg completed
+  20,000 operations in 75.7 seconds. Its eight post-major live samples were
+  2,192,632, 2,886,632, 2,975,448, 3,021,048, 2,804,984, 2,616,656,
+  2,472,944, and 2,652,736 bytes. Large objects stayed at 340,528 bytes,
+  threads stayed at 20, the fitted slope was -30 bytes/operation, and the
+  verdict was `bounded`. The final snapshot and stream version assertions
+  passed. This is the in-repository long-history release gate on the actual
+  Hackage package, complementary to the original-cohort matched comparison.
+
+- 2026-09-25: Keiro's stale Cabal index initially could see only
+  `kiroku-store` 0.9.0.0 and rejected the new lower bound. The configured
+  HTTP Hackage mirror then returned 403 for `timestamp.json`; a temporary
+  Cabal config using HTTPS refreshed the index. The resolved Keiro build now
+  downloads the published `kiroku-store` 0.9.0.1 source package. No package
+  compatibility workaround or unrelated bound change was needed.
+
+- 2026-09-25: At 1,500 operations on the published fixed store, the four
+  report-only legs passed correctness and read `bounded`: long history grew
+  0.67 MiB at 699 bytes/operation, hydration only 0.32 MiB at 340,
+  Kiroku tail reads 0.22 MiB at 228, and short history 0.37 MiB at 390.
+  Large objects in the long-history leg stayed near 0.34 MiB. The
+  verification-every leg completed 1,500 commands with active threads flat
+  at 21 in all six post-major samples, versus the original unbounded
+  sample-rate-one Kenshou arm's twenty-one *additional* Haskell threads.
+  We could not take a pre-change table with this new harness because its
+  fixture was introduced alongside the bound; the original controlled pair
+  supplies the before case. A diagnostic run initially counted raw
+  `GHC.Conc.listThreads` entries as 21 to 26, but `threadStatus` showed that
+  exactly the added entries were `ThreadFinished` handles still reachable
+  during the measurement loop. `Retention.Measure` now reports only
+  running or blocked threads; its final table was 21 throughout.
+
+- 2026-09-25: The full `nix develop -c just verify` gate passed with the
+  published `kiroku-store` 0.9.0.1 in the resolved Cabal plan. The `keiro-test`
+  suite passed 714 examples, and the default `keiro-retention` suite passed
+  all 15 asserting legs in 110.7 seconds, including the four new command and
+  read controls. The migration suite passed 36 examples. Replay compatibility,
+  ADR, bug-report, and user-documentation bundle checks were included in the
+  successful gate.
+
+- 2026-09-25: The matched Kenshou run with only the Kiroku BUG-3 strict-position
+  change, backported onto `kiroku-store` 0.8.0.1, is in
+  `mori://shinzui/keiro-runtime-kenshou` at
+  `.dev/profiles/profile-20260925T212949Z-info-table` (artifact-level URI
+  pending). Its Cabal cohort has the same package names, versions, and sources
+  as the released baseline except for `kiroku-store`, now a local 0.8.0.1
+  checkout at tag `kiroku-store-v0.8.0.1` with a two-line strictness update.
+  With verification disabled, 22,030 commands succeeded and all correctness
+  checks passed. Post-major live heap grew only 1,632,328 bytes, from
+  3,220,568 to 4,852,896 (12 samples; 19.6 MB/hour fitted slope), and
+  large-object bytes grew from 1,186,392 to 1,456,744. The unchanged cohort
+  grew 93,130,336 live bytes and 88,334,304 large-object bytes. Threads and
+  native memory stayed flat in both arms. The patched diagnostic exits 0 with
+  `stable` heap verdict. This is sufficient to assign the headline retention
+  to Kiroku BUG-3 without changing Keiro's append or hydration code.
 
 
 ## Decision Log
@@ -123,6 +222,24 @@ with only the Kiroku fix must confirm attribution before BUG-2 is closed. Milest
   297 isolated. The store's strict-position fix is on master but is unreleased;
   a backport onto the released 0.8.0.1 source in an otherwise identical cohort
   is needed to test causality. The verification fan-out remains independent.
+  Date: 2026-09-25
+
+- Decision: classify Keiro BUG-2 as a duplicate of
+  `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`; omit the Keiro-owned
+  retention repair in conditional Milestone 3.
+  Rationale: the matched 0.8.0.1 command soak changed only the idle-publisher
+  position update, turning 93.1 MB of post-major live growth into 1.6 MB while
+  preserving the full workload and durable correctness checks. The independent
+  Keiro control legs put growth in the append paths, not in hydration or tail
+  reads. The Keiro verification fan-out remains a separate Milestone 4 fix.
+  Date: 2026-09-25
+
+- Decision: require the published `mori://shinzui/kiroku/packages/kiroku-store`
+  version 0.9.0.1 across Keiro's package manifests.
+  Rationale: the previous lower bound admitted 0.9.0.0, which still contains
+  the confirmed idle-publisher retention. The fixed package and its four
+  dependent patches have been published and tagged. The Kiroku schema 0012
+  cutover remains necessary when upgrading an original 0.8 cohort.
   Date: 2026-09-25
 
 - Decision: seed the long history with raw appends and one command, not with ten thousand
@@ -193,7 +310,51 @@ with only the Kiroku fix must confirm attribution before BUG-2 is closed. Milest
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+The command soak's headline heap growth was the same Kiroku idle-publisher
+position thunk as plan 297's write-side worker finding. In the exact released
+Keiro 0.17.0.0 and Kiroku Store 0.8.0.1 cohort, changing only the strictness
+of that position update moved the three-minute verdict from `leak-suspected`
+(93.13 MB post-major live growth, 88.33 MB large-object growth) to `stable`
+(1.63 MB and 0.27 MB). Both arms passed every command and durable check.
+Keiro BUG-2 is a duplicate of
+`mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3`, as BUG-1 already was.
+Kiroku published the fix in `mori://shinzui/kiroku/packages/kiroku-store`
+version 0.9.0.1 and patched the four dependent packages. Keiro now requires
+the fixed store in every package that depends on it. Upgrading the original
+0.8 cohort also requires stopping old
+writers and applying Kiroku migration 0012 before starting the new writers.
+
+The in-repository retention suite now seeds a 10,000-event stream with a
+snapshot, checks four isolated command and read legs, and keeps an
+informational verification-every leg. Against the published fixed store, the
+20,000-command long-history leg passed its stream and snapshot assertions and
+had a -30 bytes/operation fitted post-major slope, zero kept-sample live
+growth, and flat large-object bytes. The four 1,500-operation controls were
+`bounded`. The Keiro-owned verification fan-out is separately capped at one
+in-flight task per process by default; skipped samples and unexpected task
+failures have counters, and the verification-every leg's active-thread column
+was flat at 21. Direct `RunCommandOptions` and `KeiroMetrics` record
+construction needs a source update when Keiro next releases.
+
+Kenshou hand-off: preserve
+`keiro/snapshot/soak/seed-verification-backlog-reduced` with a 10,000-event
+history, sample rate zero, a three-minute steady window, and durable
+PostgreSQL as the failing 0.8.0.1 baseline. Re-run it with a head cohort that
+resolves Kiroku Store 0.9.0.1 and migration 0012, and re-run
+`keiro/command/soak/write-side-steady-state-reduced` for five minutes with
+both worker roles. Expect the command and worker post-major slopes and
+large-object series to settle while their durable checks continue to pass.
+The exact command-soak strictness comparison already proves the causal fix;
+the post-release full live-worker rerun remains with the Kenshou repository,
+which this plan keeps read-only.
+
+Validation finished with `nix fmt`, the three focused verification examples,
+the informational verification-every leg, an asserting 20,000-command
+long-history run, all 15 default retention legs, and the full
+`nix develop -c just verify` gate. The only acceptance deviation is that the
+pre-bound thread count came from Kenshou's original sample-rate-one controlled
+arm rather than from a pre-change run of the newly added informational leg.
+The active-thread comparison and cap tests establish the intended bound.
 
 
 ## Context and Orientation
@@ -632,7 +793,8 @@ appear in the documentation.
 
 
 Scope: finish the paperwork. Add `keiro/CHANGELOG.md` entries under `## [Unreleased]`:
-"Breaking Changes" for the `KeiroMetrics` fields, "New Features" for the verification bound
+"Breaking Changes" for the `RunCommandOptions` and `KeiroMetrics` fields,
+"New Features" for the verification bound
 and counters, "Bug Fixes" for a keiro-owned retention fix naming BUG-2, and "Other Changes"
 for the new legs. When keiro owned the retention, set the report to `status: fixed`,
 `fixedVersion: unreleased`, with `resolution`, log it, and validate. Write the Kenshou

@@ -239,6 +239,13 @@ upstream. No Keiro runtime patch or package upgrade can remove the defect in
 the current released Kiroku version. The temporary Kiroku patch is not part of
 this repository or a release.
 
+2026-09-25 release follow-up: Kiroku published the strict publisher update in
+`mori://shinzui/kiroku/packages/kiroku-store` version 0.9.0.1. Keiro's
+package bounds now require that version. BUG-1 remains a duplicate; the full
+live-worker soak in the hand-off below has not
+yet been rerun against the published package. The preceding paragraph records
+the state when this plan's original attribution completed.
+
 Kenshou hand-off: rerun
 `keiro/command/soak/write-side-steady-state-reduced` for five minutes at
 `command.rate-per-second=20`, `command.accounts=16`, `router.fanout=4`,

@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-09-25
+* **Update**: BUG-2 attribution controls pass with released Kiroku 0.9.0.1 and bounded verification threads
+* **Update**: BUG-1 and BUG-2 duplicates now point to released kiroku-store 0.9.0.1
+* **Update**: BUG-2 is a duplicate of mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3: a single-change Kiroku publisher fix reduced matched command-soak post-major live growth from 93.13 MB to 1.63 MB.
 * **Update**: BUG-1 is a duplicate of mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3: both released worker profiles identify the Kiroku publisher thunk, and a strict-update comparison removes the large-object growth.
 
 ## 2026-09-24

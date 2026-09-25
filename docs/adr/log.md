@@ -1,6 +1,9 @@
 # Bundle Update Log
 
 ## 2026-09-25
+* **Update**: ADR-48 records isolated command retention gates and the process-wide verification bound
+* **Update**: ADR-48 counts active Haskell threads in the verification retention leg
+* **Update**: Extended the post-major retention gate with isolated command, hydration, and Kiroku-tail legs and a process-wide sampled seed-verification bound; the matched command soak attributes BUG-2 to mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3.
 * **Update**: ADR-48: distinguish append and probe controls and paced worker evidence
 * **Addition**: ADR-48: gate worker retention with isolated post-major heap legs
 

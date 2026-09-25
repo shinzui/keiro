@@ -4,7 +4,7 @@ title: Process-manager and router worker heaps grow during steady write-side loa
 description: Process-manager and router workers retain increasing post-major-GC heap during a five-minute steady write-side workload.
 generated:
   by: process:codex
-  at: "2026-09-25T20:28:57Z"
+  at: "2026-09-25T22:16:28Z"
 bugId: BUG-1
 status: duplicate
 duplicateOf: mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3
@@ -15,7 +15,7 @@ resolution: >-
   TVar, retaining earlier append results. A 20,000-append Kiroku-only control grew
   16.92 MiB with 15.03 MiB of large objects; forcing the scalar position in an
   isolated Kiroku 0.9.0.0 worktree held large objects near 0.30 MiB. The upstream
-  defect is tracked as Kiroku BUG-3; no released Kiroku fix exists yet.
+  defect is tracked as Kiroku BUG-3 and fixed in kiroku-store 0.9.0.1.
 severity: degraded
 origin: mori://shinzui/keiro-runtime-kenshou
 affects: mori://shinzui/keiro
@@ -28,7 +28,7 @@ reproduction:
   - Run `cabal run kenshou -- run keiro/command/soak/write-side-steady-state-reduced --set soak.duration-minutes=5 --set command.rate-per-second=20 --set command.accounts=16 --set router.fanout=4 --set projection.prune-interval-seconds=60 --dim pg.durability=durable --out runs` from the Kenshou repository.
   - Inspect the process-manager and router child leak reports and the post-major-GC live-byte series under the run directory.
   - Confirm the nine durable SQL checks pass and compare the first and last post-major-GC samples for both workers.
-workaround: No validated mitigation is known; monitor the workers' post-major-GC heap and restart them before reaching the deployment's memory limit if operationally safe.
+workaround: Upgrade to kiroku-store 0.9.0.1 or later. From the reported 0.8.0.1 cohort, stop older writers, apply Kiroku schema migration 0012, then start the new writers; this is not a rolling upgrade. The full live-worker soak still needs re-verification against the published package.
 reviews:
   - kind: model
     reviewer: process:codex
@@ -93,5 +93,6 @@ At the default 1,500 operations, `baseline-no-store`,
 20,000 operations; the longer router run used snapshots every 100 target
 events. Those worker legs consume pre-appended source events, so their samples
 do not reproduce the reporter's live feed into the publisher. The separate
-Kiroku control and matching live worker profiles provide the attribution;
-they do not mean that a released upstream fix is available.
+Kiroku control and matching live worker profiles provide the attribution.
+The strict publisher update is released in `kiroku-store` 0.9.0.1; a full
+live-worker soak against that release remains to be run.

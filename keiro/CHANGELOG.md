@@ -6,11 +6,36 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `RunCommandOptions` gains `seedVerifyInFlightLimit`. Code that constructs
+  the record directly must supply it; callers updating `defaultRunCommandOptions`
+  receive the process-wide default of one.
+- `KeiroMetrics` gains `snapshotSeedSkipped` and
+  `snapshotSeedVerificationFailed` fields. Code that constructs the record
+  directly rather than through `newKeiroMetrics` must supply them.
+
+### New Features
+
+- Limit sampled snapshot-seed full replays to one in-flight task per process by
+  default. `RunCommandOptions.seedVerifyInFlightLimit` tunes the limit, with
+  zero restoring unbounded verification. The new
+  `keiro.snapshot.seed.skipped` and
+  `keiro.snapshot.seed.verification.failed` counters expose skipped samples and
+  unexpected task failures.
+
 ### Other Changes
 
 - Add the `keiro-retention` test suite to `just verify`, with post-major heap
   measurements for isolated store, adapter, process-manager, router, and
   projection workloads (BUG-1).
+- Add long and short command, hydration-only, and Kiroku tail-read retention
+  legs to distinguish command heap growth from snapshot hydration and store
+  reads (BUG-2).
+- Count active Haskell threads in retention reports, excluding finished async
+  handles that can remain reachable during a measurement loop.
+- Require `kiroku-store >=0.9.0.1` across Keiro packages so new builds use
+  the released idle-publisher retention fix behind BUG-1 and BUG-2.
 
 ## 0.18.0.0 — 2026-09-20
 
