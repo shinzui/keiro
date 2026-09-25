@@ -123,7 +123,11 @@ token. Forgetting either change can let an old seed match and be served silently
 candidate binary's `Keiro.ReplayAudit` targeted audit before deployment; it compares accepted
 seeded state with full replay. At runtime, command hydration also samples one in 1000 usable
 seeds by default and emits `keiro.snapshot.seed.divergence` on a mismatch. Configure the rate
-through `RunCommandOptions.seedVerifySampleRate`.
+through `RunCommandOptions.seedVerifySampleRate`. Verification runs asynchronously
+with a process-wide in-flight limit of one by default; change
+`RunCommandOptions.seedVerifyInFlightLimit` to tune it (zero disables the limit).
+Samples skipped at capacity increment `keiro.snapshot.seed.skipped`, and
+unexpected verification exceptions increment `keiro.snapshot.seed.verification.failed`.
 
 The keiro test suite proves this end to end in
 `keiro/test/Main.hs` under `describe "Keiro.ProcessManager snapshots"`: a manager with

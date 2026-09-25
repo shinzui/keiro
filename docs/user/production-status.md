@@ -213,9 +213,14 @@ waits. See the [Durable Workflows guide](../guides/durable-workflows.md).
 Snapshot discriminators reject seeds whose codec version, register layout, or
 control-state shape changed, and the runtime witness full-replays a sampled
 fraction of accepted seeds to catch divergence the discriminator cannot see.
+At most one sampled full replay runs per process by default; set
+`RunCommandOptions.seedVerifyInFlightLimit` to change the bound, or to zero
+for unbounded verification. A sample that finds the limit full increments
+`keiro.snapshot.seed.skipped`; an unexpected replay exception increments
+`keiro.snapshot.seed.verification.failed` and is logged as JSON.
 Both are detection, not prevention: a fold change invisible to register layout
-still needs an explicit `withFoldFingerprint` token, and the default one-in-1000
-sample rate means divergence is found eventually rather than immediately. Run
+still needs an explicit `withFoldFingerprint` token. The default one-in-1000
+sample rate and capacity skips mean a divergence may go undetected. Run
 `Keiro.ReplayAudit` before deploying a changed fold surface instead of relying
 on the sample.
 

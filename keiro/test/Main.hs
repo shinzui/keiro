@@ -42,7 +42,7 @@ import Effectful (Eff, IOE, runEff, (:>))
 import Effectful.Error.Static (Error, throwError)
 import Effectful.Exception qualified as EffException
 import ExternalReadSpec qualified
-import GHC.Conc (ThreadStatus (..), threadStatus)
+import GHC.Conc (ThreadStatus (..), listThreads, threadStatus)
 import GroupRebuildSpec qualified
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -2815,6 +2815,136 @@ main = withMigratedSuite $ \fixture -> hspec $ do
           Store.runTransaction $
             Tx.statement targetName snapshotVersionForStreamStmt
       snapshotVersion `shouldBe` Just (StreamVersion 2)
+
+    it "bounds sampled full replays to one process-wide task and counts skipped samples" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      let targetName = "snapshot-seed-verification-bounded"
+          target = stream targetName :: Stream SnapshotCounterEventStream
+          candidateStream =
+            mkEventStreamOrThrow
+              "snapshot-counter-fold-v2-bounded"
+              (foldV2WithoutFingerprintBumpEventStreamDef & #snapshotPolicy .~ Never)
+          options =
+            defaultRunCommandOptions
+              & #metrics
+              ?~ keiroMetrics
+              & #seedVerifySampleRate
+              .~ 1
+              & #seedVerifyInFlightLimit
+              .~ 1
+      seedLongSnapshotCounter storeHandle target 10000
+      baselineThreads <- length <$> listThreads
+      threadCounts <- forM [1 .. 20 :: Int] $ \_ -> do
+        result <- Store.runStoreIO storeHandle $ runCommand options candidateStream target (Add 1)
+        case result of
+          Right (Right commandResult) -> commandResult ^. #eventsAppended `shouldBe` 1
+          other -> expectationFailure ("sampled command failed: " <> show other)
+        length <$> listThreads
+      maximum threadCounts `shouldSatisfy` (<= baselineThreads + 2)
+      observed <- timeout 15_000_000 $ do
+        let awaitCounts = do
+              _ <- forceFlushMeterProvider provider Nothing
+              exported <- readIORef metricsRef
+              let points = reverse (flattenScalarPoints exported)
+                  count name = case lookup name points of
+                    Just (IntNumber n) -> n
+                    _ -> 0
+                  skipped = count "keiro.snapshot.seed.skipped"
+                  diverged = count "keiro.snapshot.seed.divergence"
+              if skipped + diverged == 20
+                then pure (skipped, diverged)
+                else threadDelay 10_000 >> awaitCounts
+        awaitCounts
+      case observed of
+        Just (skipped, diverged) -> do
+          skipped `shouldSatisfy` (> 0)
+          diverged `shouldSatisfy` (> 0)
+        Nothing -> expectationFailure "sampled verifications did not finish or account for all twenty commands"
+
+    it "allows unbounded sampled verification when the limit is zero" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      let target = stream "snapshot-seed-verification-unbounded" :: Stream SnapshotCounterEventStream
+          candidateStream =
+            mkEventStreamOrThrow
+              "snapshot-counter-fold-v2-unbounded"
+              (foldV2WithoutFingerprintBumpEventStreamDef & #snapshotPolicy .~ Never)
+          options =
+            defaultRunCommandOptions
+              & #metrics
+              ?~ keiroMetrics
+              & #seedVerifySampleRate
+              .~ 1
+              & #seedVerifyInFlightLimit
+              .~ 0
+      seedLongSnapshotCounter storeHandle target 1000
+      forM_ [1 .. 4 :: Int] $ \_ -> do
+        Right (Right result) <- Store.runStoreIO storeHandle $ runCommand options candidateStream target (Add 1)
+        result ^. #eventsAppended `shouldBe` 1
+      observed <- timeout 10_000_000 $ do
+        let awaitCounts = do
+              _ <- forceFlushMeterProvider provider Nothing
+              exported <- readIORef metricsRef
+              case lookup "keiro.snapshot.seed.divergence" (reverse (flattenScalarPoints exported)) of
+                Just (IntNumber 4) -> pure ()
+                _ -> threadDelay 10_000 >> awaitCounts
+        awaitCounts
+      observed `shouldBe` Just ()
+      _ <- forceFlushMeterProvider provider Nothing
+      exported <- readIORef metricsRef
+      lookup "keiro.snapshot.seed.skipped" (flattenScalarPoints exported) `shouldBe` Nothing
+
+    it "releases a verification slot after an unexpected replay exception" $ \storeHandle -> do
+      (exporter, metricsRef) <- inMemoryMetricExporter
+      (provider, _env) <-
+        createMeterProvider emptyMaterializedResources defaultSdkMeterProviderOptions {metricExporter = Just exporter}
+      meter <- getMeter provider Telemetry.keiroInstrumentationLibrary
+      keiroMetrics <- Telemetry.newKeiroMetrics meter
+      let target = stream "snapshot-seed-verification-failed" :: Stream SnapshotCounterEventStream
+          candidateStream =
+            mkEventStreamOrThrow
+              "snapshot-counter-fold-v1-broken-replay"
+              ( foldV1SnapshotCounterEventStreamDef
+                  & #eventCodec
+                  .~ ( counterCodec
+                         & #decode
+                         .~ ( \eventType value ->
+                                case parseCounterEvent eventType value of
+                                  Right (CounterAdded 2) -> error "intentional seed verification replay failure"
+                                  decoded -> decoded
+                            )
+                     )
+                  & #snapshotPolicy
+                  .~ Never
+              )
+          options =
+            defaultRunCommandOptions
+              & #metrics
+              ?~ keiroMetrics
+              & #seedVerifySampleRate
+              .~ 1
+              & #seedVerifyInFlightLimit
+              .~ 1
+      Right (Right _) <- Store.runStoreIO storeHandle $ runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 2)
+      Right (Right _) <- Store.runStoreIO storeHandle $ runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 3)
+      forM_ [1 .. 2 :: Int] $ \expected -> do
+        Right (Right _) <- Store.runStoreIO storeHandle $ runCommand options candidateStream target (Add 4)
+        observed <- timeout 5_000_000 $ do
+          let awaitFailure = do
+                _ <- forceFlushMeterProvider provider Nothing
+                exported <- readIORef metricsRef
+                case lookup "keiro.snapshot.seed.verification.failed" (reverse (flattenScalarPoints exported)) of
+                  Just (IntNumber count) | count == fromIntegral expected -> pure ()
+                  _ -> threadDelay 10_000 >> awaitFailure
+          awaitFailure
+        observed `shouldBe` Just ()
 
     it "disables sampled seed verification at rate zero" $ \storeHandle -> do
       (exporter, metricsRef) <- inMemoryMetricExporter
@@ -15657,6 +15787,25 @@ initializedSnapshotEventStreamDef =
 
 snapshotCounterEventStream :: ValidatedSnapshotCounterEventStream
 snapshotCounterEventStream = mkEventStreamOrThrow "snapshot-counter" snapshotCounterEventStreamDef
+
+-- Seed the same accepted fold and snapshot shape as a long-lived stream
+-- without running thousands of commands in the verification-bound examples.
+seedLongSnapshotCounter :: Store.KirokuStore -> Stream SnapshotCounterEventStream -> Int -> IO ()
+seedLongSnapshotCounter storeHandle target historyLength = do
+  encoded <- shouldBeRight (encodeForAppend counterCodec (CounterAdded 1))
+  let targetName = Stream.streamName target
+      rawCount = historyLength - 1
+      (fullChunks, remainder) = rawCount `divMod` 500
+  forM_ [1 .. fullChunks] $ \_ -> do
+    Right _ <- Store.runStoreIO storeHandle $ Store.appendToStream targetName AnyVersion (replicate 500 encoded)
+    pure ()
+  when (remainder > 0) $ do
+    Right _ <- Store.runStoreIO storeHandle $ Store.appendToStream targetName AnyVersion (replicate remainder encoded)
+    pure ()
+  Right (Right result) <-
+    Store.runStoreIO storeHandle $
+      runCommand defaultRunCommandOptions foldV1SnapshotCounterEventStream target (Add 1)
+  result ^. #streamVersion `shouldBe` StreamVersion (fromIntegral historyLength)
 
 snapshotCounterTransducer :: SymTransducer (HsPred SnapshotCounterRegs CounterCommand) SnapshotCounterRegs CounterState CounterCommand CounterEvent
 snapshotCounterTransducer =

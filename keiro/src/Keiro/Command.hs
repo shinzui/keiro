@@ -89,7 +89,8 @@ module Keiro.Command
 where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (displayException)
+import Control.Concurrent.STM (TVar, atomically, newTVarIO, readTVar, writeTVar)
+import Control.Exception (SomeException, displayException)
 import Data.Aeson qualified as Aeson
 #ifdef KEIRO_REACTION_HYDRATION_PROBE
 import Data.ByteString.Char8 qualified as ByteString.Char8
@@ -104,7 +105,7 @@ import Effectful (Eff, IOE, (:>))
 import Effectful.Concurrent (runConcurrent)
 import Effectful.Concurrent.Async qualified as Async
 import Effectful.Error.Static (Error, tryError)
-import Effectful.Exception (trySync)
+import Effectful.Exception (finally, mask_, onException, trySync)
 import GHC.Clock (getMonotonicTimeNSec)
 import GHC.Stack (HasCallStack)
 import Keiki.Core (BoolAlg, RegFile)
@@ -143,6 +144,8 @@ import Keiro.Telemetry
     recordSnapshotReadHits,
     recordSnapshotReadMisses,
     recordSnapshotSeedDivergence,
+    recordSnapshotSeedSkipped,
+    recordSnapshotSeedVerificationFailed,
     recordSnapshotWriteFailures,
     withCommandSpan,
   )
@@ -175,6 +178,7 @@ import OpenTelemetry.Trace.Core (Span, SpanStatus (..), Tracer, addAttribute, se
 import Streamly.Data.Fold qualified as Fold
 import Streamly.Data.Stream qualified as Streamly
 import System.IO (stderr)
+import System.IO.Unsafe (unsafePerformIO)
 import System.Random.Stateful (globalStdGen, uniformRM)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 import Prelude qualified
@@ -350,6 +354,9 @@ data HydrationReplayReason
 --   replay through the seed version. The replay runs asynchronously and never
 --   blocks or fails the command. This detects hand-written fold changes that
 --   leave the snapshot discriminator unchanged; @0@ disables the witness.
+-- * 'seedVerifyInFlightLimit' — maximum concurrent sampled verifications in
+--   this process. A sampled verification is skipped when the limit is full;
+--   @0@ removes the limit.
 data RunCommandOptions = RunCommandOptions
   { retryLimit :: !Int,
     pageSize :: !Int32,
@@ -359,6 +366,7 @@ data RunCommandOptions = RunCommandOptions
     metrics :: !(Maybe KeiroMetrics),
     verifyReplayOnAppend :: !Bool,
     seedVerifySampleRate :: !Int,
+    seedVerifyInFlightLimit :: !Int,
     -- | Optional OpenTelemetry tracer. When 'Just', the command runner
     --     opens an 'Internal'-kind span around each invocation, named after
     --     the resolved stream identifier and decorated with the messaging /
@@ -391,6 +399,7 @@ defaultRunCommandOptions =
       metrics = Nothing,
       verifyReplayOnAppend = True,
       seedVerifySampleRate = 1000,
+      seedVerifyInFlightLimit = 1,
       tracer = Nothing,
       metadata = Nothing
     }
@@ -667,17 +676,67 @@ scheduleSeedVerification ::
   SnapshotSeed rs s ->
   Eff es ()
 scheduleSeedVerification options eventStream targetStream codec seed = do
-  void $ trySync $ do
+  scheduled <- trySync $ do
     sampled <-
       case options ^. #seedVerifySampleRate of
         rate | rate <= 0 -> pure False
         1 -> pure True
         rate -> liftIO ((== (1 :: Int)) <$> uniformRM (1, rate) globalStdGen)
-    when sampled
-      $ void
-      $ runConcurrent
-      $ Async.async
-      $ verifySnapshotSeed options eventStream targetStream codec seed
+    when sampled $ mask_ $ do
+      let limit = options ^. #seedVerifyInFlightLimit
+      acquired <- liftIO (reserveSeedVerification limit)
+      if acquired
+        then
+          ( void
+              $ runConcurrent
+              $ Async.async
+              $ ( do
+                    result <- trySync (verifySnapshotSeed options eventStream targetStream codec seed)
+                    case result of
+                      Left failure -> reportSeedVerificationFailure options failure
+                      Right () -> pure ()
+                )
+              `finally` releaseSeedVerificationEff
+          )
+            `onException` releaseSeedVerificationEff
+        else recordSnapshotSeedSkipped (options ^. #metrics) 1
+  case scheduled of
+    Left failure -> void $ trySync (reportSeedVerificationFailure options failure)
+    Right () -> pure ()
+
+reportSeedVerificationFailure :: (IOE :> es) => RunCommandOptions -> SomeException -> Eff es ()
+reportSeedVerificationFailure options failure = do
+  recordSnapshotSeedVerificationFailed (options ^. #metrics) 1
+  liftIO
+    $ LazyByteString.hPutStrLn stderr
+    $ Aeson.encode
+    $ Aeson.object
+      [ "event" Aeson..= ("keiro.snapshot.seed.verification.failed" :: Text),
+        "level" Aeson..= ("error" :: Text),
+        "reason" Aeson..= displayException failure
+      ]
+
+-- A process-wide reservation prevents commands on different streams from
+-- accumulating detached full-replay tasks. Atomic reservation includes the
+-- limit check so competing command threads cannot oversubscribe it.
+{-# NOINLINE seedVerificationsInFlight #-}
+seedVerificationsInFlight :: TVar Int
+seedVerificationsInFlight = unsafePerformIO (newTVarIO 0)
+
+releaseSeedVerificationEff :: (IOE :> es) => Eff es ()
+releaseSeedVerificationEff = liftIO releaseSeedVerification
+
+reserveSeedVerification :: Int -> IO Bool
+reserveSeedVerification limit = atomically $ do
+  count <- readTVar seedVerificationsInFlight
+  if limit <= 0 Prelude.|| count < limit
+    then writeTVar seedVerificationsInFlight (count Prelude.+ 1) $> True
+    else pure False
+
+releaseSeedVerification :: IO ()
+releaseSeedVerification = atomically $ do
+  count <- readTVar seedVerificationsInFlight
+  writeTVar seedVerificationsInFlight (count Prelude.- 1)
 
 verifySnapshotSeed ::
   forall phi rs s ci co es.

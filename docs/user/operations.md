@@ -593,6 +593,11 @@ Snapshots (`Keiro.Snapshot`, recorded on the command path):
 - `keiro.snapshot.seed.divergence` — Counter, `{failure}` — sampled seeds whose encoded
   state disagreed with a full replay. Any non-zero value should page (see
   [Snapshots](snapshots.md)).
+- `keiro.snapshot.seed.skipped` — Counter, `{verification}` — sampled seed
+  verifications skipped because the process-wide in-flight limit was full.
+- `keiro.snapshot.seed.verification.failed` — Counter, `{failure}` — sampled
+  verification tasks that raised an unexpected exception; the JSON error log
+  provides the reason.
 
 Process-manager and router dispatch (`WorkerOptions.metrics`):
 
