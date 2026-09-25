@@ -16,6 +16,12 @@ provenance:
       at: 2026-09-24T03:08:03Z
       mode: "discuss"
       note: "Recorded the agreed verification-bound decisions: process-wide default limit of one, same-seed dedupe deferred, no replay timeout"
+  reviews:
+    - model: "gpt-6-sol"
+      harness: "codex-cli"
+      at: 2026-09-24T05:10:04Z
+      verdict: "changes-requested"
+      note: "Verification failure test contradicts encodeSnapshotStrict handling; spawn reservation and attribution need revision"
 ---
 
 # Isolate and fix command-runner heap retention over long snapshotted histories

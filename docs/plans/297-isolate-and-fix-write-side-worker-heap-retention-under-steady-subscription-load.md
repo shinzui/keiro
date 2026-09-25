@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-24T02:46:52Z
+  revisions:
+    - model: "gpt-6-sol"
+      harness: "codex-cli"
+      at: 2026-09-24T05:09:54Z
+      mode: "update"
+      note: "Added real-adapter control and evidence requirements for upstream attribution"
+  reviews:
+    - model: "gpt-6-sol"
+      harness: "codex-cli"
+      at: 2026-09-24T05:09:58Z
+      verdict: "comments"
+      note: "Reviewed source and sibling plan; real-adapter attribution gap updated, measurement validation remains advisory"
 ---
 
 # Isolate and fix write-side worker heap retention under steady subscription load
@@ -60,8 +72,9 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 - [ ] Milestone 0: run the same profile for the `keiro/router-worker` role and, if the bands are byte arrays or thunks, the info-table variant for one of the two roles.
 - [ ] Milestone 1: add the `keiro-retention` test suite skeleton (`keiro/retention/Main.hs`, `Retention.Measure`) and prove the probe reports stable heap for the no-store baseline leg.
 - [ ] Milestone 1: add `Retention.Fixture` (target aggregate, process manager, router, ack-coupled adapter) and the kiroku-only legs.
+- [ ] Milestone 1: add an adapter-only leg using the released Shibuya–Kiroku adapter and compare it with the hand-built bridge before attributing worker growth.
 - [ ] Milestone 1: add the process-manager, router, and projection legs; run all legs in report-only mode and record the per-leg tables.
-- [ ] Milestone 2: decide attribution from the Milestone 0 and Milestone 1 evidence, record the decision, and move BUG-1 to `confirmed` or to its terminal status.
+- [ ] Milestone 2: decide attribution from the Milestone 0 and Milestone 1 evidence, record the decision, and re-status BUG-1 only when the evidence supports it.
 - [ ] Milestone 3 (only if keiro owns the retention): profile the retained leg with `-hT` and the info-table build, fix the retaining code, and turn the leg into an asserting gate.
 - [ ] Milestone 4: wire `cabal test keiro-retention` into `just haskell-test`, update `keiro/CHANGELOG.md`, close or re-status BUG-1 with `resolution`, validate the bundle, and distill an ADR.
 
@@ -93,6 +106,10 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 
 - Decision: closure vocabulary. `confirmed` when the in-repo harness reproduces retention in a keiro-owned leg; `fixed` with `fixedVersion: unreleased` once the fix lands on `master`; `duplicate` with `duplicateOf` pointing at the upstream report when a kiroku-only or adapter-only leg retains; `cannot-reproduce` with a `resolution` naming the evidence when every in-repo leg is flat and the Kenshou profile names only harness-owned closures.
   Rationale: these are the statuses the shared `coordination.bugReports` profile allows, and each terminal status must carry `resolution` under `--strict`.
+  Date: 2026-09-24
+
+- Decision: measure the real adapter as a separate leg and require matching growth and closure evidence before assigning an upstream owner.
+  Rationale: the original fixture reproduced the adapter's ack protocol by hand, so it could not isolate Shibuya adapter retention. A growing kiroku leg also does not by itself prove that the worker's growing objects have the same source. Keep ambiguous cases open for a focused profile rather than closing BUG-1 as a duplicate.
   Date: 2026-09-24
 
 
@@ -261,8 +278,8 @@ statement registry is bounded and is not a candidate.
   pattern.
 - `keiro/test/Main.hs` shows an in-memory adapter (`inMemoryAdapter`, line 18212) and a real
   ack-coupled subscription consumed by hand (`subscriptionAckStream store subConfig 4`, line
-  730). The retention fixture combines the two: a real subscription wrapped into an
-  `Adapter`.
+  730). The retention fixture combines the two for a kiroku bridge control. A separate
+  adapter-only leg must call the actual `shibuya-kiroku-adapter` used by Kenshou.
 - Kenshou's `kenshou diagnose profile` command (parser in
   `kenshou-cli/src/Kenshou/Cli/Diagnose.hs`) runs a scenario under RTS heap profiling.
   `--mode closure-type` passes `-hT` to the ordinary build; `--mode info-table` needs the
@@ -428,8 +445,11 @@ The fixture (`keiro/retention/Retention/Fixture.hs`). It defines, following
   The returned `IO ()` is the cancel action.
 - `sampleOnAck :: Int -> (Int -> IO ()) -> IO () -> Adapter es msg -> Adapter es msg`, the
   interposer that counts finalized acks, runs the sampler callback after every `blockSize`
-  acks, and runs the cancel action after the last expected ack so the worker's stream ends
-  and the worker function returns.
+  acks, and runs the supplied cancel action after the last expected ack so the worker's stream
+  ends and the worker function returns. For the real adapter, obtain that action from its
+  `shutdown` field through the fixture's `StoreRunner`. Preserve the other adapter fields.
+  Sampling inside `finalize` can retain the current handler frame and fetched batch;
+  confirm growing tables with a profile and a post-worker-return sample before attribution.
 
 The legs (`keiro/retention/Retention/Legs.hs`), each a function from the fixture handle
 (`KirokuStore`, `StoreRunner`) to `IO ()` per operation, in this order:
@@ -442,12 +462,19 @@ The legs (`keiro/retention/Retention/Legs.hs`), each a function from the fixture
 3. `kiroku-subscribe-ack`: before the loop, append `operations` source events; the loop is
    the consumer side of `subscriptionAckStream` replying `Continue` to every item, with the
    sampler driven every `blockSize` items. Kiroku's subscription worker and bridge only.
-4. `pm-worker`: pre-append the source events, then `runProcessManagerWorkerWith
+4. `shibuya-adapter-ack`: use `Shibuya.Adapter.Kiroku.kirokuAdapter` with
+   `defaultKirokuAdapterConfig` targeting only `retention-source`; consume its source,
+   finalize each item as `AckOk`, and call its `shutdown` at the operation limit. This
+   measures the released adapter's envelope and ack conversion on the same kiroku
+   subscription, without keiro dispatch. Match subscription configuration and fixture
+   events across this leg and the worker legs.
+5. `pm-worker`: pre-append the source events, then `runProcessManagerWorkerWith
    defaultWorkerOptions defaultRunCommandOptions retentionManager (sampleOnAck ...
-   adapter) decodeSignal`. One operation is one delivered source event, which performs the
+   realAdapter) decodeSignal`, where `realAdapter` comes from `kirokuAdapter`. One
+   operation is one delivered source event, which performs the
    manager append, the duplicate probes, and one target dispatch.
-5. `router-worker`: as 4 with `runRouterWorkerWith` and fan-out four.
-6. `projection-apply`: register a read model named `retention-activity` with
+6. `router-worker`: as 5 with `runRouterWorkerWith` and fan-out four.
+7. `projection-apply`: register a read model named `retention-activity` with
    `Keiro.ReadModel.Schema.registerReadModel` (as `keiro/test/CatalogSpec.hs` does for its
    fixtures), define an `AsyncProjection` whose `applyRecorded` does nothing and whose
    `idempotencyKey` is the event id (the same shape as `catalogAsyncProjection` at
@@ -462,7 +489,7 @@ hspec program under `withMigratedSuite`, one `it` per leg wrapped in
 
 Acceptance: from the repository root,
 `KEIRO_RETENTION_REPORT_ONLY=1 cabal test keiro-retention --test-show-details=direct` prints
-six tables and exits 0; the `baseline-no-store` table shows growth under 0.5 MiB. Tables for
+seven tables and exits 0; the `baseline-no-store` table shows growth under 0.5 MiB. Tables for
 the other legs are copied into Surprises & Discoveries.
 
 
@@ -470,29 +497,35 @@ the other legs are copied into Surprises & Discoveries.
 
 
 Scope: decide, from Milestone 0 and the Milestone 1 tables, which layer retains. Record the
-decision and move BUG-1 accordingly. Three outcomes are possible and each has a fixed
-follow-up:
+decision and move BUG-1 only when the worker evidence supports it. Ambiguous evidence calls
+for another focused profile and leaves the report open. The outcomes are:
 
-- `pm-worker` or `router-worker` retains while `kiroku-append-probe` and
-  `kiroku-subscribe-ack` are bounded: keiro owns it. Set `status: confirmed` and continue
-  with Milestone 3.
-- `kiroku-append-probe` or `kiroku-subscribe-ack` retains: the store layer owns it. Capture
-  a closure-type profile of the retaining leg (Milestone 3's first command, run on that
-  leg), file a bug report in the kiroku repository's bug-report bundle
+- `pm-worker` or `router-worker` retains while `kiroku-append-probe`,
+  `kiroku-subscribe-ack`, and `shibuya-adapter-ack` are bounded: profile the retaining worker
+  after confirming growth outside the finalize callback. If the growing allocations belong
+  to keiro's dispatch path, set `status: confirmed` and continue with Milestone 3.
+- A kiroku-only leg retains and its growth rate and closure profile match the retaining
+  worker: the store layer is the likely owner. File a bug report in the kiroku repository's
+  bug-report bundle
   (`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`, whose reports use the
   `mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-N` shape) with the leg as the
-  reproduction, and close BUG-1 as `duplicate` with `duplicateOf` set to that URI and a
-  `resolution` explaining the attribution. The kiroku-side report and fix are outside this
-  plan's repository and are recorded here only as a hand-off. Skip Milestone 3.
+  reproduction. Close BUG-1 as `duplicate` only after the worker evidence supports the
+  same cause; otherwise leave it `reported` and profile the worker separately. The
+  kiroku-side report and fix are outside this plan's repository and are recorded here only
+  as a hand-off. Skip Milestone 3 only for the matching upstream case.
+- `shibuya-adapter-ack` retains while the kiroku-only legs are bounded: profile that leg
+  and the worker, then file the upstream report against the adapter only if the growing
+  closures match. Keep BUG-1 open if the worker has additional growth.
 - Every leg is bounded at the default size and at `KEIRO_RETENTION_OPERATIONS=20000` for
   the two worker legs, and the Milestone 0 bands name only `Kenshou.*` closures or thread
   stacks of Kenshou threads: close BUG-1 as `cannot-reproduce` with a `resolution` that
   cites the leg tables and the profile bands, and write the hand-off text for Kenshou (the
   finding record and the scenario's `knownDefect` are theirs to update). Skip Milestone 3.
 
-In all three cases update `docs/bug-reports/1-write-side-workers-retain-heap-during-steady-soak.md`:
+When attribution is supported, update `docs/bug-reports/1-write-side-workers-retain-heap-during-steady-soak.md`:
 set `status`, add `resolution` when terminal, add `duplicateOf` when duplicate, set
-`generated.by` to `process:claude-code` and `generated.at` to the current UTC time, and
+`generated.by` to the process actually making the edit and `generated.at` to the current
+UTC time, and
 append a short "Attribution" paragraph to the body naming the legs and their verdicts. Then:
 
 ```bash
@@ -620,12 +653,13 @@ Intention: intention_01m38mx70deekbhtqefq54bpxx
 
 The plan is complete when all of the following hold:
 
-1. `cabal test keiro-retention` runs the six legs from an empty ephemeral database and
+1. `cabal test keiro-retention` runs the seven legs from an empty ephemeral database and
    prints one table per leg. With the default sizes the run finishes in well under five
    minutes on a laptop; if it does not, reduce `blockSize` before reducing `blocks`, because
    the verdict needs at least five kept samples.
-2. `baseline-no-store`, `kiroku-append-probe`, and `kiroku-subscribe-ack` are `bounded`, or
-   the plan's Decision Log records the upstream attribution and BUG-1 is `duplicate` with a
+2. `baseline-no-store`, `kiroku-append-probe`, `kiroku-subscribe-ack`, and
+   `shibuya-adapter-ack` are `bounded`, or the plan's Decision Log records matching upstream
+   attribution and BUG-1 is `duplicate` with a
    resolvable `duplicateOf`.
 3. `pm-worker` and `router-worker` are `bounded` at the default size and at 20,000
    operations, either because they always were (then BUG-1 is `cannot-reproduce` with the
@@ -672,10 +706,13 @@ test-suite keiro-retention
   build-depends:
     aeson, base, containers, deepseq, effectful, effectful-core, hasql, hasql-transaction,
     hspec, keiki, keiki-codec-json, keiro, keiro-core, keiro-test-support, kiroku-store,
-    shibuya-core, stm, streamly-core, text, time, uuid, vector
+    shibuya-core, shibuya-kiroku-adapter, stm, streamly-core, text, time, uuid, vector
 ```
 
-Use the same version bounds the `keiro-test` stanza uses for each of these packages.
+Use the same version bounds the `keiro-test` stanza uses for packages already present
+there. For `shibuya-kiroku-adapter`, verify the current release in the authoritative
+package registry and its upstream tag, then choose a bound covering that release and
+record which adapter version the retention suite actually used.
 
 `Retention.Measure` must export:
 
@@ -713,7 +750,8 @@ and `allLegs :: [Leg]` in the order listed in Milestone 1.
 Dependencies and why: `keiro-test-support` for the migrated ephemeral database;
 `kiroku-store` for `subscriptionAckStream`, `withSubscription`, `appendToStream`, and
 `eventExistsInStream`; `shibuya-core` for `Adapter`, `Ingested`, `Envelope`, `AckHandle`,
-and `AckDecision`; `streamly-core` for `Stream.morphInner` and `Stream.mapM`; `keiki` and
+and `AckDecision`; `shibuya-kiroku-adapter` for the real `kirokuAdapter`;
+`streamly-core` for `Stream.morphInner` and `Stream.mapM`; `keiki` and
 `keiki-codec-json` for the fixture transducer and codecs; `hspec` for the runner. Resolved
 versions in this workspace when the plan was written: kiroku-store 0.8.0.2, shibuya-core
 0.9.0.3, hasql 1.10.3.7, hasql-pool 1.4.2.3, streamly-core 0.3.1, effectful 2.6.1.0, GHC
@@ -724,3 +762,12 @@ the failing cohort, diff the tags in the kiroku checkout
 (`git diff kiroku-store-v0.8.0.1 kiroku-store-v0.8.0.2 -- kiroku-store/src/Kiroku/Store/Subscription`
 and the same for `shibuya-kiroku-adapter-v0.5.1.2..v0.5.1.3`) and record the result in
 Surprises & Discoveries.
+
+
+## Revision Notes
+
+
+- 2026-09-24: Reviewed this plan with plan 298 and added a real-adapter control. Attribution
+  now requires matching worker evidence before closing BUG-1 as an upstream duplicate;
+  samples inside ack finalization are explicitly treated as provisional. This addresses
+  the gap between the hand-built adapter and Kenshou's actual worker path.
