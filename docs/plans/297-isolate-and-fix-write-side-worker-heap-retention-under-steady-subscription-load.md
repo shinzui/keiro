@@ -16,6 +16,11 @@ provenance:
       at: 2026-09-24T05:09:54Z
       mode: "update"
       note: "Added real-adapter control and evidence requirements for upstream attribution"
+    - model: "gpt-6-sol"
+      harness: "codex-cli"
+      at: 2026-09-25T18:45:09Z
+      mode: "implement"
+      note: "Attempted Kenshou profiles and began dependency validation for the retention harness"
   reviews:
     - model: "gpt-6-sol"
       harness: "codex-cli"
@@ -68,9 +73,9 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 
 
 - [x] (2026-09-24) Link this plan from the BUG-1 report body and record the link in `docs/bug-reports/log.md`; the bundle validated under `--strict`.
-- [ ] Milestone 0: run Kenshou's closure-type profile of the reduced write-side soak for the `keiro/pm-worker` role and record the growing bands in Surprises & Discoveries.
-- [ ] Milestone 0: run the same profile for the `keiro/router-worker` role and, if the bands are byte arrays or thunks, the info-table variant for one of the two roles.
-- [ ] Milestone 1: add the `keiro-retention` test suite skeleton (`keiro/retention/Main.hs`, `Retention.Measure`) and prove the probe reports stable heap for the no-store baseline leg.
+- [x] (2026-09-25) Milestone 0: attempt Kenshou's closure-type profile for `keiro/pm-worker`; the run failed before a worker became ready and produced no event log.
+- [x] (2026-09-25) Milestone 0: attempt the same profile for `keiro/router-worker`; it failed at the same point. Per the milestone's recovery rule, proceed to the in-repo harness without closure bands.
+- [x] (2026-09-25) Milestone 1: add the `keiro-retention` test suite skeleton (`keiro/retention/Main.hs`, `Retention.Measure`) and prove the probe reports stable heap for the no-store baseline leg.
 - [ ] Milestone 1: add `Retention.Fixture` (target aggregate, process manager, router, ack-coupled adapter) and the kiroku-only legs.
 - [ ] Milestone 1: add an adapter-only leg using the released Shibuya–Kiroku adapter and compare it with the hand-built bridge before attributing worker growth.
 - [ ] Milestone 1: add the process-manager, router, and projection legs; run all legs in report-only mode and record the per-leg tables.
@@ -82,7 +87,11 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 ## Surprises & Discoveries
 
 
-(None yet.)
+- 2026-09-25: The two closure-type sessions, `.dev/profiles/profile-20260925T184247Z-closure-type` and `.dev/profiles/profile-20260925T184421Z-closure-type` in the Kenshou checkout, each exited 4 with `reason: "user error (worker did not become ready)"` and a zero-byte event log. There are no closure bands to attribute. The Kenshou checkout had unrelated pre-existing edits in `docs/layers/pgmq.md` and `kenshou-pgmq/src/Kenshou/Suite/Pgmq/Concurrency/Runner.hs`; this plan did not change them.
+
+- 2026-09-25: The current Keiro tree is version 0.18.0.0 and requires `kiroku-store >=0.9 && <0.10` with `shibuya-core ^>=0.9.0.0`. Hackage's latest released `shibuya-kiroku-adapter` is 0.5.1.4, also tagged upstream, but it requires `shibuya-core >=0.10 && <0.11`. The cohort adapter 0.5.1.2 requires `kiroku-store ^>=0.8` and `shibuya-core >=0.9 && <0.10`; version 0.5.1.3 already requires Shibuya 0.10. No published adapter version has bounds for the current Keiro combination. The 0.8.0.1 to 0.8.0.2 subscription diff adds cancellation masking and test hooks; the 0.5.1.2 to 0.5.1.3 adapter diff changes the supervised handler contract and consumer-group acquisition, so the cohort comparison needs explicit version context.
+
+- 2026-09-25: The first `keiro-retention` run passed its no-store baseline with six post-major samples, 5 B/op fitted slope, 0.01 MiB growth, and a flat 105,920-byte large-object reading. This confirms that the measurement code and its `-T` RTS setting work before adding store activity.
 
 
 ## Decision Log
@@ -111,6 +120,10 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 - Decision: measure the real adapter as a separate leg and require matching growth and closure evidence before assigning an upstream owner.
   Rationale: the original fixture reproduced the adapter's ack protocol by hand, so it could not isolate Shibuya adapter retention. A growing kiroku leg also does not by itself prove that the worker's growing objects have the same source. Keep ambiguous cases open for a focused profile rather than closing BUG-1 as a duplicate.
   Date: 2026-09-24
+
+- Decision: treat Milestone 0 as an attempted diagnostic and continue with Milestone 1 after both worker-role profiles failed before startup.
+  Rationale: neither profile produced an event log or closure bands, and the plan explicitly allows the independent in-repo harness to proceed when the reduced soak cannot start. Attribution must therefore rely on the harness and any later focused profile; a failed profile is not evidence for any owner.
+  Date: 2026-09-25
 
 
 ## Outcomes & Retrospective
