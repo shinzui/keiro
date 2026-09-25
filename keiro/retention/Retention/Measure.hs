@@ -21,7 +21,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.IO qualified as Text.IO
 import Data.Word (Word64)
-import GHC.Conc (listThreads)
+import GHC.Conc (ThreadStatus (..), listThreads, threadStatus)
 import GHC.Stats (GCDetails (..), RTSStats (..), getRTSStats, getRTSStatsEnabled)
 import Numeric (showFFloat)
 import System.Environment (lookupEnv)
@@ -87,7 +87,8 @@ sampleHeap count = do
   unless enabled $ fail "keiro-retention requires RTS statistics; run with +RTS -T -RTS"
   performMajorGC
   stats <- getRTSStats
-  threadCount <- length <$> listThreads
+  statuses <- listThreads >>= traverse threadStatus
+  let threadCount = length (filter isActive statuses)
   pure
     HeapSample
       { operations = count,
@@ -95,6 +96,12 @@ sampleHeap count = do
         largeObjectBytes = gcdetails_large_objects_bytes stats.gc,
         threads = threadCount
       }
+  where
+    -- listThreads also returns finished Async handles that can remain
+    -- reachable during a measurement loop. They are not running workers.
+    isActive ThreadFinished = False
+    isActive ThreadDied = False
+    isActive _ = True
 
 judge :: GateConfig -> [HeapSample] -> (Verdict, Double, Word64)
 judge config allSamples =

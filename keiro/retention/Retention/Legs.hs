@@ -21,10 +21,14 @@ import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Exception qualified as Effectful
 import Keiro.Command (defaultRunCommandOptions)
+import Keiro.Command qualified as Command
+import Keiro.EventStream.Validate (unvalidated)
 import Keiro.ProcessManager (defaultWorkerOptions, runProcessManagerWorkerWith)
 import Keiro.Projection (AsyncApplyOutcome (..), AsyncProjection (..), applyAsyncProjection)
 import Keiro.ReadModel.Schema (registerReadModel)
 import Keiro.Router (runRouterWorkerWith)
+import Keiro.Snapshot.Schema (SnapshotRow (..), lookupSnapshotRow)
+import Keiro.Stream qualified as KeiroStream
 import Keiro.Test.Postgres (StoreRunner (..))
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Subscription qualified as Subscription
@@ -32,7 +36,7 @@ import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (SubscriptionConfig, SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..), defaultSubscriptionConfig)
 import Kiroku.Store.Transaction qualified as StoreTx
 import Kiroku.Store.Types (CategoryName (..), EventData (..), EventId (..), EventType (..), ExpectedVersion (..), RecordedEvent, StreamName (..), StreamVersion (..))
-import Retention.Fixture (ackAdapter, appendSignals, decodeSignal, retentionManager, retentionRouter, sampleOnAck)
+import Retention.Fixture (LedgerCommand (..), TargetCommand (..), TargetEventStream, ackAdapter, appendSignals, decodeSignal, ledgerTarget, retentionLedger, retentionManager, retentionRouter, retentionTargetStream, sampleOnAck, seedLedger, seedLedgerRaw)
 import Retention.Measure (GateConfig (..), HeapSample (..), Verdict (..), measureLeg, measureLegWithSampler, sampleHeap)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Adapter.Kiroku (defaultKirokuAdapterConfig, kirokuAdapter)
@@ -62,11 +66,86 @@ allLegs =
     Leg "shibuya-adapter-ack" shibuyaAdapterAck,
     Leg "pm-worker" pmWorker,
     Leg "router-worker" routerWorker,
-    Leg "projection-apply" projectionApply
+    Leg "projection-apply" projectionApply,
+    Leg "command-long-history" commandLongHistory,
+    Leg "hydrate-only" hydrateOnly,
+    Leg "kiroku-read-tail" kirokuReadTail,
+    Leg "command-short-history" commandShortHistory,
+    Leg "command-long-history-verify-every" commandLongHistoryVerifyEvery
   ]
 
 operationCount :: GateConfig -> Int
 operationCount config = config.blocks * config.blockSize
+
+commandLongHistory :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+commandLongHistory = commandLongHistoryWithRate "command-long-history" 0
+
+commandLongHistoryVerifyEvery :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+commandLongHistoryVerifyEvery = commandLongHistoryWithRate "command-long-history-verify-every" 1
+
+commandLongHistoryWithRate :: Text -> Int -> GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+commandLongHistoryWithRate name rate config (_, runner@(StoreRunner runStore)) = do
+  seedLedger runner ledgerTarget 10_000
+  let options = defaultRunCommandOptions {Command.seedVerifySampleRate = rate}
+  measured <- measureLeg config name \index -> do
+    outcome <- runStore (Command.runCommand options retentionLedger ledgerTarget (Deposit 1))
+    case outcome of
+      Right (Right result)
+        | result.eventsAppended == 1
+            && result.streamVersion == StreamVersion (fromIntegral (10_000 + index)) ->
+            pure ()
+      other -> fail (Text.unpack name <> ": command " <> show index <> ": " <> show other)
+  snapshot <- runStore do
+    maybeId <- Store.lookupStreamId (KeiroStream.streamName ledgerTarget)
+    traverse lookupSnapshotRow maybeId
+  let expectedSnapshot = StreamVersion (fromIntegral (((10_000 + operationCount config) `div` 100) * 100))
+  case snapshot of
+    Right (Just (Just row)) | row.streamVersion == expectedSnapshot -> pure ()
+    other -> fail (Text.unpack name <> ": final snapshot: " <> show other)
+  postReturn name (operationCount config)
+  pure measured
+
+hydrateOnly :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+hydrateOnly config (_, runner@(StoreRunner runStore)) = do
+  seedLedger runner ledgerTarget 10_000
+  let options = defaultRunCommandOptions {Command.seedVerifySampleRate = 0}
+  measured <- measureLeg config "hydrate-only" \_ -> do
+    outcome <- runStore (Command.hydrate options (unvalidated retentionLedger) ledgerTarget)
+    case outcome of
+      Right (Right hydrated) | hydrated.streamVersion == StreamVersion 10_000 -> pure ()
+      Right (Right hydrated) -> fail ("hydrate-only: unexpected version " <> show hydrated.streamVersion)
+      Right (Left failure) -> fail ("hydrate-only: " <> show failure)
+      Left failure -> fail ("hydrate-only: " <> show failure)
+  postReturn "hydrate-only" (operationCount config)
+  pure measured
+
+kirokuReadTail :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+kirokuReadTail config (_, runner@(StoreRunner runStore)) = do
+  seedLedgerRaw runner ledgerTarget 10_000
+  let name = KeiroStream.streamName ledgerTarget
+  measured <- measureLeg config "kiroku-read-tail" \_ -> do
+    outcome <- runStore do
+      maybeId <- Store.lookupStreamId name
+      events <- Store.readStreamForward name (StreamVersion 9_900) 256
+      pure (maybeId, events)
+    case outcome of
+      Right (Just _, events) | Vector.length events == 100 -> pure ()
+      other -> fail ("kiroku-read-tail: " <> show (fmap (\(streamId, events) -> (streamId, Vector.length events)) other))
+  postReturn "kiroku-read-tail" (operationCount config)
+  pure measured
+
+commandShortHistory :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+commandShortHistory config (_, StoreRunner runStore) = do
+  let options = defaultRunCommandOptions {Command.seedVerifySampleRate = 0}
+  measured <- measureLeg config "command-short-history" \index -> do
+    let target = KeiroStream.stream ("retentiontarget-" <> Text.pack (show (index `mod` 16))) :: KeiroStream.Stream TargetEventStream
+        expected = StreamVersion (fromIntegral ((index - 1) `div` 16 + 1))
+    outcome <- runStore (Command.runCommand options retentionTargetStream target (Credit 1))
+    case outcome of
+      Right (Right result) | result.eventsAppended == 1 && result.streamVersion == expected -> pure ()
+      other -> fail ("command-short-history: command " <> show index <> ": " <> show other)
+  postReturn "command-short-history" (operationCount config)
+  pure measured
 
 baselineNoStore :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
 baselineNoStore config _ =

@@ -9,6 +9,15 @@ module Retention.Fixture
     TargetEvent (..),
     TargetEventStream,
     retentionTargetStream,
+    LedgerCommand (..),
+    LedgerEvent (..),
+    LedgerRegs,
+    LedgerState (..),
+    RetentionLedgerStream,
+    retentionLedger,
+    ledgerTarget,
+    seedLedger,
+    seedLedgerRaw,
     retentionManager,
     retentionRouter,
     retentionTarget,
@@ -36,6 +45,7 @@ import Keiki.Core
   ( Edge (..),
     HsPred,
     InCtor,
+    IndexN,
     RegFile (..),
     SymTransducer (..),
     Update (..),
@@ -44,18 +54,21 @@ import Keiki.Core
     matchInCtor,
     oNil,
     pack,
+    proj,
     unavailableInCtor,
     unavailableWireCtor,
     (*:),
   )
 import Keiki.Core qualified as Keiki
 import Keiki.Shape (CanonicalStateShape)
-import Keiro.Codec (Codec (..))
+import Keiro.Codec (Codec (..), encodeForAppend)
+import Keiro.Command qualified as Command
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
-import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
+import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow, unvalidated)
 import Keiro.ProcessManager (PMCommand (..), ProcessManager (..), ProcessManagerAction (..))
 import Keiro.Router (Router (..))
 import Keiro.Snapshot.Codec (defaultStateCodec)
+import Keiro.Snapshot.Schema (SnapshotRow (..), lookupSnapshotRow)
 import Keiro.Stream (Stream, stream)
 import Keiro.Stream qualified as Stream
 import Keiro.Test.Postgres (StoreRunner (..))
@@ -66,7 +79,7 @@ import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (SubscriptionConfig)
 import Kiroku.Store.Subscription.Types qualified as Sub
-import Kiroku.Store.Types (EventData (..), EventId (..), EventType (..), ExpectedVersion (..), GlobalPosition (..), RecordedEvent (..), StreamName (..))
+import Kiroku.Store.Types (EventData (..), EventId (..), EventType (..), ExpectedVersion (..), GlobalPosition (..), RecordedEvent (..), StreamName (..), StreamVersion (..))
 import Numeric.Natural (Natural)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Core.Ack (AckDecision (..))
@@ -96,6 +109,112 @@ data TargetState = TargetReady
 instance CanonicalStateShape TargetState
 
 type TargetEventStream = EventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
+
+data LedgerCommand = Deposit !Int
+  deriving stock (Eq, Show)
+
+data LedgerEvent = Deposited !Int
+  deriving stock (Eq, Show)
+
+data LedgerState = LedgerReady
+  deriving stock (Bounded, Enum, Eq, Generic, Ord, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalStateShape LedgerState
+
+type LedgerRegs = '[ '("balance", Int)]
+
+type RetentionLedgerStream = EventStream (HsPred LedgerRegs LedgerCommand) LedgerRegs LedgerState LedgerCommand LedgerEvent
+
+retentionLedger :: ValidatedEventStream (HsPred LedgerRegs LedgerCommand) LedgerRegs LedgerState LedgerCommand LedgerEvent
+retentionLedger = mkEventStreamOrThrow "retention-ledger" ledgerStreamDef
+
+ledgerTarget :: Stream RetentionLedgerStream
+ledgerTarget = stream "retentionledger-account"
+
+ledgerStreamDef :: RetentionLedgerStream
+ledgerStreamDef =
+  EventStream
+    { transducer =
+        SymTransducer
+          { edgesOut = \LedgerReady ->
+              [ Edge
+                  { guard = matchInCtor depositCtor,
+                    update =
+                      USet
+                        (#balance :: IndexN "balance" LedgerRegs Int)
+                        (proj (#balance :: Keiki.Index LedgerRegs Int) Keiki..+ inpCtor depositCtor #amount),
+                    output = [pack depositCtor depositedCtor (inpCtor depositCtor #amount *: oNil)],
+                    target = LedgerReady,
+                    mode = Keiki.Live
+                  }
+              ],
+            initial = LedgerReady,
+            initialRegs = RCons (Proxy @"balance") 0 RNil,
+            isFinal = \_ -> False
+          },
+      initialState = LedgerReady,
+      initialRegisters = RCons (Proxy @"balance") 0 RNil,
+      eventCodec =
+        Codec
+          { eventTypes = EventType "Deposited" :| [],
+            eventType = \_ -> EventType "Deposited",
+            schemaVersion = 1,
+            encode = \(Deposited amount) -> toJSON amount,
+            decode = \_ value -> case fromJSON value of
+              Success amount -> Right (Deposited amount)
+              Error message -> Left (Text.pack message),
+            upcasters = []
+          },
+      resolveStreamName = Stream.streamName,
+      snapshotPolicy = Every 100,
+      stateCodec = Just (defaultStateCodec @LedgerRegs @LedgerState 1)
+    }
+
+depositCtor :: InCtor LedgerCommand '[ '("amount", Int)]
+depositCtor =
+  unavailableInCtor
+    "Deposit"
+    (\(Deposit amount) -> Just (RCons Proxy amount RNil))
+    (\(RCons _ amount RNil) -> Deposit amount)
+
+depositedCtor :: WireCtor LedgerEvent (Int, ())
+depositedCtor =
+  unavailableWireCtor
+    "Deposited"
+    (\(Deposited amount) -> Just (amount, ()))
+    (\(amount, ()) -> Deposited amount)
+
+seedLedger :: StoreRunner -> Stream RetentionLedgerStream -> Int -> IO ()
+seedLedger runner@(StoreRunner runStore) target count = do
+  unless (count > 0 && count `mod` 100 == 0) $
+    fail "seedLedger requires a positive multiple of 100 events"
+  seedLedgerRaw runner target (count - 1)
+  commandResult <- runStore (Command.runCommand Command.defaultRunCommandOptions {Command.seedVerifySampleRate = 0} retentionLedger target (Deposit 1))
+  case commandResult of
+    Right (Right result) | result.eventsAppended == 1 && result.streamVersion == StreamVersion (fromIntegral count) -> pure ()
+    other -> fail ("seedLedger command: " <> show other)
+  snapshot <- runStore do
+    maybeId <- Store.lookupStreamId (Stream.streamName target)
+    traverse lookupSnapshotRow maybeId
+  case snapshot of
+    Right (Just (Just row)) | row.streamVersion == StreamVersion (fromIntegral count) -> pure ()
+    other -> fail ("seedLedger snapshot: " <> show other)
+
+seedLedgerRaw :: StoreRunner -> Stream RetentionLedgerStream -> Int -> IO ()
+seedLedgerRaw (StoreRunner runStore) target count = appendChunks count
+  where
+    eventStream = unvalidated retentionLedger
+    name = Stream.streamName target
+    seededEvent = either (error . show) Prelude.id (encodeForAppend eventStream.eventCodec (Deposited 1))
+    appendChunks remaining
+      | remaining <= 0 = pure ()
+      | otherwise = do
+          let chunk = min 500 remaining
+          result <- runStore (Store.appendToStream name AnyVersion (replicate chunk seededEvent))
+          case result of
+            Left failure -> fail ("seedLedger append: " <> show failure)
+            Right _ -> appendChunks (remaining - chunk)
 
 retentionTargetStream :: ValidatedEventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
 retentionTargetStream = mkEventStreamOrThrow "retention-target" targetStreamDef
