@@ -6,8 +6,36 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Upgrade the Kiroku dependency cohort to
+  [`kiroku-store`](mori://shinzui/kiroku/packages/kiroku-store) 0.9.0.0 and
+  [`kiroku-store-migrations`](mori://shinzui/kiroku/packages/kiroku-store-migrations)
+  0.6.0.0. Its new migration (`mori://shinzui/kiroku` at
+  `kiroku-store-migrations/migrations/0012.sql`; artifact URI pending) backfills
+  the category on every `$all` junction row and adds the index used by category
+  reads. For persistent databases, stop all processes that append with Kiroku
+  0.8 before applying the migration, then start the new binaries. Old writers
+  cannot append after `0012`, and new writers cannot append before it; the backfill
+  blocks appends while it runs. Rehearse on a restored database to size the
+  maintenance window, and run `VACUUM (ANALYZE) kiroku.stream_events` after
+  migration. Keiro's composed migration plan includes it before its own
+  migrations.
+
+### Fixes
+
+- Category reads and category subscriptions now use Kiroku's category index,
+  avoiding work proportional to the number of streams in the category.
+
 ### Other Changes
 
+- `keiro-migrations` and `keiro-test-support` move to the
+  [`pg-migrate`](mori://shinzui/pg-migrate/packages/pg-migrate) 1.2
+  package family required by the new Kiroku migrations. The obsolete
+  `pg-migrate-test-support:ephemeral-pg` `allow-newer` exception is removed.
+  A targeted `allow-newer` lets the test-only
+  [`pgmq-migration`](mori://shinzui/pgmq-hs/packages/pgmq-migration) 0.6.1.0
+  use the API-compatible `pg-migrate` 1.2 packages until its bounds widen.
 - New `keiro-reexports` verification policy fails the build when generated code
   imports a `keiro-core` module that `keiro` does not re-export. The in-repo
   conformance suites depend on `keiro-core` directly and structurally cannot

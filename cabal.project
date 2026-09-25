@@ -24,9 +24,10 @@ source-repository-package
   location: https://github.com/mzabani/codd.git
   tag: v0.1.8
 
--- pg-migrate-test-support-1.1.0.0 caps ephemeral-pg <0.3 but only uses Config
--- record updates, which 0.3's new sweepStaleOnStart field does not break. Drop
--- this once a Hackage revision or release widens the bound.
+-- pgmq-migration 0.6.1.0 caps these at 1.1; their 1.2 releases make no API or
+-- behavior changes. Kiroku's migration component requires the 1.2 family.
 allow-newer:
   haxl:time,
-  pg-migrate-test-support:ephemeral-pg
+  pgmq-migration:pg-migrate,
+  pgmq-migration:pg-migrate-embed,
+  pgmq-migration:pg-migrate-import-hasql-migration
