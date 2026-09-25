@@ -6,6 +6,12 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Other Changes
+
+- Add the `keiro-retention` test suite to `just verify`, with post-major heap
+  measurements for isolated store, adapter, process-manager, router, and
+  projection workloads (BUG-1).
+
 ## 0.18.0.0 — 2026-09-20
 
 

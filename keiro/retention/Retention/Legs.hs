@@ -7,6 +7,7 @@ module Retention.Legs
   )
 where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, putTMVar)
 import Control.Exception (evaluate, finally)
 import Control.Monad (forM_, unless, void, when)
@@ -29,8 +30,9 @@ import Kiroku.Store qualified as Store
 import Kiroku.Store.Subscription qualified as Subscription
 import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (SubscriptionConfig, SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..), defaultSubscriptionConfig)
+import Kiroku.Store.Transaction qualified as StoreTx
 import Kiroku.Store.Types (CategoryName (..), EventData (..), EventId (..), EventType (..), ExpectedVersion (..), RecordedEvent, StreamName (..), StreamVersion (..))
-import Retention.Fixture (appendSignals, decodeSignal, retentionManager, retentionRouter, sampleOnAck)
+import Retention.Fixture (ackAdapter, appendSignals, decodeSignal, retentionManager, retentionRouter, sampleOnAck)
 import Retention.Measure (GateConfig (..), HeapSample (..), Verdict (..), measureLeg, measureLegWithSampler, sampleHeap)
 import Shibuya.Adapter (Adapter (..))
 import Shibuya.Adapter.Kiroku (defaultKirokuAdapterConfig, kirokuAdapter)
@@ -39,7 +41,9 @@ import Shibuya.Core.AckHandle (AckHandle (..))
 import Shibuya.Core.Ingested (Ingested (..))
 import Streamly.Data.Stream (Stream)
 import Streamly.Data.Stream qualified as Streamly
+import System.Environment (lookupEnv)
 import System.Timeout (timeout)
+import Text.Read (readMaybe)
 
 data Leg = Leg
   { legName :: !Text,
@@ -50,7 +54,11 @@ allLegs :: [Leg]
 allLegs =
   [ Leg "baseline-no-store" baselineNoStore,
     Leg "kiroku-append-probe" kirokuAppendProbe,
+    Leg "kiroku-append-only" kirokuAppendOnly,
+    Leg "kiroku-append-tx" kirokuAppendTx,
+    Leg "kiroku-probe-only" kirokuProbeOnly,
     Leg "kiroku-subscribe-ack" kirokuSubscribeAck,
+    Leg "hand-bridge-ack" handBridgeAck,
     Leg "shibuya-adapter-ack" shibuyaAdapterAck,
     Leg "pm-worker" pmWorker,
     Leg "router-worker" routerWorker,
@@ -66,24 +74,87 @@ baselineNoStore config _ =
     void (evaluate (sum (replicate 100 (index `mod` 17))))
 
 kirokuAppendProbe :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
-kirokuAppendProbe config (_, StoreRunner runStore) =
-  measureLeg config "kiroku-append-probe" \index -> do
-    let streamName = StreamName ("retentionplain-" <> Text.pack (show (index `mod` 16)))
-        eventId = EventId (UUID.fromWords 0 0 0 (fromIntegral index))
-        event =
-          EventData
-            { eventId = Just eventId,
-              eventType = EventType "RetentionPlain",
-              payload = toJSON index,
-              metadata = Nothing,
-              causationId = Nothing,
-              correlationId = Nothing
-            }
-    exists <-
-      expectRight =<< runStore do
-        _ <- Store.appendToStream streamName AnyVersion [event]
-        Store.eventExistsInStream streamName eventId
-    unless exists $ fail ("kiroku-append-probe: missing event " <> show index)
+kirokuAppendProbe config (_, StoreRunner runStore) = do
+  measured <- measureLegWithSampler config "kiroku-append-probe" \sample -> do
+    outcome <- runStore $ forM_ [1 .. operationCount config] \index -> do
+      let (streamName, eventId, event) = plainEvent index
+      _ <- Store.appendToStream streamName AnyVersion [event]
+      exists <- Store.eventExistsInStream streamName eventId
+      unless exists $ liftIO $ fail ("kiroku-append-probe: missing event " <> show index)
+      when (index `mod` config.blockSize == 0) $ liftIO (sample index)
+    void (expectRight outcome)
+  postReturn "kiroku-append-probe" (operationCount config)
+  settleSeconds <- lookupEnv "KEIRO_RETENTION_SETTLE_SECONDS"
+  forM_ settleSeconds \rawSeconds -> case readMaybe rawSeconds of
+    Just seconds | seconds > 0 -> do
+      threadDelay (seconds * 1_000_000)
+      settled <- sampleHeap (operationCount config)
+      Text.IO.putStrLn ("settled leg=kiroku-append-probe after_seconds=" <> Text.pack (show seconds) <> " live_bytes=" <> Text.pack (show settled.liveBytes) <> " large_objects_bytes=" <> Text.pack (show settled.largeObjectBytes))
+    _ -> fail "KEIRO_RETENTION_SETTLE_SECONDS must be a positive integer"
+  pure measured
+
+kirokuAppendOnly :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+kirokuAppendOnly config (_, StoreRunner runStore) = do
+  requestedRate <- lookupEnv "KEIRO_RETENTION_APPEND_RATE"
+  delayMicros <- case requestedRate of
+    Nothing -> pure 0
+    Just rawRate -> case readMaybe rawRate of
+      Just rate | rate > 0 -> pure (1_000_000 `div` rate)
+      _ -> fail "KEIRO_RETENTION_APPEND_RATE must be a positive integer"
+  measured <- measureLegWithSampler config "kiroku-append-only" \sample -> do
+    outcome <- runStore $ forM_ [1 .. operationCount config] \index -> do
+      let (streamName, _, event) = plainEvent index
+      _ <- Store.appendToStream streamName AnyVersion [event]
+      when (delayMicros > 0) $ liftIO (threadDelay delayMicros)
+      when (index `mod` config.blockSize == 0) $ liftIO (sample index)
+    void (expectRight outcome)
+  postReturn "kiroku-append-only" (operationCount config)
+  pure measured
+
+kirokuAppendTx :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+kirokuAppendTx config (_, StoreRunner runStore) = do
+  measured <- measureLegWithSampler config "kiroku-append-tx" \sample -> do
+    outcome <- runStore $ forM_ [1 .. operationCount config] \index -> do
+      let (streamName, _, event) = plainEvent index
+      result <- StoreTx.runTransactionAppendingResource streamName AnyVersion [event] (const (pure ()))
+      case result of
+        Left failure -> liftIO $ fail ("kiroku-append-tx: " <> show failure)
+        Right () -> pure ()
+      when (index `mod` config.blockSize == 0) $ liftIO (sample index)
+    void (expectRight outcome)
+  postReturn "kiroku-append-tx" (operationCount config)
+  pure measured
+
+kirokuProbeOnly :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+kirokuProbeOnly config (_, StoreRunner runStore) = do
+  setup <- runStore $ forM_ [1 .. operationCount config] \index -> do
+    let (streamName, _, event) = plainEvent index
+    void (Store.appendToStream streamName AnyVersion [event])
+  void (expectRight setup)
+  measured <- measureLegWithSampler config "kiroku-probe-only" \sample -> do
+    outcome <- runStore $ forM_ [1 .. operationCount config] \index -> do
+      let (streamName, eventId, _) = plainEvent index
+      exists <- Store.eventExistsInStream streamName eventId
+      unless exists $ liftIO $ fail ("kiroku-probe-only: missing event " <> show index)
+      when (index `mod` config.blockSize == 0) $ liftIO (sample index)
+    void (expectRight outcome)
+  postReturn "kiroku-probe-only" (operationCount config)
+  pure measured
+
+plainEvent :: Int -> (StreamName, EventId, EventData)
+plainEvent index =
+  let streamName = StreamName ("retentionplain-" <> Text.pack (show (index `mod` 16)))
+      eventId = EventId (UUID.fromWords 0 0 0 (fromIntegral index))
+      event =
+        EventData
+          { eventId = Just eventId,
+            eventType = EventType "RetentionPlain",
+            payload = toJSON index,
+            metadata = Nothing,
+            causationId = Nothing,
+            correlationId = Nothing
+          }
+   in (streamName, eventId, event)
 
 sourceTarget :: SubscriptionTarget
 sourceTarget = Category (CategoryName "retentionsource")
@@ -112,6 +183,17 @@ consumeAck expected blockSize sample = go 1
           atomically (putTMVar item.ackReply Continue)
           when (index `mod` blockSize == 0) (sample index)
           when (index < expected) (go (index + 1) rest)
+
+handBridgeAck :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
+handBridgeAck config (store, runner@(StoreRunner runStore)) = do
+  appendSignals runner (operationCount config)
+  measured <- measureLegWithSampler config "hand-bridge-ack" \sample -> do
+    outcome <- runStore do
+      (adapter, _) <- liftIO $ ackAdapter store (sourceConfig "retention-hand-bridge-ack") 256
+      consumeAdapter (operationCount config) config.blockSize sample adapter `Effectful.finally` adapter.shutdown
+    void (expectRight outcome)
+  postReturn "hand-bridge-ack" (operationCount config)
+  pure measured
 
 shibuyaAdapterAck :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
 shibuyaAdapterAck config (store, runner@(StoreRunner runStore)) = do
@@ -152,12 +234,14 @@ pmWorker config (store, runner@(StoreRunner runStore)) = do
 
 routerWorker :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verdict, [HeapSample])
 routerWorker config (store, runner@(StoreRunner runStore)) = do
+  let snapshotTargets = operationCount config > 1500
+  Text.IO.putStrLn $ if snapshotTargets then "router-worker target snapshots: Every 100" else "router-worker target snapshots: Never"
   appendSignals runner (operationCount config)
   measured <- measureLegWithSampler config "router-worker" \sample -> do
     outcome <- runStore do
       adapter <- kirokuAdapter store (defaultKirokuAdapterConfig (SubscriptionName "retention-router") sourceTarget)
       instrumented <- sampleOnAck (operationCount config) config.blockSize sample adapter
-      runRouterWorkerWith defaultWorkerOptions defaultRunCommandOptions retentionRouter instrumented decodeSignal
+      runRouterWorkerWith defaultWorkerOptions defaultRunCommandOptions (retentionRouter snapshotTargets) instrumented decodeSignal
         `Effectful.finally` adapter.shutdown
     void (expectRight outcome)
   assertTargets runner (operationCount config) [0 .. 3] (const (operationCount config))

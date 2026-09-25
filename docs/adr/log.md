@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-09-25
+* **Update**: ADR-48: distinguish append and probe controls and paced worker evidence
+* **Addition**: ADR-48: gate worker retention with isolated post-major heap legs
+
 ## 2026-09-20
 * **Update**: ADR-12 preserves historical missing-key semantics for root-optional mapped event fields and records the type-alias canonical-identity boundary; ADR-47 records the immutable Rei adoption proof, explicit empty workflow result, and exact bounded ActionId authoring retirement (plan 295).
 * **Initial update**: ADR-47 recorded package/language eligibility while `mori://shinzui/rei` adoption and implementation retirement were still pending; the later Plan 295 entry above supersedes that interim state after the immutable rehearsal.

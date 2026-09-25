@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Retention.Fixture
   ( Signal (..),
@@ -48,11 +49,13 @@ import Keiki.Core
     (*:),
   )
 import Keiki.Core qualified as Keiki
+import Keiki.Shape (CanonicalStateShape)
 import Keiro.Codec (Codec (..))
 import Keiro.EventStream (EventStream (..), SnapshotPolicy (..))
 import Keiro.EventStream.Validate (ValidatedEventStream, mkEventStreamOrThrow)
 import Keiro.ProcessManager (PMCommand (..), ProcessManager (..), ProcessManagerAction (..))
 import Keiro.Router (Router (..))
+import Keiro.Snapshot.Codec (defaultStateCodec)
 import Keiro.Stream (Stream, stream)
 import Keiro.Stream qualified as Stream
 import Keiro.Test.Postgres (StoreRunner (..))
@@ -87,12 +90,24 @@ data TargetEvent = Credited !Int
   deriving stock (Eq, Show)
 
 data TargetState = TargetReady
-  deriving stock (Bounded, Enum, Eq, Ord, Show)
+  deriving stock (Bounded, Enum, Eq, Generic, Ord, Show)
+  deriving anyclass (FromJSON, ToJSON)
+
+instance CanonicalStateShape TargetState
 
 type TargetEventStream = EventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
 
 retentionTargetStream :: ValidatedEventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
 retentionTargetStream = mkEventStreamOrThrow "retention-target" targetStreamDef
+
+snapshottedTargetStream :: ValidatedEventStream (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent
+snapshottedTargetStream =
+  mkEventStreamOrThrow
+    "retention-target-snapshotted"
+    targetStreamDef
+      { snapshotPolicy = Every 100,
+        stateCodec = Just (defaultStateCodec @'[] @TargetState 1)
+      }
 
 targetStreamDef :: TargetEventStream
 targetStreamDef =
@@ -221,13 +236,13 @@ retentionManager =
           }
     }
 
-retentionRouter :: Router Signal (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent '[Store, Error StoreError, KirokuStoreResource, IOE]
-retentionRouter =
+retentionRouter :: Bool -> Router Signal (HsPred '[] TargetCommand) '[] TargetState TargetCommand TargetEvent '[Store, Error StoreError, KirokuStoreResource, IOE]
+retentionRouter snapshotTargets =
   Router
     { name = "retention-router",
       key = signalId,
       resolve = \_ -> pure [PMCommand (retentionTarget accountNumber) (Credit 1) | accountNumber <- [0 .. 3]],
-      targetEventStream = retentionTargetStream,
+      targetEventStream = if snapshotTargets then snapshottedTargetStream else retentionTargetStream,
       targetProjections = const []
     }
 
