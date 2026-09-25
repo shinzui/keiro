@@ -51,8 +51,14 @@ data GateConfig = GateConfig
 
 gateConfigFromEnvironment :: IO GateConfig
 gateConfigFromEnvironment = do
-  blockCount <- positiveEnv "KEIRO_RETENTION_BLOCKS" 6
   total <- positiveEnv "KEIRO_RETENTION_OPERATIONS" 1500
+  requestedBlocks <- lookupEnv "KEIRO_RETENTION_BLOCKS"
+  blockCount <- case requestedBlocks of
+    Nothing ->
+      case filter (\candidate -> total `mod` candidate == 0) [6 .. 12] of
+        first : _ -> pure first
+        [] -> fail "KEIRO_RETENTION_OPERATIONS needs a divisor from 6 to 12; set KEIRO_RETENTION_BLOCKS explicitly"
+    Just _ -> positiveEnv "KEIRO_RETENTION_BLOCKS" 6
   unless (blockCount >= 6 && total `mod` blockCount == 0) $
     fail "retention probe requires at least 6 blocks and operations divisible by blocks"
   report <- maybe False (const True) <$> lookupEnv "KEIRO_RETENTION_REPORT_ONLY"

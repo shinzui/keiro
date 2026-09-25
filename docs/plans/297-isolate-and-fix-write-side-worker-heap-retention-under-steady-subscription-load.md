@@ -76,9 +76,10 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 - [x] (2026-09-25) Milestone 0: attempt Kenshou's closure-type profile for `keiro/pm-worker`; the run failed before a worker became ready and produced no event log.
 - [x] (2026-09-25) Milestone 0: attempt the same profile for `keiro/router-worker`; it failed at the same point. Per the milestone's recovery rule, proceed to the in-repo harness without closure bands.
 - [x] (2026-09-25) Milestone 1: add the `keiro-retention` test suite skeleton (`keiro/retention/Main.hs`, `Retention.Measure`) and prove the probe reports stable heap for the no-store baseline leg.
-- [ ] Milestone 1: add `Retention.Fixture` (target aggregate, process manager, router, ack-coupled adapter) and the kiroku-only legs.
-- [ ] Milestone 1: add an adapter-only leg using the released Shibuya–Kiroku adapter and compare it with the hand-built bridge before attributing worker growth.
-- [ ] Milestone 1: add the process-manager, router, and projection legs; run all legs in report-only mode and record the per-leg tables.
+- [x] (2026-09-25) Milestone 1: add `Retention.Fixture` (target aggregate, process manager, router, ack-coupled adapter) and the kiroku-only legs.
+- [x] (2026-09-25) Milestone 1: add an adapter-only leg using released Shibuya–Kiroku adapter 0.5.1.2 and compare it with the hand-built bridge.
+- [x] (2026-09-25) Milestone 1: add the process-manager, router, and projection legs; run all seven legs in report-only mode at 60 and 1,500 operations and record the per-leg tables.
+- [ ] Milestone 2: run the worker legs at 20,000 operations, investigate the positive append/probe and process-manager slopes, and obtain closure evidence after the Kenshou profile failure.
 - [ ] Milestone 2: decide attribution from the Milestone 0 and Milestone 1 evidence, record the decision, and re-status BUG-1 only when the evidence supports it.
 - [ ] Milestone 3 (only if keiro owns the retention): profile the retained leg with `-hT` and the info-table build, fix the retaining code, and turn the leg into an asserting gate.
 - [ ] Milestone 4: wire `cabal test keiro-retention` into `just haskell-test`, update `keiro/CHANGELOG.md`, close or re-status BUG-1 with `resolution`, validate the bundle, and distill an ADR.
@@ -92,6 +93,23 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 - 2026-09-25: The current Keiro tree is version 0.18.0.0 and requires `kiroku-store >=0.9 && <0.10` with `shibuya-core ^>=0.9.0.0`. Hackage's latest released `shibuya-kiroku-adapter` is 0.5.1.4, also tagged upstream, but it requires `shibuya-core >=0.10 && <0.11`. The cohort adapter 0.5.1.2 requires `kiroku-store ^>=0.8` and `shibuya-core >=0.9 && <0.10`; version 0.5.1.3 already requires Shibuya 0.10. No published adapter version has bounds for the current Keiro combination. The 0.8.0.1 to 0.8.0.2 subscription diff adds cancellation masking and test hooks; the 0.5.1.2 to 0.5.1.3 adapter diff changes the supervised handler contract and consumer-group acquisition, so the cohort comparison needs explicit version context.
 
 - 2026-09-25: The first `keiro-retention` run passed its no-store baseline with six post-major samples, 5 B/op fitted slope, 0.01 MiB growth, and a flat 105,920-byte large-object reading. This confirms that the measurement code and its `-T` RTS setting work before adding store activity.
+
+- 2026-09-25: Kiroku defines a stream's category as the prefix before its first hyphen (`Kiroku.Store.Types.categoryName`). The proposed `retention-source-*` and `retention-target-*` names would both have category `retention`, causing the source subscription to consume target events as well. The fixture therefore uses `retentionsource-*` and `retentiontarget-*`, with a `Category "retentionsource"` subscription.
+
+- 2026-09-25: All seven legs passed in report-only mode at 60 and at 1,500 operations. The default-sized run took 87.8 seconds with the released 0.5.1.2 adapter, Kiroku 0.9.0.0, and Keiro 0.18.0.0. The six post-major live-byte samples for each leg, followed by fitted slope, kept-sample growth, and verdict, were:
+
+```text
+leg                       live bytes at blocks 1..6                                       slope B/op   growth MiB  verdict
+baseline-no-store         314016 301528 301976 303392 304832 306248                           5           0.00      bounded
+kiroku-append-probe       759976 1163544 1571272 2003152 2373344 2767600                  1604           1.53      bounded
+kiroku-subscribe-ack      1832880 1827048 1829336 1830496 1833360 1835096                   8           0.01      bounded
+shibuya-adapter-ack       2331560 2313776 2316648 2318616 2320600 2321736                   8           0.01      bounded
+pm-worker                 3149912 3529752 3756848 4145112 4331912 4586280                  1075           1.01      bounded
+router-worker             5859280 4185208 3107888 2019488 1606368 1646200                 -2632           0.00      bounded
+projection-apply          1762040 1757960 1802360 1817840 1861256 1877208                  119           0.11      bounded
+```
+
+  The no-store large-object reading was flat at 151,200 bytes and its thread count stayed 28. The append/probe large-object reading rose from 413,440 to 1,735,248 bytes with threads flat at 28. The process-manager large-object reading varied from 411,184 to 509,272 bytes with threads flat at 28; its live-byte slope therefore does not yet match the append/probe's large-object signature. The router's live heap fell as the run progressed. The raw subscription and real adapter matched each other closely. All operations succeeded and the worker target event counts matched the expected counts. Sampling inside callbacks remains provisional; post-return live-byte readings were 1,694,080 (raw subscription), 2,164,504 (adapter), 4,543,152 (manager), 1,594,864 (router), and 1,638,512 (projection).
 
 
 ## Decision Log
@@ -123,6 +141,14 @@ the growth to a layer that both reports exercise, plan 298 shrinks to confirming
 
 - Decision: treat Milestone 0 as an attempted diagnostic and continue with Milestone 1 after both worker-role profiles failed before startup.
   Rationale: neither profile produced an event log or closure bands, and the plan explicitly allows the independent in-repo harness to proceed when the reduced soak cannot start. Attribution must therefore rely on the harness and any later focused profile; a failed profile is not evidence for any owner.
+  Date: 2026-09-25
+
+- Decision: use the cohort's released adapter 0.5.1.2 for the real-adapter legs and narrowly relax its stale `kiroku-store` upper bound in `cabal.project`.
+  Rationale: Hackage and upstream tags agree that 0.5.1.4 is latest, but versions 0.5.1.3 and 0.5.1.4 require Shibuya 0.10 whereas Keiro currently requires Shibuya 0.9. The adapter-facing subscription API did not change between Kiroku 0.8.0.1 and 0.9.0.0, and Cabal successfully built the released 0.5.1.2 adapter with Kiroku 0.9. This keeps the real adapter the same version as the failing Kenshou cohort without upgrading Keiro's queue framework as part of a retention diagnosis. Results still need the Kiroku 0.9 version difference stated in attribution.
+  Date: 2026-09-25
+
+- Decision: when `KEIRO_RETENTION_BLOCKS` is unset, choose the first divisor of the requested operation count from six through twelve.
+  Rationale: the specified 20,000-operation investigation is not divisible by the six-block default, while the gate needs at least five samples after warm-up and equal block sizes. This yields six blocks for 1,500 operations and eight for 20,000; an explicit blocks override remains available.
   Date: 2026-09-25
 
 

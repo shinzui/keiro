@@ -251,6 +251,8 @@ test-suite keiro-retention
   hs-source-dirs: retention
   main-is: Main.hs
   other-modules:
+    Retention.Fixture
+    Retention.Legs
     Retention.Measure
 
   ghc-options:
@@ -259,10 +261,24 @@ test-suite keiro-retention
     "-with-rtsopts=-N -T"
 
   build-depends:
+    aeson >=2.2 && <2.3,
     base >=4.21 && <5,
+    effectful >=2.6 && <2.7,
+    effectful-core >=2.6 && <2.7,
     hspec >=2.11,
+    keiki >=0.9 && <0.10,
+    keiki-codec-json >=0.9 && <0.10,
+    keiro,
+    keiro-core ^>=0.18.0.0,
     keiro-test-support ^>=0.18.0.0,
+    kiroku-store >=0.9 && <0.10,
+    shibuya-core ^>=0.9.0.0,
+    shibuya-kiroku-adapter >=0.5.1.2 && <0.5.1.3,
+    stm >=2.5 && <2.6,
+    streamly-core >=0.3 && <0.4,
     text >=2.1 && <2.2,
+    uuid >=1.3 && <1.4,
+    vector >=0.13 && <0.14,
 
 benchmark keiro-bench
   import: warnings, shared
