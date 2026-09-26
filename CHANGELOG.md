@@ -6,10 +6,13 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
 ### Breaking Changes
 
 - Upgrade the Kiroku dependency cohort to
-  [`kiroku-store`](mori://shinzui/kiroku/packages/kiroku-store) 0.9.0.0 and
+  [`kiroku-store`](mori://shinzui/kiroku/packages/kiroku-store) `>=0.9.0.1 && <0.10`
+  and
   [`kiroku-store-migrations`](mori://shinzui/kiroku/packages/kiroku-store-migrations)
   0.6.0.0. Its new migration (`mori://shinzui/kiroku` at
   `kiroku-store-migrations/migrations/0012.sql`; artifact URI pending) backfills
@@ -20,22 +23,51 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   blocks appends while it runs. Rehearse on a restored database to size the
   maintenance window, and run `VACUUM (ANALYZE) kiroku.stream_events` after
   migration. Keiro's composed migration plan includes it before its own
-  migrations.
+  migrations, which grows the plan from 43 to 44 entries.
+- Upgrade to [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
+  0.10.0.0 and
+  [`shibuya-pgmq-adapter`](mori://shinzui/shibuya/packages/shibuya-pgmq-adapter)
+  0.16.1.0. Shibuya 0.10 is a breaking release: `ShutdownConfig` gains
+  `totalShutdownTimeout`, `ConfigError` and `PolicyError` gain constructors,
+  `ProcessorState.Processing` gains a last-progress field, and a permanent
+  framework-owned finalization failure now throws `ProcessorFailure` instead of
+  halting gracefully. Consumers that construct or match these types directly
+  must adapt; Keiro's own public API is unchanged by the upgrade.
+- `keiro`: `RunCommandOptions` gains `seedVerifyInFlightLimit`, and
+  `KeiroMetrics` gains `snapshotSeedSkipped` and
+  `snapshotSeedVerificationFailed`. Code that constructs either record directly
+  must supply the new fields.
 
-### Fixes
+### New Features
+
+- `keiro` bounds sampled snapshot-seed full replays to one in-flight task per
+  process by default, with new counters for skipped samples and unexpected
+  verification failures.
+
+### Bug Fixes
 
 - Category reads and category subscriptions now use Kiroku's category index,
   avoiding work proportional to the number of streams in the category.
+- Kiroku 0.9.0.1's idle-publisher retention fix removes the worker and command
+  heap growth reported as BUG-1 and BUG-2.
+- Shibuya 0.10 and `shibuya-pgmq-adapter` 0.16.1.0 bring lifecycle and
+  acknowledgement fixes to every Keiro worker: exception-safe startup and
+  shutdown bounded by a total deadline, wake-ups for idle intake after a halt or
+  finalization failure, a single failure delivery under `StopAllOnFailure`,
+  exactly-once dead-letter movement across ambiguous commits, and serialized,
+  cancellation-safe acknowledgement handles.
 
 ### Other Changes
 
 - `keiro-migrations` and `keiro-test-support` move to the
   [`pg-migrate`](mori://shinzui/pg-migrate/packages/pg-migrate) 1.2
-  package family required by the new Kiroku migrations. The obsolete
-  `pg-migrate-test-support:ephemeral-pg` `allow-newer` exception is removed.
-  A targeted `allow-newer` lets the test-only
-  [`pgmq-migration`](mori://shinzui/pgmq-hs/packages/pgmq-migration) 0.6.1.0
-  use the API-compatible `pg-migrate` 1.2 packages until its bounds widen.
+  package family required by the new Kiroku migrations. Test suites require
+  [`pgmq-migration`](mori://shinzui/pgmq-hs/packages/pgmq-migration)
+  `>=0.6.1.1`, the first release that accepts `pg-migrate` 1.2. `cabal.project`
+  drops every `allow-newer` exception except `haxl:time`.
+- New `keiro-retention` test suite in `just verify` measures post-major heap
+  across store, adapter, process-manager, router, projection, command,
+  hydration, and tail-read workloads.
 - New `keiro-reexports` verification policy fails the build when generated code
   imports a `keiro-core` module that `keiro` does not re-export. The in-repo
   conformance suites depend on `keiro-core` directly and structurally cannot

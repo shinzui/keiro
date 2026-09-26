@@ -309,7 +309,7 @@ runDbTraced connStr tracer act =
 
 stopAppQuickly :: (IOE :> es) => AppHandle es -> Eff es ()
 stopAppQuickly app = do
-  _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1} app
+  _ <- stopAppGracefully ShutdownConfig {drainTimeout = 1, totalShutdownTimeout = 5} app
   pure ()
 
 waitUntil :: IO Bool -> IO Bool

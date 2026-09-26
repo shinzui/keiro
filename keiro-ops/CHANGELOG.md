@@ -6,6 +6,15 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
+### Other Changes
+
+- Require `kiroku-store >=0.9.0.1 && <0.10`. The test suite requires
+  `pgmq-migration >=0.6.1.1 && <0.7`. The version moves in lockstep with the
+  rest of the packages, and the `keiro`, `keiro-pgmq`, and `keiro-migrations` bounds
+  are raised accordingly.
+
 ## 0.18.0.0 — 2026-09-20
 
 

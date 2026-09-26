@@ -24,14 +24,5 @@ source-repository-package
   location: https://github.com/mzabani/codd.git
   tag: v0.1.8
 
--- pgmq-migration 0.6.1.0 caps these at 1.1; their 1.2 releases make no API or
--- behavior changes. Kiroku's migration component requires the 1.2 family.
--- Adapter 0.5.1.2 is the last release on Shibuya 0.9. Its Kiroku 0.8 upper
--- bound predates Kiroku 0.9, whose adapter-facing subscription API is unchanged.
--- This permits the retention suite to test the cohort adapter.
 allow-newer:
-  haxl:time,
-  pgmq-migration:pg-migrate,
-  pgmq-migration:pg-migrate-embed,
-  pgmq-migration:pg-migrate-import-hasql-migration,
-  shibuya-kiroku-adapter:kiroku-store
+  haxl:time

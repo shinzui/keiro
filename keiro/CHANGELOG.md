@@ -6,8 +6,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
 ### Breaking Changes
 
+- Require `shibuya-core ^>=0.10.0.0` and `kiroku-store >=0.9.0.1 && <0.10`.
+  Shibuya 0.10 changes `ShutdownConfig`, `ConfigError`, `PolicyError`, and
+  `ProcessorState`, and a permanent framework-owned finalization failure now
+  throws `ProcessorFailure` rather than halting gracefully. Kiroku 0.9
+  requires schema migration `0012` before any 0.9 process appends; see the
+  root changelog for the cutover.
 - `RunCommandOptions` gains `seedVerifyInFlightLimit`. Code that constructs
   the record directly must supply it; callers updating `defaultRunCommandOptions`
   receive the process-wide default of one.
@@ -34,8 +42,6 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   reads (BUG-2).
 - Count active Haskell threads in retention reports, excluding finished async
   handles that can remain reachable during a measurement loop.
-- Require `kiroku-store >=0.9.0.1` across Keiro packages so new builds use
-  the released idle-publisher retention fix behind BUG-1 and BUG-2.
 
 ## 0.18.0.0 — 2026-09-20
 

@@ -1059,7 +1059,7 @@ nodes and available directly:
   `purgeDlqForce` is the unconditional escape hatch.
 - `Keiro.PGMQ.Runtime` / `Keiro.PGMQ.Metrics` — worker wiring and instruments.
 
-The package requires the `pgmq-*` 0.6 family and `shibuya-pgmq-adapter ^>=0.16.0.0`.
+The package requires the `pgmq-*` 0.6 family and `shibuya-pgmq-adapter ^>=0.16.1.0` on `shibuya-core ^>=0.10.0.0`.
 Grouped-head FIFO (`FifoHeads`) additionally needs a deployed PGMQ extension 1.12
 or later; other orderings add no server requirement.
 

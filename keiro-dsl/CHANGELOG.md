@@ -6,6 +6,17 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
+### Breaking Changes
+
+- Require `shibuya-core ^>=0.10.0.0` and `kiroku-store >=0.9.0.1 && <0.10`.
+  Generated code imports only `Shibuya.Core.Ack` and `Shibuya.Core.Types`,
+  which Shibuya 0.10 leaves unchanged, so generated output is unaffected apart
+  from its provenance stamp. The version moves in lockstep with the rest of
+  the packages, and the `keiro-core` and `keiro` bounds are raised
+  accordingly.
+
 ## 0.18.0.0 — 2026-09-20
 
 ### Breaking Changes

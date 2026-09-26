@@ -9,6 +9,7 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.19.0.0 | `>=0.9.0.1 && <0.10` | `^>=0.6.0.0` | `>=0.9 && <0.10` | `^>=0.10.0.0` |
 | 0.18.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.17.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.16.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
@@ -23,10 +24,16 @@ Keiro 0.17.0.0 and 0.18.0.0 also require the pgmq 0.6 package family and
 the 0.16.0.0 → 0.17.0.0 edge describes the source adaptations they introduce. 0.18.0.0 moves no
 upstream cohort member.
 
+Keiro 0.19.0.0 requires `shibuya-pgmq-adapter` 0.16.1.0 (the release on Shibuya 0.10), the
+`pg-migrate` 1.2 family, and, where a project uses it, `pgmq-migration >=0.6.1.1`, the first
+release that accepts `pg-migrate` 1.2. A project on the Kiroku adapter needs
+`shibuya-kiroku-adapter` 0.5.1.5 or later; no earlier release pairs Shibuya 0.10 with Kiroku 0.9.
+
 From 0.18.0.0, `keiro-test-support` requires `ephemeral-pg >=0.3.1 && <0.4`. That is a test-only
 dependency, but `pg-migrate-test-support 1.1.0.0` still caps it below 0.3, so a build plan holding
 both needs `allow-newer: pg-migrate-test-support:ephemeral-pg`. The 0.17.0.0 → 0.18.0.0 edge
-covers it.
+covers it. From 0.19.0.0, `pg-migrate-test-support` 1.2 accepts `ephemeral-pg` 0.3 and the
+exception is removed; the 0.18.0.0 → 0.19.0.0 edge covers that too.
 
 Bounds are what the published `.cabal` files declare, not the exact versions a
 given project resolved. To read what *this* project actually resolved, prefer

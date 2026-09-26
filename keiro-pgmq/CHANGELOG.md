@@ -6,6 +6,25 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
+### Breaking Changes
+
+- Require `shibuya-core ^>=0.10.0.0` and `shibuya-pgmq-adapter ^>=0.16.1.0`.
+  Shibuya 0.10 changes `ShutdownConfig`, `ConfigError`, `PolicyError`, and
+  `ProcessorState`; code that constructs or matches those types alongside
+  `keiro-pgmq` must adapt. The adapter release makes dead-letter movement
+  exactly-once across ambiguous commits and serializes acknowledgement
+  handles.
+
+### Other Changes
+
+- The test suite requires `pgmq-migration >=0.6.1.1 && <0.7`, the first
+  release that accepts `pg-migrate` 1.2, and sets `totalShutdownTimeout` where
+  it builds a `ShutdownConfig`. The version moves in lockstep with the rest of
+  the packages, and the `keiro-core` and `keiro-test-support` bounds are
+  raised accordingly.
+
 ## 0.18.0.0 — 2026-09-20
 
 

@@ -6,6 +6,20 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
+### Breaking Changes
+
+- Require `kiroku-store-migrations ^>=0.6.0.0` and
+  `kiroku-store >=0.9.0.1 && <0.10`. The composed migration plan gains Kiroku
+  migration `0012` ahead of Keiro's own migrations and grows from 43 to 44
+  entries. `0012` is new, so no recorded checksum moves, but it blocks appends
+  while it runs and Kiroku 0.8 writers cannot append after it; see the root
+  changelog for the cutover.
+- Move to the `pg-migrate` 1.2 family: `pg-migrate`, `pg-migrate-cli`,
+  `pg-migrate-embed`, `pg-migrate-import-codd`, and, in tests,
+  `pg-migrate-test-support`.
+
 ## 0.18.0.0 — 2026-09-20
 
 

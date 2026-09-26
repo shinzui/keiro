@@ -6,6 +6,15 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
+### Breaking Changes
+
+- Require `kiroku-store >=0.9.0.1 && <0.10`, `kiroku-store-migrations
+  ^>=0.6.0.0`, and `pg-migrate ^>=1.2.0.0`. Fixture databases now include
+  Kiroku migration `0012`. The version moves in lockstep with the rest of the
+  packages, and the `keiro-migrations` bound is raised accordingly.
+
 ## 0.18.0.0 — 2026-09-20
 
 

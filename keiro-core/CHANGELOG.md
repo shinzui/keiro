@@ -6,6 +6,17 @@ All notable changes to `keiro-core` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.19.0.0 — 2026-09-25
+
+### Breaking Changes
+
+- Require `kiroku-store >=0.9.0.1 && <0.10`. Kiroku 0.9 requires schema
+  migration `0012` from `kiroku-store-migrations` 0.6.0.0 before any 0.9
+  process appends; see the root changelog for the cutover.
+
+The version moves in lockstep with the rest of the packages, and no API
+changed.
+
 ## 0.18.0.0 — 2026-09-20
 
 
