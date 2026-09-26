@@ -26,3 +26,7 @@ keiro-dsl-ledger.*.txt
 # live under keiro/bench/baseline-*.csv after the implementation is complete.
 keiro/bench-before-*.csv
 .envrc.local
+
+# Python bytecode
+__pycache__/
+*.pyc
