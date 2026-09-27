@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-27
+* **Addition**: IR-51 requests an explicit timer fire outcome and a terminal state for a fire that completed without an event, because Maybe EventId's Nothing silently requeues a finished fire forever; raised from mori://shinzui/rei, where 134 reminder and dormancy timers were stuck firing.
+
 ## 2026-09-24
 * **Addition**: IR-50 requests that keiro-dsl diff classify the removal of a command together with its emitted event and target state instead of failing fold output resolution; raised from mori://tan/notification-hub plan 81.
 * **Added**: Proposed atomic rejection of sharded subscription count mismatches after external reproduction.
