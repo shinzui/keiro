@@ -96,7 +96,7 @@ The Keiki API at `mori://shinzui/keiki/packages/keiki` has typed
 `FieldProjection` witnesses consumed through `regProj` and `inpProj`. Keiro
 generates those witnesses from a consumer-owned structural mapping through the API landed by
 [`docs/plans/150`](../plans/150-implement-the-ir-1-generation-layer-bindings-api-generated-codecs-scaffold-and-conformance-harness.md).
-Language version 2 uses the generated facade for checked `reg.path` and
+The DSL uses the generated facade for checked `reg.path` and
 `cmd.path` expressions; the path must cross required structural record fields
 and end at a supported scalar. The generated transducer executes the same term
 tree that symbolic analysis sees. A hand-written Hole may use the facade too.
@@ -260,7 +260,7 @@ is complete. GHC and the generated harness remain the enforcement boundaries.
 
 ### Keep domain IDs inside structural shapes (candidate Language 6)
 
-Under Languages 1–5 a brownfield type that nests a domain ID or enum inside a
+Under Language 5 a brownfield type that nests a domain ID or enum inside a
 record had to either flatten it to `Text`/`typeid` or declare a `mapped opaque`
 twin. Candidate Language 6 (`language keiro-dsl 6`; not yet published) lets an
 existing `id`, `enum`, or `mapped nominal` declaration appear as a leaf in

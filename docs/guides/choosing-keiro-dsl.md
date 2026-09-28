@@ -79,11 +79,10 @@ the DSL.
 | An existing Haskell domain type | A nominal or structural binding skeleton | Canonical identity, representation or wire policy, generated codecs, fingerprints, and binding-law assertions | Total conversions, fixtures, and required initial values |
 | A refined value or consumer-authoritative JSON codec | `mapped opaque` | A named and versioned boundary, boundary round trips, coverage inventory, and diff visibility | `ToJSON`/`FromJSON` behavior and compatibility below the boundary |
 | An event-version conversion | An upcaster Hole | The contiguous version chain, codec dispatch, compatibility classification, and golden/replay checks | The conversion body and representative historical fixtures |
-| Read-model queries or event application | `ReadModelHoles` | Stable read-model identity, table/schema facts, consistency/feed configuration, and generated runtime wiring | Query and projection SQL/effects |
+| Read-model queries or event application | `ReadModelHoles` | Stable read-model identity, table/schema facts, freshness and catalog configuration, and generated runtime wiring | Query and projection SQL/effects |
 | Dynamic router behavior outside the declarative subset, or callbacks | A typed resolver in `RouterHoles` | Router identity, target command contract, deterministic dispatch identity, worker policy, and an honest `custom-unverified` boundary | Arbitrary target resolution and declared callbacks; Language 5 instead generates checked bounded selection when its `resolve declarative` subset fits |
-| Process-manager reactions and timer behavior (Language 1–5) | `ProcessHoles` | Process/timer identity, categories, retry policy, and generated wiring | Reaction, deadline, and fire-command bodies |
+| Process-manager reactions and timer behavior (Language 5) | `ProcessHoles` | Process/timer identity, categories, retry policy, and generated wiring | Reaction, deadline, and fire-command bodies |
 | Decoding a source event into typed reaction input (candidate Language 6) | The create-once `RecordedEvent -> Maybe <Input>` decoder Hole | The input ADT, pure reactions, guards, follow-ups, timers, `ReactiveProcessManager`, worker wrapper, reaction version and fingerprint | Source-envelope decoding only |
-| A legacy version-1 aggregate transducer | The preserved whole-transducer Hole | Spec-visible types, codecs, evolution reports, and runtime validation | The full transducer and its manual fold-version discipline |
 
 At the broadest boundary, DSL-generated and hand-written `EventStream` values
 can live in the same application and use the same Keiro runtime. A brownfield
@@ -201,24 +200,19 @@ for syntax and binding laws.
 
 ### ID prefixes become an evolution contract
 
-`language keiro-dsl 3` is the first enforcing contract. Under it, a generated ID prefix is not merely
-documentation. Safe construction and current public decoding reject invalid
+A generated ID prefix is not merely documentation. Safe construction and current public decoding reject invalid
 prefixes, suffixes, separators, normalization, lengths, and non-v7 UUID bits.
 The exact text is lowercase `<prefix>_<26 Crockford characters>` with the
 TypeID/UUIDv7 version and variant positions. The raw representation is hidden;
 application code imports `parseX`, `mkX`, and `xText`. Historical generated-event
 replay alone imports the explicitly named internal `unsafeXFromLegacyText`, so
-tightening new admission does not make old persisted events unreadable. Version
-1, version 2, and legacy-unversioned sources retain their released unchecked
-generated-ID semantics.
+tightening new admission does not make old persisted events unreadable.
 
 The same checked ID-domain contract feeds runtime validation, symbolic
 equality, consumer binding conformance, fingerprints, scaffold ledgers, explain
 output, diff, and replay impact. A prefix or domain change is therefore visible
 at the command, event, snapshot, replay, and public-codec surfaces it actually
-affects. On version-2 to version-3 adoption, historical reads stay compatible,
-public admission becomes breaking, consumers recompile, and snapshots miss.
-If replayed state still contains a legacy-invalid ID, that stream remains
+affects. If replayed state still contains a legacy-invalid ID, that stream remains
 intentionally uncacheable until the value is overwritten or explicitly
 migrated; the events remain the source of truth.
 
@@ -255,13 +249,13 @@ an explicit migration rather than a silent upgrade, and older sources retain
 their released semantics. That protects history but adds fleet coordination
 when many specifications move together.
 
-Language 6 is a **candidate**, not a published contract. Languages 1–5 remain
-published and frozen, and `keiro-dsl new` writes the published stable
-Language 5. Declaring `language keiro-dsl 6` opts a specification into
+Language 6 is a **candidate**, not a published contract. Language 5 is the
+published stable contract, and `keiro-dsl new` writes it. Languages 1 through 4
+are deprecated and scheduled for removal. Declaring `language keiro-dsl 6` opts a specification into
 delegated inboxes, first-class process reactions, structural nominal leaves,
-declared contract IDs, keyed maps, and `ordering fifo-heads` (which requires
-Language 6; a Language 4 or 5 queue must keep a published ordering with batch
-size one). Because the candidate is unpublished, released-only services should
+declared contract IDs, keyed maps, checked value mappings, and
+`ordering fifo-heads` (which requires Language 6; a Language 5 queue must keep
+a published ordering with batch size one). Because the candidate is unpublished, released-only services should
 stay on Language 5 until it is published.
 
 Canonical pretty printing is not a lossless formatter. The frontend retains exact ownership spans

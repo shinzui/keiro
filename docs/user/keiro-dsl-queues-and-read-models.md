@@ -12,7 +12,7 @@ generated:
 # Keiro DSL Queues and Read Models
 
 This page covers PGMQ work queues, read-model-driven dispatch, read models,
-Language 5 projection catalogs, and external-read contracts. It is part of the [Keiro DSL Reference](keiro-dsl-reference.md), which
+projection catalogs, and external-read contracts. It is part of the [Keiro DSL Reference](keiro-dsl-reference.md), which
 introduces the language, its versions, and source file structure.
 
 ## Work queues and dispatch
@@ -56,7 +56,7 @@ drift. Long or otherwise non-simple logical names may use a stable hashed
 physical derivation; copy the values reported by the checker or a generated
 starter rather than inventing them.
 
-Payload rows are `field -> "wire_key" type [required]`. Language 4 closes the
+Payload rows are `field -> "wire_key" type [required]`. The arrow form closes the
 type vocabulary to `text`, `int`, and `bool`, which lower to `Text`, `Int`, and
 `Bool`; other words are rejected instead of silently becoming `Text`.
 Every payload field is required: generated decoders read all of them with
@@ -66,16 +66,13 @@ the same reason, *adding* a payload row is a breaking change however it is
 spelled — a job already queued under the old shape does not contain it. Queue
 payload evolution is a persisted wire change and must go through `diff`.
 
-Language 5 additionally reserves a colon form for a complete mapped
-type expression:
+A colon form declares a complete mapped type expression instead:
 
 ```keiro
 jobData -> "job_data" : List (Optional ArtifactInfo)
 ```
 
-The colon is the language-5 feature boundary; languages 1 through 4 reject it
-at that token and retain their released scalar interpretation. Language 5
-scaffolding lowers the complete expression through the checked mapped graph,
+Scaffolding lowers the complete expression through the checked mapped graph,
 imports the exact application-owned Haskell types, and emits structural field
 codecs or opaque `ToJSON`/`FromJSON` boundaries. Required, optional, and
 present-null behavior is explicit. The queue keeps its schema-version-1
@@ -87,7 +84,7 @@ Ordering is `unordered` (the default), `fifo-throughput`, `fifo-roundrobin`, or
 `fifo-heads` is the strict failure barrier and safely batches independent group
 heads. It is Language 6 candidate syntax and is refused below Language 6 with
 `LanguageFeatureRequiresVersion`; `unordered`, `fifo-throughput`, and
-`fifo-roundrobin` remain available in every published language. The two legacy
+`fifo-roundrobin` are available in Languages 5 and 6. The two legacy
 FIFO fill modes require a runtime batch size of one.
 `via raw` requires a `text` field. An opaque derivation uses:
 
@@ -109,7 +106,7 @@ use them only for regenerable work. Partition interval and retention must be
 non-empty and are create-time settings. Changing provisioning does not migrate
 an existing queue.
 
-`dlq=on` requires `maxRetries >= 1`. Language 4 rejects retry and queue-delay
+`dlq=on` requires `maxRetries >= 1`. The checker rejects retry and queue-delay
 durations whose unit-adjusted seconds do not fit in `Int`. The disposition
 table contains all four named outcomes exactly once. `storeFailure` is
 transient and retries; `decodeFailure` is poison and dead-letters. Generated
@@ -130,8 +127,7 @@ dispatch reservation_work_dispatch {
 ```
 
 The source and dedupe read models, dedupe column, dedupe queue, queue payload
-field, and enqueue target must resolve. Under Language 4, the source key must
-also name a generated logical selector for a column of the source read model
+field, and enqueue target must resolve. The source key must also name a generated logical selector for a column of the source read model
 (`reservationId` resolves the SQL column `reservation_id`). `fanout body` names
 a hand-owned effectful one-to-many function, not a column; it must be a
 lowercase-initial identifier that could name a Haskell function. The top-level
@@ -143,10 +139,13 @@ with the declared wire key and read-model check.
 
 ## Read models
 
-The first form below is the published Languages 1–4 compatibility grammar. It
-keeps physical coordinates, delivery feed, and the historical consistency
-vocabulary on the read model. Language 5 uses the catalog form later
-in this section and does not accept those delivery/consistency fields.
+A read model is declared in one of two forms. The standalone form below keeps
+its physical coordinates on the read model and is supplied by an
+aggregate-local [projection](keiro-dsl-aggregates.md#aggregate-projections) of
+the same name. The catalog form in
+[Projection catalogs](#projection-catalogs) names its
+targets and rebuild group instead, and is the form to use for a complete
+read-side inventory.
 
 ```keiro
 readmodel transfer_decisions {
@@ -160,10 +159,7 @@ readmodel transfer_decisions {
   }
   version = 1
   shape = "fnv1a:3717f6d9e3c44bd6"
-  consistency = Strong
-  scope = category "reservation"
-  feed = subscription
-  subscription = "hospital-capacity-transfer-decisions-sub"
+  freshness = immediate
 }
 ```
 
@@ -176,23 +172,18 @@ readmodel transfer_decisions {
 the table and ordered column surface. If it drifts, `check` prints the expected
 value. Update the hash and bump `version` when the real table shape changes.
 
-In Languages 1–4, consistency is `Strong` or `Eventual`. A strong model requires
-`feed = subscription`; it cannot be inline-only because a strong read waits for
-a subscription cursor. `scope` is legal only for a strong model and is either
-`entire-log` or `category "name"`; omitted strong scope defaults to the entire
-log. Feed is `inline` or `subscription`. An inline model must be referenced by
-an aggregate projection of the same name. A `subscription` override beside
-`feed = inline` is ignored and produces `RmInlineSubscriptionIgnored`. A
-subscription name is optional for `feed = subscription`; the tool derives a
-stable default when omitted. Under Language 4, explicit subscription and scope
-category strings must satisfy the stable runtime-identity rules.
+A standalone read model is updated inline with its aggregate projection, so
+`freshness = immediate` is its only reachable freshness; a
+`wait-for-head` request is rejected with
+`CatalogQueryWaitWithoutCompatibleCursor`. The `consistency`, `scope`, `feed`,
+and `subscription` fields are not part of the language and are rejected.
 
 The SQL table remains application-migration-owned. The scaffold generates
 schema-qualified table facts and create-once apply/query functions. Use the
 generated table constant in SQL rather than depending on PostgreSQL
 `search_path`.
 
-Language 5 may declare the two type parameters of `ReadModel q r` as
+A read model may declare the two type parameters of `ReadModel q r` as
 one ordered pair after `columns`:
 
 ```keiro
@@ -201,8 +192,7 @@ query result = Optional AccountSummary
 ```
 
 Both clauses are required together and resolve complete mapped type
-expressions. Languages 1 through 4 reject the first `query` token; an omitted
-second clause is a parse error rather than a partial semantic contract.
+expressions. An omitted second clause is a parse error rather than a partial semantic contract.
 
 Scaffolding emits `Generated.<Context>.<ReadModel>.QueryContract`; its aliases use the exact
 consumer domain types and deterministic imports. The generated `ReadModel` imports those aliases,
@@ -218,12 +208,12 @@ read-model shape hash, catalog fingerprint, target reset policy, replay impact, 
 history. A legacy ledger without query-contract rows reports its baseline as unavailable rather
 than guessing that the old API was `()`.
 
-### Language 5 projection catalogs
+### Projection catalogs
 
-Language 5 is the published stable authoring contract. It adds a closed
-projection catalog without changing the meaning of any language-1–4 source. Do
-not rewrite an existing language-4 workspace merely to follow the default; opt
-in when the service is ready to declare the complete read-side inventory.
+A projection catalog declares the complete read-side inventory of a service:
+targets, rebuild groups, projection owners, and the read models they supply.
+Adopt it when the service is ready to declare that whole inventory; until then,
+standalone read models and aggregate-local projections remain valid.
 
 ```keiro
 language keiro-dsl 5
@@ -330,12 +320,12 @@ name a non-empty observed-target set whose members all belong to one projection 
 in the same rebuild group. Several read models may observe different subsets of one
 owner's targets and resolve to that same owner. The owner handler is generated and
 selected once per event source, independently of query count. Do not repeat the
-relationship with an aggregate-local `projection <readmodel>` clause; Language 5
+relationship with an aggregate-local `projection <readmodel>` clause; the checker
 reports that as conflicting legacy ownership. A multi-target query's
 `backing = <target>` still selects one physical SQL table and does not stand in for the
 complete supplier check.
 
-Projection delivery and query freshness are separate Language 5 axes:
+Projection delivery and query freshness are separate axes:
 
 ```keiro
 delivery = inline
@@ -355,7 +345,7 @@ several compatible cursors, or unreachable scopes fail checking as
 `CatalogQueryWaitWithoutCompatibleCursor` or
 `CatalogQueryWaitWithAmbiguousCursor`. A rebuild group mixing an all-stream owner
 with category-scoped owners fails as `CatalogAmbiguousSourceOrdering`, matching
-runtime catalog validation. Static Language 5 has no position-wait form; callers
+runtime catalog validation. The static language has no position-wait form; callers
 use `runQueryWithFreshness (WaitForPosition options)` with a concrete append
 position.
 
@@ -372,7 +362,7 @@ and owns live apply, replay apply, heterogeneous decoder, idempotency,
 revision provision/validation, physical-target-parametric live/replay, and verification
 bodies. Regeneration never overwrites reviewed hole code.
 
-Language 5 also supports the bounded all-row external-read contract:
+The language also supports the bounded all-row external-read contract:
 
 ```keiro
 external-read order_totals_reader {
@@ -398,7 +388,7 @@ cannot be pushed through their procedural wrapper; overflow raises `KR004` befor
 partial result is returned. The create-once projection-catalog hole module also
 scaffolds a `<contract>V<version>KeyedExternalRead` helper. Applications supply typed
 SQL arguments and an application-owned private implementation function to that helper;
-external roles still receive only the generated guarded wrapper. Language 5 does not
+external roles still receive only the generated guarded wrapper. The language does not
 attempt arbitrary query-payload mapping. A future implementation of
 [IR-25](../improvement-requests/make-derived-and-conditional-event-payload-mappings-declarative.md)
 can generate the same runtime `KeyedExternalRead` declaration without changing its

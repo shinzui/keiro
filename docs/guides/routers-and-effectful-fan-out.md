@@ -228,7 +228,7 @@ the frozen dispatch ids or turn stable-union behavior into exact-set replay.
 
 ### Custom-unverified fallback
 
-Language 4 and Language 5 continue to accept the established custom forms:
+Languages 5 and 6 continue to accept the established custom forms:
 
 ```text
 resolve stable via read-model hospital_load row { hospitalId }

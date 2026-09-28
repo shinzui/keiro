@@ -17,7 +17,7 @@ introduces the language, its versions, and source file structure.
 
 ## Processes and timers
 
-Language 5 retains the legacy single-input, single-timer process form. The
+Language 5 supports the single-input, single-timer process form. The
 unpublished Language 6 candidate adds a reaction form with multiple typed
 inputs, ordered guarded arms, optional advancement, timer-free processes, and
 multiple independently named timers. The following process is entirely
@@ -167,15 +167,15 @@ router HospitalTransferRouter
 
 `name` follows the stable identity rules described for processes. `key` must
 name an input field. A resolver is either `via read-model Name` for a declared
-read model or `via hole` for another typed effectful implementation. Under
-Language 4, every `row` field on a read-model resolver must name a column of
+read model or `via hole` for another typed effectful implementation. Every
+`row` field on a read-model resolver must name a column of
 that read model; only verified row fields become available under `resolved.*`.
 
 The mandatory `resolve stable` phrase acknowledges retry semantics: later
 attempts deduplicate targets already dispatched, but a resolver whose result
 changes can accumulate the union of targets seen across attempts.
 
-Language 5 also admits a checked, bounded selection:
+A router also admits a checked, bounded selection:
 
 ```keiro
 resolve declarative {

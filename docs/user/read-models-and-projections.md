@@ -124,39 +124,12 @@ Existing callers remain source-compatible. The `unmanagedInlineProjections`,
 `unmanagedAsyncProjection`, and `unmanagedReadModel` wrappers label values that
 remain outside catalog validation while an application migrates incrementally.
 
-### Generate the catalog from Language 5
+### Generate the catalog with `keiro-dsl`
 
-`keiro-dsl` Language 5 is the published stable authoring contract. Its checked graph
-owns the same runtime catalog described above. Language 1–4 meanings and
-generated banners remain unchanged; an existing service adopts 5 explicitly
-when it is ready to describe every physical target, rebuild group, projection
-owner, source, and query binding.
-
-A language-4 singleton read model puts physical authority on the query node:
-
-```text
-language keiro-dsl 4
-
-readmodel orderSummary {
-  schema = "sales"
-  table = "order_summary"
-  columns { order_id text required }
-  version = 1
-  shape = "fnv1a:93ea2f35f00eaf57"
-  consistency = Eventual
-  feed = subscription
-}
-```
-
-The `projection-owner` is sufficient authority for the catalog-bound read model; do
-not also add an aggregate-local `projection orderSummary` clause. One owner may supply
-several query contracts. For example, if the owner also owns `order_totals`, a second
-read model with `targets = [ order_totals ]` resolves to the same
-`order_summary_writer`. An inline owner is applied once per source event, not once per
-query model.
-
-The intentional language-5 form moves physical and lifecycle authority into
-the catalog and leaves the read model as a typed query binding:
+The `keiro-dsl` checked graph owns the same runtime catalog described above. A
+service describes every physical target, rebuild group, projection owner,
+source, and query binding. The catalog holds physical and lifecycle authority
+and leaves the read model as a typed query binding:
 
 ```text
 language keiro-dsl 5
@@ -194,6 +167,13 @@ readmodel orderSummary {
 }
 ```
 
+The `projection-owner` is sufficient authority for the catalog-bound read model; do
+not also add an aggregate-local `projection orderSummary` clause. One owner may supply
+several query contracts. For example, if the owner also owns `order_totals`, a second
+read model with `targets = [ order_totals ]` resolves to the same
+`order_summary_writer`. An inline owner is applied once per source event, not once per
+query model.
+
 `delivery` says when the owner applies events. `freshness` says what the query
 does before executing SQL. The example deliberately chooses an asynchronous
 subscription with `freshness = immediate`: it does not wait and may observe lag.
@@ -205,42 +185,20 @@ rejected before generation. Caller-specific read-your-write remains a Haskell
 `WaitForPosition` override with the command's returned position, not static DSL
 source.
 
-Language 5 requires exactly one `checkpoint-on-missing` choice for
+The language requires exactly one `checkpoint-on-missing` choice for
 each subscription owner and forbids the field on inline owners. Use
 `from-beginning` to consume retained history, `from-current-head` to begin with
 future events, or `fail` to require an operator-provisioned row. A replayable
 owner of a `reset = clear` target cannot use `from-current-head`: clearing the
 target and skipping history cannot reconstruct it.
 
-Language 5 deliberately has no stream-scoped repair syntax yet. A truthful declaration
+The language deliberately has no stream-scoped repair syntax yet. A truthful declaration
 must include application-owned row-selection, replay, and verification transactions;
 the current DSL cannot represent those functions without pretending to infer ownership
 from SQL. Declare `StreamScopedReplay` in the hand-written Haskell revision until a
 future language surface can preserve that boundary.
 
-Changing only the preamble does not invent ownership and will fail checking:
-the author or a future upgrade tool must add the target, group, owner, source,
-reset/replay policies, handler order, and query binding. Target declarations do
-not create or migrate the table.
-
-Migrate sources written against the earlier Language 5 spelling mechanically:
-
-| Earlier Language 5 spelling | Published Language 5 spelling |
-|---|---|
-| projection-owner `feed = inline | subscription` | `delivery = inline | subscription` |
-| read model `consistency = Eventual` plus either feed | `freshness = immediate`; remove read-model `feed` and `subscription` |
-| read model `consistency = Strong` plus `scope` | `freshness = wait-for-head <scope>`; derive the cursor from its owner |
-| standalone async read model | declare its target, group, and subscription projection owner |
-| inner projection `consistency = ...` | put `freshness` on its read model; the implicit inline owner supports only `immediate` |
-
-`keiro-dsl diff` enforces this table. Migrating `consistency = Strong` to
-`freshness = immediate` is a breaking `QueryFreshnessChanged` finding because callers
-lose the cursor-wait guarantee. A scope-preserving `wait-for-head <scope>` rewrite and
-an `Eventual` to `immediate` rewrite report no policy change; strengthenings and head-
-scope widenings across the migration are additive `CompatibilityStrengthened` findings.
-
-These are Language-5-only rewrites. Languages 1–4 retain their published
-`feed`, `consistency`, and `scope` grammar and generated behavior.
+Target declarations do not create or migrate the table.
 
 Scaffolding emits one generated
 `Generated.<Context>.ProjectionCatalog` facade. It validates the runtime
@@ -270,7 +228,7 @@ reported for recompilation/review without being described as replayable.
 Category and all-history owners remain visible as unsupported heterogeneous
 typed boundaries and never receive an invented mapped declaration.
 
-See [Keiro DSL Queues and Read Models](keiro-dsl-queues-and-read-models.md#language-5-projection-catalogs)
+See [Keiro DSL Queues and Read Models](keiro-dsl-queues-and-read-models.md#projection-catalogs)
 for the complete syntax and validation rules.
 
 ## Register And Fence Catalog Groups

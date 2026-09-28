@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-09-28
+* **Update**: Drop Languages 1–4 guidance: remove the version-2 to version-3 ID migration, the language-4 to 5 preamble note, and version-1/version-2 Hole distinctions, and describe Language 5 as the stable contract with Languages 1–4 deprecated.
+
 ## 2026-09-20
 * **Addition**: DOC-28 documents the public clean-scaffold path for candidate checked mappings, total binding and file-ownership obligations, generated process-reaction use, application-owned workflow codecs, and reader-first rollout.
 * **Update**: Evolution And Replayability adds the four independent checked-mapping release gates, reader-before-writer rollout, and forward-only recovery after incompatible writes; Durable Workflows makes explicit that a step rename creates a new durable action and adds isolated retained-result adoption guidance.

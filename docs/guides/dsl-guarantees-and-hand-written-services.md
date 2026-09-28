@@ -124,14 +124,12 @@ The checked nominal registry also makes same-declaration ID and enum equality a
 DSL-visible contract. Generated guards use one declaration-tagged textual key;
 the checker rejects cross-declaration and nominal-to-`Text` comparisons before
 Haskell generation. Consumer `KindID` IDs and finite enums carry exact symbolic
-domains and reconstructible models. Version-3 generated IDs carry the same
-exact TypeID-v7 domain because their public constructors and current JSON
-decoder enforce it. Version-1/version-2 and legacy-unversioned generated IDs
-still admit arbitrary `Text`, so they retain correct concrete equality but are
-reported as a one-way, unverified projection.
+domains and reconstructible models. Generated IDs carry the same exact
+declared admission domain because their public constructors and current JSON
+decoder enforce it.
 
-These guarantees stop at the spec-visible surface, but language version 2
-moves scalar aggregate behavior onto that surface. Its generated `Transducer`
+These guarantees stop at the spec-visible surface, but the language moves
+scalar aggregate behavior onto that surface. Its generated `Transducer`
 executes the checked guard/write Keiki tree directly and keeps the readable guard,
 ordered writes, event, and target in one command block; a Holes module can supply
 event fields but cannot replace generated behavior.
@@ -140,10 +138,9 @@ predicate and updates, within a generated command/event/target/mode envelope,
 and contributes a required manual `FoldVersion`. The generated ownership and
 predicate-verification report keeps an opaque Hole visibly unverified.
 
-Version 1 retains the historical create-once whole-transducer Hole, and
-upcaster bodies remain hand-owned stubs in both versions. `diff` reads spec
-text, not arbitrary Haskell bodies, so version-1 Hole/upcaster changes and the
-contents of a version-2 Hole remain outside semantic comparison. The DSL's
+Upcaster bodies remain hand-owned stubs. `diff` reads spec text, not arbitrary
+Haskell bodies, so upcaster changes and the contents of a Hole remain outside
+semantic comparison. The DSL's
 cross-version guarantee is therefore still a matter of degree, not a binary
 “checked versus unchecked” claim.
 
@@ -166,10 +163,10 @@ then moves toward failures that are loud but delayed.
 ### Rank 1: silent wrong state
 
 First, snapshot invalidation becomes a manual contract wherever fold behavior
-is hand-owned. A version-2 Hole exposes a per-transition `FoldVersion` that the
+is hand-owned. A Hole exposes a per-transition `FoldVersion` that the
 generated aggregate fingerprint composes automatically; the author must bump
-it whenever the Hole predicate or updates change. Version-1 Holes and fully
-hand-written services must instead bump `stateCodecVersion` or use
+it whenever the Hole predicate or updates change. Fully hand-written services
+must instead bump `stateCodecVersion` or use
 `defaultStateCodecWithFold (FoldVersion "...")`. `stateCodecVersion` remains the
 encoding version. Either token path makes an old seed a normal cache miss and
 forces one full replay; forgetting the manual bump can still accept a stale

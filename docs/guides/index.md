@@ -12,6 +12,7 @@ okf_version: "0.2"
 - [Adopting Keiro From tan-event-source](adopting-keiro-from-tan-event-source.md) - Migrate a service from tan-event-source to Keiro in controlled compatibility stages.
 - [Asynchronous Projections](asynchronous-projections.md) - Build eventually consistent read models with durable asynchronous delivery.
 - [Brownfield Migration And Transducer Modeling](brownfield-migration-and-transducer-modeling.md) - Introduce Keiro incrementally while modeling state transitions as explicit transducers.
+- [Checked Mapping Adoption](checked-mapping-adoption.md) - Adopt candidate checked values through total bindings, generated persistence codecs, replay evidence, and reader-first rollout.
 - [Choosing A Primitive](choosing-a-primitive.md) - Choose among Keiro primitives by durability, ordering, latency, and operational needs.
 - [Choosing A Projection](choosing-a-projection.md) - Choose inline, asynchronous, or rebuilt projections for a read-model workload.
 - [Choosing `keiro-dsl`: Benefits, Costs, and Fit](choosing-keiro-dsl.md) - Decide whether generated services fit a context's guarantees, workflow, and maintenance needs.

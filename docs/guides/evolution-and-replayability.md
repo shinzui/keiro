@@ -290,45 +290,6 @@ codec comparison workflow in
 then use versions/upcasters and the real-log replay audit for the distinct
 questions of decode migration and stored-history replay.
 
-### Migrating generated IDs to the enforced version-3 domain
-
-Changing only the preamble from `language keiro-dsl 2` to version 3 is a
-runtime-semantic migration when the service declares an ID. Re-scaffold before
-deployment: version 3 hides generated raw constructors, exposes `parseX`/`mkX`,
-validates current JSON and literals, and gives generated and consumer-bound IDs
-the same canonical TypeID-v7 domain.
-
-Run the boundary-specific evidence together:
-
-```bash
-cabal run keiro-dsl -- diff service.keiro --since HEAD^ --explain \
-  --replay-impact-out build/id-domain-replay.json \
-  --report-out build/id-domain-diff.json
-cabal run keiro-dsl -- scaffold service.keiro --out generated
-cabal test keiro-dsl-conformance-id-domain-migration
-```
-
-`IdDomainContractChanged` deliberately does not collapse into one compatibility
-answer:
-
-| Surface | Version-2 to version-3 adoption |
-|---|---|
-| Private history read | Compatible: generated event codecs retain the explicitly internal legacy constructor |
-| Old binary reads new events | Compatible: newly emitted IDs are a subset of the old unchecked generated text domain |
-| Snapshot hydration | Advisory: the successor fold discriminator makes old rows miss and replay |
-| Public consumer/current command decode | Breaking: formerly admitted malformed text is rejected at its field |
-| Persisted identity | Compatible when the declared prefix is unchanged |
-| Consumer build | Advisory: import the abstract type and safe parser instead of its raw constructor |
-
-Snapshots remain caches, not a second legacy-admission channel. If full replay
-leaves a legacy-invalid ID in current state, a newly encoded cache containing
-that text is rejected on its next hydration. The stream therefore keeps paying
-full replay until a later event overwrites the value or an explicit domain
-migration is designed. Do not weaken the public `FromJSON` instance to make the
-cache stick; that would silently reopen current command admission. Validate the
-real affected streams before producer-last cutover, using the replay-impact
-target emitted by the diff.
-
 ## Adding a new event type
 
 The one genuinely easy change. Old streams do not contain the new event, so
@@ -463,7 +424,7 @@ events and re-checks guards (see [ground truth](#the-ground-truth-why-evolution-
   two edges — `HydrationAmbiguousInversion`.
 - *Changing an output template* changes what the inversion solves against.
 
-For a language-version-2 aggregate, the checked scalar guard and ordered writes
+For a generated aggregate, the checked scalar guard and ordered writes
 are the runtime authority: the generated transducer executes the same Keiki
 term tree used for symbolic analysis. Changing a guard, write expression, or
 generated/Hole owner therefore changes the aggregate fold surface and snapshot
@@ -491,9 +452,8 @@ ambiguity). The procedure when you tighten a guard:
    replay audit answers this against real data), paste the twin — history
    stays replayable and the retired rule remains visible in the spec. If no
    stored data is affected (or you choose truncation), skip the twin.
-4. For version 2, the scaffolder lowers the marker and its checked scalar terms
-   into the generated transducer. Version-1 skeletons and hand-written services
-   call `Keiki.Builder.replayOnly` in the edge body (or set `mode = ReplayOnly`
+4. The scaffolder lowers the marker and its checked scalar terms into the
+   generated transducer. Hand-written services call `Keiki.Builder.replayOnly` in the edge body (or set `mode = ReplayOnly`
    on a raw `Edge`).
 
 Diff first cancels exact sibling transitions as an order-independent multiset.
@@ -568,7 +528,7 @@ opaque predicate is valid escape-hatch behavior but remains visibly
 violation that `diff` cannot observe.
 
 An event declared as `fields(Command)` is different from an explicit output
-template: version 2 checks the total type-identical copy and generates it
+template: the checker verifies the total type-identical copy and generates it
 directly in the transducer. There is no identity-copy Hole to preserve or
 override. Existing create-once identity functions are reported as obsolete and
 are harmless because runtime assembly no longer imports them. Explicit event
@@ -731,12 +691,6 @@ may replace `Generated.<Context>.ProjectionCatalog`, but it never overwrites
 apply, replay apply, category decoder, idempotency, and verification bodies
 alongside the DSL diff. Replay apply code must be database-transactional and
 must omit live network calls or other external side effects.
-
-Changing only a language-4 source's preamble to 5 is not an upgrade. Add the
-physical targets, reset policies, rebuild groups, projection owners and order,
-source/feed/replay facts, and query bindings explicitly. Existing language-4
-sources may remain on their published contract until that ownership work is
-ready.
 
 ## Changing the fold: same events, different state — and what snapshots do to you
 
@@ -999,7 +953,7 @@ DSL-only gates do not exist for hand-authored services.
 | Deprecate event, live streams affected | `DeprecatedEventReplayHazard`; safe two-stage retirement advised | ε-variant rejected; replay-only edge validated | `HydrationNoInvertingEdge` if ignored | actual affected streams unknown until audit | Landed gate: [139](../plans/139-validate-codecs-and-deprecated-event-replayability-at-the-stream-boundary.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit) |
 | Guard/output change vs old logs | `AggFoldSurfaceChanged`; complete replay-body unions classify preserved, changed, and removed behavior; a tightening prints a source-validated replay-only twin, while `AggGuardRelationUnknown` and `AggGuardRemedyUnavailable` withhold unproved remedies | new machine plus generated concrete/symbolic conformance | `HydrationReplayFailed` (loud/delayed) | source validation does not prove Hole behavior or runtime same-phase inversion | [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (replay audit + digest diff) |
 | Decide change over redelivery window | `RouterDecideSurfaceChanged` / `ProcessDecideSurfaceChanged` Advisory | — | deduped as benign duplicates | hole-only edits remain invisible | Landed: [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) + drain rule |
-| Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint; version-2 Hole changes require a per-transition `FoldVersion` bump | three-component discriminator and ownership/predicate-verification report | full replay on mismatch | **manual-bump residual** for version-1 Holes and other hand-written folds; an unbumped version-2 Hole is still a contract violation | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
+| Fold change, snapshots enabled | DSL-visible: `AggFoldSurfaceChanged` + new fingerprint; Hole changes require a per-transition `FoldVersion` bump | three-component discriminator and ownership/predicate-verification report | full replay on mismatch | **manual-bump residual** for hand-written folds; an unbumped Hole is still a contract violation | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md); [142](../plans/142-add-a-pre-deploy-replay-audit-and-decide-surface-change-advisories.md) (audit backstop) |
 | Register slot change | n/a | register shape hash changes | full replay (benign) | mixed-deploy snapshot thrash | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | State type `s` structural change | n/a | state shape hash changes | full replay (benign) | same-shape semantic change needs manual bump | Landed: [138](../plans/138-gate-snapshot-staleness-on-fold-changes.md) |
 | Legacy process ↔ candidate Language 6 reactions | `ProcessDispatchIdentityModelChanged` BREAKING | — | positional and target-keyed ids never match: duplicate target appends | none if drained first | Drain rule; [Cut Over As An Identity Migration](process-managers-and-timers.md#cut-over-as-an-identity-migration) |

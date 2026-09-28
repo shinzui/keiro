@@ -49,9 +49,7 @@ claiming structural proof.
 
 Adopt one service at a time:
 
-1. Pin a Keiro revision where both prerequisite master plans are complete. Keep
-   existing language-4 services on `--min-language 4` until they intentionally
-   opt in.
+1. Pin a Keiro revision where both prerequisite master plans are complete.
 2. Change the service or every workspace member to `language keiro-dsl 5`, then
    declare the complete queue/query/catalog authority the service actually
    owns. A preamble-only edit is not an adoption.

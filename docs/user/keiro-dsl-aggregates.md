@@ -195,7 +195,7 @@ A guarded transition may not have an unguarded sibling for the same pair.
 Multiple guarded siblings must be mutually exclusive; generated behavior
 verification and the conformance harness expose ambiguity.
 
-By default, Language 4 generates transition behavior from its guard, writes,
+By default, the toolchain generates transition behavior from its guard, writes,
 emits, and target. Use an explicit hole when the predicate or updates cannot be
 expressed:
 
@@ -211,9 +211,9 @@ clauses. Its create-once module supplies the implementation and a `FoldVersion`.
 Bump that token whenever hand-owned predicate or update behavior changes so
 snapshots and replay audits can detect the new fold.
 
-### Language 5 typed domain outcomes
+### Typed domain outcomes
 
-Language 5 can make every selected command result explicit without turning a
+A transition can make every selected command result explicit without turning a
 business rejection into an event:
 
 ```keiro
@@ -352,7 +352,7 @@ non-overwriting old-shape fixtures for version bumps.
 
 ### Wire policy
 
-Language 4 supports exactly:
+The only supported wire policy is:
 
 ```keiro
 wire kind=ctorName fields=camelCase schemaVersion=1
@@ -371,21 +371,19 @@ projection transfer_decisions key=reservationId
   }
 ```
 
-`key` names the source field used by the projection. Under Language 4 it must
-resolve to an aggregate register, command field, or event field. Status-map
+`key` names the source field used by the projection. It must resolve to an aggregate register, command field, or event field. Status-map
 keys are exact event names. They must be unique and resolve to events in the
 aggregate. The map is total by default; use `status-map partial { ... }` when
 some events intentionally do not change projected status.
 
-In Languages 1–4, prefer declaring a matching `readmodel` node. It then owns
-schema identity, feed, consistency, and rebuild metadata. An optional
-`consistency=Strong|Eventual` on `projection` must agree with the read model.
-A projection without a read-model node remains usable but produces a warning
-and has no registered schema or rebuild authority. In Language 5 this is a
-standalone implicit-inline compatibility form: the referenced read model owns
-`freshness`, only `immediate` is reachable, and a projection-level
-`consistency` clause is rejected. Catalog-managed queries should use a
-top-level projection owner instead.
+An aggregate-local projection is a standalone, implicitly inline form. Declare
+a matching `readmodel` node, which owns schema identity and `freshness`; only
+`freshness = immediate` is reachable, because an inline projection has no
+cursor to wait for. A projection-level `consistency` clause is rejected. A
+projection without a read-model node remains usable but produces
+`RmProjectionWithoutNode` and has no registered schema or rebuild authority.
+Catalog-managed queries should use a top-level projection owner instead; see
+[Projection catalogs](keiro-dsl-queues-and-read-models.md#projection-catalogs).
 
 ### Snapshots
 

@@ -45,19 +45,12 @@ re-runs the shared gates after applying `--module-root`, `--collocate`,
 before a write set exists. These checks are defense in depth, not a second
 semantic vocabulary.
 
-A source without a `language keiro-dsl N` preamble selects compatibility-only
-language 1. Declared languages 1 through 4 are published compatibility contracts, and language 5
-is the published stable contract and current authoring default. Earlier languages do not gain language 5's catalog or mapped
-consumer syntax or typed domain-outcome declarations/clauses.
-`check` and `scaffold`
-print one `language contract:` notice for those sources (workspace notices
-summarize member provenance); `diff` prints it for the working-tree side only.
-Use `--min-language 5` after a service intentionally adopts the stable Language 5
-catalog and typed-outcome contract; mapped queue/query spellings, outcome
-exhaustiveness, generation, conformance, coverage, and evolution reporting are
-all checked before adoption.
-Existing Language-4 compatibility CI may keep `--min-language 4` without triggering a mechanical
-rewrite; new Language-5 services should use the standard `--min-language 5` gate.
+Every source declares `language keiro-dsl 5`, the published stable contract
+and current authoring default, or `language keiro-dsl 6`, the candidate.
+Languages 1 through 4, and sources without a preamble, are deprecated and
+scheduled for removal; `check` and `scaffold` print a `language contract:`
+notice for such a source, and it should be migrated to Language 5. Gate CI with
+`--min-language 5` so that no deprecated source is accepted.
 
 A source that declares `language keiro-dsl 6` selects the candidate contract.
 `check` and `scaffold` accept it, and the `--report-out` JSON records
@@ -72,20 +65,20 @@ operational history and therefore remain warnings: `DeprecatedEventReplayHazard`
 until the database-backed audit establishes the relevant fleet fact. Five
 warnings describe deliberate or currently accepted policy:
 `WqUnloggedDurability`, `ProcessBenignInversion`, `RouterBenignInversion`,
-`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. Two more make
-accepted but currently inert declarations explicit:
-`IntakeBindFlagUnenforced` and `RmInlineSubscriptionIgnored`. Teams may deny
+`AmbiguousFollowsRejectedPolicy`, and `PolicyDeadLetterUnused`. One more makes
+an accepted but currently inert declaration explicit:
+`IntakeBindFlagUnenforced`. Teams may deny
 any of these warnings without changing the shared language contract. Two internally decidable
 warnings, `WireSchemaVersionMismatch` and `RmProjectionWithoutNode`, are
 candidates for an error in a future language version rather than retroactive
-tightening of language 4. They can be selected with `--deny` today.
+tightening of a published one. They can be selected with `--deny` today.
 
-Language 4 validates local syntax and whole-service coupling. Important closed
+The checker validates local syntax and whole-service coupling. Important closed
 surfaces include:
 
 - unique declarations, fields, states, registers, map cases, topic aliases,
   columns, and durable identities;
-- valid TypeID prefixes and current TypeID-v7 admission;
+- valid TypeID prefixes and declared ID admission domains;
 - typed aggregate expressions, initial values, transition ownership,
   event-sourced state changes, reachability, terminal states, upcaster chains,
   wire policy, projection maps, and snapshot fixtures;
@@ -97,8 +90,8 @@ surfaces include:
 - queue payload vocabulary, bounded durations, identity fixtures,
   FIFO/group/provisioning rules, complete disposition, and dispatch
   read-model/queue references;
-- PostgreSQL read-model names, types, shape fixtures, feed, scope, subscription
-  identities, consistency, and projection ownership; and
+- PostgreSQL read-model names, types, shape fixtures, freshness, catalog
+  targets and rebuild groups, and projection ownership; and
 - workflow label, input, patch, rotation, signal, operation, and stable identity
   rules.
 
@@ -106,7 +99,7 @@ Diagnostics include a source line. Fix the specification first. If a generated
 harness later fails, fix the create-once behavior or evidence named by that
 harness; do not weaken the generated runtime boundary.
 
-Language 5 catalog query-supply diagnostics are:
+Projection catalog query-supply diagnostics are:
 
 - `CatalogReadModelBindingMissing` when no observed target is declared;
 - `CatalogTargetUnknown` or `CatalogReadModelTargetOutsideGroup` for an invalid
@@ -119,9 +112,7 @@ Language 5 catalog query-supply diagnostics are:
   named by an aggregate-local legacy projection clause.
 
 Existing missing/multiple target-owner diagnostics remain authoritative at target
-claims rather than producing duplicate query noise. `RmInlineFeedUnreferenced` retains
-its published Languages 1-4 and standalone-read-model meaning; it is not the ownership
-rule for a Language 5 catalog-bound query.
+claims rather than producing duplicate query noise.
 
 ## Evolution workflow
 

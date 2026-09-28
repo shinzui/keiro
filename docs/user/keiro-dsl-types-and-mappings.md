@@ -28,7 +28,7 @@ id TransferReservationId prefix=rsv
 id HospitalId prefix=hosp
 ```
 
-An `id` declares a generated nominal identifier. Language 4 admits current
+An `id` declares a generated nominal identifier. By default it admits current
 TypeID-v7 values and generates a distinct Haskell type for each declaration.
 The prefix is at most 63 characters, uses lowercase ASCII letters and
 underscores, and cannot begin or end with an underscore. Prefixes must be unique
@@ -603,9 +603,9 @@ behavior-key changes.
 
 After that baseline, a mapped declaration change rewrites use-specific output
 only for consumers that reach it through checked roots, plus the service
-structural module. Released languages expose aggregate command, private-event,
-and register roots. Language 5 additionally lowers typed queue fields
-and read-model query pairs and derives aggregate-sourced projection consumers.
+structural module. Checked roots are aggregate commands, private events, and
+registers, typed queue fields, and read-model query pairs; the checker also derives aggregate-sourced projection
+consumers.
 Queue fields receive generated persisted JSON codecs; read-model query pairs
 receive generated Haskell aliases only. Public contracts and heterogeneous
 category/all projection sources are not inferred as private mapped consumers.

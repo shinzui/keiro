@@ -115,8 +115,9 @@ produced. The report's parent directory is created if it does not exist.
 cabal run -v0 keiro-dsl -- inspect service.keiro --format=json
 ```
 
-The report records declared Language 4 provenance, its effective semantic
-contract, and `languageSupport: "stable"`. Workspace output lists every member
+The report records the declared language, its effective semantic contract,
+and `languageSupport`: `"stable"` for Language 5 or `"candidate"` for
+Language 6. Workspace output lists every member
 in canonical path order.
 
 ### `behavior-obligations`

@@ -114,10 +114,10 @@ Types:
 
 Use it to define an aggregate stream contract around a Keiki transducer.
 
-## Generated version-2 aggregate transducer
+## Generated aggregate transducer
 
 `keiro-dsl scaffold` emits one authoritative behavior module for each
-language-version-2 aggregate:
+aggregate:
 
 - `Generated.<Context>.<Aggregate>.Transducer` exports the assembled transducer,
   the aggregate fold fingerprint, `BehaviorOwnership (GeneratedOwned,
@@ -1076,7 +1076,7 @@ planner/runner, manifest, starter skeleton, and harness modules. In particular,
 `Keiro.Dsl.TypeGraph`, `Keiro.Dsl.SemanticImpact`, `Keiro.Dsl.Coverage`, `Keiro.Dsl.CodecCompare`, and
 `Keiro.Dsl.ExplainBindings` are public library surfaces for tooling and
 consumer-compiled migration tests. `Keiro.Dsl.Expression` exposes the checked
-version-2 scalar resolver and its typed roots, required projections, literals,
+scalar resolver and its typed roots, required projections, literals,
 arithmetic evidence, and stable expression diagnostics; consumers should use
 that resolver rather than reconstructing capability rules from the raw grammar
 AST.
@@ -1116,10 +1116,7 @@ Catalog-bound read models declare `freshness = immediate`,
 `subscription`, `consistency`, or `scope`. The checked supplier relation derives
 the optional durable cursor and rejects an unreachable or ambiguous head wait.
 `ProjectionDeliveryChanged` and `QueryFreshnessChanged` report the two evolution
-axes independently. `QueryFreshnessChanged` also reports a language 4-to-5 migration
-when normalized freshness weakens or its waited head scope narrows: legacy
-`consistency`/`scope` and language 5 `freshness` are compared on one normalized axis.
-Languages 1–4 retain their frozen historical grammar.
+axes independently.
 
 Candidate Language 6 grows the public AST: `ProcessNode` carries
 `body :: ProcessBody` (`LegacyProcessBody` or `ReactionProcessBody`),

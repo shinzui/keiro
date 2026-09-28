@@ -150,9 +150,11 @@ Grouped by functionality. Unless noted, everything below lives in `keiro` and
   structural/opaque consumer mappings, total bindings, generated private-event
   codecs, safe scaffolding, conformance harnesses, compatibility-vector diffs,
   finite historical codec comparison, and supported-root coverage reports.
-  Languages 1 through 5 are published and frozen; Language 6 (process
+  Language 5 is the published stable contract; Language 6 (process
   reactions, delegated intake, `ordering fifo-heads`, nominal structural
-  leaves, and keyed maps) is a candidate, not yet a compatibility contract.
+  leaves, keyed maps, and checked value mappings) is a candidate, not yet a
+  compatibility contract. Languages 1 through 4 are deprecated and scheduled
+  for removal.
 
 The repository test suite exercises these paths against an ephemeral PostgreSQL
 database.

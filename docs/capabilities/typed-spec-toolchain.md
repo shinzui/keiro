@@ -42,9 +42,9 @@ service — aggregate, process manager, custom or declarative router, integratio
 contract, queue, read model and projection catalog, durable workflow, and more —
 in a typed `.keiro` specification, and then:
 
-- **select** an explicit released language contract before parsing. Language 5
-  is the stable/default authoring contract; Languages 1–4 retain their published
-  compatibility meaning;
+- **select** an explicit language contract before parsing. Language 5 is the
+  stable/default authoring contract and Language 6 is the candidate; Languages
+  1–4 are deprecated and scheduled for removal;
 - **compose** multi-file service workspaces with shared nominal declarations and
   one checked cross-context semantic graph;
 - **check** cross-node policy, type capabilities, behavior coverage, catalog
@@ -86,10 +86,9 @@ keiro-dsl diff order.keiro --since HEAD~1   # non-zero exit on a gated BREAKING 
   this catalog; a spec is only as adoptable as the runtime surface it scaffolds
   against. Generated code and sidecar ledgers are versioned together; update the
   lockstep package family and regenerate as one reviewed change.
-- The grammar deliberately refuses spellings no runtime implements. A source
-  without a preamble selects compatibility-only Language 1, while adopting
-  Language 5 can surface new checked obligations rather than silently assigning
-  new meaning to an old source.
+- The grammar deliberately refuses spellings no runtime implements. Every
+  source should declare `language keiro-dsl 5` (or the candidate 6); a source
+  on a deprecated language must be migrated before those languages are removed.
 - `diff` classifies compatibility from the spec and a conservative persistence
   model; it gates known unsafe surfaces but cannot prove an arbitrary hand-edit
   to a filled create-once hole is replay-safe. That guarantee still comes from

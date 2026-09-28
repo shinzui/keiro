@@ -18,9 +18,10 @@ the behavior that remains application-owned. The generated application uses
 ordinary Keiro APIs; the DSL is not interpreted in production.
 
 This reference describes **Language 5**, the published stable language and
-recommended contract for new released-only specifications. Language 4 remains a published,
-immutable compatibility contract; sections that compare predecessor behavior
-show Language 4 sources explicitly. New sources in this reference begin with:
+recommended contract for new released-only specifications, and **Language 6**,
+the candidate that extends it. They are the only supported languages; this
+reference does not document Languages 1 through 4, which are deprecated and
+scheduled for removal. Sources begin with:
 
 ```keiro
 language keiro-dsl 5
@@ -89,7 +90,7 @@ declarations and any combination of these node families:
 | `publisher` | Outbox ordering, retry, and stable identity policy. |
 | `workqueue` | PGMQ payload, ordering, provisioning, retry, and DLQ policy. |
 | `dispatch` | Read-model-driven fan-out and deduplicated queue enqueueing. |
-| `readmodel` | Registered SQL query identity and shape; Languages 1–4 retain feed/consistency, while stable Language 5 owns query freshness only. |
+| `readmodel` | Registered SQL query identity, shape, and query freshness. |
 | `workflow` | Durable named steps, waits, sleeps, children, patches, and rotation. |
 | `operation` | Named command, query, signal, or workflow-run entry point. |
 

@@ -181,7 +181,7 @@ diff-classified. The
 disposition table is mandatory and contains each of the seven rows exactly
 once. Duplicates acknowledge success, a previous terminal failure does not
 retry, poison decode failures dead-letter, and transient/in-progress outcomes
-use bounded retries according to the declared action. Language 4 rejects any
+use bounded retries according to the declared action. The checker rejects any
 retry duration whose unit-adjusted seconds do not fit in `Int`.
 
 ## Emits and publishers
@@ -240,8 +240,8 @@ publisher hospitalPublisher {
 Backoff is either `constant <duration>` or
 `exponential <initial> max=<duration> multiplier=<decimal>`. Exponential
 backoff requires both options, a positive initial delay, a maximum at least as
-large as the initial delay, and a multiplier of at least 1. Language 4 also
+large as the initial delay, and a multiplier of at least 1. The checker also
 rejects any delay whose unit-adjusted seconds do not fit in `Int`.
 `outboxId stable from <field>` declares the identity that coalesces retries;
-under Language 4 the field must be `messageId`, `idempotencyKey`, or a field of
+the field must be `messageId`, `idempotencyKey`, or a field of
 an event mapped by the publisher's emit.

@@ -120,8 +120,7 @@ generated:
 - Stable `keiro-dsl` Language 5 can generate a
   `Generated.<Context>.ProjectionCatalog` facade from `target`,
   `rebuild-group`, `projection-owner`, and catalog-bound `readmodel`
-  declarations. Adopting Language 5 is an explicit service migration, not a
-  silent change to language 1–4 programs.
+  declarations.
 
 Generated code owns identities and wiring, but application code still owns
 table migrations, SQL queries, live apply functions, replay adapters, and
