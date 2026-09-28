@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-28
+* **Addition**: RES-19 evaluates recursion schemes in keiro-dsl: existing type folds, shared typed-expression analysis, maintenance tradeoffs, unmeasured performance hypotheses, and a proposed comparison with compatibility checks.
+
 ## 2026-09-17
 * **Addition**: RES-18 records the postponed decision on Optional, List, and Map shapes in public contract fields: options, costs, prerequisites, and the trigger to revisit.
 

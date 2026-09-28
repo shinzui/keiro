@@ -24,5 +24,6 @@
 - [Case study — wiring the AgentQualification decomposition onto keiro](13-agent-qualification-runtime-wiring.md) - Map the AgentQualification decomposition onto Keiro streams, routing, process managers, read models, and integration edges.
 - [Structural Consumer Types: What Keiro Gives Up and How to Recover It Safely](14-structural-consumer-type-tradeoffs.md) - Evaluate the costs of structural and opaque consumer-owned types and identify safe ergonomic improvements.
 - [Containers in Public Contract Fields: A Postponed Decision](15-containers-in-public-contract-fields.md) - Record why integration-contract fields stay flat scalars for now, what supporting Optional, List, or Map fields on public events would cost, and what must be decided before that changes.
+- [Recursion Schemes in keiro-dsl: Maintainability and Performance](16-recursion-schemes-in-keiro-dsl.md) - Evaluate shared expression folds and combined analyses in keiro-dsl, and define the evidence needed to justify adoption and any performance claim.
 - [OpenTelemetry semantic-conventions audit](opentelemetry-semconv-audit.md) - Audit Keiro instrumentation sites against the OpenTelemetry semantic conventions and record gaps and actions.
 
