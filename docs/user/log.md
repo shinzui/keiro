@@ -1,5 +1,9 @@
 # Keiro User Documentation Log
 
+## 2026-09-28
+* **Update**: Retitle the DSL reference to cover candidate Language 6, list every candidate addition, and document bare structural values, `Day` and `Set Text`, `mapped refined` base16 values, their frozen wire policies, and `domain=typeid-v5-or-v7` ID admission.
+* **Update**: Mark `.keiro` source examples in the DSL reference with the `keiro` code fence.
+
 ## 2026-09-19
 * **Update**: The API reference names standalone and workspace scaffold ledgers instead of the retired "scaffold records" and "workspace records" (TERM-22).
 

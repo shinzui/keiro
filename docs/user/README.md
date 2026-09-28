@@ -29,8 +29,8 @@ pieces those modules import.
   projections, process managers, and timers.
 - [Replayability Safety](replay-safety.md): the `ValidatedEventStream` boundary,
   hidden-input rejection, and what replay safety does and does not guarantee.
-- [Keiro DSL Language 5 Reference](typed-spec-toolchain.md): the complete
-  stable Language 5 grammar, type and expression rules, every node family, workspaces,
+- [Keiro DSL Language 5 and Candidate Language 6 Reference](typed-spec-toolchain.md): the complete
+  stable Language 5 grammar, the candidate Language 6 additions, type and expression rules, every node family, workspaces,
   generated ownership, CLI commands, validation, and evolution workflow.
 - [Adopting Mapped Consumer Surfaces](mapped-consumer-adoption.md): the stable
   Language-5 queue, query, projection, event, and snapshot gate; prerequisites;

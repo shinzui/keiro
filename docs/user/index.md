@@ -30,7 +30,7 @@ okf_version: "0.2"
 - [Read Models And Projections](read-models-and-projections.md) - Reference projection catalogs, delivery modes, query freshness, and rebuild lifecycles.
 - [Keiro Roadmap](roadmap.md) - Track capability maturity, adoption milestones, and future durable-execution direction.
 - [Snapshots](snapshots.md) - Reference advisory snapshots, fold versions, hydration behavior, and operations.
-- [Keiro DSL Language 5 Reference](typed-spec-toolchain.md) - Define the stable Language 5 grammar, toolchain, ownership, validation, and evolution workflow.
+- [Keiro DSL Language 5 and Candidate Language 6 Reference](typed-spec-toolchain.md) - Define the stable Language 5 grammar, the candidate Language 6 additions, and the toolchain, ownership, validation, and evolution workflow.
 - [Work Queues](work-queues.md) - Reference typed PGMQ jobs, workers, retries, FIFO groups, and dead-letter operations.
 
 # Runbook

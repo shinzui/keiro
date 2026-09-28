@@ -1,15 +1,15 @@
 ---
 type: Reference
-title: Keiro DSL Language 5 Reference
-description: Define the stable Language 5 grammar, toolchain, ownership, validation, and evolution workflow.
+title: Keiro DSL Language 5 and Candidate Language 6 Reference
+description: Define the stable Language 5 grammar, the candidate Language 6 additions, and the toolchain, ownership, validation, and evolution workflow.
 docId: DOC-23
-tags: [keiro, dsl, language-5, reference]
+tags: [keiro, dsl, language-5, language-6, reference]
 generated:
   by: human:nadeem
   at: 2026-09-18T04:05:10Z
 ---
 
-# Keiro DSL Language 5 Reference
+# Keiro DSL Language 5 and Candidate Language 6 Reference
 
 `keiro-dsl` is Keiro's build-time language for describing an event-sourced
 service. A checked `.keiro` source can generate Haskell domain types, codecs,
@@ -22,17 +22,36 @@ recommended contract for new released-only specifications. Language 4 remains a 
 immutable compatibility contract; sections that compare predecessor behavior
 show Language 4 sources explicitly. New sources in this guide begin with:
 
-```text
+```keiro
 language keiro-dsl 5
 ```
 
-The active, unpublished Language 6 candidate extends this stable base with
-delegated inboxes, first-class process reactions, and nominal declarations as
-structural leaves. Candidate-only examples say so explicitly and begin with
+**Language 6** is the active candidate. It is registered and fully checked,
+scaffolded, and conformance-tested, but it has not crossed the published
+compatibility boundary: the candidate may still be corrected in place until it
+is published. It extends Language 5 with the following additions:
+
+| Candidate Language 6 addition | Reference |
+| --- | --- |
+| `idempotence delegated` intake | [Intakes](#intakes) |
+| First-class process reactions with multiple typed inputs | [Processes and timers](#processes-and-timers) |
+| `ordering fifo-heads` work queues | [Work queues](#work-queues) |
+| Declared `id`, `enum`, and `mapped nominal` leaves inside structural mappings, typed queue fields, and query types | [Consumer-owned nominal declarations](#consumer-owned-nominal-declarations) |
+| `Map[DeclaredId] T` identifier-keyed maps | [Mapped type expressions](#mapped-type-expressions) |
+| Declared ID fields in public contracts | [Integration contracts](#integration-contracts) |
+| Named bare container values (`wire Optional Text`, `wire List T`, `wire Map T`) | [Structural bare values](#structural-bare-values) |
+| `Day` calendar days and `Set Text` text sets | [Checked value wire policies](#checked-value-wire-policies) |
+| `mapped refined` base16 byte values | [Refined values](#refined-values) |
+| `domain=typeid-v5-or-v7` ID admission | [IDs](#ids) |
+
+Each addition is refused below Language 6 with
+`LanguageFeatureRequiresVersion`, and each is inert for a source that does not
+use it. Candidate-only examples say so explicitly and begin with
 `language keiro-dsl 6`; released-only services should remain on Language 5
-until that candidate is published. On the current development branch,
-`keiro-dsl new` selects `currentStableLanguageVersion`, so starters remain on
-Language 5 until the candidate is published.
+until the candidate is published. `keiro-dsl new` selects
+`currentStableLanguageVersion`, so starters remain on Language 5 until then.
+[Checked Mapping Adoption](../guides/checked-mapping-adoption.md) walks through
+the checked value mappings end to end.
 
 Use this page as both an introduction and a syntax reference. The shortest path
 is [Quick start](#quick-start), followed by the node family you need. The
@@ -76,7 +95,7 @@ cabal run -v0 keiro-dsl -- scaffold service.keiro --out src
 
 The aggregate starter has this shape:
 
-```text
+```keiro
 language keiro-dsl 5
 context my-service
 
@@ -154,7 +173,7 @@ cabal run -v0 keiro-dsl -- diff service.keiro --since HEAD^ --explain
 
 A complete source has this outer form:
 
-```text
+```keiro
 language keiro-dsl 5
 context hospital-capacity
 module Acme.Services
@@ -242,7 +261,7 @@ workspace.
 
 ### IDs
 
-```text
+```keiro
 id TransferReservationId prefix=rsv
 id HospitalId prefix=hosp
 ```
@@ -255,14 +274,14 @@ within the service.
 
 An unbound ID register begins at the sentinel `placeholder`:
 
-```text
+```keiro
 regs
   reservationId TransferReservationId = placeholder
 ```
 
 Use a checked TypeID literal in a transition write:
 
-```text
+```keiro
 write requestId := RequestId("req_00041061050r3gg28a1c60t3gf")
 ```
 
@@ -270,9 +289,44 @@ The literal must be canonical, have the declared prefix, and carry a UUID-v7
 suffix. Application code should use the safe constructors exposed by the
 generated/current ID API rather than constructing raw text wrappers.
 
+#### Admission domains (candidate Language 6)
+
+Candidate Language 6 lets an ID declaration name the frozen set of canonical
+TypeIDs its readers and public constructors admit:
+
+```keiro
+language keiro-dsl 6
+context identity-history
+
+id LegacyId prefix=legacy domain=typeid-v5-or-v7
+```
+
+`domain` is `typeid-v7` (the default when omitted) or `typeid-v5-or-v7`.
+Omitting it keeps the released TypeID-v7 behavior and its compatibility
+identity, so existing declarations are unaffected. `typeid-v5-or-v7` admits
+canonical TypeIDs whose suffix is either a UUIDv5 or a UUIDv7, for retained
+data that holds deterministic, name-derived identifiers. It controls admission
+only: it does not select an ID generator, change deterministic seeds, or
+authorize regenerating stored identifiers.
+
+The selected domain follows the ID everywhere the declaration is used: direct
+and nested aggregate fields, structural and keyed-map codecs, workqueue
+payloads, read-model query types, router recipients, and declared public
+contract fields. Process and workflow codecs, stream names, and workflow,
+child, and timer IDs stay application-owned.
+
+Changing the domain is a compatibility change in either direction. Widening to
+`typeid-v5-or-v7` is an old-reader/new-writer hazard, because older readers
+reject newly written UUIDv5 values. Narrowing back is a historical-read hazard,
+because retained UUIDv5 values stop decoding. `diff` reports either direction as
+`IdDomainContractChanged` at every direct and nested use, changes the affected
+fold fingerprint, and marks aggregate replay as affected. See
+[Explicit ID admission domains](../id-admission-domains.md) for the
+supported-use matrix.
+
 ### Enums
 
-```text
+```keiro
 enum PatientAcuity {
   RedTag=red
   YellowTag=yellow
@@ -285,7 +339,7 @@ spelling. Constructor names and wire spellings must each be unique. Enum
 registers start at a declared constructor, and expression literals are
 qualified:
 
-```text
+```keiro
 regs
   acuity PatientAcuity = GreenTag
 
@@ -294,7 +348,7 @@ guard cmd.acuity == PatientAcuity.RedTag
 
 ### Rules
 
-```text
+```keiro
 rule lifeCriticalOverride : PatientAcuity -> Bool
   ex RedTag => true ; YellowTag => false ; GreenTag => false
 ```
@@ -308,7 +362,7 @@ atoms in aggregate guards.
 
 Use `using` when an ID or enum already has an application-owned Haskell type:
 
-```text
+```keiro
 id OrderId prefix=ord using {
   haskell package=orders-domain module=Orders.Id type=OrderId
   binding = "Orders.KeiroBindings.orderIdBinding"
@@ -330,7 +384,7 @@ enum OrderStatus { Draft=draft Submitted=submitted } using {
 
 Use `mapped nominal` for an application-owned scalar wrapper:
 
-```text
+```keiro
 mapped nominal AccountNumber : Text {
   haskell package=orders-domain module=Orders.Account type=AccountNumber
   binding = "Orders.KeiroBindings.accountNumberBinding"
@@ -352,7 +406,7 @@ required. `initial` is required when the type is used by a register. A
 consumer-owned register starts with the bare token `initial`, which selects the
 declared symbol:
 
-```text
+```keiro
 regs
   orderId OrderId = initial
   status OrderStatus = initial
@@ -396,7 +450,10 @@ Aggregate registers and explicit command/event fields accept:
 
 `Json`, `Optional`, `List`, and `Map` are not legal as direct aggregate fields
 or registers. Put those shapes behind a named `mapped structural` or
-`mapped opaque` declaration.
+`mapped opaque` declaration. The candidate Language 6 `Day` and `Set Text`
+types follow the same rule: declare a named
+[bare value](#structural-bare-values) such as `wire Day` and use that mapping as
+the field or register type. A `mapped refined` declaration may be used directly.
 
 ### Optional identifiers on commands
 
@@ -404,7 +461,7 @@ A command or explicit event field cannot use `Optional DeclaredId` directly.
 Give the optional value a named structural boundary, then use that mapped type
 at the aggregate field:
 
-```text
+```keiro
 mapped structural record TemplateIdRef {
   haskell package=templates-domain module=Templates.Domain type=TemplateIdRef
   binding = "Templates.KeiroBindings.templateIdRefBinding"
@@ -435,7 +492,7 @@ A field without `:Type` is inferred in this order:
 For public and persisted shapes, explicit field types are easier to review and
 safer during evolution:
 
-```text
+```keiro
 command Adjust { amount:Integer requestId:RequestId observedAt:Time }
 event Adjusted { amount:Integer requestId:RequestId observedAt:Time }
 ```
@@ -444,20 +501,24 @@ event Adjusted { amount:Integer requestId:RequestId observedAt:Time }
 
 Structural mapped fields support these recursive expressions:
 
-```text
+```keiro
 Text
 Int
 Integer
 Bool
 Natural
 Time
+Day
 Json
 Optional Text
 List Text
 List (Optional Text)
 Map Text
 Map[DeclaredId] Text
+Set Text
+Optional (Set Text)
 OtherMappedType
+RefinedMappedType
 DeclaredId
 DeclaredEnum
 MappedNominalScalar
@@ -476,6 +537,15 @@ fixtures.
 occur beneath `Optional`, `List`, and `Map` and at typed workqueue and read-model
 query roots. Generated and consumer-bound IDs, enums, and nominal scalars are supported.
 
+`Day`, `Set Text`, and the names of `mapped refined` declarations
+(`RefinedMappedType` above) also require candidate Language 6. `Day` and
+`Set Text` lower to `Data.Time.Calendar.Day` and `Set Text` through the frozen
+policies in [Checked value wire policies](#checked-value-wire-policies). They
+may occur beneath `Optional`, `List`, and text-keyed `Map`, and a refined value
+may occur in the same positions. `Set` accepts only `Text` elements, and neither
+a set, a day, nor a refined value may be a `Map[...]` key; use a declared ID for
+a keyed map.
+
 ## Consumer-owned mapped types
 
 A mapped declaration keeps an existing Haskell type at the application
@@ -484,7 +554,7 @@ shape; an opaque mapping delegates JSON authority to the consumer type.
 
 ### Structural records
 
-```text
+```keiro
 mapped structural record ArtifactInfo {
   haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactInfo
   binding = "Example.Artifact.KeiroBindings.artifactInfoBinding"
@@ -525,7 +595,7 @@ JSON `null` cannot distinguish the cases.
 
 ### Structural string enums
 
-```text
+```keiro
 mapped structural enum ArtifactKind {
   haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactKind
   binding = "Example.Artifact.KeiroBindings.artifactKindBinding"
@@ -543,7 +613,7 @@ Constructor names and JSON string values must each be unique.
 
 ### Structural tagged unions
 
-```text
+```keiro
 mapped structural union ArtifactLocation {
   haskell package=artifact-domain module=Example.Artifact.Domain type=ArtifactLocation
   binding = "Example.Artifact.KeiroBindings.artifactLocationBinding"
@@ -561,9 +631,113 @@ mapped structural union ArtifactLocation {
 An arm may omit its payload. Arm constructor names and tag values must each be
 unique, and the tag and contents keys must not collide.
 
+### Structural bare values
+
+Candidate Language 6 adds `mapped structural value`, which gives a named
+consumer type a bare structural wire shape instead of an object, string enum,
+or tagged union:
+
+```keiro
+language keiro-dsl 6
+
+mapped structural value MaybeLabel {
+  haskell package=labels-domain module=Labels.Domain type=MaybeLabel
+  binding = "Labels.KeiroBindings.maybeLabelBinding"
+  binding-version = "1"
+  canonical-type = "labels.MaybeLabel.v1"
+  fixtures = "Labels.KeiroBindings.maybeLabelFixtures"
+  initial = "Labels.KeiroBindings.initialMaybeLabel"
+  wire Optional Text
+}
+
+mapped structural value ImportantDays {
+  # binding metadata omitted
+  wire List Day
+}
+
+mapped structural value NestedIds {
+  # binding metadata omitted
+  wire List (Optional ItemId)
+}
+```
+
+The outer constructor of the `wire` expression must be `Optional`, `List`,
+text-keyed `Map`, `Day`, or `Set Text`; the checker rejects any other bare root
+with `MappedUnsupportedEncoding`. The value is encoded as that shape directly,
+without an object wrapper. Nullability propagates transitively through named
+values, so a value whose root is `Optional` is null-capable wherever it is
+used, and wrapping it in another `Optional` is rejected as non-injective in the
+same way as `Optional Json`. A field of such a type may use `on-missing=null`,
+and a direct private-event field whose checked root is `Optional` treats an
+omitted key the same as an explicit JSON `null`.
+
+The binding is a total isomorphism between the consumer type and the generated
+shape, exactly as for records:
+
+```haskell
+maybeLabelBinding :: StructuralBinding MaybeLabel MaybeLabelShape
+maybeLabelBinding =
+  StructuralBinding
+    { bindingToShape = \(MaybeLabel value) -> value
+    , bindingFromShape = MaybeLabel
+    }
+```
+
+Named bare values are also how an aggregate field or register carries a `Day`,
+a `Set Text`, or an optional or collection shape.
+
+### Refined values
+
+Candidate Language 6 adds `mapped refined`, a consumer type whose wire form is
+one of Keiro's frozen refined policies. The only policy is `base16-bytes`:
+
+```keiro
+language keiro-dsl 6
+
+mapped refined ContentHash {
+  haskell package=storage-domain module=Storage.Hash type=ContentHash
+  binding = "Storage.KeiroBindings.contentHashBinding"
+  binding-version = "1"
+  canonical-type = "storage.ContentHash.v1"
+  fixtures = "Storage.KeiroBindings.contentHashFixtures"
+  initial = "Storage.KeiroBindings.initialContentHash"
+  wire base16-bytes
+}
+```
+
+The generated shape is a `ByteString`, and the binding converts between it and
+the consumer type totally. The policy has no length or content callback: any
+byte string, including the empty string, is admitted. Model a bounded byte
+type as a new explicit policy rather than validating in `bindingFromShape`.
+
+A refined declaration may be used directly as an aggregate field or register,
+inside structural records, bare values, lists, and text-keyed maps, and in
+typed queue payloads and read-model query types. It is not supported as a map
+key, in guard or write expressions beyond whole-value assignment, or in a
+public contract, where consumers cannot share the refined codec.
+
+### Checked value wire policies
+
+`Day`, `Set Text`, and `base16-bytes` each lower to a frozen `keiro-core` codec
+rather than a consumer validation callback. Each policy has a stable identity
+that participates in the generated mapped-wire fingerprint, so a change to
+what it reads or writes needs a successor policy and a retained reader.
+
+| Type | Codec | Writes | Reads |
+| --- | --- | --- | --- |
+| `Day` | `Keiro.Codec.CalendarDay` | `[-]YYYY-MM-DD`, proleptic Gregorian, four-digit minimum year, never a `+` sign | The same language plus an optional `+` sign and redundant year zeroes; invalid dates rejected; no timezone or instant conversion |
+| `Set Text` | `Keiro.Codec.TextSet` | A JSON array of unique strings in Unicode code-point order | Any array order and duplicate strings; no Unicode normalization or case folding |
+| `base16-bytes` | `Keiro.Codec.Base16Bytes` | Lowercase hexadecimal with no prefix, preserving leading zero bytes and the empty value | Upper- or lowercase hexadecimal; prefixes, whitespace, odd lengths, and non-hex digits rejected |
+
+Every reader accepts the full historical language and normalizes it, so
+retained non-canonical bytes decode to the same value that the writer would
+emit. Each family is a separate capability of the candidate runtime profile
+`keiro-dsl/runtime-semantics/5` and changes generated codecs only, not
+transition or fold semantics.
+
 ### Opaque mappings
 
-```text
+```keiro
 mapped opaque VendorGeometry {
   haskell package=vendor-geometry module=Vendor.Geometry type=Geometry
   codec = "vendor.geometry.json"
@@ -618,11 +792,14 @@ Before candidate Language 6, an application could preserve its Haskell ID type
 only by declaring a `mapped opaque` twin of the consumer-bound ID and, for an
 optional field, another opaque wrapper around `Maybe ClaimId`. That workaround
 made the consumer Aeson instance authoritative and caused persisted roots to
-remain visible as opaque coverage.
+remain visible as opaque coverage. The same workaround was needed when retained
+IDs carried UUIDv5 suffixes; a declaration with
+[`domain=typeid-v5-or-v7`](#admission-domains-candidate-language-6) now admits
+those values through the checked nominal path.
 
 Replace the opaque twin with the nominal declaration name directly:
 
-```text
+```keiro
 id ClaimId prefix=claim using {
   haskell package=claims-domain module=Claims.Id type=ClaimId
   binding = "Claims.KeiroBindings.claimIdBinding"
@@ -707,7 +884,7 @@ never compare even when their wire prefixes happen to match.
 
 ### Literals
 
-```text
+```keiro
 "text"
 -100
 true
@@ -749,7 +926,7 @@ written into a `Bool` register as scalar values.
 
 Example:
 
-```text
+```keiro
 Open -- Adjust -->
   guard cmd.amount + reg.balance >= -100
     && reg.reserved + cmd.requested <= reg.capacity
@@ -766,7 +943,7 @@ Open -- Adjust -->
 
 An aggregate is an event-sourced consistency boundary.
 
-```text
+```keiro
 aggregate Reservation
   regs
     reservationId TransferReservationId = placeholder
@@ -808,7 +985,7 @@ single lifecycle authority.
 
 ### Commands and events
 
-```text
+```keiro
 command Request { reservationId amount:Integer }
 event Requested = fields(Request)
 event Rejected { reservationId reason:Text }
@@ -846,7 +1023,7 @@ consumers.
 
 ### Transitions
 
-```text
+```keiro
 Source -- Command -->
   guard <Boolean expression>
   write register := <scalar expression>
@@ -869,7 +1046,7 @@ By default, Language 4 generates transition behavior from its guard, writes,
 emits, and target. Use an explicit hole when the predicate or updates cannot be
 expressed:
 
-```text
+```keiro
 Reviewed -- Close -->
   implementation hole
   emit ClosedEvent
@@ -886,7 +1063,7 @@ snapshots and replay audits can detect the new fold.
 Language 5 can make every selected command result explicit without turning a
 business rejection into an event:
 
-```text
+```keiro
 language keiro-dsl 5
 context reservations
 
@@ -958,7 +1135,7 @@ repository's quiet-host benchmark prerequisite is satisfied.
 A replay-only transition participates in hydration but never accepts a new
 command:
 
-```text
+```keiro
 replay-only Held -- Confirm -->
   emit LegacyConfirmed
   goto Confirmed
@@ -970,7 +1147,7 @@ after their live behavior has been retired.
 The initial state is not special. A historical first event can retain a
 replay-only sibling beside the current live start rule:
 
-```text
+```keiro
 command Start { legacy:Bool }
 event Started = fields(Start)
 
@@ -1005,7 +1182,7 @@ live emitter or a deprecated event is still emitted live.
 
 ### Event versions and upcasters
 
-```text
+```keiro
 event ReservationConfirmed v2 { reservationId note:Text }
   upcast from v1 = HOLE
 ```
@@ -1024,7 +1201,7 @@ non-overwriting old-shape fixtures for version bumps.
 
 Language 4 supports exactly:
 
-```text
+```keiro
 wire kind=ctorName fields=camelCase schemaVersion=1
 ```
 
@@ -1033,7 +1210,7 @@ other byte convention.
 
 ### Aggregate projections
 
-```text
+```keiro
 projection transfer_decisions key=reservationId
   status-map {
     Requested=>held
@@ -1059,14 +1236,14 @@ top-level projection owner instead.
 
 ### Snapshots
 
-```text
+```keiro
 snapshot every 100
   state-codec version=1 shape-hash="<captured-live-hash>"
 ```
 
 or:
 
-```text
+```keiro
 snapshot on-terminal
   state-codec version=1 shape-hash="<captured-live-hash>"
 ```
@@ -1087,7 +1264,7 @@ inputs, ordered guarded arms, optional advancement, timer-free processes, and
 multiple independently named timers. The following process is entirely
 generated except for decoding a `RecordedEvent` into `IncidentReactionInput`:
 
-```text
+```keiro
 language keiro-dsl 6
 context incident-response
 
@@ -1136,7 +1313,7 @@ commands still commit in separate transactions.
 Timers are optional. When present, declare one process-wide worker policy and
 one block per timer:
 
-```text
+```keiro
   on IncidentReported
     advance RecordIncident { incidentId }
     schedule escalation fireAt input.raisedAt + 5m { incidentId detail }
@@ -1211,7 +1388,7 @@ compatibility obligations remain.
 A router resolves zero or more target rows for an input and dispatches one
 command per row without keeping its own event-sourced state.
 
-```text
+```keiro
 router HospitalTransferRouter
   name "hospital-transfer-router"
   input AcceptedTransferNeed { transferNeedId region }
@@ -1241,7 +1418,7 @@ changes can accumulate the union of targets seen across attempts.
 
 Language 5 also admits a checked, bounded selection:
 
-```text
+```keiro
 resolve declarative {
   identity = "hospital-transfer-selection"
   version = 1
@@ -1290,7 +1467,7 @@ shown.
 
 A contract owns public event names, topic aliases, and payload fields:
 
-```text
+```keiro
 contract emergency {
   schemaVersion 1
   discriminator messageType
@@ -1319,18 +1496,19 @@ Contract field types are:
 | Syntax | Generated type |
 | --- | --- |
 | `typeid "prefix"` | `KindID "prefix"` with current TypeID-v7 decoding |
-| `DeclaredId` (Language 6 candidate) | the declared ID's generated or consumer-bound Haskell type, with that declaration's TypeID-v7 admission |
+| `DeclaredId` (Language 6 candidate) | the declared ID's generated or consumer-bound Haskell type, with that declaration's admission domain (`typeid-v7` unless the declaration says `typeid-v5-or-v7`) |
 | `text` | `Text` |
 | `int` | `Int` |
 
 Field names are unique within an event and cannot equal the contract
 discriminator. TypeID prefixes follow the same validity rules as shared IDs.
-The generated decoder rejects malformed, non-canonical, non-v7, and
-wrong-prefix values at the field path.
+The generated decoder rejects malformed, non-canonical, wrong-prefix, and
+unadmitted values at the field path; `typeid "prefix"` and default declared IDs
+admit only UUIDv7 suffixes.
 
 A candidate Language 6 contract may name a top-level `id` declaration directly:
 
-```text
+```keiro
 language keiro-dsl 6
 context templates
 
@@ -1367,7 +1545,7 @@ before producers.
 
 An intake connects one contract topic to the inbox:
 
-```text
+```keiro
 intake incidentInbox {
   contract emergency
   topic incidentEvents
@@ -1427,7 +1605,7 @@ Dedupe policies are `PreferIntegrationMessageId`,
 Candidate Language 6 can delegate receipt ownership to the downstream state
 machine:
 
-```text
+```keiro
 dedupe key messageId policy PreferIntegrationMessageId
 idempotence delegated
 ```
@@ -1458,7 +1636,7 @@ retry duration whose unit-adjusted seconds do not fit in `Int`.
 
 An emit maps a private discriminant to public contract events:
 
-```text
+```keiro
 emit reservationResponse {
   contract emergency
   topic hospitalEvents
@@ -1490,7 +1668,7 @@ retries reproduce the same IDs.
 
 A publisher owns delivery policy for one emit:
 
-```text
+```keiro
 publisher hospitalPublisher {
   emit reservationResponse
   ordering PerKeyHeadOfLine
@@ -1522,7 +1700,7 @@ an event mapped by the publisher's emit.
 
 The grouped-head example below uses candidate Language 6 syntax.
 
-```text
+```keiro
 workqueue reservation_work {
   queue logical = "hospital_capacity.reservation_work"
   derive physical = "hospital_capacity_reservation_work"
@@ -1570,7 +1748,7 @@ payload evolution is a persisted wire change and must go through `diff`.
 Language 5 additionally reserves a colon form for a complete mapped
 type expression:
 
-```text
+```keiro
 jobData -> "job_data" : List (Optional ArtifactInfo)
 ```
 
@@ -1592,7 +1770,7 @@ heads. It is Language 6 candidate syntax and is refused below Language 6 with
 FIFO fill modes require a runtime batch size of one.
 `via raw` requires a `text` field. An opaque derivation uses:
 
-```text
+```keiro
 group key from reservationId via reservationGroup
   fixture "rsv_... => group-a"
 ```
@@ -1601,7 +1779,7 @@ The fixture captures the expected hand-owned derivation.
 
 Provisioning is `standard` (the default), `unlogged`, or:
 
-```text
+```keiro
 provision partitioned(interval="daily", retention="7 days")
 ```
 
@@ -1619,7 +1797,7 @@ mistakes become compile errors in hand-owned handlers.
 
 ### Read-model-driven dispatch
 
-```text
+```keiro
 dispatch reservation_work_dispatch {
   source readModel = accepted_transfer_needs key = reservationId
   fanout body = resolveTransferCandidates
@@ -1649,7 +1827,7 @@ keeps physical coordinates, delivery feed, and the historical consistency
 vocabulary on the read model. Language 5 uses the catalog form later
 in this section and does not accept those delivery/consistency fields.
 
-```text
+```keiro
 readmodel transfer_decisions {
   table = "transfer_decisions"
   schema = "hospital_capacity"
@@ -1696,7 +1874,7 @@ generated table constant in SQL rather than depending on PostgreSQL
 Language 5 may declare the two type parameters of `ReadModel q r` as
 one ordered pair after `columns`:
 
-```text
+```keiro
 query input = AccountLookup
 query result = Optional AccountSummary
 ```
@@ -1726,7 +1904,7 @@ projection catalog without changing the meaning of any language-1–4 source. Do
 not rewrite an existing language-4 workspace merely to follow the default; opt
 in when the service is ready to declare the complete read-side inventory.
 
-```text
+```keiro
 language keiro-dsl 5
 context catalog-demo
 
@@ -1838,7 +2016,7 @@ complete supplier check.
 
 Projection delivery and query freshness are separate Language 5 axes:
 
-```text
+```keiro
 delivery = inline
 delivery = subscription
 
@@ -1875,7 +2053,7 @@ bodies. Regeneration never overwrites reviewed hole code.
 
 Language 5 also supports the bounded all-row external-read contract:
 
-```text
+```keiro
 external-read order_totals_reader {
   version = 1
   query = order_totals_lookup
@@ -1934,7 +2112,7 @@ rules in [Migration Ownership](migration-ownership.md).
 
 ## Workflows
 
-```text
+```keiro
 workflow HospitalTransferReservation
   name "hospital-transfer-reservation"
   in ReservationWorkflowInput {
@@ -1985,7 +2163,7 @@ today; the command/query/signal/run implementation boundary is hand-owned.
 
 ### Command operation
 
-```text
+```keiro
 operation ConfirmReservation
   command on Reservation
     stream from reservationId via reservationStream
@@ -1997,7 +2175,7 @@ hand-owned stream derivation.
 
 ### Query operation
 
-```text
+```keiro
 operation QueryTransferDecision
   query transferDecision
     input TransferReservationId
@@ -2011,7 +2189,7 @@ a Haskell type phrase and can contain multiple identifiers.
 
 ### Signal operation
 
-```text
+```keiro
 operation SignalReservationConfirmation
   signal reservation-confirmation of HospitalTransferReservation
     key from reservationId via reservationWorkflowId
@@ -2024,7 +2202,7 @@ and leave the workflow waiting.
 
 ### Run operation
 
-```text
+```keiro
 operation RunReservationWorkflow
   run HospitalTransferReservation
     input ReservationWorkflowInput
@@ -2585,6 +2763,13 @@ all checked before adoption.
 Existing Language-4 compatibility CI may keep `--min-language 4` without triggering a mechanical
 rewrite; new Language-5 services should use the standard `--min-language 5` gate.
 
+A source that declares `language keiro-dsl 6` selects the candidate contract.
+`check` and `scaffold` accept it, and the `--report-out` JSON records
+`"languageSupport": "candidate"` with runtime semantics
+`keiro-dsl/runtime-semantics/5`, because it has not yet been published. A service that adopts candidate features may gate CI with
+`--min-language 6`, but should expect to track in-place corrections to the
+candidate until it is published.
+
 The warning policy follows the evidence boundary. Three warnings depend on
 operational history and therefore remain warnings: `DeprecatedEventReplayHazard`,
 `EventRetirementInProgress`, and `ReplayOnlyCommandStillLive`. Deny them in CI
@@ -2646,7 +2831,7 @@ rule for a Language 5 catalog-bound query.
 
 For any persisted or public change:
 
-1. Edit the Language 4 source.
+1. Edit the source.
 2. Run `check` and resolve every error.
 3. Run `diff --since <deployed-ref> --explain`.
 4. For private event changes, bump event versions, preserve contiguous
@@ -2671,14 +2856,17 @@ policy can own it at the correct boundary.
 
 Before committing a new or changed service specification:
 
-- The first non-comment line is exactly `language keiro-dsl 5` for a new or migrated service.
+- The first non-comment line is exactly `language keiro-dsl 5` for a new or migrated service,
+  or `language keiro-dsl 6` only when the service intentionally adopts candidate features.
 - `check` exits zero for the whole source or workspace.
 - Every public/persisted field has an intentional type and wire spelling.
 - Aggregate time comes from command/input data, never a sampled clock.
 - Every state change emits an event; guarded siblings are mutually exclusive.
 - Event changes have a version, contiguous upcaster chain, and payload goldens.
-- Mapped structural bindings are total; opaque boundaries are intentional and
-  visible in coverage.
+- Mapped structural and refined bindings are total; opaque boundaries are
+  intentional and visible in coverage.
+- A changed ID admission domain, date, set, or base16 policy is treated as a
+  semantic change with a retained reader, never as a refactor.
 - Intake and queue disposition tables contain every required outcome and keep
   transient failures separate from poison or terminal failures.
 - Stable process, router, workflow, queue, read-model, topic, patch, and outbox
