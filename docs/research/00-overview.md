@@ -17,7 +17,7 @@ This directory holds the research backing the design of 経路 (keiro), a Haskel
 > implemented multi-package framework. For the current public contract use the
 > [User Guide](../user/README.md), [Production Status](../user/production-status.md),
 > [API Reference](../user/api-reference.md), and
-> [Typed Specifications](../user/typed-spec-toolchain.md). The overview below
+> [Keiro DSL Reference](../user/keiro-dsl-reference.md). The overview below
 > annotates major closures but does not rewrite historical conclusions in place.
 
 ## What keiro is

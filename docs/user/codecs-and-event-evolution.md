@@ -79,7 +79,7 @@ from mapped-register snapshot encoding: snapshots are a consumer-JSON cache
 whose mapping fingerprint controls invalidation.
 
 For the declaration, binding, generated-harness, and coverage contracts, see
-[Typed Specifications](typed-spec-toolchain.md#consumer-owned-mapped-types).
+[Keiro DSL Types and Mappings](keiro-dsl-types-and-mappings.md#consumer-owned-mapped-types).
 For an existing codec, capture historical JSON and follow the finite
 [shadow-comparison workflow](../guides/brownfield-migration-and-transducer-modeling.md#shadow-comparison-of-old-and-new-codecs)
 before cutover. A passing comparison is migration evidence, not a runtime

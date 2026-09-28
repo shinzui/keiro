@@ -11,7 +11,7 @@ tags:
   - keiro-dsl
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-types-and-mappings.md
 ---
 
 # structural binding
@@ -20,4 +20,4 @@ A binding connects an existing address value to the generated address shape and 
 
 The binding connects representations, while the structural declaration owns wire-format policy. It does not grant the application's JSON instance authority to override the generated format.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Types and Mappings](../user/keiro-dsl-types-and-mappings.md) for details.

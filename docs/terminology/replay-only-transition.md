@@ -13,7 +13,7 @@ related:
   - TERM-63
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-aggregates.md
 ---
 
 # replay-only transition
@@ -22,4 +22,4 @@ Suppose an older rule emitted an event that new orders must no longer produce. R
 
 It must still emit the historical evidence needed for replay. Decoding an old payload through an [upcaster](upcaster.md) is a different responsibility from retaining the behavior that interprets it.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.

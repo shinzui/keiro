@@ -14,7 +14,7 @@ related:
   - TERM-54
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-aggregates.md
 ---
 
 # transition
@@ -23,4 +23,4 @@ A transition might accept a payment when an order is awaiting payment, update it
 
 Keiro uses the transition model from `mori://shinzui/keiki` for both command handling and replay. A [replay-only transition](replay-only-transition.md) preserves historical behavior without accepting new commands.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.

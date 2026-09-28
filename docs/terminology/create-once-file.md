@@ -13,7 +13,7 @@ aliases:
   - hand-owned file
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-workspaces-and-generated-code.md
 ---
 
 # create-once file
@@ -22,4 +22,4 @@ Implementation holes, bindings, and other application-owned modules use this pol
 
 Generated modules have a different policy: regeneration may replace them. When a specification evolves, retained create-once code may need manual updates to match new interfaces.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md) for details.

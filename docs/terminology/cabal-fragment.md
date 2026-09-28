@@ -18,7 +18,7 @@ anchors:
   - kind: module
     resource: Keiro.Dsl.SidecarNames
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-workspaces-and-generated-code.md
     note: The Scaffold sidecars section.
 ---
 
@@ -32,4 +32,4 @@ The file is `keiro-dsl-cabal-fragment.context.<context>.txt` or
 `keiro-dsl-cabal-fragment.workspace.<service>.txt`. Use "Cabal fragment" rather than the
 old name "scaffold manifest", which can be confused with the authored
 [workspace manifest](workspace-manifest.md). See
-[Typed-Spec Toolchain](../user/typed-spec-toolchain.md#scaffold-sidecars) for usage.
+[Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars) for usage.

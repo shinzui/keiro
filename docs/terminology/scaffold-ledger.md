@@ -39,4 +39,4 @@ Commit it with the generated code; do not hand-edit or discard it. The file is n
 `keiro-dsl-ledger.context.<context>.txt` for one context or
 `keiro-dsl-ledger.workspace.<service>.txt` for a workspace. Older documentation calls it
 a [scaffold record](scaffold-record.md). See
-[Typed-Spec Toolchain](../user/typed-spec-toolchain.md#scaffold-sidecars) for details.
+[Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars) for details.

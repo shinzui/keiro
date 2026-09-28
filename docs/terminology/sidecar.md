@@ -22,7 +22,7 @@ anchors:
   - kind: doc
     resource: docs/adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-workspaces-and-generated-code.md
     note: The Scaffold sidecars section.
 ---
 
@@ -36,5 +36,5 @@ preserve generation history. The [Cabal fragment](cabal-fragment.md) supplies bu
 configuration to copy into a package. A workspace migration can also produce a report.
 
 The [workspace manifest](workspace-manifest.md) is an input you author, rather than a
-generated sidecar. See [Typed-Spec Toolchain](../user/typed-spec-toolchain.md#scaffold-sidecars)
+generated sidecar. See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars)
 for file names and handling rules.

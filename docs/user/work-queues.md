@@ -563,7 +563,7 @@ hand: FIFO queues require a group key and unordered queues reject one, and the
 captured physical/DLQ/table names must match the logical-name derivation.
 `keiro-dsl diff` classifies ordering, group-key, provisioning, and queue-identity
 changes as BREAKING. See
-[Typed Specifications](typed-spec-toolchain.md).
+[Keiro DSL Reference](keiro-dsl-reference.md).
 
 ## A worked example
 

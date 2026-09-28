@@ -15,7 +15,7 @@ related:
   - TERM-31
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-aggregates.md
 ---
 
 # lifecycle state
@@ -24,4 +24,4 @@ An order might be awaiting payment, paid, or shipped. These stages form its life
 
 Keiro's underlying model, owned by `mori://shinzui/keiki`, separates the lifecycle state from those remembered values. Together they form the state reconstructed from events.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.

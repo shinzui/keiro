@@ -31,7 +31,7 @@ evidence:
     resource: keiro-dsl/test/conformance-newsurface/Main.hs
     proves: "The complete stable-Language-5 surface compiles through the generated runtime and service conformance package under explicit language ownership."
   - kind: guide
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-reference.md
     proves: "How to author a .keiro spec, select a language version, run check/scaffold/diff, and fill the generated create-once holes."
 ---
 

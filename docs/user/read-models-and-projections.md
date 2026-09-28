@@ -270,7 +270,7 @@ reported for recompilation/review without being described as replayable.
 Category and all-history owners remain visible as unsupported heterogeneous
 typed boundaries and never receive an invented mapped declaration.
 
-See [Typed Specifications](typed-spec-toolchain.md#language-5-projection-catalogs)
+See [Keiro DSL Queues and Read Models](keiro-dsl-queues-and-read-models.md#language-5-projection-catalogs)
 for the complete syntax and validation rules.
 
 ## Register And Fence Catalog Groups

@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-09-28
+* **Update**: Split the DSL reference into `keiro-dsl-reference.md` (DOC-23, overview and language versions) and nine topic pages, DOC-26 through DOC-34, and repoint inbound links to the page that now holds each section.
 * **Update**: Retitle the DSL reference to cover candidate Language 6, list every candidate addition, and document bare structural values, `Day` and `Set Text`, `mapped refined` base16 values, their frozen wire policies, and `domain=typeid-v5-or-v7` ID admission.
 * **Update**: Mark `.keiro` source examples in the DSL reference with the `keiro` code fence.
 

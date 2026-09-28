@@ -1133,7 +1133,7 @@ Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `check --explain-bindings`, `check|diff --coverage-report`,
 `diff --gate|--explain|--report-out`, repeatable `check|diff --deny CODE`, and
 `scaffold --codec-comparison ... --comparison-out ...`. See
-[Typed Specifications](typed-spec-toolchain.md).
+[Keiro DSL Reference](keiro-dsl-reference.md).
 
 ## `Keiro.Prelude`
 

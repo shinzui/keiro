@@ -31,5 +31,5 @@ can check the existing package. It records generation history, not test results.
 
 The file is `keiro-dsl-conformance-ledger.txt`; keep it with the package and let the tool
 maintain it. It replaces the [conformance record](conformance-record.md). See
-[Typed-Spec Toolchain](../user/typed-spec-toolchain.md#one-runnable-conformance-package-per-service)
+[Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#one-runnable-conformance-package-per-service)
 for the generated test package.

@@ -130,7 +130,7 @@ only with the declared version and historical evidence. The escape hatch keeps
 the rest of the DSL's evidence; it cannot manufacture evidence about code it
 does not understand.
 
-See [Generated and hand-owned files](../user/typed-spec-toolchain.md#generated-and-hand-owned-files)
+See [Generated and hand-owned files](../user/keiro-dsl-workspaces-and-generated-code.md#generated-and-hand-owned-files)
 for the concrete scaffold modules and authoring rules.
 
 
@@ -196,7 +196,7 @@ traverse required structural paths to those leaves with same-declaration
 equality. A direct `Optional DeclaredId` aggregate field is still rejected: use
 a one-field `mapped structural` record whose field is
 `Optional DeclaredId optional on-missing=null`. See the
-[Language reference](../user/typed-spec-toolchain.md#mapped-type-expressions)
+[Language reference](../user/keiro-dsl-types-and-mappings.md#mapped-type-expressions)
 for syntax and binding laws.
 
 ### ID prefixes become an evolution contract
@@ -388,7 +388,7 @@ compatibility evidence in exchange for less unrestricted authoring and more
 build-time discipline. The tradeoff is granular: an escape hatch gives up
 analysis only at its declared boundary, not across the entire service.
 
-See [Typed Specifications With `keiro-dsl`](../user/typed-spec-toolchain.md) for
+See [Keiro DSL Reference](../user/keiro-dsl-reference.md) for
 the complete authoring workflow and
 [The Guarantee Ledger](dsl-guarantees-and-hand-written-services.md) for the
 precise guarantees retained by hand-written services.

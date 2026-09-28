@@ -14,7 +14,7 @@ related:
   - TERM-28
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-aggregates.md
 ---
 
 # guard
@@ -23,4 +23,4 @@ For example, a payment transition might require the amount in the command to equ
 
 Keiro uses guards from `mori://shinzui/keiki`. Changing a guard can affect historical replay as well as new decisions, so it belongs in the [replay-safety](replay-safety.md) and evolution review.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.

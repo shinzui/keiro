@@ -29,9 +29,25 @@ pieces those modules import.
   projections, process managers, and timers.
 - [Replayability Safety](replay-safety.md): the `ValidatedEventStream` boundary,
   hidden-input rejection, and what replay safety does and does not guarantee.
-- [Keiro DSL Language 5 and Candidate Language 6 Reference](typed-spec-toolchain.md): the complete
-  stable Language 5 grammar, the candidate Language 6 additions, type and expression rules, every node family, workspaces,
-  generated ownership, CLI commands, validation, and evolution workflow.
+- [Keiro DSL Reference](keiro-dsl-reference.md): the language overview, the
+  stable Language 5 and candidate Language 6 contracts, quick start, and source
+  file structure, with one page per topic:
+  - [Types and Mappings](keiro-dsl-types-and-mappings.md): IDs, enums, rules,
+    direct types, and consumer-owned nominal, structural, refined, and opaque mappings.
+  - [Aggregates](keiro-dsl-aggregates.md): expressions, transitions, typed
+    outcomes, event evolution, projections, and snapshots.
+  - [Processes and Routers](keiro-dsl-processes-and-routers.md): process
+    managers, reactions, timers, and routers.
+  - [Integration Contracts](keiro-dsl-integration.md): contracts, intakes,
+    emits, and publishers.
+  - [Queues and Read Models](keiro-dsl-queues-and-read-models.md): work
+    queues, dispatch, read models, projection catalogs, and external reads.
+  - [Workflows and Operations](keiro-dsl-workflows-and-operations.md).
+  - [Workspaces and Generated Code](keiro-dsl-workspaces-and-generated-code.md):
+    workspaces, conformance packages, and file ownership.
+  - [Command Reference](keiro-dsl-cli.md): every `keiro-dsl` command.
+  - [Validation and Evolution](keiro-dsl-validation-and-evolution.md):
+    validation layers, language gates, evolution workflow, and checklist.
 - [Adopting Mapped Consumer Surfaces](mapped-consumer-adoption.md): the stable
   Language-5 queue, query, projection, event, and snapshot gate; prerequisites;
   one-service baseline; and rollout ownership.

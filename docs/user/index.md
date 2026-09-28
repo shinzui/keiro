@@ -25,12 +25,21 @@ okf_version: "0.2"
 - [API Reference](api-reference.md) - Map Keiro's public modules and their user-facing interfaces.
 - [Durable Workflows](durable-workflows.md) - Reference named steps, durable waits, awakeables, child workflows, resume workers, and journal snapshots.
 - [Idempotent Inbox](inbox.md) - Reference inbox deduplication policies and transactional handler semantics.
+- [Keiro DSL Aggregates](keiro-dsl-aggregates.md) - Write Keiro DSL aggregate expressions, registers, commands, events, transitions, outcomes, projections, and snapshots.
+- [Keiro DSL Command Reference](keiro-dsl-cli.md) - Run the keiro-dsl new, parse, pretty, check, inspect, behavior-obligations, scaffold, and diff commands.
+- [Keiro DSL Integration Contracts](keiro-dsl-integration.md) - Declare Keiro DSL public contracts, Kafka intakes, emits, and outbox publishers.
+- [Keiro DSL Processes and Routers](keiro-dsl-processes-and-routers.md) - Declare Keiro DSL process managers, reactions, timers, and custom or declarative routers.
+- [Keiro DSL Queues and Read Models](keiro-dsl-queues-and-read-models.md) - Declare Keiro DSL work queues, read-model-driven dispatch, read models, projection catalogs, and external reads.
+- [Keiro DSL Reference](keiro-dsl-reference.md) - Introduce the Keiro DSL, its stable Language 5 and candidate Language 6 contracts, and source file structure, and index the topic reference pages.
+- [Keiro DSL Types and Mappings](keiro-dsl-types-and-mappings.md) - Declare Keiro DSL IDs, enums, rules, direct types, and consumer-owned nominal, structural, refined, and opaque mappings.
+- [Keiro DSL Validation and Evolution](keiro-dsl-validation-and-evolution.md) - Understand Keiro DSL validation layers and language gates, evolve deployed specifications safely, and review the authoring checklist.
+- [Keiro DSL Workflows and Operations](keiro-dsl-workflows-and-operations.md) - Declare Keiro DSL durable workflows and command, query, signal, and workflow-run operations.
+- [Keiro DSL Workspaces and Generated Code](keiro-dsl-workspaces-and-generated-code.md) - Compose Keiro DSL services from workspaces and understand generated, create-once, and sidecar file ownership.
 - [Durable Outbox](outbox.md) - Reference durable outgoing integration handoff, ordering, dead letters, and publishing.
 - [Production Status](production-status.md) - State Keiro's production maturity, supported adoption posture, and intentionally deferred work.
 - [Read Models And Projections](read-models-and-projections.md) - Reference projection catalogs, delivery modes, query freshness, and rebuild lifecycles.
 - [Keiro Roadmap](roadmap.md) - Track capability maturity, adoption milestones, and future durable-execution direction.
 - [Snapshots](snapshots.md) - Reference advisory snapshots, fold versions, hydration behavior, and operations.
-- [Keiro DSL Language 5 and Candidate Language 6 Reference](typed-spec-toolchain.md) - Define the stable Language 5 grammar, the candidate Language 6 additions, and the toolchain, ownership, validation, and evolution workflow.
 - [Work Queues](work-queues.md) - Reference typed PGMQ jobs, workers, retries, FIFO groups, and dead-letter operations.
 
 # Runbook

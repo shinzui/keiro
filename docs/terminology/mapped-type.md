@@ -13,7 +13,7 @@ related:
   - TERM-61
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-types-and-mappings.md
 ---
 
 # mapped type
@@ -22,4 +22,4 @@ A service can reuse its existing address type instead of introducing a second pu
 
 An opaque mapping delegates encoding to application code and leaves the internal representation outside the DSL's compatibility checks. The choice determines who owns the serialized format.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Types and Mappings](../user/keiro-dsl-types-and-mappings.md) for details.

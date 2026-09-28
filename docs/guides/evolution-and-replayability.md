@@ -19,7 +19,7 @@ changes, state-shape changes, persisted payloads, integration contracts,
 workflow bodies), and for each one gives the safe procedure, states precisely
 which gate catches a mistake today, and names the remaining hardening plan
 where a gate is not yet implemented. It applies whether you author services by hand or through the
-[`keiro-dsl` typed-spec toolchain](../user/typed-spec-toolchain.md); the
+[Keiro DSL Reference](../user/keiro-dsl-reference.md); the
 DSL-specific gates are called out as such, because a hand-authored service does
 not get them.
 

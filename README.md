@@ -137,7 +137,7 @@ must be on `PATH` (the Nix dev shell provides one).
 
 - User-facing documentation starts at [`docs/user/README.md`](docs/user/README.md).
 - The stable Language 5 DSL reference starts at
-  [`docs/user/typed-spec-toolchain.md`](docs/user/typed-spec-toolchain.md).
+  [`docs/user/keiro-dsl-reference.md`](docs/user/keiro-dsl-reference.md).
 - Migration setup and operations start at
   [`docs/user/migrations.md`](docs/user/migrations.md).
 - Long-form, guide-backed examples start at

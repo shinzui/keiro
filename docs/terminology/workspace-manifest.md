@@ -16,7 +16,7 @@ anchors:
   - kind: module
     resource: Keiro.Dsl.Workspace
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-workspaces-and-generated-code.md
     note: The Service workspaces section.
 ---
 
@@ -29,4 +29,4 @@ across several specification files.
 You author this file as input to generation. The generated supporting files are
 [sidecars](sidecar.md); build guidance is a [Cabal fragment](cabal-fragment.md).
 In keiro-dsl, "manifest" refers only to the workspace manifest. See
-[Service Workspaces](../user/typed-spec-toolchain.md#service-workspaces) for the format.
+[Service Workspaces](../user/keiro-dsl-workspaces-and-generated-code.md#service-workspaces) for the format.

@@ -14,7 +14,7 @@ related:
   - TERM-5
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-aggregates.md
 ---
 
 # register
@@ -23,4 +23,4 @@ An order can be in the paid [lifecycle state](lifecycle-state.md) while register
 
 Register changes must be recoverable from events. Registers and their formal operations belong to `mori://shinzui/keiki`; Keiro persists their evidence through events and can cache their values in [snapshots](snapshot.md).
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.

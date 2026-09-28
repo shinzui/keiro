@@ -273,7 +273,7 @@ leaves for same-declaration equality. An aggregate field that would be
 field is `Optional DeclaredId optional on-missing=null`. Replacing an opaque twin
 is reported as `MappedFieldTypeChanged`; prove it with a historical codec
 comparison as described in
-[Migrating from an opaque ID workaround](../user/typed-spec-toolchain.md#migrating-from-an-opaque-id-workaround).
+[Migrating from an opaque ID workaround](../user/keiro-dsl-types-and-mappings.md#migrating-from-an-opaque-id-workaround).
 
 ### Derive only exact nominal bindings
 

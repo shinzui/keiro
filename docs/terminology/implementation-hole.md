@@ -14,7 +14,7 @@ related:
   - TERM-55
 anchors:
   - kind: doc
-    resource: docs/user/typed-spec-toolchain.md
+    resource: docs/user/keiro-dsl-workspaces-and-generated-code.md
 ---
 
 # implementation hole
@@ -23,4 +23,4 @@ A transition with complex predicate or update logic can declare an implementatio
 
 The implementation lives in a [create-once file](create-once-file.md). Changing hand-written aggregate folding behavior also requires maintaining its [fold version](fold-version.md). A hole is an ownership boundary, not necessarily unfinished code.
 
-See [typed spec toolchain](../user/typed-spec-toolchain.md) for details.
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md) for details.
