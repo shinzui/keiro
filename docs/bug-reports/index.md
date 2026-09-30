@@ -19,7 +19,7 @@ and implementation commits. All seven reports have valid lifecycle statuses unde
 `mori/bug-reports-profile.dhall`. Plan coverage is recorded separately from the bug
 status: an unimplemented plan does not make a report `in-progress` or `fixed`.
 `confirmed` requires reproduction by the owning repository; the local reproduction
-steps in plans 299 and 300 are still unchecked.
+steps in plans 299, 300, and 301 are still unchecked.
 
 | Report | Status | Plan | Implementation |
 | --- | --- | --- | --- |
@@ -29,4 +29,4 @@ steps in plans 299 and 300 are still unchecked.
 | [BUG-4](4-long-poll-job-worker-consumes-read-attempt-without-handler.md) | `reported` | [300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md) | Unimplemented; 0/15 progress items checked. |
 | [BUG-5](5-stale-outbox-publisher-finalizes-reclaimed-claim.md) | `reported` | [299](../plans/299-fence-outbox-finalization-by-claim-generation-to-fix-bug-5.md) | Unimplemented; 0/22 progress items checked. |
 | [BUG-6](6-long-poll-processors-starve-the-job-runtime-pool.md) | `reported` | [300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md) | Unimplemented; 0/15 progress items checked. |
-| [BUG-7](7-pre-handler-dead-letter-has-no-process-span.md) | `reported` | No plan for this failure | Open; earlier one-shot tracing work does not resolve this continuous-worker gap. |
+| [BUG-7](7-pre-handler-dead-letter-has-no-process-span.md) | `reported` | [301](../plans/301-trace-pre-handler-dead-letters-on-the-continuous-job-worker-to-fix-bug-7.md) | Unimplemented; 0/12 progress items checked. |

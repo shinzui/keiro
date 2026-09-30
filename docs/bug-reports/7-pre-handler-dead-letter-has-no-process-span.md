@@ -3,8 +3,8 @@ type: Bug Report
 title: Continuous worker dead-letters an exhausted job without a process span
 description: A job whose first PGMQ read exceeds its zero retry ceiling reaches the DLQ without a handler call or a per-message process span.
 generated:
-  by: process:codex
-  at: "2026-09-30T20:55:24Z"
+  by: process:claude-code
+  at: "2026-09-30T21:10:42Z"
 bugId: BUG-7
 status: reported
 severity: degraded
@@ -53,8 +53,13 @@ Run artifacts are under `mori://shinzui/keiro-runtime-kenshou` at
 
 ## Status and implementation
 
-Status checked on 2026-09-30: `reported`; no ExecPlan currently addresses this specific
-pre-handler dead-letter span gap. [Plan 111](../plans/111-trace-one-shot-pgmq-job-processing-with-remote-parent-continuation.md)
-implemented tracing for one-shot processing; it does not establish a fix for the
-continuous worker's retry-ceiling path before handler invocation. No validated fix or
-successful reproduction in the owning repository is recorded, so the report remains open.
+Status checked on 2026-09-30: `reported`; tracked by
+[plan 301](../plans/301-trace-pre-handler-dead-letters-on-the-continuous-job-worker-to-fix-bug-7.md).
+The plan is unimplemented (0 of 12 progress items checked), including its local
+reproduction example. Its source review confirms the inference above: the PGMQ adapter's
+`mkIngested` applies the `read_ct > maxRetries` ceiling on its source stream and drops the
+message before shibuya's supervised runner, the only place the continuous path opens a
+process span, ever sees it. The plan moves that check into keiro's own handler, inside
+the span, and disables the adapter's pre-span ceiling. The report stays `reported` until
+the owning repository reproduces it with the plan's example, then moves to `fixed` only
+after implementation and validation.
