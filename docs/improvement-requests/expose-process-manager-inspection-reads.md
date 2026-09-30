@@ -6,11 +6,13 @@ description: >-
   journal streams, list shard ownership from keiro_subscription_shards, and list a process
   manager's pending timers — then endpoints wrapping them — so an operator can see what a
   process manager last did and what it is waiting on.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-30T23:53:54Z
 requestId: IR-29
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/274-expose-process-manager-inspection-reads.md
+relatedPlans:
+  - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -44,6 +46,15 @@ Library-first like its sibling
 endpoints (under `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`) wrapping
 them, per `mori://shinzui/keiro/okf/adrs/concepts/ADR-28`. Implementation is keiro's
 downstream work.
+
+Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+(this request is EP-4), which settles the artifacts shared across plans 274 through 278
+(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
+0.10.0.0 listing gate, migration and handle allocation), adds
+[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
+for IR-31, and adds
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
+the lockstep release that will move this request to `completed`.
 
 ## Context
 

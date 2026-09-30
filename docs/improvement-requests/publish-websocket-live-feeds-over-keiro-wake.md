@@ -6,11 +6,13 @@ description: >-
   built on Keiro.Wake and speaking the cross-project protocol convention, with every feed
   paired to an authoritative polling read because NOTIFY is a best-effort hint, so a UI stays
   fresh without polling storms and without ever trusting push as truth.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-30T23:53:54Z
 requestId: IR-27
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md
+relatedPlans:
+  - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -45,6 +47,15 @@ work.
 Planned on 2026-09-10 as
 [ExecPlan 277](../plans/277-publish-websocket-live-feeds-over-keiro-wake.md) and accepted;
 it completes once implementation and release evidence are recorded.
+
+Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+(this request is EP-5), which settles the artifacts shared across plans 274 through 278
+(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
+0.10.0.0 listing gate, migration and handle allocation), adds
+[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
+for IR-31, and adds
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
+the lockstep release that will move this request to `completed`.
 
 ## Planning
 

@@ -5,6 +5,14 @@ title: "Add cursor-paged workflow inspection reads for the HTTP surface"
 kind: exec-plan
 created_at: 2026-09-10T01:38:10Z
 intention: "intention_01m24f03zreg59e5twbm7mpmga"
+master_plan: "docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md"
+provenance:
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-30T23:42:28Z
+      mode: "update"
+      note: "Adopted by MasterPlan 45: cursor kind registry, cursorReader placement, instanceToJson hand-off to plan 277, migration number allocation"
 ---
 
 # Add cursor-paged workflow inspection reads for the HTTP surface
@@ -46,8 +54,10 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 - [ ] Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
       listing over `keiro_workflows` in key order and creation order, with the legacy
       `listWorkflowInstances` re-based onto the shared statements.
-- [ ] Milestone 2: migration `0033.sql` adding `keiro_workflows_created_idx`, the
-      migration-suite bookkeeping, and the index-usage proof.
+- [ ] Milestone 2: the next migration (`0033.sql` at planning time; the number is
+      allocated by `keiro-migrate new` at implementation) adding
+      `keiro_workflows_created_idx`, the migration-suite bookkeeping, and the index-usage
+      proof.
 - [ ] Milestone 3: paged detail reads (journal, step index, children, awakeables) with
       generation resolution, exercised against a real workflow instance.
 - [ ] Milestone 4: canonical JSON rendering in the library and `keiro-ops` adoption
@@ -147,6 +157,58 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
   CLI already fails the whole `wf journal` command in that case. Returning half-decoded pages
   would invite a UI to render corruption as history.
   Date: 2026-09-10
+
+- Decision: This plan is adopted as EP-2 of
+  [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+  which coordinates the keiro-ui inspection cohort (plans 274, 275, 276, 277, 278, 302, and
+  303). The MasterPlan's Integration Points are authoritative for every artifact this plan
+  shares with a sibling; where this plan's older text disagrees, the entries below and the
+  Coordination subsection in Context and Orientation state the settled form.
+  Rationale: the five request plans were written the same day by parallel sessions and
+  disagree on the cursor codec, the migration number, and the workflow rendering; MasterPlan
+  45 settles those once so no implementer has to reconcile five plans.
+  Date: 2026-09-30
+
+- Decision: `keiro/src/Keiro/Inspection/Cursor.hs` is the only cursor codec for every keiro
+  inspection read, and this plan owns it together with the kind-tag registry: `wf-key`,
+  `wf-created`, `wf-steps`, `wf-journal`, `wf-children`, `wf-awakeables` (this plan),
+  `aggregate-list` (plan 278, EP-3), `timer-pending` and `pm-list` (plan 274, EP-4).
+  Whichever of plans 274, 275, 277, or 278 lands first creates the module to the exact
+  interface in Interfaces and Dependencies and adds `base64-bytestring >=1.2 && <1.3` to
+  `keiro/keiro.cabal`; the others import it. Plan 277's proposed `Keiro.Ops.Cursor` in
+  `keiro-ops` and plan 274's proposed textual timer cursor are withdrawn.
+  Rationale: MasterPlan 45 settles one codec so every read mints interchangeable tokens and
+  the CLI and the HTTP layer carry them unchanged; a create-first rule keeps wave-one plans
+  independent without blocking any of them on this one.
+  Date: 2026-09-30
+
+- Decision: The one `optparse-applicative` reader that turns a `--after CURSOR` option into
+  an `InspectionCursor`, `cursorReader :: ReadM InspectionCursor`, lives in
+  `keiro-ops/src/Keiro/Ops/Parse.hs` and is created by whichever plan first needs it. It only
+  wraps the option text; the library read validates the kind and reports `InvalidCursor`.
+  Rationale: MasterPlan 45 places all option parsing helpers in `Keiro.Ops.Parse` beside
+  `positiveIntReader`, and keeping kind validation in the library means the CLI and the HTTP
+  layer (which passes the query value through as the same option) fail identically.
+  Date: 2026-09-30
+
+- Decision: Plan 277 (EP-5, the live feeds) renders its `workflows` feed items with this
+  plan's `instanceToJson` so that feed items equal `wf list` items. If plan 277 lands first,
+  it exports the existing private `workflowInstanceJson` from `Keiro.Ops.Workflow`
+  temporarily, and this plan's Milestone 4 replaces that import with `instanceToJson` when it
+  deletes `workflowInstanceJson`.
+  Rationale: ADR-40's fourth condition requires a feed's items to be identical to the paired
+  read's rendering; one library-owned encoder is the only way that holds by construction.
+  Date: 2026-09-30
+
+- Decision: The migration this plan adds is "the next migration"; the number `0033` named
+  in the 2026-09-10 decision above was the next free number on that day and is not a
+  reservation. `cabal run keiro-migrate -- new` allocates the real number at implementation,
+  and plan 274 (a possible pending-timer index) and plan 299 (the outbox claim-generation
+  fence) also add migrations, so the manifest line, the lock line, the expected-schema
+  snapshot, and the hard-coded counts in `keiro-migrations/test/Main.hs` are rebased on
+  whatever exists when Milestone 2 runs.
+  Rationale: MasterPlan 45 found three plans claiming `0033`; the tool exists to allocate.
+  Date: 2026-09-30
 
 
 ## Outcomes & Retrospective
@@ -265,14 +327,53 @@ ADR-28 requires advancing its `timestamp`, appending to `docs/adr/log.md` with `
 and passing the strict validation command in Concrete Steps. No ADR documents a workflow
 inspection vocabulary or cursor contract today.
 
-### Related plans
+### Coordination under MasterPlan 45 (2026-09-30)
+
+This plan is EP-2 of
+[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+which coordinates the seven plans of the keiro-ui inspection cohort: 274 (process-manager
+reads, EP-4), this plan (EP-2), 276 (the HTTP transport, EP-1), 277 (live feeds, EP-5), 278
+(aggregate reads, EP-3), 302 (composed mounting, EP-6), and 303 (the cohort release, EP-7).
+The MasterPlan's Integration Points settle every artifact this plan shares with a sibling;
+the settled forms are restated here so this plan stays self-contained.
 
 `docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md` shipped the
 bounded timer reads whose conventions (validate page size, `LIMIT n+1`, immutable keys,
-observation semantics, read-only proof by column comparison) this plan reuses.
-`docs/plans/274-expose-process-manager-inspection-reads.md` is the sibling plan for IR-29
-and was still an empty skeleton when this plan was written; it should reuse
-`Keiro.Inspection.Cursor` and the page conventions defined here rather than inventing its own.
+observation semantics, read-only proof by column comparison) this plan reuses; it remains the
+precedent for bounded reads.
+
+This plan owns `keiro/src/Keiro/Inspection/Cursor.hs` and the registry of cursor kind tags.
+The tags are plain text constants owned by the module that owns each read: `wf-key`,
+`wf-created`, `wf-steps`, `wf-journal`, `wf-children`, and `wf-awakeables` belong to this plan;
+`aggregate-list` belongs to plan 278 (EP-3); `timer-pending` and `pm-list` belong to plan 274
+(EP-4). Whichever of plans 274, 275, 277, or 278 lands first creates the module to the exact
+interface in Interfaces and Dependencies and adds `base64-bytestring >=1.2 && <1.3` to
+`keiro/keiro.cabal`; the others import it. No other cursor codec exists in keiro: plan 277's
+earlier proposal of a `Keiro.Ops.Cursor` module in `keiro-ops` and plan 274's earlier textual
+`<fire_at>/<uuid>` timer cursor are withdrawn by the MasterPlan.
+
+The one `optparse-applicative` reader that turns a `--after CURSOR` option into an
+`InspectionCursor`, `cursorReader :: ReadM InspectionCursor`, lives in
+`keiro-ops/src/Keiro/Ops/Parse.hs` beside `positiveIntReader` and is created by whichever plan
+first needs it. It only wraps the option text as an `InspectionCursor`; the library read
+validates the kind and reports `InvalidCursor`, so the CLI and the HTTP layer fail the same
+way for a foreign token.
+
+Plan 277 (EP-5, the feeds) renders its `workflows` feed items with this plan's
+`instanceToJson`, so that feed items equal `wf list` items. If plan 277 lands before this
+plan's Milestone 4, it exports the existing private `workflowInstanceJson` from
+`Keiro.Ops.Workflow` temporarily, and Milestone 4 replaces that import with `instanceToJson`
+at the moment it deletes `workflowInstanceJson`.
+
+Plan 276 (EP-1) is the transport that serves the reads this plan produces; it exists as a
+plan now, so the first Decision Log entry's rationale that no IR-26 plan existed was true on
+2026-09-10 and is historical. The hand-off contract at the end of Interfaces and Dependencies
+is still what plan 276's mechanical request translation consumes.
+[ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now
+exists and is the stance decision every child of the cohort ships under; this plan's ADR-28
+paragraph cites it. The working tree is at version 0.19.0.0 (the `0.16.0.0` figures elsewhere
+in this cohort's plans were the version on 2026-09-10). The migration this plan adds is "the
+next migration", allocated at implementation, as Milestone 2 describes.
 
 ### Test infrastructure
 
@@ -422,7 +523,12 @@ groups are unaffected.
 
 At the end of this milestone the creation ordering and creation windows from Milestone 1 are
 served by an index, proven by `EXPLAIN`, and the migration suite, lockfile, and native
-schema snapshot include migration 0033.
+schema snapshot include the new migration. The migration's number is not fixed by this plan:
+`0033` was the next free number on 2026-09-10, but plan 274 (a possible pending-timer index)
+and plan 299 (the outbox claim-generation fence) also add migrations, so the number is
+whatever `keiro-migrate new` allocates when this milestone runs. Below, `<NNNN>` stands for
+that zero-padded number, and every count, title, and lock line is rebased on the manifest as
+it exists at that moment.
 
 Create the migration through the standard tool so the manifest is appended consistently:
 
@@ -433,8 +539,9 @@ nix develop -c cabal run keiro-migrate -- new \
   --description "add workflow instance creation-order index"
 ```
 
-The tool creates `keiro-migrations/migrations/0033.sql` with the description as its first
-comment line and appends `0033.sql` to `keiro-migrations/migrations/manifest`. Replace the
+The tool prints the file it created, `keiro-migrations/migrations/<NNNN>.sql`, with the
+description as its first comment line, and appends `<NNNN>.sql` to
+`keiro-migrations/migrations/manifest`. Record the printed number in Progress. Replace the
 body with:
 
 ```sql
@@ -451,7 +558,7 @@ Append the checksum line and regenerate the snapshot:
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro/keiro-migrations/migrations
-shasum -a 256 0033.sql >> ../migrations.native.lock
+shasum -a 256 <NNNN>.sql >> ../migrations.native.lock
 cd /Users/shinzui/Keikaku/bokuno/keiro
 KEIRO_REGENERATE_EXPECTED_SCHEMA=1 nix develop -c cabal test keiro-migrations-test \
   --test-options='--match "checked-in snapshot"'
@@ -463,15 +570,15 @@ next zero-padded number, seeds it with the description as a comment line, and ap
 the manifest. The lockfile format is `<sha256><two spaces><file name>`, which is what
 `shasum -a 256` prints when run inside the directory. The snapshot diff must show exactly one
 added index line for `keiro_workflows_created_idx`. In `keiro-migrations/test/Main.hs`
-change the three titles that say thirty-two or 32 to thirty-three and 33, append
-`"0033.sql"` to `nativeMigrationFiles`, and add an example under
-`describe "fresh native databases"` named "0033 adds the creation-order index" that applies
-the plan to a fresh database, asserts
+increment the migration count the tests hard-code by one, in the three test titles that
+state it in words and digits and in `nativeMigrationFiles` (append `"<NNNN>.sql"` after the
+last entry), and add an example under `describe "fresh native databases"` named
+"<NNNN> adds the creation-order index" that applies the plan to a fresh database, asserts
 `SELECT indexdef FROM pg_indexes WHERE indexname = 'keiro_workflows_created_idx'` returns
 `CREATE INDEX keiro_workflows_created_idx ON keiro.keiro_workflows USING btree (created_at, workflow_name, workflow_id)`,
 and inserts and reads back one instance row to show the table is unaffected. Add an
 Unreleased entry to `keiro-migrations/CHANGELOG.md` in the style of the 0.16.0.0 entry for
-0032.
+0032, naming the allocated number.
 
 Add one test to the inspection group, "plans the creation-order listing through
 keiro_workflows_created_idx": mirror the discovery-index example (`SET LOCAL enable_seqscan = off`,
@@ -661,14 +768,15 @@ nix develop -c cabal run keiro-migrate -- new \
   --manifest keiro-migrations/migrations/manifest \
   --description "add workflow instance creation-order index"
 nix develop -c cabal run keiro-migrate -- check keiro-migrations/migrations/manifest
-(cd keiro-migrations/migrations && shasum -a 256 0033.sql >> ../migrations.native.lock)
+(cd keiro-migrations/migrations && shasum -a 256 <NNNN>.sql >> ../migrations.native.lock)
 KEIRO_REGENERATE_EXPECTED_SCHEMA=1 nix develop -c cabal test keiro-migrations-test \
   --test-options='--match "checked-in snapshot"'
 nix develop -c cabal test keiro-migrations-test --test-show-details=direct
 ```
 
-The regenerate run prints `regenerated keiro-migrations/expected-schema/native/keiro-v18.txt`;
-the full migration suite then reports zero failures with the updated thirty-three counts.
+Here `<NNNN>` is the number the `new` command printed. The regenerate run prints
+`regenerated keiro-migrations/expected-schema/native/keiro-v18.txt`; the full migration
+suite then reports zero failures with the migration count incremented by one.
 Because `Keiro.Migrations` embeds the directory with Template Haskell, if the new file is not
 picked up run `nix develop -c cabal clean` for the package or touch a comment in
 `keiro-migrations/src/Keiro/Migrations.hs` as the build gotcha in `Keiro.Workflow`'s module
@@ -761,8 +869,10 @@ Compatibility: the existing `wf list` and `wf journal` examples pass unchanged; 
 ## Idempotence and Recovery
 
 All reads are repeatable and never write. Tests clone a fresh database per example. The
-migration is a `CREATE INDEX IF NOT EXISTS`, so re-applying it is harmless; never edit
-`0033.sql` after it ships — a correction is a new migration. If the native snapshot or
+migration is a `CREATE INDEX IF NOT EXISTS`, so re-applying it is harmless; never edit the
+shipped migration file after it ships — a correction is a new migration. If another plan's
+migration lands between allocating this plan's number and merging, re-run `keiro-migrate new`
+rather than renumbering by hand, and redo the lock line, snapshot, and test counts. If the native snapshot or
 lockfile drifts, regenerate the snapshot with the environment variable shown in Concrete
 Steps and recompute the checksum line with `shasum -a 256`; review both diffs before
 committing. If a `cabal` build fails to see the new migration file, clean the
@@ -794,6 +904,21 @@ data CursorError
 
 encodeCursor :: (ToJSON payload) => Text -> payload -> InspectionCursor
 decodeCursor :: (FromJSON payload) => Text -> InspectionCursor -> Either CursorError payload
+```
+
+The registered kind tags across the cohort are `wf-key`, `wf-created`, `wf-steps`,
+`wf-journal`, `wf-children`, and `wf-awakeables` (this plan), `aggregate-list` (plan 278),
+and `timer-pending` and `pm-list` (plan 274); a new read registers its tag in this list and in
+MasterPlan 45's Integration Points before minting tokens.
+
+`keiro-ops/src/Keiro/Ops/Parse.hs` (additive; created by whichever cohort plan first needs
+it, so check whether it already exists):
+
+```haskell
+-- | Wrap a @--after CURSOR@ option value as an opaque cursor. Performs no
+-- validation: the library read that receives it checks the kind and payload
+-- and reports 'InvalidCursor'.
+cursorReader :: ReadM InspectionCursor
 ```
 
 `keiro/src/Keiro/Workflow/Inspection.hs` (new, exposed):
@@ -940,3 +1065,20 @@ Dependency sources consulted through Mori: kiroku-store at
 exclusive `StreamVersion` cursor and an `Int32` limit; `StreamVersion` is one-indexed with
 `0` meaning "from the first event"; `RecordedEvent` carries `eventId`, `eventType`,
 `streamVersion`, and `globalPosition`).
+
+
+## Revision notes
+
+2026-09-30: Adopted as EP-2 of
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+which coordinates the keiro-ui inspection cohort (plans 274, 275, 276, 277, 278, 302, and
+303). The frontmatter gained `master_plan`; the "Related plans" subsection became a
+Coordination subsection restating the settled shared artifacts; the Decision Log gained
+entries for the adoption, the cursor kind-tag registry with its create-first rule, the
+placement of `cursorReader` in `Keiro.Ops.Parse`, the `instanceToJson` hand-off to plan 277,
+and migration-number allocation; Milestone 2, Concrete Steps, and Idempotence now describe the
+migration as "the next migration" allocated by `keiro-migrate new` (`0033` was only the next
+free number on 2026-09-10, and plans 274 and 299 also add migrations); Interfaces and
+Dependencies lists the registered kind tags and the `cursorReader` signature. Why: the five
+request plans were written in parallel and disagreed on these artifacts, and the MasterPlan
+settles them once so each plan stays independently implementable.

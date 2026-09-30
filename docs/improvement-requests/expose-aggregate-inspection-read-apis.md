@@ -6,11 +6,13 @@ description: >-
   category, hydrate current state for display through the existing snapshot-plus-fold
   machinery, and expose snapshot metadata — and only then endpoints wrapping them, so an
   operator can see what aggregates exist and what state they hold.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-30T23:53:54Z
 requestId: IR-28
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/278-expose-aggregate-inspection-read-apis.md
+relatedPlans:
+  - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -47,6 +49,15 @@ under `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`) merely wra
 Planned on 2026-09-10 as
 [ExecPlan 278](../plans/278-expose-aggregate-inspection-read-apis.md) and accepted; it
 completes once implementation and release evidence are recorded.
+
+Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+(this request is EP-3), which settles the artifacts shared across plans 274 through 278
+(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
+0.10.0.0 listing gate, migration and handle allocation), adds
+[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
+for IR-31, and adds
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
+the lockstep release that will move this request to `completed`.
 
 ## Context
 

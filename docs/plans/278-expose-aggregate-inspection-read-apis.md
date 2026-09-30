@@ -5,6 +5,14 @@ title: "Expose aggregate inspection read APIs"
 kind: exec-plan
 created_at: 2026-09-10T03:03:53Z
 intention: "intention_01m24m6m00ev59wa81shymsktd"
+master_plan: "docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md"
+provenance:
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-30T23:44:28Z
+      mode: "update"
+      note: "Adopted by MasterPlan 45: kiroku-store 0.10.0.0 gate, hydrateWithSource hand-off to plan 274, hook coexistence, handle allocation"
 ---
 
 # Expose aggregate inspection read APIs
@@ -68,7 +76,7 @@ complete after Milestone 5.
 
 - [x] (2026-09-10T03:04Z) Plan created with intention `intention_01m24m6m00ev59wa81shymsktd`; IR-28 gained a "Planning (2026-09-10)" section linking this plan, its `timestamp` advanced, and the bundle log records the update. Status remains `proposed`.
 - [ ] M0: confirm that `Keiro.Command.hydrate` is the only snapshot-seeded hydration path used by every command runner, that a `seedVerifySampleRate` of zero schedules no background verification, and that no metrics or tracer are touched when both are `Nothing`; record the evidence.
-- [ ] M0: confirm through the kiroku checkout that `kiroku-store` 0.8.0.0 (the released bound) has no stream-listing primitive, record the `Store` constructor list, and record the status of kiroku plan 88 (which adds `listStreams`).
+- [ ] M0: confirm through the kiroku checkout that `kiroku-store` 0.9.0.1 (the released bound on 2026-09-30) has no stream-listing primitive, record the `Store` constructor list, and record the Progress state of kiroku plan 88 (which adds `listStreams`) and of kiroku MasterPlan 13 (which releases it as 0.10.0.0).
 - [ ] M0: record whether `keiro/src/Keiro/Inspection/Cursor.hs` (plan 275) exists on the current tree; if it does not, this plan creates it in Milestone 4 to plan 275's exact interface.
 - [ ] M1: add `HydrationSource`, `FullReplayReason`, `hydrateWithSource`, and `inspectionRunCommandOptions` to `keiro/src/Keiro/Command.hs`; redefine `hydrate` as a wrapper; tests prove source reporting for snapshot, full-replay, corrupt-snapshot, and no-codec cases; the command benchmark is unchanged.
 - [ ] M1: add `SnapshotObservation` and `observeSnapshotRow` to `keiro/src/Keiro/Snapshot/Schema.hs`; `keiro-ops snapshot show` gains the additive `observed_at` and `age_seconds` keys with tests.
@@ -76,8 +84,8 @@ complete after Milestone 5.
 - [ ] M2: tests in a new `describe "Keiro.Inspection.Aggregate"` group: exhaustive fold-equivalence against `hydrateFull` with and without a snapshot, corrupt-snapshot fallback, soft-deleted stream, truncation gap, unknown aggregate, blank id, snapshot status present/absent/incompatible/unused, and JSON key inventory.
 - [ ] M3: add `AppHooks.aggregates` to `keiro-ops/src/Keiro/Ops/Embed.hs` and the embedded-only `aggregate` domain (`types`, `show`, `snapshot`) in `keiro-ops/src/Keiro/Ops/Aggregate.hs`; standalone-tree and embedded-tree tests updated; handler tests compare `jsonValue` with the library rendering.
 - [ ] M3: add `jitsurei/src/Jitsurei/Inspection.hs` with inspectors for `order` and `incident`, mount it in `jitsurei/app/Main.hs`, and add a `describe "Jitsurei aggregate inspection"` test group.
-- [ ] M4 (gated on `kiroku-store` 0.9.0.0 on Hackage): bump the `kiroku-store` bound in every package; add `listAggregates`, the `aggregate-list` cursor kind, `aggregate list`, and the two-category listing tests in `keiro`, `keiro-ops`, and `jitsurei`.
-- [ ] M5: user documentation, API reference, capability record CAP-20 and updates to CAP-4 and CAP-16, changelogs, IR-28 implementation evidence, the new ADR plus the ADR-28 paragraph, and the full `just verify` gate.
+- [ ] M4 (gated on `kiroku-store` 0.10.0.0 on Hackage, released by kiroku MasterPlan 13): bump the `kiroku-store` bound to `>=0.10 && <0.11` in every package and `mori.dhall` unless plan 274's Milestone 5 already did; add `listAggregates`, the `aggregate-list` cursor kind, `aggregate list`, and the two-category listing tests in `keiro`, `keiro-ops`, and `jitsurei`.
+- [ ] M5: user documentation, API reference, the aggregate-inspection capability record (CAP-20 on 2026-09-30 unless plan 276 took it; allocate with `okf id next`) and updates to CAP-4 and CAP-16, changelogs, IR-28 implementation evidence, the new ADR plus the ADR-28 paragraph, and the full `just verify` gate.
 
 
 ## Surprises & Discoveries
@@ -225,6 +233,60 @@ complete after Milestone 5.
   from evidence.
   Date: 2026-09-10
 
+- Decision: This plan is adopted as EP-3 of
+  [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+  whose Integration Points settle every artifact this plan shares with its siblings; commits
+  carry both this plan's `Intention:` trailer and the `MasterPlan:` trailer.
+  Rationale: the five plans written on 2026-09-10 disagreed on the cursor codec, the kiroku
+  listing primitive and its release, the hook layout, and the OKF handles; the MasterPlan is
+  the one place those decisions are recorded, and this plan's text now agrees with it.
+  Date: 2026-09-30
+
+- Decision: Milestone 4 waits for `kiroku-store` 0.10.0.0, not 0.9.0.0. The bound bump to
+  `>=0.10 && <0.11` in `keiro-core`, `keiro`, `keiro-migrations`, `keiro-test-support`,
+  `keiro-dsl`, `keiro-ops`, `keiro-ops-http` (if it exists) and the `mori.dhall` dependency
+  entries is done once, by whichever of this plan's Milestone 4 and plan 274's Milestone 5
+  executes first; the second finds it done. Plan 303 ships the cohort without Milestone 4 if
+  the kiroku release is late, and IR-28 then records item 1a as pending until the next
+  lockstep release.
+  Rationale: `kiroku-store` 0.9.0.1 shipped without `listStreams` and every keiro package
+  pins `>=0.9.0.1 && <0.10`; kiroku's MasterPlan 13 (created 2026-09-30) releases the
+  primitive as 0.10.0.0 through its plan 96. The version this plan named on 2026-09-10 was an
+  expectation that kiroku's own release planning has since superseded (MasterPlan 45,
+  Integration Points, "The kiroku listing primitive and the `kiroku-store` bound").
+  Date: 2026-09-30
+
+- Decision: `hydrateWithSource`, `HydrationSource`, `FullReplayReason`,
+  `inspectionRunCommandOptions`, and the `hydrationSourceJson` shape are shared with plan 274,
+  whose instance view uses them instead of its own two-constructor `HydrationSource` and its
+  second `lookupSnapshotSeed` call. Whichever of plans 274 and 278 lands first creates them in
+  `keiro/src/Keiro/Command.hs` (and the JSON encoder in `Keiro.Inspection.Aggregate`) to the
+  exact interface in this plan's Interfaces and Dependencies; the other imports them.
+  Rationale: two views of "did this state come from a snapshot" that could disagree is the
+  drift an inspection surface must not produce (MasterPlan 45, Integration Points,
+  "Source-reporting hydration").
+  Date: 2026-09-30
+
+- Decision: `AppHooks.aggregates` coexists with plan 274's `AppHooks.processManagers`; both
+  are additive `Maybe` fields defaulting to `Nothing`; whichever plan lands second extends the
+  existing record, `emptyAppHooks`, the "omits code-dependent commands from the standalone
+  tree" and "mounts every code-dependent command" tests, the `embeddedHooks` value, and
+  `jitsureiOpsHooks` rather than replacing them. The domain word `aggregate` is reserved for
+  this plan and `pm` for plan 274.
+  Rationale: both plans edit `keiro-ops/src/Keiro/Ops/Embed.hs`, `keiro-ops/src/Keiro/Ops.hs`,
+  and `keiro-ops/test/Main.hs`; the rule keeps the merge mechanical (MasterPlan 45,
+  Integration Points, "`AppHooks` and the command tree").
+  Date: 2026-09-30
+
+- Decision: OKF handles are allocated with `okf id next` at creation and never reserved by
+  this plan. On 2026-09-30 the next free handles were CAP-20 (plan 276 also expects it for its
+  HTTP-surface record; whichever creates its record first takes it and the other takes the
+  next) and ADR-49; ADR-40 is taken by the stance ADR this plan cites.
+  Rationale: two sibling plans claimed CAP-20 and two claimed ADR-40; a plan that names a
+  handle states an expectation, not a reservation (MasterPlan 45, Integration Points, "OKF
+  handles and documentation bundles").
+  Date: 2026-09-30
+
 
 ## Outcomes & Retrospective
 
@@ -238,12 +300,12 @@ that matter here are `keiro` (the runtime library, `keiro/src/Keiro/…`), `keir
 types, `keiro-core/src/Keiro/…`, re-exported by `keiro`), `keiro-ops` (the operator command
 tree, `keiro-ops/src/Keiro/Ops/…`), `keiro-test-support` (the PostgreSQL test fixture), and
 `jitsurei` (the example application, `jitsurei/src/Jitsurei/…` and `jitsurei/app/Main.hs`).
-Every package is at version 0.16.0.0 in the working tree, and 0.16.0.0 is also the newest
-`keiro` release on Hackage (checked 2026-09-10 through
-`https://hackage.haskell.org/package/keiro/preferred.json`; the tag `keiro-0.16.0.0` resolves to
-commit `2da45585b901271d4ac19af4acf3de790c394540`). The store dependency `kiroku-store` is
-bounded `>=0.8 && <0.9` in every package and 0.8.0.0 is its newest Hackage release. Recheck
-all of these before choosing any bound.
+Every package is at version 0.19.0.0 in the working tree, and 0.19.0.0 is also the newest
+`keiro` release on Hackage (checked 2026-09-30 through
+`https://hackage.haskell.org/package/keiro/preferred.json`; when this plan was written on
+2026-09-10 both were 0.16.0.0). The store dependency `kiroku-store` is bounded
+`>=0.9.0.1 && <0.10` in every package and 0.9.0.1 is its newest Hackage release, which does
+not export a stream-listing primitive. Recheck all of these before choosing any bound.
 
 Terms used throughout, in plain language:
 
@@ -335,10 +397,11 @@ and exposes them as `jitsurei-demo ops …`.
 **Documentation bundles** are OKF bundles with profiles: `docs/user/` and `docs/guides/`
 (profile `mori/user-documentation-profile.dhall`), `docs/capabilities/`
 (`docs/capabilities/profile.dhall`; CAP-3 is `transactional-command-cycle.md`, CAP-4 is
-`advisory-snapshots.md`, CAP-16 is `operational-console.md`; the next free handle at planning
-time is CAP-20), `docs/improvement-requests/` (`mori/improvement-requests-profile.dhall`), and
-`docs/adr/` (`docs/adr/profile.dhall`, stable `ADR-N` handles; `okf id next` reported ADR-40 at
-planning time, and sibling plans may take it first). Each bundle keeps a `log.md` appended
+`advisory-snapshots.md`, CAP-16 is `operational-console.md`; the next free handle on
+2026-09-30 is CAP-20, which plan 276 also expects, so allocate at creation),
+`docs/improvement-requests/` (`mori/improvement-requests-profile.dhall`), and `docs/adr/`
+(`docs/adr/profile.dhall`, stable `ADR-N` handles; ADR-40 is now taken by the stance ADR this
+plan cites, and `okf id next` reported ADR-49 on 2026-09-30). Each bundle keeps a `log.md` appended
 with `okf log add <bundle> --kind <Kind> -m "…"`. Changelogs are the root `CHANGELOG.md`,
 `keiro/CHANGELOG.md`, and `keiro-ops/CHANGELOG.md`, each with an `[Unreleased]` heading;
 `jitsurei` has none.
@@ -349,18 +412,64 @@ The keiro-ui wire conventions this plan's JSON follows live in the keiro-ui chec
 names; cursor pagination as `items` plus `next_cursor`, omitted on the last page; cursors
 opaque to clients; ADR 28's reporting vocabulary.
 
-Sibling plans created the same day for the same initiative, for orientation and coordination:
-[274](274-expose-process-manager-inspection-reads.md) (IR-29, process-manager reads; its
-Milestone 5 assumes a kiroku primitive named `listStreamsInCategory`, whereas kiroku plan 88
-builds `listStreams` with a prefix filter, see the Decision Log),
-[275](275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md) (IR-30, workflow
-reads; owns `Keiro.Inspection.Cursor`), [276](276-serve-the-keiro-ops-surface-over-http.md)
-(IR-26, the HTTP package), and [277](277-publish-websocket-live-feeds-over-keiro-wake.md)
-(IR-27, feeds). None is a prerequisite for Milestones 1 through 3. Kiroku's side is
-`docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md` in the
-kiroku checkout found by `mori registry show shinzui/kiroku --full`
-(`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`); it was a skeleton with no progress
-at planning time.
+### Coordination under MasterPlan 45 (2026-09-30)
+
+This plan is EP-3 of
+[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+whose Integration Points settle every artifact this plan shares with its siblings. The
+siblings are [274](274-expose-process-manager-inspection-reads.md) (EP-4, IR-29,
+process-manager reads), [275](275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
+(EP-2, IR-30, workflow reads), [276](276-serve-the-keiro-ops-surface-over-http.md) (EP-1,
+IR-26, the HTTP transport), [277](277-publish-websocket-live-feeds-over-keiro-wake.md) (EP-5,
+IR-27, feeds), [302](302-mount-composed-runtime-inspection-surfaces-under-one-port.md) (EP-6,
+IR-31, composed mounting), and
+[303](303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md)
+(EP-7, the cohort release). None is a prerequisite for Milestones 1 through 3. Every commit
+under this plan carries both `ExecPlan:` and `MasterPlan:` trailers (Concrete Steps). The
+settled rules that touch this plan:
+
+- Plan 274 consumes this plan's `hydrateWithSource`, `HydrationSource`, `FullReplayReason`,
+  `inspectionRunCommandOptions`, and the `hydrationSourceJson` shape for its process-manager
+  instance view, instead of its own two-constructor `HydrationSource` and a second
+  `lookupSnapshotSeed` call. Whichever of plans 274 and 278 lands first creates them to this
+  plan's exact interface (Interfaces and Dependencies); the other imports them.
+- Plan 275 owns `Keiro.Inspection.Cursor`, and the kind tag `aggregate-list` is registered
+  there for this plan (Milestone 0 already says this plan creates the module to plan 275's
+  exact interface if it is absent). The `optparse-applicative` reader that turns a
+  `--after CURSOR` option into an `InspectionCursor`, `cursorReader :: ReadM InspectionCursor`
+  in `keiro-ops/src/Keiro/Ops/Parse.hs`, is created by whichever plan first needs it and only
+  wraps the option text; the library read validates the kind.
+- `AppHooks.aggregates` is additive beside plan 274's `AppHooks.processManagers`; whichever
+  plan lands second extends the existing record, `emptyAppHooks`, the two command-tree tests,
+  `embeddedHooks` in `keiro-ops/test/Main.hs`, and `jitsureiOpsHooks` in
+  `jitsurei/app/Main.hs`. The domain word `aggregate` is reserved for this plan and `pm` for
+  plan 274.
+- The kiroku listing primitive is
+  `Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es) => Maybe Text -> Maybe StreamName -> Int32 -> Eff es (Vector StreamInfo)`,
+  built by kiroku plan 88 under
+  `mori://shinzui/kiroku/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui`
+  and released as `kiroku-store` 0.10.0.0 by kiroku plan 96, not 0.9.0.0 as this plan said
+  on 2026-09-10. On 2026-09-30 the current release is 0.9.0.1 with no listing and every keiro
+  package pins `>=0.9.0.1 && <0.10`. Plan 274's Milestone 5 wraps the same primitive with the
+  same category prefix (its original `listStreamsInCategory` is withdrawn), and the bound bump
+  to `>=0.10 && <0.11` in `keiro-core`, `keiro`, `keiro-migrations`, `keiro-test-support`,
+  `keiro-dsl`, `keiro-ops`, `keiro-ops-http` (if it exists) and the `mori.dhall` dependency
+  entries is done once, by whichever of this plan's Milestone 4 and plan 274's Milestone 5
+  executes first. Kiroku's plan is
+  `docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md` in the
+  checkout found by `mori registry show shinzui/kiroku --full`
+  (`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`); on 2026-09-30 it had no checked
+  Progress item.
+- [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+  now exists and is the stance decision this plan's own ADR (Milestone 5) cites as the
+  boundary; this plan's ADR records only its narrower aggregate-inspection decisions.
+- OKF handles are allocated with `okf id next` at creation. On 2026-09-30 the next free
+  handles were CAP-20 (plan 276 also expects it for its HTTP-surface record; whichever creates
+  its record first takes it) and ADR-49.
+- The working tree and the newest keiro Hackage release are 0.19.0.0; recheck before
+  choosing any bound.
+- Plan 303 ships the cohort without this plan's Milestone 4 if `kiroku-store` 0.10.0.0 is
+  late; IR-28 then records item 1a as pending until the next lockstep release.
 
 Relevant local ADRs, summarized:
 
@@ -407,10 +516,12 @@ guard before it.
 
 Second, run `mori registry show shinzui/kiroku --full`, open
 `kiroku-store/src/Kiroku/Store/Effect.hs` in that checkout, and record the `Store` constructor
-list; confirm there is no listing constructor in the working tree that the `<0.9` bound can
-see, and record the Progress state of the kiroku plan
-`docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md` and the
-`listStreams` signature it specifies. Run
+list; confirm there is no listing constructor in the released 0.9.0.1 that the `<0.10` bound
+can see, and record the Progress state of the kiroku plan
+`docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md`, the
+`listStreams` signature it specifies, and the Progress state of kiroku MasterPlan 13
+(`docs/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui.md`
+in the same checkout), whose plan 96 releases the primitive as `kiroku-store` 0.10.0.0. Run
 `curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` and record the
 newest version.
 
@@ -625,9 +736,11 @@ already exercises other commands; otherwise leave the demo alone and document th
 
 Scope: the cursor-paged listing read and the `aggregate list` command. This milestone starts
 only when `kiroku-store` with `Kiroku.Store.Read.listStreams` is on Hackage (kiroku plan 88
-targets 0.9.0.0; check `curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json`
-and read the release's `Kiroku.Store.Read` export list). Record the released version and the
-exact signature in Surprises & Discoveries before writing code. During development a local
+builds it and kiroku MasterPlan 13's plan 96 releases it as 0.10.0.0; check
+`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` and read the
+release's `Kiroku.Store.Read` export list). Record the released version and the exact
+signature in Surprises & Discoveries before writing code. If plan 274's Milestone 5 has
+already bumped the bound, skip the bump below and record that. During development a local
 overlay in `cabal.project.local` is acceptable for compiling, but nothing that depends on it
 may be committed: a local checkout is not consumer-reachable, and a `source-repository-package`
 pointing at a local path must never be committed.
@@ -683,7 +796,8 @@ subsection to `docs/guides/snapshots-and-hydration.md` using the jitsurei inspec
 log entries with `okf log add docs/user --kind Update -m "…"` and validate with
 `just user-documentation-validate`. Create `docs/capabilities/aggregate-inspection-reads.md`
 with the handle from `okf id next docs/capabilities --profile docs/capabilities/profile.dhall CAP`
-(CAP-20 at planning time), `requires: [CAP-3, CAP-4, CAP-16]`, interfaces
+(CAP-20 on 2026-09-30; plan 276's HTTP-surface record also expects it, so take whatever
+`okf id next` reports at creation), `requires: [CAP-3, CAP-4, CAP-16]`, interfaces
 `Keiro.Inspection.Aggregate` and `Keiro.Ops.Aggregate`, and evidence entries naming the test
 groups; add `hydrateWithSource` to CAP-3's interface notes and `observeSnapshotRow` to CAP-4's;
 add the `aggregates` hook to CAP-16; log each with `okf log add docs/capabilities …` and run
@@ -767,8 +881,8 @@ git ls-remote --tags origin 'keiro-0.1[6-9]*'
 Milestone 4 gate (both must succeed before any listing code is written):
 
 ```bash
-curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json | grep -q '"0.9' && echo released
-grep -rn "kiroku-store" --include=*.cabal . | grep -v "0.9" ; echo "lines above still carry the old bound"
+curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json | grep -q '"0.10' && echo released
+grep -rn "kiroku-store" --include='*.cabal' . | grep -v "0.10" ; echo "lines above still carry the old bound"
 ```
 
 Documentation and bundle validation (Milestone 5 and whenever a bundle changes):
@@ -1133,11 +1247,32 @@ runCommand :: OpsEnv -> AggregateInspectors -> Command -> IO OpsOutcome
 ```
 
 Kiroku (Milestone 4, consumed, not written here): `Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es) => Maybe Text -> Maybe StreamName -> Int32 -> Eff es (Vector StreamInfo)`
-from the `kiroku-store` release that carries kiroku plan 88 (planned 0.9.0.0), with
-`StreamInfo { id, name, version, createdAt, deletedAt, truncateBefore }` unchanged from
-0.8.0.0. Verify the exact export against the released package before use.
+from the `kiroku-store` release that carries kiroku plan 88 (0.10.0.0, released by kiroku
+MasterPlan 13's plan 96), with `StreamInfo { id, name, version, createdAt, deletedAt,
+truncateBefore }` unchanged from 0.9.0.1. Verify the exact export against the released package
+before use.
 
 `jitsurei` (Milestone 3): `Jitsurei.Inspection.jitsureiAggregateInspectors :: AggregateInspectors`
 covering `order` (over `snapshotOrderEventStream`, category `order`) and `incident` (over
 `incidentEventStream`, category `incident`), mounted as `aggregates = Just
 jitsureiAggregateInspectors` in `jitsurei/app/Main.hs`.
+
+
+## Revision notes
+
+2026-09-30: Adopted as EP-3 of
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+and brought into agreement with its Integration Points. The `master_plan` frontmatter field was
+added; the sibling-plans paragraph became a "Coordination under MasterPlan 45" subsection
+naming the seven children, the `hydrateWithSource` hand-off to plan 274 (whichever lands first
+creates the primitive to this plan's interface), the `cursorReader` and `aggregate-list`
+registration under plan 275's codec, hook coexistence with plan 274's `processManagers`, and
+the reserved domain words. Every statement that kiroku's `listStreams` arrives in
+`kiroku-store` 0.9.0.0 was corrected to 0.10.0.0, because 0.9.0.1 shipped without it and
+kiroku's MasterPlan 13 (created 2026-09-30) releases it as 0.10.0.0; the Milestone 0
+preflight, Milestone 4 gate, Concrete Steps gate commands, the Context bound paragraph, and
+the Interfaces sentence now say so, and the bound bump is done once by whichever of this
+plan's Milestone 4 and plan 274's Milestone 5 runs first. The working-tree and Hackage version
+facts were refreshed to 0.19.0.0, ADR-40 is cited as the existing stance ADR, and the CAP-20
+and ADR handles are stated as `okf id next` expectations rather than reservations. Five dated
+Decision Log entries record these changes; no earlier entry was rewritten.

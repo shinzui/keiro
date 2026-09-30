@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-09-30
+* **Update**: IR-26 through IR-30 are coordinated by MasterPlan 45, which adopts plans 274 through 278, settles their shared artifacts (cursor codec, pending-timer read, hydration source, kiroku-store 0.10.0.0 listing gate, migration and handle allocation), and adds the release plan 303 that will complete them.
+* **Planning**: IR-31 is planned as ExecPlan 302 (the composition module Keiro.Ops.Http.Compose in keiro-ops-http, stable prefixes keiro/kiroku/shibuya/pgmq, CORS once, prefix routing only) under MasterPlan 45.
+
 ## 2026-09-27
 * **Addition**: IR-51 requests an explicit timer fire outcome and a terminal state for a fire that completed without an event, because Maybe EventId's Nothing silently requeues a finished fire forever; raised from mori://shinzui/rei, where 134 reminder and dormancy timers were stuck firing.
 

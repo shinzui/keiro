@@ -5,6 +5,14 @@ title: "Serve the keiro-ops surface over HTTP"
 kind: exec-plan
 created_at: 2026-09-10T01:48:17Z
 intention: "intention_01m24fzbdrevnasj0zm1y199vw"
+master_plan: "docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md"
+provenance:
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-09-30T23:43:13Z
+      mode: "update"
+      note: "Adopted by MasterPlan 45: version and bounds from the working tree, ADR-40 cited, mount-relative routes for plan 302, CORS-once under composition"
 ---
 
 # Serve the keiro-ops surface over HTTP
@@ -219,6 +227,58 @@ requested separately; see the Decision Log for how this plan relates to it.
   does not, the new ADR names IR-32 as pending and confines itself to the transport.
   Date: 2026-09-10
 
+- Decision: This plan is adopted as EP-1 of
+  [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md).
+  Every route matches `pathInfo` relative to the mount and no response carries an absolute
+  URL, so the exported application stays a prefix-agnostic value.
+  Rationale: MasterPlan 45's composition contract (plan 302, EP-6) mounts `opsApplication`
+  or `opsApplicationWithFeeds` under the prefix `/keiro` behind `composeSurfaces`, and the
+  router strips the prefix from `pathInfo` and `rawPathInfo` before delegating; a route that
+  assumed an absolute path or emitted one would break behind the prefix. The design in this
+  plan already satisfies both constraints; this entry makes them a stated requirement.
+  Date: 2026-09-30
+
+- Decision: The package version and the `^>=` bounds on sibling packages are taken from the
+  working tree at the moment the package is created, and the `kiroku-store` bound is copied
+  from `keiro-ops/keiro-ops.cabal` at that moment. This supersedes the 2026-09-10 entry that
+  fixed the version at `0.16.0.0`.
+  Rationale: MasterPlan 45's `keiro-ops-http` integration point. The tree is at 0.19.0.0 on
+  2026-09-30 and `kiroku-store` is pinned `>=0.9.0.1 && <0.10`; a number copied from a plan
+  would be wrong on the day it is used, and plans 274 and 278 will move the `kiroku-store`
+  bound again when 0.10.0.0 ships. The reasoning of the superseded entry (never upload against
+  a published `keiro-ops` that lacks the Milestone 1 exports; the next lockstep release bumps
+  everything at once) still holds.
+  Date: 2026-09-30
+
+- Decision: [ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+  exists and is cited from the new ADR and the runbook as the stance decision; the conditional
+  "if it does not exist, name IR-32 as pending" branch of the IR-32 entry is closed.
+  Rationale: MasterPlan 45 records ADR-40 as the boundary every child ships under; IR-32 is
+  complete and its ADR names this plan as an implementation, so citing it is a fact, not a
+  guess.
+  Date: 2026-09-30
+
+- Decision: OKF handles (`CAP-N`, `DOC-N`, `ADR-N`) are allocated with `okf id next` at
+  creation; the `CAP-20`, `DOC-28`, and `ADR-40` values this plan expected on 2026-09-10 are
+  expectations, not reservations.
+  Rationale: MasterPlan 45's OKF-handles integration point. `ADR-40` was taken by the stance
+  ADR, plan 278 also expects `CAP-20`, and on 2026-09-30 the next free handles were `CAP-20`,
+  `ADR-49`, and `DOC-29` in `docs/guides`; whichever plan creates a record first takes the
+  handle it is given.
+  Date: 2026-09-30
+
+- Decision: CORS under composition: this package's `corsMiddleware` and `allowedOrigins`
+  stay exactly as designed for standalone use; the once-only CORS policy of the composed
+  server belongs to plan 302, which adds headers only to responses that do not already carry
+  them. A host that mounts this application under the composed server leaves
+  `allowedOrigins` empty for HTTP and passes origins to `OpsHttpConfig` only when plan 277's
+  WebSocket origin check needs them.
+  Rationale: MasterPlan 45's composition contract asks for one place to configure origins on
+  the composed server without duplicating headers; keeping this package's middleware unchanged
+  means the standalone executable and the composed mount share one implementation, and the
+  header-presence rule in plan 302 makes the two configurations safe to combine.
+  Date: 2026-09-30
+
 
 ## Outcomes & Retrospective
 
@@ -424,9 +484,17 @@ Local, in `docs/adr/`:
   are background only: they define how out-of-process readers see Keiro state; this surface is
   in-process and goes through the command handlers instead.
 
-No local ADR records the inspection-UI boundary itself; that is IR-32's deliverable. The
-`docs/adr/` bundle is profile-governed (`docs/adr/profile.dhall`); the next free handle at
-planning time was `ADR-40`, allocated only at creation time with `okf id next`.
+[ADR 40, Inspection surfaces are a bounded exception to the no-UI stance](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+(`mori://shinzui/keiro/okf/adrs/concepts/ADR-40`) now records the inspection-UI boundary that
+IR-32 requested: keiro sanctions state browsing and safe operator actions over supported
+library APIs under five conditions (sister-package packaging with no web dependency in any
+existing package, ADR 28 discipline on the wire with the read/write split derived from
+`isMutation`, preview-then-confirm mutations disabled by default, push-is-a-hint and
+poll-is-truth feeds, and composition without duplication), while metrics and traces stay in
+OpenTelemetry. This plan is one of the implementations it names. The `docs/adr/` bundle is
+profile-governed (`docs/adr/profile.dhall`); handles are allocated only at creation time with
+`okf id next`, and the next free handle on 2026-09-30 was `ADR-49` (the `ADR-40` this plan
+expected at planning time was taken by the stance ADR).
 
 Cross-repository, cited by the exact handles Mori returns:
 
@@ -441,18 +509,60 @@ Cross-repository, cited by the exact handles Mori returns:
 - `mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-3`: push is a hint, poll is truth; this
   surface is the poll path and adds no push.
 
-### Sibling plans in flight
+### Coordination under MasterPlan 45 (2026-09-30)
 
-Plans 274 and 275 exist in the working tree and are being implemented in parallel. Both add
-read-only `keiro-ops` commands (`pm show`, `timer pending`, `shard list`, and paging additions
-to `wf show`, `wf steps`, `wf journal`) and both state that endpoint exposure is this plan's
-scope. Nothing here depends on them landing first: because endpoints are derived from the
-parser, their commands become routes the moment they merge. Plan 275's hand-off contract
+This plan is EP-1 of
+[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+the foundation of its first wave. The MasterPlan's Integration Points settle every artifact
+this plan shares with its siblings; the settled facts that touch this plan are restated here so
+the plan stays self-contained.
+
+The package version equals the working tree's shared version at the moment the package is
+created (0.19.0.0 on 2026-09-30; the `0.16.0.0` that appears in this plan's snippets and in
+the superseded Decision Log entry was the version when the plan was written), with `^>=`
+bounds on the sibling packages at that same version. The `kiroku-store` bound is copied from
+`keiro-ops/keiro-ops.cabal` at that moment (`>=0.9.0.1 && <0.10` on 2026-09-30); plans 274
+and 278 later move it to `>=0.10 && <0.11` in every package, including this one, when
+`kiroku-store` 0.10.0.0 ships with the stream-listing primitive their listing milestones wait
+for.
+
+[ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+(`mori://shinzui/keiro/okf/adrs/concepts/ADR-40`) now exists and is the stance decision, so the
+new ADR this plan writes in Milestone 5 and the runbook cite it by relative path and by that
+handle; the "if the stance ADR does not exist" branch of the IR-32 decision in the Decision
+Log no longer applies. OKF handles are allocated with `okf id next` at creation, never copied
+from a plan: on 2026-09-30 the next free handles were `CAP-20`, `ADR-49`, and `DOC-29` in
+`docs/guides`. Plan 278 also expected `CAP-20`, so whichever plan creates its capability record
+first takes it and the other takes the next.
+
+Plan 277 (EP-5) mounts WebSocket feeds onto `opsApplication` through `websocketsOr` as
+`Keiro.Ops.Http.opsApplicationWithFeeds`, adds `websockets` and `wai-websockets` to this
+package's dependencies, and serves the feeds from this plan's standalone executable. Plan 302
+(EP-6) adds `Keiro.Ops.Http.Compose` to this package and mounts `opsApplication` (or
+`opsApplicationWithFeeds`) at the path prefix `/keiro` behind `composeSurfaces`, so
+`/keiro/health` is the composed health path. That mounting imposes two constraints this plan
+already satisfies and must keep: every route matches `pathInfo` relative to the mount, and no
+response carries an absolute URL. Under composition the composed layer applies one CORS policy
+and adds CORS headers only to responses that do not already carry them, so a host may mount
+this application with `allowedOrigins = []` and configure origins once on the composed server;
+this package's own `corsMiddleware` stays as designed for standalone use. Plan 302's example
+executable sits behind a manual, default-off cabal flag and its test suite depends on
+`kiroku-metrics`; neither changes the install plan that this plan's acceptance-5 check
+inspects, because that check reads library components of the existing packages only.
+
+The commands the sibling plans add become routes with no transport change, because endpoints
+are derived from the parser: plan 274 adds `pm show`, `pm list`, `timer pending list`, and
+`shard list`; plan 275 adds paging to `wf show`, `wf steps`, and `wf journal`; plan 277 adds
+`projection status`; plan 278 adds `aggregate types`, `aggregate list`, `aggregate show`, and
+`aggregate snapshot`. Nothing here depends on them landing first. Plan 275's hand-off contract
 (query keys `status_class`, `workflow_name`, `created_since`, `ordering`, `limit`, `from`,
 error codes `invalid_page_size` and `invalid_cursor`) is satisfied by the generic mapping for
 the query keys; the two library error codes are inside the command's own failure text today
 and become distinct HTTP codes only when `keiro-ops` gains typed failures, which is noted as
-follow-up work in the runbook.
+follow-up work in the runbook. Plan 303 (EP-7) dates the changelog entries this plan leaves
+under `## [Unreleased]`, verifies the release-skill, `justfile`, and `README.md` entries that
+Milestone 5 adds rather than redoing them, and publishes `keiro-ops-http` eighth in the
+lockstep release.
 
 
 ## Plan of Work
@@ -539,7 +649,7 @@ Create `keiro-ops-http/keiro-ops-http.cabal`, modelled on `keiro-ops/keiro-ops.c
 
 ```cabal
 name:            keiro-ops-http
-version:         0.16.0.0
+version:         <shared-version>
 synopsis:        HTTP transport for the keiro-ops operational command tree
 description:
   Serves the read-only keiro-ops command tree as JSON endpoints and its
@@ -568,9 +678,9 @@ library
     , hasql                 >=1.10      && <1.11
     , hasql-pool            >=1.2       && <1.5
     , http-types            >=0.12      && <0.13
-    , keiro-migrations      ^>=0.16.0.0
-    , keiro-ops             ^>=0.16.0.0
-    , kiroku-store          >=0.8       && <0.9
+    , keiro-migrations      ^>=<shared-version>
+    , keiro-ops             ^>=<shared-version>
+    , kiroku-store          <copy the bound from keiro-ops/keiro-ops.cabal>
     , optparse-applicative  >=0.19      && <0.20
     , text                  >=2.1       && <2.2
     , wai                   >=3.2       && <3.3
@@ -583,10 +693,10 @@ executable keiro-ops-http
   ghc-options:    -threaded -rtsopts -with-rtsopts=-N
   build-depends:
     , base                  >=4.21 && <5
-    , keiro-migrations      ^>=0.16.0.0
-    , keiro-ops             ^>=0.16.0.0
+    , keiro-migrations      ^>=<shared-version>
+    , keiro-ops             ^>=<shared-version>
     , keiro-ops-http
-    , kiroku-store          >=0.8  && <0.9
+    , kiroku-store          <copy the bound from keiro-ops/keiro-ops.cabal>
     , optparse-applicative  >=0.19 && <0.20
     , text                  >=2.1  && <2.2
 
@@ -599,10 +709,14 @@ test-suite keiro-ops-http-test
   build-tool-depends: keiro-ops:keiro-ops
   build-depends:
     , aeson, base, bytestring, containers, hasql, hspec >=2.11, http-client >=0.7 && <0.8
-    , http-types, keiro ^>=0.16.0.0, keiro-ops ^>=0.16.0.0, keiro-ops-http
-    , keiro-pgmq ^>=0.16.0.0, keiro-test-support ^>=0.16.0.0, kiroku-store
+    , http-types, keiro ^>=<shared-version>, keiro-ops ^>=<shared-version>, keiro-ops-http
+    , keiro-pgmq ^>=<shared-version>, keiro-test-support ^>=<shared-version>, kiroku-store
     , pgmq-migration >=0.5 && <0.6, process >=1.6 && <1.7, text, wai, wai-extra >=3.1 && <3.2
 ```
+
+`<shared-version>` is the `version:` in `keiro-ops/keiro-ops.cabal` on the day the package is
+created (0.19.0.0 on 2026-09-30), and the `kiroku-store` bound is whatever `keiro-ops` pins
+that day (`>=0.9.0.1 && <0.10` on 2026-09-30); neither is copied from this plan.
 
 (Write the test stanza's dependencies one per line with bounds copied from
 `keiro-ops/keiro-ops.cabal` where the same package appears there; the compressed form above is
@@ -1001,8 +1115,9 @@ carries implementation evidence, and the durable decisions are in `docs/adr/`.
 
 Write `docs/guides/serve-keiro-ops-over-http.md` in the `docs/guides` OKF bundle (profile
 `mori/user-documentation-profile.dhall`; allocate the handle with
-`okf id next docs/guides --profile mori/user-documentation-profile.dhall DOC`, expected
-`DOC-28`; copy the frontmatter shape of `docs/guides/run-and-operate-jitsurei.md`, `type:
+`okf id next docs/guides --profile mori/user-documentation-profile.dhall DOC`, which reported
+`DOC-29` on 2026-09-30 and must be re-run at creation because sibling plans allocate from the
+same bundle; copy the frontmatter shape of `docs/guides/run-and-operate-jitsurei.md`, `type:
 Runbook`). It must contain: the one-paragraph statement that the surface assumes a trusted
 network or an authenticating reverse proxy and adds no authentication; how to embed
 (`opsApplication` with the application's `AppHooks` and `KirokuStore`, then mount or
@@ -1022,7 +1137,9 @@ by relative link, and noting that mutations are disabled unless the host enables
 `docs/user/log.md` accordingly.
 
 Write `docs/capabilities/http-operational-surface.md` (allocate with `okf id next
-docs/capabilities --profile docs/capabilities/profile.dhall CAP`, expected `CAP-20`; copy the
+docs/capabilities --profile docs/capabilities/profile.dhall CAP`, which reported `CAP-20` on
+2026-09-30; plan 278 expects the same handle for its aggregate-inspection record, so re-run
+the command at creation and take whatever it returns; copy the
 frontmatter shape of `docs/capabilities/operational-console.md`, `requires: [CAP-16]`,
 `packages: [keiro-ops-http]`, `interface: [Keiro.Ops.Http]`, evidence pointing at
 `keiro-ops-http/test/Main.hs`, the runbook, and `keiro-ops-http/src/Keiro/Ops/Http/Application.hs`).
@@ -1056,8 +1173,12 @@ parsing requests through `keiro-ops`'s parser and classifying with `isMutation`;
 mapping; the read/`GET` and mutation/`POST` split with the `{"confirm":"execute"}` gate;
 mutations off by default; the whole-surface schema-drift refusal and the host-level drift
 policy; CORS as an explicit list; no authentication; the sister-package packaging; and the
-relationship to IR-32 (cite the stance ADR by handle if it exists, otherwise name IR-32 as
-pending). Add a sentence to ADR 28's consequences pointing at the new ADR, advance ADR 28's
+relationship to the stance decision: cite
+[ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
+(`mori://shinzui/keiro/okf/adrs/concepts/ADR-40`) as the boundary this transport is one
+implementation of, and confine the new ADR to the transport decisions beneath it. Allocate the
+handle at creation (`ADR-49` was the next free one on 2026-09-30; the `ADR-40` expected at
+planning time is the stance ADR). Add a sentence to ADR 28's consequences pointing at the new ADR, advance ADR 28's
 `timestamp`, record both in `docs/adr/log.md` with `okf log add` (or by hand in the log's
 existing format), and run `just adr-validate`.
 
@@ -1336,3 +1457,23 @@ sibling patterns were read from `mori://shinzui/kiroku` (`kiroku-metrics`) and
 `mori://shinzui/shibuya` (`shibuya-metrics`); `optparse-applicative 0.19.0.0` was read from
 `mori://pcapriotti/optparse-applicative`; WAI, Warp, and `wai-extra` from
 `mori://yesodweb/wai`.
+
+
+## Revision notes
+
+2026-09-30: Adopted as EP-1 of
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
+which coordinates the keiro-ui inspection cohort (plans 274 through 278, 302, and 303). The
+`master_plan` frontmatter field was added; the "Sibling plans in flight" subsection was replaced
+by a coordination note restating the settled facts that touch this plan; the Milestone 2 cabal
+snippet now takes its version, sibling bounds, and `kiroku-store` bound from the working tree
+at creation instead of the stale `0.16.0.0` and `>=0.8 && <0.9`; the ADRs-consulted paragraph
+and the Milestone 5 ADR step cite the now-existing ADR 40 instead of a conditional branch on
+IR-32; the `DOC-28`, `CAP-20`, and `ADR-40` expectations became "allocate with `okf id next`"
+instructions with the 2026-09-30 values; and five Decision Log entries record the adoption,
+the mount-relative route constraint imposed by plan 302's `/keiro` prefix, the version and
+bound rule, the ADR 40 citation, the handle rule, and the CORS-once posture under composition.
+The reason for each change is that five parallel sessions planned this cohort on 2026-09-10
+and the shared decisions, the working tree version (now 0.19.0.0), and the ADR bundle have
+moved since; the MasterPlan settles them and this plan must agree with it without ceasing to
+be self-contained.

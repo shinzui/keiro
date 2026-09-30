@@ -6,11 +6,13 @@ description: >-
   JSON endpoints reusing the OpsResult envelope, with mutations exposed only behind the existing
   preview/force discipline and the fail-closed schema-drift handshake, so a browser UI can reach
   the operational surface applications already embed as a CLI.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-30T23:53:54Z
 requestId: IR-26
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/276-serve-the-keiro-ops-surface-over-http.md
+relatedPlans:
+  - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -48,6 +50,15 @@ boundary in an ADR. Implementation is keiro's downstream work.
 Planned on 2026-09-10 as
 [ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md) and accepted; it
 completes once implementation and release evidence are recorded.
+
+Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+(this request is EP-1), which settles the artifacts shared across plans 274 through 278
+(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
+0.10.0.0 listing gate, migration and handle allocation), adds
+[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
+for IR-31, and adds
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
+the lockstep release that will move this request to `completed`.
 
 ## Planning
 

@@ -6,13 +6,14 @@ description: >-
   children, awakeables) that a browser UI needs beyond the one-shot keiro-ops wf output, in
   the owning library first, so the durable-execution screens can render and refresh
   incrementally against the keiro_workflows wake ledger.
-timestamp: 2026-09-11T14:30:01Z
+timestamp: 2026-09-30T23:53:54Z
 requestId: IR-30
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md
 relatedPlans:
   - docs/plans/276-serve-the-keiro-ops-surface-over-http.md
+  - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -50,6 +51,15 @@ Endpoint exposure is deliberately outside that plan: it belongs to the IR-26 sis
 whose own plan ([plan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md)) wraps the
 plan 275 reads. This request is accepted and completes once plan 275 is implemented and the
 endpoints exist.
+
+Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+(this request is EP-2), which settles the artifacts shared across plans 274 through 278
+(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
+0.10.0.0 listing gate, migration and handle allocation), adds
+[ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
+for IR-31, and adds
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
+the lockstep release that will move this request to `completed`.
 
 ## Context
 
