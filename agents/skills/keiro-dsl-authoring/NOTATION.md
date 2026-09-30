@@ -1,34 +1,28 @@
 # keiro-dsl notation reference
 
-A `.keiro` file begins with the released language contract, then `context <name>`, followed by
-top-level declarations and nodes:
+A `.keiro` file begins with the language contract, then `context <name>`, followed by top-level
+declarations and nodes. Every source this skill writes declares Language 6:
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 6
 context hospital-capacity
 ```
 
 The preamble is recognized only after leading comments and whitespace and immediately before
 `context`. Nested fields, declarations, wire keys, and strings named `language` remain domain
-data. Language 4 is the published stable version and the examples in this reference deliberately
-stay on that released contract. Unreleased language 5 is the development authoring candidate and
-adds projection catalogs; it is amended in place until publication rather than incremented. Language 4 includes the syntax introduced by
-language 2, the generated TypeID/current-constructor behavior introduced by language 3, and typed
-public-contract TypeID admission plus strict service-surface validation. Feature gates live at
-their grammar productions, so
-`using`, `Integer`, `implementation hole`, `reg.`, and `cmd.` are inert inside comments, strings,
-wire keys, and legal names. Versions 1 through 3 remain accepted compatibility-only contracts. A
-missing preamble remains readable as `legacy-unversioned` with effective version 1, but
-parse/pretty never changes or adds a declaration. Use
-`keiro-dsl inspect <file.keiro> --format=json` to see declared and effective versions. Upgrade
-and fleet-rewrite automation is deferred to
-`docs/improvement-requests/add-version-aware-keiro-dsl-upgrade-and-fleet-rewrite-tooling.md`.
+data. Language 6 extends stable Language 5 with process reactions, delegated inboxes,
+`ordering fifo-heads`, nominal structural leaves, `Map[DeclaredId]` keys, declared contract IDs,
+bare structural values, `Day`, `Set Text`, `mapped refined` base16 values, and
+`domain=typeid-v5-or-v7` ID admission; each is refused below Language 6 with
+`LanguageFeatureRequiresVersion`. Languages 1 through 4 and sources without a preamble are
+deprecated and scheduled for removal; do not author them. Use
+`keiro-dsl inspect <file.keiro> --format=json` to see declared and effective versions.
 
-Released versions select immutable named syntax profiles explicitly; a larger version number does
+Language versions select immutable named syntax profiles explicitly; a larger version number does
 not inherit features by ordering. When extending the language, add the capability to a new/reused
 profile deliberately, implement the production in its single grammar concern, and keep rejection
-coverage for every released profile that does not own it. Never gate syntax with a raw numeric
-version comparison. Canonical parse/pretty output does not preserve comments or whitespace.
+coverage for every profile that does not own it. Never gate syntax with a raw numeric version
+comparison. Canonical parse/pretty output does not preserve comments or whitespace.
 
 `#` begins a line comment; whitespace/newlines are insignificant (structure comes from
 keywords). Every node family below is parsed, validated, and round-tripped by the toolchain.
@@ -41,10 +35,11 @@ exactly one `goto`; duplicates are positioned parse errors.
 ## Shared declarations
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 6
 context hospital-capacity
 
 id   TransferReservationId  prefix=rsv          # a current TypeID-v7 value with prefix rsv
+id   LegacyActionId         prefix=action domain=typeid-v5-or-v7   # also admits retained UUIDv5 TypeIDs
 id   HospitalId             prefix=hosp
 id   CommandId              prefix=cmd
 enum DivertStatus { Open=open TotalDivert=total-divert }   # Ctor=wire-spelling
@@ -53,17 +48,20 @@ rule lifeCriticalOverride : PatientAcuity -> Bool
   ex RedTag => true ; YellowTag => false ; GreenTag => false
 ```
 
+`domain` is `typeid-v7` (the default when omitted) or `typeid-v5-or-v7`. It controls which
+canonical TypeIDs readers and public constructors admit, never how IDs are generated. Changing it
+in either direction is an `IdDomainContractChanged` compatibility finding: widening risks old
+readers rejecting new UUIDv5 values, and narrowing stops retained UUIDv5 values from decoding.
+
 ### Consumer-owned nominal declarations
 
-These forms were introduced in language 2 and are part of the stable language-4 contract. Version
-1 and legacy-unversioned sources still reject them at the language boundary. When adopting a
-binding, add the block to a language-4 source, run `parse`, then run
+When adopting a binding, add the block to the source, run `parse`, then run
 `check --explain-bindings` and fill the create-once binding skeleton. Do not remove the old
 generated wrapper from consumer code until the generated tree and compiled conformance harness
 are green.
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 6
 context orders
 
 id OrderId prefix=ord using {
@@ -98,7 +96,8 @@ nominal scalars use exactly one of `Text`, `Int`, `Natural`, `Bool`, or `Time`. 
 required when a consumer-bound type is used by a register. Fixtures pair finite consumer values
 with expected JSON; they are evidence for the two laws and wire spellings, not proof for all
 values. A constructor that can reject, normalize, or identify distinct representation values is
-refined rather than nominal and must remain `mapped opaque`.
+refined rather than nominal: use `mapped refined` when a frozen refined policy fits, otherwise
+`mapped opaque`.
 
 Generated domain code imports the consumer type and does not emit a duplicate public wrapper.
 The private event codec remains Keiro-owned: it checks the TypeID prefix before constructing the
@@ -106,10 +105,97 @@ consumer ID and maps enum JSON only through the generated closed representation.
 still use the consumer's `ToJSON`, `FromJSON`, and `CanonicalTypeName` instances. Bound scalar
 registers also receive a context-level `NominalProjections` facade; equality is available for all
 five representations and ordering only for `Int`, `Natural`, and `Time`. Bound IDs and enums also
-receive declaration-tagged textual equality projections. Consumer `KindID` IDs and finite enums
-are exact; a legacy generated `newtype Id = Id Text` remains conservatively one-way until the
-successor ID-domain contract restricts construction. Nominal ordering and arithmetic remain
-unavailable.
+receive declaration-tagged textual equality projections. Consumer `KindID` IDs, generated IDs,
+and finite enums are exact. Nominal ordering and arithmetic remain unavailable.
+
+An `id`, `enum`, or `mapped nominal` declaration may also be a leaf inside a structural mapping,
+a typed workqueue field, or a read-model query type. The generated shape carries the nominal
+domain type, and one context-owned `Structural.NominalLeaves` module applies its binding and
+admission wherever a generated codec needs the leaf.
+
+## mapped types
+
+A mapped declaration keeps an application-owned Haskell type at the boundary. A structural
+mapping gives the DSL complete authority over its JSON shape; `mapped refined` lowers to a frozen
+Keiro wire policy; `mapped opaque` delegates JSON authority to the consumer codec.
+
+```text
+mapped structural record ArtifactInfo {
+  haskell package=artifact-domain module=Artifact.Domain type=ArtifactInfo
+  binding = "Artifact.KeiroBindings.artifactInfoBinding"
+  binding-version = "1"
+  canonical-type = "artifact.ArtifactInfo.v1"
+  fixtures = "Artifact.KeiroBindings.artifactInfoFixtures"
+  initial = "Artifact.KeiroBindings.emptyArtifactInfo"   # only when used by a register
+  wire object constructor=ArtifactInfo unknown-fields=reject {
+    artifactId  as "artifactId"  : ArtifactId              required
+    kind        as "kind"        : ArtifactKind            required   # a declared enum leaf
+    description as "description" : Optional Text           optional on-missing=null
+    tags        as "tags"        : Set Text                required
+    publishedOn as "publishedOn" : Optional Day            optional on-missing=null
+    owners      as "owners"      : Map[ArtifactId] Text    optional on-missing={}
+    digest      as "digest"      : ContentHash             required
+  }
+}
+
+mapped structural value MaybeLabel {                         # a bare container, no object wrapper
+  # haskell/binding/binding-version/canonical-type/fixtures as above
+  wire Optional Text
+}
+
+mapped refined ContentHash {                                 # lowercase base16 on the wire
+  # haskell/binding/binding-version/canonical-type/fixtures as above
+  wire base16-bytes
+}
+
+mapped structural enum Visibility {
+  # haskell/binding/binding-version/canonical-type/fixtures as above
+  wire string { Public as "public" Private as "private" }
+}
+
+mapped structural union Location {
+  # haskell/binding/binding-version/canonical-type/fixtures as above
+  wire tagged-object tag="tag" contents="contents" unknown-fields=reject {
+    LocalFile as "local_file" : Text
+    Unknown as "unknown"
+  }
+}
+
+mapped opaque VendorGeometry {
+  haskell package=vendor-geometry module=Vendor.Geometry type=Geometry
+  codec = "vendor.geometry.json"
+  version = "3"
+  fixtures = "Vendor.Geometry.KeiroBindings.geometryCases"
+}
+```
+
+Structural type expressions are `Text`, `Int`, `Integer`, `Bool`, `Natural`, `Time`, `Day`,
+`Json`, `Optional T`, `List T`, `Map T` (text keys), `Map[DeclaredId] T`, `Set Text`, and the
+name of any declared `id`, `enum`, `mapped nominal`, `mapped refined`, or other mapped type.
+Optional fields need a type-correct `on-missing` default. The checker rejects recursive mappings,
+ill-typed defaults, and `Optional` around a null-capable value (`Optional Json`, or `Optional` of
+a value whose root is already `Optional`).
+
+A `mapped structural value` must have `Optional`, `List`, text-keyed `Map`, `Day`, or `Set Text`
+as its outer constructor. It is also how an aggregate field or register carries a `Day`, a
+`Set Text`, or an optional/collection shape, since those are not legal directly. `Day`,
+`Set Text`, and `base16-bytes` lower to frozen `keiro-core` codecs:
+
+| Type | Writes | Reads |
+| --- | --- | --- |
+| `Day` | `[-]YYYY-MM-DD`, proleptic Gregorian | the same, plus an optional `+` and redundant year zeroes |
+| `Set Text` | unique strings in Unicode code-point order | any order, duplicates allowed; no normalization |
+| `base16-bytes` | lowercase hex, empty and leading zero bytes preserved | upper- or lowercase hex; no prefix, whitespace, or odd length |
+
+A refined value may be an aggregate field or register, a structural leaf, a list or text-keyed map
+value, a typed queue field, or a query type. It is not a map key, not usable in expressions beyond
+whole-value writes, and not a public contract field. `Map[K] T` requires `K` to name an `id`.
+
+Every structural and refined declaration creates a create-once binding skeleton. The binding is a
+total isomorphism between the consumer type and the generated shape; never validate in
+`bindingFromShape`. Run `check --explain-bindings` to list every binding, fixture, and initial
+obligation. A changed date, set, base16, or ID-admission policy is a semantic change that needs a
+retained reader, not a refactor.
 
 Logical identifiers use ASCII letters, digits, and underscores. Keiro derives generated Haskell
 names from one checked word segmentation: module segments, types, and constructors use
@@ -132,7 +218,7 @@ Two optional clauses may follow `context <name>` to control where the emitted mo
 are optional; a spec that omits them scaffolds exactly as today.
 
 ```text
-language keiro-dsl 4
+language keiro-dsl 6
 context hospital-capacity
 module Acme.Services        # optional PascalCase namespace prefix for every emitted module
 layout collocated          # placement style: `prefixed` (default) or `collocated`
@@ -171,13 +257,13 @@ aggregate Reservation
     goto  Held
 
   wire kind=ctorName fields=camelCase schemaVersion=1
-  projection transfer_decisions key=reservationId          # references readmodel by name; consistency= is legacy/optional
+  projection transfer_decisions key=reservationId          # an implicit inline owner of the same-named standalone readmodel
     status-map { TransferReservationCreated=>held TransferReservationConfirmed=>confirmed }
                                                              # exact event constructor => status; must be total
     # Or: status-map partial { TransferReservationCreated=>held }
 ```
 
-Language-4 scaffolding generates transitions whose expressions are completely represented by the
+Scaffolding generates transitions whose expressions are completely represented by the
 spec. Holes (you fill) remain for behavior explicitly declared as `implementation hole`, the
 projection SQL `apply`, and any `upcast<Event>V<n>` upcaster body.
 `status-map partial { … }` opts out of the totality check for events that do not change
@@ -198,8 +284,8 @@ integer literal; `Natural` uses a non-negative integral literal; and `Time` uses
 ISO-8601 value such as `"2026-01-02T03:04:05.123456789012Z"`. Time initials are parsed by
 `check` and emitted as explicit `UTCTime` calendar/clock constructors, so generated code
 does not parse them or consult a clock at runtime. Enum/state registers use an in-domain
-constructor, and an id-typed register uses the bare `placeholder` source sentinel. Language-4
-scaffolding lowers that sentinel to a deterministic valid current TypeID-v7 sample; it does not
+constructor, and an id-typed register uses the bare `placeholder` source sentinel. Scaffolding
+lowers that sentinel to a deterministic valid current TypeID-v7 sample; it does not
 construct an invalid empty-text ID.
 
 A direct aggregate or integration-contract field has **three independent names**, written in
@@ -233,16 +319,16 @@ A bare aggregate field first inherits an exactly matching register type, then tr
 PascalCase field name as a declared id, enum, aggregate vertex, or mapped type, and finally
 falls back to `Text`. Equality guards support the five direct scalars and two values of the same
 declared id or enum. Enum literals must be qualified as `Type.Constructor`; cross-ID, cross-enum,
-nominal-to-`Text`, unqualified enum, and vertex equality are rejected. Consumer `KindID` IDs and
-all enums have exact symbolic domains. Legacy generated IDs execute concrete equality but remain
-symbolically `UnverifiedOpaque` because their public wrapper admits unrestricted `Text`. Ordered
+nominal-to-`Text`, unqualified enum, and vertex equality are rejected. IDs and enums have exact
+symbolic domains. Ordered
 comparison is supported for `Int`, `Integer`, `Time`, and `Natural`. `Integer` supports exact
 `+`, `-`, and `*`; `Natural` supports the same operators with total monus subtraction. `Int`
 arithmetic, division, remainder, mixed numeric types, Time arithmetic, collection arithmetic, and
 nominal arithmetic are rejected.
 
-Direct aggregate `Json`, `Optional`, `List`, and `Map` shapes are deliberately unsupported.
-Declare a `mapped structural` type when an aggregate payload needs one of those shapes.
+Direct aggregate `Json`, `Optional`, `List`, `Map`, `Day`, and `Set Text` shapes are deliberately
+unsupported. Declare a `mapped structural` record or value when an aggregate payload needs one of
+those shapes; a `mapped refined` type may be used directly.
 `check` reports unknown types, unsupported shapes/use sites, invalid register initials,
 cross-type comparisons, and unsupported guard capabilities before scaffolding writes
 anything.
@@ -344,8 +430,9 @@ coordination metadata, not identity seed fields. Increase the version for every
 semantic fingerprint change and still follow the diff's drain instructions.
 Moving a legacy process body to reactions is a breaking identity migration.
 
-Language 5 and older retain the legacy one-input/one-timer form and its
-positional `emitIndex` identity. Do not mechanically rewrite one into the other.
+Author new processes as reactions. The older one-input/one-timer process form, with its
+positional `emitIndex` identity, is still accepted so existing processes keep their identity; do
+not mechanically rewrite one into the other.
 An `on-duplicate AckOk` hand-written legacy path must still use
 `confirmBenignDuplicate` against the target stream. See `TAXONOMY.md` for the
 full `CommandAmbiguous` distinction.
@@ -441,11 +528,25 @@ re-fetchable or worthless after success: those rows keep dedupe/operator correla
 but decode with an empty payload. Failed rows always retain the full envelope because
 they are the operator-facing dead-letter record.
 
-Delegated-idempotence intake is intentionally absent here: its runtime has not landed,
-and `docs/plans/83-delegated-idempotence-inbox-intake-bypass-the-keiro-inbox-table-when-the-downstream-state-machine-already-dedupes.md`
-owns that future DSL surface. Kafka sharding and consumer-group settings are also
-absent permanently; they vary by deployment and remain hole-kind 8 runtime config,
-not deterministic service semantics.
+`idempotence delegated` after the `dedupe` line hands receipt ownership to the downstream state
+machine instead of the inbox table:
+
+```text
+  dedupe key messageId policy PreferIntegrationMessageId
+  idempotence delegated                                  # optional; omission means `table`
+```
+
+It generates the typed `runInboxIntake` wrapper over `runInboxDelegated` and cannot be combined
+with `persist = dedupe-only` (`DelegatedInboxDedupeOnlyPersistence`), because delegated mode
+writes no inbox rows. Moving between `table` and `delegated` is a persisted-identity break
+(`IntakeIdempotenceModeChanged`) that needs an explicit cutover.
+
+Contract fields may name a declared `id` directly instead of `typeid "prefix"`, as in
+`reservationId: TransferReservationId`; the field keeps that declaration's prefix, admission
+domain, and Haskell type. Only `id` declarations are accepted there.
+
+Kafka sharding and consumer-group settings are absent permanently; they vary by deployment and
+remain hole-kind 8 runtime config, not deterministic service semantics.
 
 ## workqueue / dispatch (EP-5)
 
@@ -455,10 +556,13 @@ workqueue reservation_work {
   derive physical = "hospital_capacity_reservation_work"   # captured fixture trio; validator re-derives physical/dlq/table and checks drift
          dlq = "hospital_capacity_reservation_work_dlq"
          table = "pgmq.q_hospital_capacity_reservation_work"
-  ordering fifo-throughput                               # default: unordered; also fifo-roundrobin
+  ordering fifo-heads                                    # default: unordered; also fifo-throughput, fifo-roundrobin
   group key from reservationId via raw                   # required exactly when ordering is FIFO
   provision standard                                     # default; also unlogged or partitioned(...)
-  payload ReservationWorkItem { reservationId -> "reservation_id" text required }
+  payload ReservationWorkItem {
+    reservationId -> "reservation_id" text required       # arrow form: text | int | bool only
+    details -> "details" : ArtifactInfo                    # colon form: any mapped type expression
+  }
   retry maxRetries = 3 delay = 5s dlq = on                 # dlq=on needs maxRetries>=1
   disposition {
     storeFailure -> retry 5s                               # transient: MUST retry
@@ -480,7 +584,10 @@ dispatch reservation_work_dispatch {
 
 `ordering` is the consumer's delivery contract. FIFO modes preserve send order within
 each declared group while allowing different groups to proceed in parallel; delivery
-remains at-least-once, so handlers stay idempotent. `via raw` requires a `text` payload
+remains at-least-once, so handlers stay idempotent. `fifo-heads` is the strict failure
+barrier and safely batches independent group heads; prefer it for new FIFO queues. The
+older `fifo-throughput` and `fifo-roundrobin` modes require a runtime batch size of one.
+Every payload row is required, so adding a row is a breaking queue change. `via raw` requires a `text` payload
 field. An opaque derivation uses `via <name> fixture "<input> => <output>"` so its
 hand-owned implementation can be re-derived consistently.
 
@@ -500,7 +607,8 @@ readmodel/field references resolve.
 
 ## readmodel (EP-107)
 
-Languages 1–4 retain this compatibility form:
+A read model is standalone, supplied by the aggregate `projection` of the same name, or
+catalog-bound, supplied by a `projection-owner`. A standalone model keeps its table on the node:
 
 ```text
 readmodel transfer_decisions {
@@ -514,43 +622,23 @@ readmodel transfer_decisions {
   }
   version = 1
   shape = "fnv1a:3717f6d9e3c44bd6"
-  consistency = Strong
-  scope = category "reservation"
-  feed = subscription
-  subscription = "hospital-capacity-transfer-decisions-sub" # optional override
-}
-
-readmodel subscriptions {
-  table = "subscriptions"
-  schema = "billing"
-  columns { subscription_id text required status text required }
-  version = 1
-  shape = "fnv1a:f54d9bb2f40a6738"
-  consistency = Eventual
-  feed = inline
+  freshness = immediate                                   # the only freshness an inline projection reaches
 }
 ```
 
-The registry name is `<context>-<node_name_with_hyphens>`; the default subscription name
-is `<registry-name>-sub`. `shape` is a captured FNV-1a-64 fixture derived from the table
-name and ordered `name:type:req|null` column surface. `check` reports the recomputed value
-when it drifts, and changing the declared shape requires a version bump.
+The registry name is `<context>-<node_name_with_hyphens>`. `shape` is a captured FNV-1a-64
+fixture derived from the table name and ordered `name:type:req|null` column surface. `check`
+reports the recomputed value when it drifts, and changing the declared shape requires a version
+bump. `feed`, `subscription`, `consistency`, and `scope` are not part of the language and are
+rejected on a read model. Query operations and both read-model references in a dispatch resolve
+against these nodes; dispatch `field =` also resolves against `columns`. Generated
+query/projection holes import a schema-qualified table constant—interpolate it into SQL instead
+of depending on PostgreSQL `search_path`. Maps to generated `ReadModelTable`, `ReadModel`, and
+facts-harness modules plus a create-once `ReadModelHoles` module for inline apply, async apply,
+and query behavior.
 
-`Strong` requires `feed = subscription`; `scope` is legal only with `Strong` and defaults
-to `entire-log`. An inline model must be referenced by an aggregate `projection` of the
-same name. The projection-level `consistency=` clause is optional legacy syntax; the
-readmodel node owns the real default. Query operations and both read-model references in a
-dispatch resolve against these nodes; dispatch `field =` also resolves against `columns`.
-Generated query/projection holes import a schema-qualified table constant—interpolate it
-into SQL instead of depending on PostgreSQL `search_path`.
-Maps to generated `ReadModelTable`, `ReadModel`, and facts-harness modules plus a create-once
-`ReadModelHoles` module for inline apply, async apply, and query behavior. Checked: captured
-shape, column types, feed/consistency/scope combinations, inline projection ownership, and
-query/dispatch references agree.
-
-Candidate Language 5 separates the writer from the query policy. A catalog projection
-owner declares delivery, and a catalog-bound read model declares freshness without its own
-feed, subscription, consistency, schema, or table:
+A catalog separates the writer from the query policy. A projection owner declares delivery, and a
+catalog-bound read model declares freshness and its targets instead of a schema or table:
 
 ```text
 target transfer_decisions_table {
@@ -583,8 +671,10 @@ readmodel transfer_decisions {
     status text required
     decided_at timestamptz
   }
+  query input = TransferDecisionQuery                     # optional pair, directly after columns
+  query result = Optional TransferDecision
   version = 1
-  shape = "fnv1a:3717f6d9e3c44bd6"
+  shape = "fnv1a:bbd9418e1212852d"                        # copy the value `check` prints
   freshness = wait-for-head category "reservation"
   group = transfer_reporting
   targets = [ transfer_decisions_table ]
@@ -594,8 +684,9 @@ readmodel transfer_decisions {
 Use `freshness = immediate` to run without polling; this is valid for inline or
 subscription delivery, and the subscription form may observe lag. A head wait requires one
 compatible durable cursor derived from the owner: entire-log requires `source = all`, while
-a category wait accepts `all` or the same category. Static Language 5 does not encode a
-caller position; use the runtime `WaitForPosition` override for read-your-write.
+a category wait accepts `all` or the same category. The static language does not encode a
+caller position; use the runtime `WaitForPosition` override for read-your-write. Do not also
+name a catalog-bound read model from an aggregate-local `projection` clause.
 
 ## workflow / operation (EP-6)
 
@@ -674,7 +765,7 @@ keiro-dsl diff     --since <git-ref> <service.keiro-workspace>
 ### Workspace manifest
 
 A multi-file service uses a separate `.keiro-workspace` file. Each member is still a
-complete `.keiro` spec, starts with `language keiro-dsl 4`, and declares the same context.
+complete `.keiro` spec, starts with `language keiro-dsl 6`, and declares the same context.
 
 ```text
 service demo-project
@@ -693,8 +784,8 @@ order changes neither meaning nor generated bytes. Shared ids, enums, rules, and
 declarations have exactly one owning member; identical duplicates do not merge.
 
 - `new <kind>` — `kind` ∈ aggregate, process, router, contract, intake, emit, publisher,
-  workqueue, dispatch, workflow, operation. Prints a guaranteed-valid starter spec to stdout
-  (`keiro-dsl new aggregate > service.keiro`). `readmodel` is a top-level notation node but
+  workqueue, dispatch, workflow, operation. Prints a guaranteed-valid Language 5 starter spec to
+  stdout; change its first line to `language keiro-dsl 6` before editing. `readmodel` is a top-level notation node but
   not a standalone skeleton kind; the coupled `new workqueue` starter includes the readmodels
   needed by its dispatch.
 - `scaffold` validates first, then runs collision, firewall, faithful-lowering, and existing-file
@@ -720,6 +811,5 @@ declarations have exactly one owning member; identical duplicates do not merge.
 
 The workspace manifest itself is unversioned. `inspect <service.keiro-workspace>
 --format=json` loads its members and reports each member's source form and effective version in
-canonical path order. New workspaces use language 4 consistently. Historical legacy and
-declared-v1 members may still compose because both select effective version 1; members with
-different effective versions are refused before semantic graph merge and are not upgraded.
+canonical path order. Every member declares Language 6; members with different effective versions
+are refused before semantic graph merge and are not upgraded.

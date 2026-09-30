@@ -22,20 +22,23 @@ edit a `-- @generated` module.
 
 ## The load-bearing rules (read these first)
 
-1. **Declare the chosen language contract.** The development authoring default and `new <kind>`
-   use unreleased candidate `language keiro-dsl 6`; first-class process reactions and delegated
-   inboxes require it. Language 5 is the published stable contract for released-only services,
-   while versions 1 through 4 and unversioned sources remain accepted compatibility contracts.
-   Language 6 is amended in place until publication—never allocate language 7 merely because the
-   candidate changed. Released
-   syntax and runtime behavior are owned by explicit immutable profiles, not numeric ordering.
+1. **Author Language 6, and only Language 6.** Every source this skill writes begins with
+   `language keiro-dsl 6`. Language 6 extends Language 5 with process reactions, delegated
+   inboxes, `ordering fifo-heads`, nominal structural leaves, `Map[DeclaredId]` keys, declared
+   contract IDs, bare structural values, `Day`, `Set Text`, `mapped refined` base16 values, and
+   `domain=typeid-v5-or-v7` ID admission. `new <kind>` still prints a `language keiro-dsl 5`
+   starter: change that first line to `6` before editing. When you touch an existing Language 5
+   source, move it to 6 the same way; a preamble-only change `diff`s as `ADDITIVE` and
+   replay-neutral. Languages 1 through 4 and unversioned sources are deprecated and scheduled for
+   removal: never author them, and migrate one you encounter rather than extending it. Never
+   allocate language 7 on your own; syntax and runtime behavior are owned by explicit profiles.
 2. **Never edit a `-- @generated` line.** Those modules are overwritten on every `scaffold`.
-   Language 4 generates every transition whose guards, writes, emits, and target are completely
-   expressed in the source. Fill only create-if-absent modules and signatures for explicitly
+   The scaffolder generates every transition whose guards, writes, emits, and target are
+   completely expressed in the source. Fill only create-if-absent modules and signatures for explicitly
    hand-owned behavior such as `implementation hole`, projection SQL, bindings, and upcasters.
 3. **The firewall invariant.** A generated aggregate `Transducer.hs` is the one intentional
    generated boundary allowed to contain keiki symbolic operators (`./=`, `.==`, `.||`, `lit`,
-   `B.slot`, `B.requireGuard`); it authoritatively lowers Language-4 expressions. Other generated
+   `B.slot`, `B.requireGuard`); it authoritatively lowers the source's checked expressions. Other generated
    modules remain firewall-clean. If an operator appears elsewhere, fix the scaffolder or the
    source—never patch the generated output.
 4. **Time is injected, never sampled.** A deadline/sleep is computed from a timestamp carried
@@ -51,10 +54,10 @@ edit a `-- @generated` module.
    acknowledging it. If you handle duplicates by hand, call that function, fold `True` into
    the duplicate result, and surface `False` as the original failure; never treat a bare
    `DuplicateEvent` as success because event-id uniqueness is global.
-6. **Projection delivery and query freshness have one owner each.** In Language 5, put
+6. **Projection delivery and query freshness have one owner each.** Put
    `delivery = inline | subscription` on the catalog `projection-owner` and
-   `freshness = immediate | wait-for-head ...` on the `readmodel`. Never repeat `feed`,
-   `subscription`, `consistency`, or `scope` on a catalog-bound Language 5 read model;
+   `freshness = immediate | wait-for-head ...` on the `readmodel`. Never write `feed`,
+   `subscription`, `consistency`, or `scope` on a read model; they are not part of the language;
    the checked target-owner relation derives any durable cursor. Use `immediate` when no
    wait is required, including an explicit tolerance for async lag. A head wait requires
    a compatible subscription source; caller-specific read-your-write uses the runtime
@@ -78,12 +81,16 @@ edit a `-- @generated` module.
   process + timer, router, contract/intake/emit/publisher, workqueue/dispatch, readmodel,
   workflow/operation, evolution).
 - `LOOP.md` — the write → check → scaffold → fill → harness → diff loop as numbered steps.
-- `WALKTHROUGH.md` — a worked end-to-end example on the Reservation aggregate.
+- `WALKTHROUGH.md` — a worked end-to-end example on the Language 6 `checked-mapping-replay`
+  workspace.
 - `TAXONOMY.md` — the replay-safety warning playbook and the `CommandAmbiguous` disposition
   rules.
 - `docs/corpus/keiro-dsl-corpus.md` (repo root) — the captured conformance corpus: real
   `.keiro` specs paired with the hand-filled reference modules they map to. Consult these as
-  worked examples of how a spec lowers to filled holes.
+  worked examples of how a spec lowers to filled holes; some corpus sources predate Language 6,
+  so copy their structure, not their preamble.
+- `docs/user/keiro-dsl-reference.md` (repo root) — the user-facing language reference and its
+  topic pages, for the full rules behind every construct.
 
 ## The CLI
 
@@ -104,8 +111,10 @@ cabal run keiro-dsl -- new <kind>                      # print a minimal valid s
 
 `new <kind>` prints a minimal, guaranteed-valid `.keiro` skeleton to stdout for
 any of: `aggregate`, `process`, `router`, `contract`, `intake`, `emit`, `publisher`,
-`workqueue`, `dispatch`, `workflow`, `operation`. Pipe it straight into a file
-to start, e.g. `cabal run -v0 keiro-dsl -- new aggregate > service.keiro`.
+`workqueue`, `dispatch`, `workflow`, `operation`. The starters declare stable Language 5;
+switch them to Language 6 as you write the file, e.g.
+`cabal run -v0 keiro-dsl -- new aggregate | sed '1s/^language keiro-dsl 5$/language keiro-dsl 6/' > service.keiro`.
+Every starter checks under Language 6.
 `readmodel` is a full top-level notation node but has no standalone starter; `new workqueue`
 includes the coupled readmodel nodes its dispatch example requires.
 
@@ -122,8 +131,8 @@ later run no longer produces recorded paths, its exit-0 `stale:` report never de
 delete `generated` entries only after review, and treat `hole` entries as hand-owned code.
 
 A workspace manifest lists complete same-context member specs with `spec <relative.keiro>`
-lines. Every member declares the same selected contract; new development work defaults to
-`language keiro-dsl 6`, while a released-only workspace may stay on stable language 5. Inspection
+lines. Every member declares `language keiro-dsl 6`; members with different effective versions
+are refused before the graph merges. Inspection
 reports every member in canonical path order. Shared declarations have exactly one owning member: duplicates are refused even
 when their text is identical, so resolve a conflict by moving the declaration to one owner,
 never by copying it. Workspace scaffold history uses

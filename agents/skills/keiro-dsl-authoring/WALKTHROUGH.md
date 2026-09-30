@@ -1,103 +1,114 @@
-# Worked walkthrough: the stable Reservation aggregate
+# Worked walkthrough: the Language 6 checked-mapping-replay workspace
 
-This closes the full loop on a real Language-4 fixture, end to end. All paths are repo-relative
+This closes the full loop on a real Language 6 service, end to end. All paths are repo-relative
 to `/Users/shinzui/Keikaku/bokuno/keiro`.
 
-## 1. Start from the stable source
+## 1. Start from the Language 6 source
 
-`keiro-dsl/test/fixtures/reservation.keiro` starts with `language keiro-dsl 4` and declares one
-`aggregate Reservation`: three ID types, three enums, a rule, three registers, six states (three
-terminal), two commands, two events, two transitions, a wire policy, and a projection.
+`keiro-dsl/test/fixtures/checked-mapping-replay-workspace/service.keiro-workspace` composes two
+members, both beginning `language keiro-dsl 6` and declaring `context checked-mapping-replay`:
+
+- `domain/values.keiro` owns the shared declarations: `RetainedId` with
+  `domain=typeid-v5-or-v7`, the bare values `MaybeLabel` (`wire Optional Text`), `ImportantDays`
+  (`wire List Day`), `TextLabels` (`wire Set Text`), and `MaybeContentHash`, the refined
+  `ContentHash` (`wire base16-bytes`), and the `ReplayEnvelope` record that combines them with a
+  `Map[RetainedId] Text` field.
+- `domain/service.keiro` uses them: the `ReplayLedger` aggregate with a snapshot and a
+  `replay-only` transition, the `ReplayTarget` aggregate, a `ReplayReaction` reaction process, the
+  `replay_jobs` queue with colon-form mapped payload fields, a projection catalog with the
+  `replay_lookup` read model and its mapped query pair, and a public contract whose field names
+  the declared `RetainedId`.
 
 ```bash
-cabal run -v0 keiro-dsl -- parse keiro-dsl/test/fixtures/reservation.keiro
-cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/reservation.keiro
-cabal run -v0 keiro-dsl -- inspect keiro-dsl/test/fixtures/reservation.keiro --format=json
+workspace=keiro-dsl/test/fixtures/checked-mapping-replay-workspace/service.keiro-workspace
+cabal run -v0 keiro-dsl -- check "$workspace" --min-language 6
+cabal run -v0 keiro-dsl -- check "$workspace" --explain-bindings
+cabal run -v0 keiro-dsl -- inspect "$workspace" --format=json
 ```
 
-`parse` retains the declaration. `inspect` reports `languageVersion: 4` and
-`languageSupport: stable`. Versions 1 through 3 remain accepted as `compatibility-only`; neither
-inspection nor parse/pretty silently upgrades them.
+`check` prints one expected `ReplayOnlyCommandStillLive` warning for the retired
+`ImportLegacy` command and exits 0. `--explain-bindings` lists every binding, fixture, and
+initial symbol the application owns. `inspect` reports both members as
+`"declaredLanguageVersion": 6` with `"languageSupport": "candidate"` until Language 6 is
+published.
 
 ## 2. Scaffold the checked service
 
 ```bash
 out_dir="$(mktemp -d)"
-cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/reservation.keiro --out "$out_dir"
+cabal run -v0 keiro-dsl -- scaffold "$workspace" --out "$out_dir"
 find "$out_dir" -name '*.hs' | sort
 ```
 
-The stable plan contains context nominal modules, replay audit, aggregate domain, codec,
-transducer, behavior contract, event stream, projection, and harness modules. Generated files
-carry a `language keiro-dsl 4` banner. The create-if-absent `Holes.hs` keeps the projection apply
-function and the one transition output declared as `implementation hole`; `BehaviorHoles.hs`
-keeps consumer-owned behavior witnesses. Re-scaffolding overwrites generated files but not these
-hand-owned modules.
+The plan contains the context nominal and `Structural.NominalLeaves` modules, the structural
+shapes and `StructuralConformance`, each aggregate's domain, codec, transducer, event stream, and
+harness, the reaction's input, decision, worker, and process harness, the queue codec, the
+read-model query contract, the projection catalog facade, and the contract codec. Create-once
+modules hold only the hand-owned boundaries:
 
-The lifecycle vertex is not mirrored in a register: `goto ReservationHeld` owns the state change.
-The generated transducer lowers the source guard and emit directly, while the filled output hole
-constructs `TransferReservationConfirmedTermFields` against its generated signature.
+| Module | You fill |
+| --- | --- |
+| `Conformance/CheckedMappingReplay/Bindings.hs` | total bindings, fixtures, and initials for every mapped declaration |
+| `CheckedMappingReplay/ReplayReaction/ProcessHoles.hs` | the `RecordedEvent -> Maybe ReplayReactionInput` source decoder |
+| `CheckedMappingReplay/ReplayLookup/ReadModelHoles.hs` | the query body against the generated query types |
+| `CheckedMappingReplay/ProjectionCatalog/ProjectionCatalogHoles.hs` | live and replay apply, verification |
+| `CheckedMappingReplay/*/BehaviorHoles.hs` | consumer-owned behavior witnesses |
 
-## 3. Observe Language-4 ID admission
+The fresh `Bindings.hs` contains `HOLE` markers. The committed, filled versions live under
+`keiro-dsl/test/conformance-checked-mapping-replay/`; compare yours against them. Re-scaffolding
+overwrites generated files but never these hand-owned modules.
 
-The three source declarations generate distinct `TransferReservationId`, `HospitalId`, and
-`CommandId` types. Their public constructors validate current TypeID-v7 text:
+## 3. Fill the bindings against the generated shapes
+
+Every binding is a total isomorphism between the consumer type and its generated shape:
 
 ```haskell
-transferReservationIdValue :: TransferReservationId
-transferReservationIdValue =
-  either (error . show) id
-    (parseTransferReservationId "rsv_01h455vb4pex5vsknk084sn02q")
+maybeLabelBinding :: StructuralBinding MaybeLabel MaybeLabelShape
+maybeLabelBinding =
+  StructuralBinding
+    { bindingToShape = \(MaybeLabel value) -> value
+    , bindingFromShape = MaybeLabel
+    }
 ```
 
-The generated harness uses the same `parse…Id` constructors for every command, event, and initial
-register sample. Wrong prefixes, malformed text, non-canonical spellings, and non-v7 UUIDs cannot
-enter through these current constructors or JSON decoders. The internal
-`unsafe…FromLegacyText` functions exist only for historical event replay; authoring code must not
-import `Generated.…Nominals.Internal`.
+The refined `ContentHash` binding maps to a `ByteString` shape, `Day` fields arrive as
+`Data.Time.Calendar.Day`, and `Set Text` fields as `Set Text`; the frozen `keiro-core` codecs own
+their wire forms, so the binding never parses or validates. Fixtures should cover the edge cases
+each policy exists for: an empty and a leading-zero hash, a UUIDv5 and a UUIDv7 `RetainedId`, an
+empty and a multi-element set, and an absent and a present optional.
 
-## 4. Compile and run the harness
-
-The checked-in reference component compiles the generated tree with the hand-owned fills and runs
-the generated assertions:
+## 4. Run the whole loop and the harness
 
 ```bash
-cabal test keiro-dsl-conformance --test-show-details=direct
+just checked-mapping-adoption
+cabal test keiro-dsl:test:keiro-dsl-conformance-checked-mapping-replay --test-show-details=direct
 ```
 
-It proves replay validation is empty, both events round-trip through the persisted codec, a valid
-current-ID command reaches `ReservationHeld`, and forward execution agrees with replay for the
-final vertex and all three domain registers. Its driver also pins canonical event JSON bytes and
-unknown-event rejection.
+The recipe runs the public `check`, scaffolds into an empty tree, confirms the binding skeleton
+has `HOLE` markers, installs the completed hand-owned files, regenerates, and compares the whole
+`Generated/` tree with the committed example; it then repeats that from an existing scaffold and
+fails if any hand-owned file changed. The conformance test proves replay validation is empty,
+decodes retained non-canonical bytes through the generated event codec, replays a multi-event
+transition, crosses the replay-only edge, and checks forward execution against replay.
 
 If replay validation is red, use `TAXONOMY.md` to start from the named vertex and repair the source
-or corresponding hand-owned implementation. Do not edit a generated module or bypass the gate
+or the corresponding hand-owned implementation. Do not edit a generated module or bypass the gate
 with `mkEventStreamUnchecked`.
 
-## 5. Prove the harness catches behavior drift
+## 5. Gate evolution
+
+Before changing a deployed spec, diff it against the deployed ref:
 
 ```bash
-bash keiro-dsl/test/mutation-test.sh
+cabal run -v0 keiro-dsl -- diff "$workspace" --since <deployed-ref> --explain
 ```
 
-The script temporarily flips the stable generated guard from inequality to equality, confirms the
-named acceptance assertion turns red, and restores the file. This demonstrates that the harness,
-not successful scaffolding by itself, pins the checked behavior.
+A new event field without an event-version bump is `BREAKING`; a contiguous `vN` plus
+`upcast from v(N-1) = HOLE` is `ADDITIVE`. Changing a checked value policy is never a refactor:
+switching `RetainedId` back to `typeid-v7` reports `IdDomainContractChanged`, and changing a
+`wire` shape reports a mapped finding at every affected root. Retain the old reader, roll out
+readers before writers, and follow the rollout constraints `diff --explain` prints.
 
-## 6. Gate event evolution
-
-`keiro-dsl/test/fixtures/reservation-v2.keiro` uses event `v2` and `upcast from v1 = HOLE` clauses;
-those numbers are event schema versions, not source-language versions. The fixture itself remains
-a Language-4 source.
-
-```bash
-bash keiro-dsl/test/diff-test.sh
-```
-
-Adding a field without the event-version bump is `BREAKING`; the contiguous event-v2/upcaster form
-is `ADDITIVE`. The `keiro-dsl-conformance-v2` component compiles that codec and proves a v1-tagged
-payload traverses the upcast chain.
-
-That is the stable loop: write Language 4 → check → scaffold → fill explicit holes → run the
-harness → diff. The `.keiro` source owns deterministic behavior and current admission; hand-owned
+That is the loop: write Language 6 → check → scaffold → fill explicit holes → run the harness →
+diff. The `.keiro` source owns deterministic behavior, wire shapes, and admission; hand-owned
 modules own only the boundaries that the notation marks as holes.

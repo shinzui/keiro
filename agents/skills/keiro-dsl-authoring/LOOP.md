@@ -4,12 +4,17 @@ Run everything from the repo root (`/Users/shinzui/Keikaku/bokuno/keiro`).
 
 ### 1. Write the spec
 
-Author `service.keiro` in the notation (`NOTATION.md`). New development work starts with the
-current candidate `language keiro-dsl 5`; use published stable `language keiro-dsl 4` when the
-service must remain on released syntax. Then write `context <name>` and exactly the nodes the feature needs. Language 4 includes the released
-consumer-owned nominal syntax, generated TypeID admission, typed contract TypeID fields, and the
-strict service surface. Prefer the smallest spec that captures the decisions;
-the deterministic boilerplate is derived, so don't hand-write it.
+Author `service.keiro` in the notation (`NOTATION.md`). The first line is always
+`language keiro-dsl 6`; a `new <kind>` starter prints `language keiro-dsl 5`, so change that line
+before anything else. Then write `context <name>` and exactly the nodes the feature needs.
+Prefer the smallest spec that captures the decisions; the deterministic boilerplate is derived,
+so don't hand-write it.
+
+When the task touches an existing source on Language 5, change its preamble to 6 first and
+confirm with `diff` that the preamble change alone is `ADDITIVE` and `replay-neutral`. A source on
+Languages 1 through 4, or with no preamble, is deprecated: migrate it to Language 6 as a separate,
+reviewed change before adding features, and let `check` and `diff` surface what the older contract
+allowed that Language 6 rejects.
 
 ### 2. Parse (sanity)
 
@@ -28,15 +33,14 @@ workspace:
 cabal run keiro-dsl -- inspect service.keiro --format=json
 ```
 
-Declared version 4 is reported as `stable`. Versions 1 through 3 are reported as
-`compatibility-only`; an unversioned source is reported as `legacy-unversioned` with effective
-version 1. Inspection and parse/pretty preserve all of those source forms without silently
-rewriting them. An unsupported future version is rejected before its body is parsed.
+A Language 6 source reports `"declaredLanguageVersion": 6` and `"languageSupport": "candidate"`
+until Language 6 is published, then `"stable"`. Inspection and parse/pretty never rewrite the
+preamble. An unsupported future version is rejected before its body is parsed.
 
-`check`, `scaffold`, and the working-tree side of `diff` print a one-line stderr notice
-naming the effective contract whenever a source is compatibility-only. It is a notice, not a
-diagnostic: it has no code, does not affect the exit status, and is not something to silence.
-Treat it as the prompt to declare `language keiro-dsl 4` and fix whatever that surfaces.
+`check`, `scaffold`, and the working-tree side of `diff` print a one-line stderr
+`language contract:` notice for a deprecated source (Languages 1 through 4 or no preamble). It is
+a notice, not a diagnostic: it has no code and does not affect the exit status. Treat it as the
+prompt to migrate that source to `language keiro-dsl 6`.
 
 ### 3. Check (the gate — before any Haskell)
 
@@ -55,13 +59,13 @@ The canonical CI invocation is:
 
 ```bash
 cabal run keiro-dsl -- check service.keiro \
-  --min-language 4 \
+  --min-language 6 \
   --deny-warnings \
   --report-out build/keiro-check-report.json
 ```
 
-`--min-language 4` requires the stable released contract, so a spec cannot quietly sit on
-compatibility-only semantics. `--deny-warnings` turns every warning this invocation emits
+`--min-language 6` refuses any source below Language 6, so a spec cannot quietly sit on an
+older contract. `--deny-warnings` turns every warning this invocation emits
 into exit 1 without changing its severity; `--deny CODE[,CODE...]` (repeatable, comma-separated)
 does the same for named codes only. A code `check` cannot emit is rejected outright rather
 than accepted as a no-op, so a denial in CI is either effective or an immediate error: a
@@ -78,10 +82,8 @@ such as `ReplayOnlyCommandStillLive` during command retirement — gates CI with
 `--deny CODE[,CODE...]` list of the codes it wants fatal instead. Do not respell a benign
 inversion just to silence the warning; the warning is the confirmation.
 
-Many surfaces warn on released languages 1–3 and error from language 4 on. Both severities
-print the same sentence, so an author reads one explanation either way — and a language-4
-spec cannot state something the runtime does not do. Write the spelling that describes what
-runs: `body strict`, `on-appended AckOk`, `not-mine Retry`, a `bind … from header` naming a
+Language 6 rejects any spelling that states something the runtime does not do. Write the
+spelling that describes what runs: `body strict`, `on-appended AckOk`, `not-mine Retry`, a `bind … from header` naming a
 canonical keiro envelope header, a timer `decode unknown-status` from
 `Scheduled`/`Firing`/`Fired`/`Cancelled`/`Dead`, and a non-blank timer `dead-letter` reason.
 
@@ -106,8 +108,12 @@ Common diagnostics you must resolve in the spec (the warning-only codes are call
   `NominalInvalidHaskellSource`, `NominalInvalidQualifiedName`,
   `NominalInvalidIdentity`, `NominalInvalidIdPrefix`,
   `NominalUnsupportedRepresentation`, `NominalEmptyEnumRepresentation`,
-  `NominalMissingInitialValue`, and `NominalNameCollision`. Historical version-1 sources still
-  reject nominal syntax at the language boundary as `LanguageFeatureRequiresVersion`.
+  `NominalMissingInitialValue`, and `NominalNameCollision`.
+- Mapped types: `MappedUnsupportedEncoding` (for example a bare value whose outer constructor is
+  not `Optional`, `List`, text-keyed `Map`, `Day`, or `Set Text`) and
+  `MappedNonInjectiveNullability` (an `Optional` around a null-capable value). A direct aggregate
+  `Day`, `Set Text`, or `Optional DeclaredId` is rejected with guidance to declare a named
+  `mapped structural` value or record.
 - Process, router, and worker policy: `SagaCategoryIllegal`, `ProcessFireAtNotInjected`,
   `ProcessDispatchIdSupplied`, `ProcessUnresolvedRef`, `ProcessFieldBindingUnresolved`,
   `ProcessTimerCeilingInvalid`, `RouterUnresolvedRef`, `RouterKeyFieldUnknown`,
@@ -131,9 +137,7 @@ Common diagnostics you must resolve in the spec (the warning-only codes are call
   `CatalogQueryWaitWithAmbiguousCursor`, and
   `CatalogAmbiguousSourceOrdering`, plus `QueryUnresolvedReadModel`,
   `QueryConsistencyInvalid`, `DispatchReadModelUnresolved`, and
-  `DispatchReadModelFieldUnknown`. Released-language compatibility checks retain
-  `RmStrongInlineOnly`, `RmScopeWithoutStrong`, `RmInlineFeedUnreferenced`, and
-  `RmConsistencyConflict`; `RmProjectionWithoutNode` is a warning.
+  `DispatchReadModelFieldUnknown`. `RmProjectionWithoutNode` is a warning.
 - Workflow and operations: `WorkflowDuplicateLabel`, `WorkflowSleepDelayUnresolved`,
   `WorkflowIdFieldUnresolved`, `AwaitSignalMismatch`, `AwaitSignalValueMismatch`,
   `RunWorkflowUnresolved`, `OperationUnresolvedRef`, `WorkflowPatchDuplicate`,
@@ -231,7 +235,7 @@ files to the root project once; do not add a hand-written stanza per node.
 
 ### 5. Fill the holes
 
-Open the hole modules. Language 4 generates ordinary transition guards, writes, emits, and
+Open the hole modules. The scaffolder generates ordinary transition guards, writes, emits, and
 targets. Each remaining hole is an explicitly hand-owned boundary with a typed signature and a
 `-- HOLE …` annotation—for example an `implementation hole`, projection apply, upcaster,
 consumer binding, or effectful resolver. Fill the body against the **generated** names (the
@@ -245,10 +249,15 @@ target stream and attempted event id. Fold `True` into the duplicate outcome and
 `False` as the original failure. Pattern-matching `DuplicateEvent` alone is unsafe because
 event ids are globally unique across streams.
 
-Consumer-owned nominal declarations also create typed, create-once binding skeletons. Implement
-both total directions and the declared fixture corpus. Do not return `Either`, hide validation in
-the inverse, or move JSON policy into the binding. A refined consumer type belongs behind
-`mapped opaque`.
+Consumer-owned nominal, structural, and refined declarations also create typed, create-once
+binding skeletons. Implement both total directions and the declared fixture corpus. Do not return
+`Either`, hide validation in the inverse, or move JSON policy into the binding. A byte value with
+a base16 wire form belongs behind `mapped refined … wire base16-bytes`; any other validated or
+normalizing consumer type belongs behind `mapped opaque`.
+
+A Language 6 reaction process leaves exactly one process Hole: the create-once
+`decode<Process>Input :: RecordedEvent -> Maybe <Process>Input` source decoder. Everything else in
+the reaction, timer, and worker wiring is generated.
 
 ### 6. Run the service conformance package (pin behaviour)
 
