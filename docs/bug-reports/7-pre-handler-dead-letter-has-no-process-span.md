@@ -4,7 +4,7 @@ title: Continuous worker dead-letters an exhausted job without a process span
 description: A job whose first PGMQ read exceeds its zero retry ceiling reaches the DLQ without a handler call or a per-message process span.
 generated:
   by: process:codex
-  at: "2026-09-24T22:44:18Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-7
 status: reported
 severity: degraded
@@ -50,3 +50,11 @@ the observed run and source control flow, not an isolated patch test.
 
 Run artifacts are under `mori://shinzui/keiro-runtime-kenshou` at
 `runs/<run-id>`; an artifact-level Mori URI for run directories is pending.
+
+## Status and implementation
+
+Status checked on 2026-09-30: `reported`; no ExecPlan currently addresses this specific
+pre-handler dead-letter span gap. [Plan 111](../plans/111-trace-one-shot-pgmq-job-processing-with-remote-parent-continuation.md)
+implemented tracing for one-shot processing; it does not establish a fix for the
+continuous worker's retry-ceiling path before handler invocation. No validated fix or
+successful reproduction in the owning repository is recorded, so the report remains open.

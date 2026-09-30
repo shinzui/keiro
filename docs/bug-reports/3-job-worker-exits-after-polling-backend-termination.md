@@ -4,7 +4,7 @@ title: Job worker exits after polling backend termination
 description: A continuous job worker exits after one PostgreSQL polling backend termination and leaves later jobs queued.
 generated:
   by: process:codex
-  at: "2026-09-24T05:03:53Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-3
 status: reported
 severity: degraded
@@ -51,3 +51,12 @@ Whether the interrupted connection caused the row-count error needs upstream
 investigation; the observation does not establish that the classifier alone
 is wrong. Keiro's pending test in `keiro-pgmq/test/Main.hs` names this same
 transient-polling behavior.
+
+## Status and implementation
+
+Status checked on 2026-09-30: `reported`; no ExecPlan currently addresses this specific
+backend-termination failure. [Plan 74](../plans/74-expose-keiro-pgmq-tuning-surface-and-make-job-workers-resilient.md)
+completed earlier transient-poll retry integration, but the reported failure was observed
+after that work and the Keiro-level fault-injection example remains pending.
+[Plan 300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md) explicitly excludes BUG-3. No fix or successful
+reproduction in the owning repository is recorded, so the report remains open.

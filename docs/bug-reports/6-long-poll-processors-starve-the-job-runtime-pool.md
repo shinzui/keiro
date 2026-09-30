@@ -4,7 +4,7 @@ title: Six long-poll processors can leave a job queued on the three-connection r
 description: A six-processor long-poll worker leaves an enqueued job without a handler effect for thirty seconds, while one- and three-processor controls complete.
 generated:
   by: process:codex
-  at: "2026-09-24T20:53:46Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-6
 status: reported
 severity: degraded
@@ -51,3 +51,13 @@ Mori URI for run directories is pending.
 The three-connection limit is visible, and excess long polls are the leading
 explanation. The probe has not isolated which acquisition or acknowledgement
 operation stops progress.
+
+## Status and implementation
+
+Status checked on 2026-09-30: `reported`; tracked by
+[plan 300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md), together with BUG-4.
+The plan is unimplemented (0 of 15 progress items checked), including its local
+reproduction steps. `LongPoll` still selects server-side `LongPolling`; the proposed
+client-side reads and configurable job-runtime pool have not landed. The report
+stays `reported` until the owning repository reproduces it, then moves to `fixed`
+only after implementation and validation.

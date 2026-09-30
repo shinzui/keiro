@@ -4,7 +4,7 @@ title: Process-manager and router worker heaps grow during steady write-side loa
 description: Process-manager and router workers retain increasing post-major-GC heap during a five-minute steady write-side workload.
 generated:
   by: process:codex
-  at: "2026-09-25T22:16:28Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-1
 status: duplicate
 duplicateOf: mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3
@@ -62,16 +62,21 @@ Their native memory, thread counts, file descriptors, and PostgreSQL
 connection counts were stable. Writer and projection heap series lacked enough
 post-major-GC samples for a verdict.
 
-This is a reproducible retention signal in a combined Keiro/Kiroku workload,
-not an isolated Keiro defect or proof of unbounded growth. A longer soak,
-isolated subscription workload, and retaining-object profiles are needed to
-identify the component. The original evidence is in
+The original run established a reproducible retention signal in a combined
+Keiro/Kiroku workload. At reporting time it did not isolate the component;
+the profiles and controls described below subsequently attributed it to Kiroku.
+The original evidence is in
 `mori://shinzui/keiro-runtime-kenshou` at
 `docs/findings/1-keiro-write-side-worker-heap-growth.md` (artifact-level URI
 pending).
 
-Tracked by [plan 297](../plans/297-isolate-and-fix-write-side-worker-heap-retention-under-steady-subscription-load.md),
-which attributes the retention across keiro, kiroku, and the harness before fixing it.
+## Status and implementation
+
+Status checked on 2026-09-30: `duplicate`; [plan 297](../plans/297-isolate-and-fix-write-side-worker-heap-retention-under-steady-subscription-load.md)
+is completed (17 checked progress items, none remaining). The retention harness,
+attribution, and regression gate are implemented. The upstream fix is released in
+`kiroku-store` 0.9.0.1, and Keiro's dependency bounds require it. The full published-package
+live-worker soak remains a Kenshou follow-up; it does not reopen this duplicate.
 
 ## Attribution
 

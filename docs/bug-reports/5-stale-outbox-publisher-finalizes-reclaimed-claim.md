@@ -4,7 +4,7 @@ title: Stale outbox publisher finalizes another publisher's reclaimed claim
 description: A publisher resumed after maintenance can mark a newly claimed outbox row failed or dead even after the new publisher reports success.
 generated:
   by: process:codex
-  at: "2026-09-24T19:09:18Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-5
 status: reported
 severity: degraded
@@ -38,3 +38,13 @@ reviews:
 The Kenshou failed-outcome run `01a0d4d0-d80e-73df-a678-185c7d8bd738` realised the controlled schedule. P1's failed finalization changed P2's active claim from `publishing` to `failed`; P2 had already appended one broker record and later reported success, but the row remained `failed`. The dead-outcome run `01a0d4d2-4640-7008-9a09-e46104d73de9` left the row `dead` after P2's successful broker append. The succeeded-outcome control `01a0d4d1-e880-7794-b394-58223cac3e34` left the row `sent`, but P1 still finalized P2's claim. Run artifacts are under `mori://shinzui/keiro-runtime-kenshou` at `runs/<run-id>`; an artifact-level Mori URI for run directories is pending.
 
 The finalization statements in `keiro/src/Keiro/Outbox/Schema.hs` guard only on `outbox_id` and `status = 'publishing'`. A maintenance requeue followed by a new claim returns the row to `publishing`, so a delayed statement from the old publisher matches the new claim. A claim generation or equivalent fencing value appears necessary; the report does not prescribe its implementation.
+
+## Status and implementation
+
+Status checked on 2026-09-30: `reported`; tracked by
+[plan 299](../plans/299-fence-outbox-finalization-by-claim-generation-to-fix-bug-5.md).
+The plan is unimplemented (0 of 22 progress items checked), including its local
+reproduction steps. The current finalization API still takes an `OutboxId`, and the
+finalization SQL still has no claim-generation fence. The planned migration and
+`OutboxClaim` API have not landed; the report stays `reported` until the owning
+repository reproduces it, then moves to `fixed` only after implementation and validation.

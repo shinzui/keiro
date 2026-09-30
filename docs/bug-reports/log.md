@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-30
+* **Update**: Audit all seven lifecycle statuses and plan coverage: BUG-1/BUG-2 remain duplicate with completed plans 297/298; BUG-4/BUG-6 link unimplemented plan 300; BUG-5 links unimplemented plan 299; BUG-3/BUG-7 remain reported with no plan addressing their specific failures. Add per-report implementation notes and the index summary.
+
 ## 2026-09-25
 * **Update**: BUG-2 attribution controls pass with released Kiroku 0.9.0.1 and bounded verification threads
 * **Update**: BUG-1 and BUG-2 duplicates now point to released kiroku-store 0.9.0.1

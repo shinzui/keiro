@@ -4,7 +4,7 @@ title: Long-poll job worker consumes a read attempt without handler delivery
 description: Long-poll workers can skip a handler attempt or inflate the DLQ read count after a handler process is killed.
 generated:
   by: process:codex
-  at: "2026-09-24T05:03:53Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-4
 status: reported
 severity: degraded
@@ -51,3 +51,13 @@ The `PollEvery 1` control passed in runs
 `01a0d1b6-4762-7781-8f97-8a52245b0bb4`: three handler attempts were
 followed by DLQ `read_count=4`. Concurrent long-poll prefetch is a possible
 source of the extra lease, but the harness has not isolated the cause.
+
+## Status and implementation
+
+Status checked on 2026-09-30: `reported`; tracked by
+[plan 300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md), together with BUG-6.
+The plan is unimplemented (0 of 15 progress items checked), including its local
+reproduction steps. `toPollingConfig` in `keiro-pgmq/src/Keiro/PGMQ/Job.hs` still maps
+`LongPoll` to server-side `LongPolling`. The proposed client-side polling fix has not
+landed; the report stays `reported` until the owning repository reproduces it, then
+moves to `fixed` only after implementation and validation.

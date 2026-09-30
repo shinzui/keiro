@@ -4,7 +4,7 @@ title: Command workload retains heap with seed verification disabled
 description: Post-major-GC live heap grows during a command soak with a 10000-event history even when seed verification is disabled.
 generated:
   by: process:codex
-  at: "2026-09-25T22:16:28Z"
+  at: "2026-09-30T20:55:24Z"
 bugId: BUG-2
 status: duplicate
 duplicateOf: mori://shinzui/kiroku/okf/bug-reports/concepts/BUG-3
@@ -68,9 +68,14 @@ the headline command-soak growth. The fix is published in `kiroku-store`
 `docs/findings/2-keiro-seed-backlog-heap-growth.md` (artifact-level URI
 pending).
 
-Tracked by [plan 298](../plans/298-isolate-and-fix-command-runner-heap-retention-over-long-snapshotted-histories.md),
-which reuses the retention harness of plan 297 for the command runner over a long
-snapshotted history.
+## Status and implementation
+
+Status checked on 2026-09-30: `duplicate`; [plan 298](../plans/298-isolate-and-fix-command-runner-heap-retention-over-long-snapshotted-histories.md)
+is completed (13 checked progress items, none remaining). The command retention
+controls and independent sampled-verification bound are implemented. The matched
+Kiroku-only comparison established attribution, and the long-history control passed
+against released `kiroku-store` 0.9.0.1. The full live-worker soak remains the follow-up
+described in BUG-1.
 
 ## Attribution controls
 
