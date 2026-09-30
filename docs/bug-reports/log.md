@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-09-30
+* **Addition**: BUG-9 records keiro-ops reporting Keiro's own `external_read_<function>_binding` view as schema drift, because the expected snapshot is generated from migrations alone; every mutating operator command on a service with an all-rows external-read contract refuses without `--allow-schema-drift`.
+
 ## 2026-09-25
 * **Update**: BUG-2 attribution controls pass with released Kiroku 0.9.0.1 and bounded verification threads
 * **Update**: BUG-1 and BUG-2 duplicates now point to released kiroku-store 0.9.0.1
