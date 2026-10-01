@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-01
+* **Addition**: IR-52 requests that Keiro populate Kiroku's typed correlationId and causationId on every appended event and every process-manager-dispatched command, seeded from a caller-supplied correlation id, because the codec writes both as Nothing today; raised from mori://shinzui/shoko for migration and keiro-native verification (RES-1).
+
 ## 2026-09-30
 * **Update**: IR-26 through IR-30 are coordinated by MasterPlan 45, which adopts plans 274 through 278, settles their shared artifacts (cursor codec, pending-timer read, hydration source, kiroku-store 0.10.0.0 listing gate, migration and handle allocation), and adds the release plan 303 that will complete them.
 * **Planning**: IR-31 is planned as ExecPlan 302 (the composition module Keiro.Ops.Http.Compose in keiro-ops-http, stable prefixes keiro/kiroku/shibuya/pgmq, CORS once, prefix routing only) under MasterPlan 45.
