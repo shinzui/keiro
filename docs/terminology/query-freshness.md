@@ -1,10 +1,10 @@
 ---
 type: Term
 title: query freshness
-description: "The waiting policy applied before a read-model query runs, determining which projection progress it requires."
+description: "Query freshness is the policy that determines required projection progress before a read-model query runs."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-39
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # query freshness
 
-Keiro offers three choices: query immediately without waiting, wait for a captured event-log head, or wait for a caller-supplied [global position](global-position.md).
+Query freshness is the policy that determines required projection progress before a read-model query runs.
 
-Immediate does not mean up to date: an asynchronous projection may still lag. Waiting requires a durable cursor for the projection supplying the query. Delivery mode controls when updates run; freshness controls what the query waits for.
+A query can run immediately, wait for a captured event-log head, or wait for a caller-supplied [global position](global-position.md). Immediate execution can return data that lags behind committed events.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+Waiting requires a durable cursor for the supplying projection. Delivery mode controls update execution. Freshness controls query waiting.
+
+See [read models and projections](../user/read-models-and-projections.md).

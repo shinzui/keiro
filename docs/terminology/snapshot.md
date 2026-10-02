@@ -1,10 +1,10 @@
 ---
 type: Term
 title: snapshot
-description: A saved copy of an aggregate's state at a known stream version, used to rebuild current state without replaying its entire history.
+description: "A snapshot is aggregate state saved at a known stream version to reduce the events needed for reconstruction."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-5
 status: current
 tags:
@@ -21,10 +21,10 @@ anchors:
 
 # snapshot
 
-A snapshot lets Keiro start with previously reconstructed state and replay only the events
-that followed it. For example, a snapshot at event 1,000 means the next reconstruction can
-start with event 1,001.
+A snapshot is aggregate state saved at a known stream version to reduce the events needed for reconstruction.
 
-The event history remains authoritative. If a snapshot is unavailable, incompatible with
-the current model, or cannot be read, Keiro falls back to replaying the full history.
-See [Snapshots](../user/snapshots.md) for compatibility checks and configuration.
+A snapshot at event 1,000 lets reconstruction start with event 1,001. Event history remains authoritative.
+
+Keiro replays the full history if the snapshot is unavailable, incompatible, or unreadable.
+
+See [Snapshots](../user/snapshots.md).

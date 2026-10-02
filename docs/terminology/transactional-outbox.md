@@ -1,10 +1,10 @@
 ---
 type: Term
 title: transactional outbox
-description: A durable record of messages waiting to be published, saved transactionally so a crash cannot lose the handoff to a separate publisher.
+description: "A transactional outbox is durable message storage whose enqueue commits atomically with its associated database changes."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-18
 status: current
 tags:
@@ -23,15 +23,12 @@ anchors:
 
 # transactional outbox
 
-The outbox separates deciding to send an [integration event](integration-event.md) from
-actually publishing it. A worker sends the saved message and records the outcome, allowing
-publication to resume after a crash.
+A transactional outbox is durable message storage whose enqueue commits atomically with its associated database changes.
 
-In Keiro's standard pipeline, a subscription reads committed domain events and maps them
-to outgoing messages. Saving those messages and advancing the subscription's checkpoint
-happen in one transaction, so the subscription cannot move past a message it failed to
-save. This transaction follows the original domain-event commit.
+A worker sends each saved [integration event](integration-event.md) and records the outcome. Publication can resume after a crash.
 
-Publication is at least once: a crash after sending but before recording success can cause
-redelivery. The receiving [inbox](inbox.md) deduplicates. See
-[Durable Outbox](../user/outbox.md) for the pipeline and direct transactional enqueue option.
+In Keiro's standard pipeline, a subscription maps committed domain events to outgoing messages. Message storage and checkpoint advancement commit together. This transaction follows the domain-event commit. Direct transactional enqueue is also available.
+
+Publication is at least once. A crash after sending can cause redelivery before success is recorded. The receiving [inbox](inbox.md) deduplicates messages.
+
+See [Durable Outbox](../user/outbox.md).

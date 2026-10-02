@@ -1,10 +1,10 @@
 ---
 type: Term
 title: global position
-description: "A store-wide event position used to order events across streams and track consumer progress."
+description: "A global position is a store-wide event cursor for ordering events across streams and tracking consumer progress."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-38
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # global position
 
-A projection consuming many streams uses global positions to track how far it has progressed. A caller can use a command's returned position to wait until the supplying projection has caught up before querying.
+A global position is a store-wide event cursor for ordering events across streams and tracking consumer progress.
 
-Positions come from `mori://shinzui/kiroku`. Treat them as store-issued cursors, not timestamps or gap-free counts. A [stream version](stream-version.md) instead describes one stream's history.
+A projection uses global positions to track progress across streams. A caller can wait for the command's returned position before a query.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+Positions belong to `mori://shinzui/kiroku`. Treat them as store-issued cursors. They are not timestamps or counts that guarantee no gaps. A [stream version](stream-version.md) describes one stream's history.
+
+See [read models and projections](../user/read-models-and-projections.md).

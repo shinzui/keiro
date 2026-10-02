@@ -1,10 +1,10 @@
 ---
 type: Term
 title: register
-description: "A named, typed value remembered by an aggregate alongside its lifecycle state."
+description: "A register is a named, typed value that an aggregate retains alongside its lifecycle state."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-31
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # register
 
-An order can be in the paid [lifecycle state](lifecycle-state.md) while registers hold its customer identifier and total. Here, register means part of the aggregate's in-memory model, not a database registration record.
+A register is a named, typed value that an aggregate retains alongside its lifecycle state.
 
-Register changes must be recoverable from events. Registers and their formal operations belong to `mori://shinzui/keiki`; Keiro persists their evidence through events and can cache their values in [snapshots](snapshot.md).
+An order in the paid state can retain its customer identifier and total in registers. Events must contain enough information to recover register changes.
 
-See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.
+Register operations belong to `mori://shinzui/keiki`. Keiro stores their evidence in events and can cache their values in [snapshots](snapshot.md).
+
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md).

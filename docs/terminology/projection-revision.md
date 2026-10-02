@@ -1,10 +1,10 @@
 ---
 type: Term
 title: projection revision
-description: "A declared version of a projection's schema and behavior that can be deployed and rebuilt as one coherent implementation."
+description: "A projection revision is a declared schema and behavior version that can be deployed and rebuilt as one implementation."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-50
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # projection revision
 
-A revision connects target provisioning, live handlers, replay adapters, and verification. An online rebuild deploys both serving and candidate revisions so Keiro can keep serving one while constructing the other.
+A projection revision is a declared schema and behavior version that can be deployed and rebuilt as one implementation.
 
-A revision describes what to run; a [projection generation](projection-generation.md) is a physical instance of its data. Changing a public query shape may also require a new [external read contract](external-read-contract.md).
+A revision connects provisioning, live handlers, replay adapters, and verification. Online rebuilding deploys serving and candidate revisions together.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+A [projection generation](projection-generation.md) is a physical instance of revision data. A public query-shape change can also require a new [external read contract](external-read-contract.md).
+
+See [read models and projections](../user/read-models-and-projections.md).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: durable workflow
-description: A long-running process written as a sequence of steps and waits whose progress is saved so it can resume after interruptions.
+description: "A durable workflow is sequential code whose saved progress lets steps and waits resume after interruptions."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-13
 status: current
 tags:
@@ -24,13 +24,10 @@ anchors:
 
 # durable workflow
 
-A durable workflow can reserve stock, wait for payment confirmation, then arrange shipment,
-even if those steps span restarts or long idle periods. It saves named step results in a
-[journal](journal.md), and can wait on a [timer](timer.md), an
-[awakeable](awakeable.md), or a child workflow.
+A durable workflow is sequential code whose saved progress lets steps and waits resume after interruptions.
 
-On resumption, Keiro runs the function from the beginning and returns recorded results for
-completed steps. A step can run again if its external effect succeeded before its result
-was saved, so step effects must be idempotent. A [process manager](process-manager.md)
-expresses coordination as reactions to events; a workflow expresses it as sequential code.
-See [Durable Workflows](../guides/durable-workflows.md) for an example.
+A workflow can reserve stock, wait for payment, and arrange shipment across application restarts. It saves named step results in a [journal](journal.md). It can wait for a [timer](timer.md), an [awakeable](awakeable.md), or a [child workflow](child-workflow.md).
+
+On resumption, Keiro starts the function again and returns saved results for completed steps. An effect can succeed before its result is saved. The step can then run again, so effects must be [idempotent](idempotency.md).
+
+See [Durable Workflows](../guides/durable-workflows.md).

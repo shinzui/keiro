@@ -1,10 +1,10 @@
 ---
 type: Term
 title: router
-description: A stateless dispatcher that reacts to an event by looking up recipients and sending commands to their streams.
+description: "A router is a stateless dispatcher that looks up command recipients in response to an event."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-11
 status: current
 tags:
@@ -20,12 +20,10 @@ anchors:
 
 # router
 
-A router can query a [read model](read-model.md) to find recipients. For example, when an
-incident is reported, it might find all teams responsible for that region and send a
-command to each team's stream.
+A router is a stateless dispatcher that looks up command recipients in response to an event.
 
-Unlike a [process manager](process-manager.md), a router does not maintain its own
-event-sourced process state. Dispatch is idempotent for a recipient resolved again on
-redelivery, but a repeated lookup can find different recipients. See
-[Routers and Effectful Fan-Out](../guides/routers-and-effectful-fan-out.md) for the
-recipient and retry guarantees.
+A router can query a [read model](read-model.md) for teams responsible for an incident region. It then sends a command to each team stream.
+
+The router has no event-sourced process state. Dispatch is idempotent for a recipient found again after redelivery. A repeated lookup can find different recipients.
+
+See [Routers and Effectful Fan-Out](../guides/routers-and-effectful-fan-out.md).

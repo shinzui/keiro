@@ -1,10 +1,10 @@
 ---
 type: Term
 title: scaffold record
-description: A deprecated name for the scaffold ledger, the tool-maintained history of generated service files.
+description: "Scaffold record is a deprecated name for scaffold ledger."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-23
 status: deprecated
 tags:
@@ -20,9 +20,8 @@ anchors:
 
 # scaffold record
 
-Use [scaffold ledger](scaffold-ledger.md) in new code and documentation. You may encounter
-"scaffold record" in older projects and documentation; it refers to the same role.
+Scaffold record is a deprecated name for scaffold ledger.
 
-Existing files require an explicit migration using `scaffold --apply-name-migrations`.
-See [ADR-22](../adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md)
-for migration behavior.
+Use [scaffold ledger](scaffold-ledger.md) in new documentation. The deprecated term identifies the same generation-history role.
+
+Existing files need explicit migration with `scaffold --apply-name-migrations`. See [ADR-22](../adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md) for the migration contract.

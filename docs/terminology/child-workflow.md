@@ -1,10 +1,10 @@
 ---
 type: Term
 title: child workflow
-description: "A separately identified durable workflow started by another workflow, which can wait for its completion."
+description: "A child workflow is a separately identified durable workflow started by another workflow."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-58
 status: current
 tags:
@@ -16,8 +16,10 @@ anchors:
 
 # child workflow
 
-An order workflow might start a shipment workflow and wait for its result. The parent journals the child handle so resumption can recover that relationship.
+A child workflow is a separately identified durable workflow started by another workflow.
 
-Give the child its own workflow identity, distinct from the parent's. Parent and child retain separate execution histories; waiting for the child is itself durable.
+An order workflow can start a shipment workflow and wait for its result. The parent journals the child handle for recovery.
 
-See [durable workflows](../user/durable-workflows.md) for details.
+Give the child its own workflow identity. Parent and child retain separate execution histories. The parent can durably wait for child completion.
+
+See [durable workflows](../user/durable-workflows.md).

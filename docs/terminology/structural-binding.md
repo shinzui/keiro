@@ -1,10 +1,10 @@
 ---
 type: Term
 title: structural binding
-description: "A total conversion in both directions between an application-owned type and the structural shape declared by keiro-dsl."
+description: "A structural binding is a total conversion in both directions between an application-owned type and a DSL-declared structural shape."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-61
 status: current
 tags:
@@ -16,8 +16,10 @@ anchors:
 
 # structural binding
 
-A binding connects an existing address value to the generated address shape and back. It must preserve values in both directions; conformance fixtures provide finite evidence for those obligations.
+A structural binding is a total conversion in both directions between an application-owned type and a DSL-declared structural shape.
 
-The binding connects representations, while the structural declaration owns wire-format policy. It does not grant the application's JSON instance authority to override the generated format.
+The conversion must preserve values in both directions. Conformance fixtures provide finite evidence for these obligations.
 
-See [Keiro DSL Types and Mappings](../user/keiro-dsl-types-and-mappings.md) for details.
+The binding connects representations. The structural declaration owns wire-format policy. Application JSON instances cannot override the generated format.
+
+See [Keiro DSL Types and Mappings](../user/keiro-dsl-types-and-mappings.md).

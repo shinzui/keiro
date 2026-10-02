@@ -1,10 +1,10 @@
 ---
 type: Term
 title: replay adapter
-description: "Projection logic specifically intended to process historical events safely during a rebuild."
+description: "A replay adapter is projection logic that safely processes historical events during a rebuild."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-44
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # replay adapter
 
-A live handler might update a table and send a notification. Its replay adapter reconstructs the table without resending the notification for every historical event.
+A replay adapter is projection logic that safely processes historical events during a rebuild.
 
-A projection can declare a replay adapter or declare itself live-only. That capability is independent of the target's clear-or-preserve policy. See [projection rebuild](projection-rebuild.md).
+A live handler can update a table and send a notification. Its replay adapter reconstructs the table without sending historical notifications again.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+A projection can declare a replay adapter or remain live-only. This capability is separate from the target's clear-or-preserve policy.
+
+See [read models and projections](../user/read-models-and-projections.md).

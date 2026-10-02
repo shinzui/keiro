@@ -1,10 +1,10 @@
 ---
 type: Term
 title: projection generation
-description: "A physical instance of a projection's data, such as the serving tables or a candidate being built alongside them."
+description: "A projection generation is a physical instance of a projection revision's data."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-51
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # projection generation
 
-During an online rebuild, the serving generation stays available while the candidate is populated and checked. [Promotion](promotion.md) makes the candidate serve traffic.
+A projection generation is a physical instance of a projection revision's data.
 
-A generation instantiates a [projection revision](projection-revision.md). A retained old generation stops receiving ordinary writes after promotion; retaining it does not make rollback automatically safe.
+During online rebuilding, the serving generation remains available while Keiro populates and checks the candidate. [Promotion](promotion.md) makes the candidate serve traffic.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+A retained old generation stops receiving normal writes after promotion. Retention alone does not guarantee safe rollback.
+
+See [read models and projections](../user/read-models-and-projections.md).

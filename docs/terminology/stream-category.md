@@ -1,10 +1,10 @@
 ---
 type: Term
 title: stream category
-description: "A named family of streams that can be selected together for event consumption."
+description: "A stream category is a named family of streams for event consumption."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-36
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # stream category
 
-For example, `order-123` and `order-456` belong to the order category. A reporting [subscription](subscription.md) can follow that family without listing every order.
+A stream category is a named family of streams for event consumption.
 
-Category naming follows `mori://shinzui/kiroku`: the category precedes the first hyphen in a stream name. Keiro's category-aware stream constructors validate that boundary so naming and subscription selection agree.
+The streams `order-123` and `order-456` belong to the order category. A reporting subscription can follow this category without listing each order.
 
-See [api reference](../user/api-reference.md) for details.
+Category naming belongs to `mori://shinzui/kiroku`. The category precedes the first hyphen in a stream name. Keiro's category-aware constructors validate this boundary.
+
+See [api reference](../user/api-reference.md).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: replay-only transition
-description: "An aggregate transition retained to reconstruct historical events without allowing new commands to select that behavior."
+description: "A replay-only transition reconstructs historical events without letting new commands select the retained behavior."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-54
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # replay-only transition
 
-Suppose an older rule emitted an event that new orders must no longer produce. Removing that rule entirely can make old streams unreadable. A replay-only transition preserves the historical interpretation while retiring the live behavior.
+A replay-only transition reconstructs historical events without letting new commands select the retained behavior.
 
-It must still emit the historical evidence needed for replay. Decoding an old payload through an [upcaster](upcaster.md) is a different responsibility from retaining the behavior that interprets it.
+Removing an old rule can make stored streams unreadable. A replay-only transition retains its historical interpretation while retiring live behavior.
 
-See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.
+The transition must emit the evidence needed for replay. An [upcaster](upcaster.md) converts payload formats. It does not replace the behavior that interprets events.
+
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md).

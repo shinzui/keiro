@@ -1,10 +1,10 @@
 ---
 type: Term
 title: process manager
-description: An event-sourced coordinator that remembers the progress of a business process and reacts to events by sending commands or scheduling timers.
+description: "A process manager is an event-sourced coordinator that reacts to events with commands or timers."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-10
 status: current
 tags:
@@ -24,12 +24,10 @@ anchors:
 
 # process manager
 
-A process manager coordinates work across aggregates while keeping its own event-sourced
-state. For example, an order-fulfillment process can remember that payment arrived, request
-shipment, and use a [timer](timer.md) to handle a shipping deadline.
+A process manager is an event-sourced coordinator that reacts to events with commands or timers.
 
-Its next actions follow from the incoming event and its recorded state. Keiro gives emitted
-commands stable identities so redelivery can be handled idempotently. Use a
-[router](router.md) when finding command recipients requires a query; consider a
-[durable workflow](durable-workflow.md) when the process is easier to express as a sequence
-of steps and waits. See [Process Managers and Timers](../user/process-managers-and-timers.md).
+An order process can remember payment, request shipment, and set a shipping deadline. Its incoming event and recorded state determine the next actions.
+
+Keiro gives emitted commands stable identities for duplicate handling. Use a [router](router.md) for recipient lookup through queries. Use a [durable workflow](durable-workflow.md) for sequential steps and waits.
+
+See [Process Managers and Timers](../user/process-managers-and-timers.md).

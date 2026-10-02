@@ -1,10 +1,10 @@
 ---
 type: Term
 title: command cycle
-description: The process of rebuilding an aggregate's state, evaluating a command, and saving any resulting events while checking for concurrent changes.
+description: "A command cycle reconstructs aggregate state, evaluates a command, and appends resulting events with a concurrency check."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-4
 status: current
 tags:
@@ -22,12 +22,10 @@ anchors:
 
 # command cycle
 
-For a command such as `ShipOrder`, Keiro reads the target order's history, reconstructs
-its state, and evaluates whether shipping is allowed. It then appends any resulting events
-only if the stream has not changed since it was read. This is optimistic concurrency.
+A command cycle reconstructs aggregate state, evaluates a command, and appends resulting events with a concurrency check.
 
-On a retryable concurrency conflict, Keiro reloads the state and evaluates the command
-again, up to the configured retry limit. A [snapshot](snapshot.md) can reduce replay work;
-[inline projections](inline-projection.md) update in the same transaction as the append.
+For `ShipOrder`, Keiro reads the order history and evaluates whether shipment is permitted. It appends events only if the stream still has the expected version.
 
-See [Command Cycle](../user/command-cycle.md) for the execution sequence and options.
+On a retryable concurrency conflict, Keiro reloads state and evaluates the command again. The configured retry limit bounds these attempts. A [snapshot](snapshot.md) can reduce replay work. [Inline projections](inline-projection.md) update within the append transaction.
+
+See [Command Cycle](../user/command-cycle.md).

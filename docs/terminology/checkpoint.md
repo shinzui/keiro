@@ -1,10 +1,10 @@
 ---
 type: Term
 title: checkpoint
-description: "A durable record of how far a subscription has progressed through its event source."
+description: "A checkpoint is a durable record of subscription progress through an event source."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-35
 status: current
 tags:
@@ -21,8 +21,10 @@ anchors:
 
 # checkpoint
 
-After a restart, a subscription uses its checkpoint to resume processing. In Keiro's projection catalog, the missing-checkpoint policy chooses whether an absent checkpoint starts at the beginning, starts at the current head, or causes an error. It does not reposition an existing checkpoint.
+A checkpoint is a durable record of subscription progress through an event source.
 
-Subscription checkpoints belong to `mori://shinzui/kiroku`. They track consumer progress; a workflow's saved step results belong to its [journal](journal.md), and an aggregate's cached state is a [snapshot](snapshot.md).
+After restart, the subscription resumes from its checkpoint. A missing-checkpoint policy can start at the beginning, start at the current head, or report an error. It does not move an existing checkpoint.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+Subscription checkpoints belong to `mori://shinzui/kiroku`. Workflow step results belong to a [journal](journal.md). Aggregate cached state belongs to a [snapshot](snapshot.md).
+
+See [read models and projections](../user/read-models-and-projections.md).

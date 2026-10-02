@@ -1,10 +1,10 @@
 ---
 type: Term
 title: replay audit
-description: "A check that runs candidate application behavior against stored event histories to detect replay failures or changes in reconstructed state."
+description: "A replay audit checks candidate behavior against stored event histories for replay failures and reconstructed-state changes."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-56
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # replay audit
 
-Structural [replay-safety](replay-safety.md) validation checks the model being constructed. A replay audit checks actual histories, including events produced by older models.
+A replay audit checks candidate behavior against stored event histories for replay failures and reconstructed-state changes.
 
-Keiro can target affected streams and report replay errors, snapshot-seed divergence, and state digests for comparison. The result is evidence about the histories checked, not proof of every future behavior or business invariant.
+Structural replay-safety validation checks the current model. A replay audit checks actual histories, including events from older models.
 
-See [replay safety](../user/replay-safety.md) for details.
+Keiro can report replay errors, snapshot-seed divergence, and state digests for selected streams. Results provide evidence for the checked histories. They do not prove every future behavior or business invariant.
+
+See [replay safety](../user/replay-safety.md).

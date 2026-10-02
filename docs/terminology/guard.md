@@ -1,10 +1,10 @@
 ---
 type: Term
 title: guard
-description: "A condition that must hold for an aggregate transition to handle a command."
+description: "A guard is a condition that must hold before a transition can handle a command."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-33
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # guard
 
-For example, a payment transition might require the amount in the command to equal the outstanding balance in a [register](register.md). Guards select applicable behavior using the command and reconstructed state.
+A guard is a condition that must hold before a transition can handle a command.
 
-Keiro uses guards from `mori://shinzui/keiki`. Changing a guard can affect historical replay as well as new decisions, so it belongs in the [replay-safety](replay-safety.md) and evolution review.
+A payment guard can require the command amount to equal the outstanding balance. Guards use the command and reconstructed state to select behavior.
 
-See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.
+Guards belong to `mori://shinzui/keiki`. Guard changes can affect historical replay and new decisions. Include them in replay-safety and evolution reviews.
+
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md).

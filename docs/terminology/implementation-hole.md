@@ -1,10 +1,10 @@
 ---
 type: Term
 title: implementation hole
-description: "An explicit place where application code supplies behavior that the keiro-dsl specification leaves hand-written."
+description: "An implementation hole is an explicit boundary where application code supplies behavior outside the keiro-dsl specification."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-48
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # implementation hole
 
-A transition with complex predicate or update logic can declare an implementation hole. Scaffolding creates a place to implement that logic while generated code retains the declared transition structure.
+An implementation hole is an explicit boundary where application code supplies behavior outside the keiro-dsl specification.
 
-The implementation lives in a [create-once file](create-once-file.md). Changing hand-written aggregate folding behavior also requires maintaining its [fold version](fold-version.md). A hole is an ownership boundary, not necessarily unfinished code.
+A transition can declare a hole for complex predicates or updates. Scaffolding creates an implementation interface. Generated code retains the declared transition structure.
 
-See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md) for details.
+The implementation resides in a [create-once file](create-once-file.md). Maintain the [fold version](fold-version.md) when handwritten aggregate folding behavior changes. A hole can contain complete application logic.
+
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md).

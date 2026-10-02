@@ -1,10 +1,10 @@
 ---
 type: Term
 title: projection
-description: Logic that turns recorded events into a read model by updating it as events are processed.
+description: "A projection is logic that updates a read model from recorded events."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-7
 status: current
 tags:
@@ -23,12 +23,10 @@ anchors:
 
 # projection
 
-A projection might handle `PaymentReceived` by updating the paid amount in an order
-summary. It derives a [read model](read-model.md) from facts already recorded by the
-write side; aggregate command handling owns business decisions.
+A projection is logic that updates a read model from recorded events.
 
-An [inline projection](inline-projection.md) updates in the event append transaction.
-An [asynchronous projection](asynchronous-projection.md) processes events after they commit.
-Keiro records projection definitions in a [projection catalog](projection-catalog.md), including the tables each owns and
-whether its handlers support safe replay. See
-[Choosing a Projection](../guides/choosing-a-projection.md) for the tradeoffs.
+For `PaymentReceived`, a projection can update the paid amount in an order summary. Aggregate command handling owns business decisions.
+
+An [inline projection](inline-projection.md) updates within the event append transaction. An [asynchronous projection](asynchronous-projection.md) processes events after commit. The [projection catalog](projection-catalog.md) declares target ownership and replay capability.
+
+See [Choosing a Projection](../guides/choosing-a-projection.md).

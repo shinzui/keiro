@@ -1,10 +1,10 @@
 ---
 type: Term
 title: journal
-description: The durable execution history of one workflow instance, used to recover its progress and reuse recorded step results.
+description: "A journal is the durable execution history that recovers workflow progress and supplies saved step results."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-14
 status: current
 tags:
@@ -22,10 +22,10 @@ anchors:
 
 # journal
 
-A journal records [durable workflow](durable-workflow.md) progress, including completed
-steps, their results, and how the workflow ended. If a stock reservation step has a
-recorded result, a resumed workflow can reuse that result instead of reserving stock again.
+A journal is the durable execution history that recovers workflow progress and supplies saved step results.
 
-The journal is stored as an event stream, but its purpose is execution recovery. An
-aggregate's domain history records business facts; the journal records how far the
-workflow ran. See [Durable Workflows](../user/durable-workflows.md) for storage details.
+The journal records completed steps, their results, and workflow completion. A saved stock-reservation result lets a resumed workflow reuse the reservation.
+
+The journal uses a stored [stream](stream.md). It records execution progress. Aggregate history records domain facts.
+
+See [Durable Workflows](../user/durable-workflows.md).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: rebuild group
-description: "A set of projection targets that must move through rebuilding and return to service together."
+description: "A rebuild group is a set of projection targets that must be rebuilt and returned to service together."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-42
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # rebuild group
 
-An order summary and its totals may need one rebuild group so queries never see one rebuilt table paired with an incompatible old table. The group also declares target dependency order.
+A rebuild group is a set of projection targets that must be rebuilt and returned to service together.
 
-An offline rebuild makes the selected group unavailable while it is reconstructed and verified. Other independent groups can continue operating. See [projection rebuild](projection-rebuild.md).
+An order summary and its totals can need one group to prevent incompatible table combinations. The group declares target dependency order.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+An offline rebuild makes the selected group unavailable during reconstruction and verification. Independent groups can continue operating.
+
+See [read models and projections](../user/read-models-and-projections.md).

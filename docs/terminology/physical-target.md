@@ -1,10 +1,10 @@
 ---
 type: Term
 title: physical target
-description: "An application-owned database table maintained by a projection and declared as a unit of read-side ownership."
+description: "A physical target is an application-owned database table that a projection maintains."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-41
 status: current
 tags:
@@ -21,8 +21,10 @@ anchors:
 
 # physical target
 
-An order summary table and an order totals table can be two targets owned by one [projection](projection.md). Several query models may read different subsets of that owner's targets.
+A physical target is an application-owned database table that a projection maintains.
 
-Each target declares how rebuilding prepares its data: clear it for reconstruction or preserve it for reconciliation. This reset policy is separate from whether a handler has a safe [replay adapter](replay-adapter.md).
+An order summary and order totals can be two targets with one projection owner. Several read models can query subsets of those targets.
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+Each target declares a rebuild preparation policy. Reconstruction can clear the target; reconciliation can preserve its data. This policy is separate from replay-adapter capability.
+
+See [read models and projections](../user/read-models-and-projections.md).

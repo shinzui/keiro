@@ -1,10 +1,10 @@
 ---
 type: Term
 title: conformance record
-description: A deprecated name for the conformance ledger, the tool-maintained history of a generated conformance test package.
+description: "Conformance record is a deprecated name for conformance ledger."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-25
 status: deprecated
 tags:
@@ -22,11 +22,8 @@ anchors:
 
 # conformance record
 
-Use [conformance ledger](conformance-ledger.md) in new code and documentation. Older
-projects may still contain a conformance record, which serves the same role but uses an
-older file format.
+Conformance record is a deprecated name for conformance ledger.
 
-The explicit sidecar-name migration converts that format while preserving the original
-file contents. See
-[ADR-22](../adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md)
-for migration behavior.
+Use [conformance ledger](conformance-ledger.md) in new documentation. Existing records can use an older format.
+
+Explicit sidecar-name migration converts the format and preserves the original contents. See [ADR-22](../adr/0022-generated-sidecars-use-role-bearing-names-and-forward-compatible-ledgers.md) for the migration contract.

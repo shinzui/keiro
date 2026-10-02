@@ -1,10 +1,10 @@
 ---
 type: Term
 title: scaffold ledger
-description: A tool-maintained history of generated service files that keiro-dsl uses to detect changes and track file ownership on later runs.
+description: "A scaffold ledger is tool-maintained generation history that tracks service files and their ownership."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-22
 status: current
 tags:
@@ -31,12 +31,10 @@ anchors:
 
 # scaffold ledger
 
-Scaffolding generates the initial service code from a specification. The ledger preserves
-what that generation produced, giving later runs a baseline for detecting changed files
-and ownership. It is development-tool history, separate from application event history.
+A scaffold ledger is tool-maintained generation history that tracks service files and their ownership.
 
-Commit it with the generated code; do not hand-edit or discard it. The file is named
-`keiro-dsl-ledger.context.<context>.txt` for one context or
-`keiro-dsl-ledger.workspace.<service>.txt` for a workspace. Older documentation calls it
-a [scaffold record](scaffold-record.md). See
-[Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars) for details.
+The ledger supplies a baseline for later scaffold runs. It records development-tool history.
+
+Commit the ledger with generated code. Do not edit or discard it manually. Its filename is `keiro-dsl-ledger.context.<context>.txt` or `keiro-dsl-ledger.workspace.<service>.txt`. [Scaffold record](scaffold-record.md) is a deprecated name.
+
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars).

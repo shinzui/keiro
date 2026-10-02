@@ -1,10 +1,10 @@
 ---
 type: Term
 title: domain command outcome
-description: "The business result of a selected command decision, distinguishing acceptance, rejection, and an intentional no-op."
+description: "A domain command outcome is the typed business result of a selected decision: acceptance, rejection, or an intentional no-op."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-47
 status: current
 tags:
@@ -16,8 +16,10 @@ anchors:
 
 # domain command outcome
 
-A reservation command can accept new work, reject it because capacity is unavailable, or do nothing because the request is already satisfied. In Keiro's outcome-aware API, accepted decisions emit events; rejected and no-op decisions carry typed reasons without changing durable state.
+A domain command outcome is the typed business result of a selected decision: acceptance, rejection, or an intentional no-op.
 
-A business rejection is distinct from an execution failure. A command with no matching transition also remains a command error rather than gaining a typed business reason automatically.
+A reservation command can accept work, reject insufficient capacity, or make no change to an already satisfied request. Accepted decisions emit events. Rejections and no-ops carry typed reasons without durable state changes.
 
-See [command cycle](../user/command-cycle.md) for details.
+Business rejection differs from execution failure. A command without a matching transition remains a command error. Keiro does not automatically assign it a typed business reason.
+
+See [command cycle](../user/command-cycle.md).

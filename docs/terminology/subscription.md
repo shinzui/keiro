@@ -1,10 +1,10 @@
 ---
 type: Term
 title: subscription
-description: "A consumer that follows a selected event history and processes events as they become available."
+description: "A subscription is a consumer that follows selected event history and processes available events."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-34
 status: current
 tags:
@@ -21,8 +21,10 @@ anchors:
 
 # subscription
 
-An [asynchronous projection](asynchronous-projection.md) can subscribe to all order streams through their [stream category](stream-category.md). An integration producer can follow events to populate the [outbox](transactional-outbox.md).
+A subscription is a consumer that follows selected event history and processes available events.
 
-Durable subscriptions retain a [checkpoint](checkpoint.md) for recovery and must tolerate redelivery. The subscription machinery belongs to `mori://shinzui/kiroku`; Keiro declares its use in application contracts.
+An asynchronous projection can follow all order streams through their [stream category](stream-category.md). An integration producer can follow events to populate the [outbox](transactional-outbox.md).
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+Durable subscriptions retain a [checkpoint](checkpoint.md) for recovery. They must tolerate redelivery. Subscription machinery belongs to `mori://shinzui/kiroku`.
+
+See [read models and projections](../user/read-models-and-projections.md).

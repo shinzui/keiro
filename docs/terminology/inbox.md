@@ -1,10 +1,10 @@
 ---
 type: Term
 title: inbox
-description: A receiving-side mechanism that tracks processed messages so duplicate deliveries do not repeat their committed effects.
+description: "An inbox tracks received messages so duplicate delivery does not repeat committed handler effects."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-19
 status: current
 tags:
@@ -23,12 +23,10 @@ anchors:
 
 # inbox
 
-An [integration event](integration-event.md) may arrive more than once after a retry or
-an [outbox](transactional-outbox.md) republish. The inbox recognizes previously processed
-messages by a deduplication key.
+An inbox tracks received messages so duplicate delivery does not repeat committed handler effects.
 
-In Keiro's transactional inbox, the receipt and the handler's database changes commit or
-roll back together. A rolled-back attempt can run again; a committed receipt prevents
-the same changes from being applied again while that receipt is retained. This guarantee
-does not cover arbitrary external effects. See [Idempotent Inbox](../user/inbox.md) for
-deduplication policies, retention, and delegated handling.
+An integration event can arrive again after a retry or outbox publication. The inbox uses a deduplication key to recognize a previously processed message.
+
+In the transactional inbox, the receipt and handler database changes commit or roll back together. A rolled-back attempt can run again. A retained committed receipt prevents repetition of those changes. This guarantee does not cover arbitrary external effects.
+
+See [Idempotent Inbox](../user/inbox.md).

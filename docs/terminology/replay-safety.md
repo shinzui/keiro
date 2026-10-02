@@ -1,10 +1,10 @@
 ---
 type: Term
 title: replay safety
-description: "The property that recorded events contain enough information to reconstruct the durable state produced by command handling."
+description: "Replay safety is the property that recorded events can reconstruct the durable state produced by command handling."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-28
 status: current
 tags:
@@ -21,8 +21,10 @@ anchors:
 
 # replay safety
 
-If placing an order remembers a customer identifier, its events must preserve enough information to recover that identifier. Keiro validates the aggregate model before allowing it into the [command cycle](command-cycle.md).
+Replay safety is the property that recorded events can reconstruct the durable state produced by command handling.
 
-Validation checks the current model in isolation. It does not establish that changed behavior still interprets old histories correctly; use a [replay audit](replay-audit.md) for evidence about actual stored streams.
+If a command stores a customer identifier, its events must preserve enough information to recover that identifier. Keiro validates the aggregate model before command execution.
 
-See [replay safety](../user/replay-safety.md) for details.
+Validation checks the current model in isolation. Use a [replay audit](replay-audit.md) to check changed behavior against actual stored histories.
+
+See [replay safety](../user/replay-safety.md).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: create-once file
-description: "A file scaffolding creates initially and then preserves on later runs so developers can maintain its contents."
+description: "A create-once file is a file that scaffolding creates initially and preserves on subsequent runs."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-49
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # create-once file
 
-Implementation holes, bindings, and other application-owned modules use this policy. Once created, they can hold completed business logic without regeneration overwriting it.
+A create-once file is a file that scaffolding creates initially and preserves on subsequent runs.
 
-Generated modules have a different policy: regeneration may replace them. When a specification evolves, retained create-once code may need manual updates to match new interfaces.
+Implementation holes and bindings use this policy. Developers can complete their business logic without regeneration overwriting it.
 
-See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md) for details.
+Regeneration can replace generated modules. After specification changes, retained application code can need manual updates for new interfaces.
+
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md).

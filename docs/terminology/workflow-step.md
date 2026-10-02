@@ -1,10 +1,10 @@
 ---
 type: Term
 title: workflow step
-description: "A named action in a durable workflow whose result is saved and reused when execution resumes."
+description: "A workflow step is a named action whose saved result is reused when workflow execution resumes."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-57
 status: current
 tags:
@@ -21,8 +21,10 @@ anchors:
 
 # workflow step
 
-A reserve-stock step might save the reservation identifier in the [journal](journal.md). On resumption, the workflow reuses that result once its completion is durable.
+A workflow step is a named action whose saved result is reused when workflow execution resumes.
 
-If the external action succeeds but saving its result fails, the step may run again. Make the action [idempotent](idempotency.md), and treat step names and saved result formats as durable contracts.
+A stock-reservation step can save its reservation identifier in the [journal](journal.md). The workflow reuses the result after durable completion.
 
-See [durable workflows](../user/durable-workflows.md) for details.
+If the action succeeds before result storage, the step can run again. Make the action [idempotent](idempotency.md). Treat step names and saved result formats as durable contracts.
+
+See [durable workflows](../user/durable-workflows.md).

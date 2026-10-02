@@ -1,10 +1,10 @@
 ---
 type: Term
 title: sidecar
-description: A supporting file generated alongside Haskell code by keiro-dsl, containing generation history or build guidance.
+description: "A sidecar is a supporting file that keiro-dsl generates alongside Haskell code."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-21
 status: current
 tags:
@@ -28,13 +28,10 @@ anchors:
 
 # sidecar
 
-Here, "sidecar" means a companion file in the generated project, not a separate running
-service. It helps the tool or developer use and maintain the generated code.
+A sidecar is a supporting file that keiro-dsl generates alongside Haskell code.
 
-The [scaffold ledger](scaffold-ledger.md) and [conformance ledger](conformance-ledger.md)
-preserve generation history. The [Cabal fragment](cabal-fragment.md) supplies build
-configuration to copy into a package. A workspace migration can also produce a report.
+A sidecar contains generation history, build guidance, or a migration report. The [scaffold ledger](scaffold-ledger.md) and [conformance ledger](conformance-ledger.md) preserve generation history. The [Cabal fragment](cabal-fragment.md) supplies build entries.
 
-The [workspace manifest](workspace-manifest.md) is an input you author, rather than a
-generated sidecar. See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars)
-for file names and handling rules.
+The authored [workspace manifest](workspace-manifest.md) is generation input. In this catalog, sidecar means a companion file.
+
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars).

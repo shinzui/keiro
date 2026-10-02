@@ -1,10 +1,10 @@
 ---
 type: Term
 title: Cabal fragment
-description: Generated Haskell build configuration to copy into a package's Cabal file so it can build the generated modules.
+description: "A Cabal fragment is generated Haskell build configuration for inclusion in a package's Cabal file."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-26
 status: current
 tags:
@@ -24,12 +24,10 @@ anchors:
 
 # Cabal fragment
 
-Cabal is Haskell's package and build system. After generating code, keiro-dsl writes a
-fragment containing the build entries to add to your package. This is guidance for the
-developer; subsequent scaffold runs do not read it as configuration.
+A Cabal fragment is generated Haskell build configuration for inclusion in a package's Cabal file.
 
-The file is `keiro-dsl-cabal-fragment.context.<context>.txt` or
-`keiro-dsl-cabal-fragment.workspace.<service>.txt`. Use "Cabal fragment" rather than the
-old name "scaffold manifest", which can be confused with the authored
-[workspace manifest](workspace-manifest.md). See
-[Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars) for usage.
+After code generation, keiro-dsl writes build entries for the developer to copy. Later scaffold runs do not read the fragment as configuration.
+
+Its filename is `keiro-dsl-cabal-fragment.context.<context>.txt` or `keiro-dsl-cabal-fragment.workspace.<service>.txt`. Use Cabal fragment for this output. Reserve manifest for the authored [workspace manifest](workspace-manifest.md).
+
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#scaffold-sidecars).

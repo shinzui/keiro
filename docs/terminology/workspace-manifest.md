@@ -1,10 +1,10 @@
 ---
 type: Term
 title: workspace manifest
-description: An authored configuration file that groups several keiro-dsl specifications into one service and declares how to generate that service.
+description: "A workspace manifest is authored configuration that groups keiro-dsl specifications into one service and declares generation settings."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-27
 status: current
 tags:
@@ -22,11 +22,10 @@ anchors:
 
 # workspace manifest
 
-A `.keiro-workspace` file lists the `.keiro` specifications that make up a service,
-along with its identity and output configuration. Use it when one service is described
-across several specification files.
+A workspace manifest is authored configuration that groups keiro-dsl specifications into one service and declares generation settings.
 
-You author this file as input to generation. The generated supporting files are
-[sidecars](sidecar.md); build guidance is a [Cabal fragment](cabal-fragment.md).
-In keiro-dsl, "manifest" refers only to the workspace manifest. See
-[Service Workspaces](../user/keiro-dsl-workspaces-and-generated-code.md#service-workspaces) for the format.
+A `.keiro-workspace` file lists member `.keiro` specifications, service identity, and output configuration. Use it for a service with several specification files.
+
+The manifest is generation input. Generated supporting files are [sidecars](sidecar.md). Generated build guidance is a [Cabal fragment](cabal-fragment.md).
+
+See [Service Workspaces](../user/keiro-dsl-workspaces-and-generated-code.md#service-workspaces).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: continue-as-new
-description: "A workflow operation that starts a fresh journal generation while carrying forward explicitly chosen state."
+description: "Continue-as-new is a workflow operation that starts a new journal generation with explicitly selected state."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-59
 status: current
 tags:
@@ -21,8 +21,10 @@ anchors:
 
 # continue-as-new
 
-A recurring workflow can otherwise accumulate an unbounded [journal](journal.md). Continue-as-new closes the current generation and carries a seed into the next, allowing the same workflow instance to continue with bounded history per generation.
+Continue-as-new is a workflow operation that starts a new journal generation with explicitly selected state.
 
-The new generation restores that seed rather than replaying every prior step. An [awakeable](awakeable.md) allocated in the new generation has a fresh identifier that must be passed to its external participant.
+A recurring workflow can otherwise accumulate an unbounded [journal](journal.md). The operation closes the current generation and passes a seed to the next. Each generation has bounded history.
 
-See [durable workflows](../user/durable-workflows.md) for details.
+The new generation restores the seed without replay of prior steps. Its awakeables receive new identifiers. Pass these identifiers to external participants.
+
+See [durable workflows](../user/durable-workflows.md).

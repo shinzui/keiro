@@ -1,10 +1,10 @@
 ---
 type: Term
 title: conformance ledger
-description: A tool-maintained history of the generated test package used to check a service against its keiro-dsl specification.
+description: "A conformance ledger is tool-maintained generation history for a service's conformance test package."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-24
 status: current
 tags:
@@ -25,11 +25,10 @@ anchors:
 
 # conformance ledger
 
-When enabled, a conformance package provides runnable checks of the service against its
-specification. Its ledger records the package's identity and files so later generation
-can check the existing package. It records generation history, not test results.
+A conformance ledger is tool-maintained generation history for a service's conformance test package.
 
-The file is `keiro-dsl-conformance-ledger.txt`; keep it with the package and let the tool
-maintain it. It replaces the [conformance record](conformance-record.md). See
-[Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#one-runnable-conformance-package-per-service)
-for the generated test package.
+The ledger records package identity and generated files. Later generation uses it to check the existing package. It records generation history rather than test results.
+
+Keep `keiro-dsl-conformance-ledger.txt` with the package. Let the tool maintain it. [Conformance record](conformance-record.md) is a deprecated name.
+
+See [Keiro DSL Workspaces and Generated Code](../user/keiro-dsl-workspaces-and-generated-code.md#one-runnable-conformance-package-per-service).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: stream
-description: An ordered, append-only sequence of events recording the history of one aggregate instance or other entity.
+description: "A stream is an ordered, append-only history of events for one aggregate instance or other entity."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-1
 status: current
 tags:
@@ -24,13 +24,10 @@ anchors:
 
 # stream
 
-A stream holds one entity's history. For example, an order's stream might contain
-`OrderPlaced`, `PaymentReceived`, and `OrderShipped`. Replaying those events reconstructs
-the order's current state.
+A stream is an ordered, append-only history of events for one aggregate instance or other entity.
 
-Each command targets one stream. Keiro uses typed stream handles so application code can
-distinguish an order stream from an invoice stream. A stream is the stored
-history; an [event stream](event-stream.md) is Keiro's contract for handling commands and
-replaying history for that kind of aggregate.
+An order stream can contain `OrderPlaced`, `PaymentReceived`, and `OrderShipped`. Replay of these events reconstructs the order state.
 
-See [Core Concepts](../user/core-concepts.md#stream) for the Haskell representation.
+Each command targets one stream. Typed handles distinguish order streams from invoice streams. An [event stream](event-stream.md) defines the aggregate contract that handles commands and replays this history.
+
+See [Core Concepts](../user/core-concepts.md#stream).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: external read contract
-description: "A versioned query interface that lets another process read a projection without depending on its private tables."
+description: "An external read contract is a versioned query interface for consumers outside a projection's process."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-53
 status: current
 tags:
@@ -18,8 +18,10 @@ anchors:
 
 # external read contract
 
-Keiro publishes these contracts as guarded PostgreSQL functions. The contract defines input and result shapes and which [projection revisions](projection-revision.md) it supports.
+An external read contract is a versioned query interface for consumers outside a projection's process.
 
-A compatible contract can follow a promoted generation. A breaking input or result change requires a new contract version and consumer migration. The application still owns access grants and the meaning of its query SQL.
+Keiro publishes the contract as a guarded PostgreSQL function. It defines input and result shapes and supported [projection revisions](projection-revision.md).
 
-See [read models and projections](../user/read-models-and-projections.md) for details.
+A compatible contract can follow a promoted generation. A breaking shape change requires a new contract version and consumer migration. The application owns access grants and query SQL semantics.
+
+See [read models and projections](../user/read-models-and-projections.md).

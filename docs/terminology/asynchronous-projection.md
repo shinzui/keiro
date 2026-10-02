@@ -1,10 +1,10 @@
 ---
 type: Term
 title: asynchronous projection
-description: A projection that processes committed events in the background, allowing its read model to catch up independently of command handling.
+description: "An asynchronous projection processes committed events independently of command handling."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-9
 status: current
 tags:
@@ -23,12 +23,10 @@ anchors:
 
 # asynchronous projection
 
-An asynchronous projection follows the event log through a [subscription](subscription.md). Its [checkpoint](checkpoint.md)
-records how far it has processed. A reporting dashboard, for example, can update shortly
-after an order command succeeds instead of delaying the command for reporting work.
+An asynchronous projection processes committed events independently of command handling.
 
-The read model is eventually consistent: it may temporarily lag behind the event log.
-Delivery is at least once, so handlers must be idempotent: processing the same event again
-must not apply its effect twice. See
-[Asynchronous Projections](../guides/asynchronous-projections.md) for checkpoint policies
-and safe update patterns.
+A [subscription](subscription.md) supplies events. Its [checkpoint](checkpoint.md) records progress. A reporting dashboard can update after an order command completes.
+
+The read model can lag behind the event log. Delivery is at least once. Handlers must be [idempotent](idempotency.md) so duplicate delivery does not repeat an effect.
+
+See [Asynchronous Projections](../guides/asynchronous-projections.md).

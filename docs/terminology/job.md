@@ -1,10 +1,10 @@
 ---
 type: Term
 title: job
-description: "A declared kind of background work, combining its queue, payload format, ordering contract, and retry policy."
+description: "A job is a declared kind of background work with a queue, payload format, ordering contract, and retry policy."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-46
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # job
 
-A thumbnail job describes how thumbnail requests are queued and handled; an individual request supplies the image identifier and desired size. Its handler reports whether processing completed, should retry, or should be dead-lettered.
+A job is a declared kind of background work with a queue, payload format, ordering contract, and retry policy.
 
-A job is processed through a [work queue](work-queue.md). Its payload requests work; it is not automatically an authoritative [domain event](domain-event.md).
+A thumbnail job defines how requests are queued and handled. Each request supplies an image identifier and desired size. The handler reports completion, retry, or dead-letter disposition.
 
-See [work queues](../user/work-queues.md) for details.
+The [work queue](work-queue.md) processes the job. A job payload requests work; it is not automatically an authoritative domain event.
+
+See [work queues](../user/work-queues.md).

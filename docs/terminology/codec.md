@@ -1,10 +1,10 @@
 ---
 type: Term
 title: codec
-description: The rules for converting application events to stored data and reading stored events back, including support for older event formats.
+description: "A codec defines event type identifiers, payload encoding, payload decoding, and schema versions."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-3
 status: current
 tags:
@@ -22,12 +22,10 @@ anchors:
 
 # codec
 
-A codec connects the events your application uses to their persisted representation. It
-identifies each event type, encodes and decodes its payload, and tracks its schema version.
-An [upcaster](upcaster.md) converts an older payload into the format the current application understands.
+A codec defines event type identifiers, payload encoding, payload decoding, and schema versions.
 
-For example, when `OrderPlaced` gains a field, an upcaster can supply a value for events
-written before that field existed. Keiro stops command processing if an event type is
-unknown or its payload cannot be decoded: deciding from an incomplete history is unsafe.
+An [upcaster](upcaster.md) converts an older payload to a format that the current application understands. For example, it can supply a newly required field.
 
-See [Codecs and Event Evolution](../user/codecs-and-event-evolution.md) for the API.
+Keiro stops command processing if an event type is unknown or its payload cannot be decoded. An incomplete history cannot provide a safe command decision.
+
+See [Codecs and Event Evolution](../user/codecs-and-event-evolution.md).

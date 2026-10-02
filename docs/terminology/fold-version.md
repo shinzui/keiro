@@ -1,10 +1,10 @@
 ---
 type: Term
 title: fold version
-description: "An application-maintained version identifying hand-written logic that reconstructs aggregate state from events."
+description: "A fold version is an application-maintained identifier for handwritten logic that reconstructs aggregate state from events."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-55
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # fold version
 
-The fold is the event-processing logic that builds state. Its meaning can change even when event formats and state types remain identical.
+A fold version is an application-maintained identifier for handwritten logic that reconstructs aggregate state from events.
 
-Changing the fold version, when included in the snapshot discriminator, prevents old [snapshot](snapshot.md) state from being reused under new behavior. It does not prove historical compatibility; a [replay audit](replay-audit.md) provides evidence about actual histories. Generated DSL behavior also contributes a specification-derived fold fingerprint.
+Folding behavior can change without event-format or state-type changes. A fold version in the snapshot discriminator prevents reuse of old snapshot state under new behavior.
 
-See [snapshots](../user/snapshots.md) for details.
+The version does not prove compatibility with stored history. Use a [replay audit](replay-audit.md) for that evidence. Generated DSL behavior also contributes a specification-derived fold fingerprint.
+
+See [snapshots](../user/snapshots.md).

@@ -1,10 +1,10 @@
 ---
 type: Term
 title: lifecycle state
-description: "The named stage an aggregate currently occupies, used to determine which transitions are available."
+description: "A lifecycle state is the named stage of an aggregate that determines which transitions are available."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-30
 status: current
 tags:
@@ -20,8 +20,10 @@ anchors:
 
 # lifecycle state
 
-An order might be awaiting payment, paid, or shipped. These stages form its lifecycle; a payment total or customer identifier belongs in a [register](register.md).
+A lifecycle state is the named stage of an aggregate that determines which transitions are available.
 
-Keiro's underlying model, owned by `mori://shinzui/keiki`, separates the lifecycle state from those remembered values. Together they form the state reconstructed from events.
+Order stages can include awaiting payment, paid, and shipped. A payment total or customer identifier belongs in a [register](register.md).
 
-See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md) for details.
+The model from `mori://shinzui/keiki` separates lifecycle state from register values. Together they form the reconstructed aggregate state.
+
+See [Keiro DSL Aggregates](../user/keiro-dsl-aggregates.md).

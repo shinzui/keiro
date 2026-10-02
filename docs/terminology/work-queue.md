@@ -1,10 +1,10 @@
 ---
 type: Term
 title: work queue
-description: "A durable queue of jobs for background processing by a service."
+description: "A work queue is a durable queue of jobs for background processing by a service."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-45
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # work queue
 
-Use a work queue for work such as rendering a thumbnail or sending a reminder. Keiro's queue support delivers [jobs](job.md) at least once, so handlers must tolerate retries.
+A work queue is a durable queue of jobs for background processing by a service.
 
-A work queue carries work owed by this service; an [outbox](transactional-outbox.md) carries integration messages for publication. Keiro's queue enqueue is not atomic with an event append, so applications must account for a crash between those operations.
+A queue can hold thumbnail or reminder jobs. Delivery is at least once, so handlers must tolerate retries.
 
-See [work queues](../user/work-queues.md) for details.
+The queue carries work for this service. The [outbox](transactional-outbox.md) carries integration messages for publication. Queue enqueue is not atomic with event append. Account for a crash between these operations.
+
+See [work queues](../user/work-queues.md).

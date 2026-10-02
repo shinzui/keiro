@@ -1,10 +1,10 @@
 ---
 type: Term
 title: stream version
-description: "The position of an event within one stream, used to identify the history seen by a command."
+description: "A stream version is an event position within one stream that identifies the history seen by a command."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-37
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # stream version
 
-A command reads a stream at a known version and appends against that expected version. If another writer changes the stream first, optimistic concurrency detects the conflict and Keiro may retry with fresh state.
+A stream version is an event position within one stream that identifies the history seen by a command.
 
-Stream versions are store concepts owned by `mori://shinzui/kiroku`. They are local to a [stream](stream.md); a [global position](global-position.md) identifies progress across the store.
+A command appends against the version it read. If another writer changes the stream, optimistic concurrency detects a conflict. Keiro can retry with reconstructed state.
 
-See [command cycle](../user/command-cycle.md) for details.
+Stream versions belong to `mori://shinzui/kiroku`. A [global position](global-position.md) identifies progress across streams.
+
+See [command cycle](../user/command-cycle.md).

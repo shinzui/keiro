@@ -1,10 +1,10 @@
 ---
 type: Term
 title: dead letter
-description: A saved record of a delivery that will no longer be retried automatically, kept for investigation and possible replay.
+description: "A dead letter is a retained delivery failure that requires investigation before explicit replay."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-20
 status: current
 tags:
@@ -21,11 +21,10 @@ anchors:
 
 # dead letter
 
-A dead letter makes a failed delivery visible for an operator to inspect, address, and
-explicitly replay when appropriate. It is not an automatic retry queue, and replay must
-be safe if some effects from an earlier attempt already occurred.
+A dead letter is a retained delivery failure that requires investigation before explicit replay.
 
-Keiro's dead-letter tooling distinguishes rejected commands dispatched by a
-[process manager](process-manager.md) or [router](router.md), when configured to retain
-them, from terminal subscription failures. See [Dead Letters](../user/dead-letters.md)
-for inspection and replay procedures.
+Inspect the failed delivery and correct its cause before replay. Replay must tolerate effects that an earlier attempt already produced.
+
+Keiro distinguishes retained command rejections from terminal subscription failures. Command rejection retention applies to configured [process managers](process-manager.md) and [routers](router.md).
+
+See [Dead Letters](../user/dead-letters.md).

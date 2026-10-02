@@ -1,10 +1,10 @@
 ---
 type: Term
 title: read model
-description: A view of event-sourced data organized for queries, such as an order summary or a list of overdue invoices.
+description: "A read model is a view of event-sourced data organized for application queries."
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: "2026-09-19T03:09:21Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-6
 status: current
 tags:
@@ -22,14 +22,10 @@ anchors:
 
 # read model
 
-A read model stores the information a query needs without requiring the query to replay
-aggregate histories. An order summary might combine an order's status, payment total,
-and shipping date into one row.
+A read model is a view of event-sourced data organized for application queries.
 
-A [projection](projection.md) keeps the view up to date. The read model is the data you
-query; the projection is the logic that updates it. With asynchronous updates, the view
-can lag behind committed events.
+An order summary can contain order status, payment total, and shipment date. Queries read this view without replay of aggregate history.
 
-Keiro also tracks whether a model's schema is current and ready to query. See
-[Read Models and Projections](../user/read-models-and-projections.md) for query contracts
-and [query freshness](query-freshness.md) options.
+A [projection](projection.md) updates the view. Asynchronous updates can lag behind committed events. Keiro also tracks schema readiness and supports [query freshness](query-freshness.md) policies.
+
+See [Read Models and Projections](../user/read-models-and-projections.md).

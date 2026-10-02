@@ -1,10 +1,10 @@
 ---
 type: Term
 title: hydration
-description: "Reconstructing an aggregate's current state from its stored events, optionally starting from a compatible snapshot."
+description: "Hydration is reconstruction of aggregate state from stored events, optionally using a compatible snapshot."
 generated:
-  by: openai/codex
-  at: "2026-09-19T03:27:20Z"
+  by: openai/gpt-6.1-sol
+  at: "2026-10-02T16:43:06Z"
 termId: TERM-62
 status: current
 tags:
@@ -19,8 +19,10 @@ anchors:
 
 # hydration
 
-Before deciding a command, Keiro reads history, upcasts and decodes events, and replays them through the aggregate model. A [snapshot](snapshot.md) can provide a starting point so only later events need replay.
+Hydration is reconstruction of aggregate state from stored events, optionally using a compatible snapshot.
 
-Hydration fails if required history cannot be decoded or interpreted; skipping a bad event could produce an unsafe decision. It rebuilds command-side state, whereas a [projection rebuild](projection-rebuild.md) reconstructs derived query data.
+Before a command decision, Keiro reads history, upcasts and decodes events, and replays them through the aggregate model. A snapshot can reduce required replay.
 
-See [command cycle](../user/command-cycle.md) for details.
+Hydration fails if required events cannot be decoded or interpreted. Skipping an event can produce an unsafe decision. A [projection rebuild](projection-rebuild.md) reconstructs query data.
+
+See [command cycle](../user/command-cycle.md).
