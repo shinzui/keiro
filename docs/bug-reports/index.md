@@ -12,6 +12,7 @@ okf_version: "0.2"
 - [Six long-poll processors can leave a job queued on the three-connection runtime pool](6-long-poll-processors-starve-the-job-runtime-pool.md) - Excess long-poll processors can leave a job queued until a smaller worker takes over.
 - [Continuous worker dead-letters an exhausted job without a process span](7-pre-handler-dead-letter-has-no-process-span.md) - A pre-handler retry-ceiling dead letter emits no per-message process span.
 - [Child completion crash strands the waiting parent](8-child-completion-crash-strands-the-waiting-parent.md) - A child workflow process killed after its completion marker commits and before the parent wake commits leaves the parent suspended permanently.
+- [pgmq dlq read JSON renders the DLQ message id with a derived Show](9-pgmq-dlq-read-json-renders-message-id-with-show.md) - keiro-ops --json pgmq dlq read emits dlq_message_id as the Haskell Show rendering "MessageId {unMessageId = N}" instead of a number.
 
 ## Status and plan coverage
 
@@ -32,3 +33,4 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-6](6-long-poll-processors-starve-the-job-runtime-pool.md) | `reported` | [300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md) | Unimplemented; 0/15 progress items checked. |
 | [BUG-7](7-pre-handler-dead-letter-has-no-process-span.md) | `reported` | [301](../plans/301-trace-pre-handler-dead-letters-on-the-continuous-job-worker-to-fix-bug-7.md) | Unimplemented; 0/12 progress items checked. |
 | [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |
+| [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |

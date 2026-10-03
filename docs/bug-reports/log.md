@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-03
+* **Addition**: BUG-9 records that `keiro-ops --json pgmq dlq read` renders `dlq_message_id` with pgmq-core's derived `Show` instead of a number.
 * **Addition**: BUG-8 records a parent left suspended permanently when its child's process dies between the child's completion marker and the parent wake.
 
 ## 2026-09-30
