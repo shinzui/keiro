@@ -11,6 +11,7 @@ okf_version: "0.2"
 - [Stale outbox publisher finalizes another publisher's reclaimed claim](5-stale-outbox-publisher-finalizes-reclaimed-claim.md) - A resumed publisher can mark a newer claim failed or dead after its publisher reported success.
 - [Six long-poll processors can leave a job queued on the three-connection runtime pool](6-long-poll-processors-starve-the-job-runtime-pool.md) - Excess long-poll processors can leave a job queued until a smaller worker takes over.
 - [Continuous worker dead-letters an exhausted job without a process span](7-pre-handler-dead-letter-has-no-process-span.md) - A pre-handler retry-ceiling dead letter emits no per-message process span.
+- [Child completion crash strands the waiting parent](8-child-completion-crash-strands-the-waiting-parent.md) - A child workflow process killed after its completion marker commits and before the parent wake commits leaves the parent suspended permanently.
 
 ## Status and plan coverage
 
@@ -30,3 +31,4 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-5](5-stale-outbox-publisher-finalizes-reclaimed-claim.md) | `reported` | [299](../plans/299-fence-outbox-finalization-by-claim-generation-to-fix-bug-5.md) | Unimplemented; 0/22 progress items checked. |
 | [BUG-6](6-long-poll-processors-starve-the-job-runtime-pool.md) | `reported` | [300](../plans/300-poll-pgmq-client-side-for-long-poll-job-workers-to-fix-bug-4-and-bug-6.md) | Unimplemented; 0/15 progress items checked. |
 | [BUG-7](7-pre-handler-dead-letter-has-no-process-span.md) | `reported` | [301](../plans/301-trace-pre-handler-dead-letters-on-the-continuous-job-worker-to-fix-bug-7.md) | Unimplemented; 0/12 progress items checked. |
+| [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |

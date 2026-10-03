@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-03
+* **Addition**: BUG-8 records a parent left suspended permanently when its child's process dies between the child's completion marker and the parent wake.
+
 ## 2026-09-30
 * **Update**: BUG-7 is tracked by ExecPlan 301, which confirms from adapter and shibuya source that the retry ceiling runs on the adapter's source stream before the supervised runner opens the process span, and plans the fix inside keiro's handler.
 * **Update**: Audit all seven lifecycle statuses and plan coverage: BUG-1/BUG-2 remain duplicate with completed plans 297/298; BUG-4/BUG-6 link unimplemented plan 300; BUG-5 links unimplemented plan 299; BUG-3/BUG-7 remain reported with no plan addressing their specific failures. Add per-report implementation notes and the index summary.
