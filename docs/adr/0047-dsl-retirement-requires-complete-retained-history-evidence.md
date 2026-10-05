@@ -1,8 +1,8 @@
 ---
 type: Architecture Decision Record
 title: DSL retirement requires complete retained-history evidence
-description: DSL and API simplification must preserve aggregate replay, process recovery, and workflow continuation through complete compatibility evidence and an explicit implementation-retirement gate.
-timestamp: 2026-09-20T20:55:54Z
+description: Within supported data contracts, DSL and API simplification requires complete replay and recovery evidence, while an explicit breaking support cutoff may retire old readers and coverage.
+timestamp: 2026-10-05T17:33:36Z
 docId: ADR-47
 status: Accepted
 date: 2026-09-19
@@ -79,6 +79,25 @@ complete repository evidence. Known failures are never recast as unavailable dat
 New public APIs also require executable clean-scaffold examples, regeneration that
 preserves user code, and actionable unsupported-use diagnostics; ergonomics cannot
 be obtained by weakening validation or hiding manual compatibility obligations.
+
+## Explicit pre-1.0 support cutoff
+
+[ADR-49](0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+records the owner's explicit decision to end retired data support at a later
+breaking release R after deprecation release D. The retention and complete
+old-history comparison requirements above apply to interpretations still inside
+the supported baseline. They do not require R to keep readers, historical suites,
+or comparison binaries solely for explicitly retired contracts, nor to obtain
+every consumer's private history before ending that support promise.
+
+Every old test of retained functionality must be migrated to Language 6; current
+replay, process recovery, and workflow continuation remain covered. Every known
+consumer receives a prepared migration request/readiness record, with source/API
+readiness separate from fresh or explicitly migrated/rebuilt data readiness.
+Unsupported old histories are not reported as compatible, automatically deleted,
+or silently admitted as current. Until the announced cutoff, existing support
+obligations continue. The original scoped evidence below remains historical
+evidence and does not authorize unrelated deployment or data mutation.
 
 ## Consequences
 

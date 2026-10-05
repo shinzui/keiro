@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-10-05
+* **Update**: Clarify that the ADR-49 support cutoff can retire both old identity bridges while current identity remains frozen and old consumers need separate adoption readiness.
+* **Update**: Scope retained-history requirements to supported contracts and link the explicit ADR-49 retirement of old readers, coverage, and recurring comparison gates.
+* **Decision**: Adopt the staged pre-1.0 Language 6-only coverage and current-data support baseline; migrate retained functionality tests and ask every known consumer to migrate before the breaking cutoff.
+
 ## 2026-09-25
 * **Update**: ADR-48 records isolated command retention gates and the process-wide verification bound
 * **Update**: ADR-48 counts active Haskell threads in the verification retention leg

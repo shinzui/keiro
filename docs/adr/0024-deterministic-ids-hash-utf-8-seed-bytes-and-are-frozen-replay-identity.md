@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Deterministic ids hash UTF-8 seed bytes and are frozen replay identity
 description: Every Keiro deterministic id hashes the UTF-8 bytes of its seed text, and that derivation may never change again without a versioned migration story.
-timestamp: 2026-09-18T02:05:25Z
+timestamp: 2026-10-05T17:33:36Z
 docId: ADR-24
 status: Accepted
 date: 2026-08-06
@@ -141,6 +141,16 @@ redelivery horizon. Concretely, every at-least-once channel — Kafka consumer
 groups, PGMQ live queues and archives, durable timers, and planned operator
 replays — must be unable to redeliver a source event first delivered before the
 0.12 upgrade. Version age alone is not sufficient evidence.
+
+These conditions govern compatibility-preserving upgrades while pre-upgrade
+dispatch remains supported. The explicit pre-1.0 support cutoff in
+[ADR-49](0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+permits release R to retire both bridges and their historical coverage without
+universal consumer attestations, because the affected old dispatch is then
+unsupported. Consumers must finish, migrate, or isolate that work before R
+adoption; source-language migration alone does not drain it. Current deterministic
+identity remains frozen, and this exception does not silently switch a live old
+process to a new identity family.
 
 
 ## Consequences
