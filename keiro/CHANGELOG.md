@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.19.0.1 — 2026-10-05
+
 ### Other Changes
 
 - Admit effectful 2.7 alongside 2.6: `effectful <2.8` and

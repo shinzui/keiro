@@ -6,6 +6,12 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.19.0.1 — 2026-10-05
+
+### Other Changes
+
+- Release with the effectful-compatible Keiro cohort. No public API or migration change.
+
 ## 0.19.0.0 — 2026-09-25
 
 ### Breaking Changes
