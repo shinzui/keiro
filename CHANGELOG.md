@@ -6,6 +6,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Other Changes
+
+- Admit effectful 2.7 alongside 2.6: `effectful <2.8` and
+  `effectful-core >=2.6 && <2.7 || >=2.7.1.1 && <2.8`. Exclude the
+  effectful-core 2.7.0.0–2.7.1.0 performance regression. Bounds only; no source changed.
+
 ## 0.19.0.0 — 2026-09-25
 
 ### Breaking Changes
