@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-07
+* **Addition**: IR-53 requests list fields in integration contracts (`List <declared id | typeid | text | int>`), lowered to a Haskell list and a JSON array by the generated codec and governed by diff as public contract evolution, because a contract today admits only four scalar types while private events carry `List`; raised from mori://tan/notification-render-service, whose change signal must name every template one event touched and is hand-writing its codec meanwhile.
+
 ## 2026-10-01
 * **Addition**: IR-52 requests that Keiro populate Kiroku's typed correlationId and causationId on every appended event and every process-manager-dispatched command, seeded from a caller-supplied correlation id, because the codec writes both as Nothing today; raised from mori://shinzui/shoko for migration and keiro-native verification (RES-1).
 
