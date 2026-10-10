@@ -204,14 +204,19 @@ import Keiro.Snapshot.Policy (shouldSnapshot, shouldSnapshotSpan)
 import Keiro.Stream qualified as Stream
 import Keiro.Subscription.Shard
   ( ShardCountMismatch (..),
+    ShardCountResizeReport (..),
     ShardLease (..),
+    ShardResizeActiveLeases (..),
     WorkerId (..),
     ensureShards,
     fairShareTarget,
+    resizeShardCount,
+    resizeShardCountTx,
   )
 import Keiro.Subscription.Shard.Schema
   ( claimShardsTx,
     ensureShardRows,
+    listShardCounts,
     listShardOwnership,
     releaseShardsTx,
     renewLeaseTx,
@@ -350,6 +355,7 @@ import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.SQL qualified as KirokuSQL
 import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
+import Kiroku.Store.Subscription.Stream qualified as KirokuStream
 import Kiroku.Store.Subscription.Types
   ( SubscriptionName (..),
     SubscriptionTarget (..),
@@ -727,7 +733,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
               parseEither
                 (withObject "OrderPlaced" (.: "n"))
                 (ackEvent item ^. #payload)
-        (stream0, cancelStream) <- subscriptionAckStream store subConfig 4
+        (stream0, cancelStream) <- subscriptionAckStream store subConfig (either (error . show) id (KirokuStream.mkStreamBufferSize 4))
         ( do
             (first, stream1) <- pull "initial poison delivery" stream0
             ackAttempt first `shouldBe` 0
@@ -5673,6 +5679,10 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         (RetryDelay 5)
         (StoreFailed (Store.TransientTransactionFailure "40P01" "deadlock detected"))
         `shouldBe` AckRetry (RetryDelay 5)
+      ackForCommandError (RetryDelay 5) (StoreFailed (Store.EventDecodeFailed (Store.DecodeFailure (EventId sampleUuid) "bad payload")))
+        `shouldSatisfy` \case
+          AckHalt (HaltFatal _) -> True
+          _ -> False
       ackForCommandError (RetryDelay 5) (StoreFailed (Store.UnexpectedServerError "XX000" "boom"))
         `shouldSatisfy` \case
           AckHalt (HaltFatal _) -> True
@@ -11845,6 +11855,8 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         shardOpts = defaultShardedWorkerOptions (Category (CategoryName "orders")) 4
     it "validates sharded worker options before startup" $ \_store -> do
       shouldBeRight_ (mkShardedWorkerOptions shardOpts)
+      mkShardedWorkerOptions (shardOpts & #shardCount .~ (fromIntegral (maxBound :: Int32) + 1))
+        `shouldBeLeft` InvalidShardCount (fromIntegral (maxBound :: Int32) + 1)
       mkShardedWorkerOptions (shardOpts & #shardCount .~ 0)
         `shouldBeLeft` InvalidShardCount 0
       mkShardedWorkerOptions (shardOpts & #leaseTtl .~ 0)
@@ -11937,6 +11949,108 @@ main = withMigratedSuite $ \fixture -> hspec $ do
         `shouldThrow` \case
           ShardCountMismatch name configured found ->
             name == "orders-shard" && configured == 6 && found == [4]
+      Right counts <- Store.runStoreIO store (Store.runTransaction (listShardCounts subName))
+      counts `shouldBe` [(4, 4)]
+      Store.runStoreIO store (ensureShards lease6)
+        `shouldThrow` (\(_ :: KirokuSub.SomeSubscriptionStartupFailure) -> True)
+
+  describe "Shard count resize" $ around (withFreshStore fixture) $ do
+    let name = SubscriptionName "resize-orders"
+        size n = either (error . show) id (KirokuSub.mkConsumerGroupSize n)
+        positions store = do
+          Right inventory <- Store.runStoreIO store Store.subscriptionCheckpointInventory
+          pure [row ^. #checkpointPosition | row <- Vector.toList (inventory ^. #checkpoints), row ^. #subscriptionName == name]
+        ownership store = do
+          Right rows <- Store.runStoreIO store (Store.runTransaction (listShardOwnership name))
+          pure rows
+        seedSkewed store = do
+          Right () <- Store.runStoreIO store (Store.runTransaction (Tx.sql createShardSinkSql >> ensureShardRows name 3))
+          _ <- seedOrders store 24 5
+          for_ [0 .. 2] $ \member -> do
+            calls <- newIORef (0 :: Int)
+            let group = either (error . show) id (KirokuSub.mkConsumerGroup member (size 3))
+                config =
+                  ( KirokuSub.defaultSubscriptionConfig
+                      name
+                      (Category (CategoryName "orders"))
+                      ( \event -> do
+                          count <- atomicModifyIORef' calls (\n -> (n + 1, n + 1))
+                          sinkHandler store member event
+                          pure $ if count > fromIntegral member + 1 then KirokuSub.Stop else KirokuSub.Continue
+                      )
+                  )
+                    { KirokuSub.consumerGroup = Just group,
+                      KirokuSub.batchSize = either (error . show) id (KirokuSub.mkBatchSize 1)
+                    }
+            handle <- Store.subscribe store config
+            finished <- timeout 10000000 (KirokuSub.wait handle) `finally` (KirokuSub.cancel handle)
+            case finished of
+              Just (Right ()) -> pure ()
+              other -> expectationFailure ("seed worker failed: " <> show other)
+          before <- positions store
+          length before `shouldBe` 3
+          length (Set.fromList before) `shouldSatisfy` (> 1)
+          pure before
+        resize store count = do
+          Right report <- Store.runStoreIO store (resizeShardCount name (size count))
+          pure report
+
+    it "refuses recorded owners, including expired leases, without changing either table" $ \store -> do
+      before <- seedSkewed store
+      let oldTime = UTCTime (ModifiedJulianDay 60000) 0
+      Right claimed <- Store.runStoreIO store (Store.runTransaction (claimShardsTx name (WorkerId sampleUuid) 1 oldTime 1))
+      leases <- ownership store
+      Store.runStoreIO store (resizeShardCount name (size 2))
+        `shouldThrow` (\(ShardResizeActiveLeases actual buckets) -> actual == name && buckets == claimed)
+      positions store `shouldReturn` before
+      ownership store `shouldReturn` leases
+
+    it "shrinks and grows stopped groups at the old minimum without obsolete members" $ \store -> do
+      before <- seedSkewed store
+      report <- resize store 2
+      report ^. #previousShardCounts `shouldBe` [(3, 3)]
+      report ^. #checkpointResize . #resumePosition `shouldBe` minimum before
+      positions store `shouldReturn` replicate 2 (minimum before)
+      map (\(bucket, _, _) -> bucket) <$> ownership store `shouldReturn` [0, 1]
+      _ <- resize store 5
+      positions store `shouldReturn` replicate 5 (minimum before)
+      map (\(bucket, _, _) -> bucket) <$> ownership store `shouldReturn` [0 .. 4]
+
+    it "equalizes same-size assignments and is idempotent on repeat" $ \store -> do
+      before <- seedSkewed store
+      _ <- resize store 3
+      first <- positions store
+      first `shouldBe` replicate 3 (minimum before)
+      _ <- resize store 3
+      positions store `shouldReturn` first
+
+    it "rolls back checkpoint and lease changes when surrounding SQL fails" $ \store -> do
+      before <- seedSkewed store
+      leases <- ownership store
+      outcome <- Store.runStoreIO store $ Store.runTransaction $ do
+        resized <- resizeShardCountTx name (size 2)
+        case resized of
+          Left refusal -> error (show refusal)
+          Right _ -> Tx.sql "SELECT 1 / 0"
+      outcome `shouldSatisfy` \case Left _ -> True; Right _ -> False
+      positions store `shouldReturn` before
+      ownership store `shouldReturn` leases
+
+    it "delivers every seeded event after a changed hash assignment" $ \store -> do
+      _ <- seedSkewed store
+      _ <- resize store 2
+      let options =
+            defaultShardedWorkerOptions (Category (CategoryName "orders")) 2
+              & #renewInterval
+              .~ 0.1
+              & #leaseTtl
+              .~ 3
+              & #batchSize
+              .~ 1
+      worker <- forkIO (runShardedSubscriptionGroup store name options (sinkHandler store 9))
+      complete <- waitUntilSinkCount store 120 15000000 `finally` killThread worker
+      complete `shouldBe` True
+      shardSinkCount store `shouldReturn` 120
 
   describe "Sharded subscription single worker" $ around (withFreshStore fixture) $ do
     -- EP-51 M3: one process owning all N buckets drains a seeded category exactly
@@ -17681,7 +17795,7 @@ deadLetterCounterSource storeHandle subName sourceEvent = do
           Just (Just itemAndRest) -> pure itemAndRest
           Just Nothing -> fail (label <> ": subscription ended early")
           Nothing -> fail (label <> ": timed out waiting for delivery")
-  (stream0, cancelStream) <- subscriptionAckStream storeHandle subConfig 4
+  (stream0, cancelStream) <- subscriptionAckStream storeHandle subConfig (either (error . show) id (KirokuStream.mkStreamBufferSize 4))
   ( do
       (first, stream1) <- pull "source delivery" stream0
       atomically $
@@ -18112,8 +18226,8 @@ upsertSubscriptionCursorStmt :: Statement (Text, Int64) ()
 upsertSubscriptionCursorStmt =
   preparable
     """
-    INSERT INTO subscriptions (subscription_name, stream_name, last_seen)
-    VALUES ($1, '$all', $2)
+    INSERT INTO subscriptions (subscription_name, target_kind, last_seen)
+    VALUES ($1, 'all', $2)
     ON CONFLICT (subscription_name, consumer_group_member) DO UPDATE
       SET last_seen = EXCLUDED.last_seen,
           updated_at = now()
@@ -18128,8 +18242,8 @@ upsertSubscriptionCursorMemberStmt :: Statement (Text, Int32, Int64) ()
 upsertSubscriptionCursorMemberStmt =
   preparable
     """
-    INSERT INTO subscriptions (subscription_name, stream_name, consumer_group_member, consumer_group_size, last_seen)
-    VALUES ($1, '$all', $2, 2, $3)
+    INSERT INTO subscriptions (subscription_name, target_kind, consumer_group_member, consumer_group_size, last_seen)
+    VALUES ($1, 'all', $2, 2, $3)
     ON CONFLICT (subscription_name, consumer_group_member) DO UPDATE
       SET last_seen = EXCLUDED.last_seen,
           updated_at = now()

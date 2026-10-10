@@ -1,0 +1,19 @@
+{
+  "budget_seconds": 1000,
+  "actions": [
+    {
+      "name": "full-keiro",
+      "binary": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/t/keiro-test/build/keiro-test/keiro-test",
+      "cwd": "keiro",
+      "exit_code": 0,
+      "elapsed_seconds": 158.51633466710337
+    },
+    {
+      "name": "keiro-ops",
+      "binary": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/t/keiro-ops-test/build/keiro-ops-test/keiro-ops-test",
+      "cwd": "keiro-ops",
+      "exit_code": 0,
+      "elapsed_seconds": 173.28449870902114
+    }
+  ]
+}

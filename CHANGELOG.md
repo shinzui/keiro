@@ -6,6 +6,28 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Adopt the published hardening cohort from
+  mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review:
+  store `^>=0.10.0.0`, migrations `^>=0.7.0.0` and adapter `^>=0.6.0.0`.
+  Stop subscription workers before applying Kiroku migrations 0013 and 0014.
+  The latter replaces legacy `stream_name` checkpoints with typed target binding.
+  Sharded configuration uses validated constructors, and startup refusals share
+  `SomeSubscriptionStartupFailure`.
+
+### New Features
+
+- `resizeShardCount`/`resizeShardCountTx` atomically equalize public Kiroku
+  checkpoints and Keiro lease rows for stopped, fully relinquished groups.
+  Same-size resize is supported and can replay already handled events.
+
+### Fixes
+
+- Refuse mismatched shard startup before writing rows and classify typed
+  decode failures as deterministic. Existing projections retain the default
+  stop-on-undecodable policy.
+
 ## 0.19.0.1 — 2026-10-05
 
 ### Other Changes

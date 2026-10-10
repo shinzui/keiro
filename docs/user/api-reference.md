@@ -855,12 +855,25 @@ Types and functions:
 - `WorkerId (..)`, `freshWorkerId`
 - `acquireOwnedBuckets`, `renewOwnedBuckets`, `relinquish`
 - `ensureShards`, `ownershipSnapshot`
+- `resizeShardCount`, `resizeShardCountTx`, `ShardCountResizeReport (..)`
+- `ShardResizeActiveLeases (..)`, `ShardCountMismatch (..)`
 - `Keiro.Subscription.Shard.Worker` adds `runShardedSubscriptionGroup`
 - `Keiro.Subscription.Shard.Schema` holds the `keiro_subscription_shards` SQL
 
 Use it to run a pool of identical workers over one Kiroku consumer group: each
 bucket is leased, so the pool re-divides automatically when a worker joins,
 leaves, or dies, with no external coordinator.
+
+Before changing a bucket count, stop every reader and relinquish all lease
+owners. Build a size with Kiroku's `mkConsumerGroupSize`, then call
+`resizeShardCount`. The transaction variant composes with application SQL. Both
+checkpoint and lease changes commit or roll back together; all members resume
+at the previous minimum, so replay is possible and handlers need idempotence.
+Any recorded owner blocks resize, including expired owners. A mismatched startup
+refuses before changing rows. See [ADR-50](../adr/0050-shard-resize-composes-public-checkpoints-with-stopped-lease-rows.md).
+
+Sharded readers use Kiroku's default stop-on-undecodable policy. Decode failures
+are deterministic; worker startup refusals report `ShardReaderStartupFailed`.
 
 ## `Keiro.DeadLetter`
 

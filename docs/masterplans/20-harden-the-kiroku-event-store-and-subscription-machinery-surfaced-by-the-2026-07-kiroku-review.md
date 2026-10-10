@@ -6,6 +6,13 @@ kind: master-plan
 created_at: 2026-07-23T04:18:29Z
 status: transferred
 superseded_by: "mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-10T15:01:32Z
+      mode: "update"
+      note: "Record downstream adoption under Kiroku MasterPlan 12; retain transferred status."
 ---
 
 # Harden the kiroku event store and subscription machinery surfaced by the 2026-07 kiroku review
@@ -114,3 +121,16 @@ in the Kiroku plan set.
 
 Revision note (2026-08-27): Marked transferred before implementation and linked the authoritative
 Kiroku MasterPlan created under Intention `intention_01m12ed0r5e61aqa9h1rfgvk4a`.
+
+
+Downstream adoption note (2026-10-10): The authoritative work in
+mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review
+has published store 0.10.0.0, migrations 0.7.0.0 and adapter 0.6.0.0. Keiro
+adopts that released cohort and implements `resizeShardCount`/`resizeShardCountTx`
+through public `Kiroku.Store.Subscription.Checkpoint.resizeConsumerGroupTx`,
+with stopped-owner refusal, atomic lease replacement, validated configuration
+and the startup-failure parent. This plan remains transferred and retired;
+implementation and acceptance ownership stays with
+mori://shinzui/kiroku/plans/85-release-the-subscription-hardening-cohort-and-coordinate-downstream-adoption.
+See [ADR-50](../adr/0050-shard-resize-composes-public-checkpoints-with-stopped-lease-rows.md)
+for the durable downstream contract; no Keiro release is authorized by this note.

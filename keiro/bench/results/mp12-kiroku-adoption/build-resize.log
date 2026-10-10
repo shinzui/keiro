@@ -1,0 +1,106 @@
+Downloading
+https://hackage.haskell.org/package/kiroku-store-0.10.0.0/kiroku-store-0.10.0.0.tar.gz
+Downloading
+https://hackage.haskell.org/package/kiroku-store-migrations-0.7.0.0/kiroku-store-migrations-0.7.0.0.tar.gz
+Downloading
+https://hackage.haskell.org/package/shibuya-kiroku-adapter-0.6.0.0/shibuya-kiroku-adapter-0.6.0.0.tar.gz
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.19.0.1 (test:keiro-test) (file test/Main.hs changed)
+Preprocessing test suite 'keiro-test' for keiro-0.19.0.1...
+Building test suite 'keiro-test' for keiro-0.19.0.1...
+[18 of 18] Compiling Main             ( test/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/t/keiro-test/build/keiro-test/keiro-test-tmp/Main.o ) [Source file changed]
+test/Main.hs:11947:69: error: [GHC-88464]
+    Variable not in scope:
+      listShardCounts :: SubscriptionName -> Tx.Transaction [(a4, b1)]
+    Suggested fix:
+      Add ‘listShardCounts’ to the import list in the import of
+      ‘Keiro.Subscription.Shard.Schema’
+      (at test/Main.hs:(216,1)-(222,3)).
+      |
+11947 |       Right counts <- Store.runStoreIO store (Store.runTransaction (listShardCounts subName))
+      |                                                                     ^^^^^^^^^^^^^^^
+
+test/Main.hs:11972:21: error: [GHC-64725]
+    • | No instance for ‘Generic (KirokuSub.SubscriptionConfigM IO)’
+      |   arising from a generic lens focusing on the ‘"consumerGroup"’ field of type ‘a1’
+      |   in ‘KirokuSub.SubscriptionConfigM IO’
+      
+    • In the first argument of ‘(?~)’, namely ‘#consumerGroup’
+      In the second argument of ‘(&)’, namely ‘#consumerGroup ?~ group’
+      In the first argument of ‘(&)’, namely
+        ‘KirokuSub.defaultSubscriptionConfig
+           name (Category (CategoryName "orders"))
+           (\ event
+              -> do count <- atomicModifyIORef' calls (\ n -> (n + 1, n + 1))
+                    if count > fromIntegral member + 1 then
+                        pure KirokuSub.Stop
+                    else
+                        sinkHandler store member event >> pure KirokuSub.Continue)
+           & #consumerGroup ?~ group’
+      |
+11972 |                   & #consumerGroup ?~ group
+      |                     ^^^^^^^^^^^^^^
+
+test/Main.hs:11973:21: error: [GHC-64725]
+    • | No instance for ‘Generic
+                           (generic-lens-core-2.3.0.0:Data.Generics.Internal.Families.Changing.ReplaceArgs
+                              (KirokuSub.SubscriptionConfigM IO)
+                              (generic-lens-core-2.3.0.0:Data.Generics.Internal.Families.Changing.Unify
+                                 a'1 (Maybe KirokuSub.ConsumerGroup)))’
+      |   arising from a generic lens focusing on the ‘"batchSize"’ field of type ‘a2’
+      |   in ‘generic-lens-core-2.3.0.0:Data.Generics.Internal.Families.Changing.ReplaceArgs
+                (KirokuSub.SubscriptionConfigM IO)
+                (generic-lens-core-2.3.0.0:Data.Generics.Internal.Families.Changing.Unify
+                   a'1 (Maybe KirokuSub.ConsumerGroup))’
+      
+    • In the first argument of ‘(.~)’, namely ‘#batchSize’
+      In the second argument of ‘(&)’, namely
+        ‘#batchSize .~ either (error . show) id (KirokuSub.mkBatchSize 1)’
+      In the expression:
+        KirokuSub.defaultSubscriptionConfig
+          name (Category (CategoryName "orders"))
+          (\ event
+             -> do count <- atomicModifyIORef' calls (\ n -> (n + 1, n + 1))
+                   if count > fromIntegral member + 1 then
+                       pure KirokuSub.Stop
+                   else
+                       sinkHandler store member event >> pure KirokuSub.Continue)
+          & #consumerGroup ?~ group
+          & #batchSize .~ either (error . show) id (KirokuSub.mkBatchSize 1)
+      |
+11973 |                   & #batchSize .~ either (error . show) id (KirokuSub.mkBatchSize 1)
+      |                     ^^^^^^^^^^
+
+test/Main.hs:11975:53: error: [GHC-64725]
+    • | No instance for ‘Generic (KirokuSub.SubscriptionHandleM IO)’
+      |   arising from a generic lens focusing on the ‘"wait"’ field of type ‘IO
+                                                                                (Either a3 ())’
+      |   in ‘KirokuSub.SubscriptionHandleM IO’
+      
+    • In the second argument of ‘(^.)’, namely ‘#wait’
+      In the second argument of ‘timeout’, namely ‘(handle ^. #wait)’
+      In the first argument of ‘finally’, namely
+        ‘timeout 10000000 (handle ^. #wait)’
+      |
+11975 |             finished <- timeout 10000000 (handle ^. #wait) `finally` (handle ^. #cancel)
+      |                                                     ^^^^^
+
+test/Main.hs:11975:81: error: [GHC-64725]
+    • | No instance for ‘Generic (KirokuSub.SubscriptionHandleM IO)’
+      |   arising from a generic lens focusing on the ‘"cancel"’ field of type ‘IO
+                                                                                  b0’
+      |   in ‘KirokuSub.SubscriptionHandleM IO’
+      
+    • In the second argument of ‘(^.)’, namely ‘#cancel’
+      In the second argument of ‘finally’, namely ‘(handle ^. #cancel)’
+      In a stmt of a 'do' block:
+        finished <- timeout 10000000 (handle ^. #wait)
+                      `finally` (handle ^. #cancel)
+      |
+11975 |             finished <- timeout 10000000 (handle ^. #wait) `finally` (handle ^. #cancel)
+      |                                                                                 ^^^^^^^
+
+Error: [Cabal-7125]
+Failed to build test:keiro-test from keiro-0.19.0.1.
+

@@ -1,0 +1,10 @@
+Resolving dependencies...
+Error: [Cabal-7107]
+Could not resolve dependencies:
+[__0] trying: keiro-migrations-0.19.0.1 (user goal)
+[__1] next goal: kiroku-store-migrations (dependency of keiro-migrations)
+[__1] rejecting: kiroku-store-migrations-0.6.0.0 (conflict: keiro-migrations => kiroku-store-migrations^>=0.7.0.0)
+[__1] skipping: kiroku-store-migrations; 0.5.0.0, 0.4.0.0, 0.3.1.0, 0.3.0.0, 0.2.0.0, 0.1.1.0, 0.1.0.0, 0.3.2.1, 0.3.2.0 (has the same characteristics that caused the previous version to fail: excluded by constraint '^>=0.7.0.0' from 'keiro-migrations')
+[__1] fail (backjumping, conflict set: keiro-migrations, kiroku-store-migrations)
+After searching the rest of the dependency tree exhaustively, these were the goals I've had most trouble fulfilling: keiro-migrations, kiroku-store-migrations
+

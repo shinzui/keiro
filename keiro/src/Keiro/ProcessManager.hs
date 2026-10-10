@@ -56,8 +56,8 @@
 -- 'Keiro.Telemetry.kirokuEventBridge' on Kiroku's @eventHandler@ to observe the
 -- terminal transition.
 --
--- The adapter's @KirokuAdapterConfig@ does not currently expose @retryPolicy@, so
--- that path uses Kiroku's default bound. The sharded path is configurable:
+-- The adapter's @KirokuAdapterConfig.retryPolicy@ configures this bound and
+-- defaults to Kiroku's five-delivery policy. The sharded path is configurable:
 -- 'Keiro.Subscription.Shard.Worker.runShardedSubscriptionGroupAck' forwards
 -- 'Keiro.Subscription.Shard.Worker.ShardedWorkerOptions.retryPolicy' into the
 -- same Kiroku acknowledgement ladder. A shard handler that dispatches commands
@@ -363,6 +363,7 @@ isTransientStoreError = \case
   StreamNameTooLong {} -> False
   DuplicateEvent {} -> False
   EventAlreadyLinked {} -> False
+  EventDecodeFailed {} -> False
   LinkSourceEventMissing {} -> False
   TransientTransactionFailure {} -> True
   UnexpectedServerError {} -> False
@@ -939,7 +940,7 @@ runDomainProcessManagerWorkerWith workerOptions options manager Adapter {source 
 -- in. On a Kiroku-backed adapter, each 'AckRetry' redelivery is bounded by the
 -- subscription @RetryPolicy@ (five total deliveries by default). Exhaustion
 -- dead-letters the source event in @kiroku.dead_letters@ and advances the
--- checkpoint; @KirokuAdapterConfig@ does not currently expose that bound. Observe
+-- checkpoint; @KirokuAdapterConfig.retryPolicy@ configures that bound. Observe
 -- the terminal event with 'Keiro.Telemetry.kirokuEventBridge' and replay it with
 -- @Keiro.DeadLetter.Replay@ when appropriate.
 runProcessManagerWorker ::

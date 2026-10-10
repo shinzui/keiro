@@ -1,0 +1,139 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 3898,
+      "sha256": "8781338464ef97e4363e5c30e13ead17226375b6bdf8b82185857e848532d759"
+    },
+    {
+      "path": "adr.log",
+      "bytes": 16,
+      "sha256": "1664a46a944d3f43b8638c4eddbff8efac073fb001e33394530a1d0dd11a9fdd"
+    },
+    {
+      "path": "build-all-index.log",
+      "bytes": 93942,
+      "sha256": "1d1caabeb839a357798ebca7bb32e918c7a9cb62fd8cd0bb364c7afd51d2607e"
+    },
+    {
+      "path": "build-final.log",
+      "bytes": 48447,
+      "sha256": "72a16b1ee7ded133658ceb60575fdd6691701bde374f3f55120916e1897a537e"
+    },
+    {
+      "path": "build-fixtures.log",
+      "bytes": 38405,
+      "sha256": "bb785e4fca1c4b8c8ebd8a48c1eab8ddfae43bfb322d24ad9875fc2f4dc9ed1b"
+    },
+    {
+      "path": "build-published.log",
+      "bytes": 96148,
+      "sha256": "fd03a7e73f5dd5ff97c0930763c47d519c8da8d5c74fe93c6e06fa670787414a"
+    },
+    {
+      "path": "build-resize-fixed.log",
+      "bytes": 73740,
+      "sha256": "edfa98310092f31bf54ad1f95452f592b097319d54b4cc8cef3c594c3a68b37b"
+    },
+    {
+      "path": "build-resize.log",
+      "bytes": 5775,
+      "sha256": "51a5c598551635ccccf50ee9a10e2972f717c27a50cd85c5897ec011824b52b9"
+    },
+    {
+      "path": "build.log",
+      "bytes": 815,
+      "sha256": "d8fceb03ddd79a6d23c6214c032cd0f7f5b115bfe1fb0d3697c03f7a4696b8e4"
+    },
+    {
+      "path": "flake-final.log",
+      "bytes": 3903,
+      "sha256": "d77fad308dfd10d517f259ced06da672a704f5675dbcf0ef3157506c42a5046d"
+    },
+    {
+      "path": "flake-fixtures.log",
+      "bytes": 3903,
+      "sha256": "1765a69fcc431823085c99b4acf100f2241e3e224007ef55cf4e43e0dcb7efeb"
+    },
+    {
+      "path": "flake.log",
+      "bytes": 3903,
+      "sha256": "a88ed5df9485b769d99e3a28407f8d11efebad878f0f8ee35101aeb8a4134b28"
+    },
+    {
+      "path": "focused-shards-fixture-failure.log",
+      "bytes": 2036,
+      "sha256": "0efd9577f9bee59f31c24578ffe74646103234b6609934848583efb2f5bf5913"
+    },
+    {
+      "path": "focused-shards.log",
+      "bytes": 1713,
+      "sha256": "8cb2aba7eb36e2aff401c75c190bd3a8afc177fc53b776d83d0fb4011476ab5a"
+    },
+    {
+      "path": "format-final.log",
+      "bytes": 588,
+      "sha256": "3c6bbdb6c651a202e0caad9c6d37dfa2fce61a2adade5056295db7a2359cf4ff"
+    },
+    {
+      "path": "format-fixtures.log",
+      "bytes": 588,
+      "sha256": "4d3ce09e8bf6fbd05620ae7ed27eb5f48694c21a5e0bc5ebf307755f592da837"
+    },
+    {
+      "path": "format.log",
+      "bytes": 589,
+      "sha256": "950187ae845a60c3c61e66fd045542780c5f17b4fb86d85982f134bdb0f80476"
+    },
+    {
+      "path": "full-keiro-pre-adoption-fixtures.log",
+      "bytes": 75242,
+      "sha256": "f67e3e2ca35f59f6898c41e01b416aa310e3094d3d7d48b2debde17d02225c82"
+    },
+    {
+      "path": "full-keiro.log",
+      "bytes": 58400,
+      "sha256": "0c793847219905c37bea5d099cd8063a523d7e0b8d86224e65fbc594409a34c8"
+    },
+    {
+      "path": "index-propagation-bootstrap.project",
+      "bytes": 1069,
+      "sha256": "37aa9b4498ac29f434dc14297598af94590d61048e446bb2a73882a2981580b1"
+    },
+    {
+      "path": "keiro-ops.log",
+      "bytes": 4090,
+      "sha256": "c70a24b4e3aa3257fa322b973fb92e338307c8fb86688603c0857ece9d6737af"
+    },
+    {
+      "path": "published-dependencies.json",
+      "bytes": 3287,
+      "sha256": "262720f7b56ef3ea866056985e2df0620625d6a5dbfed50a6cd46566ceba84ff"
+    },
+    {
+      "path": "test-journal-fixture-failure.json",
+      "bytes": 368,
+      "sha256": "2722570a43a73b0f754e4213c2035afd99bef6a5710f4a1bb6738be8db7dc7c0"
+    },
+    {
+      "path": "test-journal-pre-adoption-fixtures.json",
+      "bytes": 493,
+      "sha256": "56f9ac8e9d54abdc4009e876191c1344b8729d7e464bde99d9a1d956c3d7db86"
+    },
+    {
+      "path": "test-journal.json",
+      "bytes": 633,
+      "sha256": "4916056df852775d373f330803baa3c8a46115543165706383b30e1d59f4747c"
+    },
+    {
+      "path": "user-docs.log",
+      "bytes": 34,
+      "sha256": "6a2092aa962eafb7137344b2f3ff80744468d6c858aafc819018c65d975cce92"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 1212,
+      "sha256": "652fb1e1023a38b11aeb99a8491893bf9a34a3be5477022f2e644c4710149b2b"
+    }
+  ]
+}

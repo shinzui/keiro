@@ -86,7 +86,7 @@ where
 
 import Control.Concurrent (forkFinally, killThread, threadDelay)
 import Control.Concurrent.STM (atomically, putTMVar)
-import Control.Exception (SomeAsyncException, SomeException, catch, displayException, finally, fromException, throwIO)
+import Control.Exception (Exception, SomeAsyncException, SomeException, catch, displayException, finally, fromException, throwIO)
 import Control.Monad (forever)
 import Data.Bifunctor (first)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef, writeIORef)
@@ -111,10 +111,9 @@ import Keiro.Subscription.Shard
   )
 import Kiroku.Store.Connection (KirokuStore)
 import Kiroku.Store.Effect (runStoreIO)
-import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
+import Kiroku.Store.Subscription.Stream (AckItem (..), mkStreamBufferSize, subscriptionAckStream)
 import Kiroku.Store.Subscription.Types
-  ( ConsumerGroup (..),
-    DeadLetterReason (..),
+  ( DeadLetterReason (..),
     RetryDelay (..),
     RetryPolicy (..),
     SubscriptionName,
@@ -133,6 +132,7 @@ data ShardWorkerError
   = ShardSnapshotFailed !Text
   | ShardAcquireFailed !Text
   | ShardReaderDied !Int !Text
+  | ShardReaderStartupFailed !Int !Text
   | ShardEnsureFailed !Text
   deriving stock (Generic, Eq, Show)
 
@@ -195,6 +195,7 @@ data ShardedWorkerConfigError
   | InvalidShardHandlerRetryDelay !RetryDelay
   | InvalidShardRetryMaxAttempts !Int
   deriving stock (Generic, Eq, Show)
+  deriving anyclass (Exception)
 
 -- | Sensible defaults for a sharded worker: 30 s lease, 10 s renew, batch 100,
 -- buffer 256. Supply the category target and the bucket count @N@.
@@ -216,6 +217,7 @@ defaultShardedWorkerOptions target' shardCount' =
 mkShardedWorkerOptions :: ShardedWorkerOptions -> Either ShardedWorkerConfigError ShardedWorkerOptions
 mkShardedWorkerOptions opts
   | opts ^. #shardCount < 1 = Left (InvalidShardCount (opts ^. #shardCount))
+  | opts ^. #shardCount > fromIntegral (maxBound :: Int32) = Left (InvalidShardCount (opts ^. #shardCount))
   | opts ^. #leaseTtl <= 0 = Left (InvalidShardLeaseTtl (opts ^. #leaseTtl))
   | opts ^. #renewInterval <= 0 = Left (InvalidShardRenewInterval (opts ^. #renewInterval))
   | opts ^. #leaseTtl <= opts ^. #renewInterval =
@@ -311,12 +313,31 @@ startReader ::
   Int ->
   IO RunningReader
 startReader store lease opts readers handler bucket = do
+  count <-
+    either
+      (const (throwIO (InvalidShardCount (opts ^. #shardCount))))
+      pure
+      (Sub.mkConsumerGroupSize (fromIntegral (opts ^. #shardCount)))
+  group <-
+    either
+      (const (throwIO (InvalidShardCount (opts ^. #shardCount))))
+      pure
+      (Sub.mkConsumerGroup (fromIntegral bucket) count)
+  batch <-
+    either
+      (const (throwIO (InvalidShardBatchSize (opts ^. #batchSize))))
+      pure
+      (Sub.mkBatchSize (opts ^. #batchSize))
+  buffer <-
+    either
+      (const (throwIO (InvalidShardBufferSize (opts ^. #bufferSize))))
+      pure
+      (mkStreamBufferSize (opts ^. #bufferSize))
   stopping <- newIORef False
   let subConfig =
         (defaultSubscriptionConfig (lease ^. #subscriptionName) (opts ^. #target) (\_ -> pure Continue))
-          { Sub.batchSize = opts ^. #batchSize,
-            Sub.consumerGroup =
-              Just (ConsumerGroup {member = fromIntegral bucket, size = fromIntegral (opts ^. #shardCount)}),
+          { Sub.batchSize = batch,
+            Sub.consumerGroup = Just group,
             Sub.retryPolicy = opts ^. #retryPolicy
           }
       handleItem item = do
@@ -333,7 +354,7 @@ startReader store lease opts readers handler bucket = do
         case fromException err of
           Just async -> throwIO (async :: SomeAsyncException)
           Nothing -> pure (ShardAckRetry (opts ^. #handlerRetryDelay))
-  (stream, cancelAction) <- subscriptionAckStream store subConfig (opts ^. #bufferSize)
+  (stream, cancelAction) <- subscriptionAckStream store subConfig buffer
   tid <-
     forkFinally (Stream.fold (Fold.drainMapM handleItem) stream) $ \result -> do
       intentional <- readIORef stopping
@@ -342,7 +363,11 @@ startReader store lease opts readers handler bucket = do
         let reason = case result of
               Left err -> Text.pack (displayException (err :: SomeException))
               Right _ -> "reader stream ended"
-        reportShardError opts (ShardReaderDied bucket reason)
+        case result of
+          Left err | Just refusal <- (fromException err :: Maybe Sub.SomeSubscriptionStartupFailure) -> do
+            _ <- runStoreIO store (relinquish lease (Set.singleton bucket))
+            reportShardError opts (ShardReaderStartupFailed bucket (Text.pack (displayException refusal)))
+          _ -> reportShardError opts (ShardReaderDied bucket reason)
   pure
     ( RunningReader $ do
         writeIORef stopping True
@@ -393,6 +418,7 @@ runShardedSubscriptionGroupAck ::
   ShardEventHandler ->
   IO ()
 runShardedSubscriptionGroupAck store subName opts handler = do
+  either throwIO (const (pure ())) (mkShardedWorkerOptions opts)
   worker <- WorkerId <$> UUIDv4.nextRandom
   let lease =
         ShardLease

@@ -7,6 +7,13 @@ created_at: 2026-07-23T04:18:42Z
 master_plan: "docs/masterplans/20-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review.md"
 status: transferred
 superseded_by: "mori://shinzui/kiroku/plans/81-make-consumer-group-topology-durable-and-resize-without-gaps"
+provenance:
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-10T15:01:17Z
+      mode: "update"
+      note: "Record downstream adoption of the authoritative Kiroku release without reopening this transferred plan."
 ---
 
 # Make consumer-group resize safe and persist the group size
@@ -303,3 +310,16 @@ No new packages anywhere; everything uses hasql/hasql-transaction/effectful alre
 
 Revision note (2026-08-27): Retired this source plan and split execution between canonical Kiroku
 plan 81 (topology/resize) and plan 85 (release-gated Keiro adoption).
+
+
+Downstream adoption note (2026-10-10): The authoritative work in
+mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review
+has published store 0.10.0.0, migrations 0.7.0.0 and adapter 0.6.0.0. Keiro
+adopts that released cohort and implements `resizeShardCount`/`resizeShardCountTx`
+through public `Kiroku.Store.Subscription.Checkpoint.resizeConsumerGroupTx`,
+with stopped-owner refusal, atomic lease replacement, validated configuration
+and the startup-failure parent. This plan remains transferred and retired;
+implementation and acceptance ownership stays with
+mori://shinzui/kiroku/plans/85-release-the-subscription-hardening-cohort-and-coordinate-downstream-adoption.
+See [ADR-50](../adr/0050-shard-resize-composes-public-checkpoints-with-stopped-lease-rows.md)
+for the durable downstream contract; no Keiro release is authorized by this note.

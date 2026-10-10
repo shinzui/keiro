@@ -1,0 +1,1094 @@
+
+Keiro.Projection.Catalog
+  derives typed live handlers, registrations, inventory, and one stable fingerprint [✔]
+  resolves several query models to one multi-target owner without list-order dependence [✔]
+  derives cursor authority from the owner and validates waiting scope [✔]
+  fingerprints freshness and cursor policy only in the owning group slice [✔]
+  rejects empty and split-owner query target sets with stable derived diagnostics [✔]
+  keeps supply derived from canonical owner and observed-target facts [✔]
+  fingerprints and renders checkpoint policy without changing subscription identity [✔]
+  reports missing and independent duplicate owners with every claim site [✔]
+  accumulates stable identity and reference diagnostics independent of input order [✔]
+  rejects duplicate physical tables and runtime registry names [✔]
+  rejects cross-group writes, dependency cycles, and unsafe replay combinations [✔]
+  accepts every explicit policy except current-head seeding after a replayable clear [✔]
+  rejects all-stream/category overlap while accepting distinct category fan-in [✔]
+  rejects duplicate and malformed rebuild verification identities [✔]
+  projection revisions
+    accepts a v1/v2 bridge and inventories every durable revision fact canonically [✔]
+    constructs physical target mappings only when they are closed-world total [✔]
+    accumulates stable bridge diagnostics for incomplete revisions and stale read contracts [✔]
+    fingerprints revision schema, provider, validator, handler, replay, verification, and promotion order [✔]
+    validates and fingerprints stream-scoped repair policy in the owning revision [✔]
+    rejects unknown, duplicate, cross-group, target, dedup, and identity stream policies [✔]
+  external read contracts
+    validates and inventories a versioned all-row contract canonically [✔]
+    accumulates query, shape, revision, SQL, collision, generation, and immutable-signature diagnostics [✔]
+    fingerprints every contract fact in only the owning group slice [✔]
+  keeps baseline removal comparison separate from single-catalog validity [✔]
+  does not invoke an effectful callback for an invalid catalog [✔]
+  labels legacy values as unmanaged without changing their behavior [✔]
+canonical catalog fingerprint preimages
+  renders adversarial trees injectively [✔]
+  separates the boundary-shift source collision [✔]
+  separates newline line forgery through dedup names [✔]
+  separates colliding sources inside one rebuild group slice [✔]
+  retains order-insensitive catalog and slice identities [✔]
+  keeps an existing group slice stable under an additive catalog change [✔]
+  spells canonical identities with explicit format prefixes [✔]
+catalog evolution adoption
+  previews and transactionally adopts a changed slice and query schema [✔]
+  refuses unregistered and non-live groups without partially adopting [✔]
+  classifies and adopts a live slice-v1 stored fingerprint [✔]
+  adopts only stale-format failed groups while preserving their fence [✔]
+  adopts a renamed query registration completely [✔]
+  inserts an added query registration during adoption [✔]
+  does not orphan a query registration moved to an out-of-scope group [✔]
+  keeps an inserted registration fenced when adopting a failed stale-format group [✔]
+projection catalog operations reports
+  derives complete versioned inventory and destructive preview from one catalog [✔]
+  renders stream-scoped repair policy in the stable catalog inventory JSON [✔]
+  does not construct operations or invoke a callback for an invalid catalog [✔]
+projection catalog operations actions
+  keeps registered preview read-only and starts a zero-event rebuild from catalog facts [✔]
+  inspects and resumes a failed run without caller-supplied fleet lists [✔]
+  abandons a failed run with durable group and run evidence [✔]
+catalog rebuild groups
+  registers a validated fleet atomically and refuses group-slice drift [✔]
+  publishes conservative checkpoint status without reading private Kiroku storage [✔]
+  keeps adversarial checkpoint inventory and large status listings fail-safe [✔]
+  registers an additive catalog without disturbing the existing group slice [✔]
+  prepares a mixed preserve-parent/clear-child group and derives reset state [✔]
+  condemns missing subscription names and rolls back targets, fences, dedup, and matched member resets [✔]
+  clears a foreign-key parent and child through one multi-table truncate [✔]
+  rolls preparation back when an undeclared foreign key blocks truncate [✔]
+  waits for an in-flight async apply before preparing the group [✔]
+managed external read contracts
+  fences lifecycle transitions, holds cutover behind readers, and enforces execute-only grants [✔]
+  enforces the all-row small-model boundary before returning partial results [✔]
+  revalidates retirement after a reader waits for the lifecycle lock [✔]
+  refuses rolling downgrades and preserves consumer-owned dependents [✔]
+  wraps a selective keyed implementation without granting the implementation itself [✔]
+  refuses a keyed implementation whose set result differs from the public row type [✔]
+versioned target PostgreSQL mechanics
+  provisions an incompatible candidate transactionally and rolls failed provisioning back [✔]
+  keeps OID identity explicit and demonstrates that dependent views follow the retired relation [✔]
+WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+  detects every deliberately unsupported clone feature without mutating the serving table [✔]
+  uses deterministic all-target order and one deadline that rolls a blocked cutover back [✔]
+  detects when a paused generation name is rebound to a different relation [✔]
+schema-versioned rebuild lifecycle
+  persists serving and candidate generations and resumes the same run without reprovisioning [✔]
+  rolls provisioner failures back with no run, lease, or untracked sibling [✔]
+  rolls typed schema-validation failure back after candidate DDL [✔]
+  uses the restricted clone path only for an exact-shape repair [✘]
+  remaps cloned primary-key and identity-sequence names during promotion [✘]
+  returns typed restricted-clone findings without leaving a candidate [✔]
+  refuses a deterministic staging-name collision and rolls earlier target work back [✔]
+  abandons staging generations, releases retention, and repeats as a no-op [✔]
+  dispatches async writes through the persisted serving revision and fails closed when code is absent [✔]
+  captures a durable final head and atomically promotes every target [✘]
+  keeps an additive all-row v1 contract on the old generation during replay and projects the promoted table to its stable result type [✘]
+  activates a breaking v2 contract atomically and fails the old contract with KR003 [✘]
+  keeps v1 current after a breaking promotion only through an explicit compatibility implementation [✘]
+  converges across two replay rounds while live v1 stays serving and backfills async dedup [✘]
+  refuses oversized staged dedup evidence before fencing and succeeds after checkpoint lag is reduced [✘]
+  uses the Kiroku lease to refuse hard deletion for the full active run [✔]
+  fails closed when the original retention lease expires [✔]
+  revalidates candidate DDL under the cutover locks and resumes after repair [✘]
+  previews retired blockers and drops only an unreferenced generation [✘]
+schema-versioned cutover concurrency
+  bounds writer-fence row contention and remains unfenced [✘]
+  bounds promotion group-row contention without undoing prepared evidence [✘]
+  bounds two independently contended target relations, keeps readers on v1, and resumes promotion [✘]
+  exposes only the old or new status tuple during a promotion transaction [✘]
+  bounds promotion behind a slow guarded reader and resumes after it exits [✘]
+  refuses a reader whose statement snapshot crosses promotion and succeeds on retry [✘]
+schema-versioned release fault injection
+  rolls every cutover boundary back to one v1 authority and resumes the same incompatible v2 promotion [✘]
+targeted stream reprojection
+  repairs only the selected stream and transactionally backfills redelivery evidence [✘]
+  refuses an oversized stream before taking the group-wide repair fence [✘]
+  rolls clear, replay, and dedup back when verification fails [✘]
+  rolls back clearer and decode failures without dedup evidence [✘]
+  refuses truncated and soft-deleted streams before target mutation [✘]
+  refuses an active rebuild and an unavailable persisted serving revision [✔]
+  waits for an append-first catalog writer and replays its committed event [✘]
+  holds the group writer fence until one-stream repair commits [✘]
+  serializes hard deletion behind the stream guard [✘]
+  rolls target and dedup changes back when the repair backend is interrupted [✘]
+pre-canonical rebuild recovery
+  recovers a group stranded mid-rebuild by migration 0024 [✔]
+  abandons a pre-canonical run whose process died while running [✔]
+  never abandons a pre-canonical run that is no longer the group's active run [✔]
+  never abandons a terminal pre-canonical run [✔]
+process-manager replay observation contract
+  accepts an unchanged target-keyed continuation trace [✔]
+  rejects a migration from positional to target-keyed command identity [✔]
+  rejects manager, correlation, source interpretation, timer, and witness drift independently [✔]
+  rejects same-target reorder and payload changes [✔]
+catalog replay runner
+  merges interleaved categories in global order and promotes only complete evidence [✔]
+  reads each source event once while draining a multi-source rebuild [✔]
+  counts irrelevant adapter participation even when no event applies [✔]
+  never extends the captured head when matching events arrive during verification [✔]
+  reconciles a preserved target without deleting roots absent from history [✔]
+  rolls a failed chunk back and resumes the exact contract without duplicate writes [✔]
+  refuses to resume after replay-adapter declaration order changes [✔]
+  resumes an interrupted two-adapter rebuild when declaration order is unchanged [✔]
+  keeps an order swap registration-compatible and abandonable but refuses drifted abandon [✔]
+  applies replay-adapter effects in declaration order [✔]
+  retains committed pages across verification failure and rejects catalog drift on resume [✔]
+  refuses to resume a stale replay contract under the v4 runner [✔]
+  refuses promotion when a required adapter participation row is missing [✔]
+  applies merged multi-source chunks in ascending global order across buffer boundaries [✔]
+  cross-source ordering sweep
+    preserves ascending order for seed 1 at page size 1 [✔]
+    preserves ascending order for seed 1 at page size 2 [✔]
+    preserves ascending order for seed 1 at page size 3 [✔]
+    preserves ascending order for seed 2 at page size 1 [✔]
+    preserves ascending order for seed 2 at page size 2 [✔]
+    preserves ascending order for seed 2 at page size 3 [✔]
+    preserves ascending order for seed 3 at page size 1 [✔]
+    preserves ascending order for seed 3 at page size 2 [✔]
+    preserves ascending order for seed 3 at page size 3 [✔]
+    preserves ascending order for seed 4 at page size 1 [✔]
+    preserves ascending order for seed 4 at page size 2 [✔]
+    preserves ascending order for seed 4 at page size 3 [✔]
+    preserves ascending order for seed 5 at page size 1 [✔]
+    preserves ascending order for seed 5 at page size 2 [✔]
+    preserves ascending order for seed 5 at page size 3 [✔]
+    preserves ascending order for seed 6 at page size 1 [✔]
+    preserves ascending order for seed 6 at page size 2 [✔]
+    preserves ascending order for seed 6 at page size 3 [✔]
+catalog rebuild promotion redelivery
+  promotion leaves redelivery safe for a clear-before-replay async projection [✔]
+  promotion leaves redelivery safe for a preserve-and-reconcile async projection [✔]
+  resumes a verification failure with redelivery safety and an honest fence [✔]
+  reports vanished checkpoint rows and resumes promotion after repair [✔]
+truthful read-model construction
+  builds an immediate inline model without exposing a durable cursor [✔]
+  allows an immediate model to retain a cursor for per-call waits [✔]
+  rejects waiting defaults without a durable cursor [✔]
+  rejects a position-waiting default without a concrete target [✔]
+  round-trips honest waiting defaults through the compatibility record [✔]
+  normalizes the historical no-target position wait to immediate [✔]
+serialized aggregate replay compatibility
+  crosses the PostgreSQL event envelope before candidate decoding [✔]
+complete transition-prefix observations
+  keeps a source-module refactor equivalent at every complete prefix [✔]
+  rejects a truncated multi-event transition word [✔]
+  reports changed writes, retired inverse edges, and lost head data [✔]
+  turns a semantic prefix drift into a compatibility failure [✔]
+cross-version workflow replay compatibility
+  continues a captured prefix under a source-only refactor without repeating its effect [✔]
+  fails closed when candidate code cannot decode a captured result [✔]
+  exposes a decoder that succeeds with changed meaning at the first stable key [✔]
+  treats a renamed step as new work and therefore rejects it as a pure refactor [✔]
+  keeps an in-flight instance on its recorded patch branch [✔]
+  reuses an indexed await result without rearming under candidate code [✔]
+  continues from a baseline-carried seed after continueAsNew [✔]
+catalog-fenced inline projections
+  rolls back the event append and target write while its group rebuilds [✔]
+  waits for an in-flight writer before preparing and clearing its group [✔]
+  dispatches inline writes through the persisted serving revision before appending [✔]
+Keiro
+  exposes the package metadata version [✔]
+  keeps package metadata as the only version authority [✘]
+Keiro.Telemetry metrics
+  records instrument names and values through an SDK meter [✔]
+  records nothing through a Nothing handle [✔]
+Kiroku retry exhaustion observability
+  dead-letters after the configured delivery bound, emits the metric, and advances [✔]
+Keiro.Stream
+  wraps and unwraps kiroku stream names [✔]
+  validates categories, rejecting the dash boundary and reserved names [✔]
+  builds entity streams that round-trip through kiroku's category rule [✔]
+  entityStreamId renders ids via StreamIdSegment (Text and String) [✔]
+  rejects blank entity stream id segments [✔]
+Keiro.DeadLetter
+  records a dispatch dead letter idempotently [✔]
+Keiro.Codec
+  encodes current events with type tags and schema-version metadata [✔]
+  round-trips current events [✔]
+  decodes by the stored tag, not by payload shape (H1) [✔]
+  runs upcasters in source-version order [✔]
+  rejects gaps in upcaster chains [✔]
+  validates codec construction invariants [✔]
+  rejects future-version, malformed metadata, and incomplete upcaster chains [✔]
+  rejects recorded events with unknown type tags [✔]
+Keiro.Codec.Structural
+  checks both total binding laws [✔]
+  delegates encoding to the generated shape codec [✔]
+  propagates only shape decode failures before total construction [✔]
+Keiro.Codec.Nominal
+  checks both total nominal binding laws [✔]
+  retains labelled expected-wire fixtures [✔]
+Keiro.EventStream
+  constructs an author-facing EventStream contract [✔]
+  evaluates snapshot policies with explicit terminality [✔]
+  rejects snapshot policies without a state codec [✔]
+EventStream replay-safety (validateEventStream)
+  every production-intent stream validates clean [✔]
+mkEventStream
+  rejects duplicate upcaster sources at the stream boundary [✔]
+  rejects a missing upcaster rung at the stream boundary [✔]
+  includes the stream label when throwing for an invalid codec [✔]
+  keeps invalid codecs available through the unchecked escape hatch [✔]
+  rejects a hidden-input stream by label [✔]
+  rejects a head-unrecoverable multi-event stream [✔]
+  rejects replay inversion ambiguity [✔]
+  rejects an unguarded command-field read [✔]
+  rejects a silent edge that writes registers [✔]
+  rejects a silent edge that changes vertex [✔]
+  keeps replay-contract checks enabled when caller options weaken them [✔]
+  provides a loudly named unchecked escape hatch [✔]
+  accepts every production-intent stream [✔]
+  rejects a snapshot codec whose initial register file contains an uninitialized slot [✔]
+  accepts the same snapshot stream when every initial register is initialized [✔]
+  rejects a bare EventStream at runCommand (compile-time) [✘]
+Keiro.Command
+  typed domain command outcomes
+    returns the exact ordered accepted batch and compatibility result [✔]
+    attributes sibling silent edges and returns typed rejection and no-op [✔]
+    keeps unmatched and ambiguous selection failures as CommandError [✔]
+    retains validated rejection of state-changing silent edges [✔]
+    runs SQL once with the exact accepted event pairs [✔]
+    skips SQL callbacks and inline projections for rejection and no-op [✔]
+    applies inline projections atomically for accepted domain events [✔]
+    preserves catalog outcomes while skipping catalog SQL for silent decisions [✔]
+    discards an accepted conflict attempt and returns the rehydrated silent decision [✔]
+    records only bounded decision classes on successful spans and metrics [✔]
+    keeps all five process-manager target outcomes distinguishable [✔]
+    keeps all five router target outcomes distinguishable [✔]
+    acks domain rejection and no-op in coordinator workers without leaking payloads [✔]
+  creates a stream and appends the first command event [✔]
+  reports no global position for a no-op after prior events [✔]
+  surfaces runtime edge ambiguity without appending [✔]
+  rehydrates prior events before appending a second command event [✔]
+  rejects hydration after truncation without a covering snapshot [✔]
+  rejects hydration when truncation lands inside a command batch [✔]
+  hydrates normally after truncation covered by a snapshot [✔]
+  uses caller-supplied event ids for idempotent command batches [✔]
+  retries an optimistic conflict after rehydrating the winning event [✔]
+  reports true retry attempts and command conflict metrics when the retry budget is exhausted [✔]
+  records the successful retry attempt on the command span [✔]
+  counts duplicate deterministic command events [✔]
+  fails fast when a soft-deleted stream causes a conflict fixpoint [✔]
+  surfaces decode failure during hydration [✔]
+  surfaces a typed no-inverting-edge hydration failure [✔]
+  fails hydration after guard tightening without a replay-only twin (plan 143 reproduction) [✔]
+  replays black-acuity history through the replay-only twin and keeps serving the live rule [✔]
+  rejects a new command in the removed region under the twin-bearing machine [✔]
+  surfaces a typed queue-mismatch hydration failure with the failing version [✔]
+  surfaces a truncated multi-event chain as HydrationTruncatedChain [✔]
+  surfaces ambiguous inversion during hydration [✔]
+  truncates command span error status descriptions [✔]
+  rolls back the append when inline SQL condemns the transaction [✔]
+  appends all events emitted by one accepted command [✔]
+  counts and traces a just-appended batch that cannot replay [✔]
+  skips replay verification for a snapshot-less stream when disabled [✔]
+  witnesses replay divergence on the transactional SQL append path [✔]
+  replays a prior multi-event command before appending the next batch [✔]
+  passes the complete multi-event batch to inline SQL in append order [✔]
+  command metadata is merged into stored event metadata [✔]
+  reconstructed RecordedEvents match the stored batch [✔]
+  runCommand emits a Command span with the stream name, db.system.name, and keiro.events.appended [✔]
+Keiro.Command enrichment parity
+  applies the store enrichment hook to both command append paths [✔]
+Keiro.Snapshot
+  reports an ErrorCall when strict encoding reaches an empty register slot [✔]
+  writes a snapshot after policy threshold [✔]
+  does not fail a committed command when the post-commit snapshot write fails [✔]
+  does not fail a committed command when strict snapshot encoding fails [✔]
+  hydrates from snapshot and replays only the tail [✔]
+  falls back when snapshot JSON is corrupt [✔]
+  falls back when shape hash mismatches [✔]
+  invalidates a snapshot when the control-state shape changes [✔]
+  uses the fold fingerprint as a snapshot discriminator [✔]
+  composes the hand-owned fold version into the state discriminator [✔]
+  full-replays under a changed fold and persists the new discriminator [✔]
+  pins the manual-contract hazard when fold logic changes without a discriminator bump [✔]
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"fa18a3fa0fdf9055bc829a0d064a646bbd73c15dfad16ade7c92f358778169d0","level":"error","seedVersion":2,"seededDigest":"72b5577be5337ffc7a7b9ba584792a67211c5610cbaa6aa97fef43d633f70d52","stream":"snapshot-seed-sampled-divergence"}
+  samples a stale accepted seed without failing the command or writing a snapshot [✔]
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":10000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-bounded"}
+  bounds sampled full replays to one process-wide task and counts skipped samples [✔]
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+{"event":"keiro.snapshot.seed.divergence","fullDigest":"dbeab0df97effb4ec7b8b3e998b675e8744dfa29dcf50eb3e64cbd0044c4e6f8","level":"error","seedVersion":1000,"seededDigest":"241a356022385d042cf66da5ba0fa9c20822600fe31f2f539e6de706fc62f901","stream":"snapshot-seed-verification-unbounded"}
+  allows unbounded sampled verification when the limit is zero [✔]
+{"event":"keiro.snapshot.seed.verification.failed","level":"error","reason":"intentional seed verification replay failure"}
+{"event":"keiro.snapshot.seed.verification.failed","level":"error","reason":"intentional seed verification replay failure"}
+  releases a verification slot after an unexpected replay exception [✔]
+  disables sampled seed verification at rate zero [✔]
+  falls back after operator truncation [✔]
+  writes snapshots after applying a complete multi-event command batch [✔]
+  writes a snapshot when a multi-event append crosses an Every boundary [✔]
+  allows an incompatible snapshot codec to replace a higher-version row [✔]
+Keiro.ReplayAudit
+  accepts only stream names in the configured category [✔]
+  catches a removed inverting edge while skipping unaffected streams [✔]
+  proves a replay-only twin preserves the stored guard-tightening history [✔]
+  reports a stale accepted snapshot seed as a divergence [✔]
+  keeps clean digests stable and resumes without re-auditing [✔]
+Keiro.Connection projection schema
+  places a read-model table in a configured schema, separate from keiro metadata [✔]
+Keiro.ReadModel
+  queries inline projection with Eventual consistency [✔]
+  reads the minimum checkpoint across consumer-group subscription members [✘]
+  returns no subscription position for an empty durable inventory [✔]
+  returns the newest visible position after a stream is hard deleted [✔]
+  Strong returns immediately on an empty log [✔]
+  rejects truthful waits when an immediate inline model has no cursor [✔]
+  waitFor fails fast on a cursorless model instead of burning the timeout [✔]
+  deprecated Strong and PositionWait overrides fail fast on a cursorless model [✔]
+  Strong returns immediately when the subscription is already at the store head [✘]
+keiro-test: Uncaught exception HUnt-1.6.2.0-513a169d:Test.HUnit.Lang.HUnitFailure:
+
+HUnitFailure (Just (SrcLoc {srcLocPackage = "keiro-0.19.0.1-inplace-keiro-test", srcLocModule = "Main", srcLocFile = "test/Main.hs", srcLocStartLine = 3608, srcLocStartCol = 25, srcLocEndLine = 3608, srcLocEndCol = 43})) (Reason "failed to advance subscription cursor: UnexpectedServerError \"42703\" \"column \\\"stream_name\\\" of relation \\\"subscriptions\\\" does not exist\"")
+
+HasCallStack backtrace:
+  throwIO, called at src/Test/HUnit/Lang.hs:59:35 in HUnt-1.6.2.0-513a169d:Test.HUnit.Lang
+  assertFailure, called at src/Test/Hspec/Expectations.hs:79:22 in hspc-xpcttns-0.8.4-91d37727:Test.Hspec.Expectations
+  expectationFailure, called at test/Main.hs:3608:25 in keiro-0.19.0.1-inplace-keiro-test:Main
+
+  Strong blocks until the subscription reaches the store head captured at query start [✘]
+  Strong and WaitForHead return promptly after workflow GC hard-deletes the newest events [✘]
+  Strong and WaitForHead still time out when visible events outrun the subscription [✔]
+  Strong and WaitForHead return when their category is caught up despite another active category [✘]
+  inline projection populates actor and source_event_id from command metadata [✔]
+  waits for async projection cursor with PositionWait [✘]
+  times out when PositionWait target is not reached [✘]
+  rejects a truthful position wait without a target [✔]
+  does not write the registry row on repeated read-model queries [✔]
+  rejects an unregistered model without creating a registry row [✔]
+  handles concurrent explicit read-model registration [✔]
+  rejects stale read-model schema [✔]
+  surfaces unknown read-model statuses with the raw status text [✔]
+  ignores duplicate async event by source_event_id [✔]
+  deduplicates async projection application across transactions and reopens after pruning [✔]
+  rebuild repopulates the projection table through the supported workflow [✘]
+  startRebuild on a cursorless model skips the checkpoint reset and completes [✘]
+  keeps a non-empty-log rebuild offline when replay applies nothing [✔]
+  fences live async application while a model is rebuilding [✔]
+  keeps a live applier out of the rebuild window and reopens it after promotion [✔]
+  tracks rebuild state transitions [✔]
+  records matching global position distance and projection lag gauges [✔]
+  reports zero global position distance after the newest events are hard deleted [✘]
+  counts a position-wait timeout in the timeout counter [✘]
+process reaction API feasibility
+  keeps the supplied witness on the first event of an accepted multi-event batch [✔]
+  runs no accepted callback from an optimistic attempt discarded by rehydration [✔]
+  exposes one accepted and one rehydrated-silent result when the same source races [✔]
+  allows a receipt-free silent delivery to accept after unrelated saga progress [✔]
+  shows that a negative silent probe cannot fence a later unconditional timer transaction [✔]
+  cancels a timer in the same transaction as an accepted saga append [✔]
+  rolls back both an accepted saga append and transactional cancellation when condemned [✔]
+  keeps transactional cancellation idempotent and protects terminal and foreground-owned rows [✔]
+Keiro.ProcessManager.Reaction
+  commits accepted saga timers before ordered target fan-out and recovers duplicates [✔]
+  runs no-advance and silent unconditional effects without accepted-only effects [✔]
+  retries missing same-target dispatches after a later command commits [✔]
+  compares cross-build partial recovery traces and locates changed command meaning [✔]
+  reconciles a concurrent target loser that rehydrates to a silent result [✔]
+  preserves timer statement order, Once payloads, and later-source Rearm updates [✔]
+  rolls back saga and earlier timer writes when later timer SQL fails [✔]
+  rejects undecodable, foreign-stream, and wrong-target identity collisions [✔]
+  pages accepted witnesses at 256, 1024, and 4096 event history depths [✔]
+  runs the public-only handwritten reported and acknowledged example [✔]
+  worker finalizes each success and duplicate exactly once [✔]
+  worker applies target rejection policy with the overall dispatch index [✔]
+  worker handles typed silence as a successful delivery [✔]
+  worker records manager failures at index minus one [✔]
+  worker uses bounded witness reasons and poison callbacks [✔]
+  worker lets asynchronous cancellation escape without acknowledging [✔]
+  scales worker fan-out across 8, 32, and 128 same and distinct targets [✔]
+Keiro.ProcessManager
+  advances manager state, emits a deterministic target command once, and schedules a timer [✔]
+  schedules timers when the manager command emits no events [✔]
+  treats duplicate input delivery as idempotent state and command dispatch [✔]
+  bridges a pre-UTF-8 process-manager state and command redelivery [✔]
+  bridges a pre-UTF-8 domain process-manager state and command redelivery [✔]
+  replays a Kiroku dead letter freshly and deduplicates a second replay [✔]
+  reports an already-processed Kiroku dead letter without appending [✔]
+  keeps multiple workflow process managers isolated by configured streams and categories [✔]
+  worker finalizes AckOk through the ack handle on success [✔]
+  worker halts instead of acking when a target dispatch is rejected [✔]
+  dead-letters a rejected dispatch and continues to the next event [✔]
+  skips a rejected dispatch without writing a dead-letter row [✔]
+  dead-letters a manager-state rejection at emit index minus one [✔]
+  keeps rejected-dispatch dead letters idempotent on source redelivery [✔]
+  records dispatch failures through worker metrics [✔]
+  classifies transient store failures as retry and deterministic command failures as halt [✔]
+  worker applies poison-message policy on decode failure [✔]
+  folds a concurrent duplicate target dispatch to PMCommandDuplicate [✔]
+  folds a concurrent duplicate manager-state append to PMStateDuplicate [✔]
+Keiro.ProcessManager duplicate confirmation
+  rejects a duplicate report carrying a different id [✔]
+  rejects a matching id that exists only in another stream [✔]
+  confirms matching and id-less duplicate reports when the id is in the target stream [✔]
+  rejects non-duplicate command failures [✔]
+Keiro.ProcessManager snapshots
+  writes a snapshot of the manager state stream after the policy threshold [✔]
+  hydrates the manager from its snapshot and replays only the tail [✔]
+Keiro.Router
+  RouterSelection validates positive runtime invariants [✔]
+  RouterSelection sorts, deduplicates, caps, and rejects conflicts before dispatch [✔]
+  RouterSelection exposes stable public dead-letter code, detail, and rendering [✔]
+  RouterSelection performs no target callback on conflict or overflow and dispatches exactly at the cap [✔]
+  RouterSelection retains successful targets after a later target dispatch fails [✔]
+  RouterSelection preserves target-keyed stable union across result drift [✔]
+  RouterSelection worker lowers the complete empty and failure policy matrices [✔]
+  encodes colon-bearing and non-ASCII id components without collisions [✔]
+  resolves targets effectfully and fans out one command per target [✔]
+  reports every dispatch as a duplicate on replay, writing no new events [✔]
+  dedups by target identity when a redelivered resolve reorders targets after a partial dispatch [✔]
+  dispatches a target added by resolve drift instead of misreading it as a duplicate [✔]
+  keeps full-completion order swaps idempotent [✔]
+  keeps dispatches to targets dropped by a later resolve attempt [✔]
+  keeps repeated commands to one target distinct within a resolve batch [✔]
+  drains an adapter, dispatching one command per resolved target for every message [✔]
+  finalizes AckHalt rather than AckOk when a dispatched command fails [✔]
+  dead-letters a rejected router dispatch and acknowledges the source event [✔]
+  finalizes AckRetry for a transient thrown resolver error and continues [✔]
+  finalizes AckHalt for a deterministic thrown resolver error [✔]
+  folds a concurrent duplicate router dispatch to PMCommandDuplicate [✔]
+  dedups a pre-upgrade positional router dispatch during the transition [✔]
+  bridges a pre-UTF-8 positional router redelivery with a non-ASCII key [✔]
+  bridges a pre-UTF-8 domain router redelivery with a non-ASCII key [✔]
+Keiro.Timer foreground consumer
+  preflights original work and invokes one callback for competing authorized resumes [✔]
+  orders renewal and completion against recovery on independent stores [✔]
+Keiro.Timer
+  guards dead resume ownership and retains attempts when parked [✔]
+  refuses every ineligible claim without changing any persisted column [✔]
+  claims literal empty and Unicode reasons and preserves original work [✔]
+  expires without revival and re-parks independently of ordinary recovery [✔]
+  inspects absent timers and preserves legacy metadata through every lifecycle [✔]
+  preserves empty, populated, and Unicode dead reasons verbatim [✔]
+  filters dead timers by exact owner and literal reason, preserving NULL [✔]
+  bounds pages, traverses UUID order, and leaves every stored column unchanged [✔]
+  continues after a deleted cursor and observes new eligibility only above it [✔]
+  renders authorized original work beyond empty pages and rechecks revoked permissions [✔]
+  validates worker options before startup [✔]
+  claims a due timer, fires a command, and marks it complete once [✔]
+  records timer backlog, fire lag, attempts, and stuck count [✔]
+  finds a firing timer with findStuckTimers and requeues it for re-firing [✔]
+  re-fires a timer stranded by a crashed worker [✔]
+  does not requeue a fresh firing row [✔]
+  requeueStuckAfter = Nothing preserves a stranded firing row [✔]
+  does not claim a cancelled timer [✔]
+  dead-letters a timer that exceeds the attempt ceiling and never reclaims it [✔]
+  markTimerFired does not resurrect a dead timer [✔]
+  records a row stranded in Firing in the stuck gauge [✔]
+Keiro.Outbox.Kafka
+  converts an outbox row to a Kafka producer record [✔]
+  drops the partition key when the envelope has no key [✔]
+Keiro.Outbox producer-identity
+  pins the version-1 SHA-256/UUIDv8 vector [✔]
+  pins canonical content digest independently of storage lifecycle [✔]
+  separates source, name, event, index, tuple boundaries and UTF-8 [✔]
+  rejects an empty namespace before subscription startup [✔]
+  replays after closing and reopening the store with one unchanged row [✔]
+  returns inserted, identical retry, and defaults recorded provenance [✔]
+  rolls back enqueue with a failed checkpoint and reuses both IDs on redelivery [✔]
+  concurrent identical attempts converge to one inserted and one duplicate [✔]
+  concurrent changed content selects one winner and reports one conflict [✔]
+  detects drift in every envelope field class without changing the original row [✔]
+  normalizes sub-microsecond time and JSON object order across storage [✔]
+  distinguishes absent attributes from JSON null and preserves raw MIME text [✔]
+  keeps wire identity after successful-row retention expires [✔]
+  different producer names and source events insert distinct identities [✔]
+  preserves a rejected publication and its audit data on replay [✔]
+  reports both unique-identity collision routes and keeps explicit envelopes usable [✔]
+  treats namespace drift as an identity conflict on the outbox primary key [✔]
+  records a distinct conflict metric after a checkpoint rollback [✔]
+Keiro.Outbox
+  validates terminal publication rejection data at its public boundary [✔]
+  validates publisher options before startup [✔]
+  enqueues and looks up an outbox row [✔]
+  claims a pending row, transitions it to publishing, and increments attempt count [✔]
+  claims contiguous per-key runs in one pass [✔]
+  does not let a backoff head starve other keys [✔]
+  claims contiguous per-source runs in one pass [✔]
+  claims null-keyed rows freely alongside keyed runs [✔]
+  does not claim a tail while the previous run is still publishing [✔]
+  marks a claimed row as sent with published_at set [✔]
+  finalizes rejection exactly once with durable typed audit data [✔]
+  reclaims a row stranded in publishing by a crashed worker through maintenance [✔]
+  head-of-line traffic unwedges after reclaim [✔]
+  does not reclaim a recently claimed row [✔]
+  a throwing batch publish callback fails every row in that publish call [✔]
+  a row that exhausts attempts while crash-looping is dead-lettered by maintenance [✔]
+  markOutboxSent does not resurrect a dead row [✔]
+  publishClaimedOutbox marks success and records failures with last_error [✔]
+  publishClaimedOutbox hands a same-key run to one batch publish call [✔]
+  finalizes a mid-run rejection and continues the same-key suffix [✔]
+  redelivers callbacks after a pre-commit finalization failure [✔]
+  treats rejection as terminal for per-source ordering [✔]
+  counts only a rejection finalization that wins the publishing-state race [✔]
+  excludes rejected rows from claims, maintenance, backlog, and sent garbage collection [✔]
+  publishClaimedOutbox skips the same-key suffix after a mid-run failure [✔]
+  PerSourceStream keeps one source's failure from skipping another source's rows [✔]
+  a late failure mark does not clobber a row that already reached a terminal state [✔]
+  claims nothing while another transaction holds an uncommitted claim on a key's head [✔]
+  StopTheLine publishes singleton batches and skips the unattempted suffix [✔]
+  StopTheLine continues after rejection and halts only on transient failure [✔]
+  publishClaimedOutbox treats a missing batch outcome as a failed row [✔]
+  auto-dead-letters a row after maxAttempts consecutive failures [✔]
+  garbageCollectSent deletes only old sent rows [✔]
+  enforces per-key head-of-line blocking and unblocks once the predecessor reaches a terminal state [✔]
+  allows null-keyed rows to publish independently [✔]
+  mints message ids with the configured TypeID prefix [✔]
+  validates integration producer message id prefixes before startup [✔]
+  draftToEvent stamps source and messageId without minting [✔]
+  freshOutboxId returns distinct UUIDv7 ids [✔]
+  publishClaimedOutbox emits a Producer span with messaging semconv attributes [✔]
+  does not mark a terminal rejection span as an error [✔]
+  publishClaimedOutbox records counters and sampleOutboxBacklog records the gauge [✔]
+Keiro.Inbox delegated contracts
+  computes the existing dedupe key and runs without a Store interpreter [✔]
+  rejects an invalid policy before invoking the delegated handler [✔]
+  validates retry contexts and stops after the caller-owned ceiling [✔]
+  reports the current retry attempt when a synchronous handler exception occurs [✔]
+  applies attempts 1 through 4 exactly at a ceiling of 3 [✔]
+  records failed and poisoned metrics on a failing ceiling attempt [✔]
+  retries a batch identity after failure and suppresses it only after success [✔]
+  scopes in-batch suppression by integration source [✔]
+  keeps invalid and poison deliveries isolated from later batch items [✔]
+  propagates async cancellation from a synchronized delegated batch handler [✔]
+Keiro.Inbox.Delegated pure adapters
+  pins ASCII, Unicode, empty-field, and delimiter identity vectors [✔]
+  maps every process-manager command result without acknowledging failures or no-ops [✔]
+Keiro.Inbox delegated
+  bypasses the inbox and preflights a one-shot command before invalid dispatch [✔]
+  recovers a lost acknowledgement for an atomic multi-event command [✔]
+  rejects zero-event commands and unconfirmed duplicate errors [✔]
+  converges a concurrent delivery race to one event batch and SQL effect [✔]
+  does not acknowledge a globally colliding marker from another stream [✔]
+Keiro.Inbox delegated access control
+  runs with downstream privileges while the inbox table is denied [✔]
+Keiro.Inbox
+  runs the handler once and records the row as completed [✔]
+  treats a redelivery with the same messageId as a duplicate [✔]
+  records inbox counters and samples backlog separately under the in-memory exporter [✔]
+  deduplicates via PreferSourceEventIdentity even when messageId differs [✔]
+  uses KafkaDeliveryIdentity when supplied [✔]
+  reports DedupePolicyUnsatisfied when the envelope lacks the required field [✔]
+  leaves no inbox row when the handler condemns the transaction [✔]
+  leaves no inbox row when the plain handler throws [✔]
+  exports markFailedTx from the public inbox module and preserves explicit failure marks [✔]
+  a throwing handler records a failed attempt instead of looping [✔]
+  a transient poison message succeeds on retry [✔]
+  an unrecoverable message dead-letters at the ceiling [✔]
+  processes a batch of distinct messages in one transaction [✔]
+  deduplicates repeated messages within one batch [✔]
+  falls back per message when one batch handler throws [✔]
+  reports duplicates across batch calls [✔]
+  falls back per message when one batch handler condemns the transaction [✔]
+  classifies a legacy processing row as InboxInProgress without running the handler [✔]
+  runs the handler once when two workers race the same dedupe key [✔]
+  can persist only dedupe columns for successful rows [✔]
+  keeps full failed rows even when successful rows are dedupe-only [✔]
+  garbage-collects completed rows older than the retention window [✔]
+Keiro.Inbox.Kafka
+  reconstructs an integration event from headers and payload [✔]
+  falls back to receivedAt when the occurredAt header is absent [✔]
+  rejects malformed occurredAt headers [✔]
+  reports MissingHeader for an essential header [✔]
+  withConsumerSpan parents the consumer span under an upstream producer span via W3C headers [✔]
+Keiro cross-context Kafka integration
+  publishes an Ordering integration event and runs the Billing handler exactly once across duplicate deliveries [✔]
+  preserves per-partition ordering for two events sharing a Kafka key [✔]
+  head-of-line blocks a same-key successor when the first send fails repeatedly until the first row reaches dead status [✔]
+Keiro.Integration.Event
+  round-trips a JSON envelope through encode and decode [✔]
+  preserves identity and routing through encode [✔]
+  emits the canonical wire headers [✔]
+  preserves a different content type without claiming JSON [✔]
+  reports malformed JSON payloads as decode errors instead of throwing [✔]
+  reports a JSON value that does not satisfy the target type as DecodeFailed [✔]
+  parses content-type headers back to the canonical type [✔]
+  preserves the payload bytes through integrationPayload [✔]
+Keiro.Telemetry
+  is a pass-through under a noop (Nothing) tracer [✔]
+  re-exports AttributeKeys whose textual payload matches the spec name [✔]
+  extracts a TraceContext from a W3C traceparent header pair [✔]
+  returns Nothing when the traceparent header is missing [✔]
+  injectTraceContext is a no-op when no span is active on the thread [✔]
+  traceContextFromCurrentSpan returns Nothing outside any span [✔]
+Keiro.Workflow
+  journals each step once, returns Completed, and runs each side effect once [✔]
+  replays recorded steps without re-running their side effects [✔]
+  reuses the recorded result for a repeated step name in one run [✔]
+  suspends on an unresolved awaitStep, journaling no completion [✔]
+  resumes and completes once an awaited step is externally completed [✔]
+  treats a duplicate external journal append as idempotent [✔]
+  returns the journaled value when another writer records the same step mid-flight [✔]
+  returns the JSON round-trip of a fresh step result [✔]
+  throws WorkflowStepDecodeError on the first run when the recorded result cannot decode [✔]
+  discovers a parked workflow only once its awaited step is journaled [✔]
+Keiro.Workflow instance table
+  lists workflow instances with filters and stable keyset pages [✔]
+  cancels active workflows idempotently without minting unknown state [✔]
+  cancels suspended and linked-child workflows through supported paths [✔]
+  serializes cancellation against completion so exactly one marker wins [✔]
+  force-releases leases and makes the old owner stop at its next boundary [✔]
+  creates and completes a workflow instance row transactionally with the journal [✔]
+  records suspended status for workflows that park before journaling [✔]
+  creates child instance rows at spawn time and flips them to cancelled [✔]
+  bumps the instance generation when continueAsNew rotates [✔]
+  does not let a late append resurrect a terminal instance row [✔]
+  discovers unfinished workflows from the instance table [✔]
+Keiro.Workflow discovery index
+  plans the discovery predicate through keiro_workflows_active_idx [✔]
+  returns exactly the runnable and wake-due instances [✔]
+Keiro.Workflow snapshots
+  does not fail committed workflow steps when snapshot writes fail [✔]
+  writes a snapshot of the accumulated step map after Every 2 fires [✔]
+  writes a terminal snapshot under OnTerminal at the completion version [✔]
+  reads only the tail after the snapshot version on re-hydration [✔]
+  produces identical results and journals under Never and Every 2 [✔]
+  hydrates via full replay when the snapshot discriminant mismatches [✔]
+  hydrates via full replay when the snapshot JSON is corrupt [✔]
+Keiro.Workflow snapshot wake-safety
+  keeps a genuinely unresolved awakeable pending under Every 1 [✔]
+  delivers an awakeable signalled mid-run despite the stale in-memory map [✔]
+  delivers an awakeable shadowed by a snapshot on a later run [✔]
+  delivers a child completion shadowed by a snapshot on a later run [✔]
+Keiro.Workflow.Resume
+  resumes a crashed mid-run workflow, running only the un-journaled tail [✔]
+  resumes a suspended workflow once its awaited step is journaled [✔]
+keiro resume worker: no registry entry for workflow orphan (id or-1); skipping
+  skips and counts a workflow whose name is absent from the registry [✔]
+  isolates a poison workflow so a healthy workflow still completes [✔]
+  advances candidates concurrently only when the option allows it [✔]
+  reports a mixed pass the same way when advancing sequentially [✔]
+  reports a mixed pass the same way when advancing concurrently [✔]
+  records no crash attempt against a workflow that already went terminal [✔]
+  survives a crash recorded against a just-cancelled workflow [✔]
+  marks a crashing workflow failed and short-circuits later direct runs [✔]
+  resurrects a failed workflow and completes without rerunning its journaled prefix [✔]
+  can fail again in the same generation after resurrection [✔]
+  guards resurrection and revives a failed child link transactionally [✔]
+  classifies thrown store errors as transient without consuming attempts [✔]
+  keeps the fixed-poll loop alive when one pass contains a poison workflow [✔]
+  claims one workflow instance for a single live owner and releases it [✔]
+  lets an expired workflow lease be taken and resets attempts on progressed release [✔]
+  skips a resume candidate held by another live lease owner [✔]
+  discovers nothing for an already-completed workflow and is stable [✔]
+Keiro.Workflow lease renewal
+  renews before a slow fresh step so the original lease cannot be stolen [✔]
+  stops at a lost lease boundary and the resume worker records no crash [✔]
+Keiro.Workflow continue-as-new
+  rotates a long workflow, bounds each generation, and returns the correct total [✔]
+  rediscovers and resumes a rotated workflow on its current generation [✔]
+Keiro.Workflow patch API
+  an in-flight instance observes the OLD branch; a fresh instance the NEW branch; the decision is journaled once and stable [✔]
+  a fresh instance suspended before its patch call still takes the NEW branch [✔]
+  an in-flight instance with only wake-source completions stays on the OLD branch [✔]
+  records the active patch set again for a fresh rotated generation [✔]
+Keiro.Workflow patch recording at rotation
+  keeps the active patch after a wake append lands before the first rotated run [✔]
+Keiro.Wake
+  returns WokenByTimeout when idle (no append) [✔]
+  returns WokenByNotify promptly after a real append [✔]
+  neverWake always returns WokenByTimeout [✔]
+Keiro.Workflow push latency (EP-50)
+  resumes a gated workflow sub-second after the gate append (10s fallback) [✔]
+  logs a failed push pass and keeps draining after the store recovers [✔]
+Keiro.Workflow push fallback (EP-50)
+  still drains on the fallback timeout when no notification is delivered [✔]
+Shard lease
+  validates sharded worker options before startup [✔]
+  ensureShardRows populates N rows once (idempotent on re-run) [✔]
+  worker A claims all N when free; B claims 0 while A holds valid leases [✔]
+  B claims A's buckets after A's lease expires; A then renews nothing [✔]
+  renewLease returns only still-held buckets [✔]
+  releaseShards: relinquished buckets are immediately claimable [✔]
+  fairShareTarget divides buckets evenly (ceil) [✔]
+  acquireOutcome keeps previous ownership on acquire failure [✔]
+  ensureShards rejects a shardCount mismatch [✔]
+Shard count resize
+  refuses recorded owners, including expired leases, without changing either table [✔]
+  shrinks and grows stopped groups at the old minimum without obsolete members [✔]
+  equalizes same-size assignments and is idempotent on repeat [✔]
+  rolls back checkpoint and lease changes when surrounding SQL fails [✔]
+  delivers every seeded event after a changed hash assignment [✔]
+Sharded subscription single worker
+  one worker with N=4 buckets drains a seeded category exactly once [✔]
+Sharded subscription drain and failover
+  three workers drain disjointly, then re-home a killed worker's buckets [✔]
+  a killed worker relinquishes its leases immediately [✔]
+  a handler exception is retried in place and drains [✔]
+Sharded subscription ack coupling
+  redelivers a batch-tail event whose handler was killed mid-flight [✔]
+  loses no events when a bucket is shed mid-drain during rebalance [✔]
+  allows zombie overlap duplicates without losing an event [✔]
+  dead-letters a poison event after bounded retries and keeps draining [✔]
+Keiro.Workflow observability
+  records workflow instruments through an SDK meter [✔]
+  records a resume and the pending-awakeable count when the worker re-invokes [✔]
+  records nothing through a Nothing handle [✔]
+Keiro.Workflow.Snapshot codec
+  round-trips a non-trivial accumulated step map and carries the sentinel shape hash [✔]
+Keiro.Workflow.Types journal codec
+  round-trips a WorkflowContinuedAsNew rotation marker [✔]
+  validates workflow identity smart constructors [✔]
+Keiro deterministic id derivation
+  freezes the ASCII journal-event ids, reserved step names included [✔]
+  freezes the ASCII sleep, awakeable, and process-manager ids [✔]
+  freezes target-keyed process-reaction ids and their byte preimage [✔]
+  separates reaction fields, targets, occurrences, and the router family [✔]
+  separates seeds the codepoint-truncating derivation collapsed [✔]
+  keeps the seed components positional [✔]
+  runs a workflow whose step names collided under the old derivation [✔]
+Keiro deterministic id legacy-encoding bridge
+  reproduces every captured process-manager command id [✔]
+  reproduces every captured deterministic awakeable id [✔]
+  keeps ASCII identity stable and moves every non-ASCII capture [✔]
+  documents the historical truncation collisions and their UTF-8 separation [✔]
+  adds a legacy command probe only when the seed moved [✔]
+  builds one current probe for an ASCII seed [✔]
+  orders the current and legacy probes for a non-ASCII seed [✔]
+Keiro.Workflow.Sleep
+  derives a deterministic, distinct timer id [✔]
+  round-trips and recognises its timer payload [✔]
+  recovers a legacy payload's generation from its deterministic timer id [✔]
+  prefixes the journal step name with the reserved sleep prefix [✔]
+  arms a timer and suspends, then a fired timer resumes the workflow [✔]
+  respects a positive delay: not due before fire_at, fires after [✔]
+  does not postpone fire_at when a resume pass re-arms the sleep [✔]
+  keeps a due wake_after stable on re-arm and clears it on fire [✔]
+  skips a sleeping workflow until wake_after expires [✔]
+  does not re-invoke a parked sleeper before wake_after [✔]
+  treats a missing instance row during sleep arm as a no-op wake hint update [✔]
+  fires a sleep whose instance row is missing after an arm crash [✔]
+  fires a sleep longer than the resume cadence under an active resume worker [✔]
+  uses generation-namespaced timer ids after continueAsNew [✔]
+Keiro.Timer batched drain
+  drains a mixed backlog of sleeps and process-manager timers in one pass [✔]
+  stops at the batch limit and leaves the rest claimable [✔]
+Keiro.Workflow sleep generation pinning
+  keeps a stale re-fire on the generation that armed the sleep [✔]
+Keiro.Workflow wake-lifecycle visibility
+  flips the owner instance to running when its awakeable is cancelled [✔]
+  leaves a newer sleep's wake hint intact when a stale timer re-fires [✔]
+Keiro.Workflow exact discovery
+  hides a workflow parked on an awakeable until it is signalled [✔]
+  hides a parent parked on a child while still discovering the zero-step child [✔]
+  writes running when the wake landed before the suspend write [✔]
+  flips a suspended instance to running when the wake lands after the suspend write [✔]
+  stays discoverable when a cancel lands before the stale suspend write [✔]
+  flips a suspended instance to running when the cancel lands after the suspend write [✔]
+  surfaces a due sleep through the wake hint and a fired sleep through running [✔]
+  keeps a crashed workflow discovered while its backoff gate paces retries [✔]
+  a bounded drain loop terminates over a pool that cannot advance [✔]
+  a bounded drain loop terminates over a due sleep with no timer worker [✔]
+Keiro.Workflow terminal boundaries
+  stops at the next step boundary when a workflow is failed mid-run [✔]
+  declines an ordinary append into a cancelled workflow without erroring [✔]
+  completes an awakeable owned by a failed workflow but journals nothing [✔]
+  accepts a wake append again after the workflow is resurrected [✔]
+  marks a sleep timer fired without delivering into a cancelled workflow [✔]
+Keiro.Workflow.Awakeable
+  reproduces a stable, label-sensitive generation-0 AwakeableId [✔]
+  schema: registers, completes once (idempotent), cancels, and counts pending rows [✔]
+  suspends on an unsignalled awakeable, recording a pending row and no completion [✔]
+  resumes with the signalled payload after signalAwakeable [✔]
+  is idempotent: a second signal returns False and does not change the value [✔]
+  throws WorkflowAwakeableCancelled after cancelAwakeable [✔]
+  re-appends a missing journal entry when re-signalled (crash-safe) [✔]
+  repairs a completed awakeable row from the await arm without a second signal [✔]
+  refuses a forged coordinate-derived id for a fresh awakeable [✔]
+  adopts a generation-0 legacy deterministic row [✔]
+  adopts a pre-UTF-8 generation-0 row for a non-ASCII label [✔]
+  allocates a fresh awakeable for the same label after continueAsNew [✔]
+Keiro.Workflow awakeable registration
+  registers the row before a journaled hand-off can expose the id [✔]
+Keiro.Workflow awakeable signal race
+  does not append a value when cancellation wins after the signal pre-read [✔]
+Keiro.Workflow.Child
+  derives the child spawn and result step names [✔]
+  round-trips WorkflowCancelled and WorkflowFailed through the journal codec [✔]
+  schema: registers, completes, cancels, and counts child links [✔]
+  spawns a child, drives it, propagates its result, and resumes the parent to Completed [✔]
+  repairs a completed child row from awaitChild without another completion hook [✔]
+  does not re-spawn the child when the parent is re-invoked [✔]
+  cancels a child: the child stops and the parent's awaitChild throws [✔]
+  repairs a cancelled child row when cancelChild is retried after the row flip [✔]
+  heals a cancelled-but-unmarked child from runChildWorkflow [✔]
+  delivers an honest child result equal to the old cancellation sentinel [✔]
+  throws WorkflowStepDecodeError when an enveloped child result has the wrong type [✔]
+keiro resume worker: workflow ship (id failed-child) crashed on attempt 1/1: SimulatedCrash
+keiro resume worker: marked workflow ship (id failed-child) failed: SimulatedCrash
+  wakes a parent with WorkflowChildFailed when a child reaches the failure ceiling [✔]
+  stops at the next step boundary when a workflow is cancelled mid-run [✔]
+  drives a parent and its child to completion through the resume worker [✔]
+  attaches to a completed child after continueAsNew [✔]
+Keiro.Workflow.Child durable failed delivery
+keiro resume worker: workflow ship (id failed-before-rotation) crashed on attempt 1/1: SimulatedCrash
+keiro resume worker: marked workflow ship (id failed-before-rotation) failed: SimulatedCrash
+  delivers a persisted child failure after the parent rotates past the failure journal [✔]
+Keiro.Workflow.Gc
+  deletes terminal workflow data after retention [✔]
+  deletes scheduled sleep timers so a collected workflow cannot resurrect [✔]
+  cancels a sleep fire when a terminal instance survives partial GC [✔]
+  keeps completed children while a parent is live and converges after partial cleanup [✔]
+  isolates a failing deletion, reports it honestly, and re-scans it [✔]
+  keeps the gc loop alive across a pass it cannot finish [✔]
+
+Failures:
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  1) schema-versioned rebuild lifecycle uses the restricted clone path only for an exact-shape repair
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/uses the restricted clone path only for an exact-shape repair/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  2) schema-versioned rebuild lifecycle remaps cloned primary-key and identity-sequence names during promotion
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/remaps cloned primary-key and identity-sequence names during promotion/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  3) schema-versioned rebuild lifecycle captures a durable final head and atomically promotes every target
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/captures a durable final head and atomically promotes every target/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  4) schema-versioned rebuild lifecycle keeps an additive all-row v1 contract on the old generation during replay and projects the promoted table to its stable result type
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/keeps an additive all-row v1 contract on the old generation during replay and projects the promoted table to its stable result type/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  5) schema-versioned rebuild lifecycle activates a breaking v2 contract atomically and fails the old contract with KR003
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/activates a breaking v2 contract atomically and fails the old contract with KR003/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  6) schema-versioned rebuild lifecycle keeps v1 current after a breaking promotion only through an explicit compatibility implementation
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/keeps v1 current after a breaking promotion only through an explicit compatibility implementation/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  7) schema-versioned rebuild lifecycle converges across two replay rounds while live v1 stays serving and backfills async dedup
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/converges across two replay rounds while live v1 stays serving and backfills async dedup/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  8) schema-versioned rebuild lifecycle refuses oversized staged dedup evidence before fencing and succeeds after checkpoint lag is reduced
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/refuses oversized staged dedup evidence before fencing and succeeds after checkpoint lag is reduced/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  9) schema-versioned rebuild lifecycle revalidates candidate DDL under the cutover locks and resumes after repair
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/revalidates candidate DDL under the cutover locks and resumes after repair/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  10) schema-versioned rebuild lifecycle previews retired blockers and drops only an unreferenced generation
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned rebuild lifecycle/previews retired blockers and drops only an unreferenced generation/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  11) schema-versioned cutover concurrency bounds writer-fence row contention and remains unfenced
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned cutover concurrency/bounds writer-fence row contention and remains unfenced/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  12) schema-versioned cutover concurrency bounds promotion group-row contention without undoing prepared evidence
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned cutover concurrency/bounds promotion group-row contention without undoing prepared evidence/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  13) schema-versioned cutover concurrency bounds two independently contended target relations, keeps readers on v1, and resumes promotion
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned cutover concurrency/bounds two independently contended target relations, keeps readers on v1, and resumes promotion/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  14) schema-versioned cutover concurrency exposes only the old or new status tuple during a promotion transaction
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned cutover concurrency/exposes only the old or new status tuple during a promotion transaction/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  15) schema-versioned cutover concurrency bounds promotion behind a slow guarded reader and resumes after it exits
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned cutover concurrency/bounds promotion behind a slow guarded reader and resumes after it exits/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  16) schema-versioned cutover concurrency refuses a reader whose statement snapshot crosses promotion and succeeds on retry
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned cutover concurrency/refuses a reader whose statement snapshot crosses promotion and succeeds on retry/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  17) schema-versioned release fault injection rolls every cutover boundary back to one v1 authority and resumes the same incompatible v2 promotion
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/schema-versioned release fault injection/rolls every cutover boundary back to one v1 authority and resumes the same incompatible v2 promotion/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  18) targeted stream reprojection repairs only the selected stream and transactionally backfills redelivery evidence
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/repairs only the selected stream and transactionally backfills redelivery evidence/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  19) targeted stream reprojection refuses an oversized stream before taking the group-wide repair fence
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/refuses an oversized stream before taking the group-wide repair fence/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  20) targeted stream reprojection rolls clear, replay, and dedup back when verification fails
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/rolls clear, replay, and dedup back when verification fails/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  21) targeted stream reprojection rolls back clearer and decode failures without dedup evidence
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/rolls back clearer and decode failures without dedup evidence/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  22) targeted stream reprojection refuses truncated and soft-deleted streams before target mutation
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/refuses truncated and soft-deleted streams before target mutation/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  23) targeted stream reprojection waits for an append-first catalog writer and replays its committed event
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/waits for an append-first catalog writer and replays its committed event/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  24) targeted stream reprojection holds the group writer fence until one-stream repair commits
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/holds the group writer fence until one-stream repair commits/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  25) targeted stream reprojection serializes hard deletion behind the stream guard
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/serializes hard deletion behind the stream guard/" --seed 821254700
+
+  test/VersionedRebuildSpec.hs:2351:17: 
+  26) targeted stream reprojection rolls target and dedup changes back when the repair backend is interrupted
+       UnexpectedServerError "42703" "column \"stream_name\" of relation \"subscriptions\" does not exist"
+
+  To rerun use: --match "/targeted stream reprojection/rolls target and dedup changes back when the repair backend is interrupted/" --seed 821254700
+
+  libraries/ghc-internal/src/GHC/Internal/Foreign/C/Error.hs:291:5: 
+  27) Keiro keeps package metadata as the only version authority
+       uncaught exception: IOException of type NoSuchThing
+       src/Keiro.hs: openFile: does not exist (No such file or directory)
+
+  To rerun use: --match "/Keiro/keeps package metadata as the only version authority/" --seed 821254700
+
+  test/Main.hs:1221:14: 
+  28) mkEventStream rejects a bare EventStream at runCommand (compile-time)
+       predicate failed on: "<no location info>: error: [GHC-49196]\n    Can't find test/ReplaySafetyTypeProbe.hs\n\n"
+
+  To rerun use: --match "/mkEventStream/rejects a bare EventStream at runCommand (compile-time)/" --seed 821254700
+
+  test/Main.hs:3412:7: 
+  29) Keiro.ReadModel reads the minimum checkpoint across consumer-group subscription members
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:3412:7-14)
+
+  To rerun use: --match "/Keiro.ReadModel/reads the minimum checkpoint across consumer-group subscription members/" --seed 821254700
+
+  test/Main.hs:3574:9: 
+  30) Keiro.ReadModel Strong returns immediately when the subscription is already at the store head
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:3574:9-16)
+
+  To rerun use: --match "/Keiro.ReadModel/Strong returns immediately when the subscription is already at the store head/" --seed 821254700
+
+  test/Main.hs:3612:21: 
+  31) Keiro.ReadModel Strong blocks until the subscription reaches the store head captured at query start
+       expected: Right (Right 6)
+        but got: Right (Left (ReadModelWaitTimeout "counter-read-model" (GlobalPosition 1) (GlobalPosition 0)))
+
+  To rerun use: --match "/Keiro.ReadModel/Strong blocks until the subscription reaches the store head captured at query start/" --seed 821254700
+
+  test/Main.hs:3630:9: 
+  32) Keiro.ReadModel Strong and WaitForHead return promptly after workflow GC hard-deletes the newest events
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:3630:9-16)
+
+  To rerun use: --match "/Keiro.ReadModel/Strong and WaitForHead return promptly after workflow GC hard-deletes the newest events/" --seed 821254700
+
+  test/Main.hs:3734:9: 
+  33) Keiro.ReadModel Strong and WaitForHead return when their category is caught up despite another active category
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:3734:9-16)
+
+  To rerun use: --match "/Keiro.ReadModel/Strong and WaitForHead return when their category is caught up despite another active category/" --seed 821254700
+
+  test/Main.hs:3793:9: 
+  34) Keiro.ReadModel waits for async projection cursor with PositionWait
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:3793:9-16)
+
+  To rerun use: --match "/Keiro.ReadModel/waits for async projection cursor with PositionWait/" --seed 821254700
+
+  test/Main.hs:3818:7: 
+  35) Keiro.ReadModel times out when PositionWait target is not reached
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:3818:7-14)
+
+  To rerun use: --match "/Keiro.ReadModel/times out when PositionWait target is not reached/" --seed 821254700
+
+  test/Main.hs:4040:7: 
+  36) Keiro.ReadModel rebuild repopulates the projection table through the supported workflow
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:4040:7-14)
+
+  To rerun use: --match "/Keiro.ReadModel/rebuild repopulates the projection table through the supported workflow/" --seed 821254700
+
+  test/Main.hs:4087:7: 
+  37) Keiro.ReadModel startRebuild on a cursorless model skips the checkpoint reset and completes
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:4087:7-14)
+
+  To rerun use: --match "/Keiro.ReadModel/startRebuild on a cursorless model skips the checkpoint reset and completes/" --seed 821254700
+
+  test/Main.hs:4303:7: 
+  38) Keiro.ReadModel reports zero global position distance after the newest events are hard deleted
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:4303:7-14)
+
+  To rerun use: --match "/Keiro.ReadModel/reports zero global position distance after the newest events are hard deleted/" --seed 821254700
+
+  test/Main.hs:4341:7: 
+  39) Keiro.ReadModel counts a position-wait timeout in the timeout counter
+       uncaught exception: IOException of type UserError
+       user error (Pattern match failure in 'do' block at test/Main.hs:4341:7-14)
+
+  To rerun use: --match "/Keiro.ReadModel/counts a position-wait timeout in the timeout counter/" --seed 821254700
+
+Randomized with seed 821254700
+
+Finished in 147.4147 seconds
+719 examples, 39 failures

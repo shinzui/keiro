@@ -1,0 +1,760 @@
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.19.0.1 (lib) (file src/Keiro/Subscription/Shard/Worker.hs changed)
+ - keiro-dsl-0.19.0.1 (lib:generated-haskell-language-internal) (configuration changed)
+ - keiro-migrations-0.19.0.1 (exe:keiro-migrate) (configuration changed)
+ - pgmq-core-0.6.1.1 (lib) (requires build)
+ - keiro-dsl-conformance-service-runtime-0.0.0.0 (lib) (configuration changed)
+ - keiro-dsl-behavior-complete-report-0.0.0.0 (exe:keiro-dsl-behavior-complete-report) (configuration changed)
+ - keiro-dsl-0.19.0.1 (lib) (configuration changed)
+ - pgmq-hasql-0.6.1.1 (lib) (requires build)
+ - keiro-dsl-corpus-regen-0.1.0.0 (exe:keiro-dsl-corpus-regen) (configuration changed)
+ - keiro-dsl-codec-compare-artifact-info-0.1.0.0 (exe:keiro-dsl-codec-compare-artifact-info) (configuration changed)
+ - keiro-dsl-0.19.0.1 (exe:keiro-dsl) (configuration changed)
+ - pgmq-effectful-0.6.1.1 (lib) (requires build)
+ - shibuya-pgmq-adapter-0.16.1.0 (lib) (requires build)
+ - pgmq-config-0.6.1.1 (lib) (requires build)
+ - keiro-pgmq-0.19.0.1 (lib) (configuration changed)
+ - keiro-ops-0.19.0.1 (lib) (configuration changed)
+ - jitsurei-0.1.0.0 (lib) (configuration changed)
+ - keiro-ops-0.19.0.1 (exe:keiro-ops) (configuration changed)
+ - jitsurei-0.1.0.0 (exe:jitsurei-diagrams) (configuration changed)
+ - jitsurei-0.1.0.0 (exe:jitsurei-demo) (configuration changed)
+Starting     pgmq-core-0.6.1.1 (lib)
+Configuring executable 'keiro-migrate' for keiro-migrations-0.19.0.1...
+Configuring library 'generated-haskell-language-internal' for keiro-dsl-0.19.0.1...
+Preprocessing library for keiro-0.19.0.1...
+Building library for keiro-0.19.0.1...
+[23 of 68] Compiling Keiro.Subscription.Shard ( src/Keiro/Subscription/Shard.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard.dyn_o ) [Source file changed]
+[24 of 68] Compiling Keiro.Subscription.Shard.Worker ( src/Keiro/Subscription/Shard/Worker.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard/Worker.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard/Worker.dyn_o ) [Source file changed]
+Building     pgmq-core-0.6.1.1 (lib)
+Preprocessing executable 'keiro-migrate' for keiro-migrations-0.19.0.1...
+Building executable 'keiro-migrate' for keiro-migrations-0.19.0.1...
+Configuring executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Configuring library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+[1 of 1] Compiling Main             ( app/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.19.0.1/x/keiro-migrate/build/keiro-migrate/keiro-migrate-tmp/Main.o ) [Hasql.Connection.Settings package changed]
+Preprocessing library 'generated-haskell-language-internal' for keiro-dsl-0.19.0.1...
+Building library 'generated-haskell-language-internal' for keiro-dsl-0.19.0.1...
+[1 of 1] Compiling Keiro.Dsl.GeneratedHaskellLanguage ( internal/Keiro/Dsl/GeneratedHaskellLanguage.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/l/generated-haskell-language-internal/build/generated-haskell-language-internal/Keiro/Dsl/GeneratedHaskellLanguage.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/l/generated-haskell-language-internal/build/generated-haskell-language-internal/Keiro/Dsl/GeneratedHaskellLanguage.dyn_o ) [Flags changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-migrations-0.19.0.1/x/keiro-migrate/build/keiro-migrate/keiro-migrate [Objects changed]
+Installing   pgmq-core-0.6.1.1 (lib)
+Preprocessing executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Building executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Preprocessing library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+Building library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+[ 1 of 14] Compiling BehaviorComplete.Domain ( BehaviorComplete/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/BehaviorComplete/Domain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/BehaviorComplete/Domain.dyn_o ) [Keiki.Shape package changed]
+[ 2 of 31] Compiling Proof.WorkspaceProof.AlphaView.Generated.ReadModelTable ( src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelTable.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/Generated/ReadModelTable.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/Generated/ReadModelTable.dyn_o ) [Keiro.Connection changed]
+[ 3 of 31] Compiling Proof.WorkspaceProof.AlphaView.ReadModelHoles ( src/Proof/WorkspaceProof/AlphaView/ReadModelHoles.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/ReadModelHoles.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/ReadModelHoles.dyn_o ) [Hasql.Transaction package changed]
+[ 3 of 14] Compiling Generated.BehaviorComplete.Nominals.Internal ( Generated/BehaviorComplete/Nominals/Internal.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Nominals/Internal.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Nominals/Internal.dyn_o ) [Keiki.Shape package changed]
+[ 4 of 31] Compiling Proof.WorkspaceProof.AlphaView.Generated.ReadModel ( src/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.dyn_o ) [Effectful package changed]
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs:28:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+28 |     , subscriptionName = "workspace-proof-alpha-view-sub"
+   |       ^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs:31:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+31 |     , defaultConsistency = Eventual
+   |       ^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs:31:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+31 |     , defaultConsistency = Eventual
+   |                            ^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs:32:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+32 |     , strongScope = EntireLog
+   |       ^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModel.hs:32:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+32 |     , strongScope = EntireLog
+   |                     ^^^^^^^^^
+
+Completed    pgmq-core-0.6.1.1 (lib)
+[ 5 of 31] Compiling Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness ( src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.dyn_o ) [Keiro.Projection changed]
+[ 4 of 14] Compiling Generated.BehaviorComplete.Nominals ( Generated/BehaviorComplete/Nominals.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Nominals.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Nominals.dyn_o ) [Generated.BehaviorComplete.Nominals.Internal changed]
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs:13:69: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+13 |   , ("subscriptionName", "workspace-proof-alpha-view-sub", T.unpack alphaViewReadModel.subscriptionName)
+   |                                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs:16:38: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+16 |   , ("consistency", "Eventual", show alphaViewReadModel.defaultConsistency)
+   |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs:17:52: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+17 |   , ("strongScope", "EntireLog", renderStrongScope alphaViewReadModel.strongScope)
+   |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs:20:22: warning: [GHC-68441] [-Wdeprecations]
+    In the use of type constructor or class ‘StrongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+20 | renderStrongScope :: StrongScope -> String
+   |                      ^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs:21:19: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+21 | renderStrongScope EntireLog = "EntireLog"
+   |                   ^^^^^^^^^
+
+src/Proof/WorkspaceProof/AlphaView/Generated/ReadModelHarness.hs:22:20: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘CategoryHead’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use CategoryVisibleHead. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+22 | renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
+   |                    ^^^^^^^^^^^^
+
+Starting     pgmq-hasql-0.6.1.1 (lib)
+[ 5 of 14] Compiling Generated.BehaviorComplete.Journey.Domain ( Generated/BehaviorComplete/Journey/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Journey/Domain.o ) [Keiki.Generics.TH package changed]
+[ 7 of 31] Compiling Proof.WorkspaceProof.BetaView.Generated.ReadModelTable ( src/Proof/WorkspaceProof/BetaView/Generated/ReadModelTable.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/Generated/ReadModelTable.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/Generated/ReadModelTable.dyn_o ) [Keiro.Connection changed]
+[ 8 of 31] Compiling Proof.WorkspaceProof.BetaView.ReadModelHoles ( src/Proof/WorkspaceProof/BetaView/ReadModelHoles.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/ReadModelHoles.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/ReadModelHoles.dyn_o ) [Hasql.Transaction package changed]
+Configuring library for keiro-dsl-0.19.0.1...
+[ 9 of 31] Compiling Proof.WorkspaceProof.BetaView.Generated.ReadModel ( src/Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/Generated/ReadModel.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/Generated/ReadModel.dyn_o ) [Effectful package changed]
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs:28:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+28 |     , subscriptionName = "workspace-proof-beta-view-sub"
+   |       ^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs:31:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+31 |     , defaultConsistency = Eventual
+   |       ^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs:31:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+31 |     , defaultConsistency = Eventual
+   |                            ^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs:32:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+32 |     , strongScope = EntireLog
+   |       ^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModel.hs:32:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+32 |     , strongScope = EntireLog
+   |                     ^^^^^^^^^
+
+[10 of 31] Compiling Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness ( src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.dyn_o ) [Keiro.Projection changed]
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs:13:68: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+13 |   , ("subscriptionName", "workspace-proof-beta-view-sub", T.unpack betaViewReadModel.subscriptionName)
+   |                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs:16:38: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+16 |   , ("consistency", "Eventual", show betaViewReadModel.defaultConsistency)
+   |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs:17:52: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+17 |   , ("strongScope", "EntireLog", renderStrongScope betaViewReadModel.strongScope)
+   |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs:20:22: warning: [GHC-68441] [-Wdeprecations]
+    In the use of type constructor or class ‘StrongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+20 | renderStrongScope :: StrongScope -> String
+   |                      ^^^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs:21:19: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+21 | renderStrongScope EntireLog = "EntireLog"
+   |                   ^^^^^^^^^
+
+src/Proof/WorkspaceProof/BetaView/Generated/ReadModelHarness.hs:22:20: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘CategoryHead’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use CategoryVisibleHead. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+22 | renderStrongScope (CategoryHead categoryName) = "CategoryHead " <> T.unpack categoryName
+   |                    ^^^^^^^^^^^^
+
+[12 of 31] Compiling Proof.WorkspaceProof.Generated.Nominals.Internal ( src/Proof/WorkspaceProof/Generated/Nominals/Internal.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/Nominals/Internal.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/Nominals/Internal.dyn_o ) [Keiki.Shape package changed]
+[13 of 31] Compiling Proof.WorkspaceProof.Generated.Nominals ( src/Proof/WorkspaceProof/Generated/Nominals.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/Nominals.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/Nominals.dyn_o ) [Proof.WorkspaceProof.Generated.Nominals.Internal changed]
+[14 of 31] Compiling Proof.WorkspaceProof.Beta.Generated.Domain ( src/Proof/WorkspaceProof/Beta/Generated/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Domain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Domain.dyn_o ) [Keiki.Generics.TH package changed]
+[15 of 31] Compiling Proof.WorkspaceProof.Beta.Generated.Transducer ( src/Proof/WorkspaceProof/Beta/Generated/Transducer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Transducer.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Transducer.dyn_o ) [Keiki.Symbolic package changed]
+Building     pgmq-hasql-0.6.1.1 (lib)
+[16 of 31] Compiling Proof.WorkspaceProof.Alpha.Generated.Domain ( src/Proof/WorkspaceProof/Alpha/Generated/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Domain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Domain.dyn_o ) [Keiki.Generics.TH package changed]
+[ 6 of 14] Compiling Generated.BehaviorComplete.Journey.Transducer ( Generated/BehaviorComplete/Journey/Transducer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Journey/Transducer.o ) [Keiki.Builder package changed]
+[ 7 of 14] Compiling BehaviorComplete.Journey.Holes ( BehaviorComplete/Journey/Holes.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/BehaviorComplete/Journey/Holes.o ) [Keiki.Generics package changed]
+[ 9 of 14] Compiling BehaviorComplete.Bindings ( BehaviorComplete/Bindings.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/BehaviorComplete/Bindings.o ) [Keiro.Codec.Structural changed]
+[17 of 31] Compiling Proof.WorkspaceProof.Alpha.Generated.Transducer ( src/Proof/WorkspaceProof/Alpha/Generated/Transducer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Transducer.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Transducer.dyn_o ) [Keiki.Symbolic package changed]
+[10 of 14] Compiling Generated.BehaviorComplete.Journey.Codec ( Generated/BehaviorComplete/Journey/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Journey/Codec.o ) [Data.Aeson.Types package changed]
+[18 of 31] Compiling Proof.WorkspaceProof.Beta.Generated.Codec ( src/Proof/WorkspaceProof/Beta/Generated/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Codec.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Codec.dyn_o ) [Data.Aeson.Types package changed]
+[11 of 14] Compiling Generated.BehaviorComplete.Journey.BehaviorContract ( Generated/BehaviorComplete/Journey/BehaviorContract.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/Journey/BehaviorContract.o ) [Keiki.Core package changed]
+[19 of 31] Compiling Proof.WorkspaceProof.Beta.Generated.Harness ( src/Proof/WorkspaceProof/Beta/Generated/Harness.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Harness.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/Harness.dyn_o ) [Keiki.Core package changed]
+Preprocessing library for keiro-dsl-0.19.0.1...
+[20 of 31] Compiling Proof.WorkspaceProof.Beta.Generated.EventStream ( src/Proof/WorkspaceProof/Beta/Generated/EventStream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/EventStream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/EventStream.dyn_o ) [Keiki.Core package changed]
+Building library for keiro-dsl-0.19.0.1...
+[21 of 31] Compiling Proof.WorkspaceProof.Beta.Generated.BehaviorContract ( src/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/Generated/BehaviorContract.dyn_o ) [Keiki.Core package changed]
+[12 of 14] Compiling BehaviorComplete.Journey.BehaviorHoles ( BehaviorComplete/Journey/BehaviorHoles.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/BehaviorComplete/Journey/BehaviorHoles.o ) [BehaviorComplete.Domain changed]
+[ 1 of 78] Compiling Keiro.Dsl.Grammar ( src/Keiro/Dsl/Grammar.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Grammar.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Grammar.dyn_o ) [Keiro.Codec.IdDomain changed]
+[13 of 14] Compiling Generated.BehaviorComplete.StructuralProjections ( Generated/BehaviorComplete/StructuralProjections.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Generated/BehaviorComplete/StructuralProjections.o ) [Keiki.Core package changed]
+[14 of 14] Compiling Main             ( Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report-tmp/Main.o ) [Data.Aeson package changed]
+[22 of 31] Compiling Proof.WorkspaceProof.Beta.BehaviorHoles ( src/Proof/WorkspaceProof/Beta/BehaviorHoles.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/BehaviorHoles.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Beta/BehaviorHoles.dyn_o ) [Proof.WorkspaceProof.Beta.Generated.BehaviorContract changed]
+[23 of 31] Compiling Proof.WorkspaceProof.Alpha.Generated.Codec ( src/Proof/WorkspaceProof/Alpha/Generated/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Codec.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Codec.dyn_o ) [Data.Aeson.Types package changed]
+[24 of 31] Compiling Proof.WorkspaceProof.Alpha.Generated.Harness ( src/Proof/WorkspaceProof/Alpha/Generated/Harness.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Harness.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/Harness.dyn_o ) [Keiki.Core package changed]
+[15 of 15] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-behavior-complete-report-0.0.0.0/x/keiro-dsl-behavior-complete-report/build/keiro-dsl-behavior-complete-report/keiro-dsl-behavior-complete-report [Objects changed]
+[25 of 31] Compiling Proof.WorkspaceProof.Alpha.Generated.EventStream ( src/Proof/WorkspaceProof/Alpha/Generated/EventStream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/EventStream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/EventStream.dyn_o ) [Keiki.Core package changed]
+[26 of 31] Compiling Proof.WorkspaceProof.Alpha.Generated.BehaviorContract ( src/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/Generated/BehaviorContract.dyn_o ) [Keiki.Core package changed]
+[27 of 31] Compiling Proof.WorkspaceProof.Alpha.BehaviorHoles ( src/Proof/WorkspaceProof/Alpha/BehaviorHoles.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/BehaviorHoles.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Alpha/BehaviorHoles.dyn_o ) [Proof.WorkspaceProof.Alpha.Generated.BehaviorContract changed]
+[28 of 31] Compiling Proof.WorkspaceProof.Generated.ReplayAudit ( src/Proof/WorkspaceProof/Generated/ReplayAudit.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/ReplayAudit.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/ReplayAudit.dyn_o ) [Keiro.ReplayAudit changed]
+[30 of 31] Compiling Proof.WorkspaceProof.Generated.Conformance ( src/Proof/WorkspaceProof/Generated/Conformance.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/Conformance.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/Generated/Conformance.dyn_o ) [Proof.WorkspaceProof.Alpha.Generated.Harness changed]
+[31 of 31] Compiling Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowRuntime ( src/Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowRuntime.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowRuntime.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-conformance-service-runtime-0.0.0.0/build/Proof/WorkspaceProof/WorkspaceProofWorkflow/Generated/WorkflowRuntime.dyn_o ) [Effectful package changed]
+[ 2 of 78] Compiling Keiro.Dsl.FieldIdentity ( src/Keiro/Dsl/FieldIdentity.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/FieldIdentity.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/FieldIdentity.dyn_o ) [Keiro.Dsl.Grammar changed]
+[ 3 of 78] Compiling Keiro.Dsl.CanonicalEncoding ( src/Keiro/Dsl/CanonicalEncoding.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CanonicalEncoding.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CanonicalEncoding.dyn_o ) [Keiro.Codec.CalendarDay changed]
+src/Keiro/Dsl/CanonicalEncoding.hs:166:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘list’ shadows the existing binding
+      imported from ‘Prettyprinter’ at src/Keiro/Dsl/CanonicalEncoding.hs:28:1-20
+      (and originally defined in ‘Prettyprinter.Internal’)
+    |
+166 |     list values = scalar (T.concat values)
+    |     ^^^^
+
+[ 4 of 78] Compiling Keiro.Dsl.AggregateGenerationPlan ( src/Keiro/Dsl/AggregateGenerationPlan.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/AggregateGenerationPlan.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/AggregateGenerationPlan.dyn_o ) [Keiro.Dsl.Grammar changed]
+[ 7 of 78] Compiling Keiro.Dsl.LanguageVersion ( src/Keiro/Dsl/LanguageVersion.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/LanguageVersion.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/LanguageVersion.dyn_o ) [Data.Aeson package changed]
+[ 8 of 78] Compiling Keiro.Dsl.PrettyPrint ( src/Keiro/Dsl/PrettyPrint.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/PrettyPrint.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/PrettyPrint.dyn_o ) [Keiro.Codec.IdDomain changed]
+Installing   pgmq-hasql-0.6.1.1 (lib)
+[ 9 of 78] Compiling Keiro.Dsl.ProjectionSupply ( src/Keiro/Dsl/ProjectionSupply.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ProjectionSupply.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ProjectionSupply.dyn_o ) [Keiro.Dsl.Grammar changed]
+[10 of 78] Compiling Keiro.Dsl.ReadModelShape ( src/Keiro/Dsl/ReadModelShape.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ReadModelShape.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ReadModelShape.dyn_o ) [Keiro.Dsl.Grammar changed]
+[13 of 78] Compiling Keiro.Dsl.Skeleton ( src/Keiro/Dsl/Skeleton.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Skeleton.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Skeleton.dyn_o ) [Keiro.Dsl.LanguageVersion changed]
+[15 of 78] Compiling Keiro.Dsl.SourceIndex ( src/Keiro/Dsl/SourceIndex.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SourceIndex.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SourceIndex.dyn_o ) [Keiro.Dsl.Grammar changed]
+Completed    pgmq-hasql-0.6.1.1 (lib)
+Starting     pgmq-effectful-0.6.1.1 (lib)
+[16 of 78] Compiling Keiro.Dsl.Syntax ( src/Keiro/Dsl/Syntax.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Syntax.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Syntax.dyn_o ) [Keiro.Dsl.Grammar changed]
+[17 of 78] Compiling Keiro.Dsl.Frontend.Internal ( src/Keiro/Dsl/Frontend/Internal.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Frontend/Internal.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Frontend/Internal.dyn_o ) [Keiro.Dsl.Grammar changed]
+src/Keiro/Dsl/Frontend/Internal.hs:286:41: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessNode’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+    |
+286 |   NProcess process -> NProcess process {loc = loc}
+    |                                         ^^^^^^^^^
+
+[18 of 78] Compiling Keiro.Dsl.Parser.Core ( src/Keiro/Dsl/Parser/Core.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Core.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Core.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[19 of 78] Compiling Keiro.Dsl.Parser.Workflow ( src/Keiro/Dsl/Parser/Workflow.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Workflow.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Workflow.dyn_o ) [Keiro.Dsl.Grammar changed]
+Building     pgmq-effectful-0.6.1.1 (lib)
+[20 of 78] Compiling Keiro.Dsl.Parser.ProjectionCatalog ( src/Keiro/Dsl/Parser/ProjectionCatalog.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/ProjectionCatalog.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/ProjectionCatalog.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[21 of 78] Compiling Keiro.Dsl.Parser.Preamble ( src/Keiro/Dsl/Parser/Preamble.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Preamble.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Preamble.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[22 of 78] Compiling Keiro.Dsl.Parser.Mapped ( src/Keiro/Dsl/Parser/Mapped.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Mapped.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Mapped.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+Installing   pgmq-effectful-0.6.1.1 (lib)
+[23 of 78] Compiling Keiro.Dsl.Parser.ReadModel ( src/Keiro/Dsl/Parser/ReadModel.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/ReadModel.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/ReadModel.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[24 of 78] Compiling Keiro.Dsl.Parser.Queue ( src/Keiro/Dsl/Parser/Queue.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Queue.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Queue.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+Completed    pgmq-effectful-0.6.1.1 (lib)
+Starting     pgmq-config-0.6.1.1 (lib)
+Starting     shibuya-pgmq-adapter-0.16.1.0 (lib)
+[25 of 78] Compiling Keiro.Dsl.Parser.Integration ( src/Keiro/Dsl/Parser/Integration.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Integration.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Integration.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[26 of 78] Compiling Keiro.Dsl.Parser.Expression ( src/Keiro/Dsl/Parser/Expression.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Expression.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Expression.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[27 of 78] Compiling Keiro.Dsl.Parser.Declaration ( src/Keiro/Dsl/Parser/Declaration.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Declaration.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Declaration.dyn_o ) [Keiro.Codec.IdDomain changed]
+Building     shibuya-pgmq-adapter-0.16.1.0 (lib)
+Building     pgmq-config-0.6.1.1 (lib)
+[28 of 78] Compiling Keiro.Dsl.Parser.Coordination ( src/Keiro/Dsl/Parser/Coordination.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Coordination.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Coordination.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+Installing   pgmq-config-0.6.1.1 (lib)
+Installing   shibuya-pgmq-adapter-0.16.1.0 (lib)
+[29 of 78] Compiling Keiro.Dsl.Parser.Aggregate ( src/Keiro/Dsl/Parser/Aggregate.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Aggregate.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Aggregate.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+Completed    pgmq-config-0.6.1.1 (lib)
+[30 of 78] Compiling Keiro.Dsl.Parser.Document ( src/Keiro/Dsl/Parser/Document.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Document.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser/Document.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[31 of 78] Compiling Keiro.Dsl.Frontend ( src/Keiro/Dsl/Frontend.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Frontend.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Frontend.dyn_o ) [Keiro.Dsl.Frontend.Internal changed]
+[32 of 78] Compiling Keiro.Dsl.Parser ( src/Keiro/Dsl/Parser.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Parser.dyn_o ) [Keiro.Dsl.Frontend changed]
+[33 of 78] Compiling Keiro.Dsl.TransitionFamily ( src/Keiro/Dsl/TransitionFamily.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/TransitionFamily.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/TransitionFamily.dyn_o ) [Keiro.Dsl.CanonicalEncoding changed]
+[34 of 78] Compiling Keiro.Dsl.TypeGraph ( src/Keiro/Dsl/TypeGraph.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/TypeGraph.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/TypeGraph.dyn_o ) [Data.TypeID package changed]
+Completed    shibuya-pgmq-adapter-0.16.1.0 (lib)
+Configuring library for keiro-pgmq-0.19.0.1...
+Preprocessing library for keiro-pgmq-0.19.0.1...
+Building library for keiro-pgmq-0.19.0.1...
+[1 of 6] Compiling Keiro.PGMQ.Codec ( src/Keiro/PGMQ/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Codec.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Codec.dyn_o ) [Flags changed]
+[35 of 78] Compiling Keiro.Dsl.SemanticContract ( src/Keiro/Dsl/SemanticContract.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SemanticContract.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SemanticContract.dyn_o ) [Data.Aeson package changed]
+[2 of 6] Compiling Keiro.PGMQ.Runtime ( src/Keiro/PGMQ/Runtime.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Runtime.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Runtime.dyn_o ) [Flags changed]
+[36 of 78] Compiling Keiro.Dsl.IdDomain ( src/Keiro/Dsl/IdDomain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/IdDomain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/IdDomain.dyn_o ) [Keiro.Codec.IdDomain changed]
+[37 of 78] Compiling Keiro.Dsl.ReadModelQueryContract ( src/Keiro/Dsl/ReadModelQueryContract.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ReadModelQueryContract.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ReadModelQueryContract.dyn_o ) [Data.Aeson package changed]
+[3 of 6] Compiling Keiro.PGMQ.Job   ( src/Keiro/PGMQ/Job.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Job.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Job.dyn_o ) [Flags changed]
+[38 of 78] Compiling Keiro.Dsl.NominalType ( src/Keiro/Dsl/NominalType.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/NominalType.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/NominalType.dyn_o ) [Keiro.Codec.IdDomain changed]
+[4 of 6] Compiling Keiro.PGMQ.Metrics ( src/Keiro/PGMQ/Metrics.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Metrics.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Metrics.dyn_o ) [Flags changed]
+[5 of 6] Compiling Keiro.PGMQ.Dlq   ( src/Keiro/PGMQ/Dlq.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Dlq.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ/Dlq.dyn_o ) [Flags changed]
+[39 of 78] Compiling Keiro.Dsl.MappedConsumer ( src/Keiro/Dsl/MappedConsumer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/MappedConsumer.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/MappedConsumer.dyn_o ) [Data.Aeson package changed]
+[6 of 6] Compiling Keiro.PGMQ       ( src/Keiro/PGMQ.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-pgmq-0.19.0.1/build/Keiro/PGMQ.dyn_o ) [Flags changed]
+[40 of 78] Compiling Keiro.Dsl.ExplainBindings ( src/Keiro/Dsl/ExplainBindings.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ExplainBindings.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ExplainBindings.dyn_o ) [Data.Aeson package changed]
+Configuring library for keiro-ops-0.19.0.1...
+Configuring library for jitsurei-0.1.0.0...
+[41 of 78] Compiling Keiro.Dsl.ConsumerTypePlan ( src/Keiro/Dsl/ConsumerTypePlan.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ConsumerTypePlan.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ConsumerTypePlan.dyn_o ) [Keiro.Dsl.Grammar changed]
+[42 of 78] Compiling Keiro.Dsl.MappedCodecPlan ( src/Keiro/Dsl/MappedCodecPlan.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/MappedCodecPlan.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/MappedCodecPlan.dyn_o ) [Keiro.Dsl.ConsumerTypePlan changed]
+[43 of 78] Compiling Keiro.Dsl.AggregateType ( src/Keiro/Dsl/AggregateType.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/AggregateType.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/AggregateType.dyn_o ) [Keiro.Dsl.Grammar changed]
+[44 of 78] Compiling Keiro.Dsl.RouterSelection ( src/Keiro/Dsl/RouterSelection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/RouterSelection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/RouterSelection.dyn_o ) [Keiro.Codec.IdDomain changed]
+Preprocessing library for keiro-ops-0.19.0.1...
+Preprocessing library for jitsurei-0.1.0.0...
+Building library for keiro-ops-0.19.0.1...
+Building library for jitsurei-0.1.0.0...
+[ 1 of 16] Compiling Keiro.Ops.Env    ( src/Keiro/Ops/Env.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Env.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Env.dyn_o ) [Kiroku.Store.Connection package changed]
+[ 1 of 18] Compiling Jitsurei.AgentQualRouter ( src/Jitsurei/AgentQualRouter.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/AgentQualRouter.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/AgentQualRouter.dyn_o ) [Effectful package changed]
+[ 3 of 16] Compiling Keiro.Ops.Render ( src/Keiro/Ops/Render.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Render.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Render.dyn_o ) [Data.Aeson package changed]
+[45 of 78] Compiling Keiro.Dsl.SemanticImpact ( src/Keiro/Dsl/SemanticImpact.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SemanticImpact.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SemanticImpact.dyn_o ) [Data.Aeson.Types package changed]
+src/Keiro/Dsl/SemanticImpact.hs:742:17: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘key’ shadows the existing binding
+      bound at src/Keiro/Dsl/SemanticImpact.hs:695:27
+    |
+742 |       RKeyedMap key value -> "Map[" <> (.name) key <> "](" <> expressionPresentation value <> ")"
+    |                 ^^^
+
+[ 4 of 16] Compiling Keiro.Ops.Rebuild ( src/Keiro/Ops/Rebuild.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Rebuild.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Rebuild.dyn_o ) [Data.UUID package changed]
+src/Jitsurei/AgentQualRouter.hs:157:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isRecordTransaction’
+    |
+157 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/AgentQualRouter.hs:157:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpRecordTransaction’
+    |
+157 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/AgentQualRouter.hs:242:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+    |
+242 |       subscriptionName = "jitsurei-area-chapters-sub",
+    |       ^^^^^^^^^^^^^^^^
+
+src/Jitsurei/AgentQualRouter.hs:245:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+    |
+245 |       defaultConsistency = Eventual,
+    |       ^^^^^^^^^^^^^^^^^^
+
+src/Jitsurei/AgentQualRouter.hs:245:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+    |
+245 |       defaultConsistency = Eventual,
+    |                            ^^^^^^^^
+
+src/Jitsurei/AgentQualRouter.hs:246:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+    |
+246 |       strongScope = EntireLog,
+    |       ^^^^^^^^^^^
+
+src/Jitsurei/AgentQualRouter.hs:246:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+    |
+246 |       strongScope = EntireLog,
+    |                     ^^^^^^^^^
+
+[ 5 of 16] Compiling Keiro.Ops.Projection ( src/Keiro/Ops/Projection.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Projection.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Projection.dyn_o ) [Effectful.Error.Static package changed]
+[ 6 of 16] Compiling Keiro.Ops.Pgmq   ( src/Keiro/Ops/Pgmq.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Pgmq.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Pgmq.dyn_o ) [Kiroku.Store.Connection package changed]
+[ 7 of 16] Compiling Keiro.Ops.Outbox ( src/Keiro/Ops/Outbox.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Outbox.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Outbox.dyn_o ) [Data.UUID package changed]
+[ 2 of 18] Compiling Jitsurei.CreditLimit ( src/Jitsurei/CreditLimit.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/CreditLimit.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/CreditLimit.dyn_o ) [Keiki.Generics.TH package changed]
+src/Jitsurei/CreditLimit.hs:48:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isAdjustCredit’
+   |
+48 | $(deriveAggregate ''CreditLimitCommand ''CreditLimitRegs ''CreditLimitEvent)
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/Jitsurei/CreditLimit.hs:48:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpAdjustCredit’
+   |
+48 | $(deriveAggregate ''CreditLimitCommand ''CreditLimitRegs ''CreditLimitEvent)
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[46 of 78] Compiling Keiro.Dsl.ProjectionMappedImpact ( src/Keiro/Dsl/ProjectionMappedImpact.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ProjectionMappedImpact.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ProjectionMappedImpact.dyn_o ) [Keiro.Dsl.Grammar changed]
+[ 3 of 18] Compiling Jitsurei.Domain  ( src/Jitsurei/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Domain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Domain.dyn_o ) [Keiki.Shape package changed]
+[ 8 of 16] Compiling Keiro.Ops.Inbox  ( src/Keiro/Ops/Inbox.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Inbox.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Inbox.dyn_o ) [Data.UUID package changed]
+[ 9 of 16] Compiling Keiro.Ops.ReplayAudit ( src/Keiro/Ops/ReplayAudit.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/ReplayAudit.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/ReplayAudit.dyn_o ) [Kiroku.Store.Types package changed]
+[47 of 78] Compiling Keiro.Dsl.ProcessReaction ( src/Keiro/Dsl/ProcessReaction.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ProcessReaction.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ProcessReaction.dyn_o ) [Keiro.Dsl.AggregateType changed]
+[ 4 of 18] Compiling Jitsurei.DurableWorkflow ( src/Jitsurei/DurableWorkflow.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/DurableWorkflow.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/DurableWorkflow.dyn_o ) [Effectful package changed]
+[10 of 16] Compiling Keiro.Ops.Shard  ( src/Keiro/Ops/Shard.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Shard.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Shard.dyn_o ) [Data.UUID package changed]
+src/Keiro/Ops/Shard.hs:73:23: error: [GHC-87543]
+    Ambiguous occurrence ‘ownedBuckets’.
+    It could refer to
+       either the field ‘ownedBuckets’ of record ‘ShardResizeActiveLeases’,
+              imported from ‘Keiro.Subscription.Shard’ at src/Keiro/Ops/Shard.hs:24:1-31,
+           or ‘Keiro.Ops.Shard.ownedBuckets’,
+              defined at src/Keiro/Ops/Shard.hs:90:1.
+   |
+73 |         let buckets = ownedBuckets worker ownership
+   |                       ^^^^^^^^^^^^
+
+src/Keiro/Ops/Shard.hs:85:21: error: [GHC-87543]
+    Ambiguous occurrence ‘ownedBuckets’.
+    It could refer to
+       either the field ‘ownedBuckets’ of record ‘ShardResizeActiveLeases’,
+              imported from ‘Keiro.Subscription.Shard’ at src/Keiro/Ops/Shard.hs:24:1-31,
+           or ‘Keiro.Ops.Shard.ownedBuckets’,
+              defined at src/Keiro/Ops/Shard.hs:90:1.
+   |
+85 |       let buckets = ownedBuckets worker ownership
+   |                     ^^^^^^^^^^^^
+
+[11 of 16] Compiling Keiro.Ops.Snapshot ( src/Keiro/Ops/Snapshot.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Snapshot.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Snapshot.dyn_o ) [Effectful.Error.Static package changed]
+[ 5 of 18] Compiling Jitsurei.Incident ( src/Jitsurei/Incident.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Incident.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Incident.dyn_o ) [Keiki.Generics.TH package changed]
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isResolveIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpResolveIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isEscalateIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpEscalateIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isAcknowledgeIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpAcknowledgeIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isRaiseIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Incident.hs:171:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpRaiseIncident’
+    |
+171 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+[48 of 78] Compiling Keiro.Dsl.CoordinationImpact ( src/Keiro/Dsl/CoordinationImpact.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CoordinationImpact.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CoordinationImpact.dyn_o ) [Data.Aeson package changed]
+[12 of 16] Compiling Keiro.Ops.Stream ( src/Keiro/Ops/Stream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Stream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Stream.dyn_o ) [Data.UUID package changed]
+[13 of 16] Compiling Keiro.Ops.Timer  ( src/Keiro/Ops/Timer.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Timer.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Timer.dyn_o ) [Data.UUID package changed]
+[ 6 of 18] Compiling Jitsurei.OncallRoster ( src/Jitsurei/OncallRoster.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/OncallRoster.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/OncallRoster.dyn_o ) [Effectful package changed]
+src/Jitsurei/OncallRoster.hs:55:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+55 |       subscriptionName = "jitsurei-service-oncall-sub",
+   |       ^^^^^^^^^^^^^^^^
+
+src/Jitsurei/OncallRoster.hs:58:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+58 |       defaultConsistency = Eventual,
+   |       ^^^^^^^^^^^^^^^^^^
+
+src/Jitsurei/OncallRoster.hs:58:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+58 |       defaultConsistency = Eventual,
+   |                            ^^^^^^^^
+
+src/Jitsurei/OncallRoster.hs:59:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+59 |       strongScope = EntireLog,
+   |       ^^^^^^^^^^^
+
+src/Jitsurei/OncallRoster.hs:59:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+59 |       strongScope = EntireLog,
+   |                     ^^^^^^^^^
+
+[14 of 16] Compiling Keiro.Ops.Workflow ( src/Keiro/Ops/Workflow.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Workflow.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Workflow.dyn_o ) [Data.UUID package changed]
+[ 7 of 18] Compiling Jitsurei.OrderStream ( src/Jitsurei/OrderStream.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/OrderStream.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/OrderStream.dyn_o ) [Keiki.Generics.TH package changed]
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isCancelOrder’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpCancelOrder’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isShipOrder’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpShipOrder’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isMarkPacked’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpMarkPacked’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isApprovePayment’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpApprovePayment’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isPlaceOrder’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/OrderStream.hs:59:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpPlaceOrder’
+   |
+59 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+[49 of 78] Compiling Keiro.Dsl.Expression ( src/Keiro/Dsl/Expression.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Expression.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Expression.dyn_o ) [Data.TypeID package changed]
+[ 8 of 18] Compiling Jitsurei.Paging  ( src/Jitsurei/Paging.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Paging.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Paging.dyn_o ) [Effectful package changed]
+src/Jitsurei/Paging.hs:103:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isAcknowledgePage’
+    |
+103 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Paging.hs:103:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpAcknowledgePage’
+    |
+103 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Paging.hs:103:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isSendPage’
+    |
+103 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/Paging.hs:103:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpSendPage’
+    |
+103 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+[ 9 of 18] Compiling Jitsurei.ReadModels ( src/Jitsurei/ReadModels.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/ReadModels.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/ReadModels.dyn_o ) [Hasql.Statement package changed]
+src/Jitsurei/ReadModels.hs:84:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+84 |       subscriptionName = "jitsurei-order-summary-inline",
+   |       ^^^^^^^^^^^^^^^^
+
+src/Jitsurei/ReadModels.hs:87:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+87 |       defaultConsistency = Eventual,
+   |       ^^^^^^^^^^^^^^^^^^
+
+src/Jitsurei/ReadModels.hs:87:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+87 |       defaultConsistency = Eventual,
+   |                            ^^^^^^^^
+
+src/Jitsurei/ReadModels.hs:88:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+88 |       strongScope = EntireLog,
+   |       ^^^^^^^^^^^
+
+src/Jitsurei/ReadModels.hs:88:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+   |
+88 |       strongScope = EntireLog,
+   |                     ^^^^^^^^^
+
+[15 of 16] Compiling Keiro.Ops.Embed  ( src/Keiro/Ops/Embed.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Embed.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Embed.dyn_o ) [Keiro.Projection.Catalog.Operations changed]
+[50 of 78] Compiling Keiro.Dsl.EventOutput ( src/Keiro/Dsl/EventOutput.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/EventOutput.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/EventOutput.dyn_o ) [Keiro.Dsl.AggregateType changed]
+[51 of 78] Compiling Keiro.Dsl.FoldFingerprint ( src/Keiro/Dsl/FoldFingerprint.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/FoldFingerprint.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/FoldFingerprint.dyn_o ) [Keiro.Codec.IdDomain changed]
+[52 of 78] Compiling Keiro.Dsl.ReplayImpact ( src/Keiro/Dsl/ReplayImpact.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ReplayImpact.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ReplayImpact.dyn_o ) [Data.Aeson package changed]
+[53 of 78] Compiling Keiro.Dsl.BehaviorCoverage ( src/Keiro/Dsl/BehaviorCoverage.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/BehaviorCoverage.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/BehaviorCoverage.dyn_o ) [Data.Aeson package changed]
+[10 of 18] Compiling Jitsurei.FulfillmentProcess ( src/Jitsurei/FulfillmentProcess.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/FulfillmentProcess.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/FulfillmentProcess.dyn_o ) [Effectful.Error.Static package changed]
+src/Jitsurei/FulfillmentProcess.hs:95:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isObserveFulfillmentEvent’
+   |
+95 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/FulfillmentProcess.hs:95:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpObserveFulfillmentEvent’
+   |
+95 | $( deriveAggregate
+   |  ^^^^^^^^^^^^^^^^^...
+
+[11 of 18] Compiling Jitsurei.Database ( src/Jitsurei/Database.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Database.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Database.dyn_o ) [Effectful package changed]
+[12 of 18] Compiling Jitsurei.ShipmentNotices ( src/Jitsurei/ShipmentNotices.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/ShipmentNotices.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/ShipmentNotices.dyn_o ) [Effectful package changed]
+[13 of 18] Compiling Jitsurei.Snapshots ( src/Jitsurei/Snapshots.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Snapshots.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Snapshots.dyn_o ) [Jitsurei.OrderStream changed]
+[14 of 18] Compiling Jitsurei.Timers  ( src/Jitsurei/Timers.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Timers.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Timers.dyn_o ) [Data.UUID package changed]
+[54 of 78] Compiling Keiro.Dsl.BehaviorSourceMap ( src/Keiro/Dsl/BehaviorSourceMap.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/BehaviorSourceMap.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/BehaviorSourceMap.dyn_o ) [Keiro.Dsl.BehaviorCoverage changed]
+[15 of 18] Compiling Jitsurei.EscalationProcess ( src/Jitsurei/EscalationProcess.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/EscalationProcess.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/EscalationProcess.dyn_o ) [Data.UUID.V5 package changed]
+src/Jitsurei/EscalationProcess.hs:153:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isNoteAcknowledged’
+    |
+153 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/EscalationProcess.hs:153:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpNoteAcknowledged’
+    |
+153 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/EscalationProcess.hs:153:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘isNoteRaised’
+    |
+153 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+src/Jitsurei/EscalationProcess.hs:153:2: warning: [GHC-40910] [-Wunused-top-binds]
+    Defined but not used: ‘inpNoteRaised’
+    |
+153 | $( deriveAggregate
+    |  ^^^^^^^^^^^^^^^^^...
+
+[55 of 78] Compiling Keiro.Dsl.Validate ( src/Keiro/Dsl/Validate.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Validate.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Validate.dyn_o ) [Data.TypeID package changed]
+[16 of 18] Compiling Jitsurei.ReplayAudit ( src/Jitsurei/ReplayAudit.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/ReplayAudit.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/ReplayAudit.dyn_o ) [Jitsurei.EscalationProcess changed]
+[17 of 18] Compiling Jitsurei.Diagrams ( src/Jitsurei/Diagrams.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Diagrams.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei/Diagrams.dyn_o ) [Keiki.Render.Mermaid package changed]
+[18 of 18] Compiling Jitsurei         ( src/Jitsurei.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/build/Jitsurei.dyn_o ) [Jitsurei.AgentQualRouter changed]
+[56 of 78] Compiling Keiro.Dsl.MappedDiff ( src/Keiro/Dsl/MappedDiff.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/MappedDiff.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/MappedDiff.dyn_o ) [Keiro.Dsl.Grammar changed]
+[57 of 78] Compiling Keiro.Dsl.Diff   ( src/Keiro/Dsl/Diff.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Diff.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Diff.dyn_o ) [Keiro.Codec.IdDomain changed]
+[58 of 78] Compiling Keiro.Dsl.DiffReport ( src/Keiro/Dsl/DiffReport.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/DiffReport.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/DiffReport.dyn_o ) [Data.Aeson.Types package changed]
+[59 of 78] Compiling Keiro.Dsl.Coverage ( src/Keiro/Dsl/Coverage.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Coverage.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Coverage.dyn_o ) [Data.Aeson package changed]
+[60 of 78] Compiling Keiro.Dsl.CodecCompare ( src/Keiro/Dsl/CodecCompare.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CodecCompare.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CodecCompare.dyn_o ) [Data.Aeson.Types package changed]
+[62 of 78] Compiling Keiro.Dsl.Scaffold ( src/Keiro/Dsl/Scaffold.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Scaffold.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Scaffold.dyn_o ) [Keiro.Codec.IdDomain changed]
+[63 of 78] Compiling Keiro.Dsl.WorkspaceRecord ( src/Keiro/Dsl/WorkspaceRecord.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceRecord.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceRecord.dyn_o ) [Data.Aeson package changed]
+[64 of 78] Compiling Keiro.Dsl.StructuralConformance ( src/Keiro/Dsl/StructuralConformance.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/StructuralConformance.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/StructuralConformance.dyn_o ) [Keiro.Dsl.Grammar changed]
+[65 of 78] Compiling Keiro.Dsl.ScaffoldRecord ( src/Keiro/Dsl/ScaffoldRecord.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ScaffoldRecord.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ScaffoldRecord.dyn_o ) [Data.Aeson package changed]
+[66 of 78] Compiling Keiro.Dsl.Manifest ( src/Keiro/Dsl/Manifest.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Manifest.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Manifest.dyn_o ) [Keiro.Dsl.AggregateType changed]
+[67 of 78] Compiling Keiro.Dsl.HaskellSourceMove ( src/Keiro/Dsl/HaskellSourceMove.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/HaskellSourceMove.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/HaskellSourceMove.dyn_o ) [Keiro.Dsl.Scaffold changed]
+[68 of 78] Compiling Keiro.Dsl.Goldens ( src/Keiro/Dsl/Goldens.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Goldens.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Goldens.dyn_o ) [Data.Aeson.Text package changed]
+[69 of 78] Compiling Keiro.Dsl.Harness ( src/Keiro/Dsl/Harness.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Harness.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Harness.dyn_o ) [Keiro.Codec.IdDomain changed]
+[70 of 78] Compiling Keiro.Dsl.ServiceHarness ( src/Keiro/Dsl/ServiceHarness.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ServiceHarness.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ServiceHarness.dyn_o ) [Keiro.Dsl.Grammar changed]
+[71 of 78] Compiling Keiro.Dsl.ConformancePackage ( src/Keiro/Dsl/ConformancePackage.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ConformancePackage.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ConformancePackage.dyn_o ) [Data.Aeson package changed]
+[72 of 78] Compiling Keiro.Dsl.SidecarMigration ( src/Keiro/Dsl/SidecarMigration.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SidecarMigration.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/SidecarMigration.dyn_o ) [Keiro.Dsl.ConformancePackage changed]
+[73 of 78] Compiling Keiro.Dsl.ScaffoldRun ( src/Keiro/Dsl/ScaffoldRun.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ScaffoldRun.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/ScaffoldRun.dyn_o ) [Keiro.Dsl.BehaviorCoverage changed]
+[74 of 78] Compiling Keiro.Dsl.WorkspaceAdoption ( src/Keiro/Dsl/WorkspaceAdoption.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceAdoption.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceAdoption.dyn_o ) [Keiro.Dsl.Scaffold changed]
+[75 of 78] Compiling Keiro.Dsl.Workspace ( src/Keiro/Dsl/Workspace.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Workspace.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/Workspace.dyn_o ) [Keiro.Codec.IdDomain changed]
+[76 of 78] Compiling Keiro.Dsl.WorkspaceScaffold ( src/Keiro/Dsl/WorkspaceScaffold.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceScaffold.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceScaffold.dyn_o ) [Keiro.Dsl.BehaviorCoverage changed]
+[77 of 78] Compiling Keiro.Dsl.WorkspaceDiff ( src/Keiro/Dsl/WorkspaceDiff.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceDiff.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/WorkspaceDiff.dyn_o ) [Keiro.Dsl.Diff changed]
+[78 of 78] Compiling Keiro.Dsl.CheckReport ( src/Keiro/Dsl/CheckReport.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CheckReport.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/build/Keiro/Dsl/CheckReport.dyn_o ) [Data.Aeson package changed]
+Error: [Cabal-7125]
+Failed to build keiro-ops-0.19.0.1 (which is required by exe:keiro-ops from keiro-ops-0.19.0.1 and exe:jitsurei-demo from jitsurei-0.1.0.0).
+

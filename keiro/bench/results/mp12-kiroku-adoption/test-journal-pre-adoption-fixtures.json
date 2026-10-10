@@ -1,0 +1,21 @@
+{
+  "binary": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/t/keiro-test/build/keiro-test/keiro-test",
+  "budget_seconds": 1200,
+  "actions": [
+    {
+      "name": "focused-shards",
+      "args": [
+        "--match",
+        "Shard"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 17.54254079191014
+    },
+    {
+      "name": "full-keiro",
+      "args": [],
+      "exit_code": 1,
+      "elapsed_seconds": 165.97074149991386
+    }
+  ]
+}

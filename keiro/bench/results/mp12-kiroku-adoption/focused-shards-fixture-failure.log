@@ -1,0 +1,42 @@
+
+Shard lease
+  validates sharded worker options before startup [✔]
+  ensureShardRows populates N rows once (idempotent on re-run) [✔]
+  worker A claims all N when free; B claims 0 while A holds valid leases [✔]
+  B claims A's buckets after A's lease expires; A then renews nothing [✔]
+  renewLease returns only still-held buckets [✔]
+  releaseShards: relinquished buckets are immediately claimable [✔]
+  fairShareTarget divides buckets evenly (ceil) [✔]
+  acquireOutcome keeps previous ownership on acquire failure [✔]
+  ensureShards rejects a shardCount mismatch [✔]
+Shard count resize
+  refuses recorded owners, including expired leases, without changing either table [✔]
+  shrinks and grows stopped groups at the old minimum without obsolete members [✔]
+  equalizes same-size assignments and is idempotent on repeat [✔]
+  rolls back checkpoint and lease changes when surrounding SQL fails [✔]
+  delivers every seeded event after a changed hash assignment [✘]
+Sharded subscription single worker
+  one worker with N=4 buckets drains a seeded category exactly once [✔]
+Sharded subscription drain and failover
+  three workers drain disjointly, then re-home a killed worker's buckets [✔]
+  a killed worker relinquishes its leases immediately [✔]
+  a handler exception is retried in place and drains [✔]
+Sharded subscription ack coupling
+  redelivers a batch-tail event whose handler was killed mid-flight [✔]
+  loses no events when a bucket is shed mid-drain during rebalance [✔]
+  allows zombie overlap duplicates without losing an event [✔]
+  dead-letters a poison event after bounded retries and keeps draining [✔]
+
+Failures:
+
+  test/Main.hs:12053:16: 
+  1) Shard count resize delivers every seeded event after a changed hash assignment
+       expected: True
+        but got: False
+
+  To rerun use: --match "/Shard count resize/delivers every seeded event after a changed hash assignment/" --seed 952196290
+
+Randomized with seed 952196290
+
+Finished in 30.0077 seconds
+22 examples, 1 failure

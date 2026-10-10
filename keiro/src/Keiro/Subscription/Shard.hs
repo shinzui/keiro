@@ -36,9 +36,13 @@ module Keiro.Subscription.Shard
     -- * Lease descriptor
     ShardLease (..),
     ShardCountMismatch (..),
+    ShardResizeActiveLeases (..),
+    ShardCountResizeReport (..),
 
     -- * Ownership operations
     ensureShards,
+    resizeShardCount,
+    resizeShardCountTx,
     acquireOwnedBuckets,
     renewOwnedBuckets,
     relinquish,
@@ -54,9 +58,10 @@ where
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Time (NominalDiffTime)
+import Data.Typeable (cast)
 import Data.UUID.V4 qualified as UUIDv4
 import Effectful (Eff, IOE, (:>))
-import Effectful.Exception (Exception, throwIO)
+import Effectful.Exception (Exception (..), throwIO)
 import Keiro.Prelude
 import Keiro.Subscription.Shard.Schema
   ( WorkerId (..),
@@ -64,12 +69,17 @@ import Keiro.Subscription.Shard.Schema
     ensureShardRows,
     listShardCounts,
     listShardOwnership,
+    lockShardNameTx,
+    lockShardRowsTx,
     releaseShardsTx,
     renewLeaseTx,
+    replaceShardRowsTx,
   )
 import Kiroku.Store.Effect (Store)
-import Kiroku.Store.Subscription.Types (SubscriptionName (..))
+import Kiroku.Store.Subscription.Checkpoint (ConsumerGroupResizeReport, resizeConsumerGroupTx)
+import Kiroku.Store.Subscription.Types (ConsumerGroupSize, SomeSubscriptionStartupFailure (..), SubscriptionName (..), consumerGroupSizeValue)
 import Kiroku.Store.Transaction (runTransaction)
+import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 -- | Mint a fresh per-process 'WorkerId' (a random UUID).
 freshWorkerId :: (IOE :> es) => Eff es WorkerId
@@ -94,7 +104,13 @@ data ShardCountMismatch = ShardCountMismatch
     mismatchFound :: ![Int]
   }
   deriving stock (Generic, Eq, Show)
-  deriving anyclass (Exception)
+
+-- | Keiro and Kiroku topology refusals share the released startup-failure parent.
+instance Exception ShardCountMismatch where
+  toException = toException . SomeSubscriptionStartupFailure
+  fromException exception = do
+    SomeSubscriptionStartupFailure refusal <- fromException exception
+    cast refusal
 
 -- | The fair-share claim target: @ceil(N / liveWorkers)@. When @k@ workers are
 -- live they collectively claim all @N@ buckets and no single worker hogs them. A
@@ -108,19 +124,72 @@ fairShareTarget shardCount liveWorkers =
 -- on every worker startup ('ensureShardRows' uses @ON CONFLICT DO NOTHING@).
 ensureShards :: (Store :> es) => ShardLease -> Eff es ()
 ensureShards lease = do
-  counts <- runTransaction $ do
-    ensureShardRows (subscriptionName lease) (shardCount lease)
-    listShardCounts (subscriptionName lease)
-  let configured = shardCount lease
-      found = [n | (n, _) <- counts, n /= configured]
-  unless (null found) $
-    throwIO
-      ShardCountMismatch
-        { mismatchSubscriptionName = case subscriptionName lease of
-            SubscriptionName name -> name,
-          mismatchConfigured = configured,
-          mismatchFound = found
-        }
+  outcome <- runTransaction $ do
+    lockShardNameTx (subscriptionName lease)
+    counts <- listShardCounts (subscriptionName lease)
+    let configured = shardCount lease
+        found = [n | (n, _) <- counts, n /= configured]
+    if null found
+      then ensureShardRows (subscriptionName lease) configured >> pure (Right ())
+      else
+        pure
+          ( Left
+              ShardCountMismatch
+                { mismatchSubscriptionName = case subscriptionName lease of SubscriptionName name -> name,
+                  mismatchConfigured = configured,
+                  mismatchFound = found
+                }
+          )
+  either throwIO pure outcome
+
+-- | Any recorded owner blocks resize, even after expiry. Stop workers and
+-- explicitly relinquish ownership before changing hash assignments.
+data ShardResizeActiveLeases = ShardResizeActiveLeases
+  { resizeSubscriptionName :: !SubscriptionName,
+    resizeOwnedBuckets :: ![Int]
+  }
+  deriving stock (Generic, Eq, Show)
+  deriving anyclass (Exception)
+
+-- | Both sides of the committed topology change; mixed old shard counts remain
+-- visible in the report instead of being collapsed to a guessed single size.
+data ShardCountResizeReport = ShardCountResizeReport
+  { previousShardCounts :: ![(Int, Int)],
+    resizedShardCount :: !ConsumerGroupSize,
+    checkpointResize :: !ConsumerGroupResizeReport
+  }
+  deriving stock (Generic, Eq, Show)
+
+-- | Construct the size with 'Kiroku.Store.Subscription.Types.mkConsumerGroupSize'
+-- first. Stop all workers, relinquish every lease, then atomically replace lease
+-- rows and rewind checkpoints through the released public API in
+-- mori://shinzui/kiroku/packages/kiroku-store. Same-size resize equalizes progress
+-- too, so a changed hash assignment cannot leave gaps.
+resizeShardCount :: (Store :> es) => SubscriptionName -> ConsumerGroupSize -> Eff es ShardCountResizeReport
+resizeShardCount name count = do
+  outcome <- runTransaction (resizeShardCountTx name count)
+  either throwIO pure outcome
+
+-- | Compose resize with application SQL. A refused resize performs no writes;
+-- any subsequent transaction failure rolls back both checkpoint and lease rows.
+resizeShardCountTx :: SubscriptionName -> ConsumerGroupSize -> Tx.Transaction (Either ShardResizeActiveLeases ShardCountResizeReport)
+resizeShardCountTx name count = do
+  rows <- lockShardRowsTx name
+  let active = [bucket | (bucket, _, owner) <- rows, isJust owner]
+  if null active
+    then do
+      oldCounts <- listShardCounts name
+      checkpoints <- resizeConsumerGroupTx name count
+      replaceShardRowsTx name (fromIntegral (consumerGroupSizeValue count))
+      pure
+        ( Right
+            ShardCountResizeReport
+              { previousShardCounts = oldCounts,
+                resizedShardCount = count,
+                checkpointResize = checkpoints
+              }
+        )
+    else pure (Left (ShardResizeActiveLeases name active))
 
 -- | One ownership-reconcile pass: in a single transaction, renew the leases this
 -- worker still holds, then — if it holds fewer than its fair share — claim __one__

@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-10
+* **Addition**: ADR-50: atomically resize stopped shard leases with the released public Kiroku checkpoint API.
+
 ## 2026-10-05
 * **Update**: Clarify that the ADR-49 support cutoff can retire both old identity bridges while current identity remains frozen and old consumers need separate adoption readiness.
 * **Update**: Scope retained-history requirements to supported contracts and link the explicit ADR-49 retirement of old readers, coverage, and recurring comparison gates.

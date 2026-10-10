@@ -6,6 +6,26 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Adopt `kiroku-store ^>=0.10.0.0`, migrations `^>=0.7.0.0` and the
+  Shibuya adapter `^>=0.6.0.0`. Apply Kiroku migrations 0013 and 0014 before
+  starting this cohort. Subscription sizes, members, batches and buffers use
+  validated public constructors. `ShardWorkerError` gains `ShardReaderStartupFailed`;
+  `ShardCountMismatch` can be caught as `SomeSubscriptionStartupFailure`.
+
+### New Features
+
+- Add `resizeShardCount` and transaction-composable `resizeShardCountTx` for
+  stopped, unowned groups. Atomically rewind every checkpoint to the previous
+  minimum and replace lease rows, with typed owner refusal and resize evidence.
+
+### Fixes
+
+- Refuse mismatched shard counts before inserting lease rows. Classify typed
+  event-decode failures as deterministic failures, preserving stop-on-undecodable
+  subscription behavior.
+
 ## 0.19.0.1 — 2026-10-05
 
 ### Other Changes

@@ -1,0 +1,753 @@
+Resolving dependencies...
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.19.0.1 (lib) (file src/Keiro/Subscription/Shard.hs changed)
+ - keiro-dsl-0.19.0.1 (exe:keiro-dsl) (configuration changed)
+ - keiro-dsl-corpus-regen-0.1.0.0 (exe:keiro-dsl-corpus-regen) (configuration changed)
+ - keiro-ops-0.19.0.1 (lib) (dependency rebuilt)
+ - keiro-dsl-conformance-service-runtime-0.0.0.0 (lib) (dependency rebuilt)
+ - keiro-dsl-codec-compare-artifact-info-0.1.0.0 (exe:keiro-dsl-codec-compare-artifact-info) (configuration changed)
+ - keiro-dsl-behavior-complete-report-0.0.0.0 (exe:keiro-dsl-behavior-complete-report) (dependency rebuilt)
+ - keiro-0.19.0.1 (test:keiro-test) (dependency rebuilt)
+ - jitsurei-0.1.0.0 (lib) (dependency rebuilt)
+ - keiro-ops-0.19.0.1 (exe:keiro-ops) (configuration changed)
+ - jitsurei-0.1.0.0 (exe:jitsurei-diagrams) (configuration changed)
+ - jitsurei-0.1.0.0 (exe:jitsurei-demo) (configuration changed)
+Configuring executable 'keiro-dsl-corpus-regen' for keiro-dsl-corpus-regen-0.1.0.0...
+Configuring executable 'keiro-dsl' for keiro-dsl-0.19.0.1...
+Preprocessing library for keiro-0.19.0.1...
+Building library for keiro-0.19.0.1...
+[23 of 68] Compiling Keiro.Subscription.Shard ( src/Keiro/Subscription/Shard.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard.dyn_o ) [Source file changed]
+[24 of 68] Compiling Keiro.Subscription.Shard.Worker ( src/Keiro/Subscription/Shard/Worker.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard/Worker.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/Subscription/Shard/Worker.dyn_o ) [Keiro.Subscription.Shard changed]
+[62 of 68] Compiling Keiro.ProcessManager ( src/Keiro/ProcessManager.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/ProcessManager.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/build/Keiro/ProcessManager.dyn_o ) [Source file changed]
+Preprocessing executable 'keiro-dsl-corpus-regen' for keiro-dsl-corpus-regen-0.1.0.0...
+Building executable 'keiro-dsl-corpus-regen' for keiro-dsl-corpus-regen-0.1.0.0...
+[1 of 2] Compiling CorpusPlan       ( src/CorpusPlan.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-corpus-regen-0.1.0.0/x/keiro-dsl-corpus-regen/build/keiro-dsl-corpus-regen/keiro-dsl-corpus-regen-tmp/CorpusPlan.o ) [Keiro.Dsl.ConformancePackage changed]
+Preprocessing executable 'keiro-dsl' for keiro-dsl-0.19.0.1...
+Building executable 'keiro-dsl' for keiro-dsl-0.19.0.1...
+[1 of 1] Compiling Main             ( app/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/x/keiro-dsl/build/keiro-dsl/keiro-dsl-tmp/Main.o ) [Data.Aeson.Text package changed]
+[2 of 2] Compiling Main             ( src/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-corpus-regen-0.1.0.0/x/keiro-dsl-corpus-regen/build/keiro-dsl-corpus-regen/keiro-dsl-corpus-regen-tmp/Main.o ) [CorpusPlan changed]
+Configuring executable 'keiro-dsl-codec-compare-artifact-info' for keiro-dsl-codec-compare-artifact-info-0.1.0.0...
+Preprocessing library for keiro-ops-0.19.0.1...
+Building library for keiro-ops-0.19.0.1...
+Preprocessing executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Preprocessing library for jitsurei-0.1.0.0...
+Preprocessing library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+Preprocessing test suite 'keiro-test' for keiro-0.19.0.1...
+Building executable 'keiro-dsl-behavior-complete-report' for keiro-dsl-behavior-complete-report-0.0.0.0...
+Building library for jitsurei-0.1.0.0...
+Building test suite 'keiro-test' for keiro-0.19.0.1...
+Building library for keiro-dsl-conformance-service-runtime-0.0.0.0...
+[3 of 3] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-corpus-regen-0.1.0.0/x/keiro-dsl-corpus-regen/build/keiro-dsl-corpus-regen/keiro-dsl-corpus-regen [Objects changed]
+[10 of 16] Compiling Keiro.Ops.Shard  ( src/Keiro/Ops/Shard.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Shard.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops/Shard.dyn_o ) [Data.UUID package changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-0.19.0.1/x/keiro-dsl/build/keiro-dsl/keiro-dsl [Objects changed]
+[18 of 18] Compiling Main             ( test/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/t/keiro-test/build/keiro-test/keiro-test-tmp/Main.o ) [Source file changed]
+[16 of 16] Compiling Keiro.Ops        ( src/Keiro/Ops.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/build/Keiro/Ops.dyn_o ) [Hasql.Connection.Settings package changed]
+Configuring executable 'jitsurei-diagrams' for jitsurei-0.1.0.0...
+Configuring executable 'keiro-ops' for keiro-ops-0.19.0.1...
+Configuring executable 'jitsurei-demo' for jitsurei-0.1.0.0...
+Preprocessing executable 'keiro-dsl-codec-compare-artifact-info' for keiro-dsl-codec-compare-artifact-info-0.1.0.0...
+Building executable 'keiro-dsl-codec-compare-artifact-info' for keiro-dsl-codec-compare-artifact-info-0.1.0.0...
+[ 1 of 11] Compiling Conformance.Structural.Domain ( conformance-structural/Conformance/Structural/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Conformance/Structural/Domain.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Conformance/Structural/Domain.dyn_o ) [Keiki.Shape package changed]
+Preprocessing executable 'jitsurei-diagrams' for jitsurei-0.1.0.0...
+Building executable 'jitsurei-diagrams' for jitsurei-0.1.0.0...
+test/Main.hs:15:46: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘.:?’ from module ‘Data.Aeson’ is redundant
+   |
+15 | import Data.Aeson (object, withObject, (.:), (.:?))
+   |                                              ^^^^^
+
+test/Main.hs:28:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Data.Monoid’ is redundant
+      except perhaps to import instances from ‘Data.Monoid’
+    To import instances alone, use: import Data.Monoid()
+   |
+28 | import Data.Monoid (mempty)
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:102:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Keiro.EventStream’ is redundant
+      except perhaps to import instances from ‘Keiro.EventStream’
+    To import instances alone, use: import Keiro.EventStream()
+    |
+102 | import Keiro.EventStream (Terminality (..))
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:103:1: warning: [GHC-66111] [-Wunused-imports]
+    The import of ‘Keiro.EventStream.Validate’ is redundant
+      except perhaps to import instances from ‘Keiro.EventStream.Validate’
+    To import instances alone, use: import Keiro.EventStream.Validate()
+    |
+103 | import Keiro.EventStream.Validate
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^...
+
+test/Main.hs:207:5: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘ShardCountResizeReport’
+    from module ‘Keiro.Subscription.Shard’ is redundant
+    |
+207 |     ShardCountResizeReport (..),
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:368:5: warning: [GHC-38856] [-Wunused-imports]
+    The import of ‘EventType’
+    from module ‘Kiroku.Store.Types’ is redundant
+    |
+368 |     EventType (..),
+    |     ^^^^^^^^^^^^^^
+
+test/Main.hs:902:45: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘Codec’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+    |
+902 |       fmap (const ()) (mkCodec (orderCodec {schemaVersion = 0})) `shouldBe` Left (CodecSchemaVersionInvalid 0)
+    |                                             ^^^^^^^^^^^^^^^^^
+
+test/Main.hs:1001:113: warning: [GHC-18042] [-Wtype-defaults]
+    • Defaulting the type variable ‘a0’ to type ‘Integer’ in the following constraints
+        (Num a0) arising from the literal ‘7’ at test/Main.hs:1001:113
+        (Eq a0) arising from a use of ‘shouldBe’ at test/Main.hs:1001:9-18
+        (Show a0)
+          arising from a use of ‘shouldBe’ at test/Main.hs:1001:9-18
+        (Num a0) arising from the literal ‘7’ at test/Main.hs:991:106
+    • In the expression: 7
+      In the third argument of ‘NominalFixture’, namely ‘(7, True)’
+      In the first argument of ‘(:|)’, namely
+        ‘NominalFixture
+           "enabled"
+           (object ["enabled" Aeson..= True, "amount" Aeson..= (7 :: Int)])
+           (7, True)’
+     |
+1001 |         `shouldBe` ( NominalFixture "enabled" (object ["enabled" Aeson..= True, "amount" Aeson..= (7 :: Int)]) (7, True)
+     |                                                                                                                 ^
+
+test/Main.hs:3453:11: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3453 |           runQueryWith Nothing Strong counterReadModel "empty"
+     |           ^^^^^^^^^^^^
+
+test/Main.hs:3453:32: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3453 |           runQueryWith Nothing Strong counterReadModel "empty"
+     |                                ^^^^^^
+
+test/Main.hs:3528:11: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3528 |           runQueryWith (Just keiroMetrics) Strong counterImmediateReadModel "inline"
+     |           ^^^^^^^^^^^^
+
+test/Main.hs:3528:44: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3528 |           runQueryWith (Just keiroMetrics) Strong counterImmediateReadModel "inline"
+     |                                            ^^^^^^
+
+test/Main.hs:3540:11: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3540 |           runQueryWith
+     |           ^^^^^^^^^^^^
+
+test/Main.hs:3542:14: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘PositionWait’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForPosition with a concrete target. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3542 |             (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+     |              ^^^^^^^^^^^^
+
+test/Main.hs:3580:13: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3580 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |             ^^^^^^^^^^^^
+
+test/Main.hs:3580:34: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3580 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |                                  ^^^^^^
+
+test/Main.hs:3611:13: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3611 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |             ^^^^^^^^^^^^
+
+test/Main.hs:3611:34: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3611 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |                                  ^^^^^^
+
+test/Main.hs:3662:13: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3662 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |             ^^^^^^^^^^^^
+
+test/Main.hs:3662:34: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3662 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |                                  ^^^^^^
+
+test/Main.hs:3697:13: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3697 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |             ^^^^^^^^^^^^
+
+test/Main.hs:3697:34: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3697 |             runQueryWith Nothing Strong counterReadModel "inline"
+     |                                  ^^^^^^
+
+test/Main.hs:3745:13: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3745 |             runQueryWith Nothing Strong counterCategoryReadModel "inline"
+     |             ^^^^^^^^^^^^
+
+test/Main.hs:3745:34: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Strong’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForHead. Strong is a bounded captured-head wait, not linearizability. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3745 |             runQueryWith Nothing Strong counterCategoryReadModel "inline"
+     |                                  ^^^^^^
+
+test/Main.hs:3799:13: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3799 |             runQueryWith
+     |             ^^^^^^^^^^^^
+
+test/Main.hs:3801:16: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘PositionWait’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForPosition with a concrete target. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3801 |               (PositionWait (fastWaitOptions & #target .~ Just globalPosition))
+     |                ^^^^^^^^^^^^
+
+test/Main.hs:3824:11: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+3824 |           runQueryWith
+     |           ^^^^^^^^^^^^
+
+test/Main.hs:3826:14: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘PositionWait’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForPosition with a concrete target. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+3826 |             (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+     |              ^^^^^^^^^^^^
+
+test/Main.hs:4347:11: warning: [GHC-68441] [-Wdeprecations]
+    In the use of ‘runQueryWith’ (imported from Keiro.ReadModel):
+    Deprecated: "Use runQueryWithFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits the legacy consistency surface and is removed with that generator in a later major release."
+     |
+4347 |           runQueryWith
+     |           ^^^^^^^^^^^^
+
+test/Main.hs:4349:14: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘PositionWait’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use WaitForPosition with a concrete target. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+     |
+4349 |             (PositionWait (fastWaitOptions & #target .~ Just (GlobalPosition 5)))
+     |              ^^^^^^^^^^^^
+
+test/Main.hs:4833:20: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘id’ shadows the existing binding
+      imported from ‘Prelude’ at test/Main.hs:1:8-11
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Base’)
+     |
+4833 |           original id = counterTimerRequest & #timerId .~ id & #fireAt .~ dueTimerTime & #payload .~ object ["version" Aeson..= (1 :: Int)]
+     |                    ^^
+
+test/Main.hs:4834:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘id’ shadows the existing binding
+      imported from ‘Prelude’ at test/Main.hs:1:8-11
+      (and originally defined in ‘ghc-internal-9.1204.0:GHC.Internal.Base’)
+     |
+4834 |           changed id = original id & #fireAt .~ addUTCTime 60 dueTimerTime & #payload .~ object ["version" Aeson..= (2 :: Int)]
+     |                   ^^
+
+test/Main.hs:5500:17: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+     |
+5500 |               { targetEventStream = rejectingEventStream
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:5533:17: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+     |
+5533 |               { targetEventStream = rejectNineEventStream
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:5581:17: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+     |
+5581 |               { targetEventStream = rejectingEventStream
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:5605:17: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+     |
+5605 |               { eventStream = rejectingEventStream
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:5630:17: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+     |
+5630 |               { targetEventStream = rejectingEventStream
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:5654:17: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+     |
+5654 |               { targetEventStream = rejectingEventStream
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:6549:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+6549 |         Right before <- Store.runStoreIO firstStore $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+     |               ^^^^^^
+
+test/Main.hs:6604:15: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+6604 |         Right before <- Store.runStoreIO firstStore $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+     |               ^^^^^^
+
+test/Main.hs:6657:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+6657 |             before <- snapshot
+     |             ^^^^^^
+
+test/Main.hs:6671:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+6671 |       before <- snapshot
+     |       ^^^^^^
+
+test/Main.hs:6688:21: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+6688 |         Right (Just before) <- Store.runStoreIO storeHandle $ lookupTimer tid
+     |                     ^^^^^^
+
+test/Main.hs:6691:22: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘repeated’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at test/Main.hs:196:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Fold’)
+     |
+6691 |         Right (Right repeated) <- Store.runStoreIO storeHandle $ claimDeadTimer request
+     |                      ^^^^^^^^
+
+test/Main.hs:6707:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+6707 |       Right before <- Store.runStoreIO storeHandle $ Store.runTransaction $ Tx.statement () timerReadSnapshotStmt
+     |             ^^^^^^
+
+test/Main.hs:7222:32: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘index’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at test/Main.hs:196:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Indexed’)
+     |
+7222 |         enqueue producer event index draft storeHandle = Store.runStoreIO storeHandle (Store.runTransaction (ProducerOutbox.enqueueProducerEventTx producer event index draft))
+     |                                ^^^^^
+
+test/Main.hs:7251:9: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+7251 |         before <- Store.withStore (Store.defaultConnectionSettings conn) $ \storeHandle -> do
+     |         ^^^^^^
+
+test/Main.hs:7261:16: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+7261 |         Right [before] <- rows storeHandle
+     |                ^^^^^^
+
+test/Main.hs:7314:16: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+7314 |         Right [before] <- rows storeHandle
+     |                ^^^^^^
+
+test/Main.hs:7377:16: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+     |
+7377 |         Right [before] <- rows storeHandle
+     |                ^^^^^^
+
+test/Main.hs:8636:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘contexts’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at test/Main.hs:196:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Plated’)
+     |
+8636 |       contexts <- traverse (shouldBeRight . mkDelegatedRetryContext 3) [1, 2, 3, 4]
+     |       ^^^^^^^^
+
+test/Main.hs:8639:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘failing’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at test/Main.hs:196:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Traversal’)
+     |
+8639 |           failing _ _ = do
+     |           ^^^^^^^
+
+test/Main.hs:8641:13: warning: [GHC-81995] [-Wunused-do-bind]
+    A do-notation statement discarded a result of type
+      ‘ghc-prim:GHC.Types.ZonkAny 32’
+    Suggested fix:
+      Suppress this warning by saying
+        ‘_ <- liftIO (throwIO (userError "retry ladder failure"))’
+     |
+8641 |             liftIO (throwIO (userError "retry ladder failure"))
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:8673:13: warning: [GHC-81995] [-Wunused-do-bind]
+    A do-notation statement discarded a result of type
+      ‘ghc-prim:GHC.Types.ZonkAny 33’
+    Suggested fix:
+      Suppress this warning by saying
+        ‘_ <- liftIO (throwIO (userError "terminal delegated failure"))’
+     |
+8673 |             liftIO (throwIO (userError "terminal delegated failure"))
+     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:10074:13: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘indexed’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at test/Main.hs:196:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Internal.Indexed’)
+      |
+10074 |       Right indexed <- Store.runStoreIO storeHandle $ loadStepIndex name wid 0
+      |             ^^^^^^^
+
+test/Main.hs:11499:19: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘streamName’ shadows the existing binding
+      imported from ‘Keiro’ at test/Main.hs:72:1-12
+      (and originally defined in ‘Keiro.Stream’)
+      |
+11499 |               let streamName = workflowGenerationStreamName name wid g
+      |                   ^^^^^^^^^^
+
+test/Main.hs:11565:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘pre’ shadows the existing binding
+      imported from ‘Keiro.Prelude’ at test/Main.hs:196:1-20
+      (and originally defined in ‘lens-5.3.6:Control.Lens.Fold’)
+      |
+11565 |       pre <- Store.runStoreIO storeHandle $ runWorkflow name inflight (prePatchWorkflow counter)
+      |       ^^^
+
+test/Main.hs:11990:11: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+      |
+11990 |           before <- positions store
+      |           ^^^^^^
+
+test/Main.hs:11999:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+      |
+11999 |       before <- seedSkewed store
+      |       ^^^^^^
+
+test/Main.hs:12009:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+      |
+12009 |       before <- seedSkewed store
+      |       ^^^^^^
+
+test/Main.hs:12020:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+      |
+12020 |       before <- seedSkewed store
+      |       ^^^^^^
+
+test/Main.hs:12028:7: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘before’ shadows the existing binding
+      imported from ‘Test.Hspec’ at test/Main.hs:433:1-17
+      (and originally defined in ‘hspec-core-2.11.18:Test.Hspec.Core.Hooks’)
+      |
+12028 |       before <- seedSkewed store
+      |       ^^^^^^
+
+test/Main.hs:15571:18: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘version’ shadows the existing binding
+      imported from ‘Keiro’ at test/Main.hs:72:1-12
+      |
+15571 | metadataForOrDie version existing =
+      |                  ^^^^^^^
+
+test/Main.hs:17210:7: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+      |
+17210 |     { name = "unicode-pm",
+      |       ^^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:17336:7: warning: [GHC-02256] [-Wambiguous-fields]
+    Ambiguous record update with parent type constructor ‘ProcessManager’.
+    This type-directed disambiguation mechanism will not be supported by -XDuplicateRecordFields in future releases of GHC.
+    Consider disambiguating using module qualification instead.
+      |
+17336 |     { name = managerName,
+      |       ^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:17756:38: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘streamName’ shadows the existing binding
+      imported from ‘Keiro’ at test/Main.hs:72:1-12
+      (and originally defined in ‘Keiro.Stream’)
+      |
+17756 | appendCounterEventWithId storeHandle streamName eventId event = do
+      |                                      ^^^^^^^^^^
+
+test/Main.hs:17937:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+17937 |       subscriptionName = "counter-read-model-sub",
+      |       ^^^^^^^^^^^^^^^^
+
+test/Main.hs:17940:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+17940 |       defaultConsistency = Eventual,
+      |       ^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:17940:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+17940 |       defaultConsistency = Eventual,
+      |                            ^^^^^^^^
+
+test/Main.hs:17941:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+17941 |       strongScope = EntireLog,
+      |       ^^^^^^^^^^^
+
+test/Main.hs:17941:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+17941 |       strongScope = EntireLog,
+      |                     ^^^^^^^^^
+
+test/Main.hs:17972:38: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘CategoryHead’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use CategoryVisibleHead. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+17972 |   counterReadModel & #strongScope .~ CategoryHead "counter"
+      |                                      ^^^^^^^^^^^^
+
+test/Main.hs:18064:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18064 |       subscriptionName = "placed-counter-sub",
+      |       ^^^^^^^^^^^^^^^^
+
+test/Main.hs:18067:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18067 |       defaultConsistency = Eventual,
+      |       ^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:18067:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18067 |       defaultConsistency = Eventual,
+      |                            ^^^^^^^^
+
+test/Main.hs:18068:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18068 |       strongScope = EntireLog,
+      |       ^^^^^^^^^^^
+
+test/Main.hs:18068:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18068 |       strongScope = EntireLog,
+      |                     ^^^^^^^^^
+
+test/Main.hs:18341:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘subscriptionName’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint.cursorAuthority and readModelCursorAuthority. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18341 |       subscriptionName = "router-targets-sub",
+      |       ^^^^^^^^^^^^^^^^
+
+test/Main.hs:18344:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘defaultConsistency’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use ReadModelBlueprint builders and readModelDefaultFreshness. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18344 |       defaultConsistency = Eventual,
+      |       ^^^^^^^^^^^^^^^^^^
+
+test/Main.hs:18344:28: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘Eventual’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use Immediate. Eventual means only that the query does not wait. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18344 |       defaultConsistency = Eventual,
+      |                            ^^^^^^^^
+
+test/Main.hs:18345:7: warning: [GHC-68441] [-Wdeprecations]
+    In the use of record field of ReadModel ‘strongScope’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use HeadScope through the ReadModelBlueprint builders. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18345 |       strongScope = EntireLog,
+      |       ^^^^^^^^^^^
+
+test/Main.hs:18345:21: warning: [GHC-68441] [-Wdeprecations]
+    In the use of data constructor ‘EntireLog’
+    (imported from Keiro.ReadModel):
+    Deprecated: "Use EntireVisibleLog. It remains exported while keiro-dsl's Language 4 read-model generator emits it and is removed with that generator in a later major release."
+      |
+18345 |       strongScope = EntireLog,
+      |                     ^^^^^^^^^
+
+test/Main.hs:18744:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘step’ shadows the existing binding
+      imported from ‘Keiro.Workflow’ at test/Main.hs:293:5-8
+      |
+18744 |     step = 100_000
+      |     ^^^^
+
+test/Main.hs:18758:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘step’ shadows the existing binding
+      imported from ‘Keiro.Workflow’ at test/Main.hs:293:5-8
+      |
+18758 |     step = 50_000
+      |     ^^^^
+
+test/Main.hs:18775:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘step’ shadows the existing binding
+      imported from ‘Keiro.Workflow’ at test/Main.hs:293:5-8
+      |
+18775 |     step = 200_000
+      |     ^^^^
+
+test/Main.hs:18795:5: warning: [GHC-63397] [-Wname-shadowing]
+    This binding for ‘step’ shadows the existing binding
+      imported from ‘Keiro.Workflow’ at test/Main.hs:293:5-8
+      |
+18795 |     step = 100_000
+      |     ^^^^
+
+[1 of 1] Compiling Main             ( app/DiagramsMain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-diagrams/build/jitsurei-diagrams/jitsurei-diagrams-tmp/Main.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-diagrams/build/jitsurei-diagrams/jitsurei-diagrams-tmp/Main.dyn_o ) [Keiki.Render.Validate package changed]
+[ 6 of 11] Compiling Conformance.Structural.Bindings ( conformance-structural/Conformance/Structural/Bindings.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Conformance/Structural/Bindings.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Conformance/Structural/Bindings.dyn_o ) [Keiro.Codec.Structural changed]
+[ 7 of 11] Compiling Generated.StructuralConformance.ArtifactCatalog.Domain ( conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Domain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Generated/StructuralConformance/ArtifactCatalog/Domain.o ) [Keiki.Generics.TH package changed]
+Preprocessing executable 'keiro-ops' for keiro-ops-0.19.0.1...
+Building executable 'keiro-ops' for keiro-ops-0.19.0.1...
+Preprocessing executable 'jitsurei-demo' for jitsurei-0.1.0.0...
+Building executable 'jitsurei-demo' for jitsurei-0.1.0.0...
+[1 of 1] Compiling Main             ( app/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/x/keiro-ops/build/keiro-ops/keiro-ops-tmp/Main.o ) [Keiro.Ops changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-diagrams/build/jitsurei-diagrams/jitsurei-diagrams [Objects changed]
+[1 of 1] Compiling Main             ( app/Main.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-demo/build/jitsurei-demo/jitsurei-demo-tmp/Main.o, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-demo/build/jitsurei-demo/jitsurei-demo-tmp/Main.dyn_o ) [Data.UUID.V5 package changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-ops-0.19.0.1/x/keiro-ops/build/keiro-ops/keiro-ops [Objects changed]
+[ 8 of 11] Compiling Generated.StructuralConformance.ArtifactCatalog.Codec ( conformance-structural/Generated/StructuralConformance/ArtifactCatalog/Codec.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Generated/StructuralConformance/ArtifactCatalog/Codec.o ) [Data.Aeson.Types package changed]
+[ 9 of 11] Compiling Generated.StructuralConformance.Structural.CodecCompare.ArtifactInfo ( conformance-structural/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Generated/StructuralConformance/Structural/CodecCompare/ArtifactInfo.o ) [Data.Aeson package changed]
+[10 of 11] Compiling Conformance.CodecCompare.Historical ( conformance-codec-compare/Conformance/CodecCompare/Historical.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Conformance/CodecCompare/Historical.o ) [Data.Aeson.Types package changed]
+[11 of 11] Compiling Main             ( conformance-codec-compare/RunnerMain.hs, /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info-tmp/Main.o ) [Keiro.Dsl.CodecCompare changed]
+[12 of 12] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-dsl-codec-compare-artifact-info-0.1.0.0/x/keiro-dsl-codec-compare-artifact-info/build/keiro-dsl-codec-compare-artifact-info/keiro-dsl-codec-compare-artifact-info [Objects changed]
+[2 of 2] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jitsurei-0.1.0.0/x/jitsurei-demo/build/jitsurei-demo/jitsurei-demo [Objects changed]
+[19 of 19] Linking /Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/t/keiro-test/build/keiro-test/keiro-test [Objects changed]

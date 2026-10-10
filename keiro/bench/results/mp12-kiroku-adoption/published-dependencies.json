@@ -1,0 +1,112 @@
+[
+  {
+    "type": "configured",
+    "id": "krk-str-0.10.0.0-e57c1707",
+    "pkg-name": "kiroku-store",
+    "pkg-version": "0.10.0.0",
+    "flags": {},
+    "style": "global",
+    "pkg-src": {
+      "type": "repo-tar",
+      "repo": {
+        "type": "secure-repo",
+        "uri": "http://hackage.haskell.org/"
+      }
+    },
+    "pkg-cabal-sha256": "4fdd20799e17c8605c1a6fad29d895d102c8012a30e44b65f29f5080f527deba",
+    "pkg-src-sha256": "ff09ca182e6724e78616f440c9fbe1eb8552960afa4b33ac5ec6cd2cdc0a36d4",
+    "depends": [
+      "sn-2.2.5.1-46d091a9",
+      "sync-2.2.6-fa8c6895",
+      "base-4.21.2.0-3513",
+      "bytestring-0.12.2.0-eafc",
+      "containers-0.7-c9d7",
+      "cntrvrnt-xtrs-0.3.5.4-d73b8493",
+      "ffctfl-cr-2.7.1.2-5387d605",
+      "gnrc-lns-2.3.0.0-d50bd5a2",
+      "hsql-1.10.3.7-d4d86783",
+      "hsql-ntfctns-0.2.5.0-66b59fc1",
+      "hsql-pl-1.4.2.3-b86efc4b",
+      "hsql-trnsctn-1.2.3.1-4887f291",
+      "lns-5.3.6-048bc7f8",
+      "mmzk-typd-0.7.1.2-fd526435",
+      "mtl-2.3.2-9d77",
+      "stm-2.5.3.1-0364",
+      "strmly-cr-0.3.1-ebde66e1",
+      "text-2.1.4-8bdd",
+      "time-1.14-077d",
+      "nlft-cr-0.2.1.0-cd781906",
+      "d-1.3.16.1-08eedfe2",
+      "vctr-0.13.2.0-c949f8b7"
+    ],
+    "exe-depends": [],
+    "component-name": "lib"
+  },
+  {
+    "type": "configured",
+    "id": "krk-str-mgrtns-0.7.0.0-ed355d16",
+    "pkg-name": "kiroku-store-migrations",
+    "pkg-version": "0.7.0.0",
+    "flags": {},
+    "style": "global",
+    "pkg-src": {
+      "type": "repo-tar",
+      "repo": {
+        "type": "secure-repo",
+        "uri": "http://hackage.haskell.org/"
+      }
+    },
+    "pkg-cabal-sha256": "cce0d5a54520b79d907654f7dc5c30d5907c98c6afae4bcd716f7fc8642e94be",
+    "pkg-src-sha256": "9c04214a5184a699e090396ee6065168bf508b2444f4d292a2e10258a89dacdb",
+    "depends": [
+      "base-4.21.2.0-3513",
+      "bytestring-0.12.2.0-eafc",
+      "containers-0.7-c9d7",
+      "filepath-1.5.5.0-61dc",
+      "pg-mgrt-1.2.0.0-58139ff9",
+      "pg-mgrt-mbd-1.2.0.0-b79fb7a5",
+      "pg-mgrt-mprt-cdd-1.2.0.0-9b5beb8f",
+      "template-haskell-2.23.0.0-29c2",
+      "text-2.1.4-8bdd"
+    ],
+    "exe-depends": [],
+    "component-name": "lib"
+  },
+  {
+    "type": "configured",
+    "id": "shby-krk-dptr-0.6.0.0-9ca88670",
+    "pkg-name": "shibuya-kiroku-adapter",
+    "pkg-version": "0.6.0.0",
+    "flags": {
+      "lifecycle-live": false
+    },
+    "style": "global",
+    "pkg-src": {
+      "type": "repo-tar",
+      "repo": {
+        "type": "secure-repo",
+        "uri": "http://hackage.haskell.org/"
+      }
+    },
+    "pkg-cabal-sha256": "f61bb4ae09e9fa56fec8fa1022e200ec2bc159e07b5fca8a4cf1693d08433469",
+    "pkg-src-sha256": "7e7d27e12908aefc806474efec2809a5f901a6c738cc58efe1f5d3eac8cb5c27",
+    "depends": [
+      "sn-2.2.5.1-46d091a9",
+      "base-4.21.2.0-3513",
+      "ffctfl-cr-2.7.1.2-5387d605",
+      "hs-pntlmtry-p-1.0.0.0-3cd3592e",
+      "hs-pntlmtry-smntc-cnvntns-1.40.0.0-b2ff593e",
+      "krk-str-0.10.0.0-e57c1707",
+      "shby-cr-0.10.0.1-a7bc64a0",
+      "shby-krk-dptr-0.6.0.0-2976ebef",
+      "stm-2.5.3.1-0364",
+      "strmly-cr-0.3.1-ebde66e1",
+      "text-2.1.4-8bdd",
+      "time-1.14-077d",
+      "nrdrd-cntnrs-0.2.21-fa9044e3",
+      "d-1.3.16.1-08eedfe2"
+    ],
+    "exe-depends": [],
+    "component-name": "lib"
+  }
+]

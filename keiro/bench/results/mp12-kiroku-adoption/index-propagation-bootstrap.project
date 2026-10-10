@@ -1,0 +1,31 @@
+packages:
+  https://hackage.haskell.org/package/kiroku-store-0.10.0.0/kiroku-store-0.10.0.0.tar.gz
+  https://hackage.haskell.org/package/kiroku-store-migrations-0.7.0.0/kiroku-store-migrations-0.7.0.0.tar.gz
+  https://hackage.haskell.org/package/shibuya-kiroku-adapter-0.6.0.0/shibuya-kiroku-adapter-0.6.0.0.tar.gz
+  keiro
+  keiro-core
+  keiro-migrations
+  keiro-pgmq
+  keiro-test-support
+  jitsurei
+  keiro-dsl
+  keiro-ops
+  keiro-dsl/tools/corpus-regen
+  keiro-dsl/test
+  keiro-dsl/test/conformance-behavior-complete
+  keiro-dsl/test/conformance-service-package/runtime
+  keiro-dsl/test/conformance-service-package/runtime/src/keiro-dsl-conformance.workspace.workspace-proof
+
+-- The -Werror gate on committed generated output (keiro-dsl.cabal, common
+-- stanza generated-output) is flag-guarded because Hackage rejects an
+-- unconditional -Werror; keep it on for every build of this repository.
+package keiro-dsl
+  flags: +werror-generated
+
+source-repository-package
+  type: git
+  location: https://github.com/mzabani/codd.git
+  tag: v0.1.8
+
+allow-newer:
+  haxl:time

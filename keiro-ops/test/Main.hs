@@ -1451,7 +1451,7 @@ seedCheckpointInventory store = do
   expectStore store $
     runTransaction $
       Tx.sql
-        "INSERT INTO subscriptions (subscription_name, stream_name, consumer_group_member, consumer_group_size, last_seen, updated_at) VALUES ('orders', '$all', 1, 2, 3, '2026-08-09 14:01:00+00'), ('billing', '$all', 0, 1, 4, '2026-08-09 14:02:00+00'), ('orders', '$all', 0, 2, 2, '2026-08-09 14:00:00+00')"
+        "INSERT INTO subscriptions (subscription_name, target_kind, consumer_group_member, consumer_group_size, last_seen, updated_at) VALUES ('orders', 'all', 1, 2, 3, '2026-08-09 14:01:00+00'), ('billing', 'all', 0, 1, 4, '2026-08-09 14:02:00+00'), ('orders', 'all', 0, 2, 2, '2026-08-09 14:00:00+00')"
 
 checkpointJsonFixture :: Text -> Int -> Int -> Text -> Int -> Aeson.Value
 checkpointJsonFixture subscription member position updatedAt distance =

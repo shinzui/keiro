@@ -31,6 +31,9 @@ module Keiro.Subscription.Shard.Schema
     releaseShardsTx,
     listShardOwnership,
     listShardCounts,
+    lockShardNameTx,
+    lockShardRowsTx,
+    replaceShardRowsTx,
   )
 where
 
@@ -57,7 +60,47 @@ newtype WorkerId = WorkerId UUID
 -- on every worker startup safe; it converges the table to exactly @N@ rows.
 ensureShardRows :: SubscriptionName -> Int -> Tx.Transaction ()
 ensureShardRows (SubscriptionName name) shardCount =
-  Tx.statement (name, fromIntegral shardCount) ensureShardRowsStmt
+  lockShardNameTx (SubscriptionName name)
+    >> Tx.statement (name, fromIntegral shardCount) ensureShardRowsStmt
+
+-- | Serialize creation and replacement of the complete lease-row set, including
+-- the empty-set case. Claims and renewals remain protected by their row locks.
+lockShardNameTx :: SubscriptionName -> Tx.Transaction ()
+lockShardNameTx (SubscriptionName name) = Tx.statement name lockShardNameStmt
+
+-- | Lock every existing lease row before inspecting owners or changing topology.
+lockShardRowsTx :: SubscriptionName -> Tx.Transaction [(Int, Int, Maybe WorkerId)]
+lockShardRowsTx name@(SubscriptionName text) = do
+  lockShardNameTx name
+  Tx.statement text lockShardRowsStmt
+
+-- | Replace stopped lease rows in the caller's transaction. Call only after
+-- locking the full set and refusing any nonempty owner.
+replaceShardRowsTx :: SubscriptionName -> Int -> Tx.Transaction ()
+replaceShardRowsTx name@(SubscriptionName text) count = do
+  Tx.statement text deleteShardRowsStmt
+  ensureShardRows name count
+
+lockShardNameStmt :: Statement Text ()
+lockShardNameStmt =
+  preparable
+    "SELECT pg_advisory_xact_lock(hashtext('keiro_subscription_shards'), hashtext($1))"
+    (E.param (E.nonNullable E.text))
+    D.noResult
+
+lockShardRowsStmt :: Statement Text [(Int, Int, Maybe WorkerId)]
+lockShardRowsStmt =
+  preparable
+    "SELECT bucket, shard_count, owner_worker_id FROM keiro.keiro_subscription_shards WHERE subscription_name = $1 ORDER BY bucket FOR UPDATE"
+    (E.param (E.nonNullable E.text))
+    (D.rowList ((,,) <$> (fromIntegral <$> D.column (D.nonNullable D.int4)) <*> (fromIntegral <$> D.column (D.nonNullable D.int4)) <*> (fmap WorkerId <$> D.column (D.nullable D.uuid))))
+
+deleteShardRowsStmt :: Statement Text ()
+deleteShardRowsStmt =
+  preparable
+    "DELETE FROM keiro.keiro_subscription_shards WHERE subscription_name = $1"
+    (E.param (E.nonNullable E.text))
+    D.noResult
 
 -- | Claim up to @targetCount@ buckets that are currently unowned __or__ whose
 -- lease has expired (@owner_worker_id IS NULL OR lease_expires_at < now@), in one

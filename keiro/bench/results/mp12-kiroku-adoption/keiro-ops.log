@@ -1,0 +1,74 @@
+
+embedded command tree
+  omits code-dependent commands from the standalone tree [✔]
+  mounts every code-dependent command from typed application hooks [✔]
+  parses a complete versioned start and rejects malformed generation identities [✔]
+numeric option rejection
+  rejects non-finite durations on every duration flag [✔]
+  rejects non-positive and wrapped integer options at parse time [✔]
+  shares non-negative admission across global positions, stream versions, and generations [✔]
+targeted stream repair command
+  requires a positive event admission limit [✔]
+  classifies the command as mutating and renders a stable typed refusal [✔]
+  keeps every typed refusal code distinct and stable [✔]
+catalog rebuild adoption
+  previews exact slice changes and adopts them only with force [✔]
+  annotates preview scope and warns about out-of-scope drift [✔]
+  refuses an adoption preview for a group absent from the catalog [✔]
+  recovers a pre-canonical stranded run through preview and force [✔]
+durable checkpoint inventory
+  mounts both read-only commands in the standalone tree without a lag alias [✔]
+  returns the captured store position with empty durable rows and null summaries [✔]
+  lists stopped-worker rows in name/member order and derives the member-aware floor [✔]
+  diverges store_position from visible_store_head after a hard delete [✔]
+selectConnectionString
+  prefers the explicit option, then the Keiro variable, then DATABASE_URL [✔]
+  uses an empty libpq string for standard PG environment fallbacks [✔]
+parseDuration
+  rejects every non-finite spelling Read Double accepts [✔]
+  rejects finite durations the timestamptz wire encoding cannot represent [✔]
+  still rejects lowercase non-finite spellings, negatives, and junk [✔]
+  accepts integers, decimals, scientific notation, and suffixes unchanged [✔]
+renderHuman
+  aligns columns without changing the structured JSON value [✔]
+keiro-ops numeric argument rejection
+  refuses a NaN duration before any preview or database contact [✔]
+keiro-ops executable
+  emits parseable JSON and refuses a mutation after schema drift [✔]
+workflow handlers
+  previews and runs one bounded application-registry resume pass [✔]
+keiro resume worker: no registry entry for workflow retired-approval (id wf-resume-unregistered); skipping
+  reports advanced work and the exact unregistered workflow names [✔]
+  classifies a due sleep with no timer worker as blocked, not advanced [✔]
+  lists and decodes a real journal without mutating it [✔]
+  applies exact name/status filters and keyset cursors [✔]
+  previews cancellation without mutation, then records it with force [✔]
+  previews and applies failed-workflow resurrection and lease release [✔]
+  previews and signals an awakeable through the supported library path [✔]
+  previews the exact GC candidates before deleting them [✔]
+timer handlers
+  previews and dispatches one bounded due-timer pass through the mounted hook [✔]
+  lists, previews, requeues, and dead-letters a stuck timer [✔]
+  previews and cancels a scheduled timer [✔]
+outbox handlers
+  lists backlog and previews stale recovery without mutation [✔]
+  filters and renders rejected rows with bounded audit fields [✔]
+  surfaces dispatch dead letters through the supported API [✔]
+inbox handlers
+  previews poison marking and GC without bypassing inbox APIs [✔]
+pgmq handlers
+  previews and redrives a DLQ entry, which is then consumable [✔]
+  refuses purge after inspection and leaves the DLQ unchanged [✔]
+  archives an inspected entry by id while it remains hidden [✔]
+projection handlers
+  prunes only the named dedup rows [✔]
+shard handlers
+  previews exact buckets and relinquishes them for another worker [✔]
+snapshot handlers
+  refuses uncovered truncation, passes matching coverage, and deletes advisories [✔]
+stream handlers
+  reads causation and applies reversible lifecycle operations [✔]
+  previews and applies truncate markers and permanent deletion [✔]
+
+Finished in 10.5119 seconds
+50 examples, 0 failures
