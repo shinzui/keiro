@@ -10,7 +10,7 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 - Adopt the published hardening cohort from
   mori://shinzui/kiroku/masterplans/12-harden-the-kiroku-event-store-and-subscription-machinery-surfaced-by-the-2026-07-kiroku-review:
-  store `^>=0.10.0.0`, migrations `^>=0.7.0.0` and adapter `^>=0.6.0.0`.
+  store `^>=0.11.0.0`, migrations `^>=0.7.1.0` and adapter `^>=0.6.0.1`.
   Stop subscription workers before applying Kiroku migrations 0013 and 0014.
   The latter replaces legacy `stream_name` checkpoints with typed target binding.
   Sharded configuration uses validated constructors, and startup refusals share
@@ -27,6 +27,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 - Refuse mismatched shard startup before writing rows and classify typed
   decode failures as deterministic. Existing projections retain the default
   stop-on-undecodable policy.
+
+### Other Changes
+
+- Adopt the inspection release from
+  mori://shinzui/kiroku/packages/kiroku-store. The composed migration plan
+  includes Kiroku migration 0015 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations, adding the stream
+  browsing index. Its transactional index build can block writes; schedule
+  a write pause for large persistent stores. Custom interpreters of the
+  public Kiroku `Store` effect must handle its five new read operations.
 
 ## 0.19.0.1 — 2026-10-05
 

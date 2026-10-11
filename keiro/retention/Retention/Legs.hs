@@ -32,7 +32,7 @@ import Keiro.Stream qualified as KeiroStream
 import Keiro.Test.Postgres (StoreRunner (..))
 import Kiroku.Store qualified as Store
 import Kiroku.Store.Subscription qualified as Subscription
-import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
+import Kiroku.Store.Subscription.Stream (AckItem (..), defaultStreamBufferSize, subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (SubscriptionConfig, SubscriptionName (..), SubscriptionResult (..), SubscriptionTarget (..), defaultSubscriptionConfig)
 import Kiroku.Store.Transaction qualified as StoreTx
 import Kiroku.Store.Types (CategoryName (..), EventData (..), EventId (..), EventType (..), ExpectedVersion (..), RecordedEvent, StreamName (..), StreamVersion (..))
@@ -245,7 +245,7 @@ kirokuSubscribeAck :: GateConfig -> (Store.KirokuStore, StoreRunner) -> IO (Verd
 kirokuSubscribeAck config (store, runner) = do
   appendSignals runner (operationCount config)
   measured <- measureLegWithSampler config "kiroku-subscribe-ack" \sample -> do
-    (source, cancel) <- subscriptionAckStream store (sourceConfig "retention-kiroku-ack") 256
+    (source, cancel) <- subscriptionAckStream store (sourceConfig "retention-kiroku-ack") defaultStreamBufferSize
     consumeAck (operationCount config) config.blockSize sample source `finally` cancel
   postReturn "kiroku-subscribe-ack" (operationCount config)
   pure measured

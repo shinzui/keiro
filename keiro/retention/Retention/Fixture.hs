@@ -76,7 +76,7 @@ import Kiroku.Store qualified as Store
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Effect.Resource (KirokuStoreResource)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Subscription.Stream (AckItem (..), subscriptionAckStream)
+import Kiroku.Store.Subscription.Stream (AckItem (..), mkStreamBufferSize, subscriptionAckStream)
 import Kiroku.Store.Subscription.Types (SubscriptionConfig)
 import Kiroku.Store.Subscription.Types qualified as Sub
 import Kiroku.Store.Types (EventData (..), EventId (..), EventType (..), ExpectedVersion (..), GlobalPosition (..), RecordedEvent (..), StreamName (..), StreamVersion (..))
@@ -394,7 +394,8 @@ decodeSignal recorded =
 
 ackAdapter :: (IOE :> es) => Store.KirokuStore -> SubscriptionConfig -> Natural -> IO (Adapter es RecordedEvent, IO ())
 ackAdapter store config bufferSize = do
-  (source, cancel) <- subscriptionAckStream store config bufferSize
+  validatedBufferSize <- either (fail . show) pure (mkStreamBufferSize bufferSize)
+  (source, cancel) <- subscriptionAckStream store config validatedBufferSize
   let ingested = fmap (toIngested cancel) (Streamly.morphInner liftIO source)
   pure
     ( Adapter {adapterName = "retention-ack-bridge", source = ingested, shutdown = liftIO cancel},

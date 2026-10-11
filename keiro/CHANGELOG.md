@@ -8,8 +8,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Breaking Changes
 
-- Adopt `kiroku-store ^>=0.10.0.0`, migrations `^>=0.7.0.0` and the
-  Shibuya adapter `^>=0.6.0.0`. Apply Kiroku migrations 0013 and 0014 before
+- Adopt `kiroku-store ^>=0.11.0.0`, migrations `^>=0.7.1.0` and the
+  Shibuya adapter `^>=0.6.0.1`. Apply Kiroku migrations 0013 and 0014 before
   starting this cohort. Subscription sizes, members, batches and buffers use
   validated public constructors. `ShardWorkerError` gains `ShardReaderStartupFailed`;
   `ShardCountMismatch` can be caught as `SomeSubscriptionStartupFailure`.
@@ -25,6 +25,16 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - Refuse mismatched shard counts before inserting lease rows. Classify typed
   event-decode failures as deterministic failures, preserving stop-on-undecodable
   subscription behavior.
+
+### Other Changes
+
+- Adopt the inspection release from
+  mori://shinzui/kiroku/packages/kiroku-store. The composed migration plan
+  includes Kiroku migration 0015 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations, adding the stream
+  browsing index. Its transactional index build can block writes; schedule
+  a write pause for large persistent stores. Custom interpreters of the
+  public Kiroku `Store` effect must handle its five new read operations.
 
 ## 0.19.0.1 — 2026-10-05
 
