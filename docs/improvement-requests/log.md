@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-11
+* **Planning**: IR-53 accepted for planning under ExecPlan 306: scope the opt-in guard to synchronous catalog commands, validate fences and serving bindings before the guard, and require same-database concurrency proofs and mixed-workload benchmarks for the global append lock cost. Implementation, publication, and downstream adoption remain separate work.
 * **Addition**: IR-53 proposes atomic consumer-owned relational preconditions for catalog domain commands, raised from mori://shinzui/rei/plans/249-expose-categories-and-custom-properties-with-shared-typed-assignment-semantics. Owner evaluation must precede implementation; no package or release change is authorized.
 
 ## 2026-10-01
