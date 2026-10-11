@@ -5,7 +5,7 @@ description: >-
   Provide a supported way to enforce a consumer-owned relational precondition
   atomically with a domain command and its synchronous catalog projections, returning a typed
   refusal without committing events or bypassing rebuild and serving-revision guarantees.
-timestamp: 2026-10-11T21:01:11Z
+timestamp: 2026-10-11T21:12:22Z
 requestId: IR-53
 status: accepted
 origin: mori://shinzui/rei
@@ -61,8 +61,16 @@ streams. A unique index can prevent duplicate rows, but an ordinary constraint
 exception does not provide the supported typed reuse result. The losing
 creation event must roll back together with every projection effect.
 
-Rei should continue to write one note aggregate per command and use its existing
-catalog owner. Authorization, definition/scope validation, editor interaction,
+Rei should continue to write one note aggregate per command. Keep only the
+minimum identity-to-winning-note index synchronous; project content, tags,
+display joins, search, and reporting asynchronously through a separate catalog
+owner. Use separate rebuild groups where dependencies allow, without a foreign
+key from the identity index to an async row that may not exist yet. The index is
+command authority and must fail closed while unavailable, even though events
+can reconstruct it. Archive retains its mapping; define deletion, re-anchoring,
+and legacy migration policies explicitly. An immediate reader can use a bounded
+post-commit position wait; timeout means committed with view pending. The
+guarded runner remains planned and must not be emulated with private catalog SQL. Authorization, definition/scope validation, editor interaction,
 and other external IO remain consumer preflight work.
 
 ## Existing framework behavior and gap
@@ -194,8 +202,9 @@ change; correctness tests alone do not establish release readiness.
 
 1. A PostgreSQL fixture races two independent stores/connections using different
    aggregate IDs for one consumer identity. Exactly one creation event and one
-   projected note commit. Both callers obtain the same winner, with exactly one
-   changed result. Repeat and archived-note reuse append no facts and preserve
+   minimal identity-index row commit atomically while the rich-view worker is
+   paused. Both callers obtain the same winner, with exactly one changed result.
+   After catch-up, exactly one rich note contains the winner's original payload. Repeat and archived-note reuse append no facts and preserve
    first-write content, tags, and provenance.
 2. Successful checks apply the full event batch and all catalog effects
    atomically. Refused checks commit no event, link, snapshot advancement,
@@ -209,6 +218,10 @@ change; correctness tests alone do not establish release readiness.
 5. A downstream Rei example demonstrates the operation through public APIs,
    without copying private framework table/lock SQL or catalog delivery.
    Tests distinguish a duplicate identity from an infrastructure failure.
+   Rich-view fencing leaves ensure available; identity-group fencing fails it
+   closed. Post-commit read-your-write can return pending and later succeed
+   with the same accepted receipt without reissuing the command. A refused
+   attempt never supplies its rolled-back position as a freshness target.
 6. A guard that would refuse is not executed when the catalog is missing,
    offline rebuilding, failed, or has an unavailable/invalid serving binding.
    A two-connection promotion fixture proves guard lookup and inline delivery

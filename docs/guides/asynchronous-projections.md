@@ -1,12 +1,12 @@
 ---
 type: Guide
 title: Asynchronous Projections
-description: Build eventually consistent read models with durable asynchronous delivery.
+description: Build asynchronous query models with durable delivery and bounded post-commit read-your-write.
 docId: DOC-6
 tags: [keiro, projections, read-models, asynchronous]
 generated:
-  by: human:nadeem
-  at: 2026-08-13T14:21:43Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Asynchronous Projections
@@ -16,8 +16,9 @@ has committed. A Kiroku subscription owns delivery and its checkpoint; Keiro
 coordinates transactional deduplication, application-owned target SQL, catalog
 fencing, and rebuild integration.
 
-This mode keeps command latency and availability independent from the read
-side. The tradeoff is lag and at-least-once delivery. Keiro does not provide a
+Use this mode by default for query models. It removes projection execution from
+the command transaction; shared database resources and catalog lifecycle locks
+can still cause contention. The tradeoff is lag and at-least-once delivery. Keiro does not provide a
 projection drain loop: the application starts and supervises the Kiroku
 subscription and invokes Keiro once per delivered event.
 
@@ -25,6 +26,60 @@ Kiroku's subscription package is
 `mori://shinzui/kiroku/packages/kiroku-store`. The Keiro-side runnable example
 is `orderAuditAsyncProjection` in
 [`Jitsurei.ReadModels`](../../jitsurei/src/Jitsurei/ReadModels.hs).
+
+## Read Your Write After Commit
+
+Return the successful command result directly when the caller only needs its
+identity or acceptance. If the response needs a query view, first let the
+command runner return its committed result, then wait for that result's
+`globalPosition`. Never poll a subscription from an append transaction: the
+worker cannot consume that transaction's uncommitted events.
+
+The following application-handler fragment uses existing Keiro APIs. `result`
+is a successful `CommandResult`, `readModel` has a compatible
+`DurableQueryCursor`, and the subscription worker is running. The `respond...`
+functions and `View...` constructors are application-owned response handling:
+
+```haskell
+case result.globalPosition of
+  Nothing -> respondWithoutProjectionWait result
+  Just position -> do
+    view <-
+      runQueryWithFreshness
+        metrics
+        (WaitForPosition
+          (defaultHeadWaitOptions
+            { target = Just position
+            , timeoutMicros = 500000
+            , pollMicros = 10000
+            }))
+        readModel
+        queryInput
+    case view of
+      Right row -> respondCommitted result (ViewReady row)
+      Left err@ReadModelWaitTimeout{} ->
+        respondCommitted result (ViewPending err)
+      Left err -> respondCommitted result (ViewUnavailable err)
+```
+
+Choose the timeout for the application's response budget; 500 ms is illustrative.
+A wait timeout means **command committed, view pending**, not command failure.
+Retain the receipt and position so a later request can retry the query/wait
+without resubmitting the command. Registration, schema, cursor, or liveness
+errors mean view unavailable and need their own diagnosis. Store/transport
+failures after confirmed commit likewise do not undo that commit. Preserve any
+separate uncertainty from a command whose commit was never confirmed.
+
+A silent no-op has no new append position. A rejected command or rolled-back
+guarded attempt has no committed position for its prospective events. Never
+invent one; return the decision or an independently retained winning receipt
+according to the application's policy.
+
+The supplying cursor must cover the command's source and advance only after its
+projection application succeeds. Skipping or dead-lettering a required event
+breaks this guarantee. This wait establishes a known progress boundary, not
+atomicity between the earlier command and a later query or freshness against all
+future writes. See [Choose Query Freshness Separately](#choose-query-freshness-separately).
 
 ## Define The Projection
 

@@ -5,16 +5,18 @@ description: Build transactionally consistent read models inside the command tra
 docId: DOC-5
 tags: [keiro, projections, read-models, inline]
 generated:
-  by: human:nadeem
-  at: 2026-08-13T14:21:43Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Inline Projections
 
 An `InlineProjection event` applies a decoded domain event in the same
 PostgreSQL transaction as the append that produced it. Either the event and all
-projection SQL commit, or neither does. Use it when updating the view is part of
-the command's success contract.
+projection SQL commit, or neither does. Use it only when an explicit business
+invariant requires that atomic target write. Default query models to
+[asynchronous delivery](asynchronous-projections.md#read-your-write-after-commit),
+including when a caller needs read-your-write after command completion.
 
 The Jitsurei order summary is the complete example in
 [`Jitsurei.ReadModels`](../../jitsurei/src/Jitsurei/ReadModels.hs).
@@ -59,9 +61,9 @@ path can touch the same table.
 An inline projection is part of the event-store append transaction, not work
 performed after the append. The transaction stays open while every inline
 handler runs and retains the locks acquired by the append and catalog group
-until commit. A slow handler therefore increases command latency and lock
-contention and can reduce the throughput of otherwise unrelated event-store
-work that needs conflicting locks.
+until commit. In particular, Kiroku holds its global `$all` row lock until
+transaction end, so a slow handler can delay every other appender to the same
+store, including commands targeting unrelated streams.
 
 Budget the cumulative cost and number of inline projections against the
 store's required append throughput, not only against one command's latency.
@@ -157,11 +159,12 @@ dispatch:
 targetProjections = const orderLiveProjections
 ```
 
-Use a non-empty `targetProjections` only when the router, the next process
-manager decision, or an immediate reader needs the target aggregate's local
-view to reflect that dispatched command. Use `const []` for ordinary fan-out,
-reporting, analytics, integration publishing, and any view that can be updated
-asynchronously.
+Default `targetProjections` to `const []`. Use a non-empty list only for a
+specified invariant requiring a target write atomic with dispatch. An immediate
+reader can instead wait after commit for an asynchronous view. Process-manager
+decisions should use their event-derived state and explicit inputs; do not use a
+lagging view to enforce an invariant. Reporting, search, and display views belong
+on the asynchronous path.
 
 These hooks run the projection in each target command's append transaction, but
 the current router and process-manager paths use the compatibility inline
@@ -201,7 +204,10 @@ choose freshness from the
 
 ## Inline Checklist
 
-- The target write is required for command success.
+- A named business invariant requires the target write to be atomic; a convenient
+  immediate response alone does not justify inline delivery.
+- Only minimum invariant state is synchronous; rich query models are async.
+- Mixed-traffic measurements include latency for unrelated writers in the same store.
 - The cumulative inline work is balanced against the event store's required
   append throughput and lock-contention budget.
 - The SQL is local, indexed, bounded, and predictably fast; the handler never

@@ -5,8 +5,8 @@ description: Route readers through Keiro tutorials, adoption guides, design expl
 docId: DOC-1
 tags: [keiro, guides, navigation]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:08:09Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Keiro Guides
@@ -26,12 +26,11 @@ are adopting:
 - [Choosing A Projection](choosing-a-projection.md) separates projection
   delivery, query freshness, catalog ownership, and hand-written versus
   generated wiring.
-- [Inline Projections](inline-projections.md) shows same-transaction application
-  from command paths and reactor dispatch, including replay adapters and catalog
-  fence boundaries.
-- [Asynchronous Projections](asynchronous-projections.md) shows subscription
-  delivery, transactional deduplication, checkpoint outcomes, query freshness,
-  and rebuild behavior.
+- [Asynchronous Projections](asynchronous-projections.md) is the default for query
+  models. Start with [read-your-write after commit](asynchronous-projections.md#read-your-write-after-commit),
+  then configure durable delivery, deduplication, checkpoints, and rebuilds.
+- [Inline Projections](inline-projections.md) covers minimum atomic invariant
+  state, append-throughput costs, replay adapters, and catalog fence boundaries.
 - [Offline Projection Rebuilds](offline-projection-rebuilds.md) covers catalog
   preview, group fencing, target preparation, fixed-head replay, verification,
   repair/resume, atomic promotion, and the legacy single-model lifecycle.

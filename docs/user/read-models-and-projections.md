@@ -5,8 +5,8 @@ description: Reference projection catalogs, delivery modes, query freshness, and
 docId: DOC-19
 tags: [keiro, read-models, projections, reference]
 generated:
-  by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Read Models And Projections
@@ -14,6 +14,12 @@ generated:
 Read models are query-optimized views derived from the event log. Keiro provides
 metadata, query-freshness helpers, inline projection support, and at-least-once async
 projection helpers.
+
+Default query models to asynchronous delivery, including aggregate-local views.
+Return command results directly or use bounded
+[post-commit read-your-write](../guides/asynchronous-projections.md#read-your-write-after-commit).
+Keep only minimum atomic invariant state synchronous: its SQL extends Kiroku's
+store-wide append lock interval and can delay unrelated writers.
 
 ## Declare One Projection Catalog
 

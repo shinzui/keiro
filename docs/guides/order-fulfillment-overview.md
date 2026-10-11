@@ -5,11 +5,17 @@ description: Follow the Jitsurei order-fulfillment system from commands through 
 docId: DOC-2
 tags: [keiro, jitsurei, order-fulfillment, tutorial]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:05:47Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Order Fulfillment Overview
+
+The worked example deliberately demonstrates an atomic inline order summary.
+For a new application, default query models to asynchronous delivery and use
+[post-commit read-your-write](asynchronous-projections.md#read-your-write-after-commit)
+when needed. Keep inline state only for a specified atomic invariant and measure
+its cost to unrelated writers in the same store.
 
 `jitsurei` is a small order-fulfillment application built to demonstrate Keiro
 as application code would use it. The example has one aggregate stream per

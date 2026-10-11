@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-08-14T06:53:09Z
+timestamp: 2026-10-11T21:11:39Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -251,6 +251,29 @@ Evaluation counts prove participation even when all selected events are
 irrelevant and apply counts are zero. Only that verifier constructs the opaque
 group completion token, and it promotes the run and group in one transaction;
 dedup rows are not completion evidence.
+
+
+## Delivery Selection Guidance (2026-10-11)
+
+Asynchronous delivery is the default for query models, including aggregate-local
+views. Return the command result directly where sufficient. When a caller needs
+the projected write, wait for its committed position after command completion;
+a timeout means committed with view pending and must not trigger command replay.
+Delivery and per-call freshness remain independent catalog authorities.
+
+Reserve inline delivery for the minimum state needed by a specified atomic
+invariant, such as an identity-to-winning-aggregate index. Rich content, display
+joins, search, and reporting should be asynchronous. Separate owners and rebuild
+groups where dependencies permit; an authoritative identity index must remain
+fenced while unavailable even though it is reconstructible from events.
+
+All inline handlers extend Kiroku's global `$all` row-lock interval. Evaluate
+cumulative SQL and unrelated-writer latency under mixed traffic. Async delivery
+removes this work from the append transaction but still shares database capacity.
+The guarded runner in [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md)
+is planned, not an existing API or release guarantee. See the
+[delivery guide](../guides/choosing-a-projection.md) and
+[post-commit example](../guides/asynchronous-projections.md#read-your-write-after-commit).
 
 
 ## Consequences

@@ -5,8 +5,8 @@ description: Combine routing and persisted coordination in an end-to-end inciden
 docId: DOC-19
 tags: [keiro, routers, process-managers, incident-response]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:05:47Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Coordinating Incident Response: Routers And Process Managers Together
@@ -194,11 +194,12 @@ process manager's private saga stream. Existing process managers that do not
 need read-model writes on target dispatch should set
 `targetProjections = const []`; a returned non-empty list runs in the same
 transaction as each dispatched target command.
-Use a non-empty list when the next process-manager decision, guard, or immediate
-user read needs read-your-own-writes for the target aggregate. Keep the list
-empty when dispatch is only advancing another aggregate and async projection
-freshness is enough. Because these projection writes share the command append
-transaction, keep them small, deterministic, and local to the target read model.
+Default to an empty list. Add only the minimum target writes required by an
+explicit atomic invariant. For immediate user reads, prefer a bounded
+[post-commit position wait](asynchronous-projections.md#read-your-write-after-commit).
+Process-manager decisions use event-derived state and explicit inputs, not a
+lagging view as invariant authority. These compatibility inline hooks do not
+acquire catalog rebuild fences; see [Reactor Dispatch](inline-projections.md#reactor-dispatch).
 
 On `IncidentReported` it advances its state and **arms an escalation timer**
 whose deadline comes from the severity (`escalationDeadline`). On

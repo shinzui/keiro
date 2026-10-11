@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-10-11
+* **Update**: Default query models to async delivery, add a post-commit read-your-write response example, and clarify invariant-only inline work and store-wide append costs throughout the guides.
+
 ## 2026-09-28
 * **Update**: Drop Languages 1–4 guidance: remove the version-2 to version-3 ID migration, the language-4 to 5 preamble note, and version-1/version-2 Hole distinctions, and describe Language 5 as the stable contract with Languages 1–4 deprecated.
 

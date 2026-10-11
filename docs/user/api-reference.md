@@ -5,8 +5,8 @@ description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:05:10Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # API Reference
@@ -284,15 +284,14 @@ same rebuild-group fence inside the append or dedup/write transaction and
 return typed outcomes when the group is unavailable. The older entry points are
 the unmanaged compatibility surface.
 
-Use inline projections for same-transaction read-model writes. Use async
-projection helpers for at-least-once subscription handlers. `Router` and
-`ProcessManager` can also run target inline projections during reactor
-dispatch by carrying them in `targetProjections`. Use that field when a reactor
-or immediate reader needs read-your-own-writes for the target aggregate after
-dispatch. Keep it empty for ordinary fan-out, analytics, reporting tables,
-integration publishing, or any projection work that can be eventually
-consistent; inline projection SQL runs inside the append transaction and can
-slow or fail the dispatch.
+Default query models to catalog-managed asynchronous delivery. Return the
+command result directly, or use a bounded
+[post-commit position wait](../guides/asynchronous-projections.md#read-your-write-after-commit)
+for read-your-write. Inline writes are for minimum state required by a stated
+atomic invariant. `Router` and `ProcessManager` can attach them through
+`targetProjections`; default that field to an empty list. These compatibility
+hooks lack catalog rebuild fencing. All inline work extends the store-wide
+append lock interval and can slow unrelated writers.
 
 The domain-aware inline runners apply only accepted event pairs. Typed
 rejection/no-op returns its `DomainCommandOutcome` without invoking projection
@@ -569,11 +568,10 @@ poison-message policy, transient retry delay, and dispatch metrics; the default
 worker finalizes each ack exactly once, retries transient store failures, and
 halts deterministic failures.
 `ProcessManager.targetProjections` is a list of inline projections for target
-events only; `[]` preserves append-only dispatch, while a non-empty list gives
-read-your-own-writes for target read models updated by process-manager dispatch.
-The projections should be small, deterministic writes for the target aggregate's
-own read model, not a replacement for async projections or process-manager state
-projection.
+events only; `[]` is the default. A non-empty list is for bounded deterministic
+writes required by an explicit atomic invariant, subject to the compatibility
+fencing limitation above. Reader freshness alone should use asynchronous
+projection and a post-commit wait.
 `RejectedHalt` is the safe default for target rejections. `RejectedDeadLetter`
 persists a dispatch witness before acknowledging, while `RejectedSkip`
 acknowledges without one. `confirmBenignDuplicate` proves a duplicate event id

@@ -5,11 +5,16 @@ description: Choose inline, asynchronous, or rebuilt projections for a read-mode
 docId: DOC-4
 tags: [keiro, projections, read-models, decision-guide]
 generated:
-  by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Choosing A Projection
+
+Default to asynchronous delivery for query models, including local aggregate
+views. Return the command result directly when it contains everything the caller
+needs; otherwise wait for its committed position after the command returns.
+Reserve synchronous work for a stated invariant that requires an atomic write.
 
 Keiro supports two projection delivery modes: inline application in the
 command transaction and asynchronous application from a durable subscription.
@@ -25,9 +30,9 @@ write an operational target that has no public query model at all.
 
 | Need | Delivery | Query freshness | Start here |
 |---|---|---|---|
-| The command must not succeed unless the derived row is updated | `InlineProjection` | Usually `Immediate` | [Inline Projections](inline-projections.md) |
-| A router or process manager must update the target aggregate's local view with its dispatched command | `targetProjections` with `InlineProjection` | `Immediate` | [Inline Projections](inline-projections.md#reactor-dispatch) |
-| Reporting, search, or analytics can lag behind writes | `AsyncProjection` over a Kiroku subscription | `Immediate` | [Asynchronous Projections](asynchronous-projections.md) |
+| Default query model, reporting, search, or analytics | `AsyncProjection` over a Kiroku subscription | `Immediate` | [Asynchronous Projections](asynchronous-projections.md) |
+| An explicit invariant requires the target write to commit with the event | `InlineProjection` | Usually `Immediate` | [Inline Projections](inline-projections.md) |
+| A reactor-dispatched command has that same explicit atomic invariant | `targetProjections` with `InlineProjection` | `Immediate` | [Inline Projections](inline-projections.md#reactor-dispatch) |
 | A query must include everything visible when the query begins | `AsyncProjection` | `WaitForHead` | [Asynchronous Projections](asynchronous-projections.md#choose-query-freshness-separately) |
 | A caller must observe one command's returned global position | `AsyncProjection` | `WaitForPosition` | [Asynchronous Projections](asynchronous-projections.md#choose-query-freshness-separately) |
 | Several targets must fence, rebuild, verify, and return to service together | Inline, async, or both in one catalog group | Chosen per query model | [Offline Projection Rebuilds](offline-projection-rebuilds.md) |
@@ -39,11 +44,34 @@ bounded and short-running. Choose asynchronous delivery when the view combines
 many streams, does heavier work, has independent scaling needs, or may be
 temporarily unavailable without rejecting commands.
 
+## Separate Invariant State From Query Views
+
+For an "ensure state note" operation, a small synchronous identity index can map
+`(anchor type, anchor ID, property definition ID, state ID)` to the winning note
+ID. Content, tags, display joins, search, and reporting belong in asynchronous
+query targets. Preserve identity across archive when the business rule requires
+reuse; record enough facts to reconstruct both targets deterministically.
+
+The identity index is command authority even though events can rebuild it. It
+must fail closed while unavailable; a lagging query view cannot replace it.
+Declare separate owners and rebuild groups where dependencies allow independent
+lifecycles. Avoid a foreign key from the identity index to an async row that may
+not exist yet. Do not bypass genuine dependencies merely to split groups.
+
+This is a modeling recommendation. The proposed guarded catalog command API in
+[ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md)
+is not yet implemented or released. Do not copy private catalog SQL to emulate it.
+
+Kiroku's append holds the global `$all` row lock until transaction end. Every
+inline handler and post-append guard extends that interval and can delay unrelated
+writers in the same store. Measure cumulative inline work and ordinary-writer
+p95/p99 latency under mixed traffic before adopting it.
+
 ## Source Scope Is A Separate Choice
 
 An inline handler sees the typed events emitted by the command path on which it
-is installed. It is therefore the natural fit for a view local to that
-aggregate's writes.
+is installed. This limits its event scope; it does not make inline delivery the
+default for aggregate-local query models.
 
 An asynchronous worker can consume one Kiroku category or `AllStreams`. Use a
 category when every relevant stream shares one category and unrelated traffic
@@ -133,8 +161,10 @@ For a service starting from scratch:
 
 1. Put every projection in one validated catalog, even if the first catalog has
    only one target.
-2. Use inline delivery for a small local view that is part of command success.
-3. Use async delivery for cross-stream or independently operated views.
+2. Use async delivery for query models, including aggregate-local views.
+3. Return command results directly, or use a bounded post-commit
+   `WaitForPosition` when the response needs a projected view. Keep only the
+   minimum state needed by a strict atomic invariant synchronous.
 4. Give inline-only queries `Immediate` freshness. Give async queries
    `Immediate`, `WaitForHead`, or per-call `WaitForPosition` deliberately.
 5. Supply an explicit replay adapter for reconstructible targets, keep

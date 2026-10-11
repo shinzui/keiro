@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-11
+* **Update**: Clarify delivery selection: async query defaults, minimal atomic invariant indexes, post-commit reader freshness, and global append-lock costs.
+
 ## 2026-10-10
 * **Addition**: ADR-50: atomically resize stopped shard leases with the released public Kiroku checkpoint API.
 

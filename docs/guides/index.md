@@ -10,7 +10,7 @@ okf_version: "0.2"
 
 - [Adopting keiro-dsl generated Haskell idiomatic-v2](adopting-keiro-dsl-idiomatic-v2.md) - Adopt the idiomatic-v2 generated Haskell surface and its compatibility gates.
 - [Adopting Keiro From tan-event-source](adopting-keiro-from-tan-event-source.md) - Migrate a service from tan-event-source to Keiro in controlled compatibility stages.
-- [Asynchronous Projections](asynchronous-projections.md) - Build eventually consistent read models with durable asynchronous delivery.
+- [Asynchronous Projections](asynchronous-projections.md) - Build asynchronous query models with durable delivery and bounded post-commit read-your-write.
 - [Brownfield Migration And Transducer Modeling](brownfield-migration-and-transducer-modeling.md) - Introduce Keiro incrementally while modeling state transitions as explicit transducers.
 - [Checked Mapping Adoption](checked-mapping-adoption.md) - Adopt candidate checked values through total bindings, generated persistence codecs, replay evidence, and reader-first rollout.
 - [Choosing A Primitive](choosing-a-primitive.md) - Choose among Keiro primitives by durability, ordering, latency, and operational needs.

@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-10-11
+* **Update**: Align projection, command, and reactor reference guidance with async query defaults, bounded post-commit waits, and minimum synchronous invariant state.
+
 ## 2026-09-28
 * **Update**: Drop Languages 1–4 from the user documentation: the DSL reference, read-model, API-reference, adoption, status, and roadmap pages now describe only stable Language 5 and candidate Language 6 and mark Languages 1–4 as deprecated and scheduled for removal. Rename the `Projection catalogs` and `Typed domain outcomes` sections.
 * **Update**: Split the DSL reference into `keiro-dsl-reference.md` (DOC-23, overview and language versions) and nine topic pages, DOC-26 through DOC-34, and repoint inbound links to the page that now holds each section.

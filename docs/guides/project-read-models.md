@@ -5,11 +5,17 @@ description: Implement query-oriented read models from event streams with explic
 docId: DOC-15
 tags: [keiro, projections, read-models, guide]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:05:47Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Project Read Models
+
+The worked example deliberately demonstrates an atomic inline order summary.
+For a new application, default query models to asynchronous delivery and use
+[post-commit read-your-write](asynchronous-projections.md#read-your-write-after-commit)
+when needed. Keep inline state only for a specified atomic invariant and measure
+its cost to unrelated writers in the same store.
 
 An event stream is excellent for writes and audit history, but most product
 screens need direct queries. `jitsurei` builds an inline read model named

@@ -5,8 +5,8 @@ description: Explain command hydration, decisions, optimistic concurrency, retri
 docId: DOC-4
 tags: [keiro, commands, concurrency, idempotency]
 generated:
-  by: human:nadeem
-  at: 2026-08-14T16:35:45Z
+  by: process:codex-cli
+  at: 2026-10-11T21:11:39Z
 ---
 
 # Command Cycle
@@ -275,7 +275,11 @@ runCommandWithSql
 ```
 
 If the continuation condemns the transaction, the event append is rolled back
-too. This is the recommended path for strongly consistent inline projections.
+too. This is a lower-level SQL continuation. Use the catalog-managed runner
+for managed inline targets so rebuild fences and serving bindings are honored.
+Default query models to asynchronous delivery and
+[wait after commit](../guides/asynchronous-projections.md#read-your-write-after-commit)
+when needed; reserve transaction-local writes for minimum atomic invariant state.
 
 `runCommandWithSqlEvents` additionally passes the whole produced domain-event
 list in append order:
