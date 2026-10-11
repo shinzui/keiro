@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-11
+* **Addition**: IR-53 proposes atomic consumer-owned relational preconditions for catalog domain commands, raised from mori://shinzui/rei/plans/249-expose-categories-and-custom-properties-with-shared-typed-assignment-semantics. Owner evaluation must precede implementation; no package or release change is authorized.
+
 ## 2026-10-01
 * **Addition**: IR-52 requests that Keiro populate Kiroku's typed correlationId and causationId on every appended event and every process-manager-dispatched command, seeded from a caller-supplied correlation id, because the codec writes both as Nothing today; raised from mori://shinzui/shoko for migration and keiro-native verification (RES-1).
 
