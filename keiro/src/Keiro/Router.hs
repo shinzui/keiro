@@ -631,7 +631,7 @@ runDomainRouterWorkerWith workerOptions options router Adapter {source = adapter
 -- adapter, 'AckRetry' remains bounded by the subscription @RetryPolicy@ (five
 -- total deliveries by default). Exhaustion records the source event in
 -- @kiroku.dead_letters@ with reason kind @max_attempts_exceeded@ and advances the
--- checkpoint. @KirokuAdapterConfig@ does not currently expose @retryPolicy@;
+-- checkpoint. @KirokuAdapterConfig.retryPolicy@ configures that bound;
 -- install 'Keiro.Telemetry.kirokuEventBridge' on Kiroku's @eventHandler@ to observe
 -- the terminal event. The configurable sharded path forwards
 -- @ShardedWorkerOptions.retryPolicy@ through the same Kiroku ladder; see
