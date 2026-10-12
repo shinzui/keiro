@@ -5,16 +5,17 @@ let
   runtimePath = pkgs.lib.makeBinPath [ pkgs.coreutils pkgs.gzip pkgs.perl pkgs.procps ];
   # Cabal-built executables can leave native SONAMEs unresolved outside the
   # development shell. Give both unchanged binaries the same pinned libraries.
-  runtimeLibraries = pkgs.lib.makeLibraryPath [ pkgs.postgresql_18 pkgs.rdkafka pkgs.openssl pkgs.zlib ];
+  runtimeLibraries = pkgs.lib.makeLibraryPath [ pkgs.postgresql_18 pkgs.gmp pkgs.libffi pkgs.elfutils pkgs.numactl ];
   runtimeEnvironment = pkgs.writeText "catalog-runtime-environment.json" (builtins.toJSON {
     system = pkgs.stdenv.hostPlatform.system;
     flakeLockSha256 = builtins.hashFile "sha256" (root + "/flake.lock");
     librarySearchPath = runtimeLibraries;
     nativeVersions = {
       postgresql = pkgs.postgresql_18.version;
-      rdkafka = pkgs.rdkafka.version;
-      openssl = pkgs.openssl.version;
-      zlib = pkgs.zlib.version;
+      gmp = pkgs.gmp.version;
+      libffi = pkgs.libffi.version;
+      elfutils = pkgs.elfutils.version;
+      numactl = pkgs.numactl.version;
     };
   });
 in

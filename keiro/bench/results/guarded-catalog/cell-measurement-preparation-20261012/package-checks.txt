@@ -1,0 +1,6 @@
+active
+usage: guarded-catalog-cell <payload-root> <work-file> <output-dir>
+cell execution identity mismatch
+user error (single-ordinary requires workload and result paths)
+user error (usage: ordinary-baseline WORKLOAD.json RESULT.json)
+got build log for '/nix/store/8mhcy9iyxvnfsyhv7snvaapd1j0nghb9-keiro-guarded-catalog-cell.drv' from 'daemon'

@@ -1,0 +1,1 @@
+{"schema":"cell.policy/v1","idleStopMinutes":30,"keepWarmUntil":null,"allowFaultInjection":false,"health":{"settleCpuMaxPercent":5,"runStealCpuMaxPercent":2,"startFreeDiskMinPercent":20,"runFreeDiskMinPercent":5}}
