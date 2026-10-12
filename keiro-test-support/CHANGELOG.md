@@ -6,6 +6,19 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+## 0.20.0.0 — 2026-10-12
+
+### Breaking Changes
+
+- Require the Kiroku 0.11 cohort from
+  mori://shinzui/kiroku/packages/kiroku-store; see the root changelog and
+  upgrade blueprint for subscription constructors, decoding, and migration
+  guidance.
+- Require `kiroku-store-migrations ^>=0.7.1.0` from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations. Stop workers for
+  migrations 0013 and 0014; plan the index build in 0015. The composed plan
+  now contains 47 migrations.
+
 ### New Features
 
 - Add `withFreshResourceStoresSameDatabase` and
@@ -15,13 +28,6 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
   fsync, synchronous commit, full-page writes and autovacuum locally, or uses an
   external server supplied through `KEIRO_GUARDED_CATALOG_PG_ADMIN` while
   creating and dropping only its uniquely named template and cloned databases.
-
-### Other Changes
-
-- Require `kiroku-store ^>=0.11.0.0`; see the root changelog for the
-  coordinated Kiroku upgrade.
-- Require `kiroku-store-migrations ^>=0.7.1.0`. The composed plan
-  includes Kiroku migration 0015 and now contains 47 migrations.
 
 ## 0.19.0.1 — 2026-10-05
 

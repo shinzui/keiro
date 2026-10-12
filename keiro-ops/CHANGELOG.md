@@ -6,10 +6,14 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
-### Other Changes
+## 0.20.0.0 — 2026-10-12
 
-- Require `kiroku-store ^>=0.11.0.0`; see the root changelog for the
-  coordinated Kiroku upgrade.
+### Breaking Changes
+
+- Require the Kiroku 0.11 cohort from
+  mori://shinzui/kiroku/packages/kiroku-store; see the root changelog and
+  upgrade blueprint for subscription constructors, decoding, and migration
+  guidance.
 
 ## 0.19.0.1 — 2026-10-05
 

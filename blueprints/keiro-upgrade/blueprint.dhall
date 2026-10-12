@@ -4,7 +4,7 @@ let S =
 
 in  S.Blueprint::{
     , name = "keiro-upgrade"
-    , version = Some "0.8.0"
+    , version = Some "0.9.0"
     , description = Some
         "Upgrade guidance for projects consuming Keiro, the event-sourcing framework and durable workflow engine. One edge per released version window that needs judgement work, with upstream cohort edges entailed so a project that has never heard of Kiroku still crosses them exactly once."
     , prompt = ./prompt.md as Text
@@ -65,6 +65,23 @@ in  S.Blueprint::{
             , blueprint = "kiroku-upgrade"
             , from = "0.8.0.2"
             , to = "0.9.0.0"
+            }
+          ]
+        }
+      , S.BlueprintMigration::{
+        , from = "0.19.0.1"
+        , to = "0.20.0.0"
+        , prompt = ./migrations/0.19.0.1-to-0.20.0.0.md as Text
+        , entails =
+          [ S.EntailedEdge::{
+            , blueprint = "kiroku-upgrade"
+            , from = "0.9.0.1"
+            , to = "0.10.0.0"
+            }
+          , S.EntailedEdge::{
+            , blueprint = "kiroku-upgrade"
+            , from = "0.10.0.0"
+            , to = "0.11.0.0"
             }
           ]
         }

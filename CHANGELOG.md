@@ -6,6 +6,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+## 0.20.0.0 — 2026-10-12
+
 ### Breaking Changes
 
 - Adopt the published hardening cohort from
@@ -15,6 +17,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   The latter replaces legacy `stream_name` checkpoints with typed target binding.
   Sharded configuration uses validated constructors, and startup refusals share
   `SomeSubscriptionStartupFailure`.
+- `ShardWorkerError` gains `ShardReaderStartupFailed`; extend exhaustive
+  matches in consumer diagnostics and supervision code.
+- The inspection cohort from mori://shinzui/kiroku/packages/kiroku-store
+  adds five constructors to the closed `Store` effect; exhaustive custom
+  interpreters must handle them. Complete `Subscriber` record construction
+  must supply `subDropped`. The composed plan includes migration 0015 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations, adding the stream
+  browsing index. Its transactional index build can block writes; schedule
+  a write pause for large persistent stores.
 
 ### New Features
 
@@ -40,13 +51,14 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   `>=0.6.1.1 && <0.7`, retaining the PGMQ adapter at `^>=0.16.1.0`.
   This tested release cohort supports random 1.3, Effectful 2.7, and
   pg-migrate 1.2 with the existing queue APIs and migration SQL.
-- Adopt the inspection release from
-  mori://shinzui/kiroku/packages/kiroku-store. The composed migration plan
-  includes Kiroku migration 0015 from
-  mori://shinzui/kiroku/packages/kiroku-store-migrations, adding the stream
-  browsing index. Its transactional index build can block writes; schedule
-  a write pause for large persistent stores. Custom interpreters of the
-  public Kiroku `Store` effect must handle its five new read operations.
+- Upgrade guidance declares the 0.19.0.1 → 0.20.0.0 edge and entails
+  the Kiroku hardening and inspection edges in order.
+- Clarify asynchronous query models as the default and reserve synchronous
+  catalog projections for the minimal command-authority index. Document
+  configurable bounded retries for Kiroku-backed routers and process managers.
+- Guarded catalog correctness is validated; the owner deferred exhaustive
+  performance validation. Retained partial and failed measurements do not
+  establish a full performance pass.
 
 ## 0.19.0.1 — 2026-10-05
 

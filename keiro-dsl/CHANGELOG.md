@@ -6,13 +6,20 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.20.0.0 — 2026-10-12
+
+### Breaking Changes
+
+- Require the Kiroku 0.11 cohort from
+  mori://shinzui/kiroku/packages/kiroku-store; see the root changelog and
+  upgrade blueprint for subscription constructors, decoding, and migration
+  guidance.
+
 ### Other Changes
 
 - Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
   `^>=0.10.0.1`, including its random 1.3 compatibility. Generated processor
   and acknowledgement APIs are unchanged.
-- Require `kiroku-store ^>=0.11.0.0`; see the root changelog for the
-  coordinated Kiroku upgrade.
 
 ## 0.19.0.1 — 2026-10-05
 

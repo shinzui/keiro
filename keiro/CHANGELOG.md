@@ -6,6 +6,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.20.0.0 — 2026-10-12
+
 ### Breaking Changes
 
 - Adopt `kiroku-store ^>=0.11.0.0`, migrations `^>=0.7.1.0` and the
@@ -13,6 +15,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   starting this cohort. Subscription sizes, members, batches and buffers use
   validated public constructors. `ShardWorkerError` gains `ShardReaderStartupFailed`;
   `ShardCountMismatch` can be caught as `SomeSubscriptionStartupFailure`.
+- The inspection cohort from mori://shinzui/kiroku/packages/kiroku-store
+  adds five constructors to the closed `Store` effect; exhaustive custom
+  interpreters must handle them. Complete `Subscriber` record construction
+  must supply `subDropped`. The composed plan includes migration 0015 from
+  mori://shinzui/kiroku/packages/kiroku-store-migrations, adding the stream
+  browsing index. Its transactional index build can block writes; schedule
+  a write pause for large persistent stores.
 
 ### New Features
 
@@ -35,13 +44,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 - Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
   `^>=0.10.0.1`, including its random 1.3 compatibility. Existing processor
   APIs are unchanged.
-- Adopt the inspection release from
-  mori://shinzui/kiroku/packages/kiroku-store. The composed migration plan
-  includes Kiroku migration 0015 from
-  mori://shinzui/kiroku/packages/kiroku-store-migrations, adding the stream
-  browsing index. Its transactional index build can block writes; schedule
-  a write pause for large persistent stores. Custom interpreters of the
-  public Kiroku `Store` effect must handle its five new read operations.
+- Clarify asynchronous query models as the default, minimal synchronous command
+  authority, and configurable bounded router/process-manager retries.
 
 ## 0.19.0.1 — 2026-10-05
 

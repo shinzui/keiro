@@ -9,6 +9,8 @@ edit. What to edit is in the edge prompt.
 
 | Keiro | `kiroku-store` | `kiroku-store-migrations` | `keiki` | `shibuya-core` |
 |---|---|---|---|---|
+| 0.20.0.0 | `^>=0.11.0.0` | `^>=0.7.1.0` | `>=0.9 && <0.10` | `^>=0.10.0.1` |
+| 0.19.0.1 | `>=0.9.0.1 && <0.10` | `^>=0.6.0.0` | `>=0.9 && <0.10` | `^>=0.10.0.0` |
 | 0.19.0.0 | `>=0.9.0.1 && <0.10` | `^>=0.6.0.0` | `>=0.9 && <0.10` | `^>=0.10.0.0` |
 | 0.18.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
 | 0.17.0.0 | `>=0.8 && <0.9` | `^>=0.4.0.0` | `>=0.9 && <0.10` | `^>=0.9.0.0` |
@@ -28,6 +30,13 @@ Keiro 0.19.0.0 requires `shibuya-pgmq-adapter` 0.16.1.0 (the release on Shibuya 
 `pg-migrate` 1.2 family, and, where a project uses it, `pgmq-migration >=0.6.1.1`, the first
 release that accepts `pg-migrate` 1.2. A project on the Kiroku adapter needs
 `shibuya-kiroku-adapter` 0.5.1.5 or later; no earlier release pairs Shibuya 0.10 with Kiroku 0.9.
+
+Keiro 0.20.0.0 requires the queue family `>=0.6.1.1 && <0.7`, retaining
+`shibuya-pgmq-adapter ^>=0.16.1.0`, and requires
+`shibuya-kiroku-adapter ^>=0.6.0.1` where used. Its edge entails the
+hardening and inspection upgrades from mori://shinzui/kiroku in order, covering
+validated subscription configuration, typed decoding, target binding and
+migrations 0013–0015. Keiro's composed plan contains 47 migrations.
 
 From 0.18.0.0, `keiro-test-support` requires `ephemeral-pg >=0.3.1 && <0.4`. That is a test-only
 dependency, but `pg-migrate-test-support 1.1.0.0` still caps it below 0.3, so a build plan holding

@@ -6,6 +6,8 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.20.0.0 — 2026-10-12
+
 ### Other Changes
 
 - Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
