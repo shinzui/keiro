@@ -28,6 +28,9 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### Other Changes
 
+- Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
+  `^>=0.10.0.1`, including its random 1.3 compatibility. Existing processor
+  APIs are unchanged.
 - Adopt the inspection release from
   mori://shinzui/kiroku/packages/kiroku-store. The composed migration plan
   includes Kiroku migration 0015 from

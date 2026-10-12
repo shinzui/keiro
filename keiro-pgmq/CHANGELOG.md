@@ -6,6 +6,15 @@ All notable changes to `keiro-pgmq` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
+  `^>=0.10.0.1` and the [pgmq-hs libraries](mori://shinzui/pgmq-hs)
+  `>=0.6.1.1 && <0.7`; retain the PGMQ adapter at `^>=0.16.1.0`.
+  The tested releases support random 1.3, Effectful 2.7, and pg-migrate 1.2
+  with the existing queue APIs and migration SQL. Add integration coverage
+  requiring an idle worker to report a clean shutdown within ten seconds.
+
 ## 0.19.0.1 — 2026-10-05
 
 ### Other Changes

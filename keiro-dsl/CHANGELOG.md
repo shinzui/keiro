@@ -8,6 +8,9 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Other Changes
 
+- Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
+  `^>=0.10.0.1`, including its random 1.3 compatibility. Generated processor
+  and acknowledgement APIs are unchanged.
 - Require `kiroku-store ^>=0.11.0.0`; see the root changelog for the
   coordinated Kiroku upgrade.
 

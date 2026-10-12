@@ -45,25 +45,25 @@ The working tree already resolves these releases. This work makes that selection
 
 ## Progress
 
-Implementation is underway. Milestones 1 and 2 have passed their release, descriptor, solver, build, and behavioral gates. The final repository gate and retrospective remain open.
+Implementation is complete. All three milestones passed their release, descriptor, solver, build, behavioral, and repository gates; the final ADR distillation and retrospective are recorded below.
 
 - [x] (2026-10-11) Rechecked all seven release targets against Hackage and upstream tags, compared released production sources, audited existing API adoption, and successfully resolved all components with tests and benchmarks enabled.
 - [x] (2026-10-12 02:10Z) Refreshed all seven Hackage preferred releases and three peeled tags; raised all eleven bounded Shibuya and ten older pgmq-hs minimums.
 - [x] (2026-10-12 02:10Z) Aligned the nine affected `mori.dhall` constraints; `dhall type`, `cabal update`, and the all-component dry run passed. All seven target packages resolved to secure Hackage archives at the expected versions.
-- [x] (2026-10-12 02:14Z) Rechecked released exports and Keiro call sites; added the focused idle-worker shutdown assertion with bracketed cleanup and a ten-second outer deadline.
-- [x] (2026-10-12 02:22Z) PGMQ suite passed: 80 examples, zero failures, two known pending examples; the idle-worker shutdown assertion returned `Just True`.
+- [x] (2026-10-12) Rechecked released exports and Keiro call sites; added the focused idle-worker shutdown assertion with bracketed cleanup and a ten-second outer deadline.
+- [x] (2026-10-12) PGMQ suite passed: 80 examples, zero failures, two known pending examples; the idle-worker shutdown assertion returned `Just True`.
 - [x] (2026-10-12 02:20Z) Main Keiro (719 examples), operator (50 examples), and migration (36 examples) suites passed with zero failures.
 - [x] (2026-10-12 02:29Z) All 55 `keiro-dsl:tests` suites passed inside `nix develop`; the main DSL suite reported 791 examples with zero failures. The symbolic assertion passed with Z3 4.16.0.
-- [x] (2026-10-12 02:20Z) `cabal build all --enable-tests --enable-benchmarks` exited zero on GHC 9.12.4.
+- [x] (2026-10-12) `cabal build all --enable-tests --enable-benchmarks` exited zero on GHC 9.12.4.
 - [x] (2026-10-12 02:29Z) Completed queue, worker, telemetry, operator, migration, and generated-code behavioral gates; Milestone 2 is complete.
 - [x] (2026-10-12) Documented the supported release cohort in the four affected changelogs and added the user-requested `AGENTS.md` development-shell/Z3 instructions.
-- [ ] Complete `just verify` in the Nix development shell and record final resolved versions.
-- [ ] Perform ADR distillation and record Outcomes & Retrospective before marking implementation complete.
+- [x] (2026-10-12 02:51Z) `nix develop -c just verify` exited zero, including retention, every DSL suite, examples, migrations, strict documentation, and policy gates. Reasserted all seven final versions and secure Hackage source identities.
+- [x] (2026-10-12 02:51Z) Reviewed Decision Log, discoveries, and outcomes against ADR-1/25/28/45. No architectural contract changed; no ADR amendment was required. Recorded the final retrospective and completion evidence.
 
 
 ## Surprises & Discoveries
 
-Implementation environment discovery (2026-10-12): The first `cabal test keiro-dsl:tests` exited one at “validated ID and finite enum projections are exact symbolically”; `command -v z3` found no executable. `flake.module.nix` explicitly includes Z3 in `haskellProject.extraDevPackages`, and `nix develop -c z3 --version` reports Z3 4.16.0. Rerun every DSL suite inside the existing development shell and use that shell for the final repository gate; do not relax the assertion or change dependency bounds.
+Implementation environment discovery (2026-10-12): The first `cabal test keiro-dsl:tests` exited one at “validated ID and finite enum projections are exact symbolically”; `command -v z3` found no executable. `flake.module.nix` explicitly includes Z3 in `haskellProject.extraDevPackages`, and `nix develop -c z3 --version` reports Z3 4.16.0. The subsequent all-DSL run and full repository gate passed inside the existing development shell with the assertion and dependency bounds preserved.
 
 Implementation behavioral evidence (2026-10-12): The first full PGMQ run completed in 37.5332 seconds with `80 examples, 0 failures, 2 pending`. The new idle shutdown example passed, as did grouped-head ordering, lease extension, trace acknowledgement, DLQ, provisioning-record, and nullable-metrics examples. The existing pending examples are “runJobWorkers survives a transient database error during polling” (no deterministic local fault injector) and “ensureJobQueueWith partitioned creates a partitioned queue (live)” (fixture lacks pg_partman).
 
@@ -101,7 +101,28 @@ Decision (2026-10-11): Keep the long-polling repair in `docs/plans/300-poll-pgmq
 
 ## Outcomes & Retrospective
 
-Implementation checkpoint (2026-10-12): Milestones 1 and 2 are complete. Cabal and Mori now require the verified published releases, all components built, and PGMQ/main/operator/migration/DSL integrations passed. No production Haskell or migration change was required. User-requested `AGENTS.md` now prevents relying on a partial host environment for verification. The full repository gate and final ADR distillation remain pending.
+Implementation outcome (2026-10-12): All three milestones are complete. Eleven bounded Shibuya consumers now require `^>=0.10.0.1`; ten formerly older bounded pgmq-hs consumers now require `>=0.6.1.1 && <0.7`, preserving the already-correct migration and adapter requirements. The nine affected Mori records agree. Hackage preferred releases and upstream peeled tags matched the reviewed cohort, and both refreshed solver and final solver evidence select the expected secure Hackage archives. No production API adaptation, new source override, migration SQL change, package release, or lockfile update was required.
+
+The focused integration runs passed: PGMQ reported 80 examples with zero failures and two existing pending examples; main Keiro reported 719, operators 50, and migrations 36 with zero failures. All 55 DSL suites passed in the Nix shell, including 791 examples in the main DSL suite. The idle-worker example returned `Just True` under its ten-second deadline with bracketed worker cleanup. The initial host-environment DSL failure exposed missing Z3; the existing Nix shell supplies Z3 4.16.0. User-requested `AGENTS.md` now requires shell-based verification and an explicit solver preflight.
+
+The full `nix develop -c just verify` exited zero. It repeated the behavioral gates and additionally passed 15 retention examples, 25 jitsurei examples, generated diagram checks, strict documentation checks (including all 50 ADRs), extension/API/re-export/record policies, conformance-corpus checks, process-reaction mutation and hydration proofs, replay compatibility, checked-mapping adoption, and the final 36-example migration suite. `git diff --check` also passed. Terminal evidence is captured in `/tmp/keiro-307-build.log`, `/tmp/keiro-307-pgmq.log`, `/tmp/keiro-307-consumers.log`, `/tmp/keiro-307-dsl-shell.log`, and `/tmp/keiro-307-verify.log`; these are local transient logs, while the summaries here are durable evidence.
+
+```text
+cabal build all --enable-tests --enable-benchmarks: exit 0
+cabal test keiro-pgmq-test --test-show-details=direct: 80 examples, 0 failures, 2 pending
+cabal test keiro-test keiro-ops-test keiro-migrations-test --test-show-details=direct: exit 0
+nix develop -c cabal test keiro-dsl:tests --test-show-details=direct: 55 suites passed
+nix develop -c just verify: exit 0
+pgmq-config 0.6.1.1 repo-tar http://hackage.haskell.org/
+pgmq-core 0.6.1.1 repo-tar http://hackage.haskell.org/
+pgmq-effectful 0.6.1.1 repo-tar http://hackage.haskell.org/
+pgmq-hasql 0.6.1.1 repo-tar http://hackage.haskell.org/
+pgmq-migration 0.6.1.1 repo-tar http://hackage.haskell.org/
+shibuya-core 0.10.0.1 repo-tar http://hackage.haskell.org/
+shibuya-pgmq-adapter 0.16.1.0 repo-tar http://hackage.haskell.org/
+```
+
+ADR distillation reviewed the task's decisions and evidence against ADR-1, ADR-25, ADR-28, and ADR-45. Their existing execution-path, cancellation, schema-ownership, and provisioning boundaries remain sufficient; release minimums and agent shell guidance introduce no new architectural decision. No ADR was created or changed. Existing pending transient-fault and live-partition tests remain limitations, as do the separate long-polling defects, nontransactional bounded-drain DLQ settlement, and untested adversarial shutdown/cancellation scenarios. Completion establishes the declared dependency cohort and exercised behavior, not new guarantees for those scenarios.
 
 Review/update outcome (2026-10-11): The original release cohort and bound changes are correct. The plan now records the concrete API-adoption audit, distinguishes adapter behavior from bounded-drain behavior, checks repository identity as well as archive source type, and requires an observable clean-shutdown test. The dependency upgrade, changelogs, builds, integration tests, and full repository gate remain unimplemented. No ADR changes are required for this clarification of existing boundaries. Fill in the implementation outcome and final gate evidence when those steps finish.
 
@@ -357,3 +378,5 @@ Revision note (2026-10-11): Reviewed the original plan against Hackage, release 
 Revision note (2026-10-12): Implemented Milestone 1 with verified current releases, Cabal/Mori minimums, refreshed Hackage resolution, and runtime-discovered provenance. Behavioral validation remains pending.
 
 Revision note (2026-10-12): Completed the released-API audit, clean-shutdown regression, all-component build, and focused integration gates. Recorded the missing-host-Z3 failure and successful Nix-shell rerun, added user-requested agent instructions, and documented the supported cohort in changelogs. The full repository gate remains pending.
+
+Revision note (2026-10-12): Completed Milestone 3 with a zero-exit full Nix-shell repository gate, final secure-Hackage version assertions, changelog support notes, and ADR distillation. Marked every implementation gate complete and recorded the successful outcome and unchanged coverage limits.

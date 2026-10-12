@@ -30,6 +30,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Other Changes
 
+- Require [`shibuya-core`](mori://shinzui/shibuya/packages/shibuya-core)
+  `^>=0.10.0.1` and the [pgmq-hs libraries](mori://shinzui/pgmq-hs)
+  `>=0.6.1.1 && <0.7`, retaining the PGMQ adapter at `^>=0.16.1.0`.
+  This tested release cohort supports random 1.3, Effectful 2.7, and
+  pg-migrate 1.2 with the existing queue APIs and migration SQL.
 - Adopt the inspection release from
   mori://shinzui/kiroku/packages/kiroku-store. The composed migration plan
   includes Kiroku migration 0015 from
