@@ -62,6 +62,13 @@ class EvidenceTest(unittest.TestCase):
         self.assertEqual(result["expectedReports"], 190)
         self.assertEqual(len(result["missingReports"]), 190)
 
+    def test_parses_haskell_arrival_rates_and_rejects_invalid_values(self):
+        prefix = "fixed-arrival-1000000-8-4-False-20-0-True-"
+        for text, expected in [("Just 200.0", 200.0), ("Just 2.0e2", 200.0), ("200.0", 200.0)]:
+            self.assertEqual(EVIDENCE.report_arrival_rate(prefix + text + "-report.json", prefix), expected)
+        for text in ["Nothing", "Just NaN", "Just Infinity", "Just -1.0", "Just 0.0", "Just unknown"]:
+            self.assertIsNone(EVIDENCE.report_arrival_rate(prefix + text + "-report.json", prefix))
+
     def test_passing_report_without_raw_pairs_is_incomplete(self):
         name = "refactor-10000-1-1-False-0-0-True-Nothing-report.json"
         result = EVIDENCE.matrix_inventory(self.directory, {name: {"pass": True, "ratios": [[1, 1, 1]] * 5}})
@@ -86,7 +93,7 @@ class EvidenceTest(unittest.TestCase):
             (self.directory / f"capacity-{worker}-rates.json").write_text('{"fixedCapacity":400}')
             for rate in [200.0, 320.0]:
                 for duplicates in [0, 50, 100]:
-                    reports[f"fixed-arrival-1000000-8-4-{worker}-20-{duplicates}-True-{rate}-report.json"] = {"pass": True, "ratios": [[1, 1, 1]] * 5}
+                    reports[f"fixed-arrival-1000000-8-4-{worker}-20-{duplicates}-True-Just {rate}-report.json"] = {"pass": True, "ratios": [[1, 1, 1]] * 5}
             reports[f"sustained-{worker}-report.json"] = {"latencyPass": True}
         for name in reports:
             stem = name.removesuffix("-report.json")
@@ -100,6 +107,9 @@ class EvidenceTest(unittest.TestCase):
                         (self.directory / f"{stem}-{pair}-{side}.json.gz").touch()
         self.assertEqual(len(reports), 190)
         self.assertTrue(EVIDENCE.matrix_inventory(self.directory, reports)["complete"])
+        (self.directory / "capacity-False-rates.json").write_text('{"fixedCapacity":500}')
+        self.assertFalse(EVIDENCE.matrix_inventory(self.directory, reports)["complete"])
+        (self.directory / "capacity-False-rates.json").write_text('{"fixedCapacity":400}')
         (self.directory / "sustained-True-duplicates-storage.jsonl").unlink()
         self.assertFalse(EVIDENCE.matrix_inventory(self.directory, reports)["complete"])
 

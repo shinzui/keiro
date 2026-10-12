@@ -33,6 +33,17 @@ def durability_verified(measurement):
                ["fsync", "synchronous_commit", "full_page_writes", "autovacuum"])
 
 
+def report_arrival_rate(name, prefix):
+    # workloadKey uses Haskell's Show (Maybe Double): "Just <rate>".
+    # Retain support for the plain numeric spelling in older inventories.
+    value = name[len(prefix):-len("-report.json")].removeprefix("Just ")
+    try:
+        rate = float(value)
+    except ValueError:
+        return None
+    return rate if math.isfinite(rate) and rate > 0 else None
+
+
 def matrix_inventory(directory, reports):
     """Explicitly account for every required comparison, including missing runs."""
     manifest_path = directory / "manifest.json"
@@ -59,9 +70,12 @@ def matrix_inventory(directory, reports):
         for fraction in [0.5, 0.8]:
             for duplicates in [0, 50, 100]:
                 prefix = f"fixed-arrival-1000000-8-4-{worker}-20-{duplicates}-True-"
-                matches = [name for name in reports if name.startswith(prefix) and capacity is not None
-                           and math.isclose(float(name[len(prefix):-len("-report.json")]),
-                                            capacity * fraction, rel_tol=1e-12)]
+                matches = []
+                for name in reports:
+                    if name.startswith(prefix) and capacity is not None:
+                        rate = report_arrival_rate(name, prefix)
+                        if rate is not None and math.isclose(rate, capacity * fraction, rel_tol=1e-12):
+                            matches.append(name)
                 if len(matches) == 1:
                     fixed_arrival.extend(matches)
                 else:
