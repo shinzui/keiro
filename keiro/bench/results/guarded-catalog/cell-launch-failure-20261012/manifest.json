@@ -1,0 +1,112 @@
+{
+  "schema": "cell.artifact-manifest/v1",
+  "layout": 1,
+  "runId": "keiro-306-20261012-1528",
+  "cell": "alpha",
+  "leaseId": "keiro-306-lease-20261012-1528",
+  "leaseSequence": 1,
+  "sealedAt": "2026-10-12T15:31:24Z",
+  "agentVersion": "0.1.0",
+  "payload": {
+    "kind": "nix-nar-bundle",
+    "sha256": "4c5d02bb613bec639127b7765ee5291e2c8e07a915c75eb6becd3a38f55bf0ae",
+    "storePath": "/nix/store/sbdzqjb7k5qndbpkyj0qs8rp78zlykl4-keiro-guarded-catalog-cell"
+  },
+  "outcome": "completed",
+  "retention": {
+    "policy": "bucket-retention",
+    "retentionSeconds": 34560000
+  },
+  "artifacts": [
+    {
+      "path": "cell/environment.json",
+      "sha256": "4e5639b544dc4ddd59eb93f54fea07e32e9e1d281e400e7392f69c7262d8b4c2",
+      "bytes": 736,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/execution-window.json",
+      "sha256": "13f9b084d087c9257cb93228eb987cb9f8165b233cf19221a1bc8232abcf4a62",
+      "bytes": 203,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/health.json",
+      "sha256": "f1c1ff48894f5bb93d4c71add11e0bdb068a00728ddf92ddcc8233ca059742b8",
+      "bytes": 4213,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/observations/driver.json",
+      "sha256": "c3833f9be5a972450f494bb9a1cef888a51edfff4d56cc14343ae91501fabd91",
+      "bytes": 5696,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/observations/monitoring.json",
+      "sha256": "20e27cfc7c0001a2f0737fd94cb17339fcbe847bc7b8751e6c2eed4f5ae64c15",
+      "bytes": 5711,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/observations/postgres.json",
+      "sha256": "97c8864a1af6cf9c4a8944246828a4165c5685c3ef4e6d0195165e981d1f04b5",
+      "bytes": 5710,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/reset-evidence.json",
+      "sha256": "597c71492f885fb23e7eaa2ef32bcba2fb9ac525406a6c6f1013fcdacc557808",
+      "bytes": 2071,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/result.json",
+      "sha256": "82482b019cea155042cae83b968688fc8b4a630cc64efaa1bc12bacdd6da9b1a",
+      "bytes": 249,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "logs/entry-exit.json",
+      "sha256": "39161bd2e0a719c7af08c78792f856440ec79b74a893518c803e3eda8919c79c",
+      "bytes": 29,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "logs/stderr.log",
+      "sha256": "551240ebacc0756766d48b0ac88f2fa49a6f353833049c3b3748d872778a0ebd",
+      "bytes": 240,
+      "mediaType": "text/plain"
+    },
+    {
+      "path": "logs/stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mediaType": "text/plain"
+    },
+    {
+      "path": "metrics/export.jsonl.zst",
+      "sha256": "5e79e63a0deede1a75c3be8cb4ae0774adeb170045efab35b7fd5e365097bb48",
+      "bytes": 101079,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "metrics/window.json",
+      "sha256": "e232cb69274344984c983894013ce6a75e94b0e632917a0079bec6e696c294cc",
+      "bytes": 192,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "submission/submission.json",
+      "sha256": "76ea36791506c9dcb313dd97421c723e5b0094ff082aa7ab0ffd6eebf29180ce",
+      "bytes": 4716,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "submission/work",
+      "sha256": "9c04777f2a4b5ea297202969eaaaf8224caa3f049afee985a5909b6e48f57a5f",
+      "bytes": 408,
+      "mediaType": "application/octet-stream"
+    }
+  ]
+}

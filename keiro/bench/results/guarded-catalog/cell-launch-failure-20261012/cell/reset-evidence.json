@@ -1,0 +1,80 @@
+{
+  "schema": "cell.reset-evidence/v1",
+  "runId": "keiro-306-20261012-1528",
+  "cell": "alpha",
+  "cachePolicy": "cold",
+  "startedAt": "2026-10-12T15:30:53.283195369Z",
+  "finishedAt": "2026-10-12T15:30:59.949447166Z",
+  "verified": true,
+  "steps": [
+    {
+      "name": "driver-isolation",
+      "startedAt": "2026-10-12T15:30:53.283195369Z",
+      "finishedAt": "2026-10-12T15:30:53.358246186Z",
+      "status": "ok",
+      "detail": "stoppedUnits=0; stoppedOwnedProcesses=0; removedOwnedEntries=0"
+    },
+    {
+      "name": "reset-settings",
+      "startedAt": "2026-10-12T15:30:53.669484215Z",
+      "finishedAt": "2026-10-12T15:30:54.360580671Z",
+      "status": "ok"
+    },
+    {
+      "name": "restart-postgres",
+      "startedAt": "2026-10-12T15:30:54.360581874Z",
+      "finishedAt": "2026-10-12T15:30:58.332720258Z",
+      "status": "ok"
+    },
+    {
+      "name": "recreate-databases",
+      "startedAt": "2026-10-12T15:30:58.610958512Z",
+      "finishedAt": "2026-10-12T15:30:59.222502397Z",
+      "status": "ok"
+    },
+    {
+      "name": "verify-postgres",
+      "startedAt": "2026-10-12T15:30:59.222503418Z",
+      "finishedAt": "2026-10-12T15:30:59.949442981Z",
+      "status": "ok"
+    }
+  ],
+  "postgres": {
+    "version": "PostgreSQL 18.3 on x86_64-pc-linux-gnu, compiled by clang version 21.1.8, 64-bit",
+    "databases": [
+      "keiro306_admin",
+      "postgres"
+    ],
+    "settings": [
+      {
+        "name": "autovacuum",
+        "setting": "on",
+        "source": "configuration file"
+      },
+      {
+        "name": "fsync",
+        "setting": "on",
+        "source": "configuration file"
+      },
+      {
+        "name": "full_page_writes",
+        "setting": "on",
+        "source": "configuration file"
+      },
+      {
+        "name": "synchronous_commit",
+        "setting": "on",
+        "source": "configuration file"
+      },
+      {
+        "name": "wal_level",
+        "setting": "replica",
+        "source": "configuration file"
+      }
+    ],
+    "walLsn": "9/36DDAC60",
+    "checkpoint": {
+      "performed": true
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schema": "keiro.guarded-catalog-cell-work/v1",
+  "candidateCommit": "215c6c5b6a1d01d770b1e326617cec797f5197ab",
+  "originalLibraryCommit": "ad78efae0d21d849c8106eac73df0f8bb5719e1f",
+  "execPlan": "mori://shinzui/keiro/plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands",
+  "scope": "Plan 306 full fixed-budget 190-comparison matrix; sustained storage review required"
+}

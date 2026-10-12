@@ -1,0 +1,105 @@
+{
+  "schema": "cell.submission/v1",
+  "runId": "keiro-306-20261012-1528",
+  "leaseId": "keiro-306-lease-20261012-1528",
+  "payload": {
+    "schema": "cell.payload/v1",
+    "kind": "nix-nar-bundle",
+    "bundle": {
+      "uri": "gs://tan-nb-exp-cells-control/payloads/sha256/4c5d02bb613bec639127b7765ee5291e2c8e07a915c75eb6becd3a38f55bf0ae.nar.zst",
+      "sha256": "4c5d02bb613bec639127b7765ee5291e2c8e07a915c75eb6becd3a38f55bf0ae",
+      "bytes": 101178604
+    },
+    "storePath": "/nix/store/sbdzqjb7k5qndbpkyj0qs8rp78zlykl4-keiro-guarded-catalog-cell",
+    "narHash": "sha256-1HZyoIKodT4Ntqg7fL3+p4ioGF/ni0uLQHCcotojSbw=",
+    "closurePaths": [
+      "/nix/store/yh8rykx8wakl1ccn8rc351f6r2wbg4cn-libunistring-1.4.2",
+      "/nix/store/nga9d6m9iplygw3iqghk2g840nz7b0gy-libidn2-2.3.8",
+      "/nix/store/ssvq1r0xd8f7paf6zqgpfql1a4drwhy2-xgcc-15.3.0-libgcc",
+      "/nix/store/n51dhmdbik1kfrsm62j5knavmigwrl1a-glibc-2.42-84",
+      "/nix/store/wi6kaycsa2479qrxv9xy6yg3q5ggfs6j-gcc-15.3.0-libgcc",
+      "/nix/store/0vqb1mcas5j8dv6bhbrshinlgsg6bvgi-gcc-15.3.0-lib",
+      "/nix/store/17xmg38m60inc59az3frp540ccrwn2r8-util-linux-minimal-2.42.2-lib",
+      "/nix/store/217wr6zsyp3hkrvsrl5h4d7yphdm4wir-mpdecimal-4.0.1",
+      "/nix/store/2gkqj0v0msfcagwf5ix199rf1lnwf2a1-expat-2.8.3",
+      "/nix/store/8jnb0l7s676sp8p1mh8n2188gk6vjgwp-acl-2.4.0",
+      "/nix/store/bb2jb295969rw2xmijf6s578yb0pxypr-attr-2.6.0",
+      "/nix/store/bmyw1idq6xyp1h4ksmb14s4imwnf8vwa-gmp-with-cxx-6.3.0",
+      "/nix/store/3qgy8q2j64v2m9jy3a5jmssacbblhd4r-coreutils-9.11",
+      "/nix/store/3zqyvgmchcqal0fqxg31n8sf9z720872-GuardedCatalogBaselineMain.hs",
+      "/nix/store/pfww4nv3wkgpyk1jvqqpz6ymxgj7cbbh-libxcrypt-4.5.2",
+      "/nix/store/5xym1gmpk8kxl2vvfaaxja52qap9g49l-util-linux-minimal-2.42.2-login",
+      "/nix/store/4hlgp6r4j5p6b2b9sxw01cba0x3fjxd6-systemd-minimal-libs-261.2",
+      "/nix/store/zz125vwahb637g5ckl046ll8fcqmc8pk-ncurses-6.6",
+      "/nix/store/c6mgy63s5y1353152dp2s2jaig026j3h-readline-8.3p3",
+      "/nix/store/7a60q5dgnv6z96c279rc1nalyiw4mgqn-bash-interactive-5.3p15",
+      "/nix/store/9ipfvwnqp1q8ijnmi5sxvlx9r8w34lw3-bash-5.3p15",
+      "/nix/store/bdwsskqikgdlq94xqh5dvyd8263w995g-xz-5.8.3",
+      "/nix/store/h6q94p1jw42irzqybm1049fmxakh8701-mailcap-2.1.54",
+      "/nix/store/hg41dqig0qxm7shyi0a0xkw29a14i3js-openssl-3.6.3",
+      "/nix/store/js998ih76w3n2cqnysa7g27608djj5yn-gdbm-1.26-lib",
+      "/nix/store/l3p6y554mkxi4vipnnp8809kxj0g1lyv-zlib-1.3.2",
+      "/nix/store/p0ff33dca0fbkskqwrl3spvxcn5974h0-tzdata-2026c",
+      "/nix/store/wb232z007b8qynidq89lli8lb2c4q0r4-libffi-3.8.0",
+      "/nix/store/xcv2rrfly0za0kdhzvmc0j2a6074zkib-sqlite-3.53.3",
+      "/nix/store/xcwclh5qgw2x6qc39x6ixara06xczzlw-zstd-1.5.7",
+      "/nix/store/xz5xsq0nihfs15fbknz5w0yblg04760q-bzip2-1.0.8",
+      "/nix/store/b5bpi6zfajzzrwwpgba2q6li3nnya4bs-python3-3.14.7",
+      "/nix/store/ch5kq54h6xmdiaizj97l8wjph4bmwwvv-run-guarded-catalog-cell.py",
+      "/nix/store/dhqfq8zmq501bzg5am2n89822w2c26pj-GuardedCatalogFixture.hs",
+      "/nix/store/gszzvycp83ack57x8gabhygkqk5yng1y-summarize-guarded-catalog-evidence.py",
+      "/nix/store/kfqbfq23lafkrbhxxblzf65baqz5p1ia-perl-5.42.3",
+      "/nix/store/sd9qcv5s2gxvd6hpp5hk5cixq2bd4jd1-gzip-1.14",
+      "/nix/store/symzmzrb5qzcwz9mpsrcppwq0r90mq5w-procps-4.0.7",
+      "/nix/store/y1zsddkxy1ay02jyk702sdd1rbrrh94l-Postgres.hs",
+      "/nix/store/y6mccj113z6yc4avmlvjzx746br1x1fg-GuardedCatalogWorkload.hs",
+      "/nix/store/zsd88j8wf2qzj5wrabx6rh6ddzlp1lzy-run-guarded-catalog-comparison.py",
+      "/nix/store/sbdzqjb7k5qndbpkyj0qs8rp78zlykl4-keiro-guarded-catalog-cell"
+    ],
+    "system": "x86_64-linux",
+    "command": [
+      "bin/guarded-catalog-cell"
+    ]
+  },
+  "work": {
+    "sha256": "9c04777f2a4b5ea297202969eaaaf8224caa3f049afee985a5909b6e48f57a5f",
+    "bytes": 408,
+    "mediaType": "application/json"
+  },
+  "env": {},
+  "reset": {
+    "cachePolicy": "cold",
+    "postgres": {
+      "major": 18,
+      "databases": [
+        {
+          "name": "keiro306_admin",
+          "owner": "benchmark",
+          "template": "template0"
+        }
+      ],
+      "settings": {
+        "fsync": "on",
+        "synchronous_commit": "on",
+        "full_page_writes": "on",
+        "autovacuum": "on",
+        "wal_level": "replica"
+      }
+    }
+  },
+  "limits": {
+    "wallClockSeconds": 43200,
+    "memoryMaxBytes": 17179869184,
+    "outputMaxBytes": 4294967296
+  },
+  "requires": {
+    "protocol": "cell.protocol/v1",
+    "minAgentVersion": "0.1.0",
+    "capabilities": []
+  },
+  "labels": {
+    "purpose": "guarded-catalog-plan-306",
+    "candidate": "215c6c5b6a1d01d770b1e326617cec797f5197ab",
+    "baseline": "ad78efae0d21d849c8106eac73df0f8bb5719e1f"
+  }
+}

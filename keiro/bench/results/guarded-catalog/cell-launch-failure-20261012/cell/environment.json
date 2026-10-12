@@ -1,0 +1,34 @@
+{
+  "broker": null,
+  "cell": "alpha",
+  "drivers": [
+    {
+      "host": "10.0.0.3",
+      "index": 0
+    }
+  ],
+  "leaseId": "keiro-306-lease-20261012-1528",
+  "metrics": {
+    "victoriaMetricsUrl": "http://10.0.0.4:8428"
+  },
+  "otlp": {
+    "file": {
+      "grpc": "http://10.0.0.4:4327",
+      "http": "http://10.0.0.4:4328"
+    },
+    "null": {
+      "grpc": "http://10.0.0.4:4317",
+      "http": "http://10.0.0.4:4318"
+    }
+  },
+  "postgres": {
+    "connectionString": "host=10.0.0.2 port=5432 dbname=keiro306_admin user=benchmark",
+    "database": "keiro306_admin",
+    "host": "10.0.0.2",
+    "major": 18,
+    "port": 5432,
+    "user": "benchmark"
+  },
+  "runId": "keiro-306-20261012-1528",
+  "schema": "cell.environment/v1"
+}

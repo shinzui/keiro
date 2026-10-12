@@ -13,10 +13,13 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 
 def main():
+    if len(sys.argv) != 4:
+        raise SystemExit("usage: guarded-catalog-cell <payload-root> <work-file> <output-dir>")
     payload, work_file, output = map(Path, sys.argv[1:])
     work = json.loads(work_file.read_text())
     candidate = json.loads((payload / "share/candidate-environment.json").read_text())
@@ -60,6 +63,7 @@ def main():
     contaminated = False
     exit_code = None
     process = None
+    reader = None
     with (matrix / "host-activity.jsonl").open("w") as hosts, (matrix / "comparison.log").open("w") as log:
         try:
             for _ in range(6):
@@ -71,7 +75,16 @@ def main():
                 time.sleep(5)
             process = subprocess.Popen([str(payload / "bin/keiro-bench"), "+RTS", "-N2", "-RTS"],
                                        cwd=payload / "share/keiro", env=environment,
-                                       stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, start_new_session=True)
+            def copy_log():
+                for line in process.stdout:
+                    log.write(line)
+                    log.flush()
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+            reader = threading.Thread(target=copy_log)
+            reader.start()
             while process.poll() is None:
                 snapshot = monitor.host_snapshot()
                 hosts.write(json.dumps(snapshot) + "\n")
@@ -90,6 +103,8 @@ def main():
             if process is not None and process.poll() is None:
                 os.killpg(process.pid, signal.SIGINT)
                 process.wait(timeout=30)
+            if reader is not None:
+                reader.join(timeout=30)
             (matrix / "execution.json").write_text(json.dumps({"exitCode": exit_code,
                 "contaminated": contaminated, "finishedAt": datetime.now(timezone.utc).isoformat()}, indent=2) + "\n")
     summary = subprocess.run([sys.executable, str(payload / "share/scripts/summarize-guarded-catalog-evidence.py"),

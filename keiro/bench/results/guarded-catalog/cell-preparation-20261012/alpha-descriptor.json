@@ -1,0 +1,57 @@
+{
+  "schema": "cell.descriptor/v1",
+  "name": "alpha",
+  "project": "tan-nb-exp",
+  "zone": "us-west1-a",
+  "postgresMajor": 18,
+  "instances": {
+    "postgres": "cell-alpha-postgres",
+    "drivers": [
+      "cell-alpha-driver-0"
+    ],
+    "monitoring": "cell-alpha-monitoring",
+    "broker": "cell-alpha-broker"
+  },
+  "addresses": {
+    "postgres": "10.0.0.2",
+    "drivers": [
+      "10.0.0.3"
+    ],
+    "monitoring": "10.0.0.4",
+    "broker": "10.0.0.5"
+  },
+  "shape": {
+    "broker": {
+      "diskSizeGb": 100,
+      "machineType": "n2-standard-4"
+    },
+    "driver": {
+      "bootDiskSizeGb": 100,
+      "count": 1,
+      "machineType": "n2-standard-8"
+    },
+    "monitoring": {
+      "machineType": "n2-standard-4"
+    },
+    "postgres": {
+      "diskSizeGb": 200,
+      "diskType": "pd-ssd",
+      "machineType": "n2-standard-8"
+    },
+    "scheduling": {
+      "compactPlacement": false,
+      "onHostMaintenance": "MIGRATE"
+    }
+  },
+  "images": {
+    "broker": "https://www.googleapis.com/compute/v1/projects/tan-nb-exp/global/images/cell-image-broker-5r6zs0ly52rc",
+    "driver": "https://www.googleapis.com/compute/v1/projects/tan-nb-exp/global/images/cell-image-driver-mfz42kkmmd5f",
+    "monitoring": "https://www.googleapis.com/compute/v1/projects/tan-nb-exp/global/images/cell-image-monitoring-i1i7h07rg2n2",
+    "postgres": "https://www.googleapis.com/compute/v1/projects/tan-nb-exp/global/images/cell-image-postgres18-wvn87xr9g056"
+  },
+  "buckets": {
+    "control": "tan-nb-exp-cells-control",
+    "results": "tan-nb-exp-cells-results"
+  },
+  "agentProtocol": "cell.protocol/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "cell": "alpha",
+  "entryExitCode": 2,
+  "entrySignal": null,
+  "leaseId": "keiro-306-lease-20261012-1528",
+  "leaseSequence": 1,
+  "outcome": "completed",
+  "reasons": [],
+  "runId": "keiro-306-20261012-1528",
+  "schema": "cell.run-result/v1"
+}

@@ -1,0 +1,16 @@
+{
+  "generation": 1791818923253158,
+  "lease": {
+    "acquiredAt": "2026-10-12T15:28:42Z",
+    "cancelRequested": false,
+    "cell": "alpha",
+    "heartbeatAt": "2026-10-12T15:28:42Z",
+    "leaseId": "keiro-306-lease-20261012-1528",
+    "owner": "codex-keiro-306",
+    "purpose": "guarded-catalog-performance",
+    "runsStarted": 0,
+    "schema": "cell.lease/v1",
+    "ttlSeconds": 180
+  },
+  "outcome": "acquired"
+}
