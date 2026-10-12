@@ -33,6 +33,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Effectful (Eff, IOE, liftIO, (:>))
 import Effectful.Error.Static (Error)
+import Effectful.Exception qualified as Exception
 import Effectful.Reader.Static (Reader)
 import GHC.Generics (Generic)
 import Hasql.Connection.Settings qualified as Conn
@@ -656,6 +657,24 @@ spec = do
     processed `shouldBe` True
     len <- runDb connStr (queueLen job.jobQueue.physicalName)
     len `shouldBe` 0
+
+  it "runJobWorkers shuts down an idle worker cleanly" $ \connStr -> do
+    let job = mkJob "keiro_pgmq_test.worker_idle_shutdown"
+    cleanShutdown <-
+      timeout 10_000_000 $
+        runDb connStr $ do
+          ensureJobQueue job
+          Exception.bracket
+            ( do
+                result <- runJobWorkers IgnoreFailures 16 [jobProcessor job \_payload -> pure Done]
+                either (liftIO . fail . ("runJobWorkers failed: " <>) . show) pure result
+            )
+            stopAppQuickly
+            ( \app -> do
+                liftIO $ threadDelay 100_000
+                stopAppGracefully ShutdownConfig {drainTimeout = 1, totalShutdownTimeout = 5} app
+            )
+    cleanShutdown `shouldBe` Just True
 
   it "runJobWorkers survives a transient database error during polling" $ \_connStr ->
     pendingWith "needs a deterministic keiro-pgmq-level transient polling fault injector; EP-1 covers this in upstream shibuya and shibuya-pgmq-adapter tests"

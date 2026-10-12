@@ -45,20 +45,31 @@ The working tree already resolves these releases. This work makes that selection
 
 ## Progress
 
-Implementation is underway. Milestone 1 has passed its release, descriptor, and solver gates; behavioral and repository gates remain open.
+Implementation is underway. Milestones 1 and 2 have passed their release, descriptor, solver, build, and behavioral gates. The final repository gate and retrospective remain open.
 
 - [x] (2026-10-11) Rechecked all seven release targets against Hackage and upstream tags, compared released production sources, audited existing API adoption, and successfully resolved all components with tests and benchmarks enabled.
 - [x] (2026-10-12 02:10Z) Refreshed all seven Hackage preferred releases and three peeled tags; raised all eleven bounded Shibuya and ten older pgmq-hs minimums.
 - [x] (2026-10-12 02:10Z) Aligned the nine affected `mori.dhall` constraints; `dhall type`, `cabal update`, and the all-component dry run passed. All seven target packages resolved to secure Hackage archives at the expected versions.
-- [ ] Recheck the released-API adoption audit and add the focused clean-shutdown assertion described in Milestone 2.
-- [ ] Build all components and validate queue, worker, telemetry, operator, and generated-code behavior.
-- [ ] Document the supported release cohort, complete `just verify`, and record the final resolved versions.
+- [x] (2026-10-12 02:14Z) Rechecked released exports and Keiro call sites; added the focused idle-worker shutdown assertion with bracketed cleanup and a ten-second outer deadline.
+- [x] (2026-10-12 02:22Z) PGMQ suite passed: 80 examples, zero failures, two known pending examples; the idle-worker shutdown assertion returned `Just True`.
+- [x] (2026-10-12 02:20Z) Main Keiro (719 examples), operator (50 examples), and migration (36 examples) suites passed with zero failures.
+- [x] (2026-10-12 02:29Z) All 55 `keiro-dsl:tests` suites passed inside `nix develop`; the main DSL suite reported 791 examples with zero failures. The symbolic assertion passed with Z3 4.16.0.
+- [x] (2026-10-12 02:20Z) `cabal build all --enable-tests --enable-benchmarks` exited zero on GHC 9.12.4.
+- [x] (2026-10-12 02:29Z) Completed queue, worker, telemetry, operator, migration, and generated-code behavioral gates; Milestone 2 is complete.
+- [x] (2026-10-12) Documented the supported release cohort in the four affected changelogs and added the user-requested `AGENTS.md` development-shell/Z3 instructions.
+- [ ] Complete `just verify` in the Nix development shell and record final resolved versions.
 - [ ] Perform ADR distillation and record Outcomes & Retrospective before marking implementation complete.
 
 
 ## Surprises & Discoveries
 
-Implementation (2026-10-12): The initial working tree was clean. Hackage preferred versions and peeled tag commits remain exactly as reviewed. `cabal update` reported an up-to-date index at `2026-10-11T21:59:13Z`; the refreshed all-component solver selected the seven expected releases as `repo-tar` sources from the secure Hackage repository. The host already provides GHC 9.12.4 and PostgreSQL 18 tools, so no environment or lockfile change was needed.
+Implementation environment discovery (2026-10-12): The first `cabal test keiro-dsl:tests` exited one at “validated ID and finite enum projections are exact symbolically”; `command -v z3` found no executable. `flake.module.nix` explicitly includes Z3 in `haskellProject.extraDevPackages`, and `nix develop -c z3 --version` reports Z3 4.16.0. Rerun every DSL suite inside the existing development shell and use that shell for the final repository gate; do not relax the assertion or change dependency bounds.
+
+Implementation behavioral evidence (2026-10-12): The first full PGMQ run completed in 37.5332 seconds with `80 examples, 0 failures, 2 pending`. The new idle shutdown example passed, as did grouped-head ordering, lease extension, trace acknowledgement, DLQ, provisioning-record, and nullable-metrics examples. The existing pending examples are “runJobWorkers survives a transient database error during polling” (no deterministic local fault injector) and “ensureJobQueueWith partitioned creates a partitioned queue (live)” (fixture lacks pg_partman).
+
+Implementation API audit (2026-10-12): Tagged production `src/` and migration directories have no changes between pgmq-hs 0.6.0.0 and 0.6.1.1. Verified the released two-field `AppConfig`, two-field `ShutdownConfig`, repeated-stop result retention, adapter `HeadPerGroup` and acknowledgement exception exports, `ensureQueuesEff`/`ensureQueuesReportEff`, and native migration export against Keiro call sites. Both grouped-head paths, `premake = Nothing`, full `QueueMetrics(..)` re-export, and `mkPgmqAdapterEnv` remain adopted. Explicit premake and reconciliation reports stay optional. No production adaptation or new dependency override was needed.
+
+Implementation (2026-10-12): The initial working tree was clean. Hackage preferred versions and peeled tag commits remain exactly as reviewed. `cabal update` reported an up-to-date index at `2026-10-11T21:59:13Z`; the refreshed all-component solver selected the seven expected releases as `repo-tar` sources from the secure Hackage repository. The host already provides GHC 9.12.4 and PostgreSQL 18 tools; the later DSL gate requires the existing development shell for Z3. No environment definition or lockfile change was needed.
 
 Review (2026-10-11): All seven latest normally preferred releases and all three peeled tag commits still match the original targets. Hackage archive `src/` files match the selected tags for Shibuya core, the adapter, and all five pgmq-hs libraries. The twelve SQL files shipped in the pgmq-migration archive are byte-identical between 0.6.0.0 and 0.6.1.1. Test fixtures and unreleased checkout files are not production API evidence.
 
@@ -70,6 +81,10 @@ Review (2026-10-11): `cabal build all --dry-run --enable-tests --enable-benchmar
 
 
 ## Decision Log
+
+Decision (2026-10-12, user steering): Add repository-root `AGENTS.md` requiring the Nix development shell for builds, tests, and verification, including an explicit Z3 preflight and exact command examples. Rationale: Z3 is already a Nix development dependency, but using host-provided GHC/Cabal/PostgreSQL repeatedly misses it. Preserve the existing Nix dependency declaration rather than adding it twice. This is execution guidance for the existing environment, not a new architectural contract.
+
+Decision (2026-10-12): Protect startup and shutdown in the new example with `Effectful.Exception.bracket`, using `stopAppQuickly` for release and retaining the first `stopAppGracefully` result. Rationale: tagged Shibuya supports repeated stop by returning the retained result; bracket cleanup covers exceptions and cancellation before the pool is released, while the outer assertion rejects forced or timed-out shutdown. Allow 100 milliseconds for the newly started idle worker to enter its ordinary polling loop.
 
 Decision (2026-10-11): Interpret “latest” as the latest normally preferred release available from Hackage and corroborated by upstream tags. Target `shibuya-core 0.10.0.1`, `pgmq-config`, `pgmq-core`, `pgmq-effectful`, `pgmq-hasql`, and `pgmq-migration` at `0.6.1.1`, with the already-required `shibuya-pgmq-adapter 0.16.1.0`. Rationale: local checkouts contain unreleased API changes; those are not the user's requested released dependency upgrade. Recheck releases immediately before implementation and revise this entire plan if a newer release changes the target or API assumptions.
 
@@ -85,6 +100,8 @@ Decision (2026-10-11): Keep the long-polling repair in `docs/plans/300-poll-pgmq
 
 
 ## Outcomes & Retrospective
+
+Implementation checkpoint (2026-10-12): Milestones 1 and 2 are complete. Cabal and Mori now require the verified published releases, all components built, and PGMQ/main/operator/migration/DSL integrations passed. No production Haskell or migration change was required. User-requested `AGENTS.md` now prevents relying on a partial host environment for verification. The full repository gate and final ADR distillation remain pending.
 
 Review/update outcome (2026-10-11): The original release cohort and bound changes are correct. The plan now records the concrete API-adoption audit, distinguishes adapter behavior from bounded-drain behavior, checks repository identity as well as archive source type, and requires an observable clean-shutdown test. The dependency upgrade, changelogs, builds, integration tests, and full repository gate remain unimplemented. No ADR changes are required for this clarification of existing boundaries. Fill in the implementation outcome and final gate evidence when those steps finish.
 
@@ -150,7 +167,7 @@ Run `just verify` in the development shell and record its actual exit status and
 
 ## Concrete Steps
 
-Run all commands from the repository root. Enter the shell once if GHC, Cabal, PostgreSQL, or native libraries are unavailable. The shell initializes the local development database directory but does not start PostgreSQL until the relevant recipes do so. Python 3, Bun, Mori, Dhall, and OKF must also be available on the host or shell path.
+Run all commands from the repository root. Use the development shell for DSL symbolic tests and the full gate: Z3 must be on `PATH` in addition to GHC, Cabal, PostgreSQL, and native libraries. The shell initializes the local development database directory but does not start PostgreSQL until the relevant recipes do so. Python 3, Bun, Mori, Dhall, and OKF must also be available on the host or shell path.
 
 ```bash
 cd /Users/shinzui/Keikaku/bokuno/keiro
@@ -158,6 +175,7 @@ git status --short
 nix develop
 ghc --numeric-version
 cabal --version
+z3 --version
 ```
 
 Expect GHC `9.12.4`. Record the initial dirty files before editing. Discover dependency roots and registered documentation before reading any dependency API:
@@ -337,3 +355,5 @@ No new public type or function is required. Preserve `Keiro.PGMQ.Runtime.withJob
 Revision note (2026-10-11): Reviewed the original plan against Hackage, release tags and archives, Keiro call sites, and ADR-1/25/28/45. Retained the verified versions and bounds, added the released-API adoption rationale and one focused shutdown test, corrected Hackage source verification and Mori stdout handling, and narrowed reliability claims to distinguish supervised adapter delivery from the bounded drain. Updated the living sections and implementation gates; no dependency or production-code change was made in this review.
 
 Revision note (2026-10-12): Implemented Milestone 1 with verified current releases, Cabal/Mori minimums, refreshed Hackage resolution, and runtime-discovered provenance. Behavioral validation remains pending.
+
+Revision note (2026-10-12): Completed the released-API audit, clean-shutdown regression, all-component build, and focused integration gates. Recorded the missing-host-Z3 failure and successful Nix-shell rerun, added user-requested agent instructions, and documented the supported cohort in changelogs. The full repository gate remains pending.
