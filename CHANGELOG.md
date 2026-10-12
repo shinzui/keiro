@@ -18,11 +18,16 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### New Features
 
+- `runDomainCommandWithCatalogProjectionsGuarded` admits an opt-in relational
+  precondition after catalog fencing and tentative append. Typed refusal rolls
+  back the whole batch; accepted events use the protected serving bindings.
+- `keiro-test-support` provides same-database resource fixtures for contention
+  tests and a durable benchmark fixture with optional external PostgreSQL.
 - `resizeShardCount`/`resizeShardCountTx` atomically equalize public Kiroku
   checkpoints and Keiro lease rows for stopped, fully relinquished groups.
   Same-size resize is supported and can replay already handled events.
 
-### Fixes
+### Bug Fixes
 
 - Refuse mismatched shard startup before writing rows and classify typed
   decode failures as deterministic. Existing projections retain the default

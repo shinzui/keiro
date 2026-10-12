@@ -6,6 +6,16 @@ All notable changes to `keiro-test-support` are recorded here. The format follow
 
 ## [Unreleased]
 
+### New Features
+
+- Add `withFreshResourceStoresSameDatabase` and
+  `withFreshResourceStoresSameDatabaseWithConnection` for independent resource
+  stores sharing one isolated database.
+- Add `withMigratedBenchmarkSuite` for durable benchmark databases. It enables
+  fsync, synchronous commit, full-page writes and autovacuum locally, or uses an
+  external server supplied through `KEIRO_GUARDED_CATALOG_PG_ADMIN` while
+  creating and dropping only its uniquely named template and cloned databases.
+
 ### Other Changes
 
 - Require `kiroku-store ^>=0.11.0.0`; see the root changelog for the

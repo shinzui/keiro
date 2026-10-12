@@ -24,7 +24,7 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
   stopped, unowned groups. Atomically rewind every checkpoint to the previous
   minimum and replace lease rows, with typed owner refusal and resize evidence.
 
-### Fixes
+### Bug Fixes
 
 - Refuse mismatched shard counts before inserting lease rows. Classify typed
   event-decode failures as deterministic failures, preserving stop-on-undecodable
