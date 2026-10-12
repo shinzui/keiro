@@ -65,9 +65,13 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 - [x] (2026-10-12) M2 implementation: additive result/context and guarded runner compile, sharing the existing delivery loop after complete fence admission.
 - [x] (2026-10-12) M2 validation: initial full suite passes 739 examples; focused expanded selection passes 36 examples, including 34 new guarded examples. Public re-export policy and its nine tests pass. Shared delivery adds no ordinary-path SQL or explicit locks.
 - [x] (2026-10-12) M3 focused matrix: independent-connection races in both orders, winner rollback, snapshot/effect rollback, complete batches, silent/OCC/driver retries, encode/query faults, archive/canonical reuse, both owner rebuilds, independent fencing, post-commit pending/ready/unavailable views, and writer-first/promotion-first versioned admission pass.
-- [x] (2026-10-12) M3 full regression: 753 examples pass with zero failures in 177.81 seconds after the final fixture changes.
+- [x] (2026-10-12) M3 full regression: 754 examples pass with zero failures in 161.56 seconds after the final fixture changes. Faulting handler positive controls prove refusal/all-fence admission skips delivery, and promotion-first calls permit exactly one creation across both calls.
 - [ ] M4: Measure guarded and mixed traffic against the fixed regression budgets.
+- [x] (2026-10-12) M4 diagnostic positive controls: million-row identity lookup uses its composite index; slow 20 ms guard degrades ordinary p95/p99 by 9.21/15.04 times; direct sequence counters observe 1,001 global updates and 201 guard evaluations for 1,000 outer attempts with one injected driver retry. Lock waits and guard/lock-lower-bound clocks are retained under `diagnostic-20261012`.
 - [ ] M5: Publish the public recipe, distill ADR decisions, and run the final repository checks.
+- [x] (2026-10-12) M5 documentation/export checks: guide, changelog and ADR-26/29/34 boundaries are recorded; strict ADR, user-documentation and IR validation and public export policy pass. The strengthened rebuild completion assertion passes in the 36-example focused selection.
+- [x] (2026-10-12) M5 projection guard: all 12 cases pass; the five-run median read-model p95 ratio is 1.041806 and throughput ratio is 0.977885, within its 1.25/0.90 budgets.
+- [ ] M5 regression/performance checks: the historical command CSV guard fails nine of fifteen current cases. A matching four-case selection fails three on the retained original binary and one on current; retain these pre-existing/noisy failures without changing the CSV. M4 acceptance remains pending.
 
 
 ## Surprises & Discoveries
@@ -79,6 +83,10 @@ The existing `ProjectionWriteBinding` type was exported only by a private module
 2026-10-12 — The expanded focused selection passes 36 examples in 7.94 seconds. Real same-revision and schema-changing promotions were exercised in both lock orders. Promotion-first admission either obtains a coherent new binding or returns the existing typed invalid/unavailable outcome, and a fresh call succeeds. No resolver change or extra old-path statement was needed. The note fixture declares no stream-scoped targeted repair; that conditional repair scenario does not apply. Catalog rebuilds require the rich subscription checkpoint even with the worker paused; the fixture now initializes it before rebuilding.
 
 2026-10-12 — The initial retained harness records latency but not elapsed throughput or active-worker conditions. Build an enhanced harness against the untouched original production library using `scripts/build-guarded-catalog-baseline.py`; both binaries share byte-identical fixture/request/timing modules. Record their hashes and preserve the original latency archive. This corrects an evidence gap, without substituting historical samples for alternating controls.
+
+2026-10-12 — The normal command benchmark reuses a growing primary fixture and includes hard-delete/reset work. Its full current run fails nine of fifteen historical guards; an identical selected four cases fail three on the retained original binary and one on current, with lower current means for all four selected cases. PostgreSQL observation finds I/O wait in affected-history lookup and a 112 MB `stream_events` relation. Unrelated host builds/tests also overlapped part of the full normal run. Preserve the raw results under `regression-20261012`, classify them separately from fresh-database catalog comparisons, and do not refresh the historical CSV or attribute these failures to the guarded runner without paired evidence.
+
+2026-10-12 — Final review strengthens two runtime proofs: an accepted promotion-first call must make the fresh call reuse the same note, with exactly one creation event; a deliberately faulting inline handler proves both refusal and unavailable-second-group admission execute no delivery. The full suite passes 754 examples. Ordinary refactor pairs launch both binaries in fresh RTS processes, avoiding different garbage-collection histories from a long-lived parent versus freshly launched controls; setup and warm-up remain outside measurement.
 
 
 Documentation review found guidance recommending inline delivery for immediate readers. Existing `WaitForPosition` supports that need after commit, so the baseline guides, ADR-26, and agent-facing runtime patterns now recommend async query models. Runtime behavior and performance remain unmeasured.
@@ -118,7 +126,7 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Outcomes & Retrospective
 
-2026-10-12 implementation checkpoint: the additive runner compiles; the final full suite passes 753 examples and the expanded focused selection passes 36. The example covers snapshots, both owner rebuilds, fresh OCC/driver outcomes, versioned promotion in both orders, and post-commit view errors. The ordinary-path source audit records unchanged SQL/explicit locks. Strict ADR, user documentation, improvement request, and public export checks pass. Forty paused-worker latency samples remain provenance. Enhanced alternating controls and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
+2026-10-12 implementation checkpoint: the additive runner compiles; the final full suite passes 754 examples, including 35 guarded examples. The example covers snapshots, both owner rebuilds, fresh OCC/driver outcomes, versioned promotion in both orders, and post-commit view errors. The ordinary-path source audit records unchanged SQL/explicit locks. Strict ADR, user documentation, improvement request, and public export checks and the projection benchmark guard pass. The historical command guard also fails on original source; retained raw evidence separates that drift from this feature. Forty paused-worker latency samples remain provenance. Enhanced alternating controls and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
 
 
 Planning and guidance now distinguish the atomic identity index from the asynchronous rich-note view, including independent fencing and committed-but-pending response requirements. Source review found and corrected the async-group selection gap and made callback safety, promotion admission, driver retries, and sustained duplicate costs explicit. The plan was originally authored and revised by `gpt-6-astra` with no recorded review entry before this pass. All five runtime milestones remain pending. No runtime or performance result is claimed.
@@ -342,3 +350,9 @@ Revision note (2026-10-12): Begin implementation against the actual released dep
 
 
 Revision note (2026-10-12): Record the expanded correctness matrix, unchanged ordinary-path source audit, and initial full regression result. Add reproducible enhanced original-library controls because the first retained harness omitted elapsed throughput and active-worker measurements; M4 and final verification remain pending.
+
+
+Revision note (2026-10-12): Archive direct slow-guard/driver/lock diagnostics and distinguish historical normal-command benchmark failures from the unchanged original binary. Strengthen real catalog rebuild completion assertions and distill promotion-first admission into ADR-34. Fixed acceptance budgets and required matrix remain unchanged.
+
+
+Revision note (2026-10-12): Close the correctness matrix with positive-control handler faults and a single-creation promotion assertion. Record the 754-example suite and passing projection guard. Align ordinary paired process lifetimes before fixed-budget measurements.

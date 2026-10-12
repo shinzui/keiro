@@ -1,0 +1,32 @@
+{
+  "reports": {},
+  "failedReports": [],
+  "countChecks": {
+    "instrumented-slow-guard.json.gz": {
+      "valid": true,
+      "attempts": 1000,
+      "acceptedBatches": 1000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 4000,
+      "endingCardinality": 1001000
+    },
+    "slow-control.json.gz": {
+      "valid": true,
+      "attempts": 1000,
+      "acceptedBatches": 1000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 4000,
+      "endingCardinality": 1001000
+    },
+    "slow-guard.json.gz": {
+      "valid": true,
+      "attempts": 1000,
+      "acceptedBatches": 1000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 4000,
+      "endingCardinality": 1001000
+    }
+  },
+  "storage": {},
+  "storageInterpretation": "Review continuing active backlog, expected committed-event growth, dead rows, vacuum and per-minute latency against the paired control. These metrics do not establish a universal storage bound."
+}

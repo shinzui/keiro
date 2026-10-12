@@ -19,6 +19,17 @@ def main():
     parser.add_argument("directory", type=Path)
     args = parser.parse_args()
     reports = {path.name: read_json(path) for path in sorted(args.directory.glob("*-report.json"))}
+    counts = {}
+    for path in sorted(args.directory.glob("*.json.gz")):
+        measurement = read_json(path)
+        workload = measurement["workload"]
+        completed = len(measurement["samples"])
+        accepted = sum(sample["accepted"] for sample in measurement["samples"])
+        expected_events = (100 + accepted) * workload["batchSize"]
+        valid = completed == workload["attempts"] and measurement["endingCardinality"] == workload["cardinality"] + accepted and measurement["committedEvents"] == expected_events
+        counts[path.name] = {"valid": valid, "attempts": completed, "acceptedBatches": accepted, "refusedBatches": completed-accepted, "committedMeasuredEvents": measurement["committedEvents"] - 100 * workload["batchSize"], "endingCardinality": measurement["endingCardinality"]}
+        if not valid:
+            raise SystemExit(f"cardinality/event-count evidence mismatch: {path}")
     storage = {}
     for path in sorted(args.directory.glob("*-storage.jsonl")):
         snapshots = [json.loads(line) for line in path.read_text().splitlines()]
@@ -51,7 +62,7 @@ def main():
             "elapsedSeconds": measurement["elapsedSeconds"],
         }
     failed = [name for name, report in reports.items() if report.get("pass", report.get("latencyPass")) is False]
-    summary = {"reports": reports, "failedReports": failed, "storage": storage, "storageInterpretation": "Review continuing active backlog, expected committed-event growth, dead rows, vacuum and per-minute latency against the paired control. These metrics do not establish a universal storage bound."}
+    summary = {"reports": reports, "failedReports": failed, "countChecks": counts, "storage": storage, "storageInterpretation": "Review continuing active backlog, expected committed-event growth, dead rows, vacuum and per-minute latency against the paired control. These metrics do not establish a universal storage bound."}
     destination = args.directory / "aggregate-report.json"
     destination.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps({"reports": len(reports), "failures": failed, "sustainedRuns": len(storage), "output": str(destination)}))

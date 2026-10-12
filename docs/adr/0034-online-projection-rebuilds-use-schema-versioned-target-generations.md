@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Online projection rebuilds use schema-versioned target generations
 description: Keiro rebuilds schema-changing projections into application-provisioned physical generations and promotes a verified generation through a bounded atomic cutover.
-timestamp: 2026-10-12T03:18:00Z
+timestamp: 2026-10-12T04:02:55Z
 docId: ADR-34
 status: Accepted
 date: 2026-08-13
@@ -165,6 +165,15 @@ synchronous identity authority, and participation and invariant enforcement by
 every relevant live writer. Arbitrary external SQL and asynchronous indexes are
 outside that protocol. Performance readiness requires mixed-workload evidence;
 passing correctness tests alone does not establish an acceptable lock cost.
+
+Admission after waiting for promotion must be tested separately from a writer
+that already holds its group lock. A ReadCommitted statement can return an
+updated locked row alongside metadata from its earlier statement snapshot.
+The supported outcome is a coherent serving binding or an existing typed
+unavailable/invalid-binding refusal before the consumer callback; a fresh call
+then resolves the promoted state. The same-revision and schema-changing tests
+in [GuardedCatalogVersionedSpec.hs](../../keiro/test/GuardedCatalogVersionedSpec.hs)
+exercise both orderings. They required no additional resolver SQL.
 
 
 ## Consequences

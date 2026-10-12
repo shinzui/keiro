@@ -118,7 +118,7 @@ spec fixture = describe "guarded catalog commands" $ do
             request = Keiro.ReadModel.Rebuild.RebuildRequest runId "guarded-spec" "rebuild event-derived note owners" (GlobalPosition 0)
             options = Keiro.ReadModel.Rebuild.defaultRebuildOptions request
         report <- checked runner (Keiro.ReadModel.Rebuild.startCatalogRebuild Example.catalog group options) >>= either (fail . show) pure
-        report `seq` pure ()
+        report ^. #runStatus `shouldBe` Keiro.ReadModel.Rebuild.RebuildRunPromoted
       Example.ensureStateNoteExample runner (note {Example.noteId = "duplicate"}) `shouldReturn` Right ("winner", False)
       counts runner `shouldReturn` (1, 1, 1, 0)
       payload <- checked runner (Store.runTransaction (Tx.statement "winner" Example.richLookup))
@@ -167,6 +167,18 @@ spec fixture = describe "guarded catalog commands" $ do
         pure (Left (Example.ExistingNote "winner"))
       outcome `shouldBe` Right (PreconditionRefused (Example.ExistingNote "winner"))
       checked runner (Store.readStreamForward (StreamName "loser") (StreamVersion 0) 100) `shouldReturn` mempty
+      counts runner `shouldReturn` (0, 0, 0, 0)
+
+    it "never invokes a faulting inline handler after refusal" \(_, runner) -> do
+      Example.setup runner
+      let projection :: InlineProjection Example.NoteEvent
+          projection = InlineProjection "note-identity" (\_ _ -> Tx.sql "SELECT 1 / 0")
+          definition = Example.identityDefinition & #handlers .~ (InlineHandler projection Example.site :| [])
+          set = Example.commandSet & #projectionDefinitions .~ (definition :| [])
+          run guard = checked runner (runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions (Example.handler 1) (stream "handler-fault") (Example.CreateNote (Example.notePayload (Example.exampleNote "handler-fault" "shared"))) Example.catalog set guard)
+      run (\_ -> pure (Left (Example.ExistingNote "winner"))) `shouldReturn` Right (PreconditionRefused (Example.ExistingNote "winner"))
+      -- Positive control proves the handler fault is observable if admitted.
+      run (\_ -> pure (Right ())) >>= (`shouldSatisfy` \case Left StoreFailed {} -> True; _ -> False)
       counts runner `shouldReturn` (0, 0, 0, 0)
 
     it "commits the complete four-event batch only after a successful guard" \(_, runner) -> do
@@ -221,9 +233,13 @@ spec fixture = describe "guarded catalog commands" $ do
       Example.setup runner
       checked runner (Store.runTransaction (Tx.sql "UPDATE keiro.keiro_projection_rebuild_groups SET status = 'failed', active_run_id = 'test-run', reads_allowed = false, writes_allowed = false WHERE group_id = 'note-rich-group'"))
       let note = Example.exampleNote "winner" "shared"
+          faulting :: InlineProjection Example.NoteEvent
+          faulting = InlineProjection "note-identity" (\_ _ -> Tx.sql "SELECT 1 / 0")
+          firstDefinition = Example.identityDefinition & #handlers .~ (InlineHandler faulting Example.site :| [])
+          broadSet = Example.fullSet & #projectionDefinitions .~ (firstDefinition :| [Example.richDefinition])
       Example.ensureStateNoteExample runner note `shouldReturn` Right ("winner", True)
       Example.ensureStateNoteExample runner (note {Example.noteId = "loser"}) `shouldReturn` Right ("winner", False)
-      result <- checked runner (runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions (Example.handler 1) (stream "broad") (Example.CreateNote (Example.notePayload (Example.exampleNote "broad" "other"))) Example.catalog Example.fullSet (\_ -> Tx.sql "SELECT 1 / 0" >> pure (Right () :: Either Example.NoteRefusal ())))
+      result <- checked runner (runDomainCommandWithCatalogProjectionsGuarded defaultRunCommandOptions (Example.handler 1) (stream "broad") (Example.CreateNote (Example.notePayload (Example.exampleNote "broad" "other"))) Example.catalog broadSet (\_ -> Tx.sql "SELECT 1 / 0" >> pure (Right () :: Either Example.NoteRefusal ())))
       result `shouldBe` Right (CatalogCommandOutcome (DomainProjectionCommandFenced Example.richGroup (either (error . show) id (Keiro.ReadModel.Rebuild.mkRebuildRunId "test-run"))))
       counts runner `shouldReturn` (1, 1, 0, 0)
 

@@ -1206,5 +1206,7 @@
   ],
   "machine": "macOS-26.7-arm64-arm-64bit-Mach-O",
   "recordedAt": "2026-10-12T03:54:22.938836+00:00",
-  "purpose": "enhanced alternating baseline; initial latency archive remains provenance only"
+  "purpose": "enhanced alternating baseline; initial latency archive remains provenance only",
+  "buildCheckoutHead": "0efa3d2a459042c464abdb3d2adcec246ed0b219",
+  "verifiedHarnessCommit": "22c6f696d6dcb39e5256574bf4ee050504d9d225"
 }

@@ -1,0 +1,1 @@
+{"commands":1000,"injectedDriverRetries":1,"outerAppendAttempts":1000,"scope":"diagnostic unique streams; global update/guard sequences count attempts surviving rollback; lock clocks exclude pre-update wait and commit"}

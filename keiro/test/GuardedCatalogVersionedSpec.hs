@@ -86,9 +86,14 @@ spec fixture = describe "guarded catalog commands serving revisions" $ do
                 _ -> False
               -- A fresh statement after promotion must resolve the new binding.
               final <- runGuarded writer catalog note (versionedGuard candidateVersion note)
-              final `shouldSatisfy` \case
-                Right (PreconditionRefused (Example.ExistingNote "late")) -> True
-                value -> isAccepted value
+              if isAccepted result
+                then final `shouldBe` Right (PreconditionRefused (Example.ExistingNote "late"))
+                else final `shouldSatisfy` isAccepted
+              -- A falsely valid old-generation binding would let the first
+              -- call insert into a retired table, then let the fresh call
+              -- create again in the serving table. Do not accept that pair.
+              events <- checked writer (Store.readStreamForward (Store.StreamName "late") (Store.StreamVersion 0) 100)
+              length events `shouldBe` 1
 
   around (withFreshResourceStore fixture) $ do
     it "refuses an unknown serving revision before invoking the guard" \(_, runner) -> do

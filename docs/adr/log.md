@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-12
+* **Update**: Distill promotion-first admission evidence and the ReadCommitted joined-snapshot boundary
 * **Update**: Record protected guard bindings and append serialization requirements.
 * **Update**: Distinguish transactional precondition rollback from pure domain refusal.
 * **Update**: Record fence-first guards and inline-only command sets.

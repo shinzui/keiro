@@ -1,0 +1,8 @@
+Index Scan using state_note_identity_pkey on state_note_identity  (cost=0.42..2.45 rows=1 width=16) (actual time=0.013..0.013 rows=1.00 loops=1)
+  Index Cond: ((anchor_type = 'intention'::text) AND (anchor_id = 'seed-1'::text) AND (property_id = 'status'::text) AND (state_id = 'ready'::text))
+  Index Searches: 1
+  Buffers: shared hit=4
+Planning:
+  Buffers: shared hit=28
+Planning Time: 0.182 ms
+Execution Time: 0.021 ms

@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-12
+* **Update**: Record the final 754-example correctness suite and retained performance diagnostics
 * **Update**: Record the implemented guarded runner and expanded PostgreSQL correctness evidence; performance and adoption remain pending
 
 ## 2026-10-11

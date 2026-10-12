@@ -22,7 +22,7 @@ import Keiro.Projection
 import Keiro.Test.Postgres
 import Kiroku.Store qualified as Store
 import System.Directory
-import System.Environment (lookupEnv)
+import System.Environment (getArgs, lookupEnv)
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -34,6 +34,14 @@ runGuardedCatalogEvidence :: IO Bool
 runGuardedCatalogEvidence =
   lookupEnv "KEIRO_GUARDED_CATALOG_EVIDENCE" >>= \case
     Nothing -> pure False
+    Just "single-ordinary" -> do
+      getArgs >>= \case
+        [input, output] -> do
+          config <- Lazy.readFile input >>= either fail pure . Aeson.eitherDecode
+          result <- sample config Ordinary
+          Lazy.writeFile output (Aeson.encode result)
+        _ -> fail "single-ordinary requires workload and result paths"
+      pure True
     Just mode -> do
       output <- maybe "bench/results/guarded-catalog/candidate" id <$> lookupEnv "KEIRO_GUARDED_CATALOG_OUTPUT"
       exists <- doesPathExist (output <> "/manifest.json")
@@ -197,7 +205,10 @@ comparePairSet output baseline label mode config = do
     let prefix = label <> "-" <> workloadKey config <> "-" <> show pair
         controlConfig = config {duplicatePercent = 0}
         control = if label == "refactor" then originalSample output baseline prefix controlConfig else sample controlConfig Ordinary
-        candidate = sample config mode
+        -- Both old and new ordinary binaries get a fresh RTS process. A
+        -- long-lived parent otherwise has different GC history from each
+        -- newly launched retained control, despite identical request code.
+        candidate = if label == "refactor" then currentOrdinarySample output prefix config else sample config mode
     (before, after) <- if odd pair then (,) <$> control <*> candidate else do after <- candidate; before <- control; pure (before, after)
     save output (prefix <> "-control") before
     save output (prefix <> "-candidate") after
@@ -214,6 +225,21 @@ originalSample output executable prefix config = do
   measurements <- Lazy.readFile result >>= either fail pure . Aeson.eitherDecode
   (code, _, errors) <- readProcessWithExitCode "gzip" ["-n", result] ""
   unless (code == ExitSuccess) (fail ("baseline evidence compression failed: " <> errors))
+  pure measurements
+
+currentOrdinarySample :: FilePath -> String -> Workload -> IO Measurements
+currentOrdinarySample output prefix config = do
+  (code, path, errors) <- readProcessWithExitCode "cabal" ["list-bin", "keiro:bench:keiro-bench"] ""
+  let executable = takeWhile (/= '\n') path
+  unless (code == ExitSuccess && "dist-newstyle/" `List.isInfixOf` executable && not ("/nix/store/" `List.isInfixOf` executable)) (fail ("candidate executable is not a project build: " <> errors))
+  let input = output <> "/" <> prefix <> "-candidate-workload.json"
+      result = output <> "/" <> prefix <> "-candidate-process.json"
+  Lazy.writeFile input (Aeson.encode config)
+  (exit, stdout, stderr) <- readProcessWithExitCode "env" ["KEIRO_GUARDED_CATALOG_EVIDENCE=single-ordinary", executable, input, result, "+RTS", "-N2", "-RTS"] ""
+  unless (exit == ExitSuccess) (fail ("candidate subprocess fault: " <> stdout <> stderr))
+  measurements <- Lazy.readFile result >>= either fail pure . Aeson.eitherDecode
+  (compressed, _, compressionErrors) <- readProcessWithExitCode "gzip" ["-n", result] ""
+  unless (compressed == ExitSuccess) (fail ("candidate compression fault: " <> compressionErrors))
   pure measurements
 
 -- Ratios retain throughput and the relevant end-to-end latency cohort. Refused
@@ -278,22 +304,28 @@ diagnosticTransactions output config = withMigratedSuite \fixture ->
       ( Store.runTransaction
           ( Tx.sql
               """
-              CREATE SEQUENCE app.diag_all_attempts;
-              CREATE SEQUENCE app.diag_guard_attempts;
-              CREATE TABLE app.diag_marks(txid bigint, stage text, at timestamptz);
-              CREATE FUNCTION app.diag_all() RETURNS trigger LANGUAGE plpgsql AS $$
+                      CREATE SEQUENCE app.diag_all_attempts;
+                      CREATE SEQUENCE app.diag_guard_attempts;
+                      CREATE TABLE app.diag_marks(txid bigint, stage text, at timestamptz);
+                      CREATE FUNCTION app.diag_all() RETURNS trigger LANGUAGE plpgsql AS $$
+                      BEGIN
+                        PERFORM nextval('app.diag_all_attempts');
+                        INSERT INTO app.diag_marks VALUES (txid_current(), 'all-updated', clock_timestamp());
+                        RETURN NEW;
+                      END $$;
+                      CREATE TRIGGER diag_all AFTER UPDATE ON streams FOR EACH ROW WHEN (NEW.stream_id = 0) EXECUTE FUNCTION app.diag_all();
+                      CREATE FUNCTION app.diag_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+                      BEGIN
+                        INSERT INTO app.diag_marks VALUES (txid_current(), 'identity-delivered', clock_timestamp());
+                        RETURN NEW;
+                      END $$;
+                      CREATE TRIGGER diag_identity AFTER INSERT ON app.state_note_identity FOR EACH ROW EXECUTE FUNCTION app.diag_identity();
+              CREATE FUNCTION app.diag_append_end() RETURNS trigger LANGUAGE plpgsql AS $$
               BEGIN
-                PERFORM nextval('app.diag_all_attempts');
-                INSERT INTO app.diag_marks VALUES (txid_current(), 'all-updated', clock_timestamp());
-                RETURN NEW;
+                INSERT INTO app.diag_marks VALUES (txid_current(), 'append-statement-end', clock_timestamp());
+                RETURN NULL;
               END $$;
-              CREATE TRIGGER diag_all AFTER UPDATE ON streams FOR EACH ROW WHEN (NEW.stream_id = 0) EXECUTE FUNCTION app.diag_all();
-              CREATE FUNCTION app.diag_identity() RETURNS trigger LANGUAGE plpgsql AS $$
-              BEGIN
-                INSERT INTO app.diag_marks VALUES (txid_current(), 'identity-delivered', clock_timestamp());
-                RETURN NEW;
-              END $$;
-              CREATE TRIGGER diag_identity AFTER INSERT ON app.state_note_identity FOR EACH ROW EXECUTE FUNCTION app.diag_identity();
+              CREATE TRIGGER diag_append_end AFTER INSERT ON stream_events FOR EACH STATEMENT EXECUTE FUNCTION app.diag_append_end();
               """
           )
       )
@@ -350,7 +382,7 @@ diagnosticTransactions output config = withMigratedSuite \fixture ->
     unless (allUpdates == fromIntegral (attempts config + 1) && guardEvaluations == fromIntegral (length (filter guarded (prepareRequests config)) + 1)) (fail "diagnostic driver retry count differs from injected retry")
     waits <- lines <$> readFile (output <> "/lock-waits.jsonl")
     unless (any (/= "[]") waits) (fail "slow-guard diagnostic observed no lock wait")
-    statistics <- checked runner (Store.runTransaction (Tx.statement () (preparable "SELECT jsonb_build_object('appendAllUpdates',(SELECT last_value FROM app.diag_all_attempts),'guardEvaluations',(SELECT last_value FROM app.diag_guard_attempts),'timings',(SELECT jsonb_agg(row_to_json(t)) FROM (SELECT txid, EXTRACT(EPOCH FROM (max(at) FILTER (WHERE stage='guard-end')-max(at) FILTER (WHERE stage='guard-start')))*1000000 AS guard_microseconds, EXTRACT(EPOCH FROM (max(at) FILTER (WHERE stage='identity-delivered')-min(at) FILTER (WHERE stage='all-updated')))*1000000 AS all_lock_lower_bound_microseconds FROM app.diag_marks GROUP BY txid) t))::text" E.noParams (D.singleRow (D.column (D.nonNullable D.text))))))
+    statistics <- checked runner (Store.runTransaction (Tx.statement () (preparable "SELECT jsonb_build_object('appendAllUpdates',(SELECT last_value FROM app.diag_all_attempts),'guardEvaluations',(SELECT last_value FROM app.diag_guard_attempts),'timings',(SELECT jsonb_agg(row_to_json(t)) FROM (SELECT txid, EXTRACT(EPOCH FROM (max(at) FILTER (WHERE stage='guard-end')-max(at) FILTER (WHERE stage='guard-start')))*1000000 AS guard_microseconds, EXTRACT(EPOCH FROM (max(at) FILTER (WHERE stage='identity-delivered')-max(at) FILTER (WHERE stage='append-statement-end')))*1000000 AS post_append_delivery_microseconds, EXTRACT(EPOCH FROM (max(at) FILTER (WHERE stage='identity-delivered')-min(at) FILTER (WHERE stage='all-updated')))*1000000 AS all_lock_lower_bound_microseconds FROM app.diag_marks GROUP BY txid) t),'rawStages',(SELECT jsonb_agg(row_to_json(m)) FROM app.diag_marks m))::text" E.noParams (D.singleRow (D.column (D.nonNullable D.text))))))
     writeFile (output <> "/transaction-timings.json") (Text.unpack statistics)
     Lazy.writeFile (output <> "/attempt-counts.json") (Aeson.encode (Aeson.object ["outerAppendAttempts" Aeson..= attemptsObserved, "commands" Aeson..= attempts config, "injectedDriverRetries" Aeson..= (1 :: Int), "scope" Aeson..= ("diagnostic unique streams; global update/guard sequences count attempts surviving rollback; lock clocks exclude pre-update wait and commit" :: Text)]))
     unless (attemptsObserved == attempts config) (fail "unexpected OCC churn in unique-stream diagnostic")
