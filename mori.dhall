@@ -12,7 +12,13 @@ in  Schema.Project::{
       , description = Some "Event sourcing framework and workflow engine"
       , domains = [ "EventSourcing", "Workflow" ]
       }
-    , repos = [ Schema.Repo::{ name = "keiro" } ]
+    , repos =
+      [ Schema.Repo::{
+        , name = "keiro"
+        , localPath = Some "."
+        , github = Some "shinzui/keiro"
+        }
+      ]
     , packages =
       [ Schema.Package::{
         , name = "keiro-core"

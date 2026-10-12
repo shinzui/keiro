@@ -31,6 +31,11 @@ provenance:
       at: 2026-10-12T12:43:23Z
       mode: "implement"
       note: "Resume unchanged-budget measurements with host monitoring and investigate timing stability before readiness"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-12T14:23:44Z
+      mode: "implement"
+      note: "Resume performance acceptance using Kenshou runbook and remote Linux infrastructure"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -61,6 +66,10 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 
 ## Progress
 
+- [x] (2026-10-12 14:34Z) Inspect the Kenshou exact-revision runbook, discover existing cloud infrastructure, correct Keiro's Mori upstream identity, and prepare a clean source bundle for the Linux builder. No catalog performance profile exists in the harness.
+- [x] (2026-10-12 14:34Z) Durable fixture validation passes 36 focused examples including the settings assertion; test-support passes 11 examples, reporting passes six controls, and export/ADR/user-documentation checks pass.
+- [ ] Remote M1/M4: rebuild both binaries with the durable benchmark fixture and observed database settings; obtain uncontented paired measurements and the complete fixed-budget matrix.
+
 
 - [x] (2026-10-11) Refine the plan and baseline guidance around minimum synchronous identity authority, asynchronous query models, and post-commit waits; runtime implementation remains pending.
 - [x] (2026-10-11) Validate the design against current command/catalog code and Mori-located transaction dependencies; correct projection-set selection, callback restrictions, race coverage, and performance measurement requirements. This is source review, not runtime proof.
@@ -85,6 +94,10 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 
 
 ## Surprises & Discoveries
+
+2026-10-12 — Remote-run preparation discovers that the shared benchmark fixture inherits `mori://shinzui/ephemeral-pg/packages/ephemeral-pg` test defaults: `fsync`, `synchronous_commit`, and `full_page_writes` are off. Historical catalog samples therefore describe non-durable test storage and cannot establish production performance acceptance. Add a separate durable benchmark fixture, query and retain actual database settings in every raw sample, and reject missing/off durability evidence in the final gate. Correctness fixtures retain their existing test settings. Rebuild both retained baseline and candidate with the byte-identical new workload/fixture before timing; budgets and production code remain unchanged.
+
+2026-10-12 — Consult the comparison runbook in `mori://shinzui/keiro-runtime-kenshou`, project-relative path `docs/runbooks/compare-runtime-revision-performance.md` (artifact-level URI pending). At harness commit `1ebfbda`, its performance catalog contains only the uncalibrated Shibuya core/PGMQ profiles, which do not cover this catalog workload. The first planning attempt exits 2 because Keiro's Mori repository record has no upstream; add its existing GitHub identity. Cloud discovery finds the authorized Linux builder running and the alpha/beta cells stopped. Initial builder observation contains unrelated `nagarectl-test` processes; later they finish. Preparation uses the builder's existing local Unix account because the Nix PostgreSQL binary cannot resolve the OS Login user. The second planner attempt reaches upstream verification but exits 4 because candidate commit `66e7d62f` has not been pushed; direct source-bundle preparation retains that exact committed tree without publishing it. No remote measurement is accepted at this preparation checkpoint.
 
 2026-10-12 — The resumed comparison began without an observed competing GHC/Cabal job, but independent compilation and runtime/harness verification started during the first case. Ten host snapshots in `candidate-idle-20261012/host-activity.jsonl` retain the overlap, including a GHC process at 60.7% CPU. Interrupt only the owned benchmark (PID 2661), which exits through Cabal with code -2. Two complete pairs retain 40,000 actual attempts; duplicate process/control archives represent the same samples and are not additional attempts. No five-pair report exists, so no budget verdict is possible. This does not establish a production regression or a noise-free control.
 
@@ -120,6 +133,8 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Decision Log
 
+2026-10-12 — Keep the plan's workload and fixed numeric budgets as the acceptance contract. Kenshou's uncalibrated, unrelated quick profiles cannot replace the 190 required comparisons. Prepare the exact original-library overlay and candidate in the project Nix shell on the authorized Linux builder; record host activity and stop any measurement if other builds/tests compete. A leased cell requires an explicitly supplied durable external database, supported by `withMigratedBenchmarkSuite` through `KEIRO_GUARDED_CATALOG_PG_ADMIN` (libpq keyword connection string). The fixture creates and drops only its uniquely named template and cloned databases.
+
 2026-10-12 — Stop the resumed measurement when competing host work appears instead of collecting another known-contended five-pair result. Retain every complete sample, host observation, and the explicit interruption in the log. Do not interrupt other contributors' jobs or treat normal desktop/VM activity as an isolation guarantee. The acceptance blocker is still measurement infrastructure, not evidence justifying speculative production edits or a budget revision.
 
 
@@ -145,6 +160,8 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 
 ## Outcomes & Retrospective
+
+2026-10-12 remote preparation checkpoint: previous API/correctness work remains committed. Benchmark durability and executable portability are corrected; six reporting controls pass. Source preparation is underway on the existing Linux builder, with no measured remote acceptance yet. Historical non-durable samples remain retained and are not acceptance denominators.
 
 2026-10-12 continuation checkpoint: the benchmark builds in the Nix shell and the evidence-reporting tests pass. The resumed run is deliberately interrupted after external jobs begin; its complete samples pass event/cardinality accounting but supply no acceptance verdict. Reporting now identifies incomplete matrices explicitly and fails `--require-complete` until all required evidence and budget results exist. M1 paired acceptance, M4, and the performance portion of M5 remain open pending a suitable measurement runner. Production code, dependency versions, and numeric budgets are unchanged in this continuation.
 
@@ -222,7 +239,7 @@ Also demonstrate bounded read-your-write after a confirmed accepted command: ret
 ### Milestone 4: Measure the global append cost
 
 
-Extend `GuardedCatalogBench.hs` with unguarded, empty-success-guard, indexed-miss, indexed-hit/refusal, and mixed traffic modes. Measure one and eight concurrent connections. Persist a workload manifest before candidate measurement: use initial identity cardinalities of 10,000 and 1,000,000, batch sizes of one and four events, a fixed 1 KiB creation payload with four tags, deterministic key/request seeds, and the same pool sizing and compiler/runtime options in each pair. For shared-key traffic, explicitly schedule creators and subsequent duplicate attempts so measured duplicate rates are known; an all-unique control uses a fresh identity for each corresponding attempt. Include warm-up rows in the recorded initial sizes or reset after warm-up. Successful runs grow the tables; record ending cardinalities instead of calling them fixed-size. Seed and analyze the identity index before timing, warm each case, then collect at least five alternating paired runs of 10,000 completed attempts per case with equivalent initial database size and bounded setup outside timing. Count attempts, accepted batches, refused batches, and committed events separately: duplicate reuse has fewer committed events and must not masquerade as increased append throughput. Fail on unexpected outcomes or timeouts rather than omitting samples. Measure end-to-end call latency from submission through pool wait, hydration, all retries, commit/rollback, and result delivery. Report ordinary, guarded-accepted, and guarded-refused cohorts separately, with p50/p95/p99 and maximum, and record actual driver and OCC attempt counts in diagnostic runs. Keep the 80/20 mix in a common deterministic request schedule; assigning one permanently slower worker to guards can silently change the completed traffic mix.
+Extend `GuardedCatalogBench.hs` with unguarded, empty-success-guard, indexed-miss, indexed-hit/refusal, and mixed traffic modes. Measure one and eight concurrent connections. Persist a workload manifest before candidate measurement: use initial identity cardinalities of 10,000 and 1,000,000, batch sizes of one and four events, a fixed 1 KiB creation payload with four tags, deterministic key/request seeds, and the same pool sizing and compiler/runtime options in each pair. For shared-key traffic, explicitly schedule creators and subsequent duplicate attempts so measured duplicate rates are known; an all-unique control uses a fresh identity for each corresponding attempt. Include warm-up rows in the recorded initial sizes or reset after warm-up. Successful runs grow the tables; record ending cardinalities instead of calling them fixed-size. Use durable PostgreSQL with `fsync`, `synchronous_commit`, `full_page_writes`, and `autovacuum` all enabled. The benchmark must check these settings and retain them in each raw sample; non-durable or unverified historical samples cannot establish acceptance. Seed and analyze the identity index before timing, warm each case, then collect at least five alternating paired runs of 10,000 completed attempts per case with equivalent initial database size and bounded setup outside timing. Count attempts, accepted batches, refused batches, and committed events separately: duplicate reuse has fewer committed events and must not masquerade as increased append throughput. Fail on unexpected outcomes or timeouts rather than omitting samples. Measure end-to-end call latency from submission through pool wait, hydration, all retries, commit/rollback, and result delivery. Report ordinary, guarded-accepted, and guarded-refused cohorts separately, with p50/p95/p99 and maximum, and record actual driver and OCC attempt counts in diagnostic runs. Keep the 80/20 mix in a common deterministic request schedule; assigning one permanently slower worker to guards can silently change the completed traffic mix.
 
 The required mixed workload is 80% ordinary commands and 20% guarded ensure attempts. Run guard duplicate rates of 0%, 50%, and 100%, with both repeated shared identities and distributed identities. Compare to the same concurrency and 80/20 command/batch mix in an unguarded all-unique control, acknowledging the different commit counts. This control measures the added cost of offering the stronger operation, not semantic equivalence of duplicate handling. Also compare unchanged ordinary callers before/after the refactor and compare empty-success guards with the ordinary API on identical all-unique data.
 
@@ -236,7 +253,7 @@ Use a separate diagnostic run to collect PostgreSQL lock-wait evidence and guard
 
 If the post-append design fails, first eliminate extra SQL, incorrect query plans, or redundant fence work. Do not silently move a SELECT before append. A pre-append alternative requires a revised plan with a shared identity lock/reservation protocol, participation by every writer, and deadlock-safe ordering relative to append and catalog locks. Acceptance is archived raw measurements and a computed pass/fail report, with no claim that correctness tests establish performance.
 
-Aggregate the chosen run with `scripts/summarize-guarded-catalog-evidence.py` and use `--require-complete` for the final evidence gate. The inventory requires 190 reports: 16 ordinary refactor, 32 successful-guard, 32 pure-hit cost, 96 mixed, 12 fixed-arrival, and two sustained comparisons. It verifies five pairs and retained canonical raw samples for each paired report and the raw/storage files for sustained reports, and reports the median and range for each paired metric. Exit 2 means missing matrix evidence or a failed budget. A complete passing matrix still requires the storage/backlog interpretation described above; the tool labels that state `storage-review-required`, not a completed performance handoff.
+Aggregate the chosen run with `scripts/summarize-guarded-catalog-evidence.py` and use `--require-complete` for the final evidence gate. The inventory requires 190 reports: 16 ordinary refactor, 32 successful-guard, 32 pure-hit cost, 96 mixed, 12 fixed-arrival, and two sustained comparisons. It verifies observed durability/vacuum settings, five pairs and retained canonical raw samples for each paired report and the raw/storage files for sustained reports, and reports the median and range for each paired metric. Exit 2 means missing matrix evidence or a failed budget. A complete passing matrix still requires the storage/backlog interpretation described above; the tool labels that state `storage-review-required`, not a completed performance handoff.
 
 
 ### Milestone 5: Document the supported boundary and finish validation
@@ -392,3 +409,6 @@ Revision note (2026-10-12): Resume implementation from the committed correctness
 
 
 Revision note (2026-10-12): Stop the resumed run after competing workloads start, retaining two complete pairs and ten host observations. Make the 190-comparison inventory and raw-evidence completeness observable, add ratio medians/ranges and a failing `--require-complete` reporting gate, and verify it with five tests. Preserve the original fixed budgets and leave performance acceptance open until an appropriate runner is available; no API or dependency change is made.
+
+
+Revision note (2026-10-12): Resume through the Kenshou runbook and authorized Linux builder. Correct missing Mori upstream metadata, separate durable benchmark fixtures from fast correctness fixtures, retain actual PostgreSQL settings, and remove the runtime Cabal-checkout dependency from candidate subprocess execution. Rebuild both enhanced controls before measuring; keep all fixed budgets and remaining acceptance requirements.

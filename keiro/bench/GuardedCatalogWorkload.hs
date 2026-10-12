@@ -74,7 +74,8 @@ data Measurements = Measurements
     committedEvents :: Int64,
     richRows :: Int64,
     headPosition :: Int64,
-    workerPosition :: Int64
+    workerPosition :: Int64,
+    databaseSettings :: Aeson.Value
   }
   deriving stock (Show, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
@@ -95,6 +96,8 @@ prepareRequests config = [request n | n <- [0 .. attempts config - 1]]
 
 prepareDatabase :: StoreRunner -> Workload -> IO ()
 prepareDatabase runner config = do
+  durable <- checked runner (Store.runTransaction (Tx.statement () (preparable "SELECT current_setting('fsync')='on' AND current_setting('synchronous_commit')='on' AND current_setting('full_page_writes')='on' AND current_setting('autovacuum')='on'" E.noParams (D.singleRow (D.column (D.nonNullable D.bool))))))
+  unless durable (fail "benchmark requires fsync, synchronous_commit, full_page_writes and autovacuum enabled")
   Fixture.setup runner
   checked
     runner
@@ -150,7 +153,9 @@ measureWorkload runner config action = do
   values <- case result of Nothing -> fail "scheduled work exceeded workload deadline"; Just outcomes -> concat <$> mapM (either (fail . show) pure) outcomes
   unless (length values == attempts config) (fail "missing workload attempts")
   (identityRows, events, richRows, head, cursor) <- facts runner
-  pure (Measurements config (fromIntegral (end - start) / 1e9) values identityRows events richRows head cursor)
+  settings <- checked runner (Store.runTransaction (Tx.statement () (preparable "SELECT jsonb_object_agg(name, setting)::text FROM pg_settings WHERE name IN ('server_version','fsync','synchronous_commit','full_page_writes','autovacuum','shared_buffers','wal_level','checkpoint_timeout','max_wal_size')" E.noParams (D.singleRow (D.column (D.nonNullable D.text))))))
+  databaseSettings <- either fail pure (Aeson.eitherDecodeStrict' (Encoding.encodeUtf8 settings))
+  pure (Measurements config (fromIntegral (end - start) / 1e9) values identityRows events richRows head cursor databaseSettings)
   where
     commandWorker start queue samples = do
       request <- modifyMVar queue \case [] -> pure ([], Nothing); x : xs -> pure (xs, Just x)

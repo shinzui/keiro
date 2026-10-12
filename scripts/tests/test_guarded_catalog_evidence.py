@@ -30,6 +30,13 @@ class EvidenceTest(unittest.TestCase):
         self.assertEqual(result["p95"]["median"], 1.2)
         self.assertEqual(result["p99"]["median"], 1.5)
 
+    def test_requires_observed_durability_and_vacuum_settings(self):
+        settings = dict.fromkeys(["fsync", "synchronous_commit", "full_page_writes", "autovacuum"], "on")
+        self.assertTrue(EVIDENCE.durability_verified({"databaseSettings": settings}))
+        self.assertFalse(EVIDENCE.durability_verified({}))
+        for name in settings:
+            self.assertFalse(EVIDENCE.durability_verified({"databaseSettings": {**settings, name: "off"}}))
+
     def test_empty_run_has_190_missing_comparisons(self):
         result = EVIDENCE.matrix_inventory(self.directory, {})
         self.assertFalse(result["complete"])

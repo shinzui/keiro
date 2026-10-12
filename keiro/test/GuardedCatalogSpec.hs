@@ -36,6 +36,11 @@ import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 spec :: Fixture -> Spec
 spec fixture = describe "guarded catalog commands" $ do
+  it "uses durable PostgreSQL settings for paired benchmark fixtures" $
+    withMigratedBenchmarkSuite \benchmark ->
+      withFreshResourceStore benchmark \(_, runner) ->
+        checked runner (Store.runTransaction (Tx.statement () (preparable "SELECT current_setting('fsync'), current_setting('synchronous_commit'), current_setting('full_page_writes'), current_setting('autovacuum')" E.noParams (D.singleRow ((,,,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text))))))
+          `shouldReturn` ("on", "on", "on", "on")
   for_ [("fresh refusal", 3), ("exhaustion", 0)] \(label, budget) ->
     it ("discards an OCC-conflicting decision before " <> label) $
       withFreshResourceStoresSameDatabase fixture \((_, retrying), (_, winner)) ->

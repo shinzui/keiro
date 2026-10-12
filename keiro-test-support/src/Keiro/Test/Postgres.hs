@@ -25,6 +25,7 @@ module Keiro.Test.Postgres
   ( Fixture,
     withMigratedSuite,
     withMigratedSuiteWith,
+    withMigratedBenchmarkSuite,
     withFreshDatabase,
     withFreshStore,
     withFreshStoreWith,
@@ -48,6 +49,7 @@ import Database.PostgreSQL.Migrate (MigrationComponent, defaultRunOptions, migra
 import Effectful (Eff, IOE, Limit (..), Persistence (..), UnliftStrategy (..), runEff, withEffToIO)
 import Effectful.Error.Static (Error, runErrorNoCallStack)
 import EphemeralPg qualified as Pg
+import GHC.Clock (getMonotonicTimeNSec)
 import Hasql.Connection.Settings qualified as Conn
 import Hasql.Pool qualified as Pool
 import Hasql.Pool.Config qualified as Pool.Config
@@ -59,12 +61,14 @@ import Kiroku.Store.Effect.Resource (KirokuStoreResource, getKirokuStore, withKi
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Migrations qualified as Kiroku
 import System.Directory (createDirectoryIfMissing)
+import System.Environment (lookupEnv)
 import System.Posix.User (getEffectiveUserID)
 
 -- | A running, migrated suite fixture: one cached PostgreSQL server owning a
 -- single migrated template database, plus a counter for unique clone names.
 data Fixture = Fixture
-  { server :: Pg.Database,
+  { administrativeConnection :: Text,
+    databaseConnection :: Text -> Text,
     templateName :: Text,
     nextId :: TVar Int
   }
@@ -113,13 +117,47 @@ withMigratedSuite = withMigratedSuiteWith []
 withMigratedSuiteWith :: [MigrationComponent] -> (Fixture -> IO a) -> IO a
 withMigratedSuiteWith extraComponents action = do
   config <- ephemeralPgConfig
+  withConfiguredSuite config extraComponents action
+
+-- | Durable benchmark databases. An exclusively leased remote server may be
+-- supplied through KEIRO_GUARDED_CATALOG_PG_ADMIN, a libpq keyword connection
+-- string. Only uniquely named databases created here are dropped. Ordinary
+-- correctness fixtures retain their fast local test configuration.
+withMigratedBenchmarkSuite :: (Fixture -> IO a) -> IO a
+withMigratedBenchmarkSuite action =
+  lookupEnv "KEIRO_GUARDED_CATALOG_PG_ADMIN" >>= \case
+    Nothing -> do
+      config <- ephemeralPgConfig
+      let durable = config {Pg.postgresSettings = filter (\(key, _) -> key `notElem` ["fsync", "synchronous_commit", "full_page_writes", "wal_level"]) config.postgresSettings <> [("fsync", "on"), ("synchronous_commit", "on"), ("full_page_writes", "on"), ("wal_level", "replica")]}
+      withConfiguredSuite durable [] action
+    Just prefix -> do
+      let connection = Text.pack prefix
+      if Text.null connection || "postgres://" `Text.isPrefixOf` connection || "postgresql://" `Text.isPrefixOf` connection
+        then fail "KEIRO_GUARDED_CATALOG_PG_ADMIN requires a libpq keyword connection string"
+        else do
+          unique <- getMonotonicTimeNSec
+          let template = "keiro_bench_" <> Text.pack (show unique)
+              connect name = connection <> " dbname=" <> name
+          bracket
+            ( do
+                runSqlOn connection ("CREATE DATABASE " <> quoteIdentifier template)
+                migrateTemplate [] (connect template)
+                  `onException` runSqlOn connection ("DROP DATABASE " <> quoteIdentifier template <> " WITH (FORCE)")
+                counter <- newTVarIO 0
+                pure (Fixture connection connect template counter)
+            )
+            (\_ -> runSqlOn connection ("DROP DATABASE " <> quoteIdentifier template <> " WITH (FORCE)"))
+            action
+
+withConfiguredSuite :: Pg.Config -> [MigrationComponent] -> (Fixture -> IO a) -> IO a
+withConfiguredSuite config extraComponents action = do
   started <- Pg.startCached config Pg.defaultCacheConfig
   case started of
     Left err -> fail (Text.unpack (Pg.renderStartError err))
     Right server ->
       bracket
         (setup server `onException` Pg.stop server)
-        (\fixture -> Pg.stop fixture.server)
+        (const (Pg.stop server))
         action
   where
     setup server = do
@@ -130,7 +168,7 @@ withMigratedSuiteWith extraComponents action = do
       -- released before any clone, so the template has no active sessions when
       -- PostgreSQL copies it.
       migrateTemplate extraComponents templateConnStr
-      pure (Fixture server templateDbName counter)
+      pure (Fixture (Pg.connectionString server) (connectionStringFor server) templateDbName counter)
 
 -- | Clone a fresh, empty, migrated database from the template, open a
 -- 'Store.KirokuStore' against it, run @action@, then drop the clone. The store
@@ -240,12 +278,12 @@ withFreshStores2 fixture action =
 withFreshDatabase :: Fixture -> (Text -> IO a) -> IO a
 withFreshDatabase fixture action =
   bracket create dropDb \dbName ->
-    action (connectionStringFor fixture.server dbName)
+    action (fixture.databaseConnection dbName)
   where
     create = do
       n <- atomically $ stateTVar fixture.nextId \i -> (i + 1, i + 1)
-      let dbName = "keiro_test_" <> Text.pack (show n)
-      runSql fixture.server $
+      let dbName = fixture.templateName <> "_" <> Text.pack (show n)
+      runSqlOn fixture.administrativeConnection $
         "CREATE DATABASE "
           <> quoteIdentifier dbName
           <> " TEMPLATE "
@@ -253,7 +291,7 @@ withFreshDatabase fixture action =
       pure dbName
 
     dropDb dbName =
-      runSql fixture.server $
+      runSqlOn fixture.administrativeConnection $
         "DROP DATABASE IF EXISTS " <> quoteIdentifier dbName <> " WITH (FORCE)"
 
 migrateTemplate :: [MigrationComponent] -> Text -> IO ()

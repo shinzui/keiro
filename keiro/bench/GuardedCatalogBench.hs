@@ -22,7 +22,7 @@ import Keiro.Projection
 import Keiro.Test.Postgres
 import Kiroku.Store qualified as Store
 import System.Directory
-import System.Environment (getArgs, lookupEnv)
+import System.Environment (getArgs, getExecutablePath, lookupEnv)
 import System.Exit (ExitCode (..))
 import System.Process (readProcessWithExitCode)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
@@ -120,7 +120,7 @@ runGuardedCatalogEvidence =
           save output "slow-control" control
           save output "slow-guard" slow
           unless (not (passes "mixed" [ratios "mixed" control slow])) (fail "slow guard failed to demonstrate ordinary-writer degradation")
-          withMigratedSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
+          withMigratedBenchmarkSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
             prepareDatabase runner config
             plan <-
               checked
@@ -148,7 +148,7 @@ workloadKey :: Workload -> String
 workloadKey config = List.intercalate "-" [show (cardinality config), show (connections config), show (batchSize config), show (activeWorker config), show (guardPercent config), show (duplicatePercent config), show (distributed config), show (arrivalRate config)]
 
 sample :: Workload -> Mode -> IO Measurements
-sample config mode = withMigratedSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
+sample config mode = withMigratedBenchmarkSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
   prepareDatabase runner config
   measureWorkload runner config (action runner config mode)
 
@@ -229,9 +229,7 @@ originalSample output executable prefix config = do
 
 currentOrdinarySample :: FilePath -> String -> Workload -> IO Measurements
 currentOrdinarySample output prefix config = do
-  (code, path, errors) <- readProcessWithExitCode "cabal" ["list-bin", "keiro:bench:keiro-bench"] ""
-  let executable = takeWhile (/= '\n') path
-  unless (code == ExitSuccess && "dist-newstyle/" `List.isInfixOf` executable && not ("/nix/store/" `List.isInfixOf` executable)) (fail ("candidate executable is not a project build: " <> errors))
+  executable <- getExecutablePath
   let input = output <> "/" <> prefix <> "-candidate-workload.json"
       result = output <> "/" <> prefix <> "-candidate-process.json"
   Lazy.writeFile input (Aeson.encode config)
@@ -255,7 +253,7 @@ passes label values = median [x | (x, _, _) <- values] >= (if label == "refactor
   where
     median = percentile 0.5
 
-sampleWithStorage output name config mode = withMigratedSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
+sampleWithStorage output name config mode = withMigratedBenchmarkSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
   prepareDatabase runner config
   let path = output <> "/" <> name <> "-storage.jsonl"
       snapshot = do
@@ -296,7 +294,7 @@ minute n result = result {elapsedSeconds = 60, samples = [sample | sample <- sam
 -- interval starts after the global row update and ends before commit, so it is
 -- a lower bound on that row's lock lifetime, not a production hold-time sample.
 diagnosticTransactions :: FilePath -> Workload -> IO ()
-diagnosticTransactions output config = withMigratedSuite \fixture ->
+diagnosticTransactions output config = withMigratedBenchmarkSuite \fixture ->
   withFreshResourceStoresSameDatabase fixture \((_, runner), (_, observerRunner)) -> do
     prepareDatabase runner config
     checked

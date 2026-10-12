@@ -17,7 +17,7 @@ main = do
   case arguments of
     [input, output] -> do
       config <- Lazy.readFile input >>= either fail pure . Aeson.eitherDecode
-      withMigratedSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
+      withMigratedBenchmarkSuite \fixture -> withFreshResourceStore fixture \(_, runner) -> do
         prepareDatabase runner config
         result <- measureWorkload runner config (ordinaryAction runner (batchSize config))
         Lazy.writeFile output (Aeson.encode result)

@@ -27,6 +27,12 @@ def ratio_summary(report):
     return result
 
 
+def durability_verified(measurement):
+    settings = measurement.get("databaseSettings", {})
+    return all(settings.get(name) == "on" for name in
+               ["fsync", "synchronous_commit", "full_page_writes", "autovacuum"])
+
+
 def matrix_inventory(directory, reports):
     """Explicitly account for every required comparison, including missing runs."""
     manifest_path = directory / "manifest.json"
@@ -99,7 +105,7 @@ def main():
         accepted = sum(sample["accepted"] for sample in measurement["samples"])
         expected_events = (100 + accepted) * workload["batchSize"]
         valid = completed == workload["attempts"] and measurement["endingCardinality"] == workload["cardinality"] + accepted and measurement["committedEvents"] == expected_events
-        counts[path.name] = {"valid": valid, "attempts": completed, "acceptedBatches": accepted, "refusedBatches": completed-accepted, "committedMeasuredEvents": measurement["committedEvents"] - 100 * workload["batchSize"], "endingCardinality": measurement["endingCardinality"]}
+        counts[path.name] = {"valid": valid, "durabilityVerified": durability_verified(measurement), "attempts": completed, "acceptedBatches": accepted, "refusedBatches": completed-accepted, "committedMeasuredEvents": measurement["committedEvents"] - 100 * workload["batchSize"], "endingCardinality": measurement["endingCardinality"]}
         if not valid:
             raise SystemExit(f"cardinality/event-count evidence mismatch: {path}")
     storage = {}
@@ -135,12 +141,13 @@ def main():
         }
     failed = [name for name, report in reports.items() if report.get("pass", report.get("latencyPass")) is False]
     matrix = matrix_inventory(args.directory, reports)
-    status = "failed" if failed else "incomplete" if not matrix["complete"] else "storage-review-required"
-    summary = {"reports": reports, "ratioSummaries": {name: ratio_summary(report) for name, report in reports.items() if "ratios" in report}, "failedReports": failed, "countChecks": counts, "matrix": matrix, "performanceAcceptance": status, "storage": storage, "storageInterpretation": "Review continuing active backlog, expected committed-event growth, dead rows, vacuum and per-minute latency against the paired control. These metrics do not establish a universal storage bound."}
+    non_durable = [name for name, count in counts.items() if not count["durabilityVerified"]]
+    status = "failed" if failed else "incomplete" if not matrix["complete"] else "durability-unverified" if non_durable else "storage-review-required"
+    summary = {"reports": reports, "ratioSummaries": {name: ratio_summary(report) for name, report in reports.items() if "ratios" in report}, "failedReports": failed, "countChecks": counts, "durabilityUnverifiedSamples": non_durable, "matrix": matrix, "performanceAcceptance": status, "storage": storage, "storageInterpretation": "Review continuing active backlog, expected committed-event growth, dead rows, vacuum and per-minute latency against the paired control. These metrics do not establish a universal storage bound."}
     destination = args.directory / "aggregate-report.json"
     destination.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps({"reports": len(reports), "failures": failed, "sustainedRuns": len(storage), "performanceAcceptance": status, "output": str(destination)}))
-    if args.require_complete and (not matrix["complete"] or failed):
+    if args.require_complete and (not matrix["complete"] or failed or non_durable):
         raise SystemExit(2)
 
 

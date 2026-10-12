@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Online projection rebuilds use schema-versioned target generations
 description: Keiro rebuilds schema-changing projections into application-provisioned physical generations and promotes a verified generation through a bounded atomic cutover.
-timestamp: 2026-10-12T04:02:55Z
+timestamp: 2026-10-12T14:36:04Z
 docId: ADR-34
 status: Accepted
 date: 2026-08-13
@@ -165,6 +165,13 @@ synchronous identity authority, and participation and invariant enforcement by
 every relevant live writer. Arbitrary external SQL and asynchronous indexes are
 outside that protocol. Performance readiness requires mixed-workload evidence;
 passing correctness tests alone does not establish an acceptable lock cost.
+
+Performance evidence must observe durable PostgreSQL settings (`fsync`,
+`synchronous_commit`, and `full_page_writes` enabled) and normal autovacuum.
+The fast correctness fixture disables durability and cannot supply that
+evidence. Baseline and candidate use the same durable benchmark fixture,
+retain the actual settings with raw samples, and distinguish historical
+non-durable observations from performance acceptance.
 
 Admission after waiting for promotion must be tested separately from a writer
 that already holds its group lock. A ReadCommitted statement can return an
