@@ -5,9 +5,15 @@ description: >-
   Provide a supported way to enforce a consumer-owned relational precondition
   atomically with a domain command and its synchronous catalog projections, returning a typed
   refusal without committing events or bypassing rebuild and serving-revision guarantees.
-timestamp: 2026-10-12T12:48:44Z
+timestamp: 2026-10-12T18:26:16Z
 requestId: IR-53
-status: accepted
+status: completed
+completedAt: 2026-10-12T18:26:16Z
+resolution: >-
+  ExecPlan 306 delivers the additive guarded catalog runner, compiled public example,
+  755 passing correctness examples and the documentation/package handoff. At the
+  owner's direction, exhaustive performance validation is deferred and is not a
+  release blocker; partial results remain explicitly unverified for performance.
 origin: mori://shinzui/rei
 plan: docs/plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md
 reviews:
@@ -33,26 +39,21 @@ reviews:
 
 ## Status
 
-Accepted for planning on 2026-10-11 following owner discussion. The selected
-direction is an opt-in guarded synchronous catalog command runner, implemented
-under [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md).
-The additive runner and compiled consumer example are implemented locally.
-The expanded focused PostgreSQL selection passes 36 examples, including
-same-database races, fresh OCC/driver retry results, transactional rollback,
-both catalog owner rebuilds, and versioned promotion in both lock orders.
-The final affected full suite passes 754 examples; the fixed performance
-acceptance remains tracked in the plan. An unchanged-code paired run passes
-six ordinary configurations, then fails the eight-connection/four-event/paused-
-worker throughput budget (0.926574 versus minimum 0.95). Raw failures and
-diagnostics are retained; an idle/isolated runner is needed for further
-acceptance measurement. A continuation stops after two complete alternating
-pairs when independent build/test workloads start, retaining all 40,000
-completed attempts and host observations without claiming a budget verdict.
-The evidence summary now explicitly inventories all 190 required comparisons;
-its `--require-complete` gate fails incomplete archives. Five reporting tests
-pass. These correctness results
-do not establish performance readiness. Package release, publication, and
-downstream adoption remain separate work. The earlier exploratory prototype
+Completed on 2026-10-12 under the owner's revised scope in
+[ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md).
+The additive runner and public consumer example are implemented. The final
+affected suite passes 755 examples with zero failures; the focused selection
+passes 36 examples covering same-database races, rollback, fresh OCC/driver
+results, independent catalog lifecycles and both promotion lock orders.
+Public exports, documentation/ADR checks and all seven package checks pass.
+
+The owner directs completion without further exhaustive performance testing.
+Retain the diagnostic proofs, historical failures and 19 preliminary cell
+reports, including the cancelled run's unavailable health observations and the
+replacement's reset failure. These results do not establish a full performance
+pass. The 190-report mixed/fixed-arrival/sustained matrix is deferred and is not
+an outstanding completion or release-blocking requirement. Package publication
+and downstream adoption remain separate work. The earlier exploratory prototype
 is not the accepted implementation.
 
 ## Consumer requirement
@@ -204,13 +205,16 @@ timeout/error behavior. Distinguish Keiro's bounded optimistic-concurrency
 retry loop from database-driver transaction retries; do not claim that the
 former bounds the latter.
 
-Require warmed, repeated comparisons of ordinary commands, successful guards,
-duplicate-heavy guards, and mixed ordinary/guarded traffic in the same store.
+For a separately scoped performance study, use warmed, repeated comparisons of
+ordinary commands, successful guards, duplicate-heavy guards, and mixed traffic
+in the same store.
 Record attempt throughput, committed event throughput, ordinary-command p95
 and p99 latency, and global append lock wait/hold evidence. ExecPlan 306 defines
 the initial workload and regression budgets before measurements are collected.
-A failed budget requires an explicit design revision or owner-reviewed budget
-change; correctness tests alone do not establish release readiness.
+Do not treat a failed or incomplete measurement as a performance pass. At the
+owner's direction, exhaustive performance validation is deferred for this
+implementation and does not block completion or release work; no calibrated
+performance guarantee is claimed.
 
 ## Acceptance
 
@@ -240,10 +244,10 @@ change; correctness tests alone do not establish release readiness.
    offline rebuilding, failed, or has an unavailable/invalid serving binding.
    A two-connection promotion fixture proves guard lookup and inline delivery
    use one protected serving revision, with no stale-generation reuse.
-7. A mixed-workload benchmark meets the recorded regression budgets, including
-   unrelated ordinary writers and duplicate-heavy traffic. The unguarded path
-   performs no added SQL or lock acquisition. Publish measured limitations with
-   the supported recipe; do not infer performance from the prototype's tests.
+7. The unguarded path performs no added SQL or lock acquisition. Retain measured
+   evidence and its limits with the supported recipe. Owner-directed deferral
+   removes the exhaustive mixed/fixed-arrival/sustained matrix from completion
+   scope; no full performance pass is inferred from correctness or partial data.
 
 ## Alternatives to evaluate
 

@@ -47,11 +47,12 @@ provenance:
 # Support atomic relational preconditions for synchronous catalog commands
 
 
-This ExecPlan is a living document. Keep Progress, Surprises & Discoveries,
-Decision Log, and Outcomes & Retrospective current during implementation.
-Promote durable decisions into the relevant ADRs when the implementation is
-verified. This document plans work; it records no implementation or benchmark
-success and does not authorize publication or downstream deployment.
+**Completed on 2026-10-12.** The additive guarded catalog runner, public example,
+correctness validation, documentation, and release handoff are delivered. At the
+owner's direction, exhaustive performance validation is deferred and is not a
+condition for completing this plan or proceeding with release work. Retained
+partial measurements are not a verified full performance pass. Package
+publication and downstream deployment remain separate operations.
 
 
 ## Purpose / Big Picture
@@ -61,48 +62,28 @@ Deliver [IR-53](../improvement-requests/support-atomic-relational-preconditions-
 
 The extension is an opt-in sibling of `runDomainCommandWithCatalogProjections`. A synchronous or inline projection updates its SQL tables in the event append transaction. An asynchronous projection runs later in a subscription worker; it is outside this extension. The guard is a consumer-owned SQL precondition, not another aggregate command or a new domain decision evaluator.
 
-The implementation is acceptable only with concurrency, rollback, catalog lifecycle, and performance evidence. A check after append holds Kiroku's global append lock longer and can slow unrelated writers. The plan intentionally measures that cost before considering a larger pre-append locking protocol. No package version, release tag, or downstream pin is selected here.
+The delivered implementation is validated for concurrency, rollback, and catalog lifecycle behavior. A check after append holds Kiroku's global append lock longer and can slow unrelated writers; keep consumer guards bounded and indexed. Diagnostics and partial comparisons document that cost mechanism without claiming a full performance pass. The owner has removed exhaustive performance validation from completion and release-blocking scope. No package version, release tag, or downstream pin is selected here.
 
 
 ## Progress
 
-**Current handoff (2026-10-12):** Stop exhaustive performance execution in response to the user's repeated turnaround and release-blocking concerns. The 190-report matrix below is retained as the historical validation specification, not an active instruction to keep leasing cells, restart overnight runs or block other work. The feature and 755-example correctness validation are complete; exhaustive performance acceptance is unachieved. Before any further measurements, use the bounded comparison workflow and an explicitly selected relevant scope. No new benchmark starts at this checkpoint.
+- [x] (2026-10-12) M1: Verify the released dependency transaction contract, retain the original-library executable and matching workload/compiler/dependency identities, and prove independent connections contend in the same store. The ordinary-path source audit confirms unchanged SQL and explicit lock counts. Historical and partial timing samples remain identified as such; exhaustive paired acceptance is deferred by the owner.
+- [x] (2026-10-12) M2: Deliver `GuardedCatalogOutcome`, opaque `CatalogPreconditionContext`, its binding accessor, and `runDomainCommandWithCatalogProjectionsGuarded`. All fences precede guard execution; accepted delivery uses the same bindings. Refusal rolls back the complete prospective append and transactional effects.
+- [x] (2026-10-12) M3: Validate independent-connection races in both orders, winner rollback, snapshot/effect rollback, complete event batches, silent/OCC/driver retry outcomes, operational faults, archive/reuse, both owner rebuilds, independent fencing, post-commit view waits, and versioned promotion in both lock orders. The final affected suite passes **755 examples, zero failures**, in 168.3381 seconds (`/tmp/keiro306-full.log`); the focused selection passes 36 examples and test-support passes 11.
+- [x] (2026-10-12) M4 revised scope: Retain diagnostics, all measured failures, and the verified partial cell graph under `keiro/bench/results/guarded-catalog/`. Million-row lookup uses its index, and a deliberately slow guard exposes unrelated-writer degradation. Verify all 743 interrupted-run artifacts and archive 19 completed reports: 16 ordinary comparisons, one empty guard, one indexed miss, and one pure-hit cost report. No report records a budget failure and all retained samples have durable settings; missing health observations prevent an authoritative performance pass. Mixed/fixed-arrival/sustained matrix completion is **deferred, not passed**, and requires no further action in this plan.
+- [x] (2026-10-12) M5: Deliver the compiled public-API note example, guarded-command guide, root/package changelogs, and ADR-26/29/34 contract distillation. Full regression, nine export-policy tests, strict ADR/user-documentation/IR checks, all seven warning-free package checks, and the projection guard pass. Its 12 cases and five-run median p95/throughput ratios of 1.041806/0.977885 meet the existing budgets. Historical command CSV failures also occur on the original binary; preserve their raw evidence without refreshing the CSV or claiming all benchmark guards pass.
+- [x] (2026-10-12) Release all owned measurement resources: the interrupted run is sealed cancelled, its replacement fails reset before executing a workload, alpha's owned lease is released, all four cell machines are stopped through owner tooling, and the builder watchdog is active. No benchmark, release tag, version bump, or package publication remains part of this plan.
 
-- [x] (2026-10-12) Stop the full-matrix approach and release the owned alpha lease. Freshly verify 743 interrupted-run artifacts, preserving 19 preliminary reports with no budget failures. Health observations are unavailable after cancellation, so these do not establish a healthy performance pass. The replacement run fails reset before measurement. Preserve the exact manifests/outcomes and separate corrected summary under `keiro/bench/results/guarded-catalog/cell-performance-handoff-20261012`. Owner shutdown completes after one cloud API timeout: PostgreSQL is already stopped, and the driver, monitoring and broker are stopped; the owned lease holder exits.
+Closure verification passes in the Nix development shell: strict ADR validation
+(50 concepts), improvement-request validation (53 concepts), user documentation
+(34 concepts), guide validation (29 concepts), and their graphs. `git diff --check`
+passes. The retained 755-example runtime result requires no repeat for these
+documentation-only edits.
 
-- [x] (2026-10-12 14:34Z) Inspect the Kenshou exact-revision runbook, discover existing cloud infrastructure, correct Keiro's Mori upstream identity, and prepare a clean source bundle for the Linux builder. No catalog performance profile exists in the harness.
-- [x] (2026-10-12 14:34Z) Durable fixture validation passes 36 focused examples including the settings assertion; test-support passes 11 examples, reporting passes six controls, and export/ADR/user-documentation checks pass.
-- [x] (2026-10-12 14:40Z) Full regression with the revised fixture passes 755 examples in 168.34 seconds; strict ADR, documentation, IR and export checks pass. Commit `ff1126d4` retains the durable fixture and portability fixes.
-- [x] (2026-10-12 14:54Z) Local benchmark smoke completes 100 attempts on durable PostgreSQL 18.6 with exactly 10,100 identities and 800 warm-up/measured events. Seven reporting/host-monitor controls pass, including live child processes named as a Nix-wrapped Cabal command and an external test. Archive this as harness validation, not an acceptance pair.
-- [x] (2026-10-12 15:21Z) Linux candidate and enhanced original binaries build with identical GHC 9.12.4, frozen dependency inventories and shared source hashes. Candidate `215c6c5b` has SHA-256 `c8dd3260592705fc315df5ee37cb00910cfcdfcfb19dacd7045673802f848a49`; original control has `047d5afd7b56f095e9082863f46b1d71b1a787c4411bc4f235875b1289b59fac`.
-- [x] (2026-10-12 15:21Z) Remote host preflight refuses before measurement because unrelated Nagare test/build jobs occupy the builder. Preserve `/home/builder/keiro-306-comparison-20261012` as preparation/contamination evidence; no sample or budget verdict exists there.
-- [x] (2026-10-12 15:33Z) Publish the 101,178,604-byte Linux payload, restore the builder idle watchdog, and acquire/renew alpha's exclusive lease. First cell run `keiro-306-20261012-1528` seals with entry exit 2 because source-file copies preserved Nix hash-prefixed names. No benchmark sample ran. Fresh fetch and verification pass all 15 artifacts with manifest SHA-256 `65ce306b5d59e0f69b01a9888c338e82f3c28011d8f6606b82feb2e3bb6fa337`. Cold reset and health pass; the cell's actual PostgreSQL version is 18.3, with all requested durable/vacuum settings on. Retain the failure under `cell-launch-failure-20261012` and correct packaging with actual-launcher, identity, tool and ELF startup checks before republishing.
-- [x] (2026-10-12 15:49Z) Package checks expose missing native libraries in the isolated Nix build. Read the project-built ELF's declared SONAMEs and supply the project-pinned PostgreSQL/GMP/libffi/elfutils/numactl libraries to both retained binaries. All launcher, full identity, hash-tool and both executable startup checks pass. Publish the corrected 104,652,551-byte payload (SHA-256 `5640dd094352d72aaa35e009659a8ada2b2b763803a229242cf477eba13d1121`) and submit run `01a130cb-58bf-7705-9641-f06bb4b46e89` under the renewed alpha lease. It reaches `running`; no accepted matrix result exists yet. Retain descriptor, frozen health policy, submission and package checks under `cell-measurement-preparation-20261012`. The builder watchdog is active after preparation; the two repackaging holds each used a 30-minute automatic backstop with terminal restoration.
-- [x] (2026-10-12 16:26Z) Six ordinary configurations have complete five-pair passing reports on the leased cell. These remain preliminary until sealing and independent health verification. The status watcher hits one GCS metadata timeout; reconnect it with ten-second polling while the original lease holder continues healthy renewals. Discover and fix a reporting-only arrival-rate filename mismatch: `workloadKey` emits `Just <rate>`, which the completeness checker previously parsed as a bare number. Eight reporting controls pass, including real Haskell spellings, invalid/non-finite rates and mismatched capacity. Leave the executing immutable payload intact; if it reaches the fixed-arrival phase, preserve any original reporter exception and run the corrected local checker on a separate analysis copy after verifying the sealed artifacts. Do not reinterpret any workload budget failure as a reporting fault.
-- [x] (2026-10-12 16:49Z) Release-readiness review reconciles the guarded API and new test-support fixtures into the root/package unreleased changelogs. All seven published packages pass `cabal check` in the Nix shell without warnings. The cycle also contains a breaking Kiroku upgrade, so the proposed next shared version is `0.20.0.0`; no version bump, release tag or publication has occurred. The guarded addition itself requires no consumer migration, while the existing cohort upgrade needs a release blueprint edge. Ten ordinary cell configurations now have passing five-pair reports, including million-row indices with both worker states; sealing, health replay and the remaining matrix are still pending.
-- [ ] Remote M1/M4 remaining: obtain uncontented paired measurements and the complete fixed-budget matrix from the packaged, running cell payload.
-
-
-- [x] (2026-10-11) Refine the plan and baseline guidance around minimum synchronous identity authority, asynchronous query models, and post-commit waits; runtime implementation remains pending.
-- [x] (2026-10-11) Validate the design against current command/catalog code and Mori-located transaction dependencies; correct projection-set selection, callback restrictions, race coverage, and performance measurement requirements. This is source review, not runtime proof.
-- [x] (2026-10-12) M1 dependency discovery: Cabal resolves Kiroku 0.11.0.0, Hasql 1.10.3.7, hasql-transaction 1.2.3.1, GHC 9.12.4; PostgreSQL is 18.6. Released transaction sources match Mori corpus byte-for-byte. Retain the ordinary executable and paused-worker latency samples.
-- [x] (2026-10-12) M1 runtime/source checks: overlapping backends have distinct PIDs in the same database/schema; source-derived SQL/explicit-lock audit records no change on the ordinary path. The initial full suite passes 739 examples.
-- [x] (2026-10-12) M1 enhanced executable: retain the original production library with the byte-verified shared workload/fixture harness; its source/build hashes and rebuild command are archived.
-- [ ] M1 remaining: capture accepted alternating throughput/latency with both worker states. Initial latency-only samples are provenance, not acceptance denominators.
-- [x] (2026-10-12 12:48Z) Attempt the unchanged-budget comparison in `candidate-idle-20261012`, recording executable identity and ten host samples. Stop after two alternating pairs when independent builds/tests start; all 40,000 completed attempts have expected event/cardinality counts. This is incomplete evidence, not an additional budget failure or pass.
-- [ ] M1/M4 runner requirement: obtain a runner kept free of competing builds/tests for the complete matrix. An original-versus-original diagnostic remains available if failures persist there; do not select favorable repetitions on the shared host.
-- [x] (2026-10-12) M2 implementation: additive result/context and guarded runner compile, sharing the existing delivery loop after complete fence admission.
-- [x] (2026-10-12) M2 validation: initial full suite passes 739 examples; focused expanded selection passes 36 examples, including 34 new guarded examples. Public re-export policy and its nine tests pass. Shared delivery adds no ordinary-path SQL or explicit locks.
-- [x] (2026-10-12) M3 focused matrix: independent-connection races in both orders, winner rollback, snapshot/effect rollback, complete batches, silent/OCC/driver retries, encode/query faults, archive/canonical reuse, both owner rebuilds, independent fencing, post-commit pending/ready/unavailable views, and writer-first/promotion-first versioned admission pass.
-- [x] (2026-10-12) M3 full regression: 754 examples pass with zero failures in 161.56 seconds after the final fixture changes. Faulting handler positive controls prove refusal/all-fence admission skips delivery, and promotion-first calls permit exactly one creation across both calls.
-- [ ] M4: Measure guarded and mixed traffic against the fixed regression budgets. The unchanged-code repeat passes six ordinary configurations, then stops on the eight-connection/four-event/paused-worker throughput ratio of 0.926574 (minimum 0.95); p95/p99 ratios 1.070584/1.064383 pass. Complete acceptance requires reliable measurements on an idle or isolated runner.
-- [x] (2026-10-12) M4 diagnostic positive controls: million-row identity lookup uses its composite index; slow 20 ms guard degrades ordinary p95/p99 by 9.21/15.04 times; direct sequence counters observe 1,001 global updates and 201 guard evaluations for 1,000 outer attempts with one injected driver retry. Lock waits and guard/lock-lower-bound clocks are retained under `diagnostic-20261012`.
-- [ ] M5: Publish the public recipe, distill ADR decisions, and run the final repository checks.
-- [x] (2026-10-12) M5 documentation/export checks: guide, changelog and ADR-26/29/34 boundaries are recorded; strict ADR, user-documentation and IR validation and public export policy pass. The strengthened rebuild completion assertion passes in the 36-example focused selection.
-- [x] (2026-10-12) M5 projection guard: all 12 cases pass; the five-run median read-model p95 ratio is 1.041806 and throughput ratio is 0.977885, within its 1.25/0.90 budgets.
-- [ ] M5 regression/performance checks: the historical command CSV guard fails nine of fifteen current cases. A matching four-case selection fails three on the retained original binary and one on current; retain these pre-existing/noisy failures without changing the CSV. M4 acceptance remains pending.
-- [x] (2026-10-12 12:48Z) Strengthen evidence reporting with all 190 required comparisons, paired-ratio medians/ranges, retained-sample checks, and `--require-complete`. Five Python tests pass in the Nix shell; the interrupted archive correctly reports `incomplete` and exits 2 with that flag.
-- [x] (2026-10-12) Continuation checks: strict ADR (50 concepts), user-documentation, IR (53 concepts), and public re-export policy with nine tests pass in the Nix shell. `git diff --check` passes. No production change requires repeating the retained 754-example correctness suite or benchmark guards; performance measurements remain open.
+The owner explicitly directs completion using the delivered implementation and
+existing checks, without further performance testing. Historical execution
+checkpoints remain in Git history and the retained evidence. No unfinished
+milestone remains under this revised scope.
 
 
 ## Surprises & Discoveries
@@ -147,9 +128,11 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Decision Log
 
+2026-10-12 — Final owner-directed scope: finish this plan now using the delivered feature and completed correctness checks. Defer the exhaustive 190-report performance matrix, including sustained mixed load, queueing and storage review. No additional measurements, calibrated profile work or harness integration are required for completion. Numeric budgets and failed/incomplete evidence remain unchanged; deferral does not turn partial results into a performance pass. This decision supersedes all earlier requirements to complete the full gate before closing the plan or proceeding with release work.
+
 2026-10-12 — The user's latest objection to repeated release blocking supersedes the earlier full-gate choice. Stop exhaustive execution and do not retry the 190-report matrix. The operator bypassed the Kenshou bounded `perf` workflow for a custom matrix and increased its replacement deadline to 36 hours; that was a poor scope decision, not evidence of a defective fast harness. The runbook supports selected scope with an example 30-minute execution budget. Existing catalog profiles do not exercise guarded catalog commands; any subsequent comparison needs relevant selected coverage and a bounded budget, without a new calibration or exhaustive coverage project becoming an implicit release blocker. Preserve incomplete/failing infrastructure evidence honestly; no full performance or release approval is claimed.
 
-2026-10-12 17:03Z — The user explicitly chooses to finish the full performance gate before release rather than defer the remaining validation. Keep all 190 required comparisons, fixed budgets and sustained storage review. Twelve ordinary comparisons have preliminary passing reports; do not treat that partial evidence as full acceptance. Prepare automatic terminal artifact collection, digest verification, independent Kenshou health replay and corrected reporting on a separate analysis copy, followed by manual storage/outcome review. Release preparation does not authorize a version bump or publication before the gate is complete.
+Historical decision, superseded by final completion scope: 2026-10-12 17:03Z — The user explicitly chooses to finish the full performance gate before release rather than defer the remaining validation. Keep all 190 required comparisons, fixed budgets and sustained storage review. Twelve ordinary comparisons have preliminary passing reports; do not treat that partial evidence as full acceptance. Prepare automatic terminal artifact collection, digest verification, independent Kenshou health replay and corrected reporting on a separate analysis copy, followed by manual storage/outcome review. Release preparation does not authorize a version bump or publication before the gate is complete.
 
 2026-10-12 — Keep the plan's workload and fixed numeric budgets as the acceptance contract. Kenshou's uncalibrated, unrelated quick profiles cannot replace the 190 required comparisons. Prepare the exact original-library overlay and candidate in the project Nix shell on the authorized Linux builder; record host activity and stop any measurement if other builds/tests compete. A leased cell requires an explicitly supplied durable external database, supported by `withMigratedBenchmarkSuite` through `KEIRO_GUARDED_CATALOG_PG_ADMIN` (libpq keyword connection string). The fixture creates and drops only its uniquely named template and cloned databases.
 
@@ -179,16 +162,41 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Outcomes & Retrospective
 
-2026-10-12 release-readiness checkpoint: the delivered feature and durable fixture retain the 755-example passing correctness result. All seven package checks pass, and unreleased changelogs now describe the public guarded runner and fixture additions. The next cycle's breaking dependency changes imply a proposed `0.20.0.0` release, with release preparation and publication separately tracked. The leased performance run remains active with ten preliminary ordinary passes; full M4 acceptance and independent sealed-health verification remain required by this plan.
+Completed on 2026-10-12 under the owner's revised scope. Consumers can enforce
+an indexed relational precondition through the public guarded catalog runner,
+receive a typed refusal after rollback, and reuse the winning identity without
+copying private catalog SQL. Accepted batches and inline projections commit
+atomically; catalog faults retain precedence and serving-generation protection.
+The public recipe keeps rich query models asynchronous and shows bounded
+post-commit freshness handling. The original runner remains additive-compatible
+with unchanged SQL and explicit lock counts.
 
-2026-10-12 remote preparation checkpoint: previous API/correctness work remains committed. Benchmark durability and executable portability are corrected; six reporting controls pass. Source preparation is underway on the existing Linux builder, with no measured remote acceptance yet. Historical non-durable samples remain retained and are not acceptance denominators. The revised full regression passes 755 examples with zero failures in 168.34 seconds. The comparison wrapper checks shared-source/executable hashes, compiler and dependency inventories, retains host observations every five seconds, and interrupts only its owned benchmark if another build/test appears. That observation is not a cloud cell lease.
+Correctness is established by the final 755-example suite, focused connection,
+rollback/retry and lifecycle proofs, the compiled example and public export
+checks. Documentation/ADR/IR checks and all seven package checks pass. The
+projection guard passes. The historical command CSV guard has retained failures
+on both original and candidate source; it is not represented as passing.
 
-2026-10-12 continuation checkpoint: the benchmark builds in the Nix shell and the evidence-reporting tests pass. The resumed run is deliberately interrupted after external jobs begin; its complete samples pass event/cardinality accounting but supply no acceptance verdict. Reporting now identifies incomplete matrices explicitly and fails `--require-complete` until all required evidence and budget results exist. M1 paired acceptance, M4, and the performance portion of M5 remain open pending a suitable measurement runner. Production code, dependency versions, and numeric budgets are unchanged in this continuation.
+The retained performance handoff is
+`keiro/bench/results/guarded-catalog/cell-performance-handoff-20261012/README.md`.
+Its 19 preliminary reports contain no budget failures, but cancelled-run health
+observations are unavailable and the full matrix is incomplete. These facts
+limit numerical performance claims, not completion of the revised feature
+scope. The mixed, fixed-arrival and sustained workload study is deferred;
+no follow-up benchmark is automatically authorized or required for release.
 
-2026-10-12 implementation checkpoint: the additive runner compiles; the final full suite passes 754 examples, including 35 guarded examples. The example covers snapshots, both owner rebuilds, fresh OCC/driver outcomes, versioned promotion in both orders, and post-commit view errors. The ordinary-path source audit records unchanged SQL/explicit locks. Strict ADR, user documentation, improvement request, and public export checks and the projection benchmark guard pass. The historical command guard also fails on original source; retained raw evidence separates that drift from this feature. Forty paused-worker latency samples remain provenance. Enhanced alternating controls and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
+The operator expanded validation into an exhaustive custom matrix instead of
+honoring the owner's repeated turnaround requirement and the bounded Kenshou
+workflow. Increasing the restart limit to 36 hours compounded that mistake.
+Closure preserves all evidence and stops the resource use rather than seeking
+more passing samples. ADR-26/29/34 already hold the durable transaction,
+callback and serving-binding constraints; the validation scope change introduces
+no new runtime architecture.
 
-
-At the original planning checkpoint, guidance distinguished the atomic identity index from the asynchronous rich-note view, including independent fencing and committed-but-pending response requirements. Source review corrected the async-group selection gap and made callback safety, promotion admission, driver retries, and sustained duplicate costs explicit. All runtime milestones were pending at that checkpoint; the later implementation checkpoints above describe the delivered feature and its still-open performance acceptance.
+Package publication and downstream adoption are separate work. The guarded API
+needs no migration for existing callers. The repository's pre-existing breaking
+Kiroku cycle and its proposed shared release version remain release-work inputs,
+not unfinished tasks in this plan.
 
 
 ## Context and Orientation
@@ -256,24 +264,35 @@ Use the focused test command below and the full `keiro-test` suite. Acceptance i
 
 Also demonstrate bounded read-your-write after a confirmed accepted command: retain its `CommandResult.globalPosition`, invoke `runQueryWithFreshness` with `WaitForPosition` outside the append transaction, and distinguish ready, committed-but-pending on timeout, and view-unavailable configuration/lifecycle errors. Resume a paused worker and retry the query using the same receipt without reissuing creation. No-op/refusal supplies no new committed position; duplicate reuse returns the canonical identity, using an independently retained winner receipt only when one exists. Never wait on the rolled-back candidate's position. Preserve store/transport failures separately from read-model errors and command commit uncertainty.
 
-### Milestone 4: Measure the global append cost
+### Milestone 4: Archive performance evidence and record deferred validation
 
+This milestone is complete under the owner-directed scope revision. Preserve
+the matching original/candidate builds, durable fixture, exact workload and
+sample identities, positive-control diagnostics, failed historical guards,
+interrupted runs, and corrected report from the separate analysis copy.
+The final evidence handoff records all 19 preliminary cell reports, their
+743-file verified manifest, cancellation with unavailable health evidence,
+and the replacement's pre-workload reset failure. Do not describe those results
+as a full or health-verified performance pass.
 
-Extend `GuardedCatalogBench.hs` with unguarded, empty-success-guard, indexed-miss, indexed-hit/refusal, and mixed traffic modes. Measure one and eight concurrent connections. Persist a workload manifest before candidate measurement: use initial identity cardinalities of 10,000 and 1,000,000, batch sizes of one and four events, a fixed 1 KiB creation payload with four tags, deterministic key/request seeds, and the same pool sizing and compiler/runtime options in each pair. For shared-key traffic, explicitly schedule creators and subsequent duplicate attempts so measured duplicate rates are known; an all-unique control uses a fresh identity for each corresponding attempt. Include warm-up rows in the recorded initial sizes or reset after warm-up. Successful runs grow the tables; record ending cardinalities instead of calling them fixed-size. Use durable PostgreSQL with `fsync`, `synchronous_commit`, `full_page_writes`, and `autovacuum` all enabled. The benchmark must check these settings and retain them in each raw sample; non-durable or unverified historical samples cannot establish acceptance. Seed and analyze the identity index before timing, warm each case, then collect at least five alternating paired runs of 10,000 completed attempts per case with equivalent initial database size and bounded setup outside timing. Count attempts, accepted batches, refused batches, and committed events separately: duplicate reuse has fewer committed events and must not masquerade as increased append throughput. Fail on unexpected outcomes or timeouts rather than omitting samples. Measure end-to-end call latency from submission through pool wait, hydration, all retries, commit/rollback, and result delivery. Report ordinary, guarded-accepted, and guarded-refused cohorts separately, with p50/p95/p99 and maximum, and record actual driver and OCC attempt counts in diagnostic runs. Keep the 80/20 mix in a common deterministic request schedule; assigning one permanently slower worker to guards can silently change the completed traffic mix.
+The former 190-report matrix (16 ordinary, 32 successful guard, 32 pure-hit cost,
+96 mixed, 12 fixed-arrival and two sustained comparisons) is deferred. Its
+numeric targets remain historical measurement criteria: ordinary throughput
+at least 0.95 and p95/p99 at most 1.10 of control; successful guard and mixed
+throughput at least 0.90, p95 at most 1.25 and p99 at most 1.50. No target is
+relaxed, no failure is erased, and missing evidence is not counted as success.
+`scripts/summarize-guarded-catalog-evidence.py --require-complete` continues to
+reject incomplete matrices; that optional exhaustive checker is not a
+completion or release gate for this revised plan.
 
-The required mixed workload is 80% ordinary commands and 20% guarded ensure attempts. Run guard duplicate rates of 0%, 50%, and 100%, with both repeated shared identities and distributed identities. Compare to the same concurrency and 80/20 command/batch mix in an unguarded all-unique control, acknowledging the different commit counts. This control measures the added cost of offering the stronger operation, not semantic equivalence of duplicate handling. Also compare unchanged ordinary callers before/after the refactor and compare empty-success guards with the ordinary API on identical all-unique data.
-
-Before collecting candidate results, persist these initial budgets in the harness configuration and report: the ordinary-only refactor must retain at least 95% of baseline attempt throughput and keep p95/p99 within 1.10 times baseline; empty-success guards and indexed all-unique guards must retain at least 90% throughput and keep p95 within 1.25 times and p99 within 1.50 times the comparable ordinary control. In each required mixed case, overall attempt throughput must retain at least 90% of its control, and the ordinary cohort's p95/p99 must stay within 1.25/1.50 times its control cohort. Judge the median of paired run ratios and report every run, spread, sample count, and absolute latency as well. Repeat a noisy comparison with an explained cause rather than selecting favorable runs. These targets are initial engineering budgets; a failure prevents a performance-ready conclusion until design changes or an explicit owner-reviewed budget revision.
-
-Use the retained M1 executable for ordinary-before/after pairs; use the current ordinary API as control for guarded/unguarded pairs. The one/eight-connection runs above are closed-loop: each worker submits its next command only after the previous one completes. Add a fixed-arrival-rate mixed run to expose queueing they can hide. Before candidate measurement, measure the comparable ordinary control's stable capacity and fix offered rates at 50% and 80% of that rate for both control and candidate, with eight connections. For each duplicate rate and both worker states, collect at least 10,000 scheduled attempts per paired run with five alternating pairs. Measure latency from scheduled arrival, include client queueing, and count unfinished/time-limited attempts as failures. Require the ordinary cohort's p95/p99 ratios to meet the same 1.25/1.50 budgets and all scheduled work to finish within the declared harness deadline; do not substitute closed-loop latency for this result.
-
-Add paired sustained duplicate-heavy/control diagnostics of at least ten minutes each after warm-up, with ordinary writers sharing the store, 1,000,000 initial identities, four-event candidate batches, eight connections, and the same fixed offered rate (80% of control capacity). Use 100% guarded duplicates in the 20% ensure cohort, distributed over preseeded identities, with the rich worker active; repeat with it paused to separate contention from expected backlog accumulation. Rolled-back inserts/updates still produce WAL (the database recovery log) and leave dead row versions for vacuum to reclaim; resetting the database after every short run hides this cost. Record WAL bytes per completed attempt, relation/index sizes, dead-row and autovacuum statistics, and ordinary latency by minute, preserving normal vacuum behavior. Record the paused/active async worker state and its backlog. Unexplained continuing backlog or storage growth, retry churn, or ordinary-latency budget failure blocks a performance-ready conclusion pending investigation; this run does not establish a universal storage bound. Use the supported PostgreSQL version's statistics and report any metric that is unavailable rather than inventing a proxy.
-
-Use a separate diagnostic run to collect PostgreSQL lock-wait evidence and guard/post-append duration with test-only instrumentation. Report what is directly measured versus an upper bound or proxy for `$all` hold time. Do not put extra timing statements into the measured production path. Verify that the identity query uses an index at representative cardinality with `EXPLAIN (ANALYZE, BUFFERS)` outside the timing loop. Include a deliberately slow test guard to demonstrate that the harness detects ordinary-writer degradation; this diagnostic is not a supported workload or a passing performance sample.
-
-If the post-append design fails, first eliminate extra SQL, incorrect query plans, or redundant fence work. Do not silently move a SELECT before append. A pre-append alternative requires a revised plan with a shared identity lock/reservation protocol, participation by every writer, and deadlock-safe ordering relative to append and catalog locks. Acceptance is archived raw measurements and a computed pass/fail report, with no claim that correctness tests establish performance.
-
-Aggregate the chosen run with `scripts/summarize-guarded-catalog-evidence.py` and use `--require-complete` for the final evidence gate. The inventory requires 190 reports: 16 ordinary refactor, 32 successful-guard, 32 pure-hit cost, 96 mixed, 12 fixed-arrival, and two sustained comparisons. It verifies observed durability/vacuum settings, five pairs and retained canonical raw samples for each paired report and the raw/storage files for sustained reports, and reports the median and range for each paired metric. Exit 2 means missing matrix evidence or a failed budget. A complete passing matrix still requires the storage/backlog interpretation described above; the tool labels that state `storage-review-required`, not a completed performance handoff.
+A guard extends the global append-lock interval; refused tentative writes can
+still produce WAL and vacuum work. Keep indexed bounded SQL, avoid external IO
+and new lock ordering, and retain these caveats in the public recipe. The
+existing deliberately slow guard demonstrates this mechanism. No speculative
+runtime optimization or pre-append reservation protocol is warranted by the
+retained evidence. Any future performance study is separate owner-scoped work
+with relevant selected coverage and a bounded execution budget through the
+Kenshou workflow, not a continuation of this plan.
 
 
 ### Milestone 5: Document the supported boundary and finish validation
@@ -283,10 +302,15 @@ Add `docs/guides/guarded-catalog-commands.md` following the existing guide front
 
 Update the unreleased section of `keiro/CHANGELOG.md`, export the new API consistently with `keiro/src/Keiro.hs`, and update ADR-29 for transactional refusal versus pure domain decisions and ADR-26/ADR-34 for guarded serving-target access and the unchecked SQL boundary. Keep their existing stable `docId` values, update meaningful revision timestamps, and add bundle log entries. Do not claim arbitrary callbacks are automatically safe or bounded. Update IR-53 and this plan with real test/benchmark evidence and remaining downstream obligations; do not mark downstream adoption complete based on the local example.
 
-Run the full affected test suite, normal command/projection benchmark guards, public re-export checks, and strict documentation validation. Review the final diff for unrelated changes and dependency/version bumps. Distill the global-lock and fence-order lessons into the ADRs before marking this implementation plan complete. Acceptance is the documented, tested, measured additive feature and a clear release/adoption handoff, not publication.
+Use the retained completed full affected suite, command/projection benchmark results, public re-export checks, and strict documentation validation. The final closure changes documentation only, so rerun the affected document checks and review the diff without repeating the correctness suite or benchmarks. Distill the global-lock and fence-order lessons into the ADRs. Acceptance is the documented, tested additive feature, honest performance evidence and deferral, and a clear release/adoption handoff; publication is separate.
 
 
 ## Concrete Steps
+
+**Completion scope:** Implementation and runtime verification below have already
+been performed. These commands document reproduction; they do not instruct
+another run at closure. Remote/full-matrix benchmark commands are retained for
+optional separately authorized work, not as release requirements.
 
 
 For remote preparation, transfer a Git bundle containing the committed candidate into a fresh checkout on `nix-builder-x86` in project `tan-nb-exp`, zone `us-west1-a`, using the IAP transport from `mori://shinzui/load-testing-infra`, project-relative path `scripts/iap-ssh.sh` (artifact-level URI pending). Use the existing `builder` Unix account for PostgreSQL compatibility. Build and freeze the candidate before building the original-library overlay; both run in the project Nix shell. The wrapper rejects mismatched dependencies, compiler, source hashes or executable hashes, and records its direct host-observation scope without claiming a cell lease. Run these commands in the clean candidate checkout with unused worktree/output paths:
@@ -338,7 +362,7 @@ nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=diagnostic KEIRO_GUARDED_CATAL
 nix develop -c python3 scripts/summarize-guarded-catalog-evidence.py keiro/bench/results/guarded-catalog/candidate-idle-20261012 --require-complete
 ```
 
-The summary command above demonstrates the retained interrupted run: expect `performanceAcceptance: incomplete` and exit 2. For final acceptance, replace that directory with the chosen complete run directory.
+The summary command above demonstrates the retained interrupted run: expect `performanceAcceptance: incomplete` and exit 2. That result remains truthful after owner-directed deferral; no complete run is required to close the revised plan.
 
 Dispatch evidence modes in `keiro/bench/Main.hs` before unrelated fixture setup and `defaultMain`, so `ordinary`, `compare`, and `diagnostic` run only their requested harness and exit. Add `GuardedCatalogBench` to the benchmark stanza's `other-modules`; record all workload choices in its output manifest. Cabal runs the benchmark in the `keiro` package directory, so those output paths resolve beneath `keiro/bench/results/guarded-catalog`. Choose unused output directories when repeating any command; the harness and baseline builder refuse to overwrite evidence. The enhanced builder overlays only harness/test-support files on the recorded original revision, leaves production sources untouched, records resolved dependencies/compiler/runtime options, and retains the project-built binary outside the repository. The harness reads that manifest, verifies executable/shared-source hashes, reruns the retained ordinary executable between candidate samples, and emits reports plus gzip-compressed raw JSON samples. Historical latency-only samples remain provenance, not the denominator for alternating measurements. Record the exact accepted report here during implementation; do not paste hypothetical numbers.
 
@@ -366,7 +390,7 @@ A catalog fault takes precedence over a guard that would report an existing iden
 
 Driver retries also discard rolled-back guard results and resolve/query again. Supported callbacks leave transaction control to the runner. The inline-only fixture remains writable while the async-only group is fenced; the broad-set negative control is fenced. Both promotion orderings, multi-group validation, and handler/event delivery order have observable tests.
 
-The original API signatures, unguarded SQL/lock counts, and existing behavior remain intact unless M3 exposes a pre-existing resolver correctness defect requiring an explicitly recorded shared fix. The ordinary, guarded, and mixed benchmark cases pass M4's fixed budgets with raw evidence and declared environment. The required evidence includes per-cohort end-to-end latency, fixed-arrival-rate queueing, and sustained rollback/vacuum diagnostics. No numeric improvement or regression is asserted until measured. The compiled public-API example and guide provide the downstream handoff; actual release and adoption remain separately tracked.
+The original API signatures, unguarded SQL/lock counts, and existing behavior remain intact. The final full suite passes 755 examples with zero failures and covers the behavior above. The compiled public-API example, guide, exports, ADRs, changelogs and package checks provide the completed handoff. At the owner's direction, exhaustive M4 performance acceptance is deferred and is not a completion or release-blocking requirement. Partial comparisons, unavailable health observations, historical failures and pre-workload reset failure are retained without numerical performance guarantees. Actual release and adoption remain separate operations; there is no further evidence required to finish this revised plan.
 
 
 ## Idempotence and Recovery
@@ -376,7 +400,7 @@ Use fresh ephemeral databases for each correctness fixture and equivalent fresh 
 
 No framework migration or consumer data rewrite is expected. Guard refusal rolls back the prospective event batch and all transactional row writes. Sequence increments and other nontransactional SQL effects are not covered; supported production guards avoid them. Database faults retain existing error semantics, including uncertainty if the connection fails around commit; do not translate that uncertainty into a known duplicate or proven rollback. Return the winner only after the controlled runner has produced its refusal outcome.
 
-If the implementation is abandoned, the original public runner remains available. Do not cherry-pick the unapproved prototype or reset another contributor's changes. If the benchmark fails, preserve the evidence and revise the design before declaring completion. Never resolve performance failure by weakening atomicity, bypassing fences, relaxing unique constraints, or hiding latency in an unmeasured retry loop.
+If the implementation is abandoned, the original public runner remains available. Do not cherry-pick the unapproved prototype or reset another contributor's changes. If a future benchmark fails, preserve its evidence and investigate before claiming a performance pass. Deferred benchmarks do not reopen this completed plan automatically. Never resolve performance failure by weakening atomicity, bypassing fences, relaxing unique constraints, or hiding latency in an unmeasured retry loop.
 
 
 ## Interfaces and Dependencies
@@ -468,3 +492,5 @@ Revision note (2026-10-12): Record preliminary passing ordinary cell comparisons
 Revision note (2026-10-12): Reconcile unreleased feature/fixture changelogs and record seven warning-free Nix-shell package checks while the full cell matrix continues. Record the proposed breaking-cycle release version and separate pending performance acceptance from release preparation; no release or plan-completion claim is made.
 
 Revision note (2026-10-12): Stop exhaustive testing after the user objects to its cost and release impact. Preserve verified partial evidence, record failed health replay and pre-workload reset failure, release the lease, and require bounded relevant scope before any future measurements. The historical full matrix remains incomplete; no release was performed.
+
+Revision note (2026-10-12): Complete the owner-revised plan using the implemented API, compiled example and passing correctness/documentation/package checks. Close M1–M5, explicitly defer exhaustive performance validation without claiming a pass, reconcile the IR and public recipe, and retain the existing architectural constraints. No additional testing or publication is required for this closure.

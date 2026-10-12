@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-10-12T03:18:00Z
+timestamp: 2026-10-12T18:26:16Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -271,8 +271,11 @@ All inline handlers extend Kiroku's global `$all` row-lock interval. Evaluate
 cumulative SQL and unrelated-writer latency under mixed traffic. Async delivery
 removes this work from the append transaction but still shares database capacity.
 The guarded runner in [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md)
-is implemented as an opt-in API; its full lifecycle and performance acceptance
-remain tracked in that plan and do not imply release readiness. See the
+is implemented as an opt-in API with validated concurrency, rollback and catalog
+lifecycle behavior. The completed plan records owner-directed deferral of
+exhaustive performance validation; it makes no calibrated throughput or latency
+guarantee. Indexed, bounded guards and the global append-lock cost remain part
+of the supported contract. See the
 [delivery guide](../guides/choosing-a-projection.md) and
 [post-commit example](../guides/asynchronous-projections.md#read-your-write-after-commit).
 

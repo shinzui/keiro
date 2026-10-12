@@ -6,7 +6,7 @@ docId: DOC-29
 tags: [keiro, commands, projections, transactions]
 generated:
   by: process:codex-cli
-  at: 2026-10-12T03:25:00Z
+  at: 2026-10-12T18:26:16Z
 ---
 
 # Guarded Catalog Commands
@@ -21,10 +21,12 @@ The runnable consumer example is
 [`GuardedCatalogExample.hs`](../../keiro/test/GuardedCatalogExample.hs).
 [`GuardedCatalogSpec.hs`](../../keiro/test/GuardedCatalogSpec.hs) exercises
 same-database races, rollback, driver retries, archive/replay, and post-commit
-query waits. Full lifecycle and performance acceptance is tracked in
+query waits. Implementation and correctness validation are complete in
 [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md).
-The initial measurements do not establish performance readiness or authorize
-publication. Downstream adoption belongs to
+The owner deferred exhaustive performance testing; the partial measurements
+provide no calibrated throughput or latency guarantee. A bounded indexed guard
+still extends the global append-lock interval, and refusal can incur WAL and
+vacuum work. Package publication remains separate. Downstream adoption belongs to
 `mori://shinzui/rei/plans/249-expose-categories-and-custom-properties-with-shared-typed-assignment-semantics`.
 
 ## Keep command authority small

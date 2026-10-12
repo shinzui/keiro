@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-10-12
+* **Update**: Record completed guarded catalog implementation and owner-directed performance deferral without claiming calibrated throughput or latency.
 * **Update**: Link the guarded catalog command adoption guide
 * **Update**: Add the guarded catalog command adoption recipe and callback boundary.
 
