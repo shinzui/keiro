@@ -55,6 +55,7 @@ def main():
                      leaseId=cell["leaseId"], isolation="cell lease; health evidence requires owner verification",
                      packagedExecutable=str(payload / "bin/keiro-bench"))
     (matrix / "candidate-environment.json").write_text(json.dumps(candidate, indent=2) + "\n")
+    (matrix / "runtime-environment.json").write_bytes((payload / "share/runtime-environment.json").read_bytes())
     (output / "work.json").write_bytes(work_file.read_bytes())
     environment = dict(os.environ, KEIRO_GUARDED_CATALOG_EVIDENCE="compare",
                        KEIRO_GUARDED_CATALOG_PG_ADMIN=cell["postgres"]["connectionString"],
