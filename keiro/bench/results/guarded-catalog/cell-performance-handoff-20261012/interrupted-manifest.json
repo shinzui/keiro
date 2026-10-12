@@ -1,0 +1,4474 @@
+{
+  "schema": "cell.artifact-manifest/v1",
+  "layout": 1,
+  "runId": "01a130cb-58bf-7705-9641-f06bb4b46e89",
+  "cell": "alpha",
+  "leaseId": "keiro-306-lease-20261012-1528",
+  "leaseSequence": 2,
+  "sealedAt": "2026-10-12T17:40:21Z",
+  "agentVersion": "0.1.0",
+  "payload": {
+    "kind": "nix-nar-bundle",
+    "sha256": "5640dd094352d72aaa35e009659a8ada2b2b763803a229242cf477eba13d1121",
+    "storePath": "/nix/store/i0npf84r6k4p5h8kdynl04g0nb7djjax-keiro-guarded-catalog-cell"
+  },
+  "outcome": "cancelled",
+  "retention": {
+    "policy": "bucket-retention",
+    "retentionSeconds": 34560000
+  },
+  "artifacts": [
+    {
+      "path": "cell/environment.json",
+      "sha256": "7e07c461730793efeee9447062d394967950dc7febccb898c2b052b7856a18ce",
+      "bytes": 749,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/execution-window.json",
+      "sha256": "2e00ba0bf797dc5494c719b8b3f37191acf18e59b468388d14ccf732a4f0715d",
+      "bytes": 216,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/health.json",
+      "sha256": "29b986c9ba2ec3cbf44c1f42e695ab59d92097cbef43931e01287d3eb30ac238",
+      "bytes": 1363,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/reset-evidence.json",
+      "sha256": "c606a9b6d3afc77c9d8ae5e98a1de119776df3edc8e821f4bf4f20dd932a31c0",
+      "bytes": 2084,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "cell/result.json",
+      "sha256": "5a16c6e2a9bb6f3138d47a6d725703025e109eda0d0127f150be50811fbb09cf",
+      "bytes": 311,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "logs/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "mediaType": "text/plain"
+    },
+    {
+      "path": "logs/stdout.log",
+      "sha256": "ef1fb7303cf4df13b5361f9ea82311d7b61a181f9125d6719f2405b4ce38edc6",
+      "bytes": 81887,
+      "mediaType": "text/plain"
+    },
+    {
+      "path": "metrics/export.jsonl.zst",
+      "sha256": "b022002edc6a62f1975fb0bc6e576847c0c5aec9d5390e6357c2e39210f4bff5",
+      "bytes": 1264380,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "metrics/window.json",
+      "sha256": "5607a82cafa5db6faf65f26cb1a0fd2bf6531ab135815fd3bb5425ede42da4e0",
+      "bytes": 194,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/baseline/enhanced-environment.json",
+      "sha256": "d061b876c51825b73f341f52c6b58d885ffcb1370517a565b54c4971c370105e",
+      "bytes": 16481,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/baseline-environment.json",
+      "sha256": "d061b876c51825b73f341f52c6b58d885ffcb1370517a565b54c4971c370105e",
+      "bytes": 16481,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/candidate-environment.json",
+      "sha256": "3a9e2b4b37440a75b20dde14fd199e19c46e0bd73f1311f7e53e8e441b2c73b6",
+      "bytes": 16060,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/comparison.log",
+      "sha256": "ef1fb7303cf4df13b5361f9ea82311d7b61a181f9125d6719f2405b4ce38edc6",
+      "bytes": 81887,
+      "mediaType": "text/plain"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "3965786c453e4816d646f3718dde2562ef489f8b2672056c06e647938c8dd5e4",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "ac2973f909af905a4e13730913b14d1b6e30ec0093bc60ceaaadd89bb5d7506c",
+      "bytes": 148893,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-1-control-summary.json",
+      "sha256": "b610ace6abaf61ff78a98d0209a20c1187a7d26df8e47785c83f6df87627ebb2",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-1-control.json.gz",
+      "sha256": "1f8e106b223040a31cf45a93007b75d8cc21b368aa2b1da9e86bdb1f2c0da595",
+      "bytes": 148677,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "d1f285eee5d6e6723d3c52803f60eed3051615b7bd7d31ebafbbe267b7889a62",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "f48060fdd5fdf4212651b9397972c54fa713204d237a8cc6e7835e7aa46fa6e9",
+      "bytes": 148930,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-2-control-summary.json",
+      "sha256": "0ccf37d90a0fe69943d480b39b7d75c0ee1859898bf2ac9413dfa622b4b651d1",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-2-control.json.gz",
+      "sha256": "826e438613b244054a81c4d5471633031c8067ef538a604b6ecdfbd4c350d84a",
+      "bytes": 149122,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "7da798ffb16a25b5c0f6c047ef616793504034768c9cc1ee8373dd8a9737e1f4",
+      "bytes": 233,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "7ff2a9685465897866d487f664569538a5c3bf1dad608d070e799fdb100e63f8",
+      "bytes": 148760,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-3-control-summary.json",
+      "sha256": "136751dd6b87773ef8b8ce0c8761249c3e7694505308ed175f1bf16c13734e96",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-3-control.json.gz",
+      "sha256": "a82f558c81dfc81646753383a2a0610a5717de5c31c0ae1e42610f900995ba0d",
+      "bytes": 148075,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "d0ee3a166d63900c039c4d16f9fce00d6c895e108ac1a1fbb166dd3a8588791f",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "e3d3572036158f9d080bcdff3d8735256c3111c17965d28f4a2b40a35a3795dd",
+      "bytes": 149412,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-4-control-summary.json",
+      "sha256": "b1353325d00a7d511be7e372abb09c2c8b8466e863084b4297571d94e520693f",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-4-control.json.gz",
+      "sha256": "314a09c65c76e400fad8b592c976cd1d3e3833cd3643e32796e778a744cc91ae",
+      "bytes": 148690,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "48e788656cc56c8d846f594dd3a3a798f8e3d7e41b63007685989caa589d04da",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "60c58eb85d050315b0c4654e4148b8f0ae9254a1d5e4ad0d228dda133da734c6",
+      "bytes": 148887,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-5-control-summary.json",
+      "sha256": "41dafd1d386060265784b1e27145a5c1097e699082fffb800939e094731785e8",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-5-control.json.gz",
+      "sha256": "cef82cd6c4b23421b9ee618d8d5d0e679af0f80649dfd05c6ef2e93ce3b18a5c",
+      "bytes": 148595,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/empty-10000-1-1-False-100-0-True-Nothing-report.json",
+      "sha256": "17b9d330797853fb34cdfe8b2a33169d6d114aba196b1f63c3fec314a5eb7e22",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-1-candidate-summary.json",
+      "sha256": "e8a2f466ebd237eb56f30f6a8624a9072275598dd7889b3bf18a22d87d4d9cf9",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-1-candidate.json.gz",
+      "sha256": "5eae804f32c9e6e142a98bb86a997ecb75207236568a8393a5aee88548dc9641",
+      "bytes": 145422,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-1-control-summary.json",
+      "sha256": "225b1112bc72c507cde592d6340c4e85b4d5976e2dc80a201f8347c33656e9ff",
+      "bytes": 234,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-1-control.json.gz",
+      "sha256": "87d60502610c4207e3350c0f6bbe4795259350149fb40d7531b43afbf0ea946b",
+      "bytes": 148994,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-2-candidate-summary.json",
+      "sha256": "4429e489aff2d76d020ab31befdf08007668f69520b04562e48503e7a04251c2",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-2-candidate.json.gz",
+      "sha256": "37ef20a37962811ee48b6f952f80ecb18024b68ef56344871c39ce46a1887e3e",
+      "bytes": 145859,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-2-control-summary.json",
+      "sha256": "3d6c595b81e784fd9af2d084a6aab749deb207797fbbd7a9b1c6ddc90b5eb094",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-2-control.json.gz",
+      "sha256": "5ab20d811f41f2522308e8236e0f6b15836ee90f75a43f1d936d65ce450f2aee",
+      "bytes": 149101,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-3-candidate-summary.json",
+      "sha256": "fda3783a69a99bcaed6cbc06643360d24d9e61f21154d9c5e7b60c4f82392046",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-3-candidate.json.gz",
+      "sha256": "eee1bf23dc42c9358507e1096228c470c2597e4cbdf21a0c0b64fd9fbf212d36",
+      "bytes": 145947,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-3-control-summary.json",
+      "sha256": "a7e76d32ae009313552a3bd0d7e7bbda8a429fe3f2fe9c6af6778cade1c2b0ce",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-3-control.json.gz",
+      "sha256": "a7b15ee0f27e13c7388fc2d8debb1e819cc752452bdb5d5affee6015f1bb4829",
+      "bytes": 149137,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-4-candidate-summary.json",
+      "sha256": "d954893e1005dab121af6b71acb178e3b7896740f170b6b131c2b0766c45d2dd",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-4-candidate.json.gz",
+      "sha256": "ff0ea2664a5c6caf68123d9697b62e11df119395aa79def7fde779736ca9bcd8",
+      "bytes": 145570,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-4-control-summary.json",
+      "sha256": "fb397d0e6169fff11e2f2d71520921c1859bdba2bffddd5e3ce1f2e666d2975b",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-4-control.json.gz",
+      "sha256": "78f28d0ff576d4620366a8d1c9978cdf3f08fbff644d2c167e4b60be222fc0ee",
+      "bytes": 148832,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-5-candidate-summary.json",
+      "sha256": "edb1e61cffe53545499ad708900e2601ea0fb20f151e240dc3f4a298059bcc42",
+      "bytes": 234,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-5-candidate.json.gz",
+      "sha256": "76b913aa4d64334eee33ee30397f2e69bd410fcac91fe7e65c59491ad2e13353",
+      "bytes": 145359,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-5-control-summary.json",
+      "sha256": "202df55e7a03ba58a6891a10d5633209527b6168eeaf4665eefed4c4fdab28c7",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-5-control.json.gz",
+      "sha256": "92b13f04c83cefc927f166a4acce2546b69dad5261237ab28a963abcc203e325",
+      "bytes": 149374,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/hit-10000-1-1-False-100-100-False-Nothing-report.json",
+      "sha256": "a946363f27b6890aae0e756bc579327a3d933e2898feefa54baa2ab989fecd26",
+      "bytes": 347,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/host-activity.jsonl",
+      "sha256": "8c384787aef957e848d0a621166432e94ac64fb5d22db3d9756414436c1cf0b6",
+      "bytes": 6862851,
+      "mediaType": "application/x-ndjson"
+    },
+    {
+      "path": "output/matrix/manifest.json",
+      "sha256": "08892fa726df70897cb39471b2303b3ab977242ae3c588d4535a8cd477b9f0d6",
+      "bytes": 291,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "c13d5d1079905e9acbb54cd71c74e34a5db55c31a18a6931d7b06a7950919f84",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "ef523ebd40b6ceb71b29fc910e32a825ae019b9382bfc1c38b484d1c710e11e6",
+      "bytes": 148877,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-1-control-summary.json",
+      "sha256": "5fcde5a079d1f3c57266af7651422e64add278997c2d31f06c5d849c18733277",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-1-control.json.gz",
+      "sha256": "d6c81a03b1afdbb1f397df766adc855b6692b3c557e74894986001002b64f3dd",
+      "bytes": 148630,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "4ac19d9bbb16c3b57338f5655973141fd7e8cb3f49643d149d34406dfefff082",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "ae53e0b245e4d72a30d81f8a1a4e0c87711f00fa5beb72bf31ccc3e728f784d5",
+      "bytes": 149157,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-2-control-summary.json",
+      "sha256": "436615d625824550333c14dddaa0012795e7928f5ccf7ac232ac9b302fa1d58f",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-2-control.json.gz",
+      "sha256": "4d1272ffef262e83047fb9ab5055808136e569416ce510320d9cd7e392f7e2c0",
+      "bytes": 149154,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "de9be2aa2ae1bb32e27e78181640d667c64268e3e919917b2aea334bba5f6d86",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "0f7354976340e62dd4604d82d543812199ed7b99e5f7f746b9984fcf401d2a78",
+      "bytes": 149272,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-3-control-summary.json",
+      "sha256": "5e1e84fc8aaa3f9eae8b00e6e98a35773ce43b8c1e2537355c2b327f0e19a0f8",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-3-control.json.gz",
+      "sha256": "77d7b46001ba6eba577f4d3463d546166596ccf3f3eb0910920aaa5d268244cb",
+      "bytes": 149129,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "218a992f4e4fdff0965e67d2cb2d487abb79906a19a87d9d0674707a44c17198",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "179b3688ef99aa5124ccad44ed1b37c76a6e038e75afcec6ba2e484625a323f9",
+      "bytes": 149020,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-4-control-summary.json",
+      "sha256": "d5a0a9e3e6e622700ff1fb74c47f3121e2bd949f792f8ad2c97399c83ca8d02a",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-4-control.json.gz",
+      "sha256": "1530dede1f1e9328fc6c1abae987a26d6722673881438a525fd623723a8ca512",
+      "bytes": 148809,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "6afa70afc491eb2fd81129c4241983fa95e11c26d74bb40224eb482658a72d0d",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "7e11847c96724bbba5101348325e96beeb0a487391b3e7bee1a4178ca812df2e",
+      "bytes": 149226,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-5-control-summary.json",
+      "sha256": "c7600f2f3b423decdd0ed63de1d6b2389a43d4c7b439a56bc3b38cd9b2672f36",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-5-control.json.gz",
+      "sha256": "3b1fb5349e83909bd51b1abcf6c665dc6c3a5ad6d59c2d9470deaeb60419efe0",
+      "bytes": 148775,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/miss-10000-1-1-False-100-0-True-Nothing-report.json",
+      "sha256": "a390bd81124a2dfd8d9dc69a5ecea51ac608eaec8b23849bfd6918cf7c3e78df",
+      "bytes": 340,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/mixed-10000-1-1-False-20-0-False-Nothing-1-candidate-summary.json",
+      "sha256": "0f72e8e551ebf14cfe92331bd8394994fb22c447a91f37f852e15a03896d119a",
+      "bytes": 309,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/mixed-10000-1-1-False-20-0-False-Nothing-1-candidate.json.gz",
+      "sha256": "7db58a846d99b5729f0caaee9b86f12b5fe4493215a466bcc66615ffdb7acb84",
+      "bytes": 149974,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/mixed-10000-1-1-False-20-0-False-Nothing-1-control-summary.json",
+      "sha256": "60c38269f92e68a9725260ef2afe522ef3a2e5541ee3a5507941c4ad9473d69a",
+      "bytes": 306,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/mixed-10000-1-1-False-20-0-False-Nothing-1-control.json.gz",
+      "sha256": "a4196d4c0cc4ba73162625901b1b0950d44c8120d0923e9ccbccf7bed46fa536",
+      "bytes": 150283,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "9a994d8dd6ca3e2bf079d12f896c0d423e8513d5715ef1eea688d9391eab4263",
+      "bytes": 148257,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "465281df151f055341fb5f665eaa672ec499cbedccd0c8dc4babef14571520e9",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "9a994d8dd6ca3e2bf079d12f896c0d423e8513d5715ef1eea688d9391eab4263",
+      "bytes": 148257,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "4ac60af8ee4914bcb482950075a9c243bb20e74ae0afab49cc230f404d63788d",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "e96aaba99d9a1a485d74ad7b409627b28c11065ba492eb3208cb69fb4dd22a0c",
+      "bytes": 148612,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "e96aaba99d9a1a485d74ad7b409627b28c11065ba492eb3208cb69fb4dd22a0c",
+      "bytes": 148612,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "bf55d7ade12857c6d1e45b5ed2f42c8b95a8563ef0540949241d1ddd1770e297",
+      "bytes": 148587,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "834d17c26f946f7867342027ce6a634de870f14c00cb3c05b7c1b79c0d38e2a7",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "bf55d7ade12857c6d1e45b5ed2f42c8b95a8563ef0540949241d1ddd1770e297",
+      "bytes": 148587,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "5bca545e75f1fe8060bc93111d09ca221b01414c3a99da1b2fa94c8efd01cef3",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "d1aacb607ed02bc6642d1d9db0df3e9c7484a882c40396232dfbc5689806dbf0",
+      "bytes": 148665,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "d1aacb607ed02bc6642d1d9db0df3e9c7484a882c40396232dfbc5689806dbf0",
+      "bytes": 148665,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "6c27f7ab127d7ac1216b3e17c048860581e92920dfe15ba2bf0affd05d91a23b",
+      "bytes": 148329,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "d78a3cae55402ca19e2b6f94421c5d84265fd0fb7e784a145e9e6163d092dccc",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "6c27f7ab127d7ac1216b3e17c048860581e92920dfe15ba2bf0affd05d91a23b",
+      "bytes": 148329,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "a8e1dc48b9b5fcaf4cb8db873b9e55aa43f0a5a77eaec16d55ada26eb3a9bde3",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "5e6e53c5e463c42bc99a47baaa17db0a3a61e08f4b3c2dfad4ce4c62c323abc4",
+      "bytes": 148669,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "5e6e53c5e463c42bc99a47baaa17db0a3a61e08f4b3c2dfad4ce4c62c323abc4",
+      "bytes": 148669,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "52d3f590cd189106e2dcd10f66b5e6541415a8f9f9dfab9dbddab4581f3c62f0",
+      "bytes": 148352,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "94504b1538a15721b9122dbb5c3f67c5c34de93faa5274bf586bb0ee2c3bc891",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "52d3f590cd189106e2dcd10f66b5e6541415a8f9f9dfab9dbddab4581f3c62f0",
+      "bytes": 148352,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "1f6dadee5182eaa8b16ce8a2f84064ca99b77349e7633f2b2f67fe7ab08ad128",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "2b47b6873935787a29a8908b2234a7e375271d644bc27dc69ec589796e6a164b",
+      "bytes": 148236,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "2b47b6873935787a29a8908b2234a7e375271d644bc27dc69ec589796e6a164b",
+      "bytes": 148236,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "b662af47a9952daefe79a6d7f7d489345e68b0842ffd11d51adc886232af3dea",
+      "bytes": 148178,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "4341b82b5d629f13be04b6158836f0b00be1490e3bf5536b051a801f88c26f9a",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "b662af47a9952daefe79a6d7f7d489345e68b0842ffd11d51adc886232af3dea",
+      "bytes": 148178,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "c855c60884ff38f300d6bf4ecf6649da77a3e57866b801c5f28539d69848f272",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "541d6206a91c253c3de741e77d39a53304afb27d93a89748ffb74ebbb74e96ae",
+      "bytes": 148105,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "541d6206a91c253c3de741e77d39a53304afb27d93a89748ffb74ebbb74e96ae",
+      "bytes": 148105,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "78dc274f1176ba46910ac989c862448a0b48aaea454509df2de5578865833f4c",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-False-0-0-True-Nothing-report.json",
+      "sha256": "9e92593f3146f7997284dcea8fdcf9908a0cccf8ac54245e4fc66d669b9de878",
+      "bytes": 343,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "6e13685781fc6b4ca62352ef6ba3371377a913c7689bcb9a0bb9e80053d0b1ba",
+      "bytes": 150523,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "7629407995da64ecca9fbbc82f0ff016893484b68756cba77f67d7a3d8da1630",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "6e13685781fc6b4ca62352ef6ba3371377a913c7689bcb9a0bb9e80053d0b1ba",
+      "bytes": 150523,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "2b8dee40c539fef2c58a59c0762fe9d974dbd3fe51595a49bdc04204e67a636e",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "8a1499cdbba942fb3bf858add551724d1c03a84909057303743bea8e6aa1f393",
+      "bytes": 150279,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "8a1499cdbba942fb3bf858add551724d1c03a84909057303743bea8e6aa1f393",
+      "bytes": 150279,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "9c6fececd2ca4de7547068f6138d55543bfde2007e5e5123cf25b0884783d3d7",
+      "bytes": 149921,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "c86d0587071dcd7b58eb3db8674e0397ff065100a44e1074d16520da7cf10992",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "9c6fececd2ca4de7547068f6138d55543bfde2007e5e5123cf25b0884783d3d7",
+      "bytes": 149921,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "117f663ba58338e6cb6538394494fb116975c1ee5cdb62d2a7bf79af0a3e5732",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "645f4d4e5fed6da3ea053fc1771ddac36aef1a9223e3d7cdd0ea1b196f7809ab",
+      "bytes": 150549,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "645f4d4e5fed6da3ea053fc1771ddac36aef1a9223e3d7cdd0ea1b196f7809ab",
+      "bytes": 150549,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "8a6c6f50f859212508e006a9b7aed330ee0222acc49111a95fbc6b36f8439ca0",
+      "bytes": 149920,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "4366d9ea57935dfc8cb2973f3a3aa922a3a3e0063799df256480d10060edd5bc",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "8a6c6f50f859212508e006a9b7aed330ee0222acc49111a95fbc6b36f8439ca0",
+      "bytes": 149920,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "81a0693fc613ceb5241f78a450abc976d1de01c64c238bfe431a4c6d38929004",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "434657abaa3e3c9e91dd56dad4e15a15803550c9a75747f6eb23373cbb789803",
+      "bytes": 150100,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "434657abaa3e3c9e91dd56dad4e15a15803550c9a75747f6eb23373cbb789803",
+      "bytes": 150100,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "b6aa2d48abe27d8e1b7569a2fbedee47e452d06aba436b372d59ce030beb2a52",
+      "bytes": 150166,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "eca4a6cb0c524661ef375ce6ab921dc7bc49a70d0fe62bfe8a26eafad43b610a",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "b6aa2d48abe27d8e1b7569a2fbedee47e452d06aba436b372d59ce030beb2a52",
+      "bytes": 150166,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "3af1b6dc06e23901ddc4c38db87b467f06d588ae122abe3aa3d0af7743dc7042",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "aef598ae110d78ab41c75a7eb426568167e1e10ee1583d948b7499af7fdbdc7c",
+      "bytes": 150244,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "aef598ae110d78ab41c75a7eb426568167e1e10ee1583d948b7499af7fdbdc7c",
+      "bytes": 150244,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "34f9f9722d5643b6518c1023e3aa3e564f59df0db0bb7fa250b899fd86f201a3",
+      "bytes": 150776,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "ffa5babce51de327fec2eeb41a480a03d9e847d8e5fcd8d49ed9270999c38e6c",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "34f9f9722d5643b6518c1023e3aa3e564f59df0db0bb7fa250b899fd86f201a3",
+      "bytes": 150776,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "9fbd8c2b70a481a3816d6c7b819e8b592f135d1bf6abe5e7b661455b28bea5a6",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "90bd257c372b73dc86bae566aad81d02b374e686edad9cde47fe495055b917cc",
+      "bytes": 150190,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "90bd257c372b73dc86bae566aad81d02b374e686edad9cde47fe495055b917cc",
+      "bytes": 150190,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "868e79834b625a223bf4def246f19dabca82f80f49c337a539d1245ec4041879",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-1-True-0-0-True-Nothing-report.json",
+      "sha256": "0c2658bb079d22d3c9b4df8ee911e103d456b9121bf503ab8ca40453d5f742ee",
+      "bytes": 340,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "84a43fd258a2482fa798950f83420c61d80d95f361c5411f41909664fde496ac",
+      "bytes": 150521,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "6441fbe9b2258906762a2bd1edc28624b95138ab911b0a5ec4030cb7ead0374a",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "84a43fd258a2482fa798950f83420c61d80d95f361c5411f41909664fde496ac",
+      "bytes": 150521,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "6852b25d5b6ea2a58f7e329faac1344c222b5f5a419f231206615810edd27976",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "c9f9109be0f2a3dce17de81701377255d26bb591acff8ceed4fa8760c051376e",
+      "bytes": 150355,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "c9f9109be0f2a3dce17de81701377255d26bb591acff8ceed4fa8760c051376e",
+      "bytes": 150355,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "9e7ba33b94907b2bb92a2580ec134dcc3ae07ab2ac6efcf09d1707b4e17053a3",
+      "bytes": 150651,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "55b6adc444001bbd6a61ffbe8082311358a5c0f556589a125dece15a07f28b53",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "9e7ba33b94907b2bb92a2580ec134dcc3ae07ab2ac6efcf09d1707b4e17053a3",
+      "bytes": 150651,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "7126fac723bafb77ef892cef8fca1ad9b04ebf5cc9e5864061cc6ab66eb5f3eb",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "ea4d069c01a95b362ed430939ae2c52e84fd5eb34123a3402729f5cc4a62b1ec",
+      "bytes": 150157,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "ea4d069c01a95b362ed430939ae2c52e84fd5eb34123a3402729f5cc4a62b1ec",
+      "bytes": 150157,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "59c1d531d6122fe2c28b40bdba30052ac46f4dd2f4707e1e0717ef21d2d84fda",
+      "bytes": 150086,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "669fd9f5ebae9ea964d3ac4cc9c59d1b904f7f139eef7ef5c3f3917ebbaec9cb",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "59c1d531d6122fe2c28b40bdba30052ac46f4dd2f4707e1e0717ef21d2d84fda",
+      "bytes": 150086,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "1597710d3b278ad5f66c04dae77f60892c891fb8b89929dac21a068859a2ca26",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "0c49c808d5f5d45ac2678aa2b89fe1daa42fc497cc67195d7a99b1f37347eaf8",
+      "bytes": 150064,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "0c49c808d5f5d45ac2678aa2b89fe1daa42fc497cc67195d7a99b1f37347eaf8",
+      "bytes": 150064,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "d795f0c0241f6dd5ed979f72b77483f84a6e26bcdbf34c877de80ad7c287c5e1",
+      "bytes": 149894,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "f5aa65f39d5b08701c702e7f9904407a28f9f366423f589b265368eee95c1e76",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "d795f0c0241f6dd5ed979f72b77483f84a6e26bcdbf34c877de80ad7c287c5e1",
+      "bytes": 149894,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "8c34e3d6dabd95c52bd094e1d5d703e9dff8cc5178b83573d4e630521bd58e1d",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "cf2c7831fb99d93927d25701f3a46ed33c3fe524dd965923a79bca88a3ddbd31",
+      "bytes": 149684,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "cf2c7831fb99d93927d25701f3a46ed33c3fe524dd965923a79bca88a3ddbd31",
+      "bytes": 149684,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "e7e6e242170bd0c4ea431decfaff77f32717c0348ddff3c0220941d9c9adddca",
+      "bytes": 149699,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "73a094f7551d2581a879ff10e8b1ed5a82f85b01f07507f6a8ef9552ffc271b0",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "e7e6e242170bd0c4ea431decfaff77f32717c0348ddff3c0220941d9c9adddca",
+      "bytes": 149699,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "7767e3419aaa86b67a333f0305f2d2631187bcc76d100701e4c6f7ea53c2eafc",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "15cedb1981b22809cbe020a79ebaf7769e69ff24ad9e6198c30e45cb6f54286b",
+      "bytes": 150018,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "15cedb1981b22809cbe020a79ebaf7769e69ff24ad9e6198c30e45cb6f54286b",
+      "bytes": 150018,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "67300b3a3c0eee7e12284309e2d5d8cdcece6e2b0e66f2b3a462d50abb78f32d",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-False-0-0-True-Nothing-report.json",
+      "sha256": "a51c6b1fa7ab121d4b80f7f53d849713b6ef8237d8594c58fe3b787afe5d64eb",
+      "bytes": 341,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "c8a9dd88f1dc2761b8a3a67925a79ae9fd64e0e7645a89fab55e24d9229897d1",
+      "bytes": 151396,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "516bde1d57e053e827b292c4b2c132f3b0850ff339edc28e433caa8407a0b639",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "c8a9dd88f1dc2761b8a3a67925a79ae9fd64e0e7645a89fab55e24d9229897d1",
+      "bytes": 151396,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "d874f539d22549e3d078fa886a707bafdd57ec9916a258b8ee8a566a89ccd963",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "e353d70f61c11c3a396b3d7bde6e3d4206e7900922bf0e2b48ffad3d601fd2a9",
+      "bytes": 152022,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "e353d70f61c11c3a396b3d7bde6e3d4206e7900922bf0e2b48ffad3d601fd2a9",
+      "bytes": 152022,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "1074fd651e23c58297b018dd257e9a4ca1b1df56017315b087cfb4fd0fd24ee3",
+      "bytes": 151737,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "a559b5b0bbac16e03e7de82a19f443d550d74d6c2f8408f2bdf1e8dd4edaeb5f",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "1074fd651e23c58297b018dd257e9a4ca1b1df56017315b087cfb4fd0fd24ee3",
+      "bytes": 151737,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "5be1ad74aacedbe1f94584b1b72784792cd1b64bd2fc501db203a7fdba5b7cef",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "1869bbb140819f642609a02744bb3922e1f41d0f991227f02de3188af8931d4a",
+      "bytes": 151899,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "1869bbb140819f642609a02744bb3922e1f41d0f991227f02de3188af8931d4a",
+      "bytes": 151899,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "2862f8c639313c757ab07404291151483b4e81a2c5458b9cfa1f53f3b2790b86",
+      "bytes": 152289,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "4e68aac46ca99fb31abfd287f5ce6e16c2bac9c0425fc213ec00f3e335714f50",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "2862f8c639313c757ab07404291151483b4e81a2c5458b9cfa1f53f3b2790b86",
+      "bytes": 152289,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "3952b0cafbc0a5f8008c2b5729f045b141e2e7d2918fa363c0fb0da47f2c3c6b",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "c6df981c25bca469e379618f4d5b011058de226e92b597af1943def46f1aed13",
+      "bytes": 152756,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "c6df981c25bca469e379618f4d5b011058de226e92b597af1943def46f1aed13",
+      "bytes": 152756,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "968692483253ce2b5088b0d87f14103f47df127beb4931f79d67bedd77f54e59",
+      "bytes": 151853,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "d082863b54b46476f8c414e793eb4adb0421ecfc1fa04dfbc426f8f5d6d33a6b",
+      "bytes": 234,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "968692483253ce2b5088b0d87f14103f47df127beb4931f79d67bedd77f54e59",
+      "bytes": 151853,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "3092213365a7ba67f407de30bb9aa4abd41fc9a4cf2cb12680a69035d9a13481",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "c25646a0befcc6597d148524abc4517d7f78751a20ce4c831d9b5fc0de3be4f4",
+      "bytes": 152014,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "c25646a0befcc6597d148524abc4517d7f78751a20ce4c831d9b5fc0de3be4f4",
+      "bytes": 152014,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "bfdee38237cb6d938be0f5612467b420bf8b0d0e49ffec06a7b01ba51e6e1a0e",
+      "bytes": 151943,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "84d31f6f4309f4341257b73cab5644defb1662035ab2f879bb9ab7e4971151f4",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "bfdee38237cb6d938be0f5612467b420bf8b0d0e49ffec06a7b01ba51e6e1a0e",
+      "bytes": 151943,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "9ab42bf6684c41a517b86980b915f3fb8c4f333ccf73bf334b76783640263cf4",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "371cc6dc92ca9100b34a27fcc4cc2139742f8772dbfe4ebb04413b77609e6911",
+      "bytes": 151689,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "371cc6dc92ca9100b34a27fcc4cc2139742f8772dbfe4ebb04413b77609e6911",
+      "bytes": 151689,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "10b99eb6cc69a97ed5815c13ed89fea4a5a609c555ebe3537fbfd7e7bb63d08d",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-1-4-True-0-0-True-Nothing-report.json",
+      "sha256": "79fe4effd826758426c3c88bca2cdab55abaac1edd842bdd8e9adf5e1ba491f4",
+      "bytes": 341,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "4aa17b2db9442aa498cb56bab07dcc4efbd781135d1ebbdcdfc1f4d157771df3",
+      "bytes": 166828,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "cf0484cf79c004411d3f21cb072ec5548b13620ea664ceb4fa79dace59f9c639",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "4aa17b2db9442aa498cb56bab07dcc4efbd781135d1ebbdcdfc1f4d157771df3",
+      "bytes": 166828,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "a4282dd6ce5dc5cd90917b46c9f334c5306a230c3984d5c21132ca9aeeb6cc39",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "e3f950602ae5c5c3e4f70842af7c802a922d1d5eeb212c411ca3d535875a8b6c",
+      "bytes": 166795,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "e3f950602ae5c5c3e4f70842af7c802a922d1d5eeb212c411ca3d535875a8b6c",
+      "bytes": 166795,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "57f2c64269744b9472ec9f838476d5ffd227f5609e376ec191416349849dcd08",
+      "bytes": 166947,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "e7b6882b5304cfd93edbf90b1549c158e7d503fac6efa46a56a7db3489677c68",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "57f2c64269744b9472ec9f838476d5ffd227f5609e376ec191416349849dcd08",
+      "bytes": 166947,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "0b4ff5ea271223e225fe7571385c93c848e0a25b41b0f5c554bbba5326d58a13",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "df8dfa6e0b82560398d7652a4615a6b978479c6e7218572b46b8377ef32df04e",
+      "bytes": 167055,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "df8dfa6e0b82560398d7652a4615a6b978479c6e7218572b46b8377ef32df04e",
+      "bytes": 167055,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "8cf6ad1fbd1c543353d30d741ce1443766faa1458d0af605e415a639629cd782",
+      "bytes": 166838,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "18e4166b838be86a12f23498272b371f8fd61a66a2523af02acba10bfbee64e5",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "8cf6ad1fbd1c543353d30d741ce1443766faa1458d0af605e415a639629cd782",
+      "bytes": 166838,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "9a565c44e59176981ad5368cbff1486eacb1a1f5e51a28aff4dc246fda9d806b",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "8b4a54b6eb020d4252d72e40c56426e8cb725ddc9866218708d68f52d83a3af5",
+      "bytes": 166711,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "8b4a54b6eb020d4252d72e40c56426e8cb725ddc9866218708d68f52d83a3af5",
+      "bytes": 166711,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "edbe60a7ab4160a2700ea01ac02f46cf27a73cc94e514fc6b71d25c322a3452b",
+      "bytes": 166898,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "fcda40db452ca208c2992b7d848797a7377fbfb62547fbf9081664fac48a5e30",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "edbe60a7ab4160a2700ea01ac02f46cf27a73cc94e514fc6b71d25c322a3452b",
+      "bytes": 166898,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "97e576b3cf0310a43e24dbd16cda6b2c7c80fac4605c5b9cb2aea9f2906c0015",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "d97a8d94d895467dd42f17bf3ce2107975d01e7c11f1117931fdebb89788643b",
+      "bytes": 166615,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "d97a8d94d895467dd42f17bf3ce2107975d01e7c11f1117931fdebb89788643b",
+      "bytes": 166615,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "4f8131206c1e51e32646a7c9f2b5a9f7b623a5f349f04165a94a3fa5c2c365c0",
+      "bytes": 166752,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "b296f9db9e3cf22525dc0762023ea8f42de80fcae51c963a941dd6a825e50289",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "4f8131206c1e51e32646a7c9f2b5a9f7b623a5f349f04165a94a3fa5c2c365c0",
+      "bytes": 166752,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "248a984837d3feba3618d757ec365206a503c9dfd0cb4d25efc5899bf5f0999f",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "602153987ee1898884fbf929b883a630ad382e1e28e9b1ad3423cd7bfb586d20",
+      "bytes": 166865,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "602153987ee1898884fbf929b883a630ad382e1e28e9b1ad3423cd7bfb586d20",
+      "bytes": 166865,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "661d7676b04b472c8ad8ac0a8abc649dc9d5f5c1a6ab4c10d05c1883d5cbc003",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-False-0-0-True-Nothing-report.json",
+      "sha256": "12a297ed2407957ca3bae6960e24aa429acab66b9905cda46870f3b191983b5f",
+      "bytes": 338,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "6b134eaf53734fde70ba0e1c6ba176e595663f1e10133fbbc362fd31e94ad296",
+      "bytes": 167374,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "8125479f9d8da8b8e0b3d4cec9644390c48d41dcb89e2611ac36d2d15ee2ed25",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "6b134eaf53734fde70ba0e1c6ba176e595663f1e10133fbbc362fd31e94ad296",
+      "bytes": 167374,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "5a80f88f0448ccb0558f2c3ab26a2a8ab3ef51a9d19ff906c5143988676907b2",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "f1ec3579ad94aac9547d150e324ed0b9c4ba8564235e325b574da4de1c08458d",
+      "bytes": 166861,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "f1ec3579ad94aac9547d150e324ed0b9c4ba8564235e325b574da4de1c08458d",
+      "bytes": 166861,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "cf763b539e03adbfc87e0813de4a44228834e3d89d913f39406a79771965a11f",
+      "bytes": 166959,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "be0189e2b31e3ad990f402aa143d8304666704e53e85dafaf402e80730da8694",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "cf763b539e03adbfc87e0813de4a44228834e3d89d913f39406a79771965a11f",
+      "bytes": 166959,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "17882604a41b5715a2fdaa166595b159083ea95f2b9dbf0bae05f27e6a0ef8cb",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "d32df580c4f32f9c253999645fb12403e5c1b397b3811a736b5e4d5b16e75243",
+      "bytes": 167066,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "d32df580c4f32f9c253999645fb12403e5c1b397b3811a736b5e4d5b16e75243",
+      "bytes": 167066,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "1a2dd1ce00c9d6739fd6da719c45d786431e894b7fd1da10a8b8a2806ba549f4",
+      "bytes": 167229,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "ff22d5022d1d5bf60a17dc4e843970b9851cdd03fc1e48122d496b4f18084b3a",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "1a2dd1ce00c9d6739fd6da719c45d786431e894b7fd1da10a8b8a2806ba549f4",
+      "bytes": 167229,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "e788538d91bff6a046d518a1c652334c17c624501b2a102355051ba47a26eb73",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "c274034d70356b071322be86d0021b9b8730510cadf93b2fc7fe655dcd13c6f8",
+      "bytes": 166934,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "c274034d70356b071322be86d0021b9b8730510cadf93b2fc7fe655dcd13c6f8",
+      "bytes": 166934,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "f63176285617f6acef4096f575ae8a4822550da4c3a0f06c1c667a1750fccf06",
+      "bytes": 167132,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "bae03f8df363f71060c147df43ec172cd31f6ebac4023efe3f5031040eb722af",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "f63176285617f6acef4096f575ae8a4822550da4c3a0f06c1c667a1750fccf06",
+      "bytes": 167132,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "3aba5bbc2ca7db8ce482ecbd9b688c9e1082eb6efcbc7735e39f856bf05ec4fd",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "33a0fde36b424cf8dd2926e2b9473034e32c077c796749b643dcfea5f9a25106",
+      "bytes": 167480,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "33a0fde36b424cf8dd2926e2b9473034e32c077c796749b643dcfea5f9a25106",
+      "bytes": 167480,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "130d9d4514ca0c7dddd0bd3f683a1f77f17f8f07fd0cb09127b2c272b5b9055c",
+      "bytes": 168448,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "c56f1c831cb680995658df11857fb44d575c00f3260f9d022458bd7823148014",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "130d9d4514ca0c7dddd0bd3f683a1f77f17f8f07fd0cb09127b2c272b5b9055c",
+      "bytes": 168448,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "103a034b8cc3b644e2e3d7fd778153d7e6b70ae50c98e4ee541ebefc796486d8",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "c8b414b7df51160d71df8a2cd20c8d080073c176157ab72af421768e89bca0de",
+      "bytes": 168456,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "c8b414b7df51160d71df8a2cd20c8d080073c176157ab72af421768e89bca0de",
+      "bytes": 168456,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "d6580f36f7bd6f2cbd387f0d6b90622011adeb71426ca3803e4e3b92f9aebf80",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-1-True-0-0-True-Nothing-report.json",
+      "sha256": "4afa2bbb93e42391b3c04f89238e2f0c4573084b62d57b08d3038219d8258702",
+      "bytes": 343,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "6804db5c37a2e1f262e5a42d8cff3527669b4cfeebd391e5fbe5bb2c991ade26",
+      "bytes": 169295,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "6a31c2a28bc5e88a8e1510b47432e93dfb9d3fe3aa217733d06624eb7b790a24",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "6804db5c37a2e1f262e5a42d8cff3527669b4cfeebd391e5fbe5bb2c991ade26",
+      "bytes": 169295,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "465ae5cfaa9b1da267703092fbf52f795c060558a5fecc2f4c816630d9cad6f7",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "8bc698f7f841d1ff6d6a18a806790dfee4c855b838626346dbf9aa9b0f4ea9b0",
+      "bytes": 169498,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "8bc698f7f841d1ff6d6a18a806790dfee4c855b838626346dbf9aa9b0f4ea9b0",
+      "bytes": 169498,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "42f7212babc4cc6d5c9010572497ad9a880e78a0ed952c0fc66c46a68bc93f03",
+      "bytes": 168924,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "aa1995b64a0863fd996b161e46ef3a0cfdbd079a0692856403defeb515825ced",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "42f7212babc4cc6d5c9010572497ad9a880e78a0ed952c0fc66c46a68bc93f03",
+      "bytes": 168924,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "9ab56d7ff8b93454746badd601397ecf9074f0057921d3dc8bee58ebe67fc5b8",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "b4552773a1c119c691ee6412b6a77c66bf3c431ce98d8903437e222cdebab81e",
+      "bytes": 168873,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "b4552773a1c119c691ee6412b6a77c66bf3c431ce98d8903437e222cdebab81e",
+      "bytes": 168873,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "ced862dab032c001f0739052b09f5b7bcf5a766e97f993b945b333056dc818c4",
+      "bytes": 168952,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "11378c363a5ecf6664c3436a54c11878b425347c0b6188e073f37296aaeb33d5",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "ced862dab032c001f0739052b09f5b7bcf5a766e97f993b945b333056dc818c4",
+      "bytes": 168952,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "da940eece94748046b558659c67299b144ebdae09683bef178441702a8669fcd",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "f97c3c54bce8dd9bddade111b9cb963dfdccdbbf1c33f37dc631ee9be6a4efa8",
+      "bytes": 169055,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "f97c3c54bce8dd9bddade111b9cb963dfdccdbbf1c33f37dc631ee9be6a4efa8",
+      "bytes": 169055,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "85d10aa3990f5b89a5b70cef3f0ffde2dab2141319bb1aebece667f13807b1f5",
+      "bytes": 168844,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "a520724ba8fb959ce8401100cc86cba73c95e87182883ef55554c04ff3dbba64",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "85d10aa3990f5b89a5b70cef3f0ffde2dab2141319bb1aebece667f13807b1f5",
+      "bytes": 168844,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "4e235aec7122cf541ecf816d7dbf464a6c80a1d5019f93743172aa3f15548415",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "97227e11c223e5a127c0262f419f262d7671bfebf07fc7117620296c941a4a0b",
+      "bytes": 168741,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "97227e11c223e5a127c0262f419f262d7671bfebf07fc7117620296c941a4a0b",
+      "bytes": 168741,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "b7766f2fd2e0735dc1b9162910b921d56b845ff0aee6776bdc55ad75706d4d7b",
+      "bytes": 169070,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "b8a78540395c3d02959f638fc4c25774923b70ca23d5ccfe756e4fdb5f4a26a8",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "b7766f2fd2e0735dc1b9162910b921d56b845ff0aee6776bdc55ad75706d4d7b",
+      "bytes": 169070,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "8ff1ebbe6d5e7da687b5f2f4a842d6fb1ee86c0b245bf9518e1ee91bac060e4d",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "83b42caccbab32e930f5e155b18bdaadcc1f037d509861f9f0ff2f1b50cb1f54",
+      "bytes": 168663,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "83b42caccbab32e930f5e155b18bdaadcc1f037d509861f9f0ff2f1b50cb1f54",
+      "bytes": 168663,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "15e47bcda4c798bf205529e9a2a2ab056288488b36e4c9ca9c7571262941cb89",
+      "bytes": 187,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-False-0-0-True-Nothing-report.json",
+      "sha256": "00af0184935e198945bafc713bf8c39d8c3edc3e30fca9b9ba23640b9926607e",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "50510968634975774aaaed112a0ce3b1b3b42665a0f0c4c7145a3dbc82d517bd",
+      "bytes": 169101,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "194410c73dca2dd9215e155d70749c6ce70c731c23d34eefd7c89cd808a1e7e5",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "50510968634975774aaaed112a0ce3b1b3b42665a0f0c4c7145a3dbc82d517bd",
+      "bytes": 169101,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "7972a6a36bbf455d60b312e9c034f6b74d7382edd39a27b4f27eeadd4e2c51a2",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "287a218ac74fdb8586b31b5bd18ce7cae505cf9a22e097dba4d49a8a533fc9c5",
+      "bytes": 169350,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "287a218ac74fdb8586b31b5bd18ce7cae505cf9a22e097dba4d49a8a533fc9c5",
+      "bytes": 169350,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "ee51734aeb62883ab10eb2a64d2056854105516fe91bfcf6e4cd9f53596fcaeb",
+      "bytes": 169368,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "e4aef3e2b8d1ab7f4d4151b3e4d5a2dda145e264fc0fff138128326c33e0fcd6",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "ee51734aeb62883ab10eb2a64d2056854105516fe91bfcf6e4cd9f53596fcaeb",
+      "bytes": 169368,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "ac41daf19daadefff7838c6a5411eb2cc7ab285336865691527602e9f8479b29",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "a592be080f6938e12b5bef2ea162336514bb9f325e8430488b89109d458c84af",
+      "bytes": 169300,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "a592be080f6938e12b5bef2ea162336514bb9f325e8430488b89109d458c84af",
+      "bytes": 169300,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "0b0a1d1247c0da55ecc84d6f51e6a39d6f392b0dee629ac134877b27a7d8fb0b",
+      "bytes": 169359,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "c5ce3c8da9fce671ae4f68e2dce02621151fb30bb11bda87d45eae8105de1645",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "0b0a1d1247c0da55ecc84d6f51e6a39d6f392b0dee629ac134877b27a7d8fb0b",
+      "bytes": 169359,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "237cc861dd9815c39801e3493755e99701eecc00be5fe54893a4a2cc4e3c5e53",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "6c962e6704fc85769cf55cba560c8ebe724ede1e4335998ff4620681e1e86c3a",
+      "bytes": 169338,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "6c962e6704fc85769cf55cba560c8ebe724ede1e4335998ff4620681e1e86c3a",
+      "bytes": 169338,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "340accda640a859626976d2a799f059376f83966c7067092c6de954a645422f7",
+      "bytes": 169459,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "6f930994f64109c7273c45e726f995dedd217804df6ee7cb60ca37681eb3e3ca",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "340accda640a859626976d2a799f059376f83966c7067092c6de954a645422f7",
+      "bytes": 169459,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "b67a1c7bd9795c64949f963ec61c6b785a5d782588762c60d16d365a743b0b7e",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "5097e0c0571123e2b83c08980311161a706b07563547d8426ff9c8e41a7d87ef",
+      "bytes": 169216,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "5097e0c0571123e2b83c08980311161a706b07563547d8426ff9c8e41a7d87ef",
+      "bytes": 169216,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "7cc4d06cce1624fdb8a67165b7e409d7d6ccc695e860c25a4b025bd12c11b1c3",
+      "bytes": 169424,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "83c9c995e086cf857a3a513603908461e897ec4efd77c04da46ca4c72e1f844e",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "7cc4d06cce1624fdb8a67165b7e409d7d6ccc695e860c25a4b025bd12c11b1c3",
+      "bytes": 169424,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "80f6aa91287a56cd6a2b3b337417ab8286735a08e48dd1d42f69e9e2458b4ed3",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "9669daa4bcb21d70cad4dbcdc94f1a747c1b19bb830ae07f7d1036ba5752200f",
+      "bytes": 169390,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "9669daa4bcb21d70cad4dbcdc94f1a747c1b19bb830ae07f7d1036ba5752200f",
+      "bytes": 169390,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "82d9ec3f92dfc06ba77a6615ec87ca2330f71b41e476a2a70030e91aa7ce421c",
+      "bytes": 186,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-10000-8-4-True-0-0-True-Nothing-report.json",
+      "sha256": "9e2f7055d88f7c8ce9db108a2fab3510e5048b1699106bf81993550e666caa0d",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "7333debe255b8b8a8d96f153257f40a0068988d845e7412f197ca975f1981ebe",
+      "bytes": 149411,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "d7b73f997da928cf4f4ba260963c263f16bf645141f19becf979dafc78637a52",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "7333debe255b8b8a8d96f153257f40a0068988d845e7412f197ca975f1981ebe",
+      "bytes": 149411,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "5270aad96954c0016e7071fe0b124ec96d90c80c27fcfd14df789a0fa16016ec",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "54ea093636439c21939077209bf593f950b16a6ac41bbb6c3d41570b1ca802eb",
+      "bytes": 149749,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "54ea093636439c21939077209bf593f950b16a6ac41bbb6c3d41570b1ca802eb",
+      "bytes": 149749,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "00f0e39156fc9f045cf2f094a99c681b8512f364a7e20844bb4991db12f3497b",
+      "bytes": 149358,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "ccb180b5c88e36b3ec92b63864ec29979fe93b35353434517ed5473ae3f4fbc2",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "00f0e39156fc9f045cf2f094a99c681b8512f364a7e20844bb4991db12f3497b",
+      "bytes": 149358,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "aeeb69603724fdff223e67303b830ab1b35dfe4e76f70e172745f933a3641dce",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "bf35f494bc02b33e8a0d7e47ed53e9f22a83d4cdaacb4bb78a7b82468d64d118",
+      "bytes": 149440,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "bf35f494bc02b33e8a0d7e47ed53e9f22a83d4cdaacb4bb78a7b82468d64d118",
+      "bytes": 149440,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "04560c44fafa91b241e79330fda2aa1b29e39f49f5c2f5d71c73654f706cf85d",
+      "bytes": 149103,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "22011e7a4389cde53222d1748b6ed6778b2016ae95fbe7fefb5f6279aa21c870",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "04560c44fafa91b241e79330fda2aa1b29e39f49f5c2f5d71c73654f706cf85d",
+      "bytes": 149103,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "93979b4a33b05f2f6ffa6e704b882a8a3bf5ae02879423bd5e429ab6374c67e8",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "a6cba0a90b2883573c21eef419125d8f34615ce9499a518fb62e7d57d3179211",
+      "bytes": 148943,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "a6cba0a90b2883573c21eef419125d8f34615ce9499a518fb62e7d57d3179211",
+      "bytes": 148943,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "8f0db3c7e07b276d2700d2ca22556dd71c1b5ec23d5d5cc9b600e5eea8fa14af",
+      "bytes": 149057,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "6430a0f565df6f7a217ef0df19cd67134c8ae05cf453d5889fc142feda194e99",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "8f0db3c7e07b276d2700d2ca22556dd71c1b5ec23d5d5cc9b600e5eea8fa14af",
+      "bytes": 149057,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "e00ac830887992142fb3bdffed7c0bf3381f9f1b610955891ebaa268d226315a",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "61cf4f6ee7ae47e18b55529321a09347c2dfe7409decf926d727842bc9964d89",
+      "bytes": 149044,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "61cf4f6ee7ae47e18b55529321a09347c2dfe7409decf926d727842bc9964d89",
+      "bytes": 149044,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "82211bfc5312426bde2dcff223b9c21015a08a1ad8013d78826effdd7d2236cc",
+      "bytes": 149783,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "b778b3dcc793c81a2c481b0dd72e23d7e35552939b0588a79365e07eadd717cd",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "82211bfc5312426bde2dcff223b9c21015a08a1ad8013d78826effdd7d2236cc",
+      "bytes": 149783,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "525d45622e256d960a400e8b5a83cbd6507de768983c4b1aca7bf738ec87f2e3",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "c52139298d2cf5dd0a83a4fb8621b60b3e68fd29781d8bf6f63d12f3262728f4",
+      "bytes": 149439,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "c52139298d2cf5dd0a83a4fb8621b60b3e68fd29781d8bf6f63d12f3262728f4",
+      "bytes": 149439,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "e76fa56f406b0067eefdfcf65058cbb1b115d8058a9a385de791f802b31971ef",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-False-0-0-True-Nothing-report.json",
+      "sha256": "bc160c75d089c8d595ee92f3ff1861be32a7432b97ad35ebd9429463dd3d7b61",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "706a30f7ddf85a63acd7ebb10178f4a756b5f7f7d56c8e26aac131c8e359af74",
+      "bytes": 150456,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "1c8ccb037e3d937cf80c58fe82ee99eac83aaeeb0718b7c9525811a76ed6b6c0",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "706a30f7ddf85a63acd7ebb10178f4a756b5f7f7d56c8e26aac131c8e359af74",
+      "bytes": 150456,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "470c66f66a55dd5cd4425f271ff198a1dbad55b4117dafbd55a2dd7ba99a38e7",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "08c722c68239b5ca52fcc5b17a370dc82c230b1f6266c7b2f9a448f1c15e1a83",
+      "bytes": 150093,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "08c722c68239b5ca52fcc5b17a370dc82c230b1f6266c7b2f9a448f1c15e1a83",
+      "bytes": 150093,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "5218887644f8ff5d014031fc04f6699320c28da4273c5cfa72cc7b3af7c6cd95",
+      "bytes": 150336,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "4d44305bad2089c627a9ef27932dc23c547f95b6183f15fcc279f2cd3883152a",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "5218887644f8ff5d014031fc04f6699320c28da4273c5cfa72cc7b3af7c6cd95",
+      "bytes": 150336,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "4bc52ec607f58ebf1ec2dacc164bc5d1d3275d6e0737c61a9f2ac73763efd572",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "543704497221c5635df4628eaa72484a317307dc9e0fe331973ee7b0b72914c1",
+      "bytes": 150341,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "543704497221c5635df4628eaa72484a317307dc9e0fe331973ee7b0b72914c1",
+      "bytes": 150341,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "bd48f47661d8dae33fae109196eb3cd83b1f88c204e87e1cbf8bc1494836291c",
+      "bytes": 150184,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "ea04ebbb9a845fc825f670b22eacbf30b8e5cf50517197ba89eff6f4829c0f87",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "bd48f47661d8dae33fae109196eb3cd83b1f88c204e87e1cbf8bc1494836291c",
+      "bytes": 150184,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "1758f73b394bc9cd463e7a807ea44260b208c0fdce17ae95b93bcf7273ed46d0",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "5b513583ad74ba6f71cd536c261f7a41da83a95f8c86100d942a38fb032ba962",
+      "bytes": 150434,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "5b513583ad74ba6f71cd536c261f7a41da83a95f8c86100d942a38fb032ba962",
+      "bytes": 150434,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "22c975a4fbc7b681b3e333b385443b58966ecf912679ea11bf0f0049fa9cb93e",
+      "bytes": 150217,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "07075c2a9bd0fd37e8ba2c468866d7798011a7f3dbc36ae4f0e01c69bd2c7379",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "22c975a4fbc7b681b3e333b385443b58966ecf912679ea11bf0f0049fa9cb93e",
+      "bytes": 150217,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "6e8dd8b04f6283616b88d1c18ccc4b0d242096c915fff548068693c017196d24",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "a62f34b284a64226e5c86253a90ea20b5bb71bc3796b0e70730b091be46a1d0f",
+      "bytes": 150490,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "a62f34b284a64226e5c86253a90ea20b5bb71bc3796b0e70730b091be46a1d0f",
+      "bytes": 150490,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "7f72c06b82a0835702e4c7816450f568507dbb162c00dc5993b597d9707afcde",
+      "bytes": 150381,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "b2a27dce63f70c976163a4a1f3f016fd6ad03f20f4bdb84432ab04998af380b4",
+      "bytes": 234,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "7f72c06b82a0835702e4c7816450f568507dbb162c00dc5993b597d9707afcde",
+      "bytes": 150381,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "f028389ed877de49b7b3a37782f07ce21148e8d92089585f0f73d10d6c98b0cd",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "4ad7133973ab1aeac2b2539a6fa6c087a141e1d4fa5f3766eb12f98e05867c18",
+      "bytes": 150142,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "4ad7133973ab1aeac2b2539a6fa6c087a141e1d4fa5f3766eb12f98e05867c18",
+      "bytes": 150142,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "8e98a8ffaa84f6ed841fc4bb5a90a62cea9a3f61ca2aeb5ef1025fb4db5c71de",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-1-True-0-0-True-Nothing-report.json",
+      "sha256": "69f5ab5af76cdc4247162bea0b82e6e60b541073a4b5e7bcdb56b2937eb38bb0",
+      "bytes": 341,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "d468b74ac545d064aaf2d11ea1aa531300549a63317a3da38d8c3d6b585c34fc",
+      "bytes": 149968,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "9bc5a64ec927d3eae839b3c22620d0dd40ddd0b1a16884f1eb85001313aad6e3",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "d468b74ac545d064aaf2d11ea1aa531300549a63317a3da38d8c3d6b585c34fc",
+      "bytes": 149968,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "2e3448757e6262386bbbef85f88328095048b89d393c2cbeb370a73df09dd049",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "1bd7277babe3672cf89aee1d06406121baf97548f6004628eaaefc9564db7890",
+      "bytes": 149821,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "1bd7277babe3672cf89aee1d06406121baf97548f6004628eaaefc9564db7890",
+      "bytes": 149821,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "1ea337c2820af460d476c5ba5f3a955fe2359a226c87d7dd80658933b813945c",
+      "bytes": 149774,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "a0dcfe0927d6048b1b351fda8abb7c019e5cb2bee5ba5d0fe98e8857f4f29f9e",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "1ea337c2820af460d476c5ba5f3a955fe2359a226c87d7dd80658933b813945c",
+      "bytes": 149774,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "f1fb7a4ef9b054474e32753fc3263119f0e63bc6c6d896918900db77c80fbdff",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "0e563badad92bd953a3dfb93f7051db82fd8113b3218d2aecb9e2e51f39d4997",
+      "bytes": 149936,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "0e563badad92bd953a3dfb93f7051db82fd8113b3218d2aecb9e2e51f39d4997",
+      "bytes": 149936,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "0a4259493458945c72a691cba73716f5c31b8af7a9a96cdc028e445b398cf52d",
+      "bytes": 149956,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "b55b07ea28d091cb716892e13717e53e723d8ae71ebfa223d655823bfe7e5d73",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "0a4259493458945c72a691cba73716f5c31b8af7a9a96cdc028e445b398cf52d",
+      "bytes": 149956,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "5451a3c10259e7381b9538b928958f87fbb46fa26ff34431c479cd2d17b6d9c0",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "086c797ee52003a082caff131ed8b4702e7c40ee8f883e6f398d44fef1e03b79",
+      "bytes": 149587,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "086c797ee52003a082caff131ed8b4702e7c40ee8f883e6f398d44fef1e03b79",
+      "bytes": 149587,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "b971eb26b04c5b6eb9c622877fd64c92fb50b71cd9ba7c004986dd875e6f3e36",
+      "bytes": 149810,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "da7de4e3789979717a6151bada359f70908b25a26c6c34ab146530f81f3a3a79",
+      "bytes": 234,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "b971eb26b04c5b6eb9c622877fd64c92fb50b71cd9ba7c004986dd875e6f3e36",
+      "bytes": 149810,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "2e534c2cc54e1fb57f64c2f31c47e2770a15cc91c6531908b960dd39eb6ad381",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "2dfa28759af46bd0240f6b5b74d102747b491e6d2cf398ce2333caf3c853e279",
+      "bytes": 149620,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "2dfa28759af46bd0240f6b5b74d102747b491e6d2cf398ce2333caf3c853e279",
+      "bytes": 149620,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "254a6737b3d55e1015c5882086beb4f9c8d314b221496510f401c20f4818fe75",
+      "bytes": 147599,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "47491da7c48492f21e97c9310f0739f4955545f86c8c01c75d2ad72abb1689d9",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "254a6737b3d55e1015c5882086beb4f9c8d314b221496510f401c20f4818fe75",
+      "bytes": 147599,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "879911a2ed56648705db88c175127d4f0626eec07ddcf82ed7a1e5b63c764d63",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "1b32cba6074eba98eb9abc74f852e2f7ab20377721ce689efddc2379abe8d3f2",
+      "bytes": 149687,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "1b32cba6074eba98eb9abc74f852e2f7ab20377721ce689efddc2379abe8d3f2",
+      "bytes": 149687,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "9488350f73d433e5e92753234ae0f5e8a455b3b805e70017464ac081532aba56",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-False-0-0-True-Nothing-report.json",
+      "sha256": "b0eae8d090cdd862e9abd013a2de7c19247dd95d1ee18483cb2b1d162922f1f0",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "1912b7528ce248a389149455d3e911e7d0f813fa274ea0f70754b0fec46a7a2c",
+      "bytes": 151916,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "80eddc95310ea5111de4cdbfa66eedd54989fced68b5d57a3e28e31af9647257",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "1912b7528ce248a389149455d3e911e7d0f813fa274ea0f70754b0fec46a7a2c",
+      "bytes": 151916,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "85b24973939fca0df20bb0b5c1ffd5ab931d1854acd9f9eaed0bf7f795e6930f",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "578eda209fbe80e7a32a799a215c07ac6a1f51b33fe44c8fe3210c5db19d024b",
+      "bytes": 151613,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "578eda209fbe80e7a32a799a215c07ac6a1f51b33fe44c8fe3210c5db19d024b",
+      "bytes": 151613,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "be7f97a78e4642fb77ca473925bcb10ebd0e3b0e1bf32434082b243be705571e",
+      "bytes": 151680,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "78cc7ea4f15db7b9b7a4f03278802d531caa888c6c70edec2a00e7ca23873bbe",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "be7f97a78e4642fb77ca473925bcb10ebd0e3b0e1bf32434082b243be705571e",
+      "bytes": 151680,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "a0d0d192489899425ff13a656a08b1e553ab8516e974162d666e88f2c0c30c4d",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "5ff48ec2a6841d421ce326a2e26c26ec36396798fdc2ee312fecbc01b477bb7a",
+      "bytes": 152079,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "5ff48ec2a6841d421ce326a2e26c26ec36396798fdc2ee312fecbc01b477bb7a",
+      "bytes": 152079,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "1b95b0d7eb9cc0ec357e11bf216db7b2d4c060d1354df3fed4604aa1992f49c2",
+      "bytes": 151921,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "26c92df1d4e88be532247c6a740ae8d6c7b5ae40926576a3355662836749e80b",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "1b95b0d7eb9cc0ec357e11bf216db7b2d4c060d1354df3fed4604aa1992f49c2",
+      "bytes": 151921,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "a35d61a2fddea96eaa11fb3d984e9aead85f5da4e50eca0350d3350ddcb20e2b",
+      "bytes": 235,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "49128974d32b94dfca7d8ca7312c0879dd536e005466cb4f71b15c0562de1d9c",
+      "bytes": 151972,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "49128974d32b94dfca7d8ca7312c0879dd536e005466cb4f71b15c0562de1d9c",
+      "bytes": 151972,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "1bd9302f09fde722bad6670b7c777c884c4b1ecfa350e99ac03892098205e1b9",
+      "bytes": 152114,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "7039510d5dcad40a910d15b3a33c9d14a3c7a95acffbbc4b8c7540b5a9e9eddd",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "1bd9302f09fde722bad6670b7c777c884c4b1ecfa350e99ac03892098205e1b9",
+      "bytes": 152114,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "8289ac4027e578ac9265a950590df8a56dd253df24cf4564b981df607c9c40de",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "c7bf66df860533e5ee995fd2a92acce27e3e9f35964b55b57b8f515509f093a8",
+      "bytes": 152228,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "c7bf66df860533e5ee995fd2a92acce27e3e9f35964b55b57b8f515509f093a8",
+      "bytes": 152228,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "c785620f48334189133d653506106e9ea5dc4c1df2cf4caa38351efaceac59b5",
+      "bytes": 152221,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "774391483d9a27dc705fe6c74f68beb63a6fe4aac001aea6fd25e0db6eb7ba70",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "c785620f48334189133d653506106e9ea5dc4c1df2cf4caa38351efaceac59b5",
+      "bytes": 152221,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "1b6c32f82ff15017350e6ad0f08b77d5ccce649d24d085b02fe072d3979b5d17",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "3b99fda673efd71ea48051c19752ead7d660b3cb20f8fb658961777ef69f2dc0",
+      "bytes": 152201,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "3b99fda673efd71ea48051c19752ead7d660b3cb20f8fb658961777ef69f2dc0",
+      "bytes": 152201,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "5ba878f32fa9d12c807250c7234cb0c39a75549f6a5f731842b9f52b5fe1d542",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-1-4-True-0-0-True-Nothing-report.json",
+      "sha256": "60c6465b357ce4d671f20edebd475474ea29522f30fc77eba5317082e0648291",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "c19ca688bbbe36ae02007f0275aacbae2f357e543e257297dbcef43c6685fe0d",
+      "bytes": 166687,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "7360036dc2a7b2cb7a324f62531ad097c3adecdb527f39ac2653e46ea65225b3",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "c19ca688bbbe36ae02007f0275aacbae2f357e543e257297dbcef43c6685fe0d",
+      "bytes": 166687,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "2c274156f7fe34bc699bfb5fb415b81b554e7158a5d4640725fa6271b121cb57",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "f4b2eb5f4d6b2b28fdbee84fa9ce4d788d5c0629e5240b018df9ca482301a3c1",
+      "bytes": 166995,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "f4b2eb5f4d6b2b28fdbee84fa9ce4d788d5c0629e5240b018df9ca482301a3c1",
+      "bytes": 166995,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "6e6322130445b5a6bf07926366a4d5e01822e00a963102967de1e25659fc5f06",
+      "bytes": 166998,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "8e231975be3892c75559af7c18c8da2ab68ae7c52d3d8bef2828073851199871",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "6e6322130445b5a6bf07926366a4d5e01822e00a963102967de1e25659fc5f06",
+      "bytes": 166998,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "87604d2d76ec5608f012d4ff188c9c0e6cee37656c8baa29a76268deed7fa1b0",
+      "bytes": 236,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "9bf302633f80ae67823c63b9daa07c9c2ef3c87a72187eb40a907a6c4d16043c",
+      "bytes": 167090,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "9bf302633f80ae67823c63b9daa07c9c2ef3c87a72187eb40a907a6c4d16043c",
+      "bytes": 167090,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "7437c1a29acad68311de677f3e36aa5cf1300402be681b5fb8ad2602477e428d",
+      "bytes": 166814,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "3aaedb9d26606a3649aab3ff202c7d9356319e70d6c750a219d2bf92ade24559",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "7437c1a29acad68311de677f3e36aa5cf1300402be681b5fb8ad2602477e428d",
+      "bytes": 166814,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "c460eacd8a98b41afef8c3a2b3e60d4d127458ad778e2c233afd39b79b8acb74",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "b1dc2c0d69979941bc2cf0278bf02d153393dd02aaebcd2a423983412d396813",
+      "bytes": 166840,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "b1dc2c0d69979941bc2cf0278bf02d153393dd02aaebcd2a423983412d396813",
+      "bytes": 166840,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "cb19701d93b47b0347f189a2e85c29c1e0a491769c8e1624f2781a5a6020e972",
+      "bytes": 167396,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "594aa3ab1b973b493dadbdbad65e0974e1ae27c6e7ac99286e3b7284faccce31",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "cb19701d93b47b0347f189a2e85c29c1e0a491769c8e1624f2781a5a6020e972",
+      "bytes": 167396,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "d0c81cbbd3b35dcfbf63d1c38a5ae8606ca699bf53b6f5901b80541475ef984a",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "6f0f5248a0dfc02ee7d20354d6207e2a1716c7f37577eba046b834b295ab4827",
+      "bytes": 167437,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "6f0f5248a0dfc02ee7d20354d6207e2a1716c7f37577eba046b834b295ab4827",
+      "bytes": 167437,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "dd7522ab5439725242a96e7f0d1100764de0736c26d3d7565f3b4a76fa98f286",
+      "bytes": 166980,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "9a62e7a44fe4a52dd8422276dc43d4b6256be0b514d8cfcd178b30a5cfcfbad2",
+      "bytes": 237,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "dd7522ab5439725242a96e7f0d1100764de0736c26d3d7565f3b4a76fa98f286",
+      "bytes": 166980,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "1f0432c9fad4c50bd8c11c955b44aa48602ea595bde2a350d8082b6864fdbff3",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "14dd047d295820e3c229f5147edd541953051784f0f1dcc9dfcd44ff7ddf2bf6",
+      "bytes": 166851,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "14dd047d295820e3c229f5147edd541953051784f0f1dcc9dfcd44ff7ddf2bf6",
+      "bytes": 166851,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "d31a464fa259a7a3bd0a5f10a0429890a59e7e737bf8bfd6e7ce319add8916dd",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-False-0-0-True-Nothing-report.json",
+      "sha256": "7570f53a1e29afa432e47b7097f8089b6280d0323e87df004d68db6ae7581e90",
+      "bytes": 340,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "3a6614e1f39e336db47987909a72b6fdd665d3115054c5d7a3f7056640bc2344",
+      "bytes": 168382,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "da130c593cba89d0ecbc0990ab50a0fa30e6219b5a13ba4fa47a58a0437230ec",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "3a6614e1f39e336db47987909a72b6fdd665d3115054c5d7a3f7056640bc2344",
+      "bytes": 168382,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "b2c7ba40cd272e4ea2289f0ac5d83b0fe11935973e905e16008689a475bbbf26",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "02f862727580420c82baa1693c2d838eabefd71e057918a573a5036f8b76497c",
+      "bytes": 167681,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "02f862727580420c82baa1693c2d838eabefd71e057918a573a5036f8b76497c",
+      "bytes": 167681,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "3e0f5e39e6f4b5b4e9d86b39d46daa6c8d07d23296ebeef60da5ba7c71d2845d",
+      "bytes": 167896,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "ee029e0c1d19031c676d4275a08083fb934e9b6f0933c8fca0a1988921b2f165",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "3e0f5e39e6f4b5b4e9d86b39d46daa6c8d07d23296ebeef60da5ba7c71d2845d",
+      "bytes": 167896,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "eb5b53cc52aad218107b565cb71ed07f1386cc0a818827466f2bb9a1b81bef76",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "f58a13147fde8724d6e78e501476690b77a73532b7a30427783dca480d96c23d",
+      "bytes": 167431,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "f58a13147fde8724d6e78e501476690b77a73532b7a30427783dca480d96c23d",
+      "bytes": 167431,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "24b7b3092ef273ff5ce95040976d7edd875d62afa8cbfd1022545389ecda8153",
+      "bytes": 167246,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "1a0bdab31f8023d728255c0aa2ada6ecd8bde98fec0da9441a9920503e37368b",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "24b7b3092ef273ff5ce95040976d7edd875d62afa8cbfd1022545389ecda8153",
+      "bytes": 167246,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "61c57f5c9e45a83baae48837980bb85961b19b9539139cd9ab03fec6ba1b21a7",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "c60ab252d954074a4101c119e652a79b263c9d1b039b01de067fee5239527556",
+      "bytes": 167101,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "c60ab252d954074a4101c119e652a79b263c9d1b039b01de067fee5239527556",
+      "bytes": 167101,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "ed0a569a52297ec10721d4180102f801a4da70e10991a9a77ae0ef4c497934a5",
+      "bytes": 167035,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "f903ab3ca9bcbb3be2e43fc4eac71bf20d355b0924683115441bcab9abc234c5",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "ed0a569a52297ec10721d4180102f801a4da70e10991a9a77ae0ef4c497934a5",
+      "bytes": 167035,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "a56d966b802f76293243284b79cd97a13bf3885163d6252bdac5919f7522d7a4",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "08356d630ab454908785b93df35b3147cccd5082a5981459df0d65ca6ea06892",
+      "bytes": 167039,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "08356d630ab454908785b93df35b3147cccd5082a5981459df0d65ca6ea06892",
+      "bytes": 167039,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "c9c68cd50eb059a3e823ea4e0a94c03a3308d2269150b9547f44f9f665658c38",
+      "bytes": 166922,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "3adee5e7dd8fa374cad88ea1fa487b3625ead922ee1ea29ab26bb3c9decd2ee6",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "c9c68cd50eb059a3e823ea4e0a94c03a3308d2269150b9547f44f9f665658c38",
+      "bytes": 166922,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "508929991410165f8d7b4057f2c5e3f5a7577a5c5a151fae9af8e738e597cfbc",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "08424c0a96c24a34743f335dd65c0dc8706523425ffca5df3e21023cd9045141",
+      "bytes": 167404,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "08424c0a96c24a34743f335dd65c0dc8706523425ffca5df3e21023cd9045141",
+      "bytes": 167404,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "f57e60627dc06ae60563c33af09d0a66af20b80b7d243578056f439083a03160",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-1-True-0-0-True-Nothing-report.json",
+      "sha256": "f97a0573d035e8e898ff5e94f32dd7ea96c66c3ed6f748bb4c9eadd459ae3a2b",
+      "bytes": 339,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "c6599dc42ed6311c084a42a8b45d8c932d88b3b68cfa7e1acd4fb164871a5a9c",
+      "bytes": 168980,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "d9ff53a44700dbe067289bab3397a236c69d5bf23440ee6ca4ce790e764ea672",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "c6599dc42ed6311c084a42a8b45d8c932d88b3b68cfa7e1acd4fb164871a5a9c",
+      "bytes": 168980,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "9c6f266857c18f0b3f258164d5034616e53a5beb9713a6a2fe13e75855eb64ae",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "4ba5917781311de02761c916c48d8659ef2bacdfecc6abcbdb8be63446fa76b3",
+      "bytes": 168853,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "4ba5917781311de02761c916c48d8659ef2bacdfecc6abcbdb8be63446fa76b3",
+      "bytes": 168853,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-1-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "247f674637f1fadfb994d767a4235e0e903eb68c4a8bb7fd05526842e4740329",
+      "bytes": 168665,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "c03d59ca00534ddc1f26c33d79037cc7b7f1ca7119951c7cce1b3cc48ae9fb2e",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "247f674637f1fadfb994d767a4235e0e903eb68c4a8bb7fd05526842e4740329",
+      "bytes": 168665,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "99bbc7f93f7bdecdc60893054480488a74a5724c85789d25704372abacf7bf48",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "d87130daf0036d66aa19148db8453b9aa1fd217c6817ebfa2fa6c9439edc0b20",
+      "bytes": 168966,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "d87130daf0036d66aa19148db8453b9aa1fd217c6817ebfa2fa6c9439edc0b20",
+      "bytes": 168966,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-2-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "1b507acaf1a42405854e3652c2d84b6f4f39e089bed7251bc49a0709d7c103e9",
+      "bytes": 169076,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "73cef5b532dd194fcc002373c5b96c2a784891c40e8c6cd62135253d0f5306e0",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "1b507acaf1a42405854e3652c2d84b6f4f39e089bed7251bc49a0709d7c103e9",
+      "bytes": 169076,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "47ed9e4d6b2988f49110d884b66ff130ccc96b8446e532a52aba60d231f8302d",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "e60536cda413e4836d8205d464711c698433e36369606f96f2227793d7702803",
+      "bytes": 168774,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "e60536cda413e4836d8205d464711c698433e36369606f96f2227793d7702803",
+      "bytes": 168774,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-3-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "8c7d30f5d71d510bedb8dbe18ce04df6edb392bd5f9972e3f0a04ad95b0f4ba1",
+      "bytes": 169144,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "c4c0103776dbc7619aa226d765381bc00d6768677993fb0c693f98a3b31aa220",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "8c7d30f5d71d510bedb8dbe18ce04df6edb392bd5f9972e3f0a04ad95b0f4ba1",
+      "bytes": 169144,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "d637851e95bc5c4bee7ba47bb24cb442d0b157ea29a6a2aacaafe164900b77d4",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "64d153b72bc976ffe36dd203672aa305f11542211a054888398ea5cda2671665",
+      "bytes": 168974,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "64d153b72bc976ffe36dd203672aa305f11542211a054888398ea5cda2671665",
+      "bytes": 168974,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-4-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "67b80f8b717182e6b2e8b1813dd1cbc74f534701d2a11eb0fb9ce13196c752c0",
+      "bytes": 168755,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "82541ce55a7db74a15cbb0dbbda21223b08e802e89dbfb6375fefc4446af8668",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "67b80f8b717182e6b2e8b1813dd1cbc74f534701d2a11eb0fb9ce13196c752c0",
+      "bytes": 168755,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "44e85a1a61b9f01ded056f2c0e6f5e3ea445fe9c1b76f3317c053e74b565f134",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "ac3b8afd63e4632f27b43df05c6c26af089fbf42c0bd587e4e597b3b9962c33c",
+      "bytes": 168921,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "ac3b8afd63e4632f27b43df05c6c26af089fbf42c0bd587e4e597b3b9962c33c",
+      "bytes": 168921,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-5-workload.json",
+      "sha256": "9cfd7a85e0d7da27ea770e833f0a0611637215935da4f5ed1530a3679fecbc2d",
+      "bytes": 189,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-False-0-0-True-Nothing-report.json",
+      "sha256": "f8400d75269426c79fc0dcfc63cbae8e2ba6e51bebe86629f58d9cbed036cd52",
+      "bytes": 342,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-candidate-process.json.gz",
+      "sha256": "23fb94c4f58f1d497e4c5bc60c676c2820ce7f93d296f01052eb651411aa752c",
+      "bytes": 169030,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-candidate-summary.json",
+      "sha256": "6790d368c664fe4ebb7d6ff94d098e4866b550be813256e3a8beff520d187a03",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-candidate-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-candidate.json.gz",
+      "sha256": "23fb94c4f58f1d497e4c5bc60c676c2820ce7f93d296f01052eb651411aa752c",
+      "bytes": 169030,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-control-summary.json",
+      "sha256": "90d7158136974516a72a09d3e9b340bb22e72ea8a79961d4ef99db6096245b7d",
+      "bytes": 238,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-control.json.gz",
+      "sha256": "d2687ac7f7e1d59fd389cdabbb6495571659523392af226de3d39ab4651d5317",
+      "bytes": 168934,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-original.json.gz",
+      "sha256": "d2687ac7f7e1d59fd389cdabbb6495571659523392af226de3d39ab4651d5317",
+      "bytes": 168934,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-1-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-candidate-process.json.gz",
+      "sha256": "35b22a03284a596713878cf93d1bc90b8e24b162bc6cc82f007a30c1b99a19f0",
+      "bytes": 168984,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-candidate-summary.json",
+      "sha256": "dd822365c4f1feb4fb3f2a985be20197b3ebd0dc8310359e15b0264dac69352d",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-candidate-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-candidate.json.gz",
+      "sha256": "35b22a03284a596713878cf93d1bc90b8e24b162bc6cc82f007a30c1b99a19f0",
+      "bytes": 168984,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-control-summary.json",
+      "sha256": "bd7bdda17234c787c054bef96410409db80bf6a23ed0ceaefd83b0b0454ee8c5",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-control.json.gz",
+      "sha256": "63c26dbb8bad474deb877cf140e4bfe59e048bfd7ef65a85b9df45f0d33f5e0c",
+      "bytes": 169447,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-original.json.gz",
+      "sha256": "63c26dbb8bad474deb877cf140e4bfe59e048bfd7ef65a85b9df45f0d33f5e0c",
+      "bytes": 169447,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-2-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-candidate-process.json.gz",
+      "sha256": "651e917acf68b049204cf84edce0d2686cc1fd4276bdb2db8ba1924c216ca6ec",
+      "bytes": 168999,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-candidate-summary.json",
+      "sha256": "c727777ca63b766b59523e788e05ca74846eb553c0bd572c9ad367fe40cbab38",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-candidate-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-candidate.json.gz",
+      "sha256": "651e917acf68b049204cf84edce0d2686cc1fd4276bdb2db8ba1924c216ca6ec",
+      "bytes": 168999,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-control-summary.json",
+      "sha256": "869743abe022b0f01948954eb843f59072951c5552f65f6bbacdb9aef3a2dc56",
+      "bytes": 240,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-control.json.gz",
+      "sha256": "08aedef241be85f69ffecd1e3676abc067c694614be34a5b34e251550fbaae1d",
+      "bytes": 168994,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-original.json.gz",
+      "sha256": "08aedef241be85f69ffecd1e3676abc067c694614be34a5b34e251550fbaae1d",
+      "bytes": 168994,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-3-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-candidate-process.json.gz",
+      "sha256": "8611a99f9c59f4f000fd25b1f54a1096349652ba5909bd06a6c576b9871c1afe",
+      "bytes": 169059,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-candidate-summary.json",
+      "sha256": "e43aa5b78ad4c01de8f4815c99b73bd8760ff00cd7212f55591084e38ec6378f",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-candidate-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-candidate.json.gz",
+      "sha256": "8611a99f9c59f4f000fd25b1f54a1096349652ba5909bd06a6c576b9871c1afe",
+      "bytes": 169059,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-control-summary.json",
+      "sha256": "627daa0f8a6dcf67446860b62531019e371fffd00a63358975b2629b6c53c8d3",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-control.json.gz",
+      "sha256": "cf467cc19fbf18eab0153f6bc20aa287c0119f821729c1e459fe53e8a9a9b679",
+      "bytes": 168876,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-original.json.gz",
+      "sha256": "cf467cc19fbf18eab0153f6bc20aa287c0119f821729c1e459fe53e8a9a9b679",
+      "bytes": 168876,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-4-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-candidate-process.json.gz",
+      "sha256": "aec6de8209f7406f4b921babd4655a99acd7d47c3d271fddf6d643f7f45a15f6",
+      "bytes": 168813,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-candidate-summary.json",
+      "sha256": "c23b8184b50922a82e2845d3c304e6f50078114f0d08a720f3e15d0cb7ac7913",
+      "bytes": 239,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-candidate-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-candidate.json.gz",
+      "sha256": "aec6de8209f7406f4b921babd4655a99acd7d47c3d271fddf6d643f7f45a15f6",
+      "bytes": 168813,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-control-summary.json",
+      "sha256": "ebddaada848ca0e9c508b6c93c357be3a6b334dc4e7d864f4c4a60119fd815ed",
+      "bytes": 241,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-control.json.gz",
+      "sha256": "b66e964dafca1c3294c6cecdbbea995270d34ca0017b8ef578f53c176ba27eac",
+      "bytes": 169088,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-original.json.gz",
+      "sha256": "b66e964dafca1c3294c6cecdbbea995270d34ca0017b8ef578f53c176ba27eac",
+      "bytes": 169088,
+      "mediaType": "application/octet-stream"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-5-workload.json",
+      "sha256": "306a6fa44fa91fd005d9c4dfee51fa708b0fd99581a8d482e7f2c52aa4b23679",
+      "bytes": 188,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/refactor-1000000-8-4-True-0-0-True-Nothing-report.json",
+      "sha256": "48807e8121e46ab4671ffb6cb3f5223e5e2c365e82b90b772760d4c4504b967a",
+      "bytes": 339,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/matrix/runtime-environment.json",
+      "sha256": "27f7ef0c64529b9607bbe480d0ce1116e14585f38ab93fb6f69f178fe35d625d",
+      "bytes": 562,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "output/work.json",
+      "sha256": "9c04777f2a4b5ea297202969eaaaf8224caa3f049afee985a5909b6e48f57a5f",
+      "bytes": 408,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "submission/submission.json",
+      "sha256": "6a4ae61ad4d6817e8c9b326546f5f443f51576acb11b1daaed1324bda1d4694b",
+      "bytes": 5222,
+      "mediaType": "application/json"
+    },
+    {
+      "path": "submission/work",
+      "sha256": "9c04777f2a4b5ea297202969eaaaf8224caa3f049afee985a5909b6e48f57a5f",
+      "bytes": 408,
+      "mediaType": "application/octet-stream"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "cell": "alpha",
+  "entryExitCode": null,
+  "entrySignal": null,
+  "leaseId": "keiro-306-lease-20261012-1528",
+  "leaseSequence": 2,
+  "outcome": "cancelled",
+  "reasons": [
+    "lease-lost",
+    "health-unavailable"
+  ],
+  "runId": "01a130cb-58bf-7705-9641-f06bb4b46e89",
+  "schema": "cell.run-result/v1"
+}

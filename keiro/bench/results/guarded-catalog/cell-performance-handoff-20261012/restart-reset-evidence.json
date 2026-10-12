@@ -1,0 +1,19 @@
+{
+  "schema": "cell.reset-evidence/v1",
+  "runId": "01a13133-d7ad-703f-a9b6-05b08b60434e",
+  "cell": "alpha",
+  "cachePolicy": "cold",
+  "startedAt": "2026-10-12T17:44:38Z",
+  "finishedAt": "2026-10-12T17:47:40Z",
+  "verified": false,
+  "steps": [
+    {
+      "name": "role-reset",
+      "startedAt": "2026-10-12T17:44:38Z",
+      "finishedAt": "2026-10-12T17:47:40Z",
+      "status": "failed",
+      "detail": "reset-executor-failed"
+    }
+  ],
+  "postgres": null
+}

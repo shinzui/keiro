@@ -66,6 +66,10 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 
 ## Progress
 
+**Current handoff (2026-10-12):** Stop exhaustive performance execution in response to the user's repeated turnaround and release-blocking concerns. The 190-report matrix below is retained as the historical validation specification, not an active instruction to keep leasing cells, restart overnight runs or block other work. The feature and 755-example correctness validation are complete; exhaustive performance acceptance is unachieved. Before any further measurements, use the bounded comparison workflow and an explicitly selected relevant scope. No new benchmark starts at this checkpoint.
+
+- [x] (2026-10-12) Stop the full-matrix approach and release the owned alpha lease. Freshly verify 743 interrupted-run artifacts, preserving 19 preliminary reports with no budget failures. Health observations are unavailable after cancellation, so these do not establish a healthy performance pass. The replacement run fails reset before measurement. Preserve the exact manifests/outcomes and separate corrected summary under `keiro/bench/results/guarded-catalog/cell-performance-handoff-20261012`. Owner shutdown completes after one cloud API timeout: PostgreSQL is already stopped, and the driver, monitoring and broker are stopped; the owned lease holder exits.
+
 - [x] (2026-10-12 14:34Z) Inspect the Kenshou exact-revision runbook, discover existing cloud infrastructure, correct Keiro's Mori upstream identity, and prepare a clean source bundle for the Linux builder. No catalog performance profile exists in the harness.
 - [x] (2026-10-12 14:34Z) Durable fixture validation passes 36 focused examples including the settings assertion; test-support passes 11 examples, reporting passes six controls, and export/ADR/user-documentation checks pass.
 - [x] (2026-10-12 14:40Z) Full regression with the revised fixture passes 755 examples in 168.34 seconds; strict ADR, documentation, IR and export checks pass. Commit `ff1126d4` retains the durable fixture and portability fixes.
@@ -142,6 +146,8 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 
 ## Decision Log
+
+2026-10-12 — The user's latest objection to repeated release blocking supersedes the earlier full-gate choice. Stop exhaustive execution and do not retry the 190-report matrix. The operator bypassed the Kenshou bounded `perf` workflow for a custom matrix and increased its replacement deadline to 36 hours; that was a poor scope decision, not evidence of a defective fast harness. The runbook supports selected scope with an example 30-minute execution budget. Existing catalog profiles do not exercise guarded catalog commands; any subsequent comparison needs relevant selected coverage and a bounded budget, without a new calibration or exhaustive coverage project becoming an implicit release blocker. Preserve incomplete/failing infrastructure evidence honestly; no full performance or release approval is claimed.
 
 2026-10-12 17:03Z — The user explicitly chooses to finish the full performance gate before release rather than defer the remaining validation. Keep all 190 required comparisons, fixed budgets and sustained storage review. Twelve ordinary comparisons have preliminary passing reports; do not treat that partial evidence as full acceptance. Prepare automatic terminal artifact collection, digest verification, independent Kenshou health replay and corrected reporting on a separate analysis copy, followed by manual storage/outcome review. Release preparation does not authorize a version bump or publication before the gate is complete.
 
@@ -460,3 +466,5 @@ Revision note (2026-10-12): Finish and verify native runtime packaging from the 
 Revision note (2026-10-12): Record preliminary passing ordinary cell comparisons and recover a client-only watcher timeout without interrupting healthy lease renewal or measurements. Correct the completeness checker's parsing of Haskell `Just` arrival-rate filenames and test capacity admission without changing any workload or fixed budget. Preserve the running payload and verify its eventual sealed measurements independently; M4 remains open.
 
 Revision note (2026-10-12): Reconcile unreleased feature/fixture changelogs and record seven warning-free Nix-shell package checks while the full cell matrix continues. Record the proposed breaking-cycle release version and separate pending performance acceptance from release preparation; no release or plan-completion claim is made.
+
+Revision note (2026-10-12): Stop exhaustive testing after the user objects to its cost and release impact. Preserve verified partial evidence, record failed health replay and pre-workload reset failure, release the lease, and require bounded relevant scope before any future measurements. The historical full matrix remains incomplete; no release was performed.

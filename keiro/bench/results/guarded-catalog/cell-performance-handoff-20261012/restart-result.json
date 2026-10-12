@@ -1,0 +1,13 @@
+{
+  "cell": "alpha",
+  "entryExitCode": null,
+  "entrySignal": null,
+  "leaseId": "keiro-306-lease-20261012-fullmatrix",
+  "leaseSequence": 1,
+  "outcome": "infrastructure-failure",
+  "reasons": [
+    "reset-failed"
+  ],
+  "runId": "01a13133-d7ad-703f-a9b6-05b08b60434e",
+  "schema": "cell.run-result/v1"
+}

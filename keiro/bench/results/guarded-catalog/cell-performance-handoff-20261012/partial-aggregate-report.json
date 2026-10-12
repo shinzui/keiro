@@ -1,0 +1,4331 @@
+{
+  "reports": {
+    "empty-10000-1-1-False-100-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          1.0139443356561897,
+          0.9757014076056827,
+          0.9738430960617824
+        ],
+        [
+          1.001645842311542,
+          0.9314263597510041,
+          0.9162123198237708
+        ],
+        [
+          0.6751976033025427,
+          1.5350047826199358,
+          1.5250900516649293
+        ],
+        [
+          0.9490819330414996,
+          1.0451333524128814,
+          1.0584444899069645
+        ],
+        [
+          0.9565003399799562,
+          1.0527825464999425,
+          1.0514706695602445
+        ]
+      ]
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-report.json": {
+      "budgetApplicable": false,
+      "pass": true,
+      "ratios": [
+        [
+          2.0675125690889216,
+          0.44491868033110876,
+          0.4436185827311487
+        ],
+        [
+          2.0773617876761223,
+          0.42201486431750124,
+          0.43281800715094604
+        ],
+        [
+          1.9859251271749907,
+          0.43219972392929706,
+          0.44257175670572957
+        ],
+        [
+          2.201536974635632,
+          0.4050372977486843,
+          0.4169753135381869
+        ],
+        [
+          2.132202451784247,
+          0.3968397489085398,
+          0.4089048482135195
+        ]
+      ]
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9542741591896179,
+          1.028855924492513,
+          1.036828451558833
+        ],
+        [
+          0.9572016958886549,
+          1.043369524635442,
+          1.0522548163372225
+        ],
+        [
+          0.9462676144326942,
+          1.0641335627115374,
+          1.0523310001991057
+        ],
+        [
+          0.9528031005733016,
+          0.9804436505356113,
+          0.9790077526996331
+        ],
+        [
+          0.9187847074716906,
+          1.0875097033617043,
+          1.0968429764643461
+        ]
+      ]
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          1.0527473731506582,
+          0.9184418714623428,
+          0.9099002974809808
+        ],
+        [
+          1.0101791348781572,
+          0.9960446614965361,
+          0.9946119547330807
+        ],
+        [
+          1.0112555416880653,
+          1.0433637680394279,
+          1.0657024578945427
+        ],
+        [
+          0.9702262823057975,
+          0.9804814545045701,
+          0.9852470667811336
+        ],
+        [
+          0.9712607396525749,
+          1.0637665791982271,
+          1.0657096438480662
+        ]
+      ]
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9757823638406561,
+          1.0239318497753984,
+          1.0455932350410422
+        ],
+        [
+          0.9961671529748832,
+          1.01791031559168,
+          1.0218761993893577
+        ],
+        [
+          0.9876682252951603,
+          1.0212005650012983,
+          1.049372665235757
+        ],
+        [
+          1.0336744824644168,
+          0.9835395344299838,
+          1.0203100703672774
+        ],
+        [
+          1.0074644541923639,
+          0.9619627567159617,
+          0.9998723014629244
+        ]
+      ]
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9647126384570542,
+          1.0070678029816098,
+          1.0142869532379433
+        ],
+        [
+          0.9596959192424772,
+          1.002460275598194,
+          1.0067102012387417
+        ],
+        [
+          1.0042479430517808,
+          1.0135871863860049,
+          1.0178403727510432
+        ],
+        [
+          0.9863879326952144,
+          1.031860479787905,
+          1.0286315618690511
+        ],
+        [
+          1.0085042943827862,
+          1.0070034214441927,
+          0.9976527402077945
+        ]
+      ]
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          1.0307527755429713,
+          0.9794942685208791,
+          0.9019345488770375
+        ],
+        [
+          1.0220445005604628,
+          0.931869345590525,
+          0.9365236340952381
+        ],
+        [
+          1.0426092105011995,
+          0.9668253845789043,
+          1.0520215644810011
+        ],
+        [
+          1.0400821899236545,
+          0.9367680778221829,
+          0.9643717135977198
+        ],
+        [
+          0.9740133629659369,
+          1.0241137855972928,
+          1.038312177422036
+        ]
+      ]
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9877709739867887,
+          1.0107861944941434,
+          1.019513262802856
+        ],
+        [
+          1.005254959722433,
+          0.9955089750385889,
+          1.004863811165392
+        ],
+        [
+          0.9902849757346072,
+          1.0211411323468402,
+          1.0049711373437886
+        ],
+        [
+          0.9860802131074635,
+          1.0088350010034073,
+          1.037254297039666
+        ],
+        [
+          0.9935126708880836,
+          1.0055405888343423,
+          0.988699841714735
+        ]
+      ]
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9585431900732837,
+          0.9877295810407426,
+          0.9737906794956664
+        ],
+        [
+          1.0083993061975676,
+          0.9549992245519265,
+          0.9753560767923869
+        ],
+        [
+          0.9855790661359863,
+          0.9877831032522948,
+          1.0507164080812919
+        ],
+        [
+          1.0226283798296418,
+          0.9849673356524008,
+          0.9720894195534677
+        ],
+        [
+          0.9841737899383924,
+          1.0436914906486645,
+          1.0111221895536195
+        ]
+      ]
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          1.0176257308369603,
+          0.9863200496786669,
+          1.049609073188842
+        ],
+        [
+          0.9946035953327571,
+          0.9957448144286364,
+          0.9883855235017732
+        ],
+        [
+          1.0049571422441932,
+          0.9719274956515462,
+          1.0003259128220856
+        ],
+        [
+          0.9814998431133861,
+          1.0167361590255724,
+          1.0275766887178297
+        ],
+        [
+          0.9793673283918286,
+          1.0060065134865002,
+          0.9919636479026109
+        ]
+      ]
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9981667340873115,
+          0.996313986053231,
+          0.9936030259329095
+        ],
+        [
+          0.9769549773691805,
+          0.9831997984253588,
+          0.9935471955348804
+        ],
+        [
+          0.9911219362275479,
+          1.0243912283660928,
+          1.0101777831911534
+        ],
+        [
+          0.9863845463712484,
+          0.9452583611634917,
+          0.9153433116111497
+        ],
+        [
+          0.9886351381369426,
+          1.0044701621087122,
+          1.0037570544864127
+        ]
+      ]
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          1.0364544554283492,
+          0.9079885835071658,
+          0.8966800387862474
+        ],
+        [
+          1.009785809696157,
+          1.0017285301762546,
+          0.9908733364886766
+        ],
+        [
+          1.0098039964919472,
+          0.9912435355451903,
+          1.0041924175641563
+        ],
+        [
+          1.0158458418550287,
+          0.9911696225004902,
+          0.9884442706255104
+        ],
+        [
+          0.9830606993293781,
+          1.0724410331793874,
+          1.0946046074212707
+        ]
+      ]
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9590629977139027,
+          1.0247981950096383,
+          1.081104281852925
+        ],
+        [
+          1.0175133308936664,
+          1.0086668908193823,
+          0.9848214079760298
+        ],
+        [
+          1.0243585322626503,
+          0.9801745437156292,
+          0.9847963950499778
+        ],
+        [
+          0.9819369716143497,
+          1.0219812683668084,
+          1.0297855671540468
+        ],
+        [
+          0.963209544110916,
+          1.0697167001772199,
+          1.2054334224353684
+        ]
+      ]
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9854924177812686,
+          0.9903534805491534,
+          0.9769199346683621
+        ],
+        [
+          1.018422263157673,
+          0.9797966143658075,
+          0.9864314329433885
+        ],
+        [
+          0.9784955435949835,
+          0.9903074866802303,
+          0.9921054143593321
+        ],
+        [
+          0.996037794652678,
+          0.9858868285466958,
+          0.9762770337716756
+        ],
+        [
+          2.0906045985751587,
+          0.3860631050025005,
+          0.41541139247972053
+        ]
+      ]
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9916630566450872,
+          1.0223351567396477,
+          1.0257734202932016
+        ],
+        [
+          1.020988720155155,
+          0.9944794513487302,
+          0.9676424856108384
+        ],
+        [
+          0.9744556728234627,
+          0.9834732723990419,
+          0.9556633588762359
+        ],
+        [
+          1.0238017322763093,
+          0.9694306218624691,
+          0.9472669945121585
+        ],
+        [
+          1.0140334003969032,
+          0.9975841972820034,
+          0.9756934073196273
+        ]
+      ]
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          1.0232050791522167,
+          0.9776080409895544,
+          0.9551084776964388
+        ],
+        [
+          0.9977234009213989,
+          0.9868680538059753,
+          0.975274738415069
+        ],
+        [
+          1.0235662098857743,
+          0.9763259777260552,
+          0.9842990970926211
+        ],
+        [
+          1.018039867473495,
+          1.0064021237169432,
+          1.0284931807239173
+        ],
+        [
+          0.9928409704223619,
+          1.009529666753483,
+          0.9766075565258708
+        ]
+      ]
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9333632639816548,
+          1.0217760668253275,
+          0.9730801428239584
+        ],
+        [
+          0.9662395226092391,
+          0.9928873479050297,
+          0.9827216987200114
+        ],
+        [
+          0.993334259198549,
+          1.0090041068663906,
+          0.965536315992817
+        ],
+        [
+          0.980169294775693,
+          1.0132663091821181,
+          1.0286904032461648
+        ],
+        [
+          1.0157145247223593,
+          1.024350165685877,
+          1.0470396399222597
+        ]
+      ]
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.9621472182111862,
+          1.027492964266449,
+          1.0379811506344758
+        ],
+        [
+          1.0418357911556955,
+          0.9844830635622892,
+          0.9303791078125588
+        ],
+        [
+          1.0011945167553544,
+          0.9939172823562892,
+          0.9931869492185237
+        ],
+        [
+          0.9908787492285657,
+          1.0260874072186006,
+          0.9910283272321836
+        ],
+        [
+          0.9891567105062967,
+          1.0145107338880759,
+          1.0986975521354467
+        ]
+      ]
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-report.json": {
+      "budgetApplicable": true,
+      "pass": true,
+      "ratios": [
+        [
+          0.974317479189912,
+          1.0303205276326755,
+          1.0949663808382737
+        ],
+        [
+          1.0343854022881254,
+          0.9662503853779182,
+          1.0449589883946961
+        ],
+        [
+          0.9824094843906901,
+          1.04111929780064,
+          1.1098936695562744
+        ],
+        [
+          0.9830724436483403,
+          0.9907755186634346,
+          1.0122000869831063
+        ],
+        [
+          1.045690831896387,
+          0.9967897548074346,
+          0.9403120879174695
+        ]
+      ]
+    }
+  },
+  "ratioSummaries": {
+    "empty-10000-1-1-False-100-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9565003399799562,
+        "minimum": 0.6751976033025427,
+        "maximum": 1.0139443356561897
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.0451333524128814,
+        "minimum": 0.9314263597510041,
+        "maximum": 1.5350047826199358
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0514706695602445,
+        "minimum": 0.9162123198237708,
+        "maximum": 1.5250900516649293
+      }
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 2.0773617876761223,
+        "minimum": 1.9859251271749907,
+        "maximum": 2.201536974635632
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.42201486431750124,
+        "minimum": 0.3968397489085398,
+        "maximum": 0.44491868033110876
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.43281800715094604,
+        "minimum": 0.4089048482135195,
+        "maximum": 0.4436185827311487
+      }
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9528031005733016,
+        "minimum": 0.9187847074716906,
+        "maximum": 0.9572016958886549
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.043369524635442,
+        "minimum": 0.9804436505356113,
+        "maximum": 1.0875097033617043
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0522548163372225,
+        "minimum": 0.9790077526996331,
+        "maximum": 1.0968429764643461
+      }
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 1.0101791348781572,
+        "minimum": 0.9702262823057975,
+        "maximum": 1.0527473731506582
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9960446614965361,
+        "minimum": 0.9184418714623428,
+        "maximum": 1.0637665791982271
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9946119547330807,
+        "minimum": 0.9099002974809808,
+        "maximum": 1.0657096438480662
+      }
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9961671529748832,
+        "minimum": 0.9757823638406561,
+        "maximum": 1.0336744824644168
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.01791031559168,
+        "minimum": 0.9619627567159617,
+        "maximum": 1.0239318497753984
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0218761993893577,
+        "minimum": 0.9998723014629244,
+        "maximum": 1.049372665235757
+      }
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9863879326952144,
+        "minimum": 0.9596959192424772,
+        "maximum": 1.0085042943827862
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.0070678029816098,
+        "minimum": 1.002460275598194,
+        "maximum": 1.031860479787905
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0142869532379433,
+        "minimum": 0.9976527402077945,
+        "maximum": 1.0286315618690511
+      }
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 1.0307527755429713,
+        "minimum": 0.9740133629659369,
+        "maximum": 1.0426092105011995
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9668253845789043,
+        "minimum": 0.931869345590525,
+        "maximum": 1.0241137855972928
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9643717135977198,
+        "minimum": 0.9019345488770375,
+        "maximum": 1.0520215644810011
+      }
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9902849757346072,
+        "minimum": 0.9860802131074635,
+        "maximum": 1.005254959722433
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.0088350010034073,
+        "minimum": 0.9955089750385889,
+        "maximum": 1.0211411323468402
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0049711373437886,
+        "minimum": 0.988699841714735,
+        "maximum": 1.037254297039666
+      }
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9855790661359863,
+        "minimum": 0.9585431900732837,
+        "maximum": 1.0226283798296418
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9877295810407426,
+        "minimum": 0.9549992245519265,
+        "maximum": 1.0436914906486645
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9753560767923869,
+        "minimum": 0.9720894195534677,
+        "maximum": 1.0507164080812919
+      }
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9946035953327571,
+        "minimum": 0.9793673283918286,
+        "maximum": 1.0176257308369603
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9957448144286364,
+        "minimum": 0.9719274956515462,
+        "maximum": 1.0167361590255724
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0003259128220856,
+        "minimum": 0.9883855235017732,
+        "maximum": 1.049609073188842
+      }
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9886351381369426,
+        "minimum": 0.9769549773691805,
+        "maximum": 0.9981667340873115
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.996313986053231,
+        "minimum": 0.9452583611634917,
+        "maximum": 1.0243912283660928
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9936030259329095,
+        "minimum": 0.9153433116111497,
+        "maximum": 1.0101777831911534
+      }
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 1.0098039964919472,
+        "minimum": 0.9830606993293781,
+        "maximum": 1.0364544554283492
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9912435355451903,
+        "minimum": 0.9079885835071658,
+        "maximum": 1.0724410331793874
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9908733364886766,
+        "minimum": 0.8966800387862474,
+        "maximum": 1.0946046074212707
+      }
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9819369716143497,
+        "minimum": 0.9590629977139027,
+        "maximum": 1.0243585322626503
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.0219812683668084,
+        "minimum": 0.9801745437156292,
+        "maximum": 1.0697167001772199
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0297855671540468,
+        "minimum": 0.9847963950499778,
+        "maximum": 1.2054334224353684
+      }
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.996037794652678,
+        "minimum": 0.9784955435949835,
+        "maximum": 2.0906045985751587
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9858868285466958,
+        "minimum": 0.3860631050025005,
+        "maximum": 0.9903534805491534
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9769199346683621,
+        "minimum": 0.41541139247972053,
+        "maximum": 0.9921054143593321
+      }
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 1.0140334003969032,
+        "minimum": 0.9744556728234627,
+        "maximum": 1.0238017322763093
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9944794513487302,
+        "minimum": 0.9694306218624691,
+        "maximum": 1.0223351567396477
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9676424856108384,
+        "minimum": 0.9472669945121585,
+        "maximum": 1.0257734202932016
+      }
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 1.018039867473495,
+        "minimum": 0.9928409704223619,
+        "maximum": 1.0235662098857743
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9868680538059753,
+        "minimum": 0.9763259777260552,
+        "maximum": 1.009529666753483
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9766075565258708,
+        "minimum": 0.9551084776964388,
+        "maximum": 1.0284931807239173
+      }
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.980169294775693,
+        "minimum": 0.9333632639816548,
+        "maximum": 1.0157145247223593
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.0132663091821181,
+        "minimum": 0.9928873479050297,
+        "maximum": 1.024350165685877
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9827216987200114,
+        "minimum": 0.965536315992817,
+        "maximum": 1.0470396399222597
+      }
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9908787492285657,
+        "minimum": 0.9621472182111862,
+        "maximum": 1.0418357911556955
+      },
+      "p95": {
+        "count": 5,
+        "median": 1.0145107338880759,
+        "minimum": 0.9844830635622892,
+        "maximum": 1.027492964266449
+      },
+      "p99": {
+        "count": 5,
+        "median": 0.9931869492185237,
+        "minimum": 0.9303791078125588,
+        "maximum": 1.0986975521354467
+      }
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-report.json": {
+      "throughput": {
+        "count": 5,
+        "median": 0.9830724436483403,
+        "minimum": 0.974317479189912,
+        "maximum": 1.045690831896387
+      },
+      "p95": {
+        "count": 5,
+        "median": 0.9967897548074346,
+        "minimum": 0.9662503853779182,
+        "maximum": 1.04111929780064
+      },
+      "p99": {
+        "count": 5,
+        "median": 1.0449589883946961,
+        "minimum": 0.9403120879174695,
+        "maximum": 1.1098936695562744
+      }
+    }
+  },
+  "failedReports": [],
+  "countChecks": {
+    "empty-10000-1-1-False-100-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "empty-10000-1-1-False-100-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 0,
+      "refusedBatches": 10000,
+      "committedMeasuredEvents": 0,
+      "endingCardinality": 10000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 0,
+      "refusedBatches": 10000,
+      "committedMeasuredEvents": 0,
+      "endingCardinality": 10000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 0,
+      "refusedBatches": 10000,
+      "committedMeasuredEvents": 0,
+      "endingCardinality": 10000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 0,
+      "refusedBatches": 10000,
+      "committedMeasuredEvents": 0,
+      "endingCardinality": 10000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 0,
+      "refusedBatches": 10000,
+      "committedMeasuredEvents": 0,
+      "endingCardinality": 10000
+    },
+    "hit-10000-1-1-False-100-100-False-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "miss-10000-1-1-False-100-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "mixed-10000-1-1-False-20-0-False-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "mixed-10000-1-1-False-20-0-False-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-1-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-1-4-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-1-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-10000-8-4-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 20000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-1-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-1-4-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-1-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 10000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-False-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-1-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-1-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-1-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-1-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-2-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-2-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-2-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-2-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-3-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-3-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-3-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-3-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-4-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-4-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-4-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-4-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-5-candidate-process.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-5-candidate.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-5-control.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    },
+    "refactor-1000000-8-4-True-0-0-True-Nothing-5-original.json.gz": {
+      "valid": true,
+      "durabilityVerified": true,
+      "attempts": 10000,
+      "acceptedBatches": 10000,
+      "refusedBatches": 0,
+      "committedMeasuredEvents": 40000,
+      "endingCardinality": 1010000
+    }
+  },
+  "durabilityUnverifiedSamples": [],
+  "matrix": {
+    "applicable": true,
+    "expectedReports": 190,
+    "presentReports": 19,
+    "missingReports": [
+      "empty-10000-1-1-True-100-0-True-Nothing-report.json",
+      "empty-10000-1-4-False-100-0-True-Nothing-report.json",
+      "empty-10000-1-4-True-100-0-True-Nothing-report.json",
+      "empty-10000-8-1-False-100-0-True-Nothing-report.json",
+      "empty-10000-8-1-True-100-0-True-Nothing-report.json",
+      "empty-10000-8-4-False-100-0-True-Nothing-report.json",
+      "empty-10000-8-4-True-100-0-True-Nothing-report.json",
+      "empty-1000000-1-1-False-100-0-True-Nothing-report.json",
+      "empty-1000000-1-1-True-100-0-True-Nothing-report.json",
+      "empty-1000000-1-4-False-100-0-True-Nothing-report.json",
+      "empty-1000000-1-4-True-100-0-True-Nothing-report.json",
+      "empty-1000000-8-1-False-100-0-True-Nothing-report.json",
+      "empty-1000000-8-1-True-100-0-True-Nothing-report.json",
+      "empty-1000000-8-4-False-100-0-True-Nothing-report.json",
+      "empty-1000000-8-4-True-100-0-True-Nothing-report.json",
+      "fixed-arrival-1000000-8-4-False-20-0-True-<capacity * 0.5>-report.json",
+      "fixed-arrival-1000000-8-4-False-20-0-True-<capacity * 0.8>-report.json",
+      "fixed-arrival-1000000-8-4-False-20-100-True-<capacity * 0.5>-report.json",
+      "fixed-arrival-1000000-8-4-False-20-100-True-<capacity * 0.8>-report.json",
+      "fixed-arrival-1000000-8-4-False-20-50-True-<capacity * 0.5>-report.json",
+      "fixed-arrival-1000000-8-4-False-20-50-True-<capacity * 0.8>-report.json",
+      "fixed-arrival-1000000-8-4-True-20-0-True-<capacity * 0.5>-report.json",
+      "fixed-arrival-1000000-8-4-True-20-0-True-<capacity * 0.8>-report.json",
+      "fixed-arrival-1000000-8-4-True-20-100-True-<capacity * 0.5>-report.json",
+      "fixed-arrival-1000000-8-4-True-20-100-True-<capacity * 0.8>-report.json",
+      "fixed-arrival-1000000-8-4-True-20-50-True-<capacity * 0.5>-report.json",
+      "fixed-arrival-1000000-8-4-True-20-50-True-<capacity * 0.8>-report.json",
+      "hit-10000-1-1-False-100-100-True-Nothing-report.json",
+      "hit-10000-1-1-True-100-100-False-Nothing-report.json",
+      "hit-10000-1-1-True-100-100-True-Nothing-report.json",
+      "hit-10000-1-4-False-100-100-False-Nothing-report.json",
+      "hit-10000-1-4-False-100-100-True-Nothing-report.json",
+      "hit-10000-1-4-True-100-100-False-Nothing-report.json",
+      "hit-10000-1-4-True-100-100-True-Nothing-report.json",
+      "hit-10000-8-1-False-100-100-False-Nothing-report.json",
+      "hit-10000-8-1-False-100-100-True-Nothing-report.json",
+      "hit-10000-8-1-True-100-100-False-Nothing-report.json",
+      "hit-10000-8-1-True-100-100-True-Nothing-report.json",
+      "hit-10000-8-4-False-100-100-False-Nothing-report.json",
+      "hit-10000-8-4-False-100-100-True-Nothing-report.json",
+      "hit-10000-8-4-True-100-100-False-Nothing-report.json",
+      "hit-10000-8-4-True-100-100-True-Nothing-report.json",
+      "hit-1000000-1-1-False-100-100-False-Nothing-report.json",
+      "hit-1000000-1-1-False-100-100-True-Nothing-report.json",
+      "hit-1000000-1-1-True-100-100-False-Nothing-report.json",
+      "hit-1000000-1-1-True-100-100-True-Nothing-report.json",
+      "hit-1000000-1-4-False-100-100-False-Nothing-report.json",
+      "hit-1000000-1-4-False-100-100-True-Nothing-report.json",
+      "hit-1000000-1-4-True-100-100-False-Nothing-report.json",
+      "hit-1000000-1-4-True-100-100-True-Nothing-report.json",
+      "hit-1000000-8-1-False-100-100-False-Nothing-report.json",
+      "hit-1000000-8-1-False-100-100-True-Nothing-report.json",
+      "hit-1000000-8-1-True-100-100-False-Nothing-report.json",
+      "hit-1000000-8-1-True-100-100-True-Nothing-report.json",
+      "hit-1000000-8-4-False-100-100-False-Nothing-report.json",
+      "hit-1000000-8-4-False-100-100-True-Nothing-report.json",
+      "hit-1000000-8-4-True-100-100-False-Nothing-report.json",
+      "hit-1000000-8-4-True-100-100-True-Nothing-report.json",
+      "miss-10000-1-1-True-100-0-True-Nothing-report.json",
+      "miss-10000-1-4-False-100-0-True-Nothing-report.json",
+      "miss-10000-1-4-True-100-0-True-Nothing-report.json",
+      "miss-10000-8-1-False-100-0-True-Nothing-report.json",
+      "miss-10000-8-1-True-100-0-True-Nothing-report.json",
+      "miss-10000-8-4-False-100-0-True-Nothing-report.json",
+      "miss-10000-8-4-True-100-0-True-Nothing-report.json",
+      "miss-1000000-1-1-False-100-0-True-Nothing-report.json",
+      "miss-1000000-1-1-True-100-0-True-Nothing-report.json",
+      "miss-1000000-1-4-False-100-0-True-Nothing-report.json",
+      "miss-1000000-1-4-True-100-0-True-Nothing-report.json",
+      "miss-1000000-8-1-False-100-0-True-Nothing-report.json",
+      "miss-1000000-8-1-True-100-0-True-Nothing-report.json",
+      "miss-1000000-8-4-False-100-0-True-Nothing-report.json",
+      "miss-1000000-8-4-True-100-0-True-Nothing-report.json",
+      "mixed-10000-1-1-False-20-0-False-Nothing-report.json",
+      "mixed-10000-1-1-False-20-0-True-Nothing-report.json",
+      "mixed-10000-1-1-False-20-100-False-Nothing-report.json",
+      "mixed-10000-1-1-False-20-100-True-Nothing-report.json",
+      "mixed-10000-1-1-False-20-50-False-Nothing-report.json",
+      "mixed-10000-1-1-False-20-50-True-Nothing-report.json",
+      "mixed-10000-1-1-True-20-0-False-Nothing-report.json",
+      "mixed-10000-1-1-True-20-0-True-Nothing-report.json",
+      "mixed-10000-1-1-True-20-100-False-Nothing-report.json",
+      "mixed-10000-1-1-True-20-100-True-Nothing-report.json",
+      "mixed-10000-1-1-True-20-50-False-Nothing-report.json",
+      "mixed-10000-1-1-True-20-50-True-Nothing-report.json",
+      "mixed-10000-1-4-False-20-0-False-Nothing-report.json",
+      "mixed-10000-1-4-False-20-0-True-Nothing-report.json",
+      "mixed-10000-1-4-False-20-100-False-Nothing-report.json",
+      "mixed-10000-1-4-False-20-100-True-Nothing-report.json",
+      "mixed-10000-1-4-False-20-50-False-Nothing-report.json",
+      "mixed-10000-1-4-False-20-50-True-Nothing-report.json",
+      "mixed-10000-1-4-True-20-0-False-Nothing-report.json",
+      "mixed-10000-1-4-True-20-0-True-Nothing-report.json",
+      "mixed-10000-1-4-True-20-100-False-Nothing-report.json",
+      "mixed-10000-1-4-True-20-100-True-Nothing-report.json",
+      "mixed-10000-1-4-True-20-50-False-Nothing-report.json",
+      "mixed-10000-1-4-True-20-50-True-Nothing-report.json",
+      "mixed-10000-8-1-False-20-0-False-Nothing-report.json",
+      "mixed-10000-8-1-False-20-0-True-Nothing-report.json",
+      "mixed-10000-8-1-False-20-100-False-Nothing-report.json",
+      "mixed-10000-8-1-False-20-100-True-Nothing-report.json",
+      "mixed-10000-8-1-False-20-50-False-Nothing-report.json",
+      "mixed-10000-8-1-False-20-50-True-Nothing-report.json",
+      "mixed-10000-8-1-True-20-0-False-Nothing-report.json",
+      "mixed-10000-8-1-True-20-0-True-Nothing-report.json",
+      "mixed-10000-8-1-True-20-100-False-Nothing-report.json",
+      "mixed-10000-8-1-True-20-100-True-Nothing-report.json",
+      "mixed-10000-8-1-True-20-50-False-Nothing-report.json",
+      "mixed-10000-8-1-True-20-50-True-Nothing-report.json",
+      "mixed-10000-8-4-False-20-0-False-Nothing-report.json",
+      "mixed-10000-8-4-False-20-0-True-Nothing-report.json",
+      "mixed-10000-8-4-False-20-100-False-Nothing-report.json",
+      "mixed-10000-8-4-False-20-100-True-Nothing-report.json",
+      "mixed-10000-8-4-False-20-50-False-Nothing-report.json",
+      "mixed-10000-8-4-False-20-50-True-Nothing-report.json",
+      "mixed-10000-8-4-True-20-0-False-Nothing-report.json",
+      "mixed-10000-8-4-True-20-0-True-Nothing-report.json",
+      "mixed-10000-8-4-True-20-100-False-Nothing-report.json",
+      "mixed-10000-8-4-True-20-100-True-Nothing-report.json",
+      "mixed-10000-8-4-True-20-50-False-Nothing-report.json",
+      "mixed-10000-8-4-True-20-50-True-Nothing-report.json",
+      "mixed-1000000-1-1-False-20-0-False-Nothing-report.json",
+      "mixed-1000000-1-1-False-20-0-True-Nothing-report.json",
+      "mixed-1000000-1-1-False-20-100-False-Nothing-report.json",
+      "mixed-1000000-1-1-False-20-100-True-Nothing-report.json",
+      "mixed-1000000-1-1-False-20-50-False-Nothing-report.json",
+      "mixed-1000000-1-1-False-20-50-True-Nothing-report.json",
+      "mixed-1000000-1-1-True-20-0-False-Nothing-report.json",
+      "mixed-1000000-1-1-True-20-0-True-Nothing-report.json",
+      "mixed-1000000-1-1-True-20-100-False-Nothing-report.json",
+      "mixed-1000000-1-1-True-20-100-True-Nothing-report.json",
+      "mixed-1000000-1-1-True-20-50-False-Nothing-report.json",
+      "mixed-1000000-1-1-True-20-50-True-Nothing-report.json",
+      "mixed-1000000-1-4-False-20-0-False-Nothing-report.json",
+      "mixed-1000000-1-4-False-20-0-True-Nothing-report.json",
+      "mixed-1000000-1-4-False-20-100-False-Nothing-report.json",
+      "mixed-1000000-1-4-False-20-100-True-Nothing-report.json",
+      "mixed-1000000-1-4-False-20-50-False-Nothing-report.json",
+      "mixed-1000000-1-4-False-20-50-True-Nothing-report.json",
+      "mixed-1000000-1-4-True-20-0-False-Nothing-report.json",
+      "mixed-1000000-1-4-True-20-0-True-Nothing-report.json",
+      "mixed-1000000-1-4-True-20-100-False-Nothing-report.json",
+      "mixed-1000000-1-4-True-20-100-True-Nothing-report.json",
+      "mixed-1000000-1-4-True-20-50-False-Nothing-report.json",
+      "mixed-1000000-1-4-True-20-50-True-Nothing-report.json",
+      "mixed-1000000-8-1-False-20-0-False-Nothing-report.json",
+      "mixed-1000000-8-1-False-20-0-True-Nothing-report.json",
+      "mixed-1000000-8-1-False-20-100-False-Nothing-report.json",
+      "mixed-1000000-8-1-False-20-100-True-Nothing-report.json",
+      "mixed-1000000-8-1-False-20-50-False-Nothing-report.json",
+      "mixed-1000000-8-1-False-20-50-True-Nothing-report.json",
+      "mixed-1000000-8-1-True-20-0-False-Nothing-report.json",
+      "mixed-1000000-8-1-True-20-0-True-Nothing-report.json",
+      "mixed-1000000-8-1-True-20-100-False-Nothing-report.json",
+      "mixed-1000000-8-1-True-20-100-True-Nothing-report.json",
+      "mixed-1000000-8-1-True-20-50-False-Nothing-report.json",
+      "mixed-1000000-8-1-True-20-50-True-Nothing-report.json",
+      "mixed-1000000-8-4-False-20-0-False-Nothing-report.json",
+      "mixed-1000000-8-4-False-20-0-True-Nothing-report.json",
+      "mixed-1000000-8-4-False-20-100-False-Nothing-report.json",
+      "mixed-1000000-8-4-False-20-100-True-Nothing-report.json",
+      "mixed-1000000-8-4-False-20-50-False-Nothing-report.json",
+      "mixed-1000000-8-4-False-20-50-True-Nothing-report.json",
+      "mixed-1000000-8-4-True-20-0-False-Nothing-report.json",
+      "mixed-1000000-8-4-True-20-0-True-Nothing-report.json",
+      "mixed-1000000-8-4-True-20-100-False-Nothing-report.json",
+      "mixed-1000000-8-4-True-20-100-True-Nothing-report.json",
+      "mixed-1000000-8-4-True-20-50-False-Nothing-report.json",
+      "mixed-1000000-8-4-True-20-50-True-Nothing-report.json",
+      "sustained-False-report.json",
+      "sustained-True-report.json"
+    ],
+    "missingSamples": [],
+    "incompletePairSets": [],
+    "complete": false
+  },
+  "performanceAcceptance": "incomplete",
+  "storage": {},
+  "storageInterpretation": "Review continuing active backlog, expected committed-event growth, dead rows, vacuum and per-minute latency against the paired control. These metrics do not establish a universal storage bound."
+}
