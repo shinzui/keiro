@@ -17,6 +17,7 @@ import Data.Time.Calendar (Day (ModifiedJulianDay))
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
+import GuardedCatalogBench (runGuardedCatalogEvidence)
 import InboxDelegatedBench (prepareInboxDelegatedBenchmarks, runInboxDelegatedExplainIfRequested)
 import Keiki.Core
   ( Edge (..),
@@ -145,7 +146,12 @@ data InboxScenario = InboxScenario
   }
 
 main :: IO ()
-main =
+main = do
+  evidence <- runGuardedCatalogEvidence
+  unless evidence ordinaryMain
+
+ordinaryMain :: IO ()
+ordinaryMain =
   withMigratedSuite \fixture ->
     withFreshResourceStore fixture \(store, runner) -> do
       withFreshResourceStore fixture \(readModelStore, readModelRunner) -> do

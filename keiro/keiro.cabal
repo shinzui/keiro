@@ -196,6 +196,8 @@ test-suite keiro-test
     Compatibility.ReadModel011
     ExternalReadSpec
     GroupRebuildSpec
+    GuardedCatalogExample
+    GuardedCatalogSpec
     Paths_keiro
     PreCanonicalRecoverySpec
     PreimageSpec
@@ -283,9 +285,14 @@ test-suite keiro-retention
 benchmark keiro-bench
   import: warnings, shared
   type: exitcode-stdio-1.0
-  hs-source-dirs: bench
+  hs-source-dirs:
+    bench
+    test
+
   main-is: Main.hs
   other-modules:
+    GuardedCatalogBench
+    GuardedCatalogExample
     InboxDelegatedBench
     ProducerIdentityBench
     ReadModelBench

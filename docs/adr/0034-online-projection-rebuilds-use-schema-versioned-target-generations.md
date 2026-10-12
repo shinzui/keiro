@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Online projection rebuilds use schema-versioned target generations
 description: Keiro rebuilds schema-changing projections into application-provisioned physical generations and promotes a verified generation through a bounded atomic cutover.
-timestamp: 2026-08-14T06:53:09Z
+timestamp: 2026-10-12T03:18:00Z
 docId: ADR-34
 status: Accepted
 date: 2026-08-13
@@ -149,6 +149,22 @@ deletion or truncation of events at or below the captured head must be refused o
 serialized against active rebuilds. Deduplication evidence used at cutover is derived
 under that retention guarantee or persisted as replay proceeds; the protocol never
 assumes without enforcement that old history is immutable.
+
+
+## Guarded command boundary (2026-10-12)
+
+Guarded synchronous commands resolve all persisted serving bindings before a
+consumer precondition runs. Lookup and accepted delivery share the protected
+revision and physical targets. Missing revisions or invalid bindings retain the
+existing typed catalog refusals and take precedence over consumer duplicate
+policy. Callbacks must resolve declared target IDs and handle supported serving
+schemas explicitly; there is no fallback to a candidate or retained old table.
+Identity guards execute after Kiroku append serialization and extend its global
+lock interval. Correctness assumes a separate ReadCommitted lookup statement,
+synchronous identity authority, and participation and invariant enforcement by
+every relevant live writer. Arbitrary external SQL and asynchronous indexes are
+outside that protocol. Performance readiness requires mixed-workload evidence;
+passing correctness tests alone does not establish an acceptable lock cost.
 
 
 ## Consequences

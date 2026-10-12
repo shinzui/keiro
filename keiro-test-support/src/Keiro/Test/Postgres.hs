@@ -33,6 +33,8 @@ module Keiro.Test.Postgres
     withFreshResourceStoreWith,
     withFreshResourceStorePrepared,
     withFreshStores2,
+    withFreshResourceStoresSameDatabase,
+    withFreshResourceStoresSameDatabaseWithConnection,
   )
 where
 
@@ -200,6 +202,27 @@ runResourceStore settings action =
           ( store,
             StoreRunner (unlift . runErrorNoCallStack . runStoreResource)
           )
+
+-- | Independent resource-aware pools sharing one migrated database. Unlike
+-- 'withFreshStores2', this fixture exercises contention in the same event store.
+withFreshResourceStoresSameDatabase ::
+  Fixture ->
+  (((Store.KirokuStore, StoreRunner), (Store.KirokuStore, StoreRunner)) -> IO ()) ->
+  IO ()
+withFreshResourceStoresSameDatabase fixture action =
+  withFreshResourceStoresSameDatabaseWithConnection fixture (\_ -> action)
+
+-- | Also expose the clone's connection string for an independent SQL observer
+-- or controller. All supplied stores are closed before the clone is dropped.
+withFreshResourceStoresSameDatabaseWithConnection ::
+  Fixture ->
+  (Text -> ((Store.KirokuStore, StoreRunner), (Store.KirokuStore, StoreRunner)) -> IO ()) ->
+  IO ()
+withFreshResourceStoresSameDatabaseWithConnection fixture action =
+  withFreshDatabase fixture \connStr ->
+    runResourceStore (Store.defaultConnectionSettings connStr) \first ->
+      runResourceStore (Store.defaultConnectionSettings connStr) \second ->
+        action connStr (first, second)
 
 -- | Like 'withFreshStore' but provides two independent migrated databases (and
 -- two stores) cloned from the same template — used by cross-context

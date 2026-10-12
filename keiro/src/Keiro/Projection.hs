@@ -25,6 +25,11 @@ module Keiro.Projection
     runCommandWithCatalogProjections,
     DomainProjectionCommandOutcome (..),
     runDomainCommandWithCatalogProjections,
+    GuardedCatalogOutcome (..),
+    CatalogPreconditionContext,
+    ProjectionWriteBinding (..),
+    catalogPreconditionBindings,
+    runDomainCommandWithCatalogProjectionsGuarded,
 
     -- * Asynchronous projections
     AsyncProjection (..),
@@ -89,7 +94,8 @@ import Keiro.Projection.Catalog
 import Keiro.Projection.Types
 import Keiro.ReadModel (storeHeadPosition, subscriptionPositionFromInventory)
 import Keiro.ReadModel.Rebuild.Group
-  ( ProjectionWriteFence (..),
+  ( ProjectionWriteBinding (..),
+    ProjectionWriteFence (..),
     RebuildRunId,
     lockProjectionGroupsTx,
   )
@@ -138,6 +144,21 @@ data DomainProjectionCommandOutcome target co rejection noOp
   | DomainProjectionCommandServingBindingInvalid !RebuildGroupId !ProjectionRevisionId !Text
   | DomainProjectionCommandCatalogMismatch !SourceId
   deriving stock (Generic, Eq, Show)
+
+-- | A precondition refusal proves rollback and carries no accepted command
+-- receipt. All ordinary catalog and pure domain outcomes retain their types.
+data GuardedCatalogOutcome target co rejection noOp refusal
+  = CatalogCommandOutcome !(DomainProjectionCommandOutcome target co rejection noOp)
+  | PreconditionRefused !refusal
+  deriving stock (Generic, Eq, Show)
+
+-- | Callback-scoped serving bindings, resolved under all required group locks.
+-- Retaining this value does not retain locks or authorize another transaction.
+-- Asynchronously maintained targets are not command-time identity authority.
+newtype CatalogPreconditionContext = CatalogPreconditionContext [ProjectionWriteBinding]
+
+catalogPreconditionBindings :: CatalogPreconditionContext -> [ProjectionWriteBinding]
+catalogPreconditionBindings (CatalogPreconditionContext bindings) = bindings
 
 -- | Catalog-aware result of one asynchronous projection application.
 data CatalogAsyncApplyOutcome
@@ -290,17 +311,72 @@ runDomainCommandWithCatalogProjections options handler targetStream command cata
     toProjectionOutcome = \case
       DomainSqlCommandSilent outcome -> DomainProjectionCommandApplied outcome
       DomainSqlCommandCommitted outcome _ -> DomainProjectionCommandApplied outcome
-      DomainSqlCommandRolledBack fence -> fenceOutcome fence
+      DomainSqlCommandRolledBack fence -> domainCatalogFenceOutcome fence
 
-    fenceOutcome = \case
-      ProjectionWritesAllowed _ ->
-        error "runDomainCommandWithCatalogProjections: rolled back with writes allowed"
-      ProjectionWriteFenced groupId runId -> DomainProjectionCommandFenced groupId runId
-      ProjectionWriteGroupUnregistered groupId -> DomainProjectionCommandGroupUnregistered groupId
-      ProjectionServingRevisionUnavailable groupId revisionId ->
-        DomainProjectionCommandServingRevisionUnavailable groupId revisionId
-      ProjectionServingBindingInvalid groupId revisionId detail ->
-        DomainProjectionCommandServingBindingInvalid groupId revisionId detail
+domainCatalogFenceOutcome :: ProjectionWriteFence -> DomainProjectionCommandOutcome target co rejection noOp
+domainCatalogFenceOutcome = \case
+  ProjectionWritesAllowed _ ->
+    error "runDomainCommandWithCatalogProjections: rolled back with writes allowed"
+  ProjectionWriteFenced groupId runId -> DomainProjectionCommandFenced groupId runId
+  ProjectionWriteGroupUnregistered groupId -> DomainProjectionCommandGroupUnregistered groupId
+  ProjectionServingRevisionUnavailable groupId revisionId ->
+    DomainProjectionCommandServingRevisionUnavailable groupId revisionId
+  ProjectionServingBindingInvalid groupId revisionId detail ->
+    DomainProjectionCommandServingBindingInvalid groupId revisionId detail
+
+-- | Check a relational precondition after tentative append and catalog
+-- admission, before inline delivery. @Left refusal@ rolls back the whole
+-- append transaction; @Right ()@ delivers using the exact protected bindings.
+-- Silent domain decisions invoke neither catalog SQL nor the precondition.
+--
+-- The callback is trusted, bounded transaction-local application SQL and may
+-- run repeatedly on driver retries. Return refusal through 'Either'; never
+-- call @Tx.condemn@, control transactions/savepoints/isolation, acquire other
+-- stream/group locks, or append recursively. Avoid sequences, session locks,
+-- SQL functions with external effects, and other effects surviving rollback.
+-- Production identity checks should be bounded indexed reads only.
+--
+-- Atomic identity lookup relies on participating writers using the same Kiroku
+-- store's global append lock and synchronous authority under ReadCommitted.
+-- The callback sees its own tentative append; that is not a committed winner.
+-- Every creation path must enforce the invariant. Arbitrary external SQL and
+-- lagging async projections do not participate in this guarantee. Keep checks
+-- minimal: every post-append statement extends the store-wide append lock.
+-- 'RunCommandOptions' bounds OCC retries, not Hasql's transaction retry loop.
+runDomainCommandWithCatalogProjectionsGuarded ::
+  forall phi rs s ci co rejection noOp refusal es.
+  (HasCallStack, IOE :> es, Store :> es, Error StoreError :> es, KirokuStoreResource :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
+  RunCommandOptions ->
+  DomainCommandHandler phi rs s ci co rejection noOp ->
+  Stream (EventStream phi rs s ci co) ->
+  ci ->
+  ValidatedProjectionCatalog ->
+  ProjectionSet co ->
+  (CatalogPreconditionContext -> Tx.Transaction (Either refusal ())) ->
+  Eff es (Either CommandError (GuardedCatalogOutcome (EventStream phi rs s ci co) co rejection noOp refusal))
+runDomainCommandWithCatalogProjectionsGuarded options handler targetStream command catalog projectionSet precondition
+  | Prelude.null groups =
+      pure (Right (CatalogCommandOutcome (DomainProjectionCommandCatalogMismatch (projectionSet ^. #projectionSource))))
+  | otherwise = do
+      outcome <- runDomainCommandWithSqlEventsControlled options handler targetStream command $ \pairs _ -> do
+        fence <- lockProjectionGroupsTx catalog groups
+        case fence of
+          ProjectionWritesAllowed bindings -> do
+            decision <- precondition (CatalogPreconditionContext bindings)
+            case decision of
+              Left refusal -> pure (RollbackSqlTransaction (Right refusal))
+              Right () -> do
+                deliverCatalogProjectionsTx catalog projectionSet bindings pairs
+                pure (CommitSqlTransaction (Left fence))
+          _ -> pure (RollbackSqlTransaction (Left fence))
+      pure (fmap toGuardedOutcome outcome)
+  where
+    groups = typedProjectionRebuildGroups catalog projectionSet
+    toGuardedOutcome = \case
+      DomainSqlCommandSilent value -> CatalogCommandOutcome (DomainProjectionCommandApplied value)
+      DomainSqlCommandCommitted value _ -> CatalogCommandOutcome (DomainProjectionCommandApplied value)
+      DomainSqlCommandRolledBack (Left fence) -> CatalogCommandOutcome (domainCatalogFenceOutcome fence)
+      DomainSqlCommandRolledBack (Right refusal) -> PreconditionRefused refusal
 
 applyCatalogProjectionsTx ::
   ValidatedProjectionCatalog ->
@@ -312,9 +388,20 @@ applyCatalogProjectionsTx catalog projectionSet groups pairs = do
   fence <- lockProjectionGroupsTx catalog groups
   case fence of
     ProjectionWritesAllowed bindings -> do
-      traverse_ applyBinding bindings
+      deliverCatalogProjectionsTx catalog projectionSet bindings pairs
       pure (CommitSqlTransaction fence)
     _ -> pure (RollbackSqlTransaction fence)
+
+-- Group-major, handler-major, event-major order is shared by both runners.
+-- All admission checks must finish before calling this delivery-only helper.
+deliverCatalogProjectionsTx ::
+  ValidatedProjectionCatalog ->
+  ProjectionSet co ->
+  [ProjectionWriteBinding] ->
+  [(co, RecordedEvent)] ->
+  Tx.Transaction ()
+deliverCatalogProjectionsTx catalog projectionSet bindings pairs =
+  traverse_ applyBinding bindings
   where
     applyBinding binding =
       case binding ^. #writeRevisionId of

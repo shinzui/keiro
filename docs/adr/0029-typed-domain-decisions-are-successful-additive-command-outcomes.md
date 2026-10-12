@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Typed domain decisions are successful additive command outcomes
 description: Keiro preserves accepted event batches and typed rejection/no-op payloads as successful results while unmatched commands and infrastructure failures remain CommandError.
-timestamp: 2026-08-10T18:56:01Z
+timestamp: 2026-10-12T03:18:00Z
 docId: ADR-29
 status: Accepted
 date: 2026-08-10
@@ -111,6 +111,17 @@ points retain their types and legacy result allocation path. The DSL consumes
 this runtime contract in the follow-up
 [ExecPlan 232](../plans/232-add-typed-domain-outcomes-to-the-dsl.md); it does not
 define a second generated outcome type.
+
+
+## Guarded command boundary (2026-10-12)
+
+The opt-in `runDomainCommandWithCatalogProjectionsGuarded` returns a separate
+`PreconditionRefused refusal` after rolling back a tentative append. A refusal
+carries neither `DomainAccepted` nor a `CommandResult`; it is not a selected
+pure domain rejection. Silent decisions still invoke no callback or catalog
+transaction. The existing controlled command loop owns condemnation, retries,
+and post-commit snapshot work. Refusal payloads never become framework telemetry
+dimensions. See [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md).
 
 
 ## Consequences

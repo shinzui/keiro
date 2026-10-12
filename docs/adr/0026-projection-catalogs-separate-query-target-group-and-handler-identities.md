@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Projection catalogs separate query, target, group, and handler identities
 description: A validated projection catalog separates query models, physical targets, atomic rebuild groups, and projection handlers while leaving application SQL and schema ownership explicit.
-timestamp: 2026-10-11T21:11:39Z
+timestamp: 2026-10-12T03:18:00Z
 docId: ADR-26
 status: Accepted
 date: 2026-08-08
@@ -271,9 +271,24 @@ All inline handlers extend Kiroku's global `$all` row-lock interval. Evaluate
 cumulative SQL and unrelated-writer latency under mixed traffic. Async delivery
 removes this work from the append transaction but still shares database capacity.
 The guarded runner in [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md)
-is planned, not an existing API or release guarantee. See the
+is implemented as an opt-in API; its full lifecycle and performance acceptance
+remain tracked in that plan and do not imply release readiness. See the
 [delivery guide](../guides/choosing-a-projection.md) and
 [post-commit example](../guides/asynchronous-projections.md#read-your-write-after-commit).
+
+
+## Guarded command boundary (2026-10-12)
+
+The opt-in guarded catalog runner completes admission for every required group
+before invoking consumer SQL, then uses the exact same bindings for inline
+delivery. Its opaque context is callback-scoped information, not a transferable
+lock lease. `ProjectionSet` group selection includes async-only owners; commands
+requiring independent async-view availability must supply an inline-only subset
+of the full catalog's definitions. The ordinary runner's group selection is
+unchanged. Guards are trusted retryable application SQL: they must return their
+refusal through `Either`, leave all transaction control to Keiro, and avoid
+nontransactional effects and new lock-order edges. Catalog validation cannot
+prove that an opaque guard is bounded or respects these restrictions.
 
 
 ## Consequences

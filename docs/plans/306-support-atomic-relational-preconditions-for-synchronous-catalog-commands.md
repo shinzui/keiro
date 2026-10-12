@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-11T22:36:02Z
       mode: "update"
       note: "Validate source contracts; fix inline-only command selection and strengthen callback, concurrency, retry, and sustained performance acceptance"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-12T02:56:46Z
+      mode: "implement"
+      note: "Begin baseline capture and implementation against Kiroku 0.11.0.0"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -54,14 +59,21 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 
 - [x] (2026-10-11) Refine the plan and baseline guidance around minimum synchronous identity authority, asynchronous query models, and post-commit waits; runtime implementation remains pending.
 - [x] (2026-10-11) Validate the design against current command/catalog code and Mori-located transaction dependencies; correct projection-set selection, callback restrictions, race coverage, and performance measurement requirements. This is source review, not runtime proof.
-- [ ] M1: Establish executable dependency/transaction evidence, confirm the inline-only command set, and capture the ordinary catalog baseline.
-- [ ] M2: Add the guarded public API with fence-first callbacks and shared delivery internals.
+- [x] (2026-10-12) M1 dependency discovery: Cabal resolves Kiroku 0.11.0.0, Hasql 1.10.3.7, hasql-transaction 1.2.3.1, GHC 9.12.4; PostgreSQL is 18.6. Released transaction sources match Mori corpus byte-for-byte. Retain the ordinary executable and paused-worker latency samples.
+- [ ] M1 remaining: verify overlapping same-database backends at runtime; complete ordinary baseline SQL/lock counts, throughput, active-worker measurements, and the full existing suite.
+- [x] (2026-10-12) M2 implementation: additive result/context and guarded runner compile, sharing the existing delivery loop after complete fence admission.
+- [x] (2026-10-12) M2 focused validation: 20 guarded examples pass, including rollback, silent decisions, complete batch delivery/order, catalog precedence, races and driver retries. Public re-export policy and its nine tests pass.
+- [ ] M2 remaining: original-suite regression checks and baseline SQL-count verification.
 - [ ] M3: Prove same-database races, retries, rollback, and serving-revision protection.
 - [ ] M4: Measure guarded and mixed traffic against the fixed regression budgets.
 - [ ] M5: Publish the public recipe, distill ADR decisions, and run the final repository checks.
 
 
 ## Surprises & Discoveries
+
+2026-10-12 — Implementation checkout is `ad78efae0d21d849c8106eac73df0f8bb5719e1f`, with Kiroku already bounded at `^>=0.11.0.0`. No dependency bound change is needed. Published Kiroku 0.11.0.0 `Transaction.hs` and Hasql transaction 1.2.3.1 retry interpreter match the Mori-discovered corpus byte-for-byte. Baseline environment and retained executable digest are in `keiro/bench/results/guarded-catalog/baseline/environment.json`. Initial latency samples overlap compilation and are provenance only; they do not establish M4 acceptance.
+
+The existing `ProjectionWriteBinding` type was exported only by a private module, despite appearing inside the public fence value. Export it from `Keiro.Projection` alongside the opaque context so consumers can name and inspect the supported binding type.
 
 
 Documentation review found guidance recommending inline delivery for immediate readers. Existing `WaitForPosition` supports that need after commit, so the baseline guides, ADR-26, and agent-facing runtime patterns now recommend async query models. Runtime behavior and performance remain unmeasured.
@@ -100,6 +112,8 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 
 ## Outcomes & Retrospective
+
+2026-10-12 implementation checkpoint: the additive runner compiles and 20 focused PostgreSQL examples pass. Forty paused-worker ordinary latency samples (10,000 attempts each) and a retained executable are recorded. Full regression, complete M3 lifecycle/OCC evidence, and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
 
 
 Planning and guidance now distinguish the atomic identity index from the asynchronous rich-note view, including independent fencing and committed-but-pending response requirements. Source review found and corrected the async-group selection gap and made callback safety, promotion admission, driver retries, and sustained duplicate costs explicit. The plan was originally authored and revised by `gpt-6-astra` with no recorded review entry before this pass. All five runtime milestones remain pending. No runtime or performance result is claimed.
@@ -315,3 +329,6 @@ Revision note (2026-10-11): Refined the consumer model to minimum synchronous id
 
 
 Revision note (2026-10-11): Validated the current command, catalog, rebuild, and Mori-located transaction sources. Corrected async-owner fencing by specifying an inline-only command set; clarified callback control and rollback limits, identity-key policy, retry and promotion admission tests, and delivery ordering. Preserved numeric budgets while adding reproducible workloads, queue-inclusive cohort measurements, and sustained duplicate-cost evidence. Only planning and source checks were performed; implementation and performance acceptance remain pending.
+
+
+Revision note (2026-10-12): Begin implementation against the actual released dependency versions, retain ordinary baseline evidence, add same-database resource fixtures and the public guarded runner. Runtime and full performance acceptance remain pending; no readiness claim is made.

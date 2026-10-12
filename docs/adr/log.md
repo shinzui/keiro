@@ -1,5 +1,10 @@
 # Bundle Update Log
 
+## 2026-10-12
+* **Update**: Record protected guard bindings and append serialization requirements.
+* **Update**: Distinguish transactional precondition rollback from pure domain refusal.
+* **Update**: Record fence-first guards and inline-only command sets.
+
 ## 2026-10-11
 * **Update**: Clarify delivery selection: async query defaults, minimal atomic invariant indexes, post-commit reader freshness, and global append-lock costs.
 

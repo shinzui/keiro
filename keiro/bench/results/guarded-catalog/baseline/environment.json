@@ -1,0 +1,25 @@
+{
+  "keiroRevision": "ad78efae0d21d849c8106eac73df0f8bb5719e1f",
+  "compiler": "ghc-9.12.4",
+  "optimization": "-O1",
+  "rts": "+RTS -N2 -RTS",
+  "postgres": "18.6",
+  "cabal": "3.16.1.0",
+  "hasql": "1.10.3.7",
+  "hasqlTransaction": "1.2.3.1",
+  "kirokuStore": "0.11.0.0",
+  "kirokuCorpusRevision": "ff113e96bbdb95f3bacd5ac3eb5082cf284ff752",
+  "hasqlTransactionCorpusRevision": "8a1ea3525b9208cd92c1ac592443a75140b8da11",
+  "retainedExecutable": "/tmp/keiro-306-baseline/keiro-bench",
+  "retainedExecutableSha256": "87925c275d9fbc285d0497fe959a923fa9dc8d540141941fa38143a80606c7c4",
+  "machine": "macOS-26.7-arm64-arm-64bit-Mach-O",
+  "sourceCheck": "Hackage tarball Transaction.hs and Hasql retry interpreter match Mori corpus byte-for-byte",
+  "worker": "paused",
+  "poolSize": 10,
+  "warmupRows": 100,
+  "endingCardinalityDelta": 10100,
+  "limitations": [
+    "Latency baseline only; elapsed throughput, active-worker comparison, and sustained offered-load acceptance remain pending.",
+    "Concurrent compilation occurred during initial samples; these samples are provenance, not final performance acceptance."
+  ]
+}

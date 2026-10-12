@@ -16,6 +16,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Add `runDomainCommandWithCatalogProjectionsGuarded`, an opt-in relational
+  precondition after catalog admission and tentative append. Typed refusal rolls
+  back the batch; accepted delivery uses the same protected serving bindings.
+
 - Add `resizeShardCount` and transaction-composable `resizeShardCountTx` for
   stopped, unowned groups. Atomically rewind every checkpoint to the previous
   minimum and replace lease rows, with typed owner refusal and resize evidence.

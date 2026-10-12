@@ -1,0 +1,1 @@
+{"attempts":10000,"batches":[1,4],"cardinalities":[10000,1000000],"connections":[1,8],"guardedP95Maximum":1.25,"guardedP99Maximum":1.5,"guardedThroughputMinimum":0.9,"mode":"ordinary","ordinaryLatencyMaximum":1.1,"ordinaryThroughputMinimum":0.95,"pairs":5,"payloadBytes":1024,"tags":4}
