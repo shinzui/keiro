@@ -16,6 +16,11 @@ provenance:
       at: 2026-10-11T23:49:57Z
       mode: "update"
       note: "Verified releases and source archives; documented API adoption, settlement boundaries, and focused shutdown validation."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-12T02:10:08Z
+      mode: "implement"
+      note: "Implement released dependency minimums, shutdown coverage, and all repository validation gates."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -40,11 +45,11 @@ The working tree already resolves these releases. This work makes that selection
 
 ## Progress
 
-Implementation has not started. The completed entry records planning research only; all implementation gates remain open.
+Implementation is underway. Milestone 1 has passed its release, descriptor, and solver gates; behavioral and repository gates remain open.
 
 - [x] (2026-10-11) Rechecked all seven release targets against Hackage and upstream tags, compared released production sources, audited existing API adoption, and successfully resolved all components with tests and benchmarks enabled.
-- [ ] Refresh release evidence and raise the Shibuya and pgmq-hs minimums in every bounded Cabal consumer.
-- [ ] Align the affected `mori.dhall` dependency constraints and demonstrate Hackage-only resolution.
+- [x] (2026-10-12 02:10Z) Refreshed all seven Hackage preferred releases and three peeled tags; raised all eleven bounded Shibuya and ten older pgmq-hs minimums.
+- [x] (2026-10-12 02:10Z) Aligned the nine affected `mori.dhall` constraints; `dhall type`, `cabal update`, and the all-component dry run passed. All seven target packages resolved to secure Hackage archives at the expected versions.
 - [ ] Recheck the released-API adoption audit and add the focused clean-shutdown assertion described in Milestone 2.
 - [ ] Build all components and validate queue, worker, telemetry, operator, and generated-code behavior.
 - [ ] Document the supported release cohort, complete `just verify`, and record the final resolved versions.
@@ -52,6 +57,8 @@ Implementation has not started. The completed entry records planning research on
 
 
 ## Surprises & Discoveries
+
+Implementation (2026-10-12): The initial working tree was clean. Hackage preferred versions and peeled tag commits remain exactly as reviewed. `cabal update` reported an up-to-date index at `2026-10-11T21:59:13Z`; the refreshed all-component solver selected the seven expected releases as `repo-tar` sources from the secure Hackage repository. The host already provides GHC 9.12.4 and PostgreSQL 18 tools, so no environment or lockfile change was needed.
 
 Review (2026-10-11): All seven latest normally preferred releases and all three peeled tag commits still match the original targets. Hackage archive `src/` files match the selected tags for Shibuya core, the adapter, and all five pgmq-hs libraries. The twelve SQL files shipped in the pgmq-migration archive are byte-identical between 0.6.0.0 and 0.6.1.1. Test fixtures and unreleased checkout files are not production API evidence.
 
@@ -328,3 +335,5 @@ No new public type or function is required. Preserve `Keiro.PGMQ.Runtime.withJob
 
 
 Revision note (2026-10-11): Reviewed the original plan against Hackage, release tags and archives, Keiro call sites, and ADR-1/25/28/45. Retained the verified versions and bounds, added the released-API adoption rationale and one focused shutdown test, corrected Hackage source verification and Mori stdout handling, and narrowed reliability claims to distinguish supervised adapter delivery from the bounded drain. Updated the living sections and implementation gates; no dependency or production-code change was made in this review.
+
+Revision note (2026-10-12): Implemented Milestone 1 with verified current releases, Cabal/Mori minimums, refreshed Hackage resolution, and runtime-discovered provenance. Behavioral validation remains pending.
