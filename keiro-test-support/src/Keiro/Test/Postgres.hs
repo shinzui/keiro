@@ -161,7 +161,7 @@ newtype StoreRunner
 
 -- | Like 'withFreshStore', but also supplies the resource-aware interpreter
 -- required by Keiro's transactional command runners.
-withFreshResourceStore :: Fixture -> ((Store.KirokuStore, StoreRunner) -> IO ()) -> IO ()
+withFreshResourceStore :: Fixture -> ((Store.KirokuStore, StoreRunner) -> IO a) -> IO a
 withFreshResourceStore fixture = withFreshResourceStoreWith fixture id
 
 -- | Like 'withFreshResourceStore', with a connection-settings modifier for
@@ -169,8 +169,8 @@ withFreshResourceStore fixture = withFreshResourceStoreWith fixture id
 withFreshResourceStoreWith ::
   Fixture ->
   (Store.ConnectionSettings -> Store.ConnectionSettings) ->
-  ((Store.KirokuStore, StoreRunner) -> IO ()) ->
-  IO ()
+  ((Store.KirokuStore, StoreRunner) -> IO a) ->
+  IO a
 withFreshResourceStoreWith fixture modify action =
   withFreshDatabase fixture \connStr ->
     runResourceStore (modify (Store.defaultConnectionSettings connStr)) action
@@ -191,8 +191,8 @@ withFreshResourceStorePrepared fixture prepare modify action =
 
 runResourceStore ::
   Store.ConnectionSettings ->
-  ((Store.KirokuStore, StoreRunner) -> IO ()) ->
-  IO ()
+  ((Store.KirokuStore, StoreRunner) -> IO a) ->
+  IO a
 runResourceStore settings action =
   runEff $
     withKirokuStore settings $ do

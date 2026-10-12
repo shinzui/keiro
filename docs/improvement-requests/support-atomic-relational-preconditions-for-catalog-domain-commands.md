@@ -5,7 +5,7 @@ description: >-
   Provide a supported way to enforce a consumer-owned relational precondition
   atomically with a domain command and its synchronous catalog projections, returning a typed
   refusal without committing events or bypassing rebuild and serving-revision guarantees.
-timestamp: 2026-10-11T21:12:22Z
+timestamp: 2026-10-12T03:53:45Z
 requestId: IR-53
 status: accepted
 origin: mori://shinzui/rei
@@ -36,10 +36,15 @@ reviews:
 Accepted for planning on 2026-10-11 following owner discussion. The selected
 direction is an opt-in guarded synchronous catalog command runner, implemented
 under [ExecPlan 306](../plans/306-support-atomic-relational-preconditions-for-synchronous-catalog-commands.md).
-This revision records the design and acceptance requirements; implementation,
-package release, publication, and downstream adoption have not been completed
-or authorized by this planning step. The earlier exploratory prototype is not
-the accepted implementation.
+The additive runner and compiled consumer example are implemented locally.
+The expanded focused PostgreSQL selection passes 36 examples, including
+same-database races, fresh OCC/driver retry results, transactional rollback,
+both catalog owner rebuilds, and versioned promotion in both lock orders.
+The final affected full suite passes 753 examples; the fixed performance
+acceptance remains tracked in the plan. These correctness results
+do not establish performance readiness. Package release, publication, and
+downstream adoption remain separate work. The earlier exploratory prototype
+is not the accepted implementation.
 
 ## Consumer requirement
 

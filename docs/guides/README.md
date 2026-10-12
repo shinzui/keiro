@@ -6,7 +6,7 @@ docId: DOC-1
 tags: [keiro, guides, navigation]
 generated:
   by: process:codex-cli
-  at: 2026-10-11T21:11:39Z
+  at: 2026-10-12T03:53:45Z
 ---
 
 # Keiro Guides
@@ -31,6 +31,9 @@ are adopting:
   then configure durable delivery, deduplication, checkpoints, and rebuilds.
 - [Inline Projections](inline-projections.md) covers minimum atomic invariant
   state, append-throughput costs, replay adapters, and catalog fence boundaries.
+- [Guarded Catalog Commands](guarded-catalog-commands.md) enforces a relational
+  identity precondition after append and catalog admission, with typed reuse,
+  rollback, protected serving targets, and separate asynchronous query views.
 - [Offline Projection Rebuilds](offline-projection-rebuilds.md) covers catalog
   preview, group fencing, target preparation, fixed-head replay, verification,
   repair/resume, atomic promotion, and the legacy single-model lifecycle.

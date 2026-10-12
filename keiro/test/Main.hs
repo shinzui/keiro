@@ -45,6 +45,7 @@ import ExternalReadSpec qualified
 import GHC.Conc (ThreadStatus (..), listThreads, threadStatus)
 import GroupRebuildSpec qualified
 import GuardedCatalogSpec qualified
+import GuardedCatalogVersionedSpec qualified
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Statement (Statement, preparable)
@@ -445,6 +446,7 @@ main = withMigratedSuite $ \fixture -> hspec $ do
   CatalogOperationsSpec.spec fixture
   GroupRebuildSpec.spec fixture
   GuardedCatalogSpec.spec fixture
+  GuardedCatalogVersionedSpec.spec fixture
   ExternalReadSpec.spec fixture
   VersionedTargetPostgresSpec.spec fixture
   VersionedRebuildSpec.spec fixture

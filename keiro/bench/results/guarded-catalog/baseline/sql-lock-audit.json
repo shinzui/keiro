@@ -1,0 +1,37 @@
+{
+  "method": "source-derived statement and explicit lock audit, not a server statement trace",
+  "originalLibraryCommit": "ad78efae0d21d849c8106eac73df0f8bb5719e1f",
+  "candidateLibraryCommit": "0efa3d2a459042c464abdb3d2adcec246ed0b219",
+  "fixture": "one legacy identity group, one SQL-writing creation handler; audited events are SQL-free; fresh source streams; no snapshots",
+  "ordinaryBeforeAndAfter": {
+    "hydrationStatements": 1,
+    "appendBodyStatements": 3,
+    "appendBodyBreakdown": ["Kiroku append CTE", "one lockGroupWithServingBindingsStmt", "one identity INSERT"],
+    "transactionControl": ["BEGIN at ReadCommitted", "COMMIT"],
+    "oneAndFourEventBatchesHaveSameCounts": true,
+    "additionalCandidateSqlStatements": 0,
+    "additionalCandidateExplicitLocks": 0
+  },
+  "guardedIndexedMiss": {
+    "appendBodyStatements": 4,
+    "additionalSql": "one bounded identity SELECT after the group fence"
+  },
+  "guardedIndexedHit": {
+    "appendBodyStatements": 3,
+    "breakdown": ["tentative append CTE", "group fence", "identity SELECT"],
+    "transactionEnd": "ROLLBACK; no inline INSERT or post-commit snapshot"
+  },
+  "explicitLockOrder": {
+    "command": ["source stream insert/version update", "global stream zero update", "sorted catalog group FOR SHARE locks", "guard reads", "inline delivery", "transaction end releases locks"],
+    "promotion": ["exclusive catalog group lifecycle lock", "physical target cutover locks and metadata writes"],
+    "targetedRepair": ["source history FOR UPDATE guard", "exclusive catalog group lock", "serving targets and repair writes"]
+  },
+  "limitations": "Counts describe this fixture's no-conflict execution. Historical streams add hydration pages; snapshots, application handlers, pool setup and asynchronous workers have their own SQL. PostgreSQL also takes ordinary relation/index/constraint locks; these are not enumerated as a total server lock count.",
+  "sources": [
+    "keiro/src/Keiro/Projection.hs: applyCatalogProjectionsTx and deliverCatalogProjectionsTx",
+    "keiro/src/Keiro/ReadModel/Rebuild/Group.hs: lockProjectionGroupsTx and lockGroupWithServingBindingsStmt",
+    "keiro/src/Keiro/ReadModel/Rebuild/Stream.hs: lockHistoryAndRepair",
+    "mori://shinzui/kiroku/packages/kiroku-store — src/Kiroku/Store/Transaction.hs, Effect.hs, SQL.hs and HistoryRetention/SQL.hs; released 0.11.0.0",
+    "mori://hasql/hasql/packages/hasql-transaction — released 1.2.3.1 transaction interpreter"
+  ]
+}

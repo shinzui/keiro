@@ -1,5 +1,9 @@
 # Keiro Guides Log
 
+## 2026-10-12
+* **Update**: Link the guarded catalog command adoption guide
+* **Update**: Add the guarded catalog command adoption recipe and callback boundary.
+
 ## 2026-10-11
 * **Update**: Default query models to async delivery, add a post-commit read-your-write response example, and clarify invariant-only inline work and store-wide append costs throughout the guides.
 

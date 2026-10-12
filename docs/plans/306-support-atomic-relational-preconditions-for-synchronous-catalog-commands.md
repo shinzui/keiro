@@ -60,11 +60,12 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 - [x] (2026-10-11) Refine the plan and baseline guidance around minimum synchronous identity authority, asynchronous query models, and post-commit waits; runtime implementation remains pending.
 - [x] (2026-10-11) Validate the design against current command/catalog code and Mori-located transaction dependencies; correct projection-set selection, callback restrictions, race coverage, and performance measurement requirements. This is source review, not runtime proof.
 - [x] (2026-10-12) M1 dependency discovery: Cabal resolves Kiroku 0.11.0.0, Hasql 1.10.3.7, hasql-transaction 1.2.3.1, GHC 9.12.4; PostgreSQL is 18.6. Released transaction sources match Mori corpus byte-for-byte. Retain the ordinary executable and paused-worker latency samples.
-- [ ] M1 remaining: verify overlapping same-database backends at runtime; complete ordinary baseline SQL/lock counts, throughput, active-worker measurements, and the full existing suite.
+- [x] (2026-10-12) M1 runtime/source checks: overlapping backends have distinct PIDs in the same database/schema; source-derived SQL/explicit-lock audit records no change on the ordinary path. The initial full suite passes 739 examples.
+- [ ] M1 remaining: retain the enhanced original-library executable and capture alternating throughput/latency with both worker states. Initial latency-only samples are provenance, not acceptance denominators.
 - [x] (2026-10-12) M2 implementation: additive result/context and guarded runner compile, sharing the existing delivery loop after complete fence admission.
-- [x] (2026-10-12) M2 focused validation: 20 guarded examples pass, including rollback, silent decisions, complete batch delivery/order, catalog precedence, races and driver retries. Public re-export policy and its nine tests pass.
-- [ ] M2 remaining: original-suite regression checks and baseline SQL-count verification.
-- [ ] M3: Prove same-database races, retries, rollback, and serving-revision protection.
+- [x] (2026-10-12) M2 validation: initial full suite passes 739 examples; focused expanded selection passes 36 examples, including 34 new guarded examples. Public re-export policy and its nine tests pass. Shared delivery adds no ordinary-path SQL or explicit locks.
+- [x] (2026-10-12) M3 focused matrix: independent-connection races in both orders, winner rollback, snapshot/effect rollback, complete batches, silent/OCC/driver retries, encode/query faults, archive/canonical reuse, both owner rebuilds, independent fencing, post-commit pending/ready/unavailable views, and writer-first/promotion-first versioned admission pass.
+- [x] (2026-10-12) M3 full regression: 753 examples pass with zero failures in 177.81 seconds after the final fixture changes.
 - [ ] M4: Measure guarded and mixed traffic against the fixed regression budgets.
 - [ ] M5: Publish the public recipe, distill ADR decisions, and run the final repository checks.
 
@@ -74,6 +75,10 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 2026-10-12 — Implementation checkout is `ad78efae0d21d849c8106eac73df0f8bb5719e1f`, with Kiroku already bounded at `^>=0.11.0.0`. No dependency bound change is needed. Published Kiroku 0.11.0.0 `Transaction.hs` and Hasql transaction 1.2.3.1 retry interpreter match the Mori-discovered corpus byte-for-byte. Baseline environment and retained executable digest are in `keiro/bench/results/guarded-catalog/baseline/environment.json`. Initial latency samples overlap compilation and are provenance only; they do not establish M4 acceptance.
 
 The existing `ProjectionWriteBinding` type was exported only by a private module, despite appearing inside the public fence value. Export it from `Keiro.Projection` alongside the opaque context so consumers can name and inspect the supported binding type.
+
+2026-10-12 — The expanded focused selection passes 36 examples in 7.94 seconds. Real same-revision and schema-changing promotions were exercised in both lock orders. Promotion-first admission either obtains a coherent new binding or returns the existing typed invalid/unavailable outcome, and a fresh call succeeds. No resolver change or extra old-path statement was needed. The note fixture declares no stream-scoped targeted repair; that conditional repair scenario does not apply. Catalog rebuilds require the rich subscription checkpoint even with the worker paused; the fixture now initializes it before rebuilding.
+
+2026-10-12 — The initial retained harness records latency but not elapsed throughput or active-worker conditions. Build an enhanced harness against the untouched original production library using `scripts/build-guarded-catalog-baseline.py`; both binaries share byte-identical fixture/request/timing modules. Record their hashes and preserve the original latency archive. This corrects an evidence gap, without substituting historical samples for alternating controls.
 
 
 Documentation review found guidance recommending inline delivery for immediate readers. Existing `WaitForPosition` supports that need after commit, so the baseline guides, ADR-26, and agent-facing runtime patterns now recommend async query models. Runtime behavior and performance remain unmeasured.
@@ -113,7 +118,7 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Outcomes & Retrospective
 
-2026-10-12 implementation checkpoint: the additive runner compiles and 20 focused PostgreSQL examples pass. Forty paused-worker ordinary latency samples (10,000 attempts each) and a retained executable are recorded. Full regression, complete M3 lifecycle/OCC evidence, and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
+2026-10-12 implementation checkpoint: the additive runner compiles; the final full suite passes 753 examples and the expanded focused selection passes 36. The example covers snapshots, both owner rebuilds, fresh OCC/driver outcomes, versioned promotion in both orders, and post-commit view errors. The ordinary-path source audit records unchanged SQL/explicit locks. Strict ADR, user documentation, improvement request, and public export checks pass. Forty paused-worker latency samples remain provenance. Enhanced alternating controls and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
 
 
 Planning and guidance now distinguish the atomic identity index from the asynchronous rich-note view, including independent fencing and committed-but-pending response requirements. Source review found and corrected the async-group selection gap and made callback safety, promotion admission, driver retries, and sustained duplicate costs explicit. The plan was originally authored and revised by `gpt-6-astra` with no recorded review entry before this pass. All five runtime milestones remain pending. No runtime or performance result is claimed.
@@ -241,12 +246,14 @@ The first focused command is meaningful after M2 registers that describe group; 
 Implement the following benchmark environment switches in M1/M4. They are proposed harness interfaces, not existing commands today. `ordinary` exits after baseline capture; `compare` runs candidate/control pairs and exits nonzero on a budget failure; `diagnostic` records lock behavior without using its instrumented samples for acceptance. Use unique run output directories to retain evidence.
 
 ```bash
+nix develop -c python3 scripts/build-guarded-catalog-baseline.py --worktree /tmp/keiro-306-original --output /tmp/keiro-306-enhanced-baseline-v2
+cp /tmp/keiro-306-enhanced-baseline-v2/enhanced-environment.json keiro/bench/results/guarded-catalog/baseline/enhanced-environment.json
 nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=ordinary KEIRO_GUARDED_CATALOG_OUTPUT=bench/results/guarded-catalog/baseline cabal bench keiro-bench --benchmark-options='+RTS -N2 -RTS'
 nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=compare KEIRO_GUARDED_CATALOG_BASELINE=bench/results/guarded-catalog/baseline KEIRO_GUARDED_CATALOG_OUTPUT=bench/results/guarded-catalog/candidate cabal bench keiro-bench --benchmark-options='+RTS -N2 -RTS'
 nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=diagnostic KEIRO_GUARDED_CATALOG_OUTPUT=bench/results/guarded-catalog/diagnostic cabal bench keiro-bench --benchmark-options='+RTS -N2 -RTS'
 ```
 
-Dispatch evidence modes in `keiro/bench/Main.hs` before unrelated fixture setup and `defaultMain`, so `ordinary`, `compare`, and `diagnostic` run only their requested harness and exit. Add `GuardedCatalogBench` to the benchmark stanza's `other-modules`; record all workload choices in its output manifest. Cabal runs the benchmark in the `keiro` package directory, so those output paths resolve beneath `keiro/bench/results/guarded-catalog`. The harness must read the recorded baseline manifest, rerun the retained ordinary executable between candidate samples for the ordinary before/after comparison, and emit a concise report plus raw machine-readable samples. Include the retained executable path and digest in the manifest; fail if it is missing or its build/workload configuration differs. Historical samples remain provenance and a drift diagnostic, not the denominator for purported alternating before/after measurements. Record the exact accepted report here during implementation; do not paste hypothetical benchmark numbers.
+Dispatch evidence modes in `keiro/bench/Main.hs` before unrelated fixture setup and `defaultMain`, so `ordinary`, `compare`, and `diagnostic` run only their requested harness and exit. Add `GuardedCatalogBench` to the benchmark stanza's `other-modules`; record all workload choices in its output manifest. Cabal runs the benchmark in the `keiro` package directory, so those output paths resolve beneath `keiro/bench/results/guarded-catalog`. Choose unused output directories when repeating any command; the harness and baseline builder refuse to overwrite evidence. The enhanced builder overlays only harness/test-support files on the recorded original revision, leaves production sources untouched, records resolved dependencies/compiler/runtime options, and retains the project-built binary outside the repository. The harness reads that manifest, verifies executable/shared-source hashes, reruns the retained ordinary executable between candidate samples, and emits reports plus gzip-compressed raw JSON samples. Historical latency-only samples remain provenance, not the denominator for alternating measurements. Record the exact accepted report here during implementation; do not paste hypothetical numbers.
 
 ```bash
 nix develop -c cabal bench keiro-bench --benchmark-options='-p command --time-mode wall --hide-progress --baseline bench/baseline-command.csv --fail-if-slower 25'
@@ -332,3 +339,6 @@ Revision note (2026-10-11): Validated the current command, catalog, rebuild, and
 
 
 Revision note (2026-10-12): Begin implementation against the actual released dependency versions, retain ordinary baseline evidence, add same-database resource fixtures and the public guarded runner. Runtime and full performance acceptance remain pending; no readiness claim is made.
+
+
+Revision note (2026-10-12): Record the expanded correctness matrix, unchanged ordinary-path source audit, and initial full regression result. Add reproducible enhanced original-library controls because the first retained harness omitted elapsed throughput and active-worker measurements; M4 and final verification remain pending.

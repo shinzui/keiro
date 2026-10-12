@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-12
+* **Update**: Record the implemented guarded runner and expanded PostgreSQL correctness evidence; performance and adoption remain pending
+
 ## 2026-10-11
 * **Update**: Refine IR-53 to separate synchronous identity authority from async rich views; require paused-worker, independent-fence, and post-commit freshness evidence in ExecPlan 306.
 * **Planning**: IR-53 accepted for planning under ExecPlan 306: scope the opt-in guard to synchronous catalog commands, validate fences and serving bindings before the guard, and require same-database concurrency proofs and mixed-workload benchmarks for the global append lock cost. Implementation, publication, and downstream adoption remain separate work.
