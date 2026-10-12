@@ -1,0 +1,28 @@
+Using saved setting for 'extra-substituters = https://shinzui.cachix.org' from ~/.local/share/nix/trusted-settings.json.
+Using saved setting for 'extra-trusted-public-keys = shinzui.cachix.org-1:QEmAoJrA9WwLP0uxfDgktLi2BRrcvQQWdz8NzcMg4/E=' from ~/.local/share/nix/trusted-settings.json.
+warning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.
+Pass '--accept-flake-config' to trust it
+Build profile: -w ghc-9.12.4 -O1
+In order, the following will be built (use -v for more details):
+ - keiro-0.19.0.1 (bench:keiro-bench) (ephemeral targets)
+Preprocessing benchmark 'keiro-bench' for keiro-0.19.0.1...
+Building benchmark 'keiro-bench' for keiro-0.19.0.1...
+Running 1 benchmarks...
+Benchmark keiro-bench: RUNNING...
+refactor-10000-1-1-False-0-0-True-Nothing-1-control Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 342.7498484445858),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 49285.0),("p50",Number 2343.0),("p95",Number 6572.0),("p99",Number 13802.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-1-candidate Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 257.9243849786592),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 80045.0),("p50",Number 2801.0),("p95",Number 10719.0),("p99",Number 21924.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-2-control Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 474.7315582930476),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 63972.0),("p50",Number 1981.0),("p95",Number 3496.0),("p99",Number 7128.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-2-candidate Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 299.83116806757283),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 87038.0),("p50",Number 2572.0),("p95",Number 8538.0),("p99",Number 14739.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-3-control Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 646.742513179319),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 27252.0),("p50",Number 1477.0),("p95",Number 2599.0),("p99",Number 3587.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-3-candidate Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 682.7899781725699),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 77318.0),("p50",Number 1459.0),("p95",Number 2184.0),("p99",Number 2575.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-4-control Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 686.2477394141654),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 23902.0),("p50",Number 1432.0),("p95",Number 2263.0),("p99",Number 2742.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-4-candidate Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 614.2779699955926),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 34781.0),("p50",Number 1516.0),("p95",Number 2863.0),("p99",Number 6255.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-5-control Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 716.5059102064762),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 54705.0),("p50",Number 1383.0),("p95",Number 2132.0),("p99",Number 2461.0)]))])),("refused",Number 0.0)])
+refactor-10000-1-1-False-0-0-True-Nothing-5-candidate Object (fromList [("accepted",Number 10000.0),("attemptThroughput",Number 666.9632874727154),("attempts",Number 10000.0),("cohorts",Object (fromList [("guarded-accepted",Null),("guarded-refused",Null),("ordinary",Object (fromList [("count",Number 10000.0),("maximum",Number 39636.0),("p50",Number 1293.0),("p95",Number 3155.0),("p99",Number 7127.0)]))])),("refused",Number 0.0)])
+keiro-bench: Uncaught exception ghc-internal:GHC.Internal.IO.Exception.IOException:
+
+user error (fixed performance budget failed: refactor 10000-1-1-False-0-0-True-Nothing [(0.7525149497487209,1.6310103469263542,1.5884654397913347),(0.6315804433681438,2.442219679633867,2.067760942760943),(1.0557369652662005,0.8403232012312428,0.7178700864231948),(0.8951256735941865,1.2651347768448962,2.2811816192560177),(0.9308552490244162,1.4798311444652907,2.8959772450223484)])
+Benchmark keiro-bench: ERROR
+Error: [Cabal-7125]
+Benchmarks failed for bench:keiro-bench from keiro-0.19.0.1.
+

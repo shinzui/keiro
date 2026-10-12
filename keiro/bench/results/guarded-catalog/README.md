@@ -49,12 +49,31 @@ binary fails one. Selected means (original/current) are 4.02/3.42 ms for legacy
 accepted-one, 44.3/38.9 ms for router fan-out ten, and 4.385/3.651 seconds for
 fan-out one thousand. These are individual Tasty measurements, not five-pair
 acceptance medians. Both binaries exceed historical fan-out baselines, while
-the observed current selected means are lower. The full current run's observer
+three of the four current selected means are lower. Fan-out one hundred is
+356/374 ms (original/current). The full current run's observer
 finds I/O wait in hard-delete affected-history lookup, with a 112 MB
 `stream_events` relation in the shared growing benchmark fixture. No cleanup
 or historical CSV change is made for this feature. Shared-host background
 build/test activity was observed during the initial full command run; it is
 another reason to preserve the raw failures and use fresh alternating controls.
+
+`candidate-20261012/` retains the first fixed-budget comparison. All five
+10,000-attempt pairs complete with the expected event/cardinality counts. The
+ordinary refactor case (10,000 initial identities, one connection, one event,
+paused worker) fails: median throughput/p95/p99 ratios are
+0.895126/1.479831/2.067761 against budgets 0.95/1.10/1.10. Host activity records
+show unrelated builds/tests. This failure is retained, not reclassified as a pass.
+
+`rts-diagnostic-20261012/` records a separate original/current sample with nearly
+identical heap allocation and a faster current elapsed time. It demonstrates
+variation, not acceptance or a proven cause. `candidate-repeat-20261012/` repeats
+the complete five-pair comparison with unchanged code and budgets. Its first six
+ordinary configurations pass. The seventh (10,000 initial identities, eight
+connections, four events, paused worker) fails throughput: median
+throughput/p95/p99 ratios are 0.926574/1.070584/1.064383. All 700,000 attempts
+complete with expected counts. Both failed reports remain archived. Further
+acceptance needs an idle or isolated runner; host activity alone does not prove
+the cause of either failure.
 
 The required complete matrix, fixed-arrival and ten-minute storage/latency
 comparisons remain pending. No performance-ready conclusion is recorded here.

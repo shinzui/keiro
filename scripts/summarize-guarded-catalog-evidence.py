@@ -18,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     args = parser.parse_args()
-    reports = {path.name: read_json(path) for path in sorted(args.directory.glob("*-report.json"))}
+    reports = {path.name: read_json(path) for path in sorted(args.directory.glob("*-report.json")) if path.name != "aggregate-report.json"}
     counts = {}
     for path in sorted(args.directory.glob("*.json.gz")):
         measurement = read_json(path)

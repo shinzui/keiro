@@ -1,0 +1,1 @@
+{"attempts":10000,"deadlineSeconds":300,"guardedP95Maximum":1.25,"guardedP99Maximum":1.5,"guardedThroughputMinimum":0.9,"mode":"compare","ordinaryP95Maximum":1.1,"ordinaryP99Maximum":1.1,"ordinaryThroughputMinimum":0.95,"pairs":5,"payloadBytes":1024,"poolSize":10,"requestSeed":306,"tags":4}

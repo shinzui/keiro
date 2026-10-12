@@ -1,0 +1,1 @@
+{"accepted":10000,"attemptThroughput":1954.5351665830779,"attempts":10000,"cohorts":{"guarded-accepted":null,"guarded-refused":null,"ordinary":{"count":10000,"maximum":128403,"p50":3037,"p95":10335,"p99":18020}},"refused":0}

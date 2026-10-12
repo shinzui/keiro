@@ -1,0 +1,1 @@
+{"activeWorker":false,"arrivalRate":null,"attempts":10000,"batchSize":4,"cardinality":10000,"connections":8,"deadlineSeconds":300,"distributed":true,"duplicatePercent":0,"guardPercent":0}

@@ -1,0 +1,2256 @@
+{
+  "sourceCommit": "158268953cb4f85967b9bd17baa4e036b4c4fa61",
+  "executable": "/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.19.0.1/b/keiro-bench/build/keiro-bench/keiro-bench",
+  "executableSha256": "a6af7180018c652c38def89b8c4ccf9c325d0835aa8933f8c5064edd20c1bc20",
+  "baseline": {
+    "originalLibraryCommit": "ad78efae0d21d849c8106eac73df0f8bb5719e1f",
+    "harnessCommit": "0efa3d2a459042c464abdb3d2adcec246ed0b219",
+    "harnessFiles": {
+      "keiro/bench/GuardedCatalogWorkload.hs": "f69e5975e3d8020927d64ff76d385db8c6002130b16154418320d2be49576889",
+      "keiro/bench/GuardedCatalogBaselineMain.hs": "00b785d54c7d97ffa6d257df30a21d7bc122f6a37dad765971e1008712eccc0f",
+      "keiro/test/GuardedCatalogFixture.hs": "7207e8f02610039fa3f0236b024a3fcf22fef0355c7459bd7f532eba7adf3f52",
+      "keiro-test-support/src/Keiro/Test/Postgres.hs": "93ad8b65ac77deca333f919ae00b6cd26a2b603dcafa93db2a72ba2f769437ab"
+    },
+    "workloadSha256": "f69e5975e3d8020927d64ff76d385db8c6002130b16154418320d2be49576889",
+    "fixtureSha256": "7207e8f02610039fa3f0236b024a3fcf22fef0355c7459bd7f532eba7adf3f52",
+    "retainedExecutable": "/private/tmp/keiro-306-enhanced-baseline-v2/ordinary-baseline",
+    "sha256": "64bfb938197d84a3bbff014d428c4fa523332fd71d14391c78de64d672d69ecf",
+    "compiler": "9.12.4",
+    "cabal": "3.16.1.0",
+    "buildOptions": "GHC -O1; runtime +RTS -N2 -RTS; pool size 10",
+    "dependencies": [
+      [
+        "Cabal",
+        "3.14.2.0"
+      ],
+      [
+        "Cabal-syntax",
+        "3.14.2.0"
+      ],
+      [
+        "Glob",
+        "0.10.2"
+      ],
+      [
+        "HUnit",
+        "1.6.2.0"
+      ],
+      [
+        "OneTuple",
+        "0.4.3"
+      ],
+      [
+        "Only",
+        "0.1"
+      ],
+      [
+        "QuickCheck",
+        "2.18.0.0"
+      ],
+      [
+        "StateVar",
+        "1.2.2"
+      ],
+      [
+        "abstract-deque",
+        "0.3"
+      ],
+      [
+        "adjunctions",
+        "4.4.4"
+      ],
+      [
+        "aeson",
+        "2.2.5.1"
+      ],
+      [
+        "aeson-casing",
+        "0.2.0.0"
+      ],
+      [
+        "aeson-pretty",
+        "0.8.11"
+      ],
+      [
+        "ansi-terminal",
+        "1.1.5"
+      ],
+      [
+        "ansi-terminal-types",
+        "1.1.3"
+      ],
+      [
+        "appar",
+        "0.1.8"
+      ],
+      [
+        "array",
+        "0.5.8.0"
+      ],
+      [
+        "assoc",
+        "1.1.1"
+      ],
+      [
+        "async",
+        "2.2.6"
+      ],
+      [
+        "atomic-primops",
+        "0.8.8"
+      ],
+      [
+        "attoparsec",
+        "0.14.4"
+      ],
+      [
+        "attoparsec-aeson",
+        "2.2.2.0"
+      ],
+      [
+        "base",
+        "4.21.2.0"
+      ],
+      [
+        "base-compat",
+        "0.15.0"
+      ],
+      [
+        "base-orphans",
+        "0.9.4"
+      ],
+      [
+        "base16",
+        "1.0"
+      ],
+      [
+        "base16-bytestring",
+        "1.0.2.0"
+      ],
+      [
+        "base64",
+        "1.0"
+      ],
+      [
+        "base64-bytestring",
+        "1.2.1.0"
+      ],
+      [
+        "bifunctors",
+        "5.6.3"
+      ],
+      [
+        "binary",
+        "0.8.9.3"
+      ],
+      [
+        "binary-parser",
+        "0.5.7.7"
+      ],
+      [
+        "bitvec",
+        "1.1.6.0"
+      ],
+      [
+        "blaze-builder",
+        "0.4.4.1"
+      ],
+      [
+        "byteorder",
+        "1.0.4"
+      ],
+      [
+        "bytestring",
+        "0.12.2.0"
+      ],
+      [
+        "bytestring-strict-builder",
+        "0.4.5.8"
+      ],
+      [
+        "bytestring-tree-builder",
+        "0.2.7.13"
+      ],
+      [
+        "call-stack",
+        "0.4.0"
+      ],
+      [
+        "case-insensitive",
+        "1.2.1.0"
+      ],
+      [
+        "cborg",
+        "0.2.10.0"
+      ],
+      [
+        "cereal",
+        "0.5.8.3"
+      ],
+      [
+        "character-ps",
+        "0.1"
+      ],
+      [
+        "charset",
+        "0.3.12"
+      ],
+      [
+        "clock",
+        "0.8.4"
+      ],
+      [
+        "cmdargs",
+        "0.10.22"
+      ],
+      [
+        "codd",
+        "0.1.8"
+      ],
+      [
+        "colour",
+        "2.3.7"
+      ],
+      [
+        "comonad",
+        "5.0.10"
+      ],
+      [
+        "conduit",
+        "1.3.6.1"
+      ],
+      [
+        "conduit-extra",
+        "1.3.8"
+      ],
+      [
+        "containers",
+        "0.7"
+      ],
+      [
+        "contravariant",
+        "1.5.6"
+      ],
+      [
+        "contravariant-extras",
+        "0.3.5.4"
+      ],
+      [
+        "cookie",
+        "0.5.1"
+      ],
+      [
+        "cryptohash-md5",
+        "0.11.101.0"
+      ],
+      [
+        "cryptohash-sha1",
+        "0.11.101.0"
+      ],
+      [
+        "cryptohash-sha256",
+        "0.11.102.1"
+      ],
+      [
+        "cryptohash-sha512",
+        "0.11.103.0"
+      ],
+      [
+        "crypton",
+        "1.1.5"
+      ],
+      [
+        "crypton-asn1-encoding",
+        "0.10.0"
+      ],
+      [
+        "crypton-asn1-parse",
+        "0.10.0"
+      ],
+      [
+        "crypton-asn1-types",
+        "0.4.1"
+      ],
+      [
+        "crypton-connection",
+        "0.4.6"
+      ],
+      [
+        "crypton-pem",
+        "0.3.0"
+      ],
+      [
+        "crypton-socks",
+        "0.6.2"
+      ],
+      [
+        "crypton-x509",
+        "1.9.1"
+      ],
+      [
+        "crypton-x509-store",
+        "1.9.0"
+      ],
+      [
+        "crypton-x509-system",
+        "1.9.0"
+      ],
+      [
+        "crypton-x509-validation",
+        "1.9.1"
+      ],
+      [
+        "data-default",
+        "0.8.0.2"
+      ],
+      [
+        "data-default-class",
+        "0.2.0.0"
+      ],
+      [
+        "data-fix",
+        "0.3.4"
+      ],
+      [
+        "deepseq",
+        "1.5.1.0"
+      ],
+      [
+        "directory",
+        "1.3.10.1"
+      ],
+      [
+        "distributive",
+        "0.6.3"
+      ],
+      [
+        "dlist",
+        "1.0"
+      ],
+      [
+        "double-conversion",
+        "2.0.5.0"
+      ],
+      [
+        "ech-config",
+        "0.0.1"
+      ],
+      [
+        "effectful",
+        "2.7.1.0"
+      ],
+      [
+        "effectful-core",
+        "2.7.1.2"
+      ],
+      [
+        "entropy",
+        "0.4.1.11"
+      ],
+      [
+        "ephemeral-pg",
+        "0.3.1.0"
+      ],
+      [
+        "exceptions",
+        "0.10.12"
+      ],
+      [
+        "file-embed",
+        "0.0.16.0"
+      ],
+      [
+        "file-io",
+        "0.1.6"
+      ],
+      [
+        "filelock",
+        "0.1.1.9"
+      ],
+      [
+        "filepath",
+        "1.5.5.0"
+      ],
+      [
+        "formatting",
+        "7.2.0"
+      ],
+      [
+        "free",
+        "5.2"
+      ],
+      [
+        "fusion-plugin-types",
+        "0.1.0"
+      ],
+      [
+        "generic-lens",
+        "2.3.0.0"
+      ],
+      [
+        "generic-lens-core",
+        "2.3.0.0"
+      ],
+      [
+        "ghc",
+        "9.12.4"
+      ],
+      [
+        "ghc-bignum",
+        "1.3"
+      ],
+      [
+        "ghc-boot",
+        "9.12.4"
+      ],
+      [
+        "ghc-boot-th",
+        "9.12.4"
+      ],
+      [
+        "ghc-heap",
+        "9.12.4"
+      ],
+      [
+        "ghc-internal",
+        "9.1204.0"
+      ],
+      [
+        "ghc-platform",
+        "0.1.0.0"
+      ],
+      [
+        "ghc-prim",
+        "0.13.0"
+      ],
+      [
+        "ghci",
+        "9.12.4"
+      ],
+      [
+        "half",
+        "0.3.3"
+      ],
+      [
+        "happy",
+        "2.2"
+      ],
+      [
+        "happy-lib",
+        "2.2"
+      ],
+      [
+        "hashable",
+        "1.5.1.0"
+      ],
+      [
+        "hashtables",
+        "1.4.2"
+      ],
+      [
+        "haskell-lexer",
+        "1.2.1"
+      ],
+      [
+        "haskell-src-exts",
+        "1.24.0"
+      ],
+      [
+        "haskell-src-meta",
+        "0.8.16"
+      ],
+      [
+        "hasql",
+        "1.10.3.7"
+      ],
+      [
+        "hasql-notifications",
+        "0.2.5.0"
+      ],
+      [
+        "hasql-pool",
+        "1.4.2.3"
+      ],
+      [
+        "hasql-transaction",
+        "1.2.3.1"
+      ],
+      [
+        "haxl",
+        "2.5.1.1"
+      ],
+      [
+        "heaps",
+        "0.4.1"
+      ],
+      [
+        "hpc",
+        "0.7.0.2"
+      ],
+      [
+        "hpke",
+        "0.2.0"
+      ],
+      [
+        "hs-opentelemetry-api",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-api-types",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-exporter-handle",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-exporter-in-memory",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-exporter-otlp",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-otlp",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-propagator-b3",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-propagator-datadog",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-propagator-jaeger",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-propagator-w3c",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-propagator-xray",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-sdk",
+        "1.0.0.0"
+      ],
+      [
+        "hs-opentelemetry-semantic-conventions",
+        "1.40.0.0"
+      ],
+      [
+        "hsc2hs",
+        "0.68.10"
+      ],
+      [
+        "hspec",
+        "2.11.18"
+      ],
+      [
+        "hspec-core",
+        "2.11.18"
+      ],
+      [
+        "hspec-discover",
+        "2.11.18"
+      ],
+      [
+        "hspec-expectations",
+        "0.8.4"
+      ],
+      [
+        "http-client",
+        "0.7.19"
+      ],
+      [
+        "http-client-tls",
+        "0.4.0"
+      ],
+      [
+        "http-conduit",
+        "2.3.9.1"
+      ],
+      [
+        "http-types",
+        "0.12.6"
+      ],
+      [
+        "indexed-profunctors",
+        "0.1.1.1"
+      ],
+      [
+        "indexed-traversable",
+        "0.1.5"
+      ],
+      [
+        "indexed-traversable-instances",
+        "0.1.2.1"
+      ],
+      [
+        "integer-conversion",
+        "0.1.1"
+      ],
+      [
+        "integer-gmp",
+        "1.1"
+      ],
+      [
+        "integer-logarithms",
+        "1.0.5"
+      ],
+      [
+        "invariant",
+        "0.6.5"
+      ],
+      [
+        "iproute",
+        "1.7.15"
+      ],
+      [
+        "jitsurei",
+        "0.1.0.0"
+      ],
+      [
+        "kan-extensions",
+        "5.2.8"
+      ],
+      [
+        "keiki",
+        "0.9.1.0"
+      ],
+      [
+        "keiki-codec-json",
+        "0.9.1.0"
+      ],
+      [
+        "keiro",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-core",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-dsl",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-dsl-behavior-complete-report",
+        "0.0.0.0"
+      ],
+      [
+        "keiro-dsl-codec-compare-artifact-info",
+        "0.1.0.0"
+      ],
+      [
+        "keiro-dsl-conformance-service-runtime",
+        "0.0.0.0"
+      ],
+      [
+        "keiro-dsl-corpus-regen",
+        "0.1.0.0"
+      ],
+      [
+        "keiro-migrations",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-ops",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-pgmq",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-test-support",
+        "0.19.0.1"
+      ],
+      [
+        "keiro-workspace-proof-conformance",
+        "0.0.0.0"
+      ],
+      [
+        "kiroku-store",
+        "0.11.0.0"
+      ],
+      [
+        "kiroku-store-migrations",
+        "0.7.1.0"
+      ],
+      [
+        "lens",
+        "5.3.6"
+      ],
+      [
+        "lens-family",
+        "2.1.3"
+      ],
+      [
+        "lens-family-core",
+        "2.1.3"
+      ],
+      [
+        "libBF",
+        "0.6.9"
+      ],
+      [
+        "libyaml",
+        "0.1.4"
+      ],
+      [
+        "libyaml-clib",
+        "0.2.5"
+      ],
+      [
+        "lockfree-queue",
+        "0.2.4"
+      ],
+      [
+        "megaparsec",
+        "9.8.3"
+      ],
+      [
+        "microlens",
+        "0.5.0.0"
+      ],
+      [
+        "mime-types",
+        "0.1.2.2"
+      ],
+      [
+        "mlkem",
+        "0.2.3.0"
+      ],
+      [
+        "mmorph",
+        "1.2.2"
+      ],
+      [
+        "mmzk-typeid",
+        "0.7.1.2"
+      ],
+      [
+        "monad-control",
+        "1.0.3.1"
+      ],
+      [
+        "mono-traversable",
+        "1.0.21.0"
+      ],
+      [
+        "mtl",
+        "2.3.2"
+      ],
+      [
+        "network",
+        "3.2.9.0"
+      ],
+      [
+        "network-bsd",
+        "2.8.1.0"
+      ],
+      [
+        "network-byte-order",
+        "0.1.8"
+      ],
+      [
+        "network-info",
+        "0.2.1"
+      ],
+      [
+        "network-uri",
+        "2.6.4.2"
+      ],
+      [
+        "nothunks",
+        "0.3.2"
+      ],
+      [
+        "nqe",
+        "0.6.6"
+      ],
+      [
+        "old-locale",
+        "1.0.0.7"
+      ],
+      [
+        "optparse-applicative",
+        "0.19.0.0"
+      ],
+      [
+        "os-string",
+        "2.0.10"
+      ],
+      [
+        "parallel",
+        "3.3.0.0"
+      ],
+      [
+        "parsec",
+        "3.1.18.0"
+      ],
+      [
+        "parser-combinators",
+        "1.3.1"
+      ],
+      [
+        "pg-migrate",
+        "1.2.0.0"
+      ],
+      [
+        "pg-migrate-cli",
+        "1.2.0.0"
+      ],
+      [
+        "pg-migrate-embed",
+        "1.2.0.0"
+      ],
+      [
+        "pg-migrate-import-codd",
+        "1.2.0.0"
+      ],
+      [
+        "pg-migrate-import-hasql-migration",
+        "1.2.0.0"
+      ],
+      [
+        "pg-migrate-test-support",
+        "1.2.0.0"
+      ],
+      [
+        "pgmq-config",
+        "0.6.1.1"
+      ],
+      [
+        "pgmq-core",
+        "0.6.1.1"
+      ],
+      [
+        "pgmq-effectful",
+        "0.6.1.1"
+      ],
+      [
+        "pgmq-hasql",
+        "0.6.1.1"
+      ],
+      [
+        "pgmq-migration",
+        "0.6.1.1"
+      ],
+      [
+        "postgresql-binary",
+        "0.15.0.1"
+      ],
+      [
+        "postgresql-connection-string",
+        "0.1.0.6"
+      ],
+      [
+        "postgresql-libpq",
+        "0.11.0.0"
+      ],
+      [
+        "postgresql-libpq-configure",
+        "0.11"
+      ],
+      [
+        "postgresql-simple",
+        "0.7.0.1"
+      ],
+      [
+        "pretty",
+        "1.1.3.6"
+      ],
+      [
+        "prettyprinter",
+        "1.7.2"
+      ],
+      [
+        "prettyprinter-ansi-terminal",
+        "1.1.4"
+      ],
+      [
+        "primitive",
+        "0.9.1.0"
+      ],
+      [
+        "process",
+        "1.6.26.1"
+      ],
+      [
+        "profunctors",
+        "5.6.3"
+      ],
+      [
+        "proto-lens",
+        "0.7.1.7"
+      ],
+      [
+        "proto-lens-runtime",
+        "0.7.0.8"
+      ],
+      [
+        "quickcheck-io",
+        "0.2.0"
+      ],
+      [
+        "ram",
+        "0.22.1"
+      ],
+      [
+        "random",
+        "1.3.1"
+      ],
+      [
+        "reflection",
+        "2.1.9"
+      ],
+      [
+        "resourcet",
+        "1.3.0"
+      ],
+      [
+        "rts",
+        "1.0.3"
+      ],
+      [
+        "safe",
+        "0.3.21"
+      ],
+      [
+        "safe-exceptions",
+        "0.1.7.4"
+      ],
+      [
+        "sbv",
+        "14.8"
+      ],
+      [
+        "scientific",
+        "0.3.9.0"
+      ],
+      [
+        "semaphore-compat",
+        "1.0.0"
+      ],
+      [
+        "semialign",
+        "1.4"
+      ],
+      [
+        "semigroupoids",
+        "6.0.2"
+      ],
+      [
+        "serialise",
+        "0.2.6.1"
+      ],
+      [
+        "shibuya-core",
+        "0.10.0.1"
+      ],
+      [
+        "shibuya-kiroku-adapter",
+        "0.6.0.1"
+      ],
+      [
+        "shibuya-pgmq-adapter",
+        "0.16.1.0"
+      ],
+      [
+        "split",
+        "0.2.5.1"
+      ],
+      [
+        "splitmix",
+        "0.1.3.2"
+      ],
+      [
+        "stm",
+        "2.5.3.1"
+      ],
+      [
+        "streaming",
+        "0.2.4.0"
+      ],
+      [
+        "streaming-commons",
+        "0.2.3.1"
+      ],
+      [
+        "streamly",
+        "0.11.1"
+      ],
+      [
+        "streamly-core",
+        "0.3.1"
+      ],
+      [
+        "strict",
+        "0.5.1"
+      ],
+      [
+        "strict-mutable-base",
+        "2.0.0.0"
+      ],
+      [
+        "syb",
+        "0.7.4"
+      ],
+      [
+        "system-cxx-std-lib",
+        "1.0"
+      ],
+      [
+        "tagged",
+        "0.8.11"
+      ],
+      [
+        "tasty",
+        "1.5.4"
+      ],
+      [
+        "tasty-bench",
+        "0.5.1"
+      ],
+      [
+        "template-haskell",
+        "2.23.0.0"
+      ],
+      [
+        "template-haskell-compat-v0208",
+        "0.1.9.6"
+      ],
+      [
+        "temporary",
+        "1.3"
+      ],
+      [
+        "text",
+        "2.1.4"
+      ],
+      [
+        "text-builder",
+        "1.0.0.5"
+      ],
+      [
+        "text-builder-core",
+        "0.1.1.3"
+      ],
+      [
+        "text-iso8601",
+        "0.1.1.2"
+      ],
+      [
+        "text-short",
+        "0.1.6.1"
+      ],
+      [
+        "th-abstraction",
+        "0.7.2.0"
+      ],
+      [
+        "th-compat",
+        "0.1.7"
+      ],
+      [
+        "th-expand-syns",
+        "0.4.12.0"
+      ],
+      [
+        "th-lift",
+        "0.8.7"
+      ],
+      [
+        "th-orphans",
+        "0.13.17"
+      ],
+      [
+        "th-reify-many",
+        "0.1.10"
+      ],
+      [
+        "these",
+        "1.2.1"
+      ],
+      [
+        "thread-utils-context",
+        "0.4.1.1"
+      ],
+      [
+        "thread-utils-finalizers",
+        "0.1.1.0"
+      ],
+      [
+        "time",
+        "1.14"
+      ],
+      [
+        "time-compat",
+        "1.9.9"
+      ],
+      [
+        "time-hourglass",
+        "0.3.0"
+      ],
+      [
+        "tls",
+        "2.4.6"
+      ],
+      [
+        "transformers",
+        "0.6.3.0"
+      ],
+      [
+        "transformers-base",
+        "0.4.6.1"
+      ],
+      [
+        "transformers-compat",
+        "0.7.2"
+      ],
+      [
+        "tree-view",
+        "0.5.1"
+      ],
+      [
+        "typed-process",
+        "0.2.13.0"
+      ],
+      [
+        "unagi-chan",
+        "0.4.1.4"
+      ],
+      [
+        "unicode-data",
+        "0.9.0"
+      ],
+      [
+        "uniplate",
+        "1.6.13"
+      ],
+      [
+        "unique",
+        "0.0.2"
+      ],
+      [
+        "unix",
+        "2.8.8.0"
+      ],
+      [
+        "unix-compat",
+        "0.7.4.1"
+      ],
+      [
+        "unix-time",
+        "0.5.0"
+      ],
+      [
+        "unliftio",
+        "0.2.25.1"
+      ],
+      [
+        "unliftio-core",
+        "0.2.1.0"
+      ],
+      [
+        "unordered-containers",
+        "0.2.21"
+      ],
+      [
+        "uuid",
+        "1.3.16.1"
+      ],
+      [
+        "uuid-types",
+        "1.0.6.1"
+      ],
+      [
+        "vault",
+        "0.3.2.0"
+      ],
+      [
+        "vector",
+        "0.13.2.0"
+      ],
+      [
+        "vector-algorithms",
+        "0.9.1.0"
+      ],
+      [
+        "vector-builder",
+        "0.3.8.7"
+      ],
+      [
+        "vector-stream",
+        "0.1.0.1"
+      ],
+      [
+        "wherefrom-compat",
+        "0.2.0.0"
+      ],
+      [
+        "witherable",
+        "0.5"
+      ],
+      [
+        "yaml",
+        "0.11.11.2"
+      ],
+      [
+        "zlib",
+        "0.7.1.1"
+      ]
+    ],
+    "machine": "macOS-26.7-arm64-arm-64bit-Mach-O",
+    "recordedAt": "2026-10-12T03:54:22.938836+00:00",
+    "purpose": "enhanced alternating baseline; initial latency archive remains provenance only",
+    "buildCheckoutHead": "0efa3d2a459042c464abdb3d2adcec246ed0b219",
+    "verifiedHarnessCommit": "22c6f696d6dcb39e5256574bf4ee050504d9d225"
+  },
+  "runtimeOptions": "+RTS -N2 -RTS",
+  "acceptanceRequirement": "No concurrent builds/tests/other benchmarks initiated by this task; shared host background activity is recorded separately.",
+  "ordinaryProcessLifetime": "Both retained and candidate ordinary binaries launch as fresh RTS processes; identical shared measurement code and fresh databases.",
+  "hostProcessesBeforeRun": [
+    "  PID  %CPU COMM",
+    "    1   0.9 /sbin/launchd",
+    "  470   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "  519   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "  520   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "  650  12.1 /usr/libexec/logd",
+    "  652   0.0 /usr/libexec/UserEventAgent",
+    "  655   0.0 /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoted",
+    "  658   0.0 /usr/sbin/systemstats",
+    "  662   0.1 /usr/libexec/configd",
+    "  664   0.0 /System/Library/CoreServices/powerd.bundle/powerd",
+    "  665   0.0 /usr/libexec/IOMFB_bics_daemon",
+    "  669   0.0 /usr/libexec/remoted",
+    "  673   0.0 /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd_system",
+    "  675   0.0 /usr/libexec/watchdogd",
+    "  679   0.9 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds",
+    "  681   0.0 /usr/libexec/kernelmanagerd",
+    "  682   0.0 /usr/libexec/diskarbitrationd",
+    "  686   0.0 /usr/sbin/syslogd",
+    "  688   0.0 /usr/libexec/thermalmonitord",
+    "  689   0.0 /System/Library/PrivateFrameworks/CoreDuetContext.framework/Resources/contextstored",
+    "  690   0.0 /usr/libexec/xprotectd",
+    "  691   2.4 /usr/libexec/opendirectoryd",
+    "  692   0.0 /System/Library/PrivateFrameworks/ApplePushService.framework/apsd",
+    "  693   0.0 /System/Library/CoreServices/launchservicesd",
+    "  694   0.0 /usr/libexec/timed",
+    "  695   0.0 /System/Library/PrivateFrameworks/MobileDevice.framework/Versions/A/Resources/usbmuxd",
+    "  696   0.0 /usr/sbin/securityd",
+    "  698   0.1 /usr/libexec/locationd",
+    "  701   0.0 autofsd",
+    "  702   0.0 /usr/libexec/dasd",
+    "  703   0.0 /usr/libexec/corerepaird",
+    "  705   0.1 /usr/sbin/distnoted",
+    "  709   0.0 /System/Library/CoreServices/logind",
+    "  710   0.0 /System/Library/PrivateFrameworks/GenerationalStorage.framework/Versions/A/Support/revisiond",
+    "  711   0.0 /usr/sbin/KernelEventAgent",
+    "  715   0.1 /usr/sbin/bluetoothd",
+    "  716   0.8 /usr/sbin/notifyd",
+    "  718   0.2 /usr/libexec/corebrightnessd",
+    "  719   0.0 /usr/libexec/AirPlayXPCHelper",
+    "  720   0.0 /System/Library/Frameworks/CoreMediaIO.framework/Versions/A/Resources/com.apple.cmio.registerassistantservice",
+    "  724   0.0 /System/Library/PrivateFrameworks/TCC.framework/Support/tccd",
+    "  725   0.1 /usr/sbin/cfprefsd",
+    "  726   0.0 /usr/libexec/runningboardd",
+    "  728   0.2 /System/Library/CoreServices/coreservicesd",
+    "  732   0.0 /System/Library/PrivateFrameworks/CoreAnalytics.framework/Support/analyticsd",
+    "  735   0.0 /usr/libexec/trustd",
+    "  736   1.5 /usr/sbin/coreaudiod",
+    "  739   0.3 /usr/sbin/mDNSResponder",
+    "  742   0.0 /usr/libexec/nsurlsessiond",
+    "  744   0.0 /usr/libexec/apfsd",
+    "  746   0.0 /usr/libexec/corestoraged",
+    "  749   0.0 /System/Library/Frameworks/CoreMediaIO.framework/Resources/VDC.plugin/Contents/Resources/VDCAssistant",
+    "  751   0.0 /usr/libexec/lsd",
+    "  753   0.0 /usr/libexec/airportd",
+    "  756   0.4 /usr/libexec/symptomsd",
+    "  761   0.0 /System/Library/Frameworks/Security.framework/Versions/A/XPCServices/authd.xpc/Contents/MacOS/authd",
+    "  762   0.0 /usr/libexec/ApplicationFirewall/socketfilterfw",
+    "  763   0.0 /usr/sbin/distnoted",
+    "  777   0.0 /usr/sbin/distnoted",
+    "  779   0.0 /usr/sbin/mDNSResponderHelper",
+    "  780   0.0 /usr/libexec/eligibilityd",
+    "  783   0.0 /usr/sbin/distnoted",
+    "  788   0.0 /usr/sbin/distnoted",
+    "  790  40.2 /usr/libexec/syspolicyd",
+    "  792   0.0 /System/Library/CoreServices/TimeMachine/backupd",
+    "  794   0.0 Core Audio Driver (MSTeamsAudioDevice.driver)",
+    "  796   0.0 /usr/libexec/audiomxd",
+    "  797   0.0 /usr/sbin/WirelessRadioManagerd",
+    "  802   0.0 /usr/libexec/audioclocksyncd",
+    "  805   0.0 /usr/libexec/com.apple.cmio.videodriverkithostextension.systemextension/Contents/MacOS/com.apple.cmio.videodriverkithostextension",
+    "  806   0.0 /usr/sbin/appleh13camerad",
+    "  820   0.0 /usr/sbin/distnoted",
+    "  826   0.0 /usr/sbin/BTLEServer",
+    "  828   0.0 /usr/sbin/distnoted",
+    "  831   0.6 /usr/libexec/searchpartyd",
+    "  844   0.0 /usr/sbin/distnoted",
+    "  856   0.0 /usr/libexec/aned",
+    "  859   0.0 /Library/Application Support/org.pqrs/Karabiner-DriverKit-VirtualHIDDevice/Applications/Karabiner-VirtualHIDDevice-Daemon.app/Contents/MacOS/Karabiner-VirtualHIDDevice-Daemon",
+    "  861   0.0 /Library/Application Support/org.pqrs/Karabiner-Elements/Karabiner-Core-Service.app/Contents/MacOS/Karabiner-Core-Service",
+    "  909   0.0 /nix/var/nix/profiles/default/bin/nix-daemon",
+    "  924   0.0 /usr/libexec/cameracaptured",
+    "  925   0.0 /System/Library/Frameworks/CoreMediaIO.framework/Versions/A/Resources/UVCAssistant.systemextension/Contents/MacOS/UVCAssistant",
+    "  928   0.0 Core Audio Driver (ParrotAudioPlugin.driver)",
+    "  930   0.0 /System/Library/CoreServices/Software Update.app/Contents/Resources/suhelperd",
+    "  933   0.0 /usr/sbin/distnoted",
+    " 1003   0.0 /System/Library/CoreServices/appleeventsd",
+    " 1018   0.0 /System/Library/Frameworks/LocalAuthentication.framework/Support/coreauthd",
+    " 1027   0.0 /System/Library/Audio/Plug-Ins/usbaudio.bundle/Contents/MacOS/usbaudiod",
+    " 1029   1.4 /System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN",
+    " 1030   0.0 /usr/sbin/distnoted",
+    " 1031   0.0 /System/Library/DriverExtensions/com.apple.AppleUserHIDDrivers.dext/com.apple.AppleUserHIDDrivers",
+    " 1032   0.0 /System/Library/DriverExtensions/IOUserBluetoothSerialDriver.dext/IOUserBluetoothSerialDriver",
+    " 1033   0.0 /Library/SystemExtensions/F1C5BD74-7F16-4BD2-9B74-69202C2CD139/org.pqrs.Karabiner-DriverKit-VirtualHIDDevice.dext/org.pqrs.Karabiner-DriverKit-VirtualHIDDevice",
+    " 1035   0.0 /System/Library/DriverExtensions/com.apple.DriverKit-IOUserDockChannelSerial.dext/com.apple.DriverKit-IOUserDockChannelSerial",
+    " 1044   0.1 /usr/sbin/distnoted",
+    " 1056   0.0 /usr/libexec/rosetta/oahd",
+    " 1123   0.3 /usr/sbin/cfprefsd",
+    " 1125   0.0 /System/Library/CoreServices/Setup Assistant.app/Contents/Resources/mbuseragent",
+    " 1149   0.0 /usr/libexec/secd",
+    " 1165   0.0 /usr/libexec/containermanagerd",
+    " 1169   0.0 /usr/libexec/lsd",
+    " 1188   0.5 /usr/libexec/trustd",
+    " 1193   0.0 /System/Library/PrivateFrameworks/SystemMigrationNetwork.framework/Resources/migrationhelper",
+    " 1226   0.0 /usr/sbin/filecoordinationd",
+    " 1266   0.0 /usr/sbin/distnoted",
+    " 1348   0.0 /usr/sbin/systemstats",
+    " 1382   0.0 /usr/sbin/distnoted",
+    " 1402   0.0 /usr/sbin/distnoted",
+    " 1405   0.0 /System/Library/Frameworks/CryptoTokenKit.framework/ctkd",
+    " 1416   0.0 /usr/sbin/distnoted",
+    " 1435   0.0 /usr/libexec/modelmanagerd",
+    " 1443   0.0 /usr/libexec/nearbyd",
+    " 1457   0.0 /System/Library/Frameworks/AuthenticationServices.framework/Versions/A/XPCServices/com.apple.AuthenticationServices.Helper.xpc/Contents/MacOS/com.apple.AuthenticationServices.Helper",
+    " 1473   0.0 /System/Library/PrivateFrameworks/DiskImages.framework/Resources/hdiejectd",
+    " 1475   0.0 /System/Library/PrivateFrameworks/DiskImages.framework/Resources/diskimages-helper",
+    " 1645   0.0 /usr/sbin/distnoted",
+    " 1685   0.0 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdbulkimport",
+    " 1789   0.0 automountd",
+    " 1803   0.0 /System/Library/Frameworks/CryptoTokenKit.framework/ctkahp.bundle/Contents/MacOS/ctkahp",
+    " 1822   0.0 /usr/libexec/gamepolicyd",
+    " 1882   0.0 /System/Library/CoreServices/SubmitDiagInfo",
+    " 2003   0.0 /usr/libexec/transparencyd",
+    " 2018   0.0 /System/Library/PrivateFrameworks/ProtectedCloudStorage.framework/Helpers/ProtectedCloudKeySyncing",
+    " 2110   0.0 /System/Library/Frameworks/OpenGL.framework/Versions/A/Libraries/CVMServer",
+    " 2111   0.0 bash",
+    " 2371   0.0 /usr/libexec/diagnosticd",
+    " 2393   0.0 /usr/sbin/distnoted",
+    " 2423   0.0 /System/Library/PrivateFrameworks/CoreFP.framework/Versions/A/fairplayd",
+    " 2428   0.0 /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/HIServices.framework/Versions/A/XPCServices/com.apple.hiservices-xpcservice.xpc/Contents/MacOS/com.apple.hiservices-xpcservice",
+    " 2610   2.7 /Users/shinzui/.codex/packages/app-server-daemon/releases/0.162.1-aarch64-apple-darwin/bin/codex",
+    " 2668   0.0 /Applications/Slack.app/Contents/MacOS/Slack",
+    " 2814   0.0 /Applications/Slack.app/Contents/Frameworks/Slack Helper.app/Contents/MacOS/Slack Helper",
+    " 2817   0.0 /Applications/Slack.app/Contents/Frameworks/Slack Helper.app/Contents/MacOS/Slack Helper",
+    " 2912   0.0 /Applications/Slack.app/Contents/Frameworks/Slack Helper (Renderer).app/Contents/MacOS/Slack Helper (Renderer)",
+    " 3095   0.0 /Library/PrivilegedHelperTools/com.adobe.acc.installer.v2",
+    " 3166   0.0 /usr/sbin/distnoted",
+    " 3201   0.0 postgres: shinzui mori [local] idle",
+    " 3306   0.0 /Applications/Slack.app/Contents/Frameworks/Slack Helper.app/Contents/MacOS/Slack Helper",
+    " 3307   0.0 /Applications/Slack.app/Contents/Frameworks/Slack Helper.app/Contents/MacOS/Slack Helper",
+    " 3502   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    " 3583   6.7 tmux",
+    " 3621   0.0 /System/Library/ExtensionKit/Extensions/TGOnDeviceInferenceProviderService.appex/Contents/MacOS/TGOnDeviceInferenceProviderService",
+    " 3736   0.0 /usr/libexec/duetexpertd",
+    " 3787   0.0 /System/Library/PrivateFrameworks/VoiceShortcuts.framework/Versions/A/Support/siriactionsd",
+    " 3923   0.2 /Library/SystemExtensions/635DA42F-5097-4465-B115-BAE9D94A7969/io.tailscale.ipn.macsys.network-extension.systemextension/Contents/MacOS/io.tailscale.ipn.macsys.network-extension",
+    " 4752   0.4 sleep",
+    " 5214   0.0 /System/Library/PrivateFrameworks/AppleCredentialManager.framework/AppleCredentialManagerDaemon",
+    " 5388   0.0 /usr/libexec/amfid",
+    " 5585   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    " 5670   0.0 /usr/sbin/distnoted",
+    " 5820   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    " 5845   1.3 /bin/zsh",
+    " 5990   0.0 /System/Library/CoreServices/pbs",
+    " 6021   0.0 /System/Library/CoreServices/iconservicesagent",
+    " 6153   0.0 /System/Library/CoreServices/CrashReporterSupportHelper",
+    " 6219   6.2 /nix/var/nix/profiles/default/bin/nix-daemon",
+    " 6545   0.0 /System/Library/CoreServices/iconservicesd",
+    " 7586   0.1 /Users/shinzui/.codex/packages/app-server-daemon/releases/0.162.1-aarch64-apple-darwin/bin/codex-code-mode-host",
+    " 7763  27.8 python3",
+    " 8617   0.0 /Applications/CleanShot X.app/Contents/MacOS/CleanShot X",
+    " 8732   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    " 8733   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    " 8734   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    " 8735   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    " 8737   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    " 8738   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    " 8739   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    " 8740   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    " 8742   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    " 9354   6.1 nix-prefetch-url",
+    " 9881   0.0 ps",
+    "10169   0.0 /System/Library/PrivateFrameworks/LocalAuthenticationUI.framework/Versions/A/XPCServices/LocalAuthenticationRemoteService.xpc/Contents/MacOS/LocalAuthenticationRemoteService",
+    "10267   0.0 /System/Library/PrivateFrameworks/CalendarDaemon.framework/Support/calaccessd",
+    "10270   0.0 /System/Library/PrivateFrameworks/AppleMediaServicesUI.framework/amsengagementd",
+    "10271   0.0 /System/Library/PrivateFrameworks/MobileTimer.framework/Executables/mobiletimerd",
+    "10281   0.0 /usr/libexec/usermanagerd",
+    "10283   0.0 /System/Library/PrivateFrameworks/DoNotDisturbServer.framework/Support/donotdisturbd",
+    "10299   0.0 /System/Library/PrivateFrameworks/TCC.framework/Support/tccd",
+    "10302   0.0 /usr/libexec/sandboxd",
+    "10303   0.0 /System/Library/PrivateFrameworks/CommunicationTrust.framework/Support/communicationtrustd",
+    "10347   0.0 /usr/bin/true",
+    "10411   0.0 /System/Library/Frameworks/MediaAccessibility.framework/Versions/A/XPCServices/com.apple.accessibility.mediaaccessibilityd.xpc/Contents/MacOS/com.apple.accessibility.mediaaccessibilityd",
+    "10412   0.0 /System/Library/Frameworks/AudioToolbox.framework/AudioComponentRegistrar",
+    "10616   0.0 (nagarectl-test)",
+    "10815   0.4 postgres: shinzui mori [local] idle",
+    "11012   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "11187   0.0 /nix/store/zndqgdxn4p28iyax8raza3pfn7lkjw64-postgresql-18.6/bin/postgres",
+    "11188   0.0 postgres: io worker 0",
+    "11189   0.0 postgres: io worker 1",
+    "11190   0.0 postgres: io worker 2",
+    "11191   0.0 postgres: checkpointer ",
+    "11192   0.0 postgres: background writer ",
+    "11194   0.0 postgres: walwriter ",
+    "11195   0.0 postgres: autovacuum launcher ",
+    "11196   0.0 postgres: logical replication launcher ",
+    "11324   0.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+    "11485   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "11646   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "12356   0.0 /System/Library/PrivateFrameworks/PrivateCloudCompute.framework/privatecloudcomputed.app/Contents/MacOS/privatecloudcomputed",
+    "12992   0.0 /System/Library/Frameworks/VideoToolbox.framework/Versions/A/XPCServices/VTDecoderXPCService.xpc/Contents/MacOS/VTDecoderXPCService",
+    "13424   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "13646   0.0 postgres: shinzui mori [local] idle",
+    "14120   0.0 /usr/libexec/PerfPowerServices",
+    "14655   0.0 postgres: shinzui rei [local] idle",
+    "14871   0.0 /usr/libexec/findmydeviced",
+    "14873   0.0 /usr/libexec/containermanagerd_system",
+    "15485   0.0 /usr/libexec/findmybeaconingd",
+    "15500   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "16947   0.0 /System/Library/Frameworks/Security.framework/Versions/A/MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent",
+    "17692   0.1 postgres: shinzui notion_hub [local] idle",
+    "17712   0.0 /System/Library/CoreServices/TimeMachine/backupd-helper",
+    "18101   0.0 /usr/libexec/nesessionmanager",
+    "19081   0.0 sleep",
+    "19268   0.0 /System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod",
+    "19373   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "19374   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    "19382   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "19688   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    "19689   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "19690   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "20135   0.9 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird",
+    "20218   0.0 /System/Library/PrivateFrameworks/SessionCore.framework/Support/liveactivitiesd",
+    "20360   0.0 /usr/libexec/taskgated",
+    "20372   0.0 /usr/libexec/neagent",
+    "20448   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "20608   0.0 /Applications/1Password 7.app/Contents/Library/LoginItems/1Password Extension Helper.app/Contents/MacOS/1PasswordSLSNativeMessageHost",
+    "20634   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "20636   0.0 /Users/shinzui/.codex/plugins/cache/openai-bundled/chrome/latest/extension-host/macos/arm64/ChatGPT for Chrome",
+    "20805   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "20880   0.0 /System/Library/PrivateFrameworks/UsageTracking.framework/Versions/A/UsageTrackingAgent",
+    "21163   0.0 /System/Library/PrivateFrameworks/ReplicatorCore.framework/Support/replicatord",
+    "21215   1.8 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "21601   0.0 /System/Library/PrivateFrameworks/HearingCore.framework/heard",
+    "21632   0.0 /System/Library/PrivateFrameworks/BackgroundTaskManagement.framework/Resources/backgroundtaskmanagementd",
+    "21889   0.0 /nix/store/zv89kk7zyaf29041b07mz9cm3ahikx0w-postgresql-and-plugins-18.6/bin/postgres",
+    "21891   0.0 postgres: io worker 0",
+    "21892   0.0 postgres: io worker 1",
+    "21893   0.0 postgres: io worker 2",
+    "21894   0.0 postgres: checkpointer ",
+    "21895   0.0 postgres: background writer ",
+    "21897   0.0 postgres: walwriter ",
+    "21898   0.0 postgres: autovacuum launcher ",
+    "21899   0.0 postgres: pg_cron launcher ",
+    "21900   0.0 postgres: logical replication launcher ",
+    "22158   0.0 postgres: shinzui rei [local] idle",
+    "22159   0.0 postgres: shinzui rei [local] idle",
+    "22659   0.0 /System/Applications/Notes.app/Contents/PlugIns/com.apple.Notes.SpotlightIndexExtension.appex/Contents/MacOS/com.apple.Notes.SpotlightIndexExtension",
+    "23767   0.1 postgres: shinzui rei [local] idle",
+    "23815   0.0 /usr/libexec/smd",
+    "23829   0.0 /System/Library/PrivateFrameworks/XprotectFramework.framework/Versions/A/XPCServices/XProtectBridgeService.xpc/Contents/MacOS/XProtectBridgeService",
+    "23858   0.0 /System/Library/PrivateFrameworks/CloudTelemetry.framework/Versions/A/XPCServices/CloudTelemetryService.xpc/Contents/MacOS/CloudTelemetryService",
+    "24051   0.0 /System/Applications/Mail.app/Contents/PlugIns/com.apple.mail.SpotlightIndexExtension.appex/Contents/MacOS/com.apple.mail.SpotlightIndexExtension",
+    "24094   0.0 postgres: shinzui rei [local] idle",
+    "24175   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "24209   0.0 postgres: shinzui mori [local] idle",
+    "24762   0.0 /usr/libexec/rtcreportingd",
+    "25207   0.0 postgres: shinzui rei [local] idle",
+    "25208   0.0 postgres: shinzui rei [local] idle",
+    "25209   0.0 postgres: shinzui rei [local] idle",
+    "25210   0.0 postgres: shinzui rei [local] idle",
+    "25283   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "25284   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    "25294   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "25681   1.7 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "25798   0.0 /usr/libexec/powerexperienced",
+    "26831   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "27388   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "27674   0.0 /usr/libexec/mlhostd",
+    "27760   0.0 /System/Library/Frameworks/ExtensionFoundation.framework/Versions/A/XPCServices/extensionkitservice.xpc/Contents/MacOS/extensionkitservice",
+    "27765   0.0 /usr/libexec/secinitd",
+    "28176   0.0 zsh",
+    "28194   0.0 just",
+    "28259   0.0 /nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal",
+    "28783   0.0 <defunct>",
+    "28811   0.0 /usr/sbin/BTLEServerAgent",
+    "29437   0.0 /usr/libexec/logd_helper",
+    "30021   0.0 postgres: shinzui mori [local] idle",
+    "30508   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "30704   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "30791   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "31080   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "31630   0.0 /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper",
+    "31652   0.0 /System/Library/PrivateFrameworks/AppStoreComponents.framework/Support/appstorecomponentsd",
+    "32254   0.0 /Users/shinzui/.codex/packages/app-server-daemon/releases/0.162.1-aarch64-apple-darwin/bin/codex",
+    "32587   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "33059   0.0 /System/Library/PrivateFrameworks/AppStoreDaemon.framework/Support/appstoreagent",
+    "33288   0.1 /Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow",
+    "33476   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler",
+    "33489   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper.app/Contents/MacOS/Wispr Flow Helper",
+    "33490   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper.app/Contents/MacOS/Wispr Flow Helper",
+    "33536   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper (Renderer).app/Contents/MacOS/Wispr Flow Helper (Renderer)",
+    "33537   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper (Renderer).app/Contents/MacOS/Wispr Flow Helper (Renderer)",
+    "33538   3.1 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper (Renderer).app/Contents/MacOS/Wispr Flow Helper (Renderer)",
+    "33540   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper (Renderer).app/Contents/MacOS/Wispr Flow Helper (Renderer)",
+    "33553   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper.app/Contents/MacOS/Wispr Flow Helper",
+    "33554   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper.app/Contents/MacOS/Wispr Flow Helper",
+    "33718   0.0 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper (Renderer).app/Contents/MacOS/Wispr Flow Helper (Renderer)",
+    "33737   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "33858   0.0 /System/Library/PrivateFrameworks/IMDPersistence.framework/IMAutomaticHistoryDeletionAgent.app/Contents/MacOS/IMAutomaticHistoryDeletionAgent",
+    "33885   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "34392   0.0 /System/Cryptexes/App/usr/libexec/SafariBookmarksSyncAgent",
+    "34801   0.0 /usr/libexec/spotlightknowledged.updater",
+    "35166   0.0 /nix/store/pk4n1x1g3fp8rrvpjm87cxz097swn1qj-postgresql-17.10/bin/postgres",
+    "35167   0.0 postgres: checkpointer ",
+    "35168   0.0 postgres: background writer ",
+    "35170   0.0 postgres: walwriter ",
+    "35171   0.0 postgres: autovacuum launcher ",
+    "35172   0.0 postgres: logical replication launcher ",
+    "35256   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "35489   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "35690   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "35851   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "35925   3.1 /System/Library/PrivateFrameworks/CascadeSets.framework/Versions/A/XPCServices/SetStoreUpdateService.xpc/Contents/MacOS/SetStoreUpdateService",
+    "35991   0.0 /System/Library/Frameworks/Security.framework/Versions/A/XPCServices/com.apple.CodeSigningHelper.xpc/Contents/MacOS/com.apple.CodeSigningHelper",
+    "36217   0.0 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagare-harness/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagare-harness-0.1.0/x/nagare-harness/build/nagare-harness/nagare-harness",
+    "37099   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "37439   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "37441   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "37448   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "37559   0.0 postgres: shinzui mori [local] idle",
+    "38933   0.0 rtadvd",
+    "40159   0.0 /usr/libexec/biometrickitd",
+    "40302   0.0 postgres: shinzui rei [local] idle",
+    "40713   0.0 /usr/libexec/routined",
+    "41262   0.9 bash",
+    "41844   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "42352   0.0 /System/Library/Frameworks/AppKit.framework/Versions/C/XPCServices/ThemeWidgetControlViewService.xpc/Contents/MacOS/ThemeWidgetControlViewService",
+    "42603   0.0 /usr/libexec/seputil",
+    "42915   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper.app/Contents/MacOS/Notion Helper",
+    "42916   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper.app/Contents/MacOS/Notion Helper",
+    "43033   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "43350   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "43758   0.0 postgres: shinzui notion_hub [local] idle",
+    "44406   0.0 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdwrite",
+    "44433   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "45726   0.0 /System/Library/CoreServices/UserNotificationCenter.app/Contents/MacOS/UserNotificationCenter",
+    "45953   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "45954   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node",
+    "45960   0.0 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+    "47329   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/MacOS/Safari",
+    "47345   0.0 /System/Cryptexes/App/usr/libexec/com.apple.Safari.History",
+    "47346   0.0 /System/Library/Frameworks/ImageIO.framework/Versions/A/XPCServices/ImageIOXPCService.xpc/Contents/MacOS/ImageIOXPCService",
+    "47352   0.0 /System/Library/PrivateFrameworks/IntelligenceFlowContextRuntime.framework/Versions/A/intelligencecontextd",
+    "47355   0.0 /System/Cryptexes/App/usr/libexec/SafariNotificationAgent",
+    "47362   0.0 /System/Library/PrivateFrameworks/CoreParsec.framework/parsecd",
+    "47365   0.0 /System/Library/PrivateFrameworks/CloudSubscriptionFeatures.framework/FeatureAccessAgent",
+    "47366   0.0 /System/Library/PrivateFrameworks/UIFoundation.framework/Versions/A/XPCServices/nsattributedstringagent.xpc/Contents/MacOS/nsattributedstringagent",
+    "47368   0.0 /System/Library/PrivateFrameworks/iTunesCloud.framework/Support/itunescloudd",
+    "47369   0.0 /usr/libexec/triald",
+    "47370   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Library/StagedFrameworks/Safari/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+    "47375   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Library/StagedFrameworks/Safari/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+    "47376   0.0 /System/Library/Frameworks/Translation.framework/translationd",
+    "47388   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Library/StagedFrameworks/Safari/SafariShared.framework/Versions/A/XPCServices/com.apple.Safari.SearchHelper.xpc/Contents/MacOS/com.apple.Safari.SearchHelper",
+    "47393   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app/Contents/XPCServices/com.apple.Safari.SandboxBroker.xpc/Contents/MacOS/com.apple.Safari.SandboxBroker",
+    "47403   0.0 /System/Cryptexes/App/usr/libexec/webinspectord",
+    "47405   0.0 /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/com.apple.CoreSimulator.CoreSimulatorService.xpc/Contents/MacOS/com.apple.CoreSimulator.CoreSimulatorService",
+    "47411   0.0 /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/XPCServices/SimulatorTrampoline.xpc/Contents/MacOS/SimulatorTrampoline",
+    "47414   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Library/StagedFrameworks/Safari/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+    "47417   0.0 /System/Library/PrivateFrameworks/Categories.framework/Versions/A/XPCServices/CategoriesService.xpc/Contents/MacOS/CategoriesService",
+    "47418   0.0 /System/Volumes/Preboot/Cryptexes/App/System/Library/StagedFrameworks/Safari/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+    "47437   0.0 /usr/libexec/MTLAssetUpgraderD",
+    "47446   0.0 /System/Cryptexes/App/System/Library/StagedFrameworks/Safari/SafariServices.framework/XPCServices/com.apple.SafariServices.ExtensionHelper.xpc/Contents/MacOS/com.apple.SafariServices.ExtensionHelper",
+    "47468   0.0 /System/Library/Frameworks/AppKit.framework/Versions/C/XPCServices/com.apple.appkit.xpc.openAndSavePanelService.xpc/Contents/MacOS/com.apple.appkit.xpc.openAndSavePanelService",
+    "47474   0.0 /System/Library/Frameworks/ImageIO.framework/Versions/A/XPCServices/ImageIOXPCService.xpc/Contents/MacOS/ImageIOXPCService",
+    "47475   0.0 /System/Library/Frameworks/QuickLookThumbnailing.framework/Support/com.apple.quicklook.ThumbnailsAgent",
+    "47476   0.0 /System/Library/Frameworks/QuickLookUI.framework/Versions/A/XPCServices/QuickLookUIService.xpc/Contents/MacOS/QuickLookUIService",
+    "47484   0.0 /System/Library/PrivateFrameworks/iCloudNotification.framework/iCloudNotificationAgent",
+    "47554   0.0 /usr/libexec/wifivelocityd",
+    "47730   0.0 /System/Library/PrivateFrameworks/AXAssetLoader.framework/Support/axassetsd",
+    "47738   0.0 /System/Library/PrivateFrameworks/TextToSpeechVoiceBankingSupport.framework/Support/voicebankingd",
+    "47739   0.0 /System/iOSSupport/System/Library/ExtensionKit/Extensions/KonaSynthesizer.appex/Contents/MacOS/KonaSynthesizer",
+    "47741   0.0 /System/Library/PrivateFrameworks/MacinTalk.framework/PlugIns/MacinTalkAUSP.appex/Contents/MacOS/MacinTalkAUSP",
+    "47743   0.0 /System/iOSSupport/System/Library/ExtensionKit/Extensions/MauiAUSP.appex/Contents/MacOS/MauiAUSP",
+    "47753   0.0 /System/Library/PrivateFrameworks/MacinTalk.framework/PlugIns/WardaSynthesizer.appex/Contents/MacOS/WardaSynthesizer",
+    "47759   0.0 /System/iOSSupport/System/Library/ExtensionKit/Extensions/SiriAUSP.appex/Contents/MacOS/SiriAUSP",
+    "47789   0.0 /System/Library/Frameworks/AudioToolbox.framework/XPCServices/AUCrashHandlerService.xpc/Contents/MacOS/AUCrashHandlerService",
+    "48160   0.3 /Applications/Notion.app/Contents/Frameworks/Notion Helper (Renderer).app/Contents/MacOS/Notion Helper (Renderer)",
+    "48208   0.0 /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/reversetemplated",
+    "49537   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "50250   0.0 /usr/libexec/UserEventAgent",
+    "50251   0.0 /System/Library/CoreServices/audioaccessoryd",
+    "50254   0.0 /usr/sbin/universalaccessd",
+    "50256   0.0 /usr/libexec/pboard",
+    "50257   0.0 /System/Library/Frameworks/InputMethodKit.framework/Resources/imklaunchagent",
+    "50258   0.0 /System/Library/CoreServices/WindowManager.app/Contents/MacOS/WindowManager",
+    "50259   0.0 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd",
+    "50260   0.0 /System/Library/Input Methods/PressAndHold.app/Contents/PlugIns/PAH_Extension.appex/Contents/MacOS/PAH_Extension",
+    "50261   2.7 /System/Library/PrivateFrameworks/BiomeStreams.framework/Support/BiomeAgent",
+    "50264   0.0 /System/Library/PrivateFrameworks/UserNotificationsCore.framework/Support/usernotificationsd",
+    "50266   0.0 /System/Library/Frameworks/Accounts.framework/Versions/A/Support/accountsd",
+    "50271   0.0 /usr/libexec/nsurlsessiond",
+    "50272   0.0 /usr/libexec/rapportd",
+    "50273   0.0 /System/Library/PrivateFrameworks/MobileDevice.framework/Resources/MobileDeviceUpdater.app/Contents/MacOS/MobileDeviceUpdater",
+    "50274   0.0 /usr/sbin/usernoted",
+    "50281   0.0 /System/Library/PrivateFrameworks/FileProvider.framework/Support/fileproviderd",
+    "50286   0.0 /System/Library/PrivateFrameworks/IDS.framework/identityservicesd.app/Contents/MacOS/identityservicesd",
+    "50288   0.0 /System/Library/CoreServices/sharedfilelistd",
+    "50290   0.2 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "50291   0.0 /usr/libexec/networkserviceproxy",
+    "50293   0.0 /System/Applications/Preview.app/Contents/MacOS/Preview",
+    "50295   0.0 /System/Library/Frameworks/ApplicationServices.framework/Frameworks/ATS.framework/Support/fontd",
+    "50297   0.0 /usr/libexec/sharingd",
+    "50304   0.0 /System/Library/PrivateFrameworks/IMCore.framework/imagent.app/Contents/MacOS/imagent",
+    "50305   0.0 /Applications/Notion.app/Contents/MacOS/Notion",
+    "50306   0.0 /Applications/1Password 7.app/Contents/MacOS/1Password 7",
+    "50307   0.0 /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/ATS.framework/Versions/A/Support/fontworker",
+    "50309   0.0 /System/Applications/Passwords.app/Contents/MacOS/Passwords",
+    "50311   0.0 /Applications/Tailscale.app/Contents/MacOS/Tailscale",
+    "50314   0.0 /System/Library/PrivateFrameworks/ChronoCore.framework/Support/chronod",
+    "50320   0.0 /System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+    "50322   0.0 /System/Library/CoreServices/WiFiAgent.app/Contents/MacOS/WiFiAgent",
+    "50323   0.0 /System/Library/CoreServices/SystemUIServer.app/Contents/MacOS/SystemUIServer",
+    "50329   0.0 /System/Library/CoreServices/WallpaperAgent.app/Contents/MacOS/WallpaperAgent",
+    "50332   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/chrome_crashpad_handler",
+    "50333   0.0 /System/Library/CoreServices/AccessibilityUIServer.app/Contents/MacOS/AccessibilityUIServer",
+    "50344   0.0 /System/Library/PrivateFrameworks/AMPDevices.framework/Versions/A/Support/AMPDeviceDiscoveryAgent",
+    "50345   0.0 /usr/libexec/ContinuityCaptureAgent",
+    "50348   0.0 /System/Library/PrivateFrameworks/ViewBridge.framework/Versions/A/XPCServices/ViewBridgeAuxiliary.xpc/Contents/MacOS/ViewBridgeAuxiliary",
+    "50356   0.0 /System/Library/CoreServices/diagnostics_agent",
+    "50366   0.0 /System/Library/PrivateFrameworks/CommunicationsFilter.framework/CMFSyncAgent",
+    "50372   0.0 /System/Library/ExtensionKit/Extensions/WallpaperImageExtension.appex/Contents/MacOS/WallpaperImageExtension",
+    "50374   0.0 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension",
+    "50393   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+    "50394   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+    "50398   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+    "50407   0.0 /System/Library/CoreServices/NotificationCenter.app/Contents/MacOS/NotificationCenter",
+    "50411   0.0 /System/Library/PrivateFrameworks/CloudDocs.framework/PlugIns/com.apple.CloudDocs.iCloudDriveFileProvider.appex/Contents/MacOS/com.apple.CloudDocs.iCloudDriveFileProvider",
+    "50412   0.0 /System/Library/PrivateFrameworks/FamilyCircle.framework/Versions/A/Resources/familycircled",
+    "50421   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "50425   0.0 /System/Library/CoreServices/Spotlight.app/Contents/MacOS/Spotlight",
+    "50428   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "50429   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "50436   0.0 /System/Library/PrivateFrameworks/TextInputUIMacHelper.framework/Versions/A/XPCServices/CursorUIViewService.xpc/Contents/MacOS/CursorUIViewService",
+    "50442   0.0 /System/Library/CoreServices/UIKitSystem.app/Contents/MacOS/UIKitSystem",
+    "50455   0.0 /usr/libexec/milod",
+    "50461   0.0 /System/Library/PrivateFrameworks/UserActivity.framework/Agents/useractivityd",
+    "50462   0.0 /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoteagent",
+    "50463   0.0 /usr/libexec/avconferenced",
+    "50465   0.0 /usr/libexec/searchpartyuseragent",
+    "50481   0.0 /System/Library/CoreServices/Batteries.app/Contents/PlugIns/BatteriesAvocadoWidgetExtension.appex/Contents/MacOS/BatteriesAvocadoWidgetExtension",
+    "50492   0.0 /System/Library/CoreServices/Screen Time.app/Contents/PlugIns/ScreenTimeWidgetExtension.appex/Contents/MacOS/ScreenTimeWidgetExtension",
+    "50495   0.0 /System/Library/CoreServices/UniversalControl.app/Contents/MacOS/UniversalControl",
+    "50498   0.0 /System/Applications/FindMy.app/Contents/PlugIns/FindMyWidgetItems.appex/Contents/MacOS/FindMyWidgetItems",
+    "50518   0.0 /System/Cryptexes/App/System/Library/CoreServices/PasswordManagerBrowserExtensionHelper.app/Contents/MacOS/PasswordManagerBrowserExtensionHelper",
+    "50522   0.0 /Applications/Claude.app/Contents/Helpers/chrome-native-host",
+    "50538   0.0 /Users/shinzui/.codex/plugins/cache/openai-bundled/chrome/latest/extension-host/macos/arm64/ChatGPT for Chrome",
+    "50564   0.0 /System/Library/PrivateFrameworks/AppPredictionFoundation.framework/Versions/A/XPCServices/AppPredictionIntentsHelperService.xpc/Contents/MacOS/AppPredictionIntentsHelperService",
+    "50567   0.0 /System/Library/PrivateFrameworks/WorkflowKit.framework/XPCServices/ShortcutsViewService.xpc/Contents/MacOS/ShortcutsViewService",
+    "50663   0.0 /System/Applications/FindMy.app/Contents/PlugIns/FindMyWidgetPeople.appex/Contents/MacOS/FindMyWidgetPeople",
+    "50668   0.0 /System/Applications/Weather.app/Contents/PlugIns/WeatherWidget.appex/Contents/MacOS/WeatherWidget",
+    "50681   0.0 /System/Applications/Calendar.app/Contents/PlugIns/CalendarWidgetExtension.appex/Contents/MacOS/CalendarWidgetExtension",
+    "50712   0.0 /System/Library/Image Capture/Support/icdd",
+    "50714   0.0 /System/Library/Frameworks/ImageCaptureCore.framework/Versions/A/XPCServices/mscamerad-xpc.xpc/Contents/MacOS/mscamerad-xpc",
+    "50715   0.0 /usr/libexec/ptpcamerad",
+    "50740   4.6 /Applications/Notion.app/Contents/Frameworks/Notion Helper.app/Contents/MacOS/Notion Helper",
+    "50741   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper.app/Contents/MacOS/Notion Helper",
+    "50743   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper.app/Contents/MacOS/Notion Helper",
+    "50745   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper (Renderer).app/Contents/MacOS/Notion Helper (Renderer)",
+    "50770   0.0 /System/Library/PrivateFrameworks/LocalAuthenticationUI.framework/Versions/A/XPCServices/LocalAuthenticationRemoteService.xpc/Contents/MacOS/LocalAuthenticationRemoteService",
+    "50772   0.0 /nix/store/6fnjcsj1m8my75h03h2r10gb2qsg0268-mori-rei-app/bin/mori-rei-app",
+    "50773   0.0 /nix/store/2ihzykiqgnspp5d436g3gby0704wkf32-mori/bin/mori",
+    "50775   0.0 /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd",
+    "50776   0.0 /nix/store/qjwcy43rvgii1ad6nml61zb3v9zqzq4a-caddy-2.11.4/bin/caddy",
+    "50777   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50778   0.0 /nix/store/02mjfl79xgznz2xcjsifza3k6q6pk8sh-mina/bin/mina",
+    "50779   0.1 /nix/store/n5ifpp82lkijxmw05y7az5f2yrfdxbsg-notion-hub-subscriptions/bin/notion-hub-subscriptions",
+    "50780   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50783   0.1 /nix/store/2ihzykiqgnspp5d436g3gby0704wkf32-mori/bin/mori",
+    "50784   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50785   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50786   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50787   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50788   0.0 nginx: master process /nix/store/586vdr8fxpx38l9gv4bzly4r099acn1q-nginx-1.30.4/bin/nginx -c /nix/store/305w3q7vg4c17y930h4ks6iqnn914d5r-victoriatraces-jaeger-ui-nginx.conf -p /Users/shinzui/.local/share/victoria-traces/nginx -g daemon off;",
+    "50789   0.0 2BUA8C4S2C.com.agilebits.onepassword7-helper",
+    "50792   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50793   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50794   0.0 /nix/store/m9qkr2vhxpazkq0y14n7xzh9zpnyslj3-rei/bin/rei",
+    "50797   0.0 com.apple.Passwords.MenuBarExtra",
+    "50798   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50801   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50803   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50804   0.0 /nix/store/pl98fh2npg9bb2x5fzg5v76yi7wv60lc-watchman-2026.01.19.00/bin/watchman",
+    "50807   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50809   0.0 /System/Library/CoreServices/AirPlayUIAgent.app/Contents/MacOS/AirPlayUIAgent",
+    "50811   0.0 /nix/store/x1hmc0cs28xfqby4dgd6xak473yzc6q1-rei-api/bin/rei-api",
+    "50812   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50813   0.0 /nix/store/d0pm6snj4mpbw1h4bz6869i2chps5ll6-postgresql-18.4/bin/postgres",
+    "50814   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50816   0.5 /nix/store/x8dpxhvnqqm8ksyv5sq2mx72dc6v66xc-VictoriaTraces-0.9.4/bin/victoria-traces",
+    "50818   0.0 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app/Contents/MacOS/Creative Cloud",
+    "50820   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50821   0.0 /nix/store/rzjfnffcsfqfjkp6jjr74dl9sh0l69wc-VictoriaLogs-1.52.0/bin/victoria-logs",
+    "50823   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "50824   0.0 /System/Library/CoreServices/TextInputMenuAgent.app/Contents/MacOS/TextInputMenuAgent",
+    "50825   0.2 /nix/store/m9qkr2vhxpazkq0y14n7xzh9zpnyslj3-rei/bin/rei",
+    "50830   0.0 /System/Library/Frameworks/CryptoTokenKit.framework/ctkahp.bundle/Contents/MacOS/ctkahp",
+    "50836   0.0 /Applications/RepoBar.app/Contents/MacOS/RepoBar",
+    "50842   0.0 /Applications/Velja.app/Contents/MacOS/Velja",
+    "50861   0.0 /System/Library/PrivateFrameworks/FamilyControls.framework/Resources/parentalcontrolsd",
+    "50865   0.0 /Applications/Hammerspoon.app/Contents/MacOS/Hammerspoon",
+    "50868   0.0 /Applications/Magnet.app/Contents/MacOS/Magnet",
+    "50953   0.0 postgres: io worker 0",
+    "50954   0.0 postgres: io worker 1",
+    "50955   0.0 postgres: io worker 2",
+    "50956   0.0 postgres: checkpointer ",
+    "50957   0.0 postgres: background writer ",
+    "50999   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51000   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51021   0.0 postgres: walwriter ",
+    "51022   0.0 postgres: autovacuum launcher ",
+    "51023   0.0 postgres: archiver last was 000000010000001500000070",
+    "51024   0.0 postgres: logical replication launcher ",
+    "51025   0.5 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app/Contents/MacOS/../Frameworks/Creative Cloud UI Helper (GPU).app/Contents/MacOS/Creative Cloud UI Helper (GPU)",
+    "51063   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51068   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51072   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51073   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51077   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51078   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51086   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51087   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51088   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51089   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51092   0.0 /Applications/Notion.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt",
+    "51094   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51095   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51140   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51141   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51174   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51175   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "51202   0.0 /System/Library/PrivateFrameworks/UniversalAccess.framework/Versions/A/Resources/universalAccessAuthWarn.app/Contents/MacOS/universalAccessAuthWarn",
+    "51246   0.0 postgres: shinzui notion_hub [local] idle",
+    "51250   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51251   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51252   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51253   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51254   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51255   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51258   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51259   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51260   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51263   0.0 nginx: worker process",
+    "51278   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51280   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51281   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51282   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51283   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51284   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51285   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51287   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51289   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51290   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51291   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51292   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51296   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51297   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51299   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51306   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51308   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51310   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51312   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51313   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51317   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51318   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51319   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51320   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51331   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51332   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51346   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51351   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51352   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51353   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51359   0.0 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app/Contents/MacOS/../Frameworks/Creative Cloud UI Helper.app/Contents/MacOS/Creative Cloud UI Helper",
+    "51362   0.0 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app/Contents/MacOS/../Frameworks/Creative Cloud UI Helper.app/Contents/MacOS/Creative Cloud UI Helper",
+    "51370   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51371   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51372   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51394   5.3 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app/Contents/MacOS/../Frameworks/Creative Cloud UI Helper (Renderer).app/Contents/MacOS/Creative Cloud UI Helper (Renderer)",
+    "51409   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51410   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51411   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51414   0.0 /nix/store/h4pzlycrx2dp24ga9zvx9dj7zlw5qbki-coreutils-9.11/bin/tail",
+    "51415   0.0 /nix/store/1fi2mymhcrnjf4cz0z69plamcdqfnary-jq-1.8.2-bin/bin/jq",
+    "51416   0.0 /nix/store/n51n6xlxqwf2i95k5v6pi4z1862ikfg5-bash-5.3p15/bin/bash",
+    "51479   0.0 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores",
+    "51480   0.0 postgres: shinzui rei [local] idle",
+    "51489   0.0 /Applications/Ollama.app/Contents/MacOS/Ollama",
+    "51533   0.0 postgres: shinzui rei [local] idle",
+    "51534   0.0 postgres: shinzui rei [local] idle",
+    "51555   0.0 postgres: shinzui rei [local] idle",
+    "51560   0.0 postgres: shinzui mori [local] idle",
+    "51577  23.5 /Applications/WezTerm.app/Contents/MacOS/wezterm-gui",
+    "51583   0.0 postgres: shinzui rei [local] idle",
+    "51584   0.0 postgres: shinzui rei [local] idle",
+    "51609   0.0 postgres: shinzui rei [local] idle",
+    "51610   0.0 postgres: shinzui mori [local] idle",
+    "51614   0.0 /Applications/Ollama.app/Contents/Resources/ollama",
+    "51665   0.0 postgres: shinzui mori [local] idle",
+    "51715   0.0 /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper",
+    "51732   0.0 /System/Library/CoreServices/Shortcuts Events.app/Contents/MacOS/Shortcuts Events",
+    "51961   0.1 /nix/store/93xplkp4ykr592v6vaslxb3k3hw0qnjb-postgresql-18.4/bin/postgres",
+    "51962   0.0 postgres: io worker 0",
+    "51963   0.0 postgres: io worker 1",
+    "51964   0.0 postgres: io worker 2",
+    "51965   0.0 postgres: checkpointer ",
+    "51966   0.0 postgres: background writer ",
+    "51968   0.0 postgres: walwriter ",
+    "51969   0.0 postgres: autovacuum launcher ",
+    "51970   0.0 postgres: logical replication launcher ",
+    "52224   0.0 /System/Library/PrivateFrameworks/EcosystemAnalytics.framework/Support/ecosystemanalyticsd",
+    "52248   0.0 /System/Library/PrivateFrameworks/Ecosystem.framework/Support/ecosystemd",
+    "53127   0.0 /usr/sbin/netbiosd",
+    "53555   0.0 /System/Library/PrivateFrameworks/SiriInference.framework/Versions/A/siriinferenced",
+    "53583   0.0 /System/Library/PrivateFrameworks/EmailDaemon.framework/Versions/A/maild",
+    "53797   0.0 /System/Library/Frameworks/LocalAuthentication.framework/Support/coreauthd",
+    "53946   1.9 /Applications/Wispr Flow.app/Contents/Resources/swift-helper-app-dist/Wispr Flow.app/Contents/MacOS/Wispr Flow",
+    "54020   0.0 /System/Library/PrivateFrameworks/TelephonyUtilities.framework/callservicesd",
+    "54023   0.0 /System/Library/PrivateFrameworks/SyncedDefaults.framework/Support/syncdefaultsd",
+    "54111   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54166   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54167   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54175   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54178   0.0 /Applications/1Password 7.app/Contents/Library/LoginItems/1Password Extension Helper.app/Contents/MacOS/1PasswordSLSNativeMessageHost",
+    "54274   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54303   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54307   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54311   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54314   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54317   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54320   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54336   0.0 /usr/libexec/assessmentagent",
+    "54349   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54350   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54355   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54363   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54365   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54371   0.0 /System/Library/PrivateFrameworks/CoreAnalytics.framework/Support/analyticsagent",
+    "54380   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54381   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54386   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54391   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54397   0.0 /usr/libexec/gamecontrollerd",
+    "54398   0.0 /usr/bin/perl",
+    "54399   0.0 /usr/libexec/gamecontrolleragentd",
+    "54414   0.0 /System/Library/PrivateFrameworks/IntelligenceFlowRuntime.framework/Versions/A/intelligenceflowd",
+    "54577   0.0 /usr/libexec/ospredictiond",
+    "54664   0.0 /usr/libexec/feedbackd",
+    "54754   0.0 /System/Library/PrivateFrameworks/CommerceKit.framework/Versions/A/Resources/commerce",
+    "54869   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+    "54870   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+    "54871   0.0 /System/Library/PrivateFrameworks/People.framework/peopled",
+    "54953   0.0 /System/Library/PrivateFrameworks/PhotoAnalysis.framework/Versions/A/Support/photoanalysisd",
+    "54954   0.0 /System/Library/PrivateFrameworks/PhotoLibraryServices.framework/Versions/A/Support/photolibraryd",
+    "54955   0.0 /System/Library/CoreServices/ScopedBookmarkAgent",
+    "54956   0.0 /System/Library/Frameworks/NetFS.framework/Versions/A/XPCServices/PlugInLibraryService.xpc/Contents/MacOS/PlugInLibraryService",
+    "54958   0.0 /System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd",
+    "54970   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "54987   0.0 cloudphotod",
+    "55108   0.0 /usr/libexec/replayd",
+    "55194   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "55200   0.0 /Library/Application Support/Adobe/Adobe Desktop Common/IPCBox/AdobeIPCBroker.app/Contents/MacOS/AdobeIPCBroker",
+    "55244   0.0 /Library/Application Support/Adobe/Adobe Desktop Common/ADS/Adobe Desktop Service.app/Contents/MacOS/Adobe Desktop Service",
+    "55246   0.0 /usr/libexec/keyboardservicesd",
+    "55252   0.0 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud Helper.app/Contents/MacOS/Creative Cloud Helper",
+    "55261   0.0 /Applications/Utilities/Adobe Sync/CoreSync/Core Sync.app/Contents/MacOS/Core Sync",
+    "55333   0.0 /System/Library/PrivateFrameworks/SystemStatusServer.framework/Support/systemstatusd",
+    "55713   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "56170   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "56227   0.0 /Applications/Utilities/Adobe Creative Cloud Experience/CCXProcess/CCXProcess.app/Contents/MacOS/Creative Cloud Content Manager.node",
+    "56612   0.0 /usr/libexec/storagekitd",
+    "56751   0.0 /System/Library/PrivateFrameworks/KerberosHelper/Helpers/DiskUnmountWatcher",
+    "56791   0.0 /System/Library/Frameworks/ExtensionFoundation.framework/Versions/A/XPCServices/extensionkitservice.xpc/Contents/MacOS/extensionkitservice",
+    "56933   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "56983   0.0 postgres: shinzui rei [local] idle",
+    "56998   0.0 /usr/libexec/nfcd",
+    "57079   0.0 /System/Library/PrivateFrameworks/NearFieldPrivateServices.framework/Versions/A/XPCServices/NFStorageServer.xpc/Contents/MacOS/NFStorageServer",
+    "57230   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "57822   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "58174   0.0 /usr/libexec/nehelper",
+    "58182   0.0 /System/Library/PrivateFrameworks/AppleMediaServices.framework/Resources/amsaccountsd",
+    "58183   0.0 /System/Library/PrivateFrameworks/HomeKitDaemon.framework/Support/homed",
+    "58521   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "58555   0.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+    "58733   0.0 /Library/Apple/System/Library/PrivateFrameworks/RemotePairing.framework/Versions/A/XPCServices/remotepairingd.xpc/Contents/MacOS/remotepairingd",
+    "58737   0.0 /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simdiskimaged",
+    "58815   0.0 postgres: shinzui mori [local] idle",
+    "58816   0.0 postgres: shinzui mori [local] idle",
+    "58853   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "59111   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "59114   0.0 /Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud Helper.app/Contents/Frameworks/AdobeCrashReporter.framework/Versions/A/Adobe Crash Processor.app/Contents/MacOS/Adobe Crash Processor",
+    "59164   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "59212   0.0 postgres: shinzui rei [local] idle",
+    "59213   0.0 postgres: shinzui rei [local] idle",
+    "59214   0.0 postgres: shinzui rei [local] idle",
+    "59215   0.0 postgres: shinzui rei [local] idle",
+    "59216   0.0 postgres: shinzui rei [local] idle",
+    "59422   0.0 bash",
+    "59578   0.0 /nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal",
+    "59834   0.0 /usr/libexec/mdmclient",
+    "60032   0.0 zsh",
+    "60041   0.0 bash",
+    "60042   0.1 ugrep",
+    "60346   0.0 /System/Library/ExtensionKit/Extensions/TGOnDeviceInferenceProviderService.appex/Contents/MacOS/TGOnDeviceInferenceProviderService",
+    "60347   0.0 /usr/sbin/distnoted",
+    "60437  39.1 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder",
+    "60463   0.0 /Library/Application Support/Adobe/Adobe OS Extension/Creative Cloud.app/Contents/PlugIns/Adobe Context Menu Extension.appex/Contents/MacOS/Adobe Context Menu Extension",
+    "60464   0.0 /Applications/Utilities/Adobe Sync/CoreSync/Core Sync.app/Contents/PlugIns/ACCFinderSync.appex/Contents/MacOS/ACCFinderSync",
+    "60466   0.0 bash",
+    "60467   0.1 nix",
+    "60473   0.0 /nix/store/0xv60gnpizxbvqjwjc6xsfcps7slhkji-sentry-native-0.13.5/bin/crashpad_handler",
+    "60475   0.0 /nix/var/nix/profiles/default/bin/nix-daemon",
+    "60506   0.0 postgres: shinzui rei [local] idle",
+    "60510   0.0 postgres: shinzui rei [local] idle",
+    "60525   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "60602   0.0 /System/Library/Frameworks/CoreTelephony.framework/Support/CommCenter",
+    "60603   0.0 /System/Library/CoreServices/CoreLocationAgent.app/Contents/MacOS/CoreLocationAgent",
+    "60678   0.3 /nix/var/nix/profiles/default/bin/nix-daemon",
+    "61293   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "61799   0.0 /usr/libexec/proactived",
+    "61819   1.5 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "61859   0.0 /usr/libexec/audioanalyticsd",
+    "61860   0.0 /System/Library/PrivateFrameworks/Categories.framework/Versions/A/XPCServices/CategoriesService.xpc/Contents/MacOS/CategoriesService",
+    "61861   0.0 /System/Library/PrivateFrameworks/ContextKit.framework/Versions/A/XPCServices/ContextService.xpc/Contents/MacOS/ContextService",
+    "61862   0.0 /System/Library/PrivateFrameworks/ContextKit.framework/Versions/A/XPCServices/ContextService.xpc/Contents/MacOS/ContextService",
+    "61863   0.0 /System/Library/Frameworks/VideoToolbox.framework/Versions/A/XPCServices/VTDecoderXPCService.xpc/Contents/MacOS/VTDecoderXPCService",
+    "62059   0.0 /usr/libexec/dmd",
+    "62060   0.0 /System/Library/Frameworks/MediaExtension.framework/Versions/A/Helpers/MENotificationAgent",
+    "62061   0.0 /System/Library/PrivateFrameworks/BackgroundTaskManagement.framework/Support/BackgroundTaskManagementAgent.app/Contents/MacOS/BackgroundTaskManagementAgent",
+    "62065   0.0 /System/Library/Frameworks/ManagedSettings.framework/Versions/A/ManagedSettingsAgent",
+    "62217   0.0 /usr/libexec/PowerUIAgent",
+    "62226   0.0 /System/Library/PrivateFrameworks/Synapse.framework/Support/contentlinkingd",
+    "62612   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "62929   0.0 /usr/libexec/SidecarRelay",
+    "62991   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "63135   0.0 /System/Library/PrivateFrameworks/CoreDuetContext.framework/Resources/ContextStoreAgent",
+    "63254   0.0 /System/Library/CoreServices/ReportCrash",
+    "63933   0.0 /usr/libexec/countryd",
+    "63952   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "64258   0.0 /usr/libexec/keybagd",
+    "64300   0.0 /System/Library/PrivateFrameworks/CoreRecents.framework/Versions/A/Support/recentsd",
+    "64301   0.0 /System/Library/ExtensionKit/Extensions/TGOnDeviceInferenceProviderService.appex/Contents/MacOS/TGOnDeviceInferenceProviderService",
+    "64342   0.0 /System/Library/PrivateFrameworks/MapsSync.framework/mapssyncd",
+    "64805   0.2 postgres: shinzui mori [local] idle",
+    "64945   0.0 /nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal",
+    "64975   0.0 /System/Library/PrivateFrameworks/IMDPersistence.framework/XPCServices/IMDPersistenceAgent.xpc/Contents/MacOS/IMDPersistenceAgent",
+    "64980   0.0 /nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/.cabal-wrapped",
+    "65104   0.0 /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/suggestd",
+    "65183   0.0 /usr/libexec/coreduetd",
+    "65205   0.0 /System/Library/CoreServices/Siri.app/Contents/MacOS/Siri",
+    "65208   1.0 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/./dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65210  35.0 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65211  36.2 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65213  61.3 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65214  33.1 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65215  51.8 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65216  33.6 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65217  37.4 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65218  52.0 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65219  65.3 /Users/shinzui/Keikaku/bokuno/nagare/.claude/worktrees/f116/cli/nagarectl/dist-newstyle/build/aarch64-osx/ghc-9.12.4/nagarectl-0.5.0/t/nagarectl-test/build/nagarectl-test/nagarectl-test",
+    "65226   0.0 /usr/libexec/mobileassetd",
+    "65349   0.0 /usr/libexec/knowledge-agent",
+    "65361   0.0 /usr/libexec/securityd_system",
+    "65671   0.0 /System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod",
+    "65672   0.0 /usr/libexec/secinitd",
+    "65673   0.0 /usr/sbin/cfprefsd",
+    "65674   0.0 /usr/libexec/trustd",
+    "65675   0.0 /usr/libexec/trustdFileHelper",
+    "65676   0.0 /usr/libexec/containermanagerd",
+    "65677   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "65678   0.0 /System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod",
+    "65679   0.0 /System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod",
+    "65680   0.0 /usr/libexec/secinitd",
+    "65681   0.0 /usr/libexec/secinitd",
+    "65683   0.0 /usr/sbin/cfprefsd",
+    "65684   0.0 /usr/libexec/containermanagerd",
+    "65685   0.0 /usr/libexec/trustd",
+    "65686   0.0 /usr/libexec/containermanagerd",
+    "65972   0.0 /usr/libexec/online-auth-agent",
+    "66152   0.0 /System/Library/Services/AppleSpell.service/Contents/MacOS/AppleSpell",
+    "66174   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "66276   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "66346   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "66602   0.0 /usr/sbin/systemsoundserverd",
+    "66712   0.0 /System/Library/Frameworks/AudioToolbox.framework/AudioComponentRegistrar",
+    "66713   0.0 /System/Library/Frameworks/AudioToolbox.framework/XPCServices/com.apple.audio.SandboxHelper.xpc/Contents/MacOS/com.apple.audio.SandboxHelper",
+    "66907   0.0 /usr/sbin/spindump",
+    "67003   3.2 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd",
+    "67061   0.0 /Applications/Granola.app/Contents/MacOS/Granola",
+    "67096   0.0 /Applications/Granola.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler",
+    "67097   0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper.app/Contents/MacOS/Granola Helper",
+    "67099   0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper.app/Contents/MacOS/Granola Helper",
+    "67102   0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper (Renderer).app/Contents/MacOS/Granola Helper (Renderer)",
+    "67103   0.1 Granola Helper (MacOSMicAppsWithDevices)",
+    "67106   0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper (Renderer).app/Contents/MacOS/Granola Helper (Renderer)",
+    "67108   0.0 Granola Helper (MissionControl)",
+    "67110   0.0 Granola Helper (Storage)",
+    "67113   0.0 /System/Library/ExtensionKit/Extensions/GenerativeExperiencesSafetyInferenceProvider.appex/Contents/MacOS/GenerativeExperiencesSafetyInferenceProvider",
+    "67114   0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper.app/Contents/MacOS/Granola Helper",
+    "67115   0.0 /Applications/Granola.app/Contents/Frameworks/Granola Helper.app/Contents/MacOS/Granola Helper",
+    "67198   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "67302   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "67607   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "67907   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "67908   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "68214   0.0 /System/Library/PrivateFrameworks/IntelligencePlatformCompute.framework/Versions/A/XPCServices/IntelligencePlatformComputeService.xpc/Contents/MacOS/IntelligencePlatformComputeService",
+    "68448   0.0 /System/Library/PrivateFrameworks/ScreenTimeCore.framework/Versions/A/ScreenTimeAgent",
+    "69043   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "69471   0.0 /System/Library/Frameworks/Metal.framework/Versions/A/XPCServices/MTLCompilerService.xpc/Contents/MacOS/MTLCompilerService",
+    "69850   0.0 /System/Library/PrivateFrameworks/BiomeStreams.framework/Support/biomed",
+    "70255   0.0 postgres: shinzui rei [local] idle",
+    "70483   0.0 /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper",
+    "71007   0.0 /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper",
+    "71346   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "71465   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper (Renderer).app/Contents/MacOS/Notion Helper (Renderer)",
+    "71661   0.0 /usr/libexec/sysmond",
+    "71672   2.5 /Applications/Notion.app/Contents/Frameworks/Notion Helper (Renderer).app/Contents/MacOS/Notion Helper (Renderer)",
+    "71704   0.0 /System/Library/PrivateFrameworks/PassKitCore.framework/passd",
+    "71784   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "71871   0.0 /System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd",
+    "72047   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "72606   0.0 /usr/libexec/mobileactivationd",
+    "72739   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "72789   2.2 /Users/shinzui/Keikaku/bokuno/keiro-runtime-kenshou/dist-newstyle/build/aarch64-osx/ghc-9.12.4/kenshou-cli-0.1.0.0/x/kenshou/build/kenshou/kenshou",
+    "72812   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "73188   2.4 /usr/local/bin/determinate-nixd",
+    "73406   0.3 /nix/var/nix/profiles/default/bin/nix-daemon",
+    "73953  13.6 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+    "74038   0.0 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow",
+    "74915   0.0 /System/Library/Input Methods/JapaneseIM-RomajiTyping.app/Contents/PlugIns/JapaneseIM-RomajiTyping.appex/Contents/MacOS/JapaneseIM-RomajiTyping",
+    "75203   0.0 /usr/sbin/distnoted",
+    "75396   0.0 /System/Library/PrivateFrameworks/AmbientDisplay.framework/Versions/A/XPCServices/com.apple.AmbientDisplayAgent.xpc/Contents/MacOS/com.apple.AmbientDisplayAgent",
+    "75763   0.0 /usr/libexec/pkd",
+    "75800   0.0 /nix/store/0xv60gnpizxbvqjwjc6xsfcps7slhkji-sentry-native-0.13.5/bin/crashpad_handler",
+    "76154   0.0 bash",
+    "76259   0.1 postgres: shinzui rei [local] idle",
+    "76330   0.0 /System/Cryptexes/App/usr/libexec/SafariLaunchAgent",
+    "76758   0.0 /System/Library/PrivateFrameworks/AuthKit.framework/Versions/A/Support/akd",
+    "76908   0.0 /System/Library/PrivateFrameworks/CoreADI.framework/adid",
+    "76990   0.0 /System/Applications/Messages.app/Contents/PlugIns/Messages Assistant Extension.appex/Contents/MacOS/Messages Assistant Extension",
+    "76998   0.3 postgres: shinzui rei [local] idle",
+    "77105   0.0 /System/Library/PrivateFrameworks/CoreSymbolication.framework/coresymbolicationd",
+    "77649   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "78384   0.0 /System/Library/CoreServices/appplaceholdersyncd",
+    "78648   0.1 postgres: shinzui rei [local] idle",
+    "78746   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "78860   0.0 /nix/store/gsdyx2mr1qsw6xpgzfy9ggwk8a5ig2ka-postgresql-17.11/bin/postgres",
+    "78861   0.0 postgres: checkpointer ",
+    "78862   0.0 postgres: background writer ",
+    "78864   0.0 postgres: walwriter ",
+    "78865   0.0 postgres: autovacuum launcher ",
+    "78866   0.0 postgres: logical replication launcher ",
+    "79988   0.0 /System/Library/CoreServices/Siri.app/Contents/XPCServices/SiriNCService.xpc/Contents/MacOS/SiriNCService",
+    "80755   0.0 /usr/libexec/remindd",
+    "80766   1.9 /usr/libexec/siriknowledged",
+    "81633   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "81776   0.0 head",
+    "81780   0.0 fzf",
+    "81855   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "82137   0.2 nix-daemon",
+    "83312   0.0 /usr/bin/ssh-agent",
+    "83887   0.0 /System/Library/CoreServices/osanalyticshelper",
+    "84154   0.1 /System/Library/PrivateFrameworks/XprotectFramework.framework/Versions/A/XPCServices/XprotectService.xpc/Contents/MacOS/XprotectService",
+    "84363   0.0 /nix/store/zndqgdxn4p28iyax8raza3pfn7lkjw64-postgresql-18.6/bin/postgres",
+    "84364   0.0 postgres: io worker 0",
+    "84365   0.0 postgres: io worker 1",
+    "84366   0.0 postgres: io worker 2",
+    "84367   0.0 postgres: checkpointer ",
+    "84368   0.0 postgres: background writer ",
+    "84370   0.0 postgres: walwriter ",
+    "84371   0.0 postgres: autovacuum launcher ",
+    "84372   0.0 postgres: logical replication launcher ",
+    "84524   0.0 /Applications/Raycast.app/Contents/MacOS/Raycast",
+    "84539   0.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+    "84541   0.0 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking",
+    "84542   0.1 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent",
+    "84547   0.0 Raycast Backend",
+    "84564   0.0 /Applications/Raycast.app/Contents/XPCServices/Raycast Accessibility.xpc/Contents/MacOS/com.raycast.macos.Accessibility",
+    "84565   0.0 /Applications/Raycast.app/Contents/XPCServices/Raycast Pasteboard.xpc/Contents/MacOS/com.raycast.macos.Pasteboard",
+    "84794   0.0 /nix/store/0xv60gnpizxbvqjwjc6xsfcps7slhkji-sentry-native-0.13.5/bin/crashpad_handler",
+    "85180   0.0 ssh",
+    "85258   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "85458   0.0 /System/Library/PrivateFrameworks/StatusKit.framework/StatusKitAgent",
+    "85514   0.0 socat",
+    "85566   0.0 /System/Library/Frameworks/GSS.framework/Helpers/GSSCred",
+    "85634   0.0 /System/Library/PrivateFrameworks/CloudKitDaemon.framework/Support/cloudd",
+    "85673   0.0 /System/Library/PrivateFrameworks/CloudTelemetry.framework/Versions/A/XPCServices/CloudTelemetryService.xpc/Contents/MacOS/CloudTelemetryService",
+    "85728   0.0 /System/Library/PrivateFrameworks/AssetCacheServices.framework/Versions/A/XPCServices/AssetCacheLocatorService.xpc/Contents/MacOS/AssetCacheLocatorService",
+    "86287   0.0 sudo",
+    "86705   0.0 /System/Library/PrivateFrameworks/GenerativeExperiencesRuntime.framework/Versions/A/generativeexperiencesd",
+    "86710   0.0 /System/Library/PrivateFrameworks/ModelCatalogRuntime.framework/Versions/A/modelcatalogd",
+    "86742   0.0 /System/Library/PrivateFrameworks/CoreFollowUp.framework/Versions/A/Support/followupd",
+    "86992   0.0 /System/Library/PrivateFrameworks/ModelCatalogRuntime.framework/Versions/A/ModelCatalogAgent",
+    "87129   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "88240   0.0 /System/Library/PrivateFrameworks/IntelligencePlatformCore.framework/Versions/A/intelligenceplatformd",
+    "88803   0.0 /System/Library/CoreServices/CoreServicesUIAgent.app/Contents/MacOS/CoreServicesUIAgent",
+    "88825   0.0 /System/Library/CoreServices/ControlCenter.app/Contents/PlugIns/DisplayControls.appex/Contents/MacOS/DisplayControls",
+    "88862   0.0 /System/Library/CoreServices/Dock.app/Contents/MacOS/Dock",
+    "88992   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/bin/container-apiserver",
+    "89001   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/libexec/container/plugins/container-network-vmnet/bin/container-network-vmnet",
+    "89009   0.0 /usr/libexec/InternetSharing",
+    "89028   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/libexec/container/plugins/container-network-vmnet/bin/container-network-vmnet",
+    "89029   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/libexec/container/plugins/machine-apiserver/bin/machine-apiserver",
+    "89052   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/libexec/container/plugins/container-core-images/bin/container-core-images",
+    "89063   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/libexec/container/plugins/container-runtime-linux/bin/container-runtime-linux",
+    "89076   4.4 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine",
+    "89083   0.0 /usr/libexec/dhcp6d",
+    "89111   0.0 /nix/store/xapi2xhr8vb5g7npvn59nbrg1srwm680-container-1.2.2/libexec/container/plugins/container-runtime-linux/bin/container-runtime-linux",
+    "89114   0.0 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine",
+    "89289   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "89951   0.0 /System/Library/CoreServices/talagentd",
+    "89974   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "90212   0.0 /System/Library/Frameworks/CryptoTokenKit.framework/ctkd",
+    "90570   0.0 /usr/libexec/inputanalyticsd",
+    "90619   0.0 /Applications/Notion.app/Contents/Frameworks/Notion Helper (Renderer).app/Contents/MacOS/Notion Helper (Renderer)",
+    "91318   0.0 /usr/libexec/findmylocateagent",
+    "91319   0.0 /System/Library/Frameworks/Contacts.framework/Support/contactsd",
+    "92851   0.0 /System/Library/PrivateFrameworks/DataAccess.framework/Support/dataaccessd",
+    "92990   0.0 /System/Library/PrivateFrameworks/SkyLight.framework//Versions/A/Resources/AquaAppearanceHelper.app/Contents/MacOS/AquaAppearanceHelper",
+    "92993   1.5 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "93006   1.9 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "93346   1.2 /usr/libexec/swcd",
+    "93392  55.1 nix",
+    "93395   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "93465   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "94009   0.0 /usr/libexec/wifip2pd",
+    "94605   0.0 /nix/store/75k4n51xsqvdbclfyccckp4ggsks8bbq-reiko/bin/reiko",
+    "94791   0.0 /usr/libexec/linkd",
+    "95168   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "95272   0.0 /System/Library/PrivateFrameworks/iCloudDriveService.framework/XPCServices/ContainerMetadataExtractor.xpc/Contents/MacOS/ContainerMetadataExtractor",
+    "95349   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "95350   0.0 /nix/store/lipz1c65d7wzq9w8ppya5kk1jzw715cc-perl-5.42.0/bin/perl",
+    "95406   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "96196   0.0 /nix/store/0xv60gnpizxbvqjwjc6xsfcps7slhkji-sentry-native-0.13.5/bin/crashpad_handler",
+    "96359   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "96895   5.3 /nix/var/nix/profiles/default/bin/nix-daemon",
+    "98210   0.0 /System/Library/Frameworks/AppKit.framework/Versions/C/XPCServices/ThemeWidgetControlViewService.xpc/Contents/MacOS/ThemeWidgetControlViewService",
+    "98776   0.0 /System/Library/PrivateFrameworks/SafariSafeBrowsing.framework/com.apple.Safari.SafeBrowsing.Service",
+    "99385   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "99503   0.0 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "99710   0.1 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/154.0.8037.57/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)",
+    "84594   0.0 -zsh",
+    "32237   0.0 -zsh",
+    "16333   0.0 -zsh",
+    "17254   0.9 /Users/shinzui/.local/bin/claude",
+    "72015   0.0 -zsh",
+    "42484   0.0 -zsh",
+    "53956   0.0 -zsh",
+    "54337   0.0 tmux",
+    "31304   0.0 /Users/shinzui/.local/bin/claude",
+    "41008   0.0 -zsh",
+    "88050   0.0 -zsh",
+    "19258   4.3 codex",
+    "67568   0.0 -zsh",
+    "51691   0.0 -zsh",
+    "52070   0.0 tmux",
+    "30781   0.0 -zsh",
+    "70558   0.1 /Users/shinzui/.local/bin/claude",
+    "56661   0.0 -zsh",
+    "45435   0.0 codex",
+    "93182   0.0 -zsh",
+    "89394   0.0 -zsh",
+    " 6849   0.0 -zsh",
+    " 7112   0.0 tmux",
+    "71476   0.0 -zsh",
+    "89370   1.9 /Users/shinzui/.local/bin/claude",
+    "56180   0.0 -zsh",
+    "56431   0.0 tmux",
+    " 3893   0.0 -zsh",
+    " 9842   0.0 -zsh",
+    "91113   0.1 /Users/shinzui/.local/bin/claude",
+    " 6437   0.0 -zsh",
+    "36118   0.0 -zsh",
+    "36576   0.0 tmux",
+    "27753   0.0 -zsh",
+    "95994   0.0 -zsh",
+    "96146   0.0 tmux",
+    "10025   0.0 -zsh",
+    "10417   0.0 tmux",
+    "15563   0.0 just",
+    "15982   0.0 /nix/store/ccjihgs38m5qgvksik031vjz1cn9qksy-cabal-install-3.16.1.0/bin/cabal",
+    "36815   0.0 -zsh",
+    "96265   0.0 /Users/shinzui/Toshokan/jangso-db/dist-newstyle/build/aarch64-osx/ghc-9.12.4/jangso-cli-0.1.0.0/x/jangso/build/jangso/jangso",
+    "18468   0.0 -zsh",
+    "69648   0.0 -zsh",
+    "70737   0.0 tmux",
+    "47427   0.0 -zsh",
+    "47197   0.0 -zsh",
+    "58732   0.0 -zsh",
+    "59636   0.0 caffeinate",
+    "74142   5.5 /Users/shinzui/.local/bin/claude",
+    "97486   0.0 -zsh",
+    "22425   0.0 -zsh",
+    "24847   3.2 codex",
+    "55488   0.0 -zsh",
+    " 5781   0.0 -zsh",
+    "34719   0.0 bun",
+    "34720   0.0 node",
+    "20605   0.0 -zsh",
+    "95245   0.0 just",
+    "95251   0.0 just",
+    "95252   0.0 zsh",
+    "95268   0.0 cloud-sql-proxy",
+    "32162   0.0 -zsh",
+    "49944   0.0 codex",
+    "76061   0.0 -zsh",
+    "76730   0.0 tmux",
+    "88573   0.0 -zsh",
+    "42561   0.0 -zsh",
+    "  886   0.0 -zsh",
+    "14090   0.0 -zsh",
+    "59787   0.0 caffeinate",
+    "60930   1.0 /Users/shinzui/.local/bin/claude",
+    "17688   0.0 -zsh",
+    "18960   0.0 codex",
+    "80993   0.0 -zsh",
+    "59007   0.0 -zsh",
+    "59969   0.3 /nix/store/m9qkr2vhxpazkq0y14n7xzh9zpnyslj3-rei/bin/rei",
+    "60541   0.1 claude",
+    "74164   0.0 -zsh",
+    "86440   0.0 -zsh",
+    "86290   0.0 sudo",
+    "86291   0.0 /nix/store/bl2g4vv0klwm2dsp1nx79qi2m31gv137-python3-3.14.6-env/bin/python",
+    "25169   0.0 just",
+    "25175   0.0 just",
+    "25176   0.0 zsh",
+    "25186   0.0 cloud-sql-proxy",
+    "96061   0.0 -zsh",
+    "96071   0.0 -zsh",
+    "96083   0.0 -zsh",
+    "97070   0.0 just",
+    "97078   0.0 just",
+    "97082   0.0 zsh",
+    "97157   0.0 cloud-sql-proxy"
+  ]
+}

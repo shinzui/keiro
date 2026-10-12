@@ -5,7 +5,7 @@ description: >-
   Provide a supported way to enforce a consumer-owned relational precondition
   atomically with a domain command and its synchronous catalog projections, returning a typed
   refusal without committing events or bypassing rebuild and serving-revision guarantees.
-timestamp: 2026-10-12T04:30:00Z
+timestamp: 2026-10-12T05:15:12Z
 requestId: IR-53
 status: accepted
 origin: mori://shinzui/rei
@@ -41,7 +41,11 @@ The expanded focused PostgreSQL selection passes 36 examples, including
 same-database races, fresh OCC/driver retry results, transactional rollback,
 both catalog owner rebuilds, and versioned promotion in both lock orders.
 The final affected full suite passes 754 examples; the fixed performance
-acceptance remains tracked in the plan. These correctness results
+acceptance remains tracked in the plan. An unchanged-code paired run passes
+six ordinary configurations, then fails the eight-connection/four-event/paused-
+worker throughput budget (0.926574 versus minimum 0.95). Raw failures and
+diagnostics are retained; an idle/isolated runner is needed for further
+acceptance measurement. These correctness results
 do not establish performance readiness. Package release, publication, and
 downstream adoption remain separate work. The earlier exploratory prototype
 is not the accepted implementation.
@@ -75,7 +79,7 @@ command authority and must fail closed while unavailable, even though events
 can reconstruct it. Archive retains its mapping; define deletion, re-anchoring,
 and legacy migration policies explicitly. An immediate reader can use a bounded
 post-commit position wait; timeout means committed with view pending. The
-guarded runner remains planned and must not be emulated with private catalog SQL. Authorization, definition/scope validation, editor interaction,
+guarded runner remains unreleased and must not be emulated with private catalog SQL. Authorization, definition/scope validation, editor interaction,
 and other external IO remain consumer preflight work.
 
 ## Existing framework behavior and gap
