@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-12
+* **Update**: IR-53 retains an interrupted two-pair continuation after competing workloads start; five evidence-reporting tests pass and the 190-comparison completeness gate keeps performance acceptance open.
 * **Update**: IR-53 retains two fixed-budget runs and CPU/allocation diagnostics; six ordinary cases pass in the repeat, but throughput fails in the seventh. Performance acceptance remains open pending an idle/isolated runner.
 * **Update**: Record the final 754-example correctness suite and retained performance diagnostics
 * **Update**: Record the implemented guarded runner and expanded PostgreSQL correctness evidence; performance and adoption remain pending

@@ -26,6 +26,11 @@ provenance:
       at: 2026-10-12T02:56:46Z
       mode: "implement"
       note: "Begin baseline capture and implementation against Kiroku 0.11.0.0"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-12T12:43:23Z
+      mode: "implement"
+      note: "Resume unchanged-budget measurements with host monitoring and investigate timing stability before readiness"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -63,6 +68,8 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 - [x] (2026-10-12) M1 runtime/source checks: overlapping backends have distinct PIDs in the same database/schema; source-derived SQL/explicit-lock audit records no change on the ordinary path. The initial full suite passes 739 examples.
 - [x] (2026-10-12) M1 enhanced executable: retain the original production library with the byte-verified shared workload/fixture harness; its source/build hashes and rebuild command are archived.
 - [ ] M1 remaining: capture accepted alternating throughput/latency with both worker states. Initial latency-only samples are provenance, not acceptance denominators.
+- [x] (2026-10-12 12:48Z) Attempt the unchanged-budget comparison in `candidate-idle-20261012`, recording executable identity and ten host samples. Stop after two alternating pairs when independent builds/tests start; all 40,000 completed attempts have expected event/cardinality counts. This is incomplete evidence, not an additional budget failure or pass.
+- [ ] M1/M4 runner requirement: obtain a runner kept free of competing builds/tests for the complete matrix. An original-versus-original diagnostic remains available if failures persist there; do not select favorable repetitions on the shared host.
 - [x] (2026-10-12) M2 implementation: additive result/context and guarded runner compile, sharing the existing delivery loop after complete fence admission.
 - [x] (2026-10-12) M2 validation: initial full suite passes 739 examples; focused expanded selection passes 36 examples, including 34 new guarded examples. Public re-export policy and its nine tests pass. Shared delivery adds no ordinary-path SQL or explicit locks.
 - [x] (2026-10-12) M3 focused matrix: independent-connection races in both orders, winner rollback, snapshot/effect rollback, complete batches, silent/OCC/driver retries, encode/query faults, archive/canonical reuse, both owner rebuilds, independent fencing, post-commit pending/ready/unavailable views, and writer-first/promotion-first versioned admission pass.
@@ -73,9 +80,15 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 - [x] (2026-10-12) M5 documentation/export checks: guide, changelog and ADR-26/29/34 boundaries are recorded; strict ADR, user-documentation and IR validation and public export policy pass. The strengthened rebuild completion assertion passes in the 36-example focused selection.
 - [x] (2026-10-12) M5 projection guard: all 12 cases pass; the five-run median read-model p95 ratio is 1.041806 and throughput ratio is 0.977885, within its 1.25/0.90 budgets.
 - [ ] M5 regression/performance checks: the historical command CSV guard fails nine of fifteen current cases. A matching four-case selection fails three on the retained original binary and one on current; retain these pre-existing/noisy failures without changing the CSV. M4 acceptance remains pending.
+- [x] (2026-10-12 12:48Z) Strengthen evidence reporting with all 190 required comparisons, paired-ratio medians/ranges, retained-sample checks, and `--require-complete`. Five Python tests pass in the Nix shell; the interrupted archive correctly reports `incomplete` and exits 2 with that flag.
+- [x] (2026-10-12) Continuation checks: strict ADR (50 concepts), user-documentation, IR (53 concepts), and public re-export policy with nine tests pass in the Nix shell. `git diff --check` passes. No production change requires repeating the retained 754-example correctness suite or benchmark guards; performance measurements remain open.
 
 
 ## Surprises & Discoveries
+
+2026-10-12 — The resumed comparison began without an observed competing GHC/Cabal job, but independent compilation and runtime/harness verification started during the first case. Ten host snapshots in `candidate-idle-20261012/host-activity.jsonl` retain the overlap, including a GHC process at 60.7% CPU. Interrupt only the owned benchmark (PID 2661), which exits through Cabal with code -2. Two complete pairs retain 40,000 actual attempts; duplicate process/control archives represent the same samples and are not additional attempts. No five-pair report exists, so no budget verdict is possible. This does not establish a production regression or a noise-free control.
+
+2026-10-12 — The existing evidence summarizer returned success for a partial directory with no failed reports, without enumerating the missing matrix. Add a separate completeness inventory and optional failing gate rather than changing any performance budget. The required matrix has 16 ordinary refactor, 32 successful-guard, 32 pure-hit, 96 mixed, 12 fixed-arrival, and two sustained comparison reports. Passing latency budgets still require a separate storage/backlog interpretation. Five tests cover ratio calculation, empty/partial evidence, complete coverage including storage, and the failing CLI gate.
 
 2026-10-12 — Implementation checkout is `ad78efae0d21d849c8106eac73df0f8bb5719e1f`, with Kiroku already bounded at `^>=0.11.0.0`. No dependency bound change is needed. Published Kiroku 0.11.0.0 `Transaction.hs` and Hasql transaction 1.2.3.1 retry interpreter match the Mori-discovered corpus byte-for-byte. Baseline environment and retained executable digest are in `keiro/bench/results/guarded-catalog/baseline/environment.json`. Initial latency samples overlap compilation and are provenance only; they do not establish M4 acceptance.
 
@@ -107,6 +120,8 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Decision Log
 
+2026-10-12 — Stop the resumed measurement when competing host work appears instead of collecting another known-contended five-pair result. Retain every complete sample, host observation, and the explicit interruption in the log. Do not interrupt other contributors' jobs or treat normal desktop/VM activity as an isolation guarantee. The acceptance blocker is still measurement infrastructure, not evidence justifying speculative production edits or a budget revision.
+
 
 2026-10-11 — Owner discussion selected a small opt-in synchronous catalog runner. Rei owns identity lookup and duplicate-to-reuse policy; Keiro owns transaction rollback, catalog fences, and delivery. Existing runners retain their signatures, outcomes, and SQL/lock counts.
 
@@ -131,10 +146,12 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Outcomes & Retrospective
 
+2026-10-12 continuation checkpoint: the benchmark builds in the Nix shell and the evidence-reporting tests pass. The resumed run is deliberately interrupted after external jobs begin; its complete samples pass event/cardinality accounting but supply no acceptance verdict. Reporting now identifies incomplete matrices explicitly and fails `--require-complete` until all required evidence and budget results exist. M1 paired acceptance, M4, and the performance portion of M5 remain open pending a suitable measurement runner. Production code, dependency versions, and numeric budgets are unchanged in this continuation.
+
 2026-10-12 implementation checkpoint: the additive runner compiles; the final full suite passes 754 examples, including 35 guarded examples. The example covers snapshots, both owner rebuilds, fresh OCC/driver outcomes, versioned promotion in both orders, and post-commit view errors. The ordinary-path source audit records unchanged SQL/explicit locks. Strict ADR, user documentation, improvement request, and public export checks and the projection benchmark guard pass. The historical command guard also fails on original source; retained raw evidence separates that drift from this feature. Forty paused-worker latency samples remain provenance. Enhanced alternating controls and M4 throughput/queueing/sustained acceptance remain outstanding. The API and fixture are not yet a performance-ready handoff.
 
 
-Planning and guidance now distinguish the atomic identity index from the asynchronous rich-note view, including independent fencing and committed-but-pending response requirements. Source review found and corrected the async-group selection gap and made callback safety, promotion admission, driver retries, and sustained duplicate costs explicit. The plan was originally authored and revised by `gpt-6-astra` with no recorded review entry before this pass. All five runtime milestones remain pending. No runtime or performance result is claimed.
+At the original planning checkpoint, guidance distinguished the atomic identity index from the asynchronous rich-note view, including independent fencing and committed-but-pending response requirements. Source review corrected the async-group selection gap and made callback safety, promotion admission, driver retries, and sustained duplicate costs explicit. All runtime milestones were pending at that checkpoint; the later implementation checkpoints above describe the delivered feature and its still-open performance acceptance.
 
 
 ## Context and Orientation
@@ -148,7 +165,7 @@ The original inspected Keiro baseline was `2a38ee169d165c571a142cb47d08bab1e7ad7
 
 `keiro/src/Keiro/Projection/Catalog.hs` exports `PhysicalTargets`, `QualifiedTable`, `resolvePhysicalTarget`, and revision-specific live handlers. A serving revision is the code/schema version currently receiving live writes. Its physical targets are the actual tables selected for that revision. An online rebuild populates separate candidate tables while the old revision serves; promotion atomically selects the new generation. The guard must read the protected serving generation, and accepted events must reach the same bindings. A guard is not re-run during event replay: the committed creation event must carry enough identity and payload to reconstruct the note.
 
-The dependency is `mori://shinzui/kiroku/packages/kiroku-store`, currently bounded by `^>=0.10.0.0` in `keiro/keiro.cabal`. Its `Kiroku.Store.Transaction.appendToStreamTx` contract documents an update of the global `$all` row and retention of that row lock through commit or rollback. Its runner uses `ReadCommitted`, under which each subsequent SQL statement sees commits preceding that statement. Thus a loser waiting on append serialization can query the committed winner afterwards. This proof depends on a separate guard statement after the append, the same database/store schema, synchronous identity updates, and all relevant live writers participating. Reads performed before append or in the same append statement's old snapshot do not inherit the proof. Existing catalog maintenance supplies its separate lifecycle protection. Locate dependency code with Mori, never by traversing `/nix/store`.
+The dependency is `mori://shinzui/kiroku/packages/kiroku-store`, bounded by `^>=0.11.0.0` in the implementation checkout's `keiro/keiro.cabal` (the earlier source inspection used `^>=0.10.0.0`). Its `Kiroku.Store.Transaction.appendToStreamTx` contract documents an update of the global `$all` row and retention of that row lock through commit or rollback. Its runner uses `ReadCommitted`, under which each subsequent SQL statement sees commits preceding that statement. Thus a loser waiting on append serialization can query the committed winner afterwards. This proof depends on a separate guard statement after the append, the same database/store schema, synchronous identity updates, and all relevant live writers participating. Reads performed before append or in the same append statement's old snapshot do not inherit the proof. Existing catalog maintenance supplies its separate lifecycle protection. Locate dependency code with Mori, never by traversing `/nix/store`.
 
 The consumer fixture has a synchronous `state_note_identity` target mapping `(anchor type, anchor ID, property definition ID, state ID)` to the winning note ID, and a separate asynchronous rich-note target. Store only additional metadata demonstrably needed for the invariant or a retained winning receipt; do not duplicate content/tags or display joins in the synchronous index. Use separate catalog owners and groups so rich-view unavailability need not fence ensure commands, provided declared dependencies allow independent lifecycles. The identity row refers to the aggregate identity, not a foreign key to an asynchronous row that may not exist yet. Keep real dependencies explicit and do not claim independence for tables that require a shared lifecycle. Fencing the identity group must fail ensure closed. For this fixture, all four identity columns are `NOT NULL` and the unique key covers exactly those four canonical values; do not add an archive filter to the guard or index. Normalize values before both lookup and event creation so equality cannot differ between guard, writer, and replay. Archive retains the mapping. The fixture forbids deletion or re-anchoring of an indexed note and requires legacy duplicates to be reconciled before index activation; downstream policy changes require their own migration and invariant proof. Every creation path must both participate in append serialization and enforce the invariant, not merely acquire the same lock. A bypass path that only hits the unique constraint remains an operational error, never typed reuse.
 
@@ -219,6 +236,8 @@ Use a separate diagnostic run to collect PostgreSQL lock-wait evidence and guard
 
 If the post-append design fails, first eliminate extra SQL, incorrect query plans, or redundant fence work. Do not silently move a SELECT before append. A pre-append alternative requires a revised plan with a shared identity lock/reservation protocol, participation by every writer, and deadlock-safe ordering relative to append and catalog locks. Acceptance is archived raw measurements and a computed pass/fail report, with no claim that correctness tests establish performance.
 
+Aggregate the chosen run with `scripts/summarize-guarded-catalog-evidence.py` and use `--require-complete` for the final evidence gate. The inventory requires 190 reports: 16 ordinary refactor, 32 successful-guard, 32 pure-hit cost, 96 mixed, 12 fixed-arrival, and two sustained comparisons. It verifies five pairs and retained canonical raw samples for each paired report and the raw/storage files for sustained reports, and reports the median and range for each paired metric. Exit 2 means missing matrix evidence or a failed budget. A complete passing matrix still requires the storage/backlog interpretation described above; the tool labels that state `storage-review-required`, not a completed performance handoff.
+
 
 ### Milestone 5: Document the supported boundary and finish validation
 
@@ -264,7 +283,10 @@ cp /tmp/keiro-306-enhanced-baseline-v2/enhanced-environment.json keiro/bench/res
 nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=ordinary KEIRO_GUARDED_CATALOG_OUTPUT=bench/results/guarded-catalog/baseline cabal bench keiro-bench --benchmark-options='+RTS -N2 -RTS'
 nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=compare KEIRO_GUARDED_CATALOG_BASELINE=bench/results/guarded-catalog/baseline KEIRO_GUARDED_CATALOG_OUTPUT=bench/results/guarded-catalog/candidate cabal bench keiro-bench --benchmark-options='+RTS -N2 -RTS'
 nix develop -c env KEIRO_GUARDED_CATALOG_EVIDENCE=diagnostic KEIRO_GUARDED_CATALOG_OUTPUT=bench/results/guarded-catalog/diagnostic cabal bench keiro-bench --benchmark-options='+RTS -N2 -RTS'
+nix develop -c python3 scripts/summarize-guarded-catalog-evidence.py keiro/bench/results/guarded-catalog/candidate-idle-20261012 --require-complete
 ```
+
+The summary command above demonstrates the retained interrupted run: expect `performanceAcceptance: incomplete` and exit 2. For final acceptance, replace that directory with the chosen complete run directory.
 
 Dispatch evidence modes in `keiro/bench/Main.hs` before unrelated fixture setup and `defaultMain`, so `ordinary`, `compare`, and `diagnostic` run only their requested harness and exit. Add `GuardedCatalogBench` to the benchmark stanza's `other-modules`; record all workload choices in its output manifest. Cabal runs the benchmark in the `keiro` package directory, so those output paths resolve beneath `keiro/bench/results/guarded-catalog`. Choose unused output directories when repeating any command; the harness and baseline builder refuse to overwrite evidence. The enhanced builder overlays only harness/test-support files on the recorded original revision, leaves production sources untouched, records resolved dependencies/compiler/runtime options, and retains the project-built binary outside the repository. The harness reads that manifest, verifies executable/shared-source hashes, reruns the retained ordinary executable between candidate samples, and emits reports plus gzip-compressed raw JSON samples. Historical latency-only samples remain provenance, not the denominator for alternating measurements. Record the exact accepted report here during implementation; do not paste hypothetical numbers.
 
@@ -364,3 +386,9 @@ Revision note (2026-10-12): Close the correctness matrix with positive-control h
 
 
 Revision note (2026-10-12): Preserve both fixed-budget attempts and RTS diagnostics. Six ordinary configurations pass in the repeat, while the seventh fails throughput. Keep M4 open and request an idle/isolated measurement environment; no code or budget change is made. Correct the historical command comparison to three of four lower current means.
+
+
+Revision note (2026-10-12): Resume implementation from the committed correctness/documentation checkpoint. The benchmark builds in the Nix shell. Start another complete comparison with unchanged production code, workloads, and budgets after observing no competing GHC/Cabal jobs, retaining regular host samples and exact executable identity. Normal desktop/VM activity remains; investigate original-binary timing stability if acceptance fails instead of selecting favorable repetitions.
+
+
+Revision note (2026-10-12): Stop the resumed run after competing workloads start, retaining two complete pairs and ten host observations. Make the 190-comparison inventory and raw-evidence completeness observable, add ratio medians/ranges and a failing `--require-complete` reporting gate, and verify it with five tests. Preserve the original fixed budgets and leave performance acceptance open until an appropriate runner is available; no API or dependency change is made.

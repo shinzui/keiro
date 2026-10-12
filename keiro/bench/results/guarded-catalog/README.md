@@ -24,6 +24,20 @@ are reported separately from committed event throughput. Rebuild the original
 binary with `scripts/build-guarded-catalog-baseline.py`; aggregate retained
 results with `scripts/summarize-guarded-catalog-evidence.py`.
 
+The aggregate report enumerates all 190 required comparison reports, missing
+raw pairs/storage samples, and paired-ratio medians and ranges. For a completion
+gate, run from the repository root:
+
+```bash
+nix develop -c python3 scripts/summarize-guarded-catalog-evidence.py keiro/bench/results/guarded-catalog/candidate-idle-20261012 --require-complete
+```
+
+This retained interrupted example exits 2 for incomplete evidence. Substitute
+the chosen run directory for acceptance; the gate exits 2 for any incomplete
+evidence or failed budget. Even complete passing
+latency reports require interpretation of sustained storage, vacuum, and active
+worker backlog before a performance-ready conclusion.
+
 `diagnostic-20261012/` contains unsupported slow-guard positive controls,
 index-plan evidence, PostgreSQL lock waits and transaction clocks. The 20 ms
 guard reduces attempt throughput from 2,059.69 to 211.37 per second and increases
@@ -77,3 +91,13 @@ the cause of either failure.
 
 The required complete matrix, fixed-arrival and ten-minute storage/latency
 comparisons remain pending. No performance-ready conclusion is recorded here.
+
+`candidate-idle-20261012/` retains an interrupted continuation with unchanged
+code and budgets. No competing GHC/Cabal job was observed before launch, but
+independent compilation and runtime/harness verification started during the
+first case. Ten host snapshots retain that overlap. The controller interrupted
+only its benchmark after two alternating pairs; those 40,000 attempts have
+expected event/cardinality counts. No five-pair report exists and this archive
+has no budget verdict. The original/process files duplicate the corresponding
+control/candidate samples and must not be counted as additional attempts.
+`--require-complete` correctly reports `incomplete` and exits 2 for this archive.

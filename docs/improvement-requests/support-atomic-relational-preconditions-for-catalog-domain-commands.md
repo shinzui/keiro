@@ -5,7 +5,7 @@ description: >-
   Provide a supported way to enforce a consumer-owned relational precondition
   atomically with a domain command and its synchronous catalog projections, returning a typed
   refusal without committing events or bypassing rebuild and serving-revision guarantees.
-timestamp: 2026-10-12T05:15:12Z
+timestamp: 2026-10-12T12:48:44Z
 requestId: IR-53
 status: accepted
 origin: mori://shinzui/rei
@@ -45,7 +45,12 @@ acceptance remains tracked in the plan. An unchanged-code paired run passes
 six ordinary configurations, then fails the eight-connection/four-event/paused-
 worker throughput budget (0.926574 versus minimum 0.95). Raw failures and
 diagnostics are retained; an idle/isolated runner is needed for further
-acceptance measurement. These correctness results
+acceptance measurement. A continuation stops after two complete alternating
+pairs when independent build/test workloads start, retaining all 40,000
+completed attempts and host observations without claiming a budget verdict.
+The evidence summary now explicitly inventories all 190 required comparisons;
+its `--require-complete` gate fails incomplete archives. Five reporting tests
+pass. These correctness results
 do not establish performance readiness. Package release, publication, and
 downstream adoption remain separate work. The earlier exploratory prototype
 is not the accepted implementation.
