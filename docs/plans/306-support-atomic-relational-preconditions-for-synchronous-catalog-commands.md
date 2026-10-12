@@ -68,6 +68,7 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 
 - [x] (2026-10-12 14:34Z) Inspect the Kenshou exact-revision runbook, discover existing cloud infrastructure, correct Keiro's Mori upstream identity, and prepare a clean source bundle for the Linux builder. No catalog performance profile exists in the harness.
 - [x] (2026-10-12 14:34Z) Durable fixture validation passes 36 focused examples including the settings assertion; test-support passes 11 examples, reporting passes six controls, and export/ADR/user-documentation checks pass.
+- [x] (2026-10-12 14:40Z) Full regression with the revised fixture passes 755 examples in 168.34 seconds; strict ADR, documentation, IR and export checks pass. Commit `ff1126d4` retains the durable fixture and portability fixes.
 - [ ] Remote M1/M4: rebuild both binaries with the durable benchmark fixture and observed database settings; obtain uncontented paired measurements and the complete fixed-budget matrix.
 
 
@@ -161,7 +162,7 @@ Review checks: the public re-export check and its nine policy tests pass. The tw
 
 ## Outcomes & Retrospective
 
-2026-10-12 remote preparation checkpoint: previous API/correctness work remains committed. Benchmark durability and executable portability are corrected; six reporting controls pass. Source preparation is underway on the existing Linux builder, with no measured remote acceptance yet. Historical non-durable samples remain retained and are not acceptance denominators.
+2026-10-12 remote preparation checkpoint: previous API/correctness work remains committed. Benchmark durability and executable portability are corrected; six reporting controls pass. Source preparation is underway on the existing Linux builder, with no measured remote acceptance yet. Historical non-durable samples remain retained and are not acceptance denominators. The revised full regression passes 755 examples with zero failures in 168.34 seconds. The comparison wrapper checks shared-source/executable hashes, compiler and dependency inventories, retains host observations every five seconds, and interrupts only its owned benchmark if another build/test appears. That observation is not a cloud cell lease.
 
 2026-10-12 continuation checkpoint: the benchmark builds in the Nix shell and the evidence-reporting tests pass. The resumed run is deliberately interrupted after external jobs begin; its complete samples pass event/cardinality accounting but supply no acceptance verdict. Reporting now identifies incomplete matrices explicitly and fails `--require-complete` until all required evidence and budget results exist. M1 paired acceptance, M4, and the performance portion of M5 remain open pending a suitable measurement runner. Production code, dependency versions, and numeric budgets are unchanged in this continuation.
 
@@ -268,6 +269,17 @@ Run the full affected test suite, normal command/projection benchmark guards, pu
 
 ## Concrete Steps
 
+
+For remote preparation, transfer a Git bundle containing the committed candidate into a fresh checkout on `nix-builder-x86` in project `tan-nb-exp`, zone `us-west1-a`, using the IAP transport from `mori://shinzui/load-testing-infra`, project-relative path `scripts/iap-ssh.sh` (artifact-level URI pending). Use the existing `builder` Unix account for PostgreSQL compatibility. Build and freeze the candidate before building the original-library overlay; both run in the project Nix shell. The wrapper rejects mismatched dependencies, compiler, source hashes or executable hashes, and records its direct host-observation scope without claiming a cell lease. Run these commands in the clean candidate checkout with unused worktree/output paths:
+
+```bash
+nix develop -c cabal build keiro:bench:keiro-bench
+nix develop -c cabal freeze --enable-benchmarks
+nix develop -c python3 scripts/build-guarded-catalog-baseline.py --worktree /home/builder/keiro-306-original --output /home/builder/keiro-306-baseline
+nix develop -c python3 scripts/run-guarded-catalog-comparison.py --baseline /home/builder/keiro-306-baseline --output /home/builder/keiro-306-comparison
+```
+
+Keep the SSH transport connected while the command runs so the builder's normal idle shutdown does not interrupt it. Do not change global cloud configuration, stop other work, disable the watchdog, or run on a contaminated host. Retain the wrapper's `candidate-environment.json`, `host-activity.jsonl`, `comparison.log`, `execution.json`, and aggregate/raw evidence. A preflight refusal retains host observations and runs no comparison. A complete passing report still needs the sustained storage/backlog review.
 
 Run commands from the Keiro repository root. Use the repository's Nix development environment for Cabal and PostgreSQL tools; tests start isolated ephemeral databases and do not require a running production database. Use an already active development shell instead of nesting `nix develop` when appropriate. No command should search `/nix/store` or the filesystem root.
 
@@ -412,3 +424,6 @@ Revision note (2026-10-12): Stop the resumed run after competing workloads start
 
 
 Revision note (2026-10-12): Resume through the Kenshou runbook and authorized Linux builder. Correct missing Mori upstream metadata, separate durable benchmark fixtures from fast correctness fixtures, retain actual PostgreSQL settings, and remove the runtime Cabal-checkout dependency from candidate subprocess execution. Rebuild both enhanced controls before measuring; keep all fixed budgets and remaining acceptance requirements.
+
+
+Revision note (2026-10-12): Record the 755-example full regression and add a reproducible remote comparison wrapper with dependency/compiler/source checks and five-second host monitoring. Freeze the candidate dependency selection into the enhanced baseline build; do not pool contaminated samples, retry budget failures automatically, or claim an exclusive lease from host observations.

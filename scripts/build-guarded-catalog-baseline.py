@@ -61,6 +61,9 @@ def main():
     if "    vector " not in stanza:
         stanza = stanza.replace("    uuid ", "    vector >=0.13 && <0.14,\n    uuid ")
     (worktree / "keiro/keiro.cabal").write_text(prefix + "benchmark keiro-bench\n" + stanza)
+    freeze = ROOT / "cabal.project.freeze"
+    if freeze.exists():
+        shutil.copyfile(freeze, worktree / "cabal.project.freeze")
     subprocess.run(["cabal", "build", "keiro:bench:keiro-bench"], cwd=worktree, check=True)
     executable = Path(run("cabal", "list-bin", "keiro:bench:keiro-bench", cwd=worktree))
     # Retain only a binary returned from this project's build directory.
@@ -80,6 +83,7 @@ def main():
         "compiler": run("ghc", "--numeric-version"),
         "cabal": run("cabal", "--numeric-version"),
         "buildOptions": "GHC -O1; runtime +RTS -N2 -RTS; pool size 10",
+        "freezeSha256": digest(freeze) if freeze.exists() else None,
         "dependencies": sorted({(p.get("pkg-name"), p.get("pkg-version")) for p in plan["install-plan"]}),
         "machine": platform.platform(),
         "recordedAt": datetime.now(timezone.utc).isoformat(),
