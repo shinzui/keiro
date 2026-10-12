@@ -69,6 +69,7 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 - [x] (2026-10-12 14:34Z) Inspect the Kenshou exact-revision runbook, discover existing cloud infrastructure, correct Keiro's Mori upstream identity, and prepare a clean source bundle for the Linux builder. No catalog performance profile exists in the harness.
 - [x] (2026-10-12 14:34Z) Durable fixture validation passes 36 focused examples including the settings assertion; test-support passes 11 examples, reporting passes six controls, and export/ADR/user-documentation checks pass.
 - [x] (2026-10-12 14:40Z) Full regression with the revised fixture passes 755 examples in 168.34 seconds; strict ADR, documentation, IR and export checks pass. Commit `ff1126d4` retains the durable fixture and portability fixes.
+- [x] (2026-10-12 14:54Z) Local benchmark smoke completes 100 attempts on durable PostgreSQL 18.6 with exactly 10,100 identities and 800 warm-up/measured events. Seven reporting/host-monitor controls pass, including live child processes named as a Nix-wrapped Cabal command and an external test. Archive this as harness validation, not an acceptance pair.
 - [ ] Remote M1/M4: rebuild both binaries with the durable benchmark fixture and observed database settings; obtain uncontented paired measurements and the complete fixed-budget matrix.
 
 
@@ -95,6 +96,8 @@ The implementation is acceptable only with concurrency, rollback, catalog lifecy
 
 
 ## Surprises & Discoveries
+
+2026-10-12 — The builder stops at 14:47Z during the cold Cabal build despite the SSH transport being connected. Cloud status confirms `TERMINATED`; restart only that authorized VM and retain the interrupted log. Preparation resumes from installed packages, in a new log, at exact candidate `7233bd1e`. Arm the owned eight-hour `keiro-306-restore-idle.timer` before temporarily stopping the existing idle timer, following the infrastructure's earlier bounded-hold precedent. Restore the original timer at the terminal checkpoint; no measurement ran before the interruption.
 
 2026-10-12 — Remote-run preparation discovers that the shared benchmark fixture inherits `mori://shinzui/ephemeral-pg/packages/ephemeral-pg` test defaults: `fsync`, `synchronous_commit`, and `full_page_writes` are off. Historical catalog samples therefore describe non-durable test storage and cannot establish production performance acceptance. Add a separate durable benchmark fixture, query and retain actual database settings in every raw sample, and reject missing/off durability evidence in the final gate. Correctness fixtures retain their existing test settings. Rebuild both retained baseline and candidate with the byte-identical new workload/fixture before timing; budgets and production code remain unchanged.
 
@@ -279,7 +282,7 @@ nix develop -c python3 scripts/build-guarded-catalog-baseline.py --worktree /hom
 nix develop -c python3 scripts/run-guarded-catalog-comparison.py --baseline /home/builder/keiro-306-baseline --output /home/builder/keiro-306-comparison
 ```
 
-Keep the SSH transport connected while the command runs so the builder's normal idle shutdown does not interrupt it. Do not change global cloud configuration, stop other work, disable the watchdog, or run on a contaminated host. Retain the wrapper's `candidate-environment.json`, `host-activity.jsonl`, `comparison.log`, `execution.json`, and aggregate/raw evidence. A preflight refusal retains host observations and runs no comparison. A complete passing report still needs the sustained storage/backlog review.
+Keep the SSH transport connected while the command runs so the builder's normal idle shutdown does not interrupt it. Do not change global cloud configuration, stop other work, or run on a contaminated host. If the builder's existing idle watchdog stops active Cabal preparation, first arm a bounded transient systemd timer to restore `idle-shutdown.timer`, then temporarily stop that idle timer. Restore its previously active state on every terminal path, and cancel only the owned restoration timer after restoration. The 2026-10-12 preparation uses `keiro-306-restore-idle.timer` with an eight-hour backstop; it changes no installed watchdog code or cell idle policy. Retain the wrapper's `candidate-environment.json`, `host-activity.jsonl`, `comparison.log`, `execution.json`, and aggregate/raw evidence. A preflight refusal retains host observations and runs no comparison. A complete passing report still needs the sustained storage/backlog review.
 
 Run commands from the Keiro repository root. Use the repository's Nix development environment for Cabal and PostgreSQL tools; tests start isolated ephemeral databases and do not require a running production database. Use an already active development shell instead of nesting `nix develop` when appropriate. No command should search `/nix/store` or the filesystem root.
 
@@ -427,3 +430,9 @@ Revision note (2026-10-12): Resume through the Kenshou runbook and authorized Li
 
 
 Revision note (2026-10-12): Record the 755-example full regression and add a reproducible remote comparison wrapper with dependency/compiler/source checks and five-second host monitoring. Freeze the candidate dependency selection into the enhanced baseline build; do not pool contaminated samples, retry budget failures automatically, or claim an exclusive lease from host observations.
+
+
+Revision note (2026-10-12): Retain the remote cold-build interruption and resume against candidate `7233bd1e`. Replace the ineffective SSH-only idle assumption with an explicitly bounded, automatically restoring preparation/measurement hold on the existing builder watchdog. No acceptance sample or budget verdict is inferred from the interrupted build.
+
+
+Revision note (2026-10-12): Verify the durable measurement output with a 100-attempt active-worker smoke and live contamination controls. Normalize wrapped compiler/build executable names in host monitoring, recognize external test binaries, and retain process identities/resource use without command arguments. The complete fixed-budget remote matrix remains outstanding.

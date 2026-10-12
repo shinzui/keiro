@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -13,6 +14,9 @@ SCRIPT = Path(__file__).resolve().parents[1] / "summarize-guarded-catalog-eviden
 SPEC = importlib.util.spec_from_file_location("guarded_evidence", SCRIPT)
 EVIDENCE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EVIDENCE)
+RUNNER_SPEC = importlib.util.spec_from_file_location("guarded_runner", SCRIPT.with_name("run-guarded-catalog-comparison.py"))
+RUNNER = importlib.util.module_from_spec(RUNNER_SPEC)
+RUNNER_SPEC.loader.exec_module(RUNNER)
 
 
 class EvidenceTest(unittest.TestCase):
@@ -36,6 +40,21 @@ class EvidenceTest(unittest.TestCase):
         self.assertFalse(EVIDENCE.durability_verified({}))
         for name in settings:
             self.assertFalse(EVIDENCE.durability_verified({"databaseSettings": {**settings, name: "off"}}))
+
+    def test_host_monitor_detects_wrapped_build_and_external_test_processes(self):
+        for name in [".cabal-wrapped", "/tmp/guarded-host-control-tests"]:
+            with subprocess.Popen([name, "30"], executable="/bin/sleep") as process:
+                try:
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline:
+                        blockers = RUNNER.host_snapshot()["blockers"]
+                        if any(line.split()[0] == str(process.pid) for line in blockers):
+                            break
+                        time.sleep(0.05)
+                    else:
+                        self.fail(f"host monitor missed {name}")
+                finally:
+                    process.terminate()
 
     def test_empty_run_has_190_missing_comparisons(self):
         result = EVIDENCE.matrix_inventory(self.directory, {})

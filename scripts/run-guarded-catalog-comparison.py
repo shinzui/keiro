@@ -30,19 +30,25 @@ def digest(path):
 def host_snapshot():
     processes = command("ps", "-eo", "pid,ppid,pcpu,args")
     blockers = []
+    retained = ["PID PPID CPU EXECUTABLE"]
     for line in processes.splitlines()[1:]:
         fields = line.split(None, 3)
         if len(fields) != 4:
             continue
         executable = fields[3].split()[0]
-        name = Path(executable).name
+        # Command arguments may contain another contributor's credentials.
+        # Retain executable identity and resource use, never their arguments.
+        observation = " ".join(fields[:3] + [executable])
+        retained.append(observation)
+        name = Path(executable).name.lstrip(".").removesuffix("-wrapped")
         if (name in {"cabal", "cargo", "rustc", "gcc", "cc", "clang", "clang++"}
                 or name == "ghc" or name.startswith("ghc-")
                 or (name == "nix-store" and "--serve" in fields[3])
+                or name.endswith(("-test", "-tests"))
                 or (executable.startswith("/build/") and "test" in name)):
-            blockers.append(line.strip())
+            blockers.append(observation)
     return {"at": datetime.now(timezone.utc).isoformat(),
-            "load": os.getloadavg(), "processes": processes, "blockers": blockers}
+            "load": os.getloadavg(), "processes": "\n".join(retained), "blockers": blockers}
 
 
 def main():
@@ -67,7 +73,7 @@ def main():
     if dependencies != sorted(map(tuple, manifest["dependencies"])):
         raise SystemExit("baseline/candidate dependency inventories differ; rebuild with one freeze file")
     compiler = command("ghc", "--numeric-version")
-    if compiler != manifest["compiler"]:
+    if compiler != manifest["compiler"] or plan["compiler-id"] != "ghc-" + compiler:
         raise SystemExit("baseline/candidate compilers differ")
     for name, expected in manifest["harnessFiles"].items():
         if digest(ROOT / name) != expected:
