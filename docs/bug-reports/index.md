@@ -14,6 +14,7 @@ okf_version: "0.2"
 - [Child completion crash strands the waiting parent](8-child-completion-crash-strands-the-waiting-parent.md) - A child workflow process killed after its completion marker commits and before the parent wake commits leaves the parent suspended permanently.
 - [pgmq dlq read JSON renders the DLQ message id with a derived Show](9-pgmq-dlq-read-json-renders-message-id-with-show.md) - keiro-ops --json pgmq dlq read emits dlq_message_id as the Haskell Show rendering "MessageId {unMessageId = N}" instead of a number.
 - [Initial hole harness requires acceptance from empty registers despite history-backed witnesses](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) - DSL 0.20.0.0 falsely fails Rei's valid guarded clear in both generic initial acceptance and forward/replay probes.
+- [Read-model harness imports an inconsistent name for a keyword segment](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) - Keiro DSL accepts a read-model name ending in the snake-case segment type, but its generated definition and harness import disagree on capitalization and fail compilation.
 
 ## Status and plan coverage
 
@@ -36,6 +37,7 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
 | [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `reported` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Unimplemented; 1/13 progress items checked (plan bookkeeping only); diagnosis validated from source and the generated probe shape reproduced in keiro. |
+| [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `reported` | No plan for this failure | Open; reported by the notification-render-service consumer through GitHub PR #6 and renumbered from the contributor's BUG-8, which master had already allocated. |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
 assertions share one reproduction. Later that day the owning repository validated the

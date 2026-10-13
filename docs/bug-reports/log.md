@@ -12,6 +12,9 @@
 * **Update**: BUG-7 is tracked by ExecPlan 301, which confirms from adapter and shibuya source that the retry ceiling runs on the adapter's source stream before the supervised runner opens the process span, and plans the fix inside keiro's handler.
 * **Update**: Audit all seven lifecycle statuses and plan coverage: BUG-1/BUG-2 remain duplicate with completed plans 297/298; BUG-4/BUG-6 link unimplemented plan 300; BUG-5 links unimplemented plan 299; BUG-3/BUG-7 remain reported with no plan addressing their specific failures. Add per-report implementation notes and the index summary.
 
+## 2026-09-28
+* **Addition**: BUG-11 records released read-model generation producing different definition and harness-import spellings when a snake-case name contains the Haskell keyword segment `type`; an untouched minimal harness fails compilation and a renamed control succeeds.
+
 ## 2026-09-25
 * **Update**: BUG-2 attribution controls pass with released Kiroku 0.9.0.1 and bounded verification threads
 * **Update**: BUG-1 and BUG-2 duplicates now point to released kiroku-store 0.9.0.1
