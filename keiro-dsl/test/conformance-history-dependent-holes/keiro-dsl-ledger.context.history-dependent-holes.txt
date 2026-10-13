@@ -1,0 +1,37 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/history-dependent-holes.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes structural conformance","path":"Generated/HistoryDependentHoles/StructuralConformance.hs"}
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes behavior source map","path":"Generated/HistoryDependentHoles/BehaviorSourceMap.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context history-dependent-holes replay-audit assembly","path":"Generated/HistoryDependentHoles/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Assignment (line 12)","path":"HistoryDependentHoles/Assignment/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Projection.hs"}
+module-role {"family":"Holes","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"HistoryDependentHoles/Assignment/Holes.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Assignment (line 12)","path":"Generated/HistoryDependentHoles/Assignment/Harness.hs"}
+generated Generated/HistoryDependentHoles/StructuralConformance.hs
+generated Generated/HistoryDependentHoles/BehaviorSourceMap.hs
+generated Generated/HistoryDependentHoles/ReplayAudit.hs
+generated Generated/HistoryDependentHoles/Assignment/Domain.hs
+generated Generated/HistoryDependentHoles/Assignment/Codec.hs
+generated Generated/HistoryDependentHoles/Assignment/Transducer.hs
+generated Generated/HistoryDependentHoles/Assignment/BehaviorContract.hs
+hole HistoryDependentHoles/Assignment/BehaviorHoles.hs
+generated Generated/HistoryDependentHoles/Assignment/EventStream.hs
+generated Generated/HistoryDependentHoles/Assignment/Projection.hs
+hole HistoryDependentHoles/Assignment/Holes.hs
+generated Generated/HistoryDependentHoles/Assignment/Harness.hs
+mapping {"codecIdentity":"conformance.history-dependent-holes.PropertyValues.json","codecVersion":"1","mode":"opaque","module":"Conformance.HistoryDependentHoles.Domain","package":"keiro-dsl","schema":1,"specName":"PropertyValues","type":"PropertyValues"}
+behavior {"aggregate":"Assignment","command":"SetProperty","evidence":"hole-witnessed","key":"behavior-v1-73b7455c36956c2b","kind":"live-transition","outputs":[{"command":"SetProperty","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Assignment","command":"ClearProperty","evidence":"hole-witnessed","key":"behavior-v1-afe574346545beaa","kind":"replay-transition","outputs":[{"command":"ClearProperty","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Assignment","command":"Touch","evidence":"generated-authoritative","key":"behavior-v1-fa59fc344c44f50b","kind":"live-transition","outputs":[{"command":"Touch","ownership":"generated-command-identity"}],"source":"Active"}
+behavior {"aggregate":"Assignment","command":"ClearProperty","evidence":"hole-witnessed","key":"behavior-v1-fe7277b756f0ff4b","kind":"live-transition","outputs":[{"command":"ClearProperty","ownership":"generated-command-identity"}],"source":"Active"}
+semantic-impact {"declarations":[{"consequences":[{"consumer":"Assignment","kind":"consumer-build"},{"aggregate":"Assignment","kind":"snapshot-hydration"}],"consumerEvidence":[{"consumer":"Assignment","operation":null,"path":"Assignment register values : PropertyValues","surface":"snapshot-register"}],"consumers":["Assignment"],"declaration":"PropertyValues","identity":"opaque\u001fkeiro-dsl:Conformance.HistoryDependentHoles.Domain:PropertyValues\u001fconformance.history-dependent-holes.PropertyValues.json\u001f1\u001fConformance.HistoryDependentHoles.Bindings.propertyValuesCases\u001fConformance.HistoryDependentHoles.Bindings.emptyPropertyValues\u001faea479573cfac02e"}],"mappedSurfaceEvidenceVersion":1,"serviceInventory":["PropertyValues"]}

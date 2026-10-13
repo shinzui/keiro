@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-13T15:13:00Z
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-13T23:28:57Z
+      mode: "discuss"
+      note: "Owner accepts the breaking ContractType API split; added plan 304 sequencing, M1 compile-at-each-step order, and three tree-checked corrections"
 ---
 
 # Support list fields in integration contracts
@@ -63,7 +69,7 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 ## Progress
 
 - [ ] M1. Move IR-54 to `in-progress` (frontmatter `status`, body Status, log entry).
-- [ ] M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`.
+- [ ] M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`. Land this first with no producer of `CList`: the full build and every existing suite must pass before the lowering and the parser.
 - [ ] M1. Add `ContractListFieldSyntax` to `LanguageFeature` and to `profileV5` in `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`.
 - [ ] M1. Parse `List <scalar>` in `pContractType` (`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`), gate it, and refuse nested containers with a stable message.
 - [ ] M1. Print `List <scalar>` in `docContractType` (`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).
@@ -173,6 +179,25 @@ implementation. Provide concise evidence.
   with a revisit note rather than retiring it.
   Rationale: RES-18 says to record the outcome as an ADR when the decision is taken. The
   options analysis stays useful for the day `Optional` or `Map` is requested.
+  Date: 2026-10-13
+
+- Decision: Breaking the keiro-dsl library API is acceptable for this change. The split of
+  `Keiro.Dsl.Grammar.ContractType` ships as a PVP-major keiro-dsl release with a
+  "Breaking Changes" changelog entry, and no compatibility shim or pattern synonyms are
+  added for the old constructors.
+  Rationale: The owner stated on 2026-10-13 that breaking changes are welcome now because
+  the APIs are being finalised before 1.0 (the same stance ADR-49 records for the language
+  and runtime surfaces). A shim would preserve the very shape this plan removes.
+  Date: 2026-10-13
+
+- Decision: Sequence this plan before plan 304's Language 6 finalisation milestone, and
+  inside Milestone 1 land the type split first with no producer of `CList`, then the
+  scaffold lowering, then the parser and its gate.
+  Rationale: The gate relies on Language 6 still being an amendable candidate; if plan 304
+  finalises Language 6 first, the syntax must move to a new candidate and this plan is
+  re-planned. Within Milestone 1, each step compiles and passes the existing suites, which
+  keeps the tree releasable between commits and makes concurrent edits to `Scaffold.hs` and
+  `Validate.hs` by other sessions easier to rebase.
   Date: 2026-10-13
 
 
@@ -351,7 +376,11 @@ schema under JSON Schema or Avro, so the schema-registry framing anticipated by
 - `docs/adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md`
   (ADR-49): Language 6 is the pre-1.0 baseline and is finalised at a later release
   boundary; until then it is the candidate this plan amends in place. New positive fixtures
-  select Language 6.
+  select Language 6. Plan 304
+  (`docs/plans/304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md`)
+  finalises Language 6 in its Milestone 2, which had not started on 2026-10-13; this plan's
+  Milestone 1 must land before that, or the gate moves to the next candidate and this plan
+  is re-planned.
 
 No cross-repository ADR applies. The consumer's own plan 17 is evidence, not a decision
 record for this repository.
@@ -376,6 +405,14 @@ pointing at `List`, a nested container fails with one stable message, and `scaff
 the list lowering shown below. The ADR exists and validates. Begin by moving IR-54 to
 `in-progress`: set `status: in-progress` in its frontmatter, say so in its body Status
 section, and run `okf log add docs/improvement-requests --kind Update -m "IR-54 implementation started under ExecPlan 312."`.
+
+Work in three compiling steps and commit after each. First split the type and update every
+match site; nothing yet produces a `CList`, so the build, every test suite, and the corpus
+drift check must pass unchanged. Second add the scaffold lowering for `CList`, still with no
+parser producing it. Third add the parser branch, the language feature, the pretty printer
+arm, the fixtures, and the frontend-profile tests. The compiler drives the first step: after
+the type change, every old match on `ContractType` is a type error until it chooses between
+"same as the scalar" and "list-specific".
 
 **Grammar.** In `keiro-dsl/src/Keiro/Dsl/Grammar.hs`, replace the single `ContractType`
 with
@@ -428,9 +465,10 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
           CText <$ keyword "text",
           CInt <$ keyword "int",
           do
+            offset <- getOffset
             declaredId <- withOwnedSpan ident
             when (locatedValue declaredId `elem` reservedContainerWords) $
-              failAt (spanOf declaredId) nestedContainerMessage
+              failAt offset nestedContainerMessage
             requireLanguageFeatureAt context ContractDeclaredIdSyntax (spanOf declaredId)
             pure (CDeclaredId (locatedValue declaredId))
         ]
@@ -439,10 +477,11 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
       "contract field types admit typeid \"prefix\", text, int, a declared id, or List of one of those; nested containers, Optional, Map, and records are not supported in public contracts"
 ```
 
-`failAt`, `withOwnedSpan`, `spanOf`, and `locatedValue` are exported by
-`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs` (check the export list at lines 20 to 57 and
-adapt the exact helper if `failAt` takes a different argument shape; the requirement is a
-stable message at the offending token). Because the gate is checked before the
+`failAt :: Int -> String -> P a` (`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`, line 165) takes
+a megaparsec source offset, not a span, so capture `getOffset` (from `Text.Megaparsec`,
+already imported) before `ident` and pass it. `withOwnedSpan`, `spanOf`, and `locatedValue`
+are exported by the same `Parser/Core.hs` (export list, lines 20 to 57); `when` needs
+`Control.Monad`. The requirement is a stable message at the offending token. Because the gate is checked before the
 declared-id branch, a Language 5 source fails at `List`, not at the element name. The
 words in `reservedContainerWords` are reserved only in the contract type position; a
 declared id named `Listing` still parses because `keyword` requires a word boundary.
@@ -480,6 +519,9 @@ scalar through `contractScalar`:
   that, `fieldTypeChange` already reports a scalar-to-list change and an element-type change
   as breaking `ContractFieldChanged` with the detail
   `field type changed List text -> List int`, and no new change code is needed.
+- `keiro-dsl/src/Keiro/Dsl/Workspace.hs`, line 1410, `instance HasLocs ContractType`:
+  give `ContractScalarType` the same location-free instance and cover both `ContractType`
+  constructors; the compiler reports this site among the first.
 - `keiro-dsl/test/Main.hs` wherever it constructs or matches `ContractType` values (the
   compiler lists them).
 
@@ -679,9 +721,10 @@ line 9555), add:
   `contract:templates.TemplatesReassigned.templateIds` (prefix `template`),
   `…claimIds` (prefix `claim`), and `…legacyTemplateIds` (prefix `template`); assert the
   binding obligations for `ClaimId` include the use site
-  `contract templates event TemplatesReassigned .claimIds : List ClaimId` (adapt the exact
-  rendering of the use-site text to what `bindingObligationsForService` produces for a list,
-  and record it in Surprises & Discoveries if it differs from this guess).
+  `contract templates event TemplatesReassigned .claimIds : ClaimId` (the use-site text
+  names the nominal, not the field shape: the site text comes from
+  `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs`, line 1183, and the existing declared-id test at
+  `keiro-dsl/test/Main.hs`, line 7983, asserts the same `.claimId : ClaimId` form).
 - "refuses nested containers in contract fields": `parseSource` on an inline Language 6
   source with `templateIds: List List TemplateId` is `Left` and the rendered failure
   contains "nested containers".
@@ -800,6 +843,11 @@ diagnostic `ContractListFieldUsedAsKey`, resolving IR-54. In the root `CHANGELOG
 `## [Unreleased]`, add one line pointing at the keiro-dsl entry. Do not pick a version
 number; the release that ships this follows the shared release convention and the
 registry, and the person releasing records the version in the Progress release item.
+Because the `ContractType` split is a breaking library change, that release is a PVP-major
+bump of keiro-dsl with no compatibility shim (Decision Log). Before publishing, list the
+library consumers with `mori registry dependents shinzui/keiro --packages` and tell each one
+that imports `Keiro.Dsl.Grammar` (kotei-core's development dependency and the keiro-syntax
+automation among them) what changed.
 
 Move IR-54 to `completed`: set `status: completed`, `completedAt`, and a `resolution`
 sentence in its frontmatter, update the body Status section, advance `timestamp`, and run
@@ -997,3 +1045,15 @@ and `text` as the declared-id suite does.
 External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJSON`,
 `JSONPathElement`, and `(<?>)`; `mmzk-typeid` for `KindID`; `keiro-core` for
 `parseKindIdV7Value`. No new dependency is added to any package.
+
+
+## Revision Notes
+
+- 2026-10-13 (discuss): After a risk review the owner confirmed that breaking the keiro-dsl
+  library API is acceptable because the APIs are being finalised before 1.0, so the
+  `ContractType` split ships without a shim and the release handoff lists library consumers.
+  Recorded the sequencing constraint against plan 304's Language 6 finalisation and a
+  compile-at-each-step order inside Milestone 1. Corrected three details found while
+  checking the plan against the tree: `failAt` takes a megaparsec offset, the
+  `HasLocs ContractType` instance in `Workspace.hs` is a match site, and binding use-site
+  text names the nominal (`: ClaimId`) rather than the field shape.

@@ -1,0 +1,40 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/history-dependent-holes.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.HistoryDependentHoles.Assignment.BehaviorContract
+    Generated.HistoryDependentHoles.Assignment.Codec
+    Generated.HistoryDependentHoles.Assignment.Domain
+    Generated.HistoryDependentHoles.Assignment.EventStream
+    Generated.HistoryDependentHoles.Assignment.Harness
+    Generated.HistoryDependentHoles.Assignment.Projection
+    Generated.HistoryDependentHoles.Assignment.Transducer
+    Generated.HistoryDependentHoles.BehaviorSourceMap
+    Generated.HistoryDependentHoles.ReplayAudit
+    Generated.HistoryDependentHoles.StructuralConformance
+    HistoryDependentHoles.Assignment.BehaviorHoles
+    HistoryDependentHoles.Assignment.Holes
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.HistoryDependentHoles.Bindings
+    Conformance.HistoryDependentHoles.Domain
