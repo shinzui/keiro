@@ -39,7 +39,7 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
 | [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `reported` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Unimplemented; 1/13 progress items checked (plan bookkeeping only); diagnosis validated from source and the generated probe shape reproduced in keiro. |
 | [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `confirmed` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Unimplemented; reproduced by the owning repository on master after 0.20.0.0 with the report's minimal spec and GHC 9.12.4 (transcript under `evidence/`). Reported through GitHub PR #6 as BUG-8 and renumbered on merge because BUG-8 was already allocated. |
-| [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `reported` | No plan for this failure | Open; source-level cause validated by the owning repository on master after 0.20.0.0 (binding view created at reconciliation, snapshot lists every view, expected snapshot carries only `projection_group_status_v1`). Reported through GitHub PR #7 as BUG-9 and renumbered on merge because BUG-9 was already allocated. |
+| [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `reported` | [311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md) | Unimplemented; 0/12 progress items checked; source-level cause validated by the owning repository on master after 0.20.0.0 (binding view created at reconciliation, snapshot lists every view, expected snapshot carries only `projection_group_status_v1`). Reported through GitHub PR #7 as BUG-9 and renumbered on merge because BUG-9 was already allocated. |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
 assertions share one reproduction. Later that day the owning repository validated the
@@ -52,5 +52,5 @@ it on master the same day, set `confirmed`, and wrote plan 310; no generator cha
 implemented yet.
 
 BUG-12 was merged from GitHub PR #7 on 2026-10-13. The owning repository confirmed the
-cause from master source the same day; no compiled reproduction or fix is claimed yet, so
-the status stays `reported`.
+cause from master source the same day and wrote plan 311; no compiled reproduction or fix
+is claimed yet, so the status stays `reported`.

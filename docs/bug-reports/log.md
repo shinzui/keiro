@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-13
+* **Update**: BUG-12 is tracked by ExecPlan 311, which makes live-schema verification consult keiro.keiro_managed_read_objects so runtime-created binding views are expected while unregistered views stay reported; status remains reported until the compiled fixture fails.
 * **Update**: BUG-11 is tracked by ExecPlan 310, which derives every generated declaration stem once from the whole logical name, shares the read-model stem between the definition and the harness import, adds a compiled keyword-segment conformance suite, and audits generated-to-generated explicit imports before scaffold writes.
 * **Update**: BUG-11 is confirmed by the owning repository: the report's minimal specification reproduces on master after 0.20.0.0 with keiro-dsl scaffold and GHC 9.12.4 (GHC-61689 on the untouched read-model harness; the renamed control type-checks); the transcript is retained under evidence/.
 * **Update**: BUG-10 is tracked by ExecPlan 309, which validates the generator diagnosis from source, reproduces the generated probe shape in keiro, and plans witness-backed harness rows for hole-owned initial edges; status remains reported until the compiled fixture fails.
