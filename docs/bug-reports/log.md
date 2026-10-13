@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-13
+* **Update**: BUG-10 is tracked by ExecPlan 309, which validates the generator diagnosis from source, reproduces the generated probe shape in keiro, and plans witness-backed harness rows for hole-owned initial edges; status remains reported until the compiled fixture fails.
 * **Addition**: BUG-10 records false failing initial-hole acceptance and forward/replay probes for Rei's history-dependent ClearProperty. Retain consumer gate evidence, generator diagnosis and repair acceptance; owner investigation remains pending, separate from completed IR-18.
 
 ## 2026-10-03

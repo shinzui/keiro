@@ -35,8 +35,10 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-7](7-pre-handler-dead-letter-has-no-process-span.md) | `reported` | [301](../plans/301-trace-pre-handler-dead-letters-on-the-continuous-job-worker-to-fix-bug-7.md) | Unimplemented; 0/12 progress items checked. |
 | [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
-| [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `reported` | No producer plan for this failure | Open; consumer reproduction and generator diagnosis retained, awaiting owner investigation. |
+| [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `reported` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Unimplemented; 1/13 progress items checked (plan bookkeeping only); diagnosis validated from source and the generated probe shape reproduced in keiro. |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
-assertions share one reproduction; no producer confirmation or implementation is
-claimed. It is separate from completed IR-18's replay-only mode/layout repair.
+assertions share one reproduction. Later that day the owning repository validated the
+generator diagnosis from source and wrote plan 309; no compiled producer reproduction
+or implementation is claimed yet, so the status stays `reported`. It is separate from
+completed IR-18's replay-only mode/layout repair.

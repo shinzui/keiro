@@ -3,8 +3,8 @@ type: Bug Report
 title: Initial hole harness requires acceptance from empty registers despite history-backed witnesses
 description: Keiro DSL generates false failing acceptance and forward/replay probes for an initial-vertex implementation hole whose valid live command requires retained history.
 generated:
-  by: process:codex
-  at: "2026-10-13T13:28:32Z"
+  by: process:claude-code
+  at: "2026-10-13T14:08:07Z"
 bugId: BUG-10
 status: reported
 severity: unusable
@@ -139,3 +139,15 @@ Do not seed production initial registers, remove the membership guard, change
 replay semantics or event wire shapes, hand-edit generated consumer files, or
 suppress these failures as acceptance. This report authorizes investigation only;
 no producer implementation, version bump or release was performed.
+
+## Tracking
+
+Tracked by [plan 309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md). On 2026-10-13 the owning repository validated the
+diagnosis from `keiro-dsl/src/Keiro/Dsl/Harness.hs` (`initialLiveTransitionEntries`
+filters on mode only; `acceptDecl` and `forwardReplayDecl` step from initial registers
+with a synthetic command regardless of `HoleImplementation`) and reproduced the
+generated probe shape by scaffolding a minimal hole-owned initial self-loop with the
+0.20.0.0 generator. The generated whole-service conformance package composes only
+`harnessAssertions`, so the consumer's behavior witnesses never run in that gate. The
+lifecycle remains `reported` until the plan's compiled fixture executes the failing rows
+in this repository; the plan then records `confirmed`, and `fixed` after the full gate.
