@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-10-13
+* **Update**: Document history-backed initial-hole harness evidence and whole-service witness checks.
+
 ## 2026-10-11
 * **Update**: Align projection, command, and reactor reference guidance with async query defaults, bounded post-commit waits, and minimum synchronous invariant state.
 

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-08-10T00:52:02Z
+timestamp: 2026-10-13T23:30:33Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -151,6 +151,29 @@ the fold fingerprint changes, and snapshot compatibility misses. Migration from 
 version-1 whole-transducer Hole is manual; regeneration never overwrites consumer code or claims
 that behavior has been translated automatically.
 
+
+### Harness evidence follows ownership
+
+For a live transition leaving the initial vertex, generated-owned behavior keeps
+its synthetic acceptance and forward/replay probes. A Hole-owned edge instead
+uses the consumer's history-backed `LiveWitness` through the generated behavior
+contract: being at the initial control vertex does not imply initial registers.
+The generated whole-service gate executes that same evidence through the
+aggregate harness. Missing, pending, duplicate, stale, wrong-kind, wrong-edge,
+under-seeded, or false witnesses fail named rows. A live requirement cannot use
+its replay-only sibling as evidence.
+
+`behaviorObligationReport` restricts the existing coverage runner to one required
+key and witnesses carrying that key. It shares history settlement, live mode and
+exact edge attribution, expected emissions, persisted-codec decoding, detailed
+replay attribution, final vertex, and every-register comparison with the full
+behavior report. The harness does not maintain a second witness runner. This is
+finite concrete evidence; Hole behavior remains conservatively unverified.
+
+Replay-only edges retain replay evidence and never receive forward probes.
+Legacy version-1 transducers retain their existing synthetic probes while that
+source contract remains supported. No replay, wire, fold, or snapshot identity
+changes follow from choosing the appropriate harness evidence.
 
 ## Consequences
 

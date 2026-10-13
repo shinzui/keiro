@@ -922,7 +922,7 @@ produce:
 Also assert, without mutation, that the generated harness text still contains
 `acceptTouch` stepping from `initialAssignmentRegs` (a `grep` on the committed
 `Generated/HistoryDependentHoles/Assignment/Harness.hs`), which is the "ordinary
-generated-edge probes retained" check. Add a recipe to `justfile` in the `meta` group:
+generated-edge probes retained" check. Add a recipe to `Justfile` in the `meta` group:
 
 ```text
 [group('meta')]
@@ -1169,7 +1169,7 @@ New committed artifacts: `keiro-dsl/test/fixtures/history-dependent-holes.keiro`
 `keiro-dsl-conformance-history-dependent-holes` test-suite in `keiro-dsl/keiro-dsl.cabal`;
 `keiro-dsl/test/conformance-service-package/domain/assignment.keiro` with its runtime
 modules and fills; `keiro-dsl/test/history-dependent-holes-mutation-test.sh`; the
-`initial-hole-proof` recipe in `justfile`.
+`initial-hole-proof` recipe in `Justfile`.
 
 Revision note (2026-10-13): implementation began with scaffolded single-spec and
 workspace reproductions; filled Hole signatures explicitly account for their register write.

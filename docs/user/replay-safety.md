@@ -5,8 +5,8 @@ description: Explain the replay-safety guarantee, its limits, and the ValidatedE
 docId: DOC-20
 tags: [keiro, replay, validation, event-streams]
 generated:
-  by: human:nadeem
-  at: 2026-08-05T14:40:36Z
+  by: process:codex
+  at: 2026-10-13T23:30:33Z
 ---
 
 # Replayability Safety
@@ -233,7 +233,12 @@ replay-only Empty -- Start -->
   goto Active
 ```
 
-Scaffolding emits one live `acceptStart` probe. The replay-only sibling is
+Scaffolding emits one live `acceptStart` probe. A live initial edge declared
+`implementation hole` uses the consumer's history-backed `LiveWitness` through
+the generated behavior contract. Its forward/replay rows are labelled
+`hole witness filled` and `hole witness verified`; the contract checks exact
+edge attribution, emitted values, persisted-codec decoding, final vertex, and
+every register. Generated-owned initial edges retain their synthetic probes. The replay-only sibling is
 proved through its generated `ReplayWitness`, not through `step`. An initial
 replay-only command with no live sibling likewise receives replay evidence but
 no `accept<Command>` helper. Generated predicate verification and behavior

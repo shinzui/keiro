@@ -6,6 +6,18 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Generated aggregate harnesses prove Hole-owned live initial transitions with
+  the consumer's history-backed `LiveWitness` through `BehaviorContract`, which
+  now exports `behaviorObligationReport`. Their forward/replay rows are labelled
+  `hole witness filled` and `hole witness verified`; pending or invalid witnesses
+  fail whole-service conformance. Generated-owned probes, replay semantics, wire
+  shapes, fold fingerprints, and snapshot identity are unchanged; this requires
+  no data migration or DSL diff impact. Fixes
+  [BUG-10](mori://shinzui/keiro/okf/bug-reports/concepts/BUG-10) under
+  [plan 309](docs/plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md).
+
 ## 0.20.0.0 — 2026-10-12
 
 ### Breaking Changes

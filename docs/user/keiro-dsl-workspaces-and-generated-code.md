@@ -6,7 +6,7 @@ docId: DOC-32
 tags: [keiro, dsl, workspaces, scaffold, reference]
 generated:
   by: anthropic-claude-code/claude-opus-5
-  at: 2026-09-28T00:00:00Z
+  at: 2026-10-13T23:30:33Z
 ---
 
 # Keiro DSL Workspaces and Generated Code
@@ -236,6 +236,14 @@ emits one context `BehaviorSourceMap`, a generated `BehaviorContract` per
 aggregate, and a create-once `BehaviorHoles` module. Fill live, rejection, and
 replay witnesses with real histories, commands, expected events, or expected
 rejections.
+
+The generated whole-service conformance package executes witnesses for
+hole-owned live initial edges through `BehaviorContract`. A `Pending`, missing,
+duplicate, stale, or false witness for such an edge fails its acceptance and
+forward/replay rows. Supply the history that makes the command valid; an
+initial control vertex may already hold registers rebuilt from earlier events.
+`behaviorObligationReport` executes one required key with the witnesses carrying
+that key; `behaviorCoverageReport` still checks the full inventory.
 
 New pending rows identify the semantic source cell beside the stable key, but
 do not copy a position that would become stale after the file becomes

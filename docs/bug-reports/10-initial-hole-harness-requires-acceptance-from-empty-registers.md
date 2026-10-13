@@ -149,6 +149,6 @@ filters on mode only; `acceptDecl` and `forwardReplayDecl` step from initial reg
 with a synthetic command regardless of `HoleImplementation`) and reproduced the
 generated probe shape by scaffolding a minimal hole-owned initial self-loop with the
 0.20.0.0 generator. The generated whole-service conformance package composes only
-`harnessAssertions`, so the consumer's behavior witnesses never run in that gate. The
-lifecycle remains `reported` until the plan's compiled fixture executes the failing rows
-in this repository; the plan then records `confirmed`, and `fixed` after the full gate.
+`harnessAssertions`, so the consumer's behavior witnesses never run in that gate. The compiled fixture and generated whole-service package now reproduce both
+failing clear rows in this repository, while the fixture's behavior report passes.
+BUG-10 is `confirmed`; plan 309 records `fixed` after the full verification gate.

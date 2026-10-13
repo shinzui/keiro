@@ -5,8 +5,8 @@ description: Decide whether generated services fit a context's guarantees, workf
 docId: DOC-10
 tags: [keiro, dsl, adoption, decision-guide]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:08:09Z
+  by: process:codex
+  at: 2026-10-13T23:30:33Z
 ---
 
 # Choosing `keiro-dsl`: Benefits, Costs, and Fit
@@ -294,7 +294,9 @@ contract.
 ### Behavior conformance is finite evidence, not universal proof
 
 The harness accounts for every derivable obligation, but each witness is still
-one concrete history and command. Hole-owned behavior, unknown guard coverage,
+one concrete history and command. The generated whole-service gate also
+executes the history-backed witnesses for hole-owned live initial edges,
+checking acceptance and persisted-codec replay equality. Hole-owned behavior, unknown guard coverage,
 and one-way projections remain visibly unverified. The stricter
 `--fail-on-unverified` policy is opt-in because some services intentionally
 retain those boundaries.

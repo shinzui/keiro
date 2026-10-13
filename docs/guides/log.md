@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-10-13
+* **Update**: Explain whole-service execution of initial-hole behavior witnesses.
+
 ## 2026-10-12
 * **Update**: Record completed guarded catalog implementation and owner-directed performance deferral without claiming calibrated throughput or latency.
 * **Update**: Link the guarded catalog command adoption guide

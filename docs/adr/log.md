@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-13
+* **Update**: ADR-17: harness evidence follows transition ownership (plan 309).
+
 ## 2026-10-12
 * **Update**: Reconcile completed guarded catalog implementation with owner-directed performance deferral; retain bounded SQL and global-lock constraints.
 * **Update**: Require observed durable PostgreSQL and normal vacuum for guarded-command performance acceptance.
