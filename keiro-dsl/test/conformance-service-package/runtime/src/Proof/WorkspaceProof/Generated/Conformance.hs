@@ -4,7 +4,9 @@ module Proof.WorkspaceProof.Generated.Conformance
   , serviceConformanceFacts
   ) where
 
+import Proof.WorkspaceProof.Generated.StructuralConformance qualified as StructuralConformance
 import Proof.WorkspaceProof.Alpha.Generated.Harness qualified as Alpha
+import Proof.WorkspaceProof.Assignment.Generated.Harness qualified as Assignment
 import Proof.WorkspaceProof.Beta.Generated.Harness qualified as Beta
 import Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness qualified as AlphaView
 import Proof.WorkspaceProof.BetaView.Generated.ReadModelHarness qualified as BetaView
@@ -13,7 +15,9 @@ import Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts quali
 runServiceConformanceChecks :: IO [(String, Bool)]
 runServiceConformanceChecks =
   pure (
-    [("aggregate/Alpha/" <> fact, passed) | (fact, passed) <- Alpha.harnessAssertions]
+    [("structural/" <> fact, passed) | (fact, passed) <- StructuralConformance.structuralConformanceAssertions]
+    <> [("aggregate/Alpha/" <> fact, passed) | (fact, passed) <- Alpha.harnessAssertions]
+    <> [("aggregate/Assignment/" <> fact, passed) | (fact, passed) <- Assignment.harnessAssertions]
     <> [("aggregate/Beta/" <> fact, passed) | (fact, passed) <- Beta.harnessAssertions]
     <> [("readmodel/alpha_view/" <> fact, passed) | (fact, passed) <- AlphaView.readModelFactResults]
     <> [("readmodel/beta_view/" <> fact, passed) | (fact, passed) <- BetaView.readModelFactResults]

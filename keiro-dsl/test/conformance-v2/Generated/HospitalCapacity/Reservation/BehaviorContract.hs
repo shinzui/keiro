@@ -14,6 +14,7 @@ module Generated.HospitalCapacity.Reservation.BehaviorContract
   , BehaviorConformanceReport (..)
   , behaviorRequirements
   , behaviorCoverageReport
+  , behaviorObligationReport
   , behaviorConformancePassed
   , behaviorConformancePassedWith
   , renderBehaviorConformanceText
@@ -205,7 +206,18 @@ behaviorRequirements =
   ]
 
 behaviorCoverageReport :: [BehaviorWitness] -> BehaviorConformanceReport
-behaviorCoverageReport witnesses =
+behaviorCoverageReport = coverageReportFor behaviorRequirements
+
+-- | Execute one required obligation and the witnesses carrying its key.
+-- Hole-owned initial harness probes use the consumer's history-backed evidence.
+behaviorObligationReport :: BehaviorKey -> [BehaviorWitness] -> BehaviorConformanceReport
+behaviorObligationReport key witnesses =
+  coverageReportFor
+    [requirement | requirement <- behaviorRequirements, requirement.key == key]
+    [witness | witness <- witnesses, behaviorWitnessKey witness == key]
+
+coverageReportFor :: [BehaviorRequirement] -> [BehaviorWitness] -> BehaviorConformanceReport
+coverageReportFor requirements witnesses =
   BehaviorConformanceReport
     { required = sortedKeys (Map.keys requiredByKey)
     , filled = sortedKeys [key | (key, [witness]) <- Map.toList witnessGroups, Map.member key requiredByKey, not (isPending witness)]
@@ -218,7 +230,7 @@ behaviorCoverageReport witnesses =
     , unverified = sortedKeys [requirement.key | (requirement, Right ()) <- executions, not (proofStrength requirement)]
     }
  where
-  requiredByKey = Map.fromList [(requirement.key, requirement) | requirement <- behaviorRequirements]
+  requiredByKey = Map.fromList [(requirement.key, requirement) | requirement <- requirements]
   witnessGroups = Map.fromListWith (flip (<>)) [(behaviorWitnessKey witness, [witness]) | witness <- witnesses]
   executions =
     [ (requirement, runWitness requirement witness)

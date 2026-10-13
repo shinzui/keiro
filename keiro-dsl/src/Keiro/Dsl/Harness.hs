@@ -10,13 +10,13 @@
 --   2. a /clock-free/ assertion baked from the spec (TIME IS INJECTED, NOT
 --      SAMPLED) — @False@ would mean a guard\/write sampled a wall clock;
 --   3. a golden wire round-trip per event (@decode . encode == id@);
---   4. a behavioural /accept/ check per transition out of the initial state:
---      stepping a sample command lands on the declared @goto@ vertex. This is the
---      check a wrong guard fails — flipping @./=@ to @.==@ in the filled body turns
---      it red while leaving the scaffold untouched.
+--   4. an /accept/ check per live transition out of the initial state:
+--      generated-owned and legacy edges step a synthetic sample; a Hole-owned
+--      edge executes the consumer's history-backed witness through its contract.
 --   5. a forward/replay equality check per live, event-emitting transition out of
 --      the initial state: emitted events cross the generated codec boundary, then
 --      replay must reconstruct the forward vertex and every declared register.
+--      Hole-owned edges use the same comparison in the behavior contract.
 --
 -- @Text@ samples include their field name so same-typed field swaps remain visible
 -- to the replay check. Other sample kinds remain uniform until fixture bindings can
@@ -50,6 +50,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Dsl.AggregateGenerationPlan
 import Keiro.Dsl.AggregateType
+import Keiro.Dsl.BehaviorCoverage qualified as Behavior
 import Keiro.Dsl.FieldIdentity
 import Keiro.Dsl.GeneratedHaskellLanguage
 import Keiro.Dsl.Goldens (GoldenPayload (..))
@@ -66,6 +67,7 @@ import Keiro.Dsl.RouterSelection
 import Keiro.Dsl.Scaffold
 import Keiro.Dsl.SemanticContract (CheckedService, checkedLanguageContract, checkedProjectionSupplies, checkedSpec, checkedTypeGraph, legacyCheckedService)
 import Keiro.Dsl.SemanticImpact (aggregateMappedClosure, semanticImpact)
+import Keiro.Dsl.SourceIndex qualified as SourceIndex
 import Keiro.Dsl.TypeGraph
 
 -- | Emit the aggregate harness after selecting the service's effective
@@ -829,7 +831,9 @@ emitHarness goldens a =
       ++ [ "",
            "-- | (label, passed). A driver runs these and exits non-zero on any False,",
            "-- naming the failing assertion. Filling a hole wrongly turns a specific",
-           "-- entry False; the scaffold cannot.",
+           if null (initialWitnessProbeEntries a)
+             then "-- entry False; the scaffold cannot."
+             else "-- entry False; pending Hole witnesses fail until filled and verified.",
            "harnessAssertions :: [(String, Bool)]",
            "harnessAssertions =",
            "  [ (\"validateTransducer is empty\", null (validateTransducer defaultValidationOptions " <> lowerFirst nm <> "Transducer))"
@@ -846,7 +850,7 @@ emitHarness goldens a =
       ++ ["  ++ mappedConformanceAssertions" | hasMappedHarness a]
       ++ ["  ++ nominalConformanceAssertions" | hasNominalHarness a]
       ++ [ "  ++ forwardReplay" <> (.command) t
-         | t <- replayTransitions
+         | t <- map (.transition) (filter (not . null . (.emits) . (.transition)) (initialLiveTransitionEntries a))
          ]
       ++ ( if null upcastEvents
              then []
@@ -859,10 +863,13 @@ emitHarness goldens a =
            "roundTrips :: " <> nm <> "Event -> Bool",
            "roundTrips e = parse" <> nm <> "Event (eventType " <> lowerFirst nm <> "Codec e) (encode" <> nm <> "Event e) == Right e"
          ]
+      ++ witnessSharedDeclarations
       ++ harnessSampleDeclarations a
       ++ concatMap (sampleEventDecl a) ((.events) a)
-      ++ concatMap (acceptDecl a . (.transition)) (initialLiveTransitionEntries a)
+      ++ concatMap (acceptDecl a . (.transition)) (initialSyntheticProbeEntries a)
+      ++ concatMap (witnessAcceptDecl a) (initialWitnessProbeEntries a)
       ++ concatMap (forwardReplayDecl a) replayTransitions
+      ++ concatMap (witnessForwardReplayDecl a) witnessReplayEntries
       ++ concatMap (upcastDecl goldens a) upcastEvents
       ++ mappedHarnessDeclarations a
       ++ nominalHarnessDeclarations a
@@ -875,13 +882,25 @@ emitHarness goldens a =
     upcastEvents = [e | e <- (.events) a, (.upcastFrom) e /= Nothing]
     replayTransitions =
       [ t
-      | entry <- initialLiveTransitionEntries a,
+      | entry <- initialSyntheticProbeEntries a,
         let t = (.transition) entry,
         not (null ((.emits) t))
       ]
+    witnessReplayEntries = filter (not . null . (.emits) . (.transition)) (initialWitnessProbeEntries a)
+    witnessSharedDeclarations =
+      if null (initialWitnessProbeEntries a)
+        then []
+        else
+          [ "",
+            "-- | One required obligation carrying exactly one non-pending witness.",
+            "holeWitnessFilled :: BehaviorKey -> BehaviorConformanceReport -> Bool",
+            "holeWitnessFilled key report = report.reportRequired == [key] && report.reportFilled == [key]"
+          ]
     coreImports =
       ["applyEventsEither" | not (null replayTransitions)]
-        ++ ["defaultValidationOptions", "step", "validateTransducer"]
+        ++ ["defaultValidationOptions"]
+        ++ ["step" | not (null (initialSyntheticProbeEntries a))]
+        ++ ["validateTransducer"]
         ++ ["fieldWitnessAgrees" | not (null (nominalScalarHarnessTypes a)) || not (null (enforcedConsumerNominalIdHarnessTypes a))]
         ++ ["(!)" | not (null replayTransitions) && not (null ((.regs) a))]
     upcastAssertions =
@@ -915,6 +934,8 @@ emitHarness goldens a =
           ++ aggregateHarnessImports a
           ++ T.lines (renderPlannedImports (harnessImportPlan a))
           ++ goldenImports
+          ++ ["import " <> (.holePrefix) a <> ".BehaviorHoles (behaviorWitnesses)" | not (null (initialWitnessProbeEntries a))]
+          ++ ["import " <> (.genPrefix) a <> ".BehaviorContract (BehaviorConformanceReport (..), BehaviorKey (..), behaviorObligationReport)" | not (null (initialWitnessProbeEntries a))]
 
     upcastLabel event source =
       case goldenFor goldens event of
@@ -1017,6 +1038,59 @@ initialLiveTransitionEntries a = case map (.name) ((.states) a) of
       (.mode) ((.transition) entry) == TmLive
     ]
   [] -> []
+
+-- | Only guards owned by the generator (or legacy transducers) admit a
+-- synthetic probe from initial registers. Initial vertices may retain history.
+initialSyntheticProbeEntries :: Agg -> [TransitionLayoutEntry]
+initialSyntheticProbeEntries =
+  filter ((/= HoleImplementation) . (.implementation) . (.transition)) . initialLiveTransitionEntries
+
+initialWitnessProbeEntries :: Agg -> [TransitionLayoutEntry]
+initialWitnessProbeEntries =
+  filter ((== HoleImplementation) . (.implementation) . (.transition)) . initialLiveTransitionEntries
+
+witnessKeyFor :: Agg -> TransitionLayoutEntry -> Text
+witnessKeyFor a entry =
+  case [ Behavior.unBehaviorKey ((.key) requirement)
+       | requirement <- behaviorRequirementsFor a,
+         (.origin) requirement == Behavior.TransitionRequirementOrigin ((.name) a) (SourceIndex.TransitionOrdinal ((.declarationIndex) entry - 1))
+       ] of
+    [key] -> key
+    keys -> error ("hole-owned initial edge " <> show ((.declarationIndex) entry) <> " has " <> show (length keys) <> " behavior requirements")
+
+witnessAcceptDecl :: Agg -> TransitionLayoutEntry -> [Text]
+witnessAcceptDecl a entry =
+  [ "",
+    "-- Hole-owned initial edge: the consumer's history-backed live witness",
+    "-- proves acceptance through the generated behavior contract.",
+    helper <> " :: BehaviorConformanceReport",
+    helper <> " = behaviorObligationReport (BehaviorKey " <> key <> ") behaviorWitnesses",
+    "",
+    "accept" <> command <> " :: Bool",
+    "accept" <> command <> " = holeWitnessFilled (BehaviorKey " <> key <> ") " <> helper <> " && null " <> helper <> ".reportFailed"
+  ]
+  where
+    command = (.command) ((.transition) entry)
+    helper = "holeWitness" <> command
+    key = tshow (witnessKeyFor a entry)
+
+witnessForwardReplayDecl :: Agg -> TransitionLayoutEntry -> [Text]
+witnessForwardReplayDecl a entry =
+  [ "",
+    "-- The behavior contract decodes emissions through the persisted codec,",
+    "-- replays them, and compares the final vertex and every register.",
+    "forwardReplay" <> command <> " :: [(String, Bool)]",
+    "forwardReplay" <> command <> " =",
+    "  [ (prefix <> \"hole witness filled\", holeWitnessFilled key " <> helper <> ")",
+    "  , (prefix <> \"hole witness verified\", holeWitnessFilled key " <> helper <> " && null " <> helper <> ".reportFailed)",
+    "  ]",
+    "  where",
+    "    key = BehaviorKey " <> tshow (witnessKeyFor a entry),
+    "    prefix = \"forward/replay equality: " <> command <> " from " <> initialVertex a <> " -- \""
+  ]
+  where
+    command = (.command) ((.transition) entry)
+    helper = "holeWitness" <> command
 
 -- | @sampleEvent<Ctor> :: <Agg>Event@ — a sample built from per-field sample
 -- values (enum→first constructor, Bool→False, id→placeholder,
@@ -1488,8 +1562,15 @@ mappedHarnessDeclarationsResolved aggregate = case (.typeGraph) aggregate of
   Just graph ->
     [ declaration
     | key <- aggregateMappedClosure (semanticImpact graph) ((.name) aggregate),
-      Just declaration <- [Map.lookup key ((.declarations) graph)]
+      Just declaration <- [Map.lookup key ((.declarations) graph)],
+      needsHarnessFixtures key declaration
     ]
+  where
+    -- Opaque register initials live in Domain; this module only samples command
+    -- and event fields. Register-only opaque fixtures would leave unused imports.
+    needsHarnessFixtures key ResolvedOpaque {} =
+      any ((== AggregateMapped key) . snd) (concatMap (.fields) ((.commands) aggregate <> (.events) aggregate))
+    needsHarnessFixtures _ ResolvedStructural {} = True
 
 mappedEventFields :: Agg -> [(ResolvedCtor, Text, ResolvedAggregateType, ResolvedMappedDecl)]
 mappedEventFields aggregate =

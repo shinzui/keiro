@@ -83,17 +83,17 @@ later steps that this plan names but does not perform.
 
 
 - [x] (2026-10-13) Milestone 0: validate BUG-10 from source, reproduce the generated probe shape with the public scaffolder, create this plan with its intention, link it from the bug report body, log, and index, and run `just bug-reports-validate`.
-- [x] (2026-10-13T23:29Z) Milestone 1: add `keiro-dsl/test/fixtures/history-dependent-holes.keiro`, its consumer `Domain` and `Bindings` modules, scaffold it with the public CLI into `keiro-dsl/test/conformance-history-dependent-holes/`, and force-add the scaffold ledger and Cabal fragment.
-- [x] (2026-10-13T23:29Z) Milestone 1: fill `HistoryDependentHoles/Assignment/Holes.hs` (set inserts, live clear requires membership, replay-only clear deletes unconditionally) and `BehaviorHoles.hs` (history-backed live clear witness, replay-only empty clear witness).
-- [x] (2026-10-13T23:41Z) Milestone 1: add the suite driver `Main.hs` and the `keiro-dsl-conformance-history-dependent-holes` test-suite stanza; run it before the repair and record the two `FAIL` rows beside the passing behavior report in Surprises & Discoveries.
-- [x] (2026-10-13T23:44Z) Milestone 1: set BUG-10 `status: confirmed`, advance `generated`, and log the confirmation.
-- [ ] Milestone 2: export `behaviorRequirementsFor` from `Keiro.Dsl.Scaffold`; add `behaviorObligationReport` to every generated `BehaviorContract` by sharing the coverage-report body.
-- [ ] Milestone 2: split initial live entries in `Keiro.Dsl.Harness` by ownership; emit witness-backed `accept<Command>`/`forwardReplay<Command>` helpers for hole-owned edges; gate the `step`/`applyEventsEither`/`(!)` imports and the `OverloadedLabels` pragma on the synthetic bucket; import `BehaviorHoles` and `BehaviorContract` only when a hole-owned initial edge exists.
-- [ ] Milestone 2: add focused generator tests to `keiro-dsl/test/Main.hs` (witness rows for hole-owned edges, unchanged synthetic rows for generated edges, replay-only still excluded, import gating when every initial edge is hole-owned, repeat scaffold byte stability).
+- [x] (2026-10-13) Milestone 1: add `keiro-dsl/test/fixtures/history-dependent-holes.keiro`, its consumer `Domain` and `Bindings` modules, scaffold it with the public CLI into `keiro-dsl/test/conformance-history-dependent-holes/`, and force-add the scaffold ledger and Cabal fragment.
+- [x] (2026-10-13) Milestone 1: fill `HistoryDependentHoles/Assignment/Holes.hs` (set inserts, live clear requires membership, replay-only clear deletes unconditionally) and `BehaviorHoles.hs` (history-backed live clear witness, replay-only empty clear witness).
+- [x] (2026-10-13) Milestone 1: add the suite driver `Main.hs` and the `keiro-dsl-conformance-history-dependent-holes` test-suite stanza; run it before the repair and record the two `FAIL` rows beside the passing behavior report in Surprises & Discoveries.
+- [x] (2026-10-13) Milestone 1: set BUG-10 `status: confirmed`, advance `generated`, and log the confirmation.
+- [x] (2026-10-13) Milestone 2: export `behaviorRequirementsFor` from `Keiro.Dsl.Scaffold`; add `behaviorObligationReport` to every generated `BehaviorContract` by sharing the coverage-report body.
+- [x] (2026-10-13) Milestone 2: split initial live entries in `Keiro.Dsl.Harness` by ownership; emit witness-backed `accept<Command>`/`forwardReplay<Command>` helpers for hole-owned edges; gate the `step`/`applyEventsEither`/`(!)` imports and the `OverloadedLabels` pragma on the synthetic bucket; import `BehaviorHoles` and `BehaviorContract` only when a hole-owned initial edge exists.
+- [ ] Milestone 2: validate the added focused generator tests to `keiro-dsl/test/Main.hs` (witness rows for hole-owned edges, unchanged synthetic rows for generated edges, replay-only still excluded, import gating when every initial edge is hole-owned, repeat scaffold byte stability).
 - [ ] Milestone 2: regenerate the corpus, review that only `BehaviorContract.hs` files and the new fixture's `Harness.hs` changed, run `scripts/check-conformance-corpus.sh`, and run `cabal test keiro-dsl:tests --keep-going`.
-- [ ] Milestone 3: add `domain/assignment.keiro` to the service-package workspace with its consumer modules and fills, extend the runtime library's module list and the CLI idempotency test's source list, regenerate, and pass `keiro-workspace-proof-conformance`.
-- [ ] Milestone 4: add `keiro-dsl/test/history-dependent-holes-mutation-test.sh` proving named failures for every mutation BUG-10 lists, and wire it into `just verify` through a new `initial-hole-proof` recipe.
-- [ ] Milestone 5: update `docs/user/replay-safety.md`, `docs/user/keiro-dsl-workspaces-and-generated-code.md`, and `docs/guides/choosing-keiro-dsl.md`; add Unreleased changelog entries; amend ADR-17; validate every bundle.
+- [x] (2026-10-13) Milestone 3: add `domain/assignment.keiro` to the service-package workspace with its consumer modules and fills, extend the runtime library's module list and the CLI idempotency test's source list, regenerate, and pass `keiro-workspace-proof-conformance`.
+- [x] (2026-10-13) Milestone 4: add `keiro-dsl/test/history-dependent-holes-mutation-test.sh` proving named failures for every mutation BUG-10 lists, and wire it into `just verify` through a new `initial-hole-proof` recipe.
+- [x] (2026-10-13) Milestone 5: update `docs/user/replay-safety.md`, `docs/user/keiro-dsl-workspaces-and-generated-code.md`, and `docs/guides/choosing-keiro-dsl.md`; add Unreleased changelog entries; amend ADR-17; validate every bundle.
 - [ ] Milestone 5: run `nix develop -c just verify` and read the exit marker inside the log; set BUG-10 to `fixed` with `fixedVersion: unreleased` and a `resolution`; update the bug-report index table; write Outcomes & Retrospective and the ADR distillation pass.
 
 
@@ -121,6 +121,33 @@ later steps that this plan names but does not perform.
   The reproduction command adds `--ghc-options=-Wno-unused-imports` solely to
   reach these assertions before the narrow import fix. The repaired fixture
   must compile under the repository's ordinary strict warning policy.
+
+- The pre-repair generated workspace package also exits 1 with exactly:
+
+  ```text
+  FAIL  aggregate/Assignment/accepts ClearProperty from AssignmentActive
+  FAIL  aggregate/Assignment/forward/replay equality: ClearProperty from AssignmentActive -- forward step accepted
+  ```
+
+  Adding an opaque mapping emits a workspace `StructuralConformance` module;
+  the runtime Cabal inventory must include it as well as the Assignment modules.
+  Omitting it produced a missing-home-module warning and an undefined symbol at
+  link time. Including the regenerated fragment's full inventory resolves that.
+
+- After regeneration, both compiled fixture packages pass under the ordinary
+  repository configuration. `accepts ClearProperty` and both witness rows pass
+  in the aggregate and whole-service reports, while empty live clear still
+  refuses and historical empty clear still attributes to replay-only edge 3.
+  The corpus diff outside the service addition contains only BehaviorContracts
+  and the single-spec Assignment Harness; the ordinary Journey Harness is
+  byte-identical to pre-plan revision `2508e81a4dc1dedd91ec76317cce8c5a7d9c5f08`.
+
+- The focused ownership/import/collision run passes all three examples. The
+  fixture also passes with `--ghc-options=-Werror`. All eight mutation cases
+  fail through the expected clear rows, with `witness-kind`,
+  `unexpected-rejection`, `event-value-mismatch`, and `command-mismatch` for
+  the executed false witnesses. The final restored baseline passes and
+  `git diff --check` is clean.
 
 ## Decision Log
 
@@ -201,6 +228,12 @@ later steps that this plan names but does not perform.
 - Decision: Test legacy probes with a small inline Language 1 aggregate.
   Rationale: `conformance-coldstart` now uses Language 4, so it cannot prove
   `LegacyHoleImplementation` preservation as the original plan suggested.
+  Date: 2026-10-13
+
+- Decision: Inventory both per-command `holeWitness<Command>` helpers and the
+  shared `holeWitnessFilled` helper in generated-name validation.
+  Rationale: a Hole command named `Filled` would otherwise emit two declarations
+  named `holeWitnessFilled`. A focused negative case verifies early refusal.
   Date: 2026-10-13
 
 ## Outcomes & Retrospective
@@ -1060,9 +1093,10 @@ The repair is accepted when all of the following hold on one tree:
    probes" still passes unchanged.
 5. `scripts/check-conformance-corpus.sh` passes from a clean tree, proving that both the
    single-spec and the workspace scaffolds are byte-stable under regeneration.
-6. The committed `Generated/BehaviorComplete/Journey/Harness.hs` differs from its
-   pre-plan content only in nothing at all (its initial edges are generated-owned), which
-   proves ordinary probes are untouched; `git diff <pre-plan-commit> -- keiro-dsl/test/conformance-behavior-complete/Generated` is empty.
+6. The committed `Generated/BehaviorComplete/Journey/Harness.hs` is byte-identical
+   to its pre-plan content (its initial edges are generated-owned). The sibling
+   `BehaviorContract.hs` intentionally gains the uniform report API; compare
+   only `Harness.hs` to prove ordinary probes are untouched.
 7. `just verify` writes `EXIT=0` into its log.
 8. BUG-10 is `fixed` with `fixedVersion: "unreleased"`, the index table row says so, and
    `just bug-reports-validate` passes.
@@ -1139,3 +1173,7 @@ modules and fills; `keiro-dsl/test/history-dependent-holes-mutation-test.sh`; th
 
 Revision note (2026-10-13): implementation began with scaffolded single-spec and
 workspace reproductions; filled Hole signatures explicitly account for their register write.
+
+Revision note (2026-10-13): captured both compiled pre-repair failures, implemented
+ownership-aware evidence and the shared contract runner, added import and helper
+collision safeguards, and drafted the mutation gate, documentation, and ADR-17 amendment.

@@ -26,6 +26,15 @@ other-modules:
     Proof.WorkspaceProof.AlphaView.Generated.ReadModelHarness
     Proof.WorkspaceProof.AlphaView.Generated.ReadModelTable
     Proof.WorkspaceProof.AlphaView.ReadModelHoles
+    Proof.WorkspaceProof.Assignment.BehaviorHoles
+    Proof.WorkspaceProof.Assignment.Generated.BehaviorContract
+    Proof.WorkspaceProof.Assignment.Generated.Codec
+    Proof.WorkspaceProof.Assignment.Generated.Domain
+    Proof.WorkspaceProof.Assignment.Generated.EventStream
+    Proof.WorkspaceProof.Assignment.Generated.Harness
+    Proof.WorkspaceProof.Assignment.Generated.Projection
+    Proof.WorkspaceProof.Assignment.Generated.Transducer
+    Proof.WorkspaceProof.Assignment.Holes
     Proof.WorkspaceProof.Beta.BehaviorHoles
     Proof.WorkspaceProof.Beta.Generated.BehaviorContract
     Proof.WorkspaceProof.Beta.Generated.Codec
@@ -42,6 +51,7 @@ other-modules:
     Proof.WorkspaceProof.Generated.Nominals
     Proof.WorkspaceProof.Generated.Nominals.Internal
     Proof.WorkspaceProof.Generated.ReplayAudit
+    Proof.WorkspaceProof.Generated.StructuralConformance
     Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts
     Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowRuntime
 
@@ -53,5 +63,13 @@ build-depends:
     , hasql-transaction
     , keiki
     , keiro
+    , keiro-dsl-conformance-service-runtime
     , kiroku-store
     , text
+
+consumer-packages:
+    keiro-dsl-conformance-service-runtime
+
+consumer-modules:
+    Proof.WorkspaceProof.AssignmentDomain
+    Proof.WorkspaceProof.AssignmentSupport

@@ -8,3 +8,4 @@ spec domain/alpha.keiro
 spec domain/beta.keiro
 spec domain/evidence.keiro
 spec domain/shared.keiro
+spec domain/assignment.keiro

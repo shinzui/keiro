@@ -7,13 +7,12 @@ import Generated.HistoryDependentHoles.Assignment.Codec (encodeAssignmentEvent, 
 import Generated.HistoryDependentHoles.Assignment.Transducer (assignmentTransducer)
 import Keiki.Core (applyEventsEither, defaultValidationOptions, step, validateTransducer, (!))
 import Keiro.Codec (eventType)
-import Data.List.NonEmpty qualified as NonEmpty
-import Keiro.Codec.Structural (FixtureCases (..))
-import Conformance.HistoryDependentHoles.Bindings qualified as Bindings
+import HistoryDependentHoles.Assignment.BehaviorHoles (behaviorWitnesses)
+import Generated.HistoryDependentHoles.Assignment.BehaviorContract (BehaviorConformanceReport (..), BehaviorKey (..), behaviorObligationReport)
 
 -- | (label, passed). A driver runs these and exits non-zero on any False,
 -- naming the failing assertion. Filling a hole wrongly turns a specific
--- entry False; the scaffold cannot.
+-- entry False; pending Hole witnesses fail until filled and verified.
 harnessAssertions :: [(String, Bool)]
 harnessAssertions =
   [ ("validateTransducer is empty", null (validateTransducer defaultValidationOptions assignmentTransducer))
@@ -32,6 +31,10 @@ harnessAssertions =
 roundTrips :: AssignmentEvent -> Bool
 roundTrips e = parseAssignmentEvent (eventType assignmentCodec e) (encodeAssignmentEvent e) == Right e
 
+-- | One required obligation carrying exactly one non-pending witness.
+holeWitnessFilled :: BehaviorKey -> BehaviorConformanceReport -> Bool
+holeWitnessFilled key report = report.required == [key] && report.filled == [key]
+
 sampleEventPropertySet :: AssignmentEvent
 sampleEventPropertySet = PropertySet (PropertySetData "sample-key" "sample-value")
 
@@ -41,61 +44,27 @@ sampleEventPropertyCleared = PropertyCleared (PropertyClearedData "sample-key")
 sampleEventTouched :: AssignmentEvent
 sampleEventTouched = Touched (TouchedData "sample-note")
 
-acceptSetProperty :: Bool
-acceptSetProperty =
-  case step assignmentTransducer (AssignmentActive, initialAssignmentRegs) (SetProperty (SetPropertyData "sample-key" "sample-value")) of
-    Just (v, _, _) -> v == AssignmentActive
-    Nothing -> False
-
-acceptClearProperty :: Bool
-acceptClearProperty =
-  case step assignmentTransducer (AssignmentActive, initialAssignmentRegs) (ClearProperty (ClearPropertyData "sample-key")) of
-    Just (v, _, _) -> v == AssignmentActive
-    Nothing -> False
-
 acceptTouch :: Bool
 acceptTouch =
   case step assignmentTransducer (AssignmentActive, initialAssignmentRegs) (Touch (TouchData "sample-note")) of
     Just (v, _, _) -> v == AssignmentActive
     Nothing -> False
 
--- forward/replay equality (plan 147): cross the persisted codec boundary,
--- replay the emitted chain, and compare the final vertex and every register.
-forwardReplaySetProperty :: [(String, Bool)]
-forwardReplaySetProperty =
-  case step assignmentTransducer (AssignmentActive, initialAssignmentRegs) (SetProperty (SetPropertyData "sample-key" "sample-value")) of
-    Nothing -> [(prefix <> "forward step accepted", False)]
-    Just (forwardVertex, forwardRegs, emitted) ->
-      case mapM (\event -> parseAssignmentEvent (eventType assignmentCodec event) (encodeAssignmentEvent event)) emitted of
-        Left _ -> [(prefix <> "emitted chain decodes", False)]
-        Right decodedEvents ->
-          case applyEventsEither assignmentTransducer (AssignmentActive, initialAssignmentRegs) decodedEvents of
-            Left _ -> [(prefix <> "replay succeeds", False)]
-            Right (replayVertex, replayRegs) ->
-              [ (prefix <> "final vertex", replayVertex == forwardVertex)
-              , (prefix <> "register values", (replayRegs ! #values) == (forwardRegs ! #values))
-              ]
-  where
-    prefix = "forward/replay equality: SetProperty from AssignmentActive -- "
+-- Hole-owned initial edge: the consumer's history-backed live witness
+-- proves acceptance through the generated behavior contract.
+holeWitnessSetProperty :: BehaviorConformanceReport
+holeWitnessSetProperty = behaviorObligationReport (BehaviorKey "behavior-v1-73b7455c36956c2b") behaviorWitnesses
 
--- forward/replay equality (plan 147): cross the persisted codec boundary,
--- replay the emitted chain, and compare the final vertex and every register.
-forwardReplayClearProperty :: [(String, Bool)]
-forwardReplayClearProperty =
-  case step assignmentTransducer (AssignmentActive, initialAssignmentRegs) (ClearProperty (ClearPropertyData "sample-key")) of
-    Nothing -> [(prefix <> "forward step accepted", False)]
-    Just (forwardVertex, forwardRegs, emitted) ->
-      case mapM (\event -> parseAssignmentEvent (eventType assignmentCodec event) (encodeAssignmentEvent event)) emitted of
-        Left _ -> [(prefix <> "emitted chain decodes", False)]
-        Right decodedEvents ->
-          case applyEventsEither assignmentTransducer (AssignmentActive, initialAssignmentRegs) decodedEvents of
-            Left _ -> [(prefix <> "replay succeeds", False)]
-            Right (replayVertex, replayRegs) ->
-              [ (prefix <> "final vertex", replayVertex == forwardVertex)
-              , (prefix <> "register values", (replayRegs ! #values) == (forwardRegs ! #values))
-              ]
-  where
-    prefix = "forward/replay equality: ClearProperty from AssignmentActive -- "
+acceptSetProperty :: Bool
+acceptSetProperty = holeWitnessFilled (BehaviorKey "behavior-v1-73b7455c36956c2b") holeWitnessSetProperty && null holeWitnessSetProperty.failed
+
+-- Hole-owned initial edge: the consumer's history-backed live witness
+-- proves acceptance through the generated behavior contract.
+holeWitnessClearProperty :: BehaviorConformanceReport
+holeWitnessClearProperty = behaviorObligationReport (BehaviorKey "behavior-v1-fe7277b756f0ff4b") behaviorWitnesses
+
+acceptClearProperty :: Bool
+acceptClearProperty = holeWitnessFilled (BehaviorKey "behavior-v1-fe7277b756f0ff4b") holeWitnessClearProperty && null holeWitnessClearProperty.failed
 
 -- forward/replay equality (plan 147): cross the persisted codec boundary,
 -- replay the emitted chain, and compare the final vertex and every register.
@@ -115,3 +84,25 @@ forwardReplayTouch =
               ]
   where
     prefix = "forward/replay equality: Touch from AssignmentActive -- "
+
+-- The behavior contract decodes emissions through the persisted codec,
+-- replays them, and compares the final vertex and every register.
+forwardReplaySetProperty :: [(String, Bool)]
+forwardReplaySetProperty =
+  [ (prefix <> "hole witness filled", holeWitnessFilled key holeWitnessSetProperty)
+  , (prefix <> "hole witness verified", holeWitnessFilled key holeWitnessSetProperty && null holeWitnessSetProperty.failed)
+  ]
+  where
+    key = BehaviorKey "behavior-v1-73b7455c36956c2b"
+    prefix = "forward/replay equality: SetProperty from AssignmentActive -- "
+
+-- The behavior contract decodes emissions through the persisted codec,
+-- replays them, and compares the final vertex and every register.
+forwardReplayClearProperty :: [(String, Bool)]
+forwardReplayClearProperty =
+  [ (prefix <> "hole witness filled", holeWitnessFilled key holeWitnessClearProperty)
+  , (prefix <> "hole witness verified", holeWitnessFilled key holeWitnessClearProperty && null holeWitnessClearProperty.failed)
+  ]
+  where
+    key = BehaviorKey "behavior-v1-fe7277b756f0ff4b"
+    prefix = "forward/replay equality: ClearProperty from AssignmentActive -- "

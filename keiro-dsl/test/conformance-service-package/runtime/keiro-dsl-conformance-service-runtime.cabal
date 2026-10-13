@@ -11,6 +11,17 @@ library
   exposed-modules:
     Proof.WorkspaceProof.Generated.Conformance
   other-modules:
+    Proof.WorkspaceProof.Assignment.BehaviorHoles
+    Proof.WorkspaceProof.Assignment.Generated.BehaviorContract
+    Proof.WorkspaceProof.Assignment.Generated.Codec
+    Proof.WorkspaceProof.Assignment.Generated.Domain
+    Proof.WorkspaceProof.Assignment.Generated.EventStream
+    Proof.WorkspaceProof.Assignment.Generated.Harness
+    Proof.WorkspaceProof.Assignment.Generated.Projection
+    Proof.WorkspaceProof.Assignment.Generated.Transducer
+    Proof.WorkspaceProof.Assignment.Holes
+    Proof.WorkspaceProof.AssignmentDomain
+    Proof.WorkspaceProof.AssignmentSupport
     Proof.WorkspaceProof.Alpha.BehaviorHoles
     Proof.WorkspaceProof.Alpha.Generated.BehaviorContract
     Proof.WorkspaceProof.Alpha.Generated.Codec
@@ -39,6 +50,7 @@ library
     Proof.WorkspaceProof.Generated.Nominals
     Proof.WorkspaceProof.Generated.Nominals.Internal
     Proof.WorkspaceProof.Generated.ReplayAudit
+    Proof.WorkspaceProof.Generated.StructuralConformance
     Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowFacts
     Proof.WorkspaceProof.WorkspaceProofWorkflow.Generated.WorkflowRuntime
   build-depends:

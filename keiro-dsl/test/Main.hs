@@ -4032,6 +4032,96 @@ main = hspec $ do
       contract `shouldSatisfy` T.isInfixOf "K.EdgeRef JourneyEmpty 1"
       contract `shouldSatisfy` T.isInfixOf "K.EdgeRef JourneyEmpty 2"
 
+    it "proves hole-owned initial edges through the consumer witness" $ do
+      spec <- specOf "test/fixtures/history-dependent-holes.keiro"
+      aggregate <- case [value | NAggregate value <- (.nodes) spec] of
+        [value] -> pure value
+        _ -> expectationFailure "expected one history-dependent aggregate" >> fail "unreachable"
+      let ctx = defaultContext spec.context
+          modules = scaffoldAggregate ctx spec aggregate <> harnessFor ctx spec aggregate
+          harness = generatedTextEndingIn "Harness.hs" modules
+          contract = generatedTextEndingIn "BehaviorContract.hs" modules
+      harness `shouldSatisfy` T.isInfixOf ".BehaviorHoles (behaviorWitnesses)"
+      T.count "behaviorObligationReport (BehaviorKey \"behavior-v1-" harness `shouldBe` 2
+      T.count "acceptClearProperty :: Bool" harness `shouldBe` 1
+      harness `shouldSatisfy` T.isInfixOf "case step assignmentTransducer (AssignmentActive, initialAssignmentRegs) (Touch"
+      harness `shouldSatisfy` (not . T.isInfixOf "initialAssignmentRegs) (ClearProperty")
+      harness `shouldSatisfy` (not . T.isInfixOf "initialAssignmentRegs) (SetProperty")
+      harness `shouldSatisfy` T.isInfixOf "hole witness filled"
+      harness `shouldSatisfy` T.isInfixOf "hole witness verified"
+      contract `shouldSatisfy` T.isInfixOf "behaviorObligationReport :: BehaviorKey -> [BehaviorWitness] -> BehaviorConformanceReport"
+
+    it "omits Keiki stepping imports when every initial edge is hole-owned" $ do
+      spec <-
+        parseInlineSpec "<hole-owned>" $
+          T.unlines
+            [ "language keiro-dsl 6",
+              "context hole-owned",
+              "aggregate Journey",
+              "  regs",
+              "    count Natural = 0",
+              "  states Empty",
+              "  command Start { amount:Natural }",
+              "  event Started = fields(Start)",
+              "  Empty -- Start --> implementation hole ; emit Started ; goto Empty"
+            ]
+      aggregate <- case [value | NAggregate value <- (.nodes) spec] of
+        [value] -> pure value
+        _ -> expectationFailure "expected one hole-owned aggregate" >> fail "unreachable"
+      let harness = generatedTextEndingIn "Harness.hs" (harnessFor (defaultContext spec.context) spec aggregate)
+          coreImports = filter (T.isPrefixOf "import Keiki.Core ") (T.lines harness)
+      coreImports `shouldBe` ["import Keiki.Core (defaultValidationOptions, validateTransducer)"]
+      harness `shouldSatisfy` (not . T.isInfixOf "LANGUAGE OverloadedLabels")
+      harness `shouldSatisfy` T.isInfixOf "holeWitnessStart"
+
+    it "refuses a hole-owned command colliding with witness bookkeeping" $ do
+      spec <-
+        parseInlineSpec "<hole-owned-helper-collision>" $
+          T.unlines
+            [ "language keiro-dsl 6",
+              "context hole-owned-helper-collision",
+              "aggregate Journey",
+              "  regs",
+              "  states Empty",
+              "  command Filled { current:Bool }",
+              "  event Started = fields(Filled)",
+              "  Empty -- Filled --> implementation hole ; emit Started ; goto Empty"
+            ]
+      [diagnostic | diagnostic <- validateSpec spec, (.code) diagnostic == GeneratedOccurrenceCollision]
+        `shouldSatisfy` (not . null)
+
+    it "keeps legacy version-1 initial probes unchanged" $ do
+      spec <-
+        parseInlineSpec "<legacy-probes>" $
+          T.unlines
+            [ "language keiro-dsl 1",
+              "context legacy-probes",
+              "aggregate Journey",
+              "  regs",
+              "  states Empty Active",
+              "  command Start { current:Bool }",
+              "  event Started = fields(Start)",
+              "  Empty -- Start --> emit Started ; goto Active"
+            ]
+      aggregate <- case [value | NAggregate value <- (.nodes) spec] of
+        [value] -> pure value
+        _ -> expectationFailure "expected one legacy aggregate" >> fail "unreachable"
+      let harness = generatedTextEndingIn "Harness.hs" (harnessFor (defaultContext spec.context) spec aggregate)
+      harness `shouldSatisfy` T.isInfixOf "import LegacyProbes.Journey.Holes (journeyTransducer)"
+      harness `shouldSatisfy` T.isInfixOf "case step journeyTransducer (JourneyEmpty, initialJourneyRegs) (Start (StartData False)) of"
+      harness `shouldSatisfy` T.isInfixOf "forwardReplayStart"
+      harness `shouldSatisfy` (not . T.isInfixOf "behaviorObligationReport")
+
+    it "keeps the history-dependent fixture byte-identical across repeat scaffolds" $ do
+      withTempDirectory "keiro-dsl-history-dependent" $ \out -> do
+        let arguments = ["scaffold", "test/fixtures/history-dependent-holes.keiro", "--out", out]
+        (firstCode, firstOut, firstErr) <- runKeiroDsl arguments
+        unless (firstCode == ExitSuccess) (expectationFailure (firstOut <> firstErr))
+        firstTree <- treeSnapshot out
+        (secondCode, secondOut, secondErr) <- runKeiroDsl arguments
+        unless (secondCode == ExitSuccess) (expectationFailure (secondOut <> secondErr))
+        treeSnapshot out `shouldReturn` firstTree
+
     it "refuses duplicate live initial harness helpers with both source locations" $ do
       spec <-
         parseInlineSpec "<initial-helper-collision>" $
@@ -11218,6 +11308,7 @@ main = hspec $ do
             sourcePaths =
               [ "service.keiro-workspace",
                 "domain/alpha.keiro",
+                "domain/assignment.keiro",
                 "domain/beta.keiro",
                 "domain/evidence.keiro",
                 "domain/shared.keiro"

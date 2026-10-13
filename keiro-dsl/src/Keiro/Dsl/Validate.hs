@@ -2060,11 +2060,23 @@ validateNames languageContract typeGraphResult spec =
        in HaskellName.plannedOccurrence targetModule HaskellName.FieldSpace scope ((.selector) identity) site
 
     aggregateHarnessOccurrences aggregate =
-      transitionHelpers <> sampleConstants
+      transitionHelpers <> witnessBookkeepingHelpers <> sampleConstants
       where
+        witnessBookkeepingHelpers =
+          [ HaskellName.plannedOccurrence targetModule HaskellName.ValueSpace "" "holeWitnessFilled" site
+          | any (\transition -> (.source) transition == initialState && (.mode) transition == TmLive && (.implementation) transition == HoleImplementation) ((.transitions) aggregate),
+            let site =
+                  HaskellName.NameSite
+                    { HaskellName.kind = HaskellName.GeneratedHelperSite,
+                      HaskellName.logicalName = "holeWitnessFilled",
+                      HaskellName.owner = "aggregate:" <> (.name) aggregate <> ":hole-witness-bookkeeping",
+                      HaskellName.line = locLine ((.loc) aggregate)
+                    }
+          ]
         transitionHelpers =
           concat
             [ [helperOccurrence "accept" ("accept" <> commandName) transition]
+                <> [helperOccurrence "hole witness" ("holeWitness" <> commandName) transition | (.implementation) transition == HoleImplementation]
                 <> [helperOccurrence "forward/replay" ("forwardReplay" <> commandName) transition | not (null ((.emits) transition))]
             | transition <- (.transitions) aggregate,
               (.source) transition == initialState,

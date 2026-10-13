@@ -9,6 +9,7 @@
 module Proof.WorkspaceProof.Generated.ReplayAudit (auditTargets) where
 
 import Proof.WorkspaceProof.Alpha.Generated.EventStream qualified as Alpha
+import Proof.WorkspaceProof.Assignment.Generated.EventStream qualified as Assignment
 import Proof.WorkspaceProof.Beta.Generated.EventStream qualified as Beta
 import Keiro.ReplayAudit (AuditTarget (..), SomeAuditTarget (..), streamInCategory)
 import Keiro.Stream qualified as Stream
@@ -20,6 +21,12 @@ auditTargets =
         { eventStream = Alpha.alphaEventStream
         , category = Stream.categoryText Alpha.alphaCategory
         , mkStream = streamInCategory (Stream.categoryText Alpha.alphaCategory)
+        }
+  , SomeAuditTarget
+      AuditTarget
+        { eventStream = Assignment.assignmentEventStream
+        , category = Stream.categoryText Assignment.assignmentCategory
+        , mkStream = streamInCategory (Stream.categoryText Assignment.assignmentCategory)
         }
   , SomeAuditTarget
       AuditTarget

@@ -17,11 +17,15 @@ data BehaviorSourceLocation = BehaviorSourceLocation
 
 behaviorSourceLocation :: Text -> Maybe BehaviorSourceLocation
 behaviorSourceLocation key = case key of
+  "behavior-v1-075a56dd42e6bc95" -> Just (BehaviorSourceLocation "domain/assignment.keiro" 32 3)
+  "behavior-v1-0db4efc62e642065" -> Just (BehaviorSourceLocation "domain/assignment.keiro" 38 3)
   "behavior-v1-579df4e5e81f7729" -> Just (BehaviorSourceLocation "domain/alpha.keiro" 15 3)
   "behavior-v1-6ab7fee2c8aa4e1d" -> Just (BehaviorSourceLocation "domain/beta.keiro" 11 3)
   "behavior-v1-72a96c964b44a2b6" -> Just (BehaviorSourceLocation "domain/alpha.keiro" 14 3)
+  "behavior-v1-9200cd4f93c83098" -> Just (BehaviorSourceLocation "domain/assignment.keiro" 43 3)
   "behavior-v1-baf43b4c31db955a" -> Just (BehaviorSourceLocation "domain/alpha.keiro" 13 3)
   "behavior-v1-c062ccf5e9b6f5c4" -> Just (BehaviorSourceLocation "domain/alpha.keiro" 6 10)
+  "behavior-v1-fbe5335a1e485829" -> Just (BehaviorSourceLocation "domain/assignment.keiro" 26 3)
   _ -> Nothing
 
 renderBehaviorSourceLocation :: Text -> Text
