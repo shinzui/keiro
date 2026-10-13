@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-13T14:19:34Z
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-13T14:43:45Z
+      mode: "update"
+      note: "Stem formula corrected to lowerFirst . pascal for byte-identity; stability example and fail-open re-export rule added"
 ---
 
 # Derive generated declaration stems from whole logical names to fix BUG-11
@@ -129,6 +135,19 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
   as a breaking changelog entry.
   Rationale: an edition exists to migrate every consumer; this change touches a shape that is
   either broken or rare, and `scaffold` already reports every overwritten module.
+  Date: 2026-10-13
+- Decision: the whole-name stem is `lowerFirst . pascal`, never `lowerFirst` alone, and the
+  plan pins `a_b_test` and `x_y_coords` as regression guards.
+  Rationale: `lowerFirst (pascal n)` equals the old per-segment concatenation for every name
+  whose segments all derive, so only reserved segments change spelling; `lowerFirst n` would
+  also rename names made of single-letter or all-caps segments (`aBTest…` instead of
+  `abTest…`), a consumer-visible change the bug does not justify. Verified on master on
+  2026-10-13 by scaffolding `a_b_test`.
+  Date: 2026-10-13
+- Decision: the import audit treats a `module M` re-export in an export list as "resolve `M`
+  if planned, otherwise unknown and never a violation".
+  Rationale: the audit refuses scaffold writes, so a false positive blocks every consumer; an
+  unknown export set must fail open.
   Date: 2026-10-13
 - Decision: BUG-11 moves from `confirmed` to `in-progress` when the compiled suite fails in
   Milestone 1 and to `fixed` with `fixedVersion: unreleased` at the end of Milestone 4.
@@ -530,7 +549,7 @@ workqueue job_type {
 Add a new `describe "Haskell.keyword-segments"` block directly after the
 `describe "Haskell.name-audit"` block in `keiro-dsl/test/Main.hs` (so the name-policy gate's
 `--match Haskell.` prefix also selects it only if you widen that match; otherwise it runs with
-the full suite, which is sufficient). It holds four examples.
+the full suite, which is sufficient). It holds five examples.
 
 The first example scaffolds the fixture with `scaffoldServiceModules` and checks that the
 harness import resolves. Take the text of the module whose path ends in
@@ -566,6 +585,14 @@ for example through `errorCodesOf` near line 2289 if it accepts text, or by writ
 to a temporary fixture and calling the file-based helper), and assert the diagnostic codes
 include `GeneratedOccurrenceReserved`. This passes before and after the repair; it exists so
 the repair cannot accidentally widen acceptance.
+
+The fifth example pins the names the repair must not change. Build the report's Language 4
+text with the read model renamed to `a_b_test`, and again to `x_y_coords`, scaffold each, and
+assert the `ReadModel.hs` text declares `abTestReadModel ::` and `xyCoordsReadModel ::`
+respectively and that each harness imports the same name. These are the spellings today's
+generator produces for names made of single-letter segments; the example passes before the
+repair and must still pass after it, proving the whole-name formula is byte-identical for every
+name without a reserved segment.
 
 Run the suite before touching the generator and record the four failures:
 
@@ -764,10 +791,20 @@ Replace the three per-segment stems in `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`:
 -- reserved-word check to one word of a compound name and glued the spellings
 -- that BUG-11 reports.
 readModelStem :: ReadModelNode -> Text
-readModelStem = lowerFirst . (.name)
+readModelStem = lowerFirst . pascal . (.name)
 ```
 
-In `emitQueueCodec` change the where-binding to `stem = lowerFirst ((.name) w)`, and in
+The formula is `lowerFirst . pascal`, not `lowerFirst` alone, and this matters. `pascal` of the
+whole name concatenates the UpperCamel words of every segment, which is exactly what the
+per-segment concatenation produced for every segment that derived successfully, and
+`lowerFirst` of that UpperCamel text re-splits it on camel boundaries exactly as the old
+`readModelStem` and today's harness do. So the new stem is byte-identical to the old one for
+every name without a reserved segment, including names made of single-letter or all-caps
+segments: `a_b_test` stays `abTestReadModel` (verified on master on 2026-10-13: definition and
+harness both spell it that way, under module segment `ABTest`). `lowerFirst` applied directly
+to `a_b_test` would instead derive `aBTest…`, a silent rename for such names, because the
+whole-name lower derivation lower-cases only the first word. In `emitQueueCodec` change the
+where-binding to `stem = lowerFirst (pascal ((.name) w))` for the same reason, and in
 `emitQueuePolicy` change it to `outcomeType = pascal ((.name) w) <> "Outcome"`. Add
 `readModelStem` to the export list of `Keiro.Dsl.Scaffold` next to `scaffoldReadModel`. In
 `keiro-dsl/src/Keiro/Dsl/Harness.hs` replace line 320 with `stem = readModelStem readModel`.
@@ -834,8 +871,11 @@ generatedImportResolutionViolations :: [ScaffoldModule] -> [Text]
 Implement it as follows. Build a map from module name (via `moduleNameOf . (.path)`) to the
 set of names the module exports: parse the `module M (…) where` header after `maskNonCode`;
 when the header has an export list, the set is its entries with any `(..)` or `(A, B)` suffix
-removed, dropping entries that start with `module ` (re-exported modules) and operator
-sections in parentheses; when the header has no export list, the set is every top-level
+removed, skipping operator sections in parentheses; when an export list contains a
+`module M` re-export, add the export set of `M` if `M` is itself a planned module (resolve
+transitively) and otherwise mark the exporting module as unknown and never report a violation
+against it, so a re-export of a runtime module can never cause a false refusal (no generated
+module in today's corpus re-exports a whole module, but the rule must be safe when one does); when the header has no export list, the set is every top-level
 signature name (`name ::` at column one) plus every `data`, `newtype`, `type`, and `class`
 head. Then, for every planned module whose `kind` is `Generated` or `HoleStub`, scan its masked
 text for lines beginning `import` that name a module present in the map and carry a
@@ -947,7 +987,7 @@ Milestone 1, in order: write `keiro-dsl/test/fixtures/keyword-segments.keiro`; r
 `cabal run -v0 keiro-dsl:exe:keiro-dsl -- check keiro-dsl/test/fixtures/keyword-segments.keiro`
 and expect `OK`; add the four examples to `keiro-dsl/test/Main.hs`; run
 `cabal test keiro-dsl-test --test-show-details=direct --test-options='--match Haskell.keyword-segments'`
-and expect three failures and one pass (the rejection example); scaffold the suite tree,
+and expect three failures and two passes (the rejection and stability examples); scaffold the suite tree,
 write `Main.hs`, add the stanza; run
 `cabal build keiro-dsl:test:keiro-dsl-conformance-keyword-segments` and expect GHC-61689;
 update the bug report, index, and log; run `just bug-reports-validate`; commit.
@@ -987,7 +1027,8 @@ suite guards the repair (do this once, then `git stash pop` and regenerate again
 `cabal test keiro-dsl-test --test-options='--match Haskell.keyword-segments'` and
 `--match Haskell.import-resolution` pass; `cabal test keiro-dsl-haskell-name-test` passes;
 `cabal run -v0 keiro-dsl:exe:keiro-dsl -- check` on a specification declaring `readmodel
-type` still prints `error[GeneratedOccurrenceReserved]`.
+type` still prints `error[GeneratedOccurrenceReserved]`; scaffolding the report's text with
+`a_b_test` still declares and imports `abTestReadModel`.
 
 Hand-mutating one generated module's import list and feeding the pair to
 `generatedImportResolutionViolations` yields a diagnostic naming the importing path, the
@@ -1036,9 +1077,9 @@ check. `deriveHaskellName`, `checkedLowerOccurrence`, and `haskellKeywords` are 
 `Keiro.Dsl.Scaffold` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`) keeps the exported helpers
 `pascal :: Text -> Text` and `lowerFirst :: Text -> Text`; `pascal` now renders a lone reserved
 word in UpperCamel (`pascal "type" == "Type"`), and both remain identity on input that cannot
-be derived. It exports `readModelStem :: ReadModelNode -> Text`, now `lowerFirst . (.name)`.
+be derived. It exports `readModelStem :: ReadModelNode -> Text`, now `lowerFirst . pascal . (.name)`, byte-identical to the old per-segment result for every name without a reserved segment.
 `emitQueueCodec` and `emitQueuePolicy` derive from the whole workqueue name. The generated
-module and value names for a read model `n` are, with `s = lowerFirst n` and `S = pascal n`:
+module and value names for a read model `n` are, with `S = pascal n` and `s = lowerFirst S`:
 module segment `S`, values `sReadModel`, `sQualifiedTable`, `sQuery`, rebuild helpers
 `startSRebuild`/`finishSRebuild`/`abandonSRebuild` where emitted, and types `SQueryInput` and
 `SQueryResult`. For a workqueue `n`: module segment `S`, values `sPayloadCodec` and
@@ -1075,3 +1116,15 @@ Documents: `docs/user/keiro-dsl-reference.md`, `keiro-dsl/CHANGELOG.md`, `CHANGE
 `docs/bug-reports/index.md` and `docs/bug-reports/log.md`. External tools: `okf` for bundle
 validation, logging, and ID allocation; `just` recipes `corpus-regen`, `bug-reports-validate`,
 `generated-name-policy`, `conformance-corpus-policy`, and `verify`.
+
+
+## Revision notes
+
+
+- 2026-10-13: corrected the stem formula from `lowerFirst . (.name)` to
+  `lowerFirst . pascal . (.name)` (and the workqueue codec stem likewise) after verifying on
+  master that `a_b_test` scaffolds `abTestReadModel`; the direct form would have renamed names
+  made of single-letter or all-caps segments. Added the fifth stability example, the matching
+  Decision Log entries, a fail-open rule for `module M` re-exports in the import audit, and the
+  stability check in Validation and Acceptance. Reason: a reviewer asked whether the fix is
+  safe, and the byte-identity claim in Milestone 2 was only true for the composed formula.
