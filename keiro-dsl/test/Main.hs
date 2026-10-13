@@ -1942,6 +1942,7 @@ main = hspec $ do
             "declarative-router/valid.keiro",
             "direct-optional-id.keiro",
             "domain-command-outcomes.keiro",
+            "history-dependent-holes.keiro",
             "hospital-surge-reactions.keiro",
             "id-admission-domains.keiro",
             "id-domain-migration-v3.keiro",

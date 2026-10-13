@@ -89,8 +89,10 @@ later steps that this plan names but does not perform.
 - [x] (2026-10-13) Milestone 1: set BUG-10 `status: confirmed`, advance `generated`, and log the confirmation.
 - [x] (2026-10-13) Milestone 2: export `behaviorRequirementsFor` from `Keiro.Dsl.Scaffold`; add `behaviorObligationReport` to every generated `BehaviorContract` by sharing the coverage-report body.
 - [x] (2026-10-13) Milestone 2: split initial live entries in `Keiro.Dsl.Harness` by ownership; emit witness-backed `accept<Command>`/`forwardReplay<Command>` helpers for hole-owned edges; gate the `step`/`applyEventsEither`/`(!)` imports and the `OverloadedLabels` pragma on the synthetic bucket; import `BehaviorHoles` and `BehaviorContract` only when a hole-owned initial edge exists.
-- [ ] Milestone 2: validate the added focused generator tests to `keiro-dsl/test/Main.hs` (witness rows for hole-owned edges, unchanged synthetic rows for generated edges, replay-only still excluded, import gating when every initial edge is hole-owned, repeat scaffold byte stability).
-- [ ] Milestone 2: regenerate the corpus, review that only `BehaviorContract.hs` files and the new fixture's `Harness.hs` changed, run `scripts/check-conformance-corpus.sh`, and run `cabal test keiro-dsl:tests --keep-going`.
+- [x] (2026-10-13) Milestone 2: validate the added focused generator tests to `keiro-dsl/test/Main.hs` (witness rows for hole-owned edges, unchanged synthetic rows for generated edges, replay-only still excluded, import gating when every initial edge is hole-owned, repeat scaffold byte stability).
+- [x] (2026-10-13) Milestone 2: regenerate the corpus, review the contract-only changes outside the new fixture/workspace, verify the ordinary Journey Harness is byte-identical, and pass `scripts/check-conformance-corpus.sh` from the committed baseline.
+- [x] (2026-10-13) Milestone 2: register the Language 6 suite and fixture in both explicit inventories; targeted reruns pass all three inventory examples. All five new generator tests and CLI workspace idempotency pass.
+- [ ] Milestone 2: confirm all 56 DSL suites pass after inventory registration through `just verify` (its `cabal test keiro-dsl:tests` runs the same complete target).
 - [x] (2026-10-13) Milestone 3: add `domain/assignment.keiro` to the service-package workspace with its consumer modules and fills, extend the runtime library's module list and the CLI idempotency test's source list, regenerate, and pass `keiro-workspace-proof-conformance`.
 - [x] (2026-10-13) Milestone 4: add `keiro-dsl/test/history-dependent-holes-mutation-test.sh` proving named failures for every mutation BUG-10 lists, and wire it into `just verify` through a new `initial-hole-proof` recipe.
 - [x] (2026-10-13) Milestone 5: update `docs/user/replay-safety.md`, `docs/user/keiro-dsl-workspaces-and-generated-code.md`, and `docs/guides/choosing-keiro-dsl.md`; add Unreleased changelog entries; amend ADR-17; validate every bundle.
@@ -148,6 +150,18 @@ later steps that this plan names but does not perform.
   `unexpected-rejection`, `event-value-mismatch`, and `command-mismatch` for
   the executed false witnesses. The final restored baseline passes and
   `git diff --check` is clean.
+
+- The clean-baseline corpus check passes all 54 plan entries, record/disk
+  consistency, Cabal inventory consistency, and regeneration freshness. The
+  new workspace member and both create-once fills survive regeneration.
+
+- The first broad DSL run passed all 55 conformance/runtime suites and 794 of
+  796 main-suite examples. Two inventory tests require new fixture registration:
+  `test/conformance-baseline.json` must list the compiled Language 6 component,
+  and `test/Main.hs` must include `history-dependent-holes.keiro` in its
+  explicit list of fixtures outside Language 4. Both inventories now include
+  the new fixture; the workspace mutation and all five new generator examples
+  passed in that run.
 
 ## Decision Log
 
@@ -655,6 +669,11 @@ the failing suite, and log it:
 okf log add docs/bug-reports --kind Update -m "BUG-10 is confirmed by the owning repository: keiro-dsl-conformance-history-dependent-holes fails the two initial-hole rows before plan 309's repair while its behavior report passes."
 nix develop -c just bug-reports-validate
 ```
+
+`keiro-dsl/test/conformance-baseline.json` inventories compiled suites and their
+language ownership. Register the new suite as `candidate-primary`, Language 6,
+with its source/directory and BUG-10 proof purpose. Also add its filename to the
+explicit outside-Language-4 fixture list in `keiro-dsl/test/Main.hs`.
 
 ### Milestone 2: the generator repair and its unit tests
 
@@ -1177,3 +1196,8 @@ workspace reproductions; filled Hole signatures explicitly account for their reg
 Revision note (2026-10-13): captured both compiled pre-repair failures, implemented
 ownership-aware evidence and the shared contract runner, added import and helper
 collision safeguards, and drafted the mutation gate, documentation, and ADR-17 amendment.
+
+Revision note (2026-10-13): the broad run exposed two explicit fixture inventories
+omitted by the original plan. Registered the new Language 6 proof in both; focused
+inventory reruns pass. The repository gate will rerun the entire DSL target, avoiding
+an additional duplicate run of its isolated workspace compilation test.
