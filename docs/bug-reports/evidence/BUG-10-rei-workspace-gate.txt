@@ -1,0 +1,58 @@
+BUG-10 consumer reproduction excerpt
+Project: mori://shinzui/rei
+Revision: eaa401e1e9ea21c4b7fdcfb445461b2891c5cb14
+Command: nix develop -c just keiro-gate
+Observed exit code: 1
+Original log SHA-256: d766956e6db3afcec9628300a9728829c08d8282fc1e18e5172b6fbb5cbb3d98
+This is a numbered excerpt, not a second execution.
+
+6: error (ignored): SQLite database '/Users/shinzui/.cache/nix/eval-cache-v6/e41ad81177309663eda4b73056051c33582f34b31eb36e7db525256ff1c7bf7a.sqlite' is busy
+7: 
+8: == leg 1/4: keiro-check (exact Language 6, candidate; --deny-warnings)
+9: mkdir -p build
+10: just keiro-dsl parse domain/rei.keiro-workspace
+11: service rei
+672: keiro-check: OK
+673: 
+674: == leg 2/4: generated layer is exactly what the sources produce
+675: generated pathspecs match 269 tracked files
+676: .....
+677: ----------------------------------------------------------------------
+682: generated layer: unchanged by regeneration
+683: 
+684: == leg 3/4: generated behaviour-conformance suite
+685: Build profile: -w ghc-9.12.4 -O1
+686: In order, the following will be built (use -v for more details):
+687:  - keiro-rei-conformance-0.0.0.0 (test:conformance) (file src/Main.hs changed)
+2679: PASS  aggregate/PropertyAssignment/golden round-trip: TaskCompletionLinkRemoved
+2680: PASS  aggregate/PropertyAssignment/accepts SetProperty from PropertyAssignmentActive
+2681: FAIL  aggregate/PropertyAssignment/accepts ClearProperty from PropertyAssignmentActive
+2682: PASS  aggregate/PropertyAssignment/accepts ClearPropertyByCategoryChange from PropertyAssignmentActive
+2683: PASS  aggregate/PropertyAssignment/accepts ClearPropertyByConditionChange from PropertyAssignmentActive
+2684: PASS  aggregate/PropertyAssignment/accepts AutoInitializeProperty from PropertyAssignmentActive
+2750: PASS  aggregate/PropertyAssignment/forward/replay equality: SetProperty from PropertyAssignmentActive -- final vertex
+2751: PASS  aggregate/PropertyAssignment/forward/replay equality: SetProperty from PropertyAssignmentActive -- register values
+2752: FAIL  aggregate/PropertyAssignment/forward/replay equality: ClearProperty from PropertyAssignmentActive -- forward step accepted
+2753: PASS  aggregate/PropertyAssignment/forward/replay equality: ClearPropertyByCategoryChange from PropertyAssignmentActive -- final vertex
+2754: PASS  aggregate/PropertyAssignment/forward/replay equality: ClearPropertyByCategoryChange from PropertyAssignmentActive -- register values
+2755: PASS  aggregate/PropertyAssignment/forward/replay equality: ClearPropertyByConditionChange from PropertyAssignmentActive -- final vertex
+3721: PASS  mapped-surface/snapshot-register/JournalEntry/LocalDay/JournalEntry register day : LocalDay
+3722: PASS  mapped-surface/snapshot-register/PropertyAssignment/CustomPropertyValueMap/PropertyAssignment register values : CustomPropertyValueMap
+3723: Test suite conformance: FAIL
+3724: Test suite logged to:
+3725: /Users/shinzui/Keikaku/bokuno/rei-project/rei/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-rei-conformance-0.0.0.0/t/conformance/test/keiro-rei-conformance-0.0.0.0-conformance.log
+3726: 0 of 1 test suites (0 of 1 test cases) passed.
+3728: Tests failed for test:conformance from keiro-rei-conformance-0.0.0.0.
+3729: 
+3730: keiro-workspace-gate: FAIL — the generated conformance suite failed — a declared behaviour obligation is not met
+3731: 
+3732: == leg 4/4: skipped (no --since given)
+3733: 
+3734: keiro-workspace-gate: FAIL
+3735: error: recipe `keiro-gate` failed with exit code 1
+
+Separate common-gate observation:
+Command: nix develop -c env REI_API_CHECK_CORE=always just api-check
+Observed exit code: 0
+Original common-gate log SHA-256: 48e9b24dbeb9b777e271c95b8ca5b23e13a11dd0672fc085e1d8344f7a498644
+All 3372 tests passed (82.08s)
