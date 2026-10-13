@@ -37,10 +37,14 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
 | [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `reported` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Unimplemented; 1/13 progress items checked (plan bookkeeping only); diagnosis validated from source and the generated probe shape reproduced in keiro. |
-| [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `reported` | No plan for this failure | Open; reported by the notification-render-service consumer through GitHub PR #6 and renumbered from the contributor's BUG-8, which master had already allocated. |
+| [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `confirmed` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Unimplemented; reproduced by the owning repository on master after 0.20.0.0 with the report's minimal spec and GHC 9.12.4 (transcript under `evidence/`). Reported through GitHub PR #6 as BUG-8 and renumbered on merge because BUG-8 was already allocated. |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
 assertions share one reproduction. Later that day the owning repository validated the
 generator diagnosis from source and wrote plan 309; no compiled producer reproduction
 or implementation is claimed yet, so the status stays `reported`. It is separate from
 completed IR-18's replay-only mode/layout repair.
+
+BUG-11 was merged from GitHub PR #6 on 2026-10-13. The owning repository reproduced
+it on master the same day, set `confirmed`, and wrote plan 310; no generator change is
+implemented yet.

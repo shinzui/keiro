@@ -3,10 +3,10 @@ type: Bug Report
 title: Read-model harness imports an inconsistent name for a keyword segment
 description: Keiro DSL accepts a read-model name ending in the snake-case segment type, but its generated definition and harness import disagree on capitalization and fail compilation.
 generated:
-  by: process:codex
-  at: "2026-09-28T21:17:58Z"
+  by: process:claude-code
+  at: "2026-10-13T14:27:09Z"
 bugId: BUG-11
-status: reported
+status: confirmed
 severity: degraded
 origin: mori://tan/notification-render-service
 affects: mori://shinzui/keiro
@@ -136,16 +136,16 @@ consistent renamed output.
 The release is pinned by tag `keiro-0.18.0.0` at commit
 `7f0c39a1babafbe194385769f0779bed4cdc34cf`.
 
-- [Scaffold.readModelStem](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/DSL/Scaffold.hs#L5555)
+- [Scaffold.readModelStem](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/Dsl/Scaffold.hs#L5555)
   splits the logical name on underscores, applies `pascal` to each segment,
   concatenates the segments, then applies `lowerFirst`.
-- [Scaffold.generatedCase](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/DSL/Scaffold.hs#L10464)
+- [Scaffold.generatedCase](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/Dsl/Scaffold.hs#L10464)
   calls the shared derivation but returns the original text on `Left`.
-- [HaskellName.deriveHaskellName](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/DSL/HaskellName.hs#L166)
+- [HaskellName.deriveHaskellName](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/Dsl/HaskellName.hs#L166)
   validates both upper- and lower-camel occurrences. A standalone `type` segment
   fails the lower-occurrence reserved-keyword check, so `pascal "type"` falls
   back to lowercase `type`. The resulting stem is `validateCustomtype`.
-- [Harness.renderReadModelHarness](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/DSL/Harness.hs#L320)
+- [Harness.renderReadModelHarness](https://github.com/shinzui/keiro/blob/keiro-0.18.0.0/keiro-dsl/src/Keiro/Dsl/Harness.hs#L320)
   applies `pascal` to the complete logical name before `lowerFirst`.
   `validate_custom_type` derives valid compound occurrences, producing
   `validateCustomType`.
@@ -171,5 +171,31 @@ reserved complete occurrence. Other declaration kinds and keyword segments may
 share similar per-segment helpers, but their behavior has not been established
 by this report. No last-working release is asserted.
 
-Status remains `reported`: the consumer reproduced the defect and traced its
-cause, while the owning repository has not independently confirmed or fixed it.
+The consumer reproduced the defect and traced its cause; the owning repository's
+confirmation follows.
+
+## Owner confirmation (2026-10-13)
+
+The owning repository reproduced the defect on master after the 0.20.0.0 release
+with the minimal specification above, unchanged: `keiro-dsl check` and `scaffold`
+succeed, `Generated/NamingRepro/ValidateCustomType/ReadModel.hs` exports
+`validateCustomtypeReadModel`, `ReadModelHarness.hs` imports
+`validateCustomTypeReadModel`, and GHC 9.12.4 rejects the untouched harness with
+GHC-61689 while the `validate_customtype` control type-checks. The transcript is
+retained in
+[evidence/BUG-11-master-keyword-segment-ghc-61689.txt](evidence/BUG-11-master-keyword-segment-ghc-61689.txt).
+The source trace matches current master: `readModelStem` in
+`keiro-dsl/src/Keiro/Dsl/Scaffold.hs` cases each underscore segment separately and
+`pascal "type"` falls back to the raw text when the reserved-occurrence check fails,
+while `emitReadModelHarness` in `keiro-dsl/src/Keiro/Dsl/Harness.hs` derives the
+stem from the whole name. A whole-name keyword such as `readmodel type` is still
+rejected by `check` with `GeneratedOccurrenceReserved`, which the fix must keep.
+The report was filed as BUG-8 in GitHub PR #6 and renumbered on merge because BUG-8
+was already allocated on master.
+
+Tracked by [plan 310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md),
+which derives every generated declaration stem once from the whole logical name,
+shares the read-model stem between the definition and the harness import, adds a
+compiled keyword-segment conformance suite that fails before the repair, and audits
+generated-to-generated explicit imports before scaffold writes. Status is
+`confirmed` until that plan's compiled proof fails and the repair lands.

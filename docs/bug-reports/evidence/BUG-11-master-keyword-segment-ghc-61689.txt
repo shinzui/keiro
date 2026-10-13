@@ -1,0 +1,76 @@
+BUG-11 owner reproduction on keiro master (0.20.0.0 development tree), 2026-10-13
+Commit: 0f81c1bbf1759620083b3ecab611e755e0809ce5 (after merging GitHub PR #6)
+Environment: nix develop shell, GHC 9.12.4, aarch64-darwin
+
+== Spec: keyword.keiro (identical to the BUG-11 report's minimal reproduction) ==
+language keiro-dsl 4
+context naming-repro
+
+readmodel validate_custom_type {
+  table = "subscriptions"
+  schema = "billing"
+  columns {
+    subscription_id text required
+    status text required
+  }
+  version = 1
+  shape = "fnv1a:f54d9bb2f40a6738"
+  consistency = Eventual
+  feed = inline
+}
+
+aggregate Subscription
+  regs
+  states Active
+
+  command Activate { subscriptionId }
+  event Activated = fields(Activate)
+
+  Active -- Activate --> emit Activated ; goto Active
+
+  projection validate_custom_type key=subscriptionId
+    status-map { Activated=>active }
+
+== cabal run -v0 keiro-dsl:exe:keiro-dsl -- check keyword.keiro ==
+/private/tmp/claude-501/-Users-shinzui-Keikaku-bokuno-keiro/efac0e84-a2ea-40aa-b389-21e5e646dcce/scratchpad/repro/keyword.keiro: language contract: effective keiro-dsl 4 (declared, compatibility-only, runtime semantics keiro-dsl/runtime-semantics/3); language-5 strict spec-surface validation is not applied — declare `language keiro-dsl 5` to adopt the published stable contract
+OK
+
+== cabal run -v0 keiro-dsl:exe:keiro-dsl -- scaffold keyword.keiro --out out-keyword (exit 0) ==
+Generated/NamingRepro/ValidateCustomType/ReadModel.hs:
+module Generated.NamingRepro.ValidateCustomType.ReadModel
+validateCustomtypeReadModel :: ReadModel ValidateCustomtypeQueryInput ValidateCustomtypeQueryResult
+validateCustomtypeReadModel =
+Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:
+import Generated.NamingRepro.ValidateCustomType.ReadModel (validateCustomTypeReadModel)
+
+== spellings per generated file (grep -o 'validateCustom[Tt]ype[A-Za-z]*' | sort | uniq -c) ==
+--- Generated/NamingRepro/Subscription/Projection.hs
+      3 validateCustomTypeProjection
+      3 validateCustomTypeStatusFor
+      1 validateCustomtypeQualifiedTable
+--- Generated/NamingRepro/ValidateCustomType/ReadModel.hs
+      2 validateCustomtypeQualifiedTable
+      2 validateCustomtypeQuery
+      6 validateCustomtypeReadModel
+--- Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs
+      6 validateCustomTypeReadModel
+--- Generated/NamingRepro/ValidateCustomType/ReadModelTable.hs
+      3 validateCustomtypeQualifiedTable
+--- NamingRepro/Subscription/Holes.hs
+      1 validateCustomTypeStatusFor
+      3 validateCustomtypeQualifiedTable
+--- NamingRepro/ValidateCustomType/ReadModelHoles.hs
+      3 validateCustomtypeQualifiedTable
+      3 validateCustomtypeQuery
+
+== ghc -fno-code -fdefer-type-errors (keiro exposed) on the untouched keyword harness ==
+out-keyword/Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-61689]
+    Module ‘Generated.NamingRepro.ValidateCustomType.ReadModel’ does not export ‘validateCustomTypeReadModel’.
+    Suggested fix: Perhaps use ‘validateCustomtypeReadModel’
+  |
+4 | import Generated.NamingRepro.ValidateCustomType.ReadModel (validateCustomTypeReadModel)
+
+== same command on the validate_customtype control harness: no errors (exit 0) ==
+control ghc exit: 0
+
+Note: -fdefer-type-errors is needed only because the store's keiro-0.20.0.0 package database used by 'cabal exec' mixes hasql-transaction/effectful instances from different builds, which turns unrelated ReadModel.hs equations into type errors in both trees; the import failure is a renamer error and does not depend on it.
