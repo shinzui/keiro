@@ -391,6 +391,37 @@ test-suite keiro-dsl-conformance-aggregate-scalar-expressions
     text >=2.1 && <2.2,
     time >=1.12 && <1.15,
 
+test-suite keiro-dsl-conformance-history-dependent-holes
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  default-extensions: OverloadedLabels
+  hs-source-dirs: test/conformance-history-dependent-holes
+  main-is: Main.hs
+  other-modules:
+    Conformance.HistoryDependentHoles.Bindings
+    Conformance.HistoryDependentHoles.Domain
+    Generated.HistoryDependentHoles.Assignment.BehaviorContract
+    Generated.HistoryDependentHoles.Assignment.Codec
+    Generated.HistoryDependentHoles.Assignment.Domain
+    Generated.HistoryDependentHoles.Assignment.EventStream
+    Generated.HistoryDependentHoles.Assignment.Harness
+    Generated.HistoryDependentHoles.Assignment.Projection
+    Generated.HistoryDependentHoles.Assignment.Transducer
+    Generated.HistoryDependentHoles.BehaviorSourceMap
+    Generated.HistoryDependentHoles.ReplayAudit
+    Generated.HistoryDependentHoles.StructuralConformance
+    HistoryDependentHoles.Assignment.BehaviorHoles
+    HistoryDependentHoles.Assignment.Holes
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    containers >=0.6 && <0.8,
+    keiki >=0.9 && <0.10,
+    keiro,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15,
+
 test-suite keiro-dsl-conformance-behavior-complete
   import: warnings, generated-output
   type: exitcode-stdio-1.0

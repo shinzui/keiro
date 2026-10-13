@@ -3,10 +3,10 @@ type: Bug Report
 title: Initial hole harness requires acceptance from empty registers despite history-backed witnesses
 description: Keiro DSL generates false failing acceptance and forward/replay probes for an initial-vertex implementation hole whose valid live command requires retained history.
 generated:
-  by: process:claude-code
-  at: "2026-10-13T14:08:07Z"
+  by: process:codex
+  at: "2026-10-13T23:30:02Z"
 bugId: BUG-10
-status: reported
+status: confirmed
 severity: unusable
 origin: mori://shinzui/rei/plans/272-separate-rei-command-invariants-from-asynchronous-query-projections
 affects: mori://shinzui/keiro/packages/keiro-dsl
@@ -39,8 +39,9 @@ Rei's complete workspace gate cannot pass for a valid history-dependent live
 clear. This blocks release acceptance of the consumer upgrade even though its
 runtime guard and history-backed behavior tests pass. Severity describes that
 unusable gate; no data loss or runtime rejection defect is observed. No sanctioned
-gate workaround is known. The owner has not yet reproduced the defect in an
-isolated Keiro fixture, so the lifecycle remains `reported`.
+gate workaround is known. The owner has now reproduced the defect in
+`keiro-dsl-conformance-history-dependent-holes`: both initial clear rows fail
+while its history-backed behavior report passes. The lifecycle is `confirmed`.
 
 ## Observed reproduction
 

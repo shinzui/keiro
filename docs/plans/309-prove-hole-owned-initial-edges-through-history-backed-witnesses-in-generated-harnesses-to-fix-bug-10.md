@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-13T13:54:49Z
+  revisions:
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-13T23:24:11Z
+      mode: "implement"
+      note: "Implement BUG-10 history-backed initial-hole harness evidence and conformance proofs"
 ---
 
 # Prove hole-owned initial edges through history-backed witnesses in generated harnesses to fix BUG-10
@@ -77,10 +83,10 @@ later steps that this plan names but does not perform.
 
 
 - [x] (2026-10-13) Milestone 0: validate BUG-10 from source, reproduce the generated probe shape with the public scaffolder, create this plan with its intention, link it from the bug report body, log, and index, and run `just bug-reports-validate`.
-- [ ] Milestone 1: add `keiro-dsl/test/fixtures/history-dependent-holes.keiro`, its consumer `Domain` and `Bindings` modules, scaffold it with the public CLI into `keiro-dsl/test/conformance-history-dependent-holes/`, and force-add the scaffold ledger and Cabal fragment.
-- [ ] Milestone 1: fill `HistoryDependentHoles/Assignment/Holes.hs` (set inserts, live clear requires membership, replay-only clear deletes unconditionally) and `BehaviorHoles.hs` (history-backed live clear witness, replay-only empty clear witness).
-- [ ] Milestone 1: add the suite driver `Main.hs` and the `keiro-dsl-conformance-history-dependent-holes` test-suite stanza; run it before the repair and record the two `FAIL` rows beside the passing behavior report in Surprises & Discoveries.
-- [ ] Milestone 1: set BUG-10 `status: confirmed`, advance `generated`, and log the confirmation.
+- [x] (2026-10-13T23:29Z) Milestone 1: add `keiro-dsl/test/fixtures/history-dependent-holes.keiro`, its consumer `Domain` and `Bindings` modules, scaffold it with the public CLI into `keiro-dsl/test/conformance-history-dependent-holes/`, and force-add the scaffold ledger and Cabal fragment.
+- [x] (2026-10-13T23:29Z) Milestone 1: fill `HistoryDependentHoles/Assignment/Holes.hs` (set inserts, live clear requires membership, replay-only clear deletes unconditionally) and `BehaviorHoles.hs` (history-backed live clear witness, replay-only empty clear witness).
+- [x] (2026-10-13T23:41Z) Milestone 1: add the suite driver `Main.hs` and the `keiro-dsl-conformance-history-dependent-holes` test-suite stanza; run it before the repair and record the two `FAIL` rows beside the passing behavior report in Surprises & Discoveries.
+- [x] (2026-10-13T23:44Z) Milestone 1: set BUG-10 `status: confirmed`, advance `generated`, and log the confirmation.
 - [ ] Milestone 2: export `behaviorRequirementsFor` from `Keiro.Dsl.Scaffold`; add `behaviorObligationReport` to every generated `BehaviorContract` by sharing the coverage-report body.
 - [ ] Milestone 2: split initial live entries in `Keiro.Dsl.Harness` by ownership; emit witness-backed `accept<Command>`/`forwardReplay<Command>` helpers for hole-owned edges; gate the `step`/`applyEventsEither`/`(!)` imports and the `OverloadedLabels` pragma on the synthetic bucket; import `BehaviorHoles` and `BehaviorContract` only when a hole-owned initial edge exists.
 - [ ] Milestone 2: add focused generator tests to `keiro-dsl/test/Main.hs` (witness rows for hole-owned edges, unchanged synthetic rows for generated edges, replay-only still excluded, import gating when every initial edge is hole-owned, repeat scaffold byte stability).
@@ -94,8 +100,27 @@ later steps that this plan names but does not perform.
 ## Surprises & Discoveries
 
 
-(None yet.)
+- The generated Hole stub has write indices `writes writes`, which only fits a
+  guard-only fill. Keiki's slot assignment extends the write list. The three
+  fixture signatures therefore use `'[] '["values"]` and import `(=:)` so the
+  map writes type-check. This is a consumer fill, with the generated envelope
+  and first-fold tokens preserved.
 
+
+- The pre-repair fixture exits 1 with exactly these two harness failures while
+  the behavior report passes:
+
+  ```text
+  FAIL  accepts ClearProperty from AssignmentActive
+  FAIL  forward/replay equality: ClearProperty from AssignmentActive -- forward step accepted
+  failed: 0
+  PASS  behavior conformance passes
+  ```
+
+  The initial compile hit unused imports for a register-only opaque mapping.
+  The reproduction command adds `--ghc-options=-Wno-unused-imports` solely to
+  reach these assertions before the narrow import fix. The repaired fixture
+  must compile under the repository's ordinary strict warning policy.
 
 ## Decision Log
 
@@ -164,6 +189,19 @@ later steps that this plan names but does not perform.
   text but did not execute a failing assertion.
   Date: 2026-10-13
 
+
+- Decision: Capture the workspace reproduction before repairing the generator,
+  avoiding a stash/regenerate round trip. Also omit register-only opaque fixture
+  imports from harness planning: Domain owns those initials and the harness
+  does not sample their fixture values.
+  Rationale: the new fixture exposed unused imports promoted to errors by the
+  conformance warning policy; narrowing imports preserves every executed probe.
+  Date: 2026-10-13
+
+- Decision: Test legacy probes with a small inline Language 1 aggregate.
+  Rationale: `conformance-coldstart` now uses Language 4, so it cannot prove
+  `LegacyHoleImplementation` preservation as the original plan suggested.
+  Date: 2026-10-13
 
 ## Outcomes & Retrospective
 
@@ -477,7 +515,9 @@ git add -f keiro-dsl/test/conformance-history-dependent-holes/keiro-dsl-ledger.c
 ```
 
 Fill `keiro-dsl/test/conformance-history-dependent-holes/HistoryDependentHoles/Assignment/Holes.hs`.
-Keep the generated signatures and fold-version tokens; replace the three stub bodies:
+Keep the generated payload/envelope types and fold-version tokens; replace the
+write indices `writes writes` with `'[] '["values"]`, import `Keiki.Builder ((=:))`,
+and replace the three stub bodies:
 
 ```haskell
 transition1ActiveSetPropertyHole d = B.do
@@ -732,10 +772,9 @@ Third, add tests to `keiro-dsl/test/Main.hs` beside the layout test near line 40
 - "omits Keiki stepping imports when every initial edge is hole-owned": a spec whose only
   initial live edges are holes; assert `step` and `applyEventsEither` are absent from the
   `Keiki.Core` import line and the `OverloadedLabels` pragma is absent.
-- "keeps legacy version-1 initial probes unchanged": reuse an existing version-1 fixture
-  (for example the one `conformance-coldstart` is scaffolded from) and assert its harness
-  text is byte-identical before and after by comparing against the committed
-  `Generated/…/Harness.hs` of that suite apart from the banner.
+- "keeps legacy version-1 initial probes unchanged": use a small inline Language 1 aggregate and assert that its Hole transducer
+  import, synthetic initial step, and forward/replay helper remain present,
+  without a behavior-contract import. `conformance-coldstart` is Language 4.
 - "keeps the history-dependent fixture byte-identical across repeat scaffolds": scaffold
   `test/fixtures/history-dependent-holes.keiro` twice into a temp directory with
   `runKeiroDsl` and compare `treeSnapshot`s, modelled on the behavior-complete test near
@@ -1069,7 +1108,8 @@ behaviorObligationReport :: BehaviorKey -> [BehaviorWitness] -> BehaviorConforma
 
 with the law that `behaviorObligationReport key witnesses` equals the full
 `behaviorCoverageReport` projected onto `key`: its `reportRequired` is `[key]` when `key` is
-a requirement and `[]` otherwise, and its `reportStale` is always `[]`.
+a requirement and `[]` otherwise, and its `reportStale` is `[]` for a known requirement key; an unknown key
+with a supplied matching witness is reported stale.
 
 In `keiro-dsl/src/Keiro/Dsl/Harness.hs`, after Milestone 2:
 
@@ -1096,3 +1136,6 @@ New committed artifacts: `keiro-dsl/test/fixtures/history-dependent-holes.keiro`
 `keiro-dsl/test/conformance-service-package/domain/assignment.keiro` with its runtime
 modules and fills; `keiro-dsl/test/history-dependent-holes-mutation-test.sh`; the
 `initial-hole-proof` recipe in `justfile`.
+
+Revision note (2026-10-13): implementation began with scaffolded single-spec and
+workspace reproductions; filled Hole signatures explicitly account for their register write.

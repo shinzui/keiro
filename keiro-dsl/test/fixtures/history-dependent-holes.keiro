@@ -1,0 +1,48 @@
+language keiro-dsl 6
+context history-dependent-holes
+
+mapped opaque PropertyValues {
+  haskell package=keiro-dsl module=Conformance.HistoryDependentHoles.Domain type=PropertyValues
+  codec = "conformance.history-dependent-holes.PropertyValues.json"
+  version = "1"
+  fixtures = "Conformance.HistoryDependentHoles.Bindings.propertyValuesCases"
+  initial = "Conformance.HistoryDependentHoles.Bindings.emptyPropertyValues"
+}
+
+aggregate Assignment
+  regs
+    values PropertyValues = initial
+  states Active
+
+  command SetProperty { key:Text value:Text }
+  command ClearProperty { key:Text }
+  command Touch { note:Text }
+
+  event PropertySet = fields(SetProperty)
+  event PropertyCleared = fields(ClearProperty)
+  event Touched = fields(Touch)
+
+  # Hole-owned: insert key -> value.
+  Active -- SetProperty -->
+    implementation hole
+    emit PropertySet
+    goto Active
+
+  # Hole-owned: the key must already be present; delete it.
+  Active -- ClearProperty -->
+    implementation hole
+    emit PropertyCleared
+    goto Active
+
+  # Generated-owned: keeps the ordinary synthetic probe.
+  Active -- Touch -->
+    emit Touched
+    goto Active
+
+  # Retained history: clears of absent keys appended under a retired rule.
+  replay-only Active -- ClearProperty -->
+    implementation hole
+    emit PropertyCleared
+    goto Active
+
+  wire kind=ctorName fields=camelCase schemaVersion=1
