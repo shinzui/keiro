@@ -2,7 +2,7 @@
 type: Research Document
 title: "Containers in Public Contract Fields: A Postponed Decision"
 description: Record why integration-contract fields stay flat scalars for now, what supporting Optional, List, or Map fields on public events would cost, and what must be decided before that changes.
-timestamp: "2026-09-17T13:26:25Z"
+timestamp: "2026-10-13T15:16:00Z"
 researchId: RES-18
 status: active
 scope: Whether keiro-dsl integration contract event fields should admit Optional, List, or Map shapes, and under which rules; the decision is deliberately postponed.
@@ -134,6 +134,24 @@ unless the consumer of the public event is itself a keiro service and the answer
 is a deliberate yes; record the outcome as an ADR that amends ADR 13's separately-owned
 grammar stance, and file an improvement request if the demand comes from another repository.
 
+
+## Revisit (2026-10-13)
+
+The trigger named above arrived. IR-54
+([Support list fields in integration contracts](../improvement-requests/support-list-fields-in-integration-contracts.md)),
+raised from `mori://tan/notification-render-service`, has a public event that must name every
+template one domain event touched and cannot be flattened without multiplying outbox rows or
+changing the wire contract. ExecPlan 312
+(`docs/plans/312-support-list-fields-in-integration-contracts.md`) adopts Option B restricted
+to `List` of an admitted scalar: no `Optional`, no `Map`, no nesting, and no structural
+references (Option C). Its Decision Log answers the five questions above for that scope: the
+public surface stays expressible without Keiro; the null-versus-missing question is avoided
+because a missing key is rejected and no `Optional` is admitted; one failing element rejects
+the whole event and is reported at `$.<wireKey>[<index>]`; the evolution table is the existing
+contract table plus the shape dimension; and a JSON array of scalars renders as an array of
+the element schema under JSON Schema or Avro. The ADR that records the outcome is written in
+that plan's first milestone, and this note remains the record of the options for the day
+`Optional` or `Map` is requested.
 
 ## Related
 

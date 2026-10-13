@@ -6,13 +6,14 @@ description: >-
   typeid, text or int), lowered to a Haskell list and a JSON array by the generated codec and
   governed by diff as public contract evolution, so a service whose integration message names
   several entities at once can keep that contract DSL-owned instead of hand-writing its codec.
-timestamp: 2026-10-07T06:30:00Z
+timestamp: 2026-10-13T15:16:00Z
 generated:
   by: process:claude-code
   at: 2026-10-07T06:30:00Z
 requestId: IR-54
-status: proposed
+status: accepted
 origin: mori://tan/notification-render-service
+plan: docs/plans/312-support-list-fields-in-integration-contracts.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -28,13 +29,40 @@ reviews:
       Parser/Integration (pContractType), Scaffold (contractValueType, encodeField, decodeField),
       Diff (contractFieldIdDomain) and the released 0.18.0.0 sources; consumer evidence read in
       mori://tan/notification-render-service. Independent review is pending.
+  - kind: model
+    reviewer: claude-code
+    reviewed_at: 2026-10-13T15:16:00Z
+    document_timestamp: 2026-10-07T06:30:00Z
+    scope: technical-accuracy
+    outcome: approved
+    provider: anthropic
+    model: claude-fable-5-1
+    effort: high
+    context: >-
+      Owner validation at Keiro 977ee434 (the merge of pull request #8) against master after
+      0.20.0.0. ContractType in keiro-dsl/src/Keiro/Dsl/Grammar.hs is the four scalar
+      constructors and pContractType in Parser/Integration.hs parses only those; the cited
+      Scaffold and Diff locations are exact and unchanged since b5ad9d57. `keiro-dsl check` on a
+      Language 6 contract declaring `templateIds: List TemplateId` fails to parse because `List`
+      is consumed as a declared-id name, while the scalar form checks OK. The consumer's private
+      List fields were confirmed at notification-renderer-domain/domain/notification-type.keiro
+      lines 123, 187, 252 and 326 (the request's path omitted the package directory). RES-18
+      recorded this decision as postponed until a producer brought an unflattenable public event;
+      this request is that trigger. Accepted and planned as ExecPlan 312 (RES-18 Option B, List
+      only).
 ---
 
 # Improvement Request: Support List Fields in Integration Contracts
 
 ## Status
 
-Proposed.
+Accepted on 2026-10-13 and planned as
+[ExecPlan 312](../plans/312-support-list-fields-in-integration-contracts.md), which adopts
+Option B of [RES-18](../research/15-containers-in-public-contract-fields.md): `List` of an
+admitted scalar inside the separately owned contract grammar, gated on candidate Language 6,
+with strict decoding, a rejected missing key, and no `Optional`, `Map`, or nesting. A list
+field is refused as a publisher `outboxId` or an intake `dedupe` key. Implementation has not
+started.
 
 Raised by `mori://tan/notification-render-service`, the notification renderer's Haskell domain
 service, from its ExecPlan 17 (`docs/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox.md`).
