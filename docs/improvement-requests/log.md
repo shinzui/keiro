@@ -12,6 +12,9 @@
 * **Planning**: IR-53 accepted for planning under ExecPlan 306: scope the opt-in guard to synchronous catalog commands, validate fences and serving bindings before the guard, and require same-database concurrency proofs and mixed-workload benchmarks for the global append lock cost. Implementation, publication, and downstream adoption remain separate work.
 * **Addition**: IR-53 proposes atomic consumer-owned relational preconditions for catalog domain commands, raised from mori://shinzui/rei/plans/249-expose-categories-and-custom-properties-with-shared-typed-assignment-semantics. Owner evaluation must precede implementation; no package or release change is authorized.
 
+## 2026-10-07
+* **Addition**: IR-54 requests list fields in integration contracts (`List <declared id | typeid | text | int>`), lowered to a Haskell list and a JSON array by the generated codec and governed by diff as public contract evolution, because a contract today admits only four scalar types while private events carry `List`; raised from mori://tan/notification-render-service, whose change signal must name every template one event touched and is hand-writing its codec meanwhile.
+
 ## 2026-10-01
 * **Addition**: IR-52 requests that Keiro populate Kiroku's typed correlationId and causationId on every appended event and every process-manager-dispatched command, seeded from a caller-supplied correlation id, because the codec writes both as Nothing today; raised from mori://shinzui/shoko for migration and keiro-native verification (RES-1).
 
