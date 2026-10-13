@@ -13,6 +13,7 @@
 ## 2026-09-30
 * **Update**: BUG-7 is tracked by ExecPlan 301, which confirms from adapter and shibuya source that the retry ceiling runs on the adapter's source stream before the supervised runner opens the process span, and plans the fix inside keiro's handler.
 * **Update**: Audit all seven lifecycle statuses and plan coverage: BUG-1/BUG-2 remain duplicate with completed plans 297/298; BUG-4/BUG-6 link unimplemented plan 300; BUG-5 links unimplemented plan 299; BUG-3/BUG-7 remain reported with no plan addressing their specific failures. Add per-report implementation notes and the index summary.
+* **Addition**: BUG-12 records keiro-ops reporting Keiro's own `external_read_<function>_binding` view as schema drift, because the expected snapshot is generated from migrations alone; every mutating operator command on a service with an all-rows external-read contract refuses without `--allow-schema-drift`.
 
 ## 2026-09-28
 * **Addition**: BUG-11 records released read-model generation producing different definition and harness-import spellings when a snake-case name contains the Haskell keyword segment `type`; an untouched minimal harness fails compilation and a renamed control succeeds.
