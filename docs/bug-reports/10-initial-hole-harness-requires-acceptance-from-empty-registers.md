@@ -4,13 +4,15 @@ title: Initial hole harness requires acceptance from empty registers despite his
 description: Keiro DSL generates false failing acceptance and forward/replay probes for an initial-vertex implementation hole whose valid live command requires retained history.
 generated:
   by: process:codex
-  at: "2026-10-13T23:30:02Z"
+  at: "2026-10-14T00:46:32Z"
 bugId: BUG-10
-status: confirmed
+status: fixed
 severity: unusable
 origin: mori://shinzui/rei/plans/272-separate-rei-command-invariants-from-asynchronous-query-projections
 affects: mori://shinzui/keiro/packages/keiro-dsl
 affectedVersion: "0.20.0.0"
+fixedVersion: "unreleased"
+resolution: Hole-owned live initial harness rows now execute exactly one history-backed witness through the generated behavior contract, enforcing exact edge attribution, expected emissions, persisted-codec replay, and final register equality.
 environment: Rei revision eaa401e1e9ea21c4b7fdcfb445461b2891c5cb14, Language 6 workspace with 33 members, released DSL 0.20.0.0, GHC 9.12.4 in the Nix development shell on aarch64-darwin.
 observed: The generated whole-service conformance suite fails acceptClearProperty and forwardReplayClearProperty because both step from the empty initial value map, while the live clear hole correctly requires membership and its history-backed behavior witness passes.
 expected: The documented consumer-compiled harness should validate a legitimate implementation hole using its typed history-backed witness, preserving exact edge attribution and persisted-codec replay equality, without requiring every live edge at the initial vertex to accept from initial registers.
@@ -41,7 +43,8 @@ runtime guard and history-backed behavior tests pass. Severity describes that
 unusable gate; no data loss or runtime rejection defect is observed. No sanctioned
 gate workaround is known. The owner has now reproduced the defect in
 `keiro-dsl-conformance-history-dependent-holes`: both initial clear rows fail
-while its history-backed behavior report passes. The lifecycle is `confirmed`.
+while its history-backed behavior report passes. The repair passed the owning repository's full verification gate and is `fixed`
+with `fixedVersion: unreleased`.
 
 ## Observed reproduction
 
@@ -138,8 +141,8 @@ acceptance or replay obligations.
 
 Do not seed production initial registers, remove the membership guard, change
 replay semantics or event wire shapes, hand-edit generated consumer files, or
-suppress these failures as acceptance. This report authorizes investigation only;
-no producer implementation, version bump or release was performed.
+suppress these failures as acceptance. The original report requested investigation. Plan 309 now implements and verifies
+the producer repair; publication and consumer adoption remain follow-ups.
 
 ## Tracking
 
@@ -151,4 +154,9 @@ generated probe shape by scaffolding a minimal hole-owned initial self-loop with
 0.20.0.0 generator. The generated whole-service conformance package composes only
 `harnessAssertions`, so the consumer's behavior witnesses never run in that gate. The compiled fixture and generated whole-service package now reproduce both
 failing clear rows in this repository, while the fixture's behavior report passes.
-BUG-10 is `confirmed`; plan 309 records `fixed` after the full verification gate.
+BUG-10 is `fixed` with `fixedVersion: unreleased`: the aggregate and generated
+whole-service proofs pass, all eight dishonest-witness mutations fail by name,
+repeat scaffolding is byte-stable, and `nix develop -c just verify` records
+`EXIT=0`. Generated-owned probes, replay/wire semantics, fold fingerprints, and
+snapshot identity are preserved. A released repair must still be adopted in
+`mori://shinzui/rei` and its full `keiro-gate` rerun.

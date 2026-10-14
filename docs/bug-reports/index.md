@@ -37,7 +37,7 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-7](7-pre-handler-dead-letter-has-no-process-span.md) | `reported` | [301](../plans/301-trace-pre-handler-dead-letters-on-the-continuous-job-worker-to-fix-bug-7.md) | Unimplemented; 0/12 progress items checked. |
 | [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
-| [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `confirmed` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | In progress; compiled aggregate and whole-service fixtures reproduce both clear failures while the history-backed behavior report passes. |
+| [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `fixed` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Completed; history-backed initial-hole acceptance and persisted-codec replay pass aggregate and whole-service proofs, all eight witness mutations fail by name, and the full verification gate passes. Fixed version: `unreleased`. |
 | [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `confirmed` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Unimplemented; reproduced by the owning repository on master after 0.20.0.0 with the report's minimal spec and GHC 9.12.4 (transcript under `evidence/`). Reported through GitHub PR #6 as BUG-8 and renumbered on merge because BUG-8 was already allocated. |
 | [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `reported` | [311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md) | Unimplemented; 0/12 progress items checked; source-level cause validated by the owning repository on master after 0.20.0.0 (binding view created at reconciliation, snapshot lists every view, expected snapshot carries only `projection_group_status_v1`). Reported through GitHub PR #7 as BUG-9 and renumbered on merge because BUG-9 was already allocated. |
 
@@ -45,7 +45,8 @@ BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
 assertions share one reproduction. Later that day the owning repository validated the
 generator diagnosis from source and wrote plan 309. Its compiled aggregate and
 generated whole-service fixtures reproduce the two failures, while its behavior
-report passes, so the status is `confirmed` pending the full repair gate. It is separate from
+report passes. Plan 309's repair now passes the full verification gate and all
+witness mutations, so BUG-10 is `fixed` with `fixedVersion: unreleased`. It is separate from
 completed IR-18's replay-only mode/layout repair.
 
 BUG-11 was merged from GitHub PR #6 on 2026-10-13. The owning repository reproduced

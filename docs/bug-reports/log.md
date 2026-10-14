@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-14
+* **Update**: BUG-10 fixed/unreleased: history-backed aggregate and whole-service proofs, all eight witness mutations, corpus freshness, and the full Nix-shell verification gate pass.
+
 ## 2026-10-13
 * **Update**: BUG-10 confirmed: the compiled history-dependent fixture fails both initial clear harness rows while its behavior report passes.
 * **Update**: BUG-12 is tracked by ExecPlan 311, which makes live-schema verification consult keiro.keiro\_managed\_read\_objects so runtime-created binding views are expected while unregistered views stay reported; status remains reported until the compiled fixture fails.

@@ -96,14 +96,14 @@ later steps that this plan names but does not perform.
 - [x] (2026-10-13) Milestone 3: add `domain/assignment.keiro` to the service-package workspace with its consumer modules and fills, extend the runtime library's module list and the CLI idempotency test's source list, regenerate, and pass `keiro-workspace-proof-conformance`.
 - [x] (2026-10-13) Milestone 4: add `keiro-dsl/test/history-dependent-holes-mutation-test.sh` proving named failures for every mutation BUG-10 lists, and wire it into `just verify` through a new `initial-hole-proof` recipe.
 - [x] (2026-10-13) Milestone 5: update `docs/user/replay-safety.md`, `docs/user/keiro-dsl-workspaces-and-generated-code.md`, and `docs/guides/choosing-keiro-dsl.md`; add Unreleased changelog entries; amend ADR-17; validate every bundle.
-- [ ] Milestone 5: run `nix develop -c just verify` and read the exit marker inside the log; set BUG-10 to `fixed` with `fixedVersion: unreleased` and a `resolution`; update the bug-report index table; write Outcomes & Retrospective and the ADR distillation pass.
+- [x] (2026-10-14T00:46:32Z) Milestone 5: run `nix develop -c just verify` and read the exit marker inside the log; set BUG-10 to `fixed` with `fixedVersion: unreleased` and a `resolution`; update the bug-report index table; write Outcomes & Retrospective and the ADR distillation pass.
 
 
 ## Surprises & Discoveries
 
 
 - The generated Hole stub has write indices `writes writes`, which only fits a
-  guard-only fill. Keiki's slot assignment extends the write list. The three
+  guard-only fill. Slot assignment in `mori://shinzui/keiki/packages/keiki` extends the write list. The three
   fixture signatures therefore use `'[] '["values"]` and import `(=:)` so the
   map writes type-check. This is a consumer fill, with the generated envelope
   and first-fold tokens preserved.
@@ -184,6 +184,20 @@ later steps that this plan names but does not perform.
   initial-hole witness mutations, replay compatibility, and checked-mapping
   adoption. Their execution restores every mutated source to its committed bytes.
   A fresh full `just verify` run is still required for the final `EXIT=0` marker.
+
+- The final full repository gate completes with:
+
+  ```text
+  796 examples, 0 failures
+  Test suite keiro-dsl-test: PASS
+  36 examples, 0 failures
+  Test suite keiro-migrations-test: PASS
+  EXIT=0
+  ```
+
+  All 56 DSL suites, both new compiled proofs, corpus freshness, and the
+  eight-case initial-hole recipe pass on the repaired tree. BUG-10 is now
+  `fixed`/`unreleased`, with release and consumer adoption retained as follow-ups.
 
 ## Decision Log
 
@@ -275,7 +289,33 @@ later steps that this plan names but does not perform.
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+Implementation is complete. The producer fixture first reproduced the two false
+initial-clear rows while its behavior report passed. Hole-owned live initial
+edges now use the consumer's exact, history-backed witness through the shared
+behavior runner. Generated-owned probes and replay-only phase selection retain
+their previous behavior. Both compiled aggregate and generated whole-service
+proofs pass, including empty live-clear refusal and exact historical replay-only
+attribution. All eight invalid-witness mutations fail through named rows and
+restore a passing baseline.
+
+The final Nix-shell repository gate records `EXIT=0` in
+`/tmp/keiro-verify-309.log`. All 56 DSL suites pass; the main suite reports 796
+examples with zero failures. Corpus freshness, strict fixture compilation,
+repeat single-spec/workspace scaffolding, runtime suites, documentation bundles,
+record/name policies, reaction/hydration proofs, replay compatibility, checked
+mapping adoption, and 36 migration examples pass. The original plan omitted two
+fixture inventories and the generated record manifests; registering and
+regenerating them completed the repository's required checks.
+
+Durable context is distilled into ADR-17: harness evidence follows transition
+ownership, uses the existing behavior runner, and remains finite evidence with
+honest unverified Hole status. Reviewing the decisions, discoveries, and this
+outcome found no further architectural decision requiring a new ADR. There are
+no new library dependencies or production wire, fold, replay, or snapshot
+identity changes. BUG-10 is fixed with `fixedVersion: unreleased`. Publishing a
+repair and adopting it in `mori://shinzui/rei`, followed by that consumer's
+`nix develop -c just keiro-gate`, remain separate follow-ups.
+
 
 
 ## Context and Orientation
@@ -1243,3 +1283,7 @@ an additional duplicate run of its isolated workspace compilation test.
 Revision note (2026-10-14): the full gate exposed stale generated record inventories.
 Refreshed both through the repository generator, reviewed their source-line and
 new-fixture changes, and passed every remaining recipe before the full rerun.
+
+Revision note (2026-10-14): completed the full gate with EXIT=0, marked BUG-10
+fixed/unreleased, updated its index and resolution, completed all Progress items,
+and recorded the retrospective and ADR-17 distillation pass.
