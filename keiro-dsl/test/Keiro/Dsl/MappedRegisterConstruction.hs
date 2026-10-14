@@ -75,13 +75,21 @@ mappedRegisterConstructionSpec = describe "mapped register construction" $ do
     errors arithmetic `shouldBe` []
   it "diagnoses command initial shadowing and preserves continued initial paths" $ do
     let source rhs = T.unlines ["language keiro-dsl 6", "context roots", "aggregate Roots", "  regs value Int = 0", "  states Empty Done!", "  command Set { initial:Int }", "  event SetEvent = fields(Set)", "  Empty -- Set -->", "    write value := " <> rhs, "    emit SetEvent", "    goto Done", "  wire kind=ctorName fields=camelCase schemaVersion=1"]
-    shadow <- parseChecked (source "initial")
-    codes shadow `shouldContain` [AggregateExpressionWriteInitialShadowed]
+    forM_ ["initial", "(initial)", "((initial))"] $ \rhs -> do
+      shadow <- parseChecked (source rhs)
+      codes shadow `shouldContain` [AggregateExpressionWriteInitialShadowed]
     qualified <- parseChecked (source "cmd.initial")
     errors qualified `shouldBe` []
     continued <- parseChecked (source "initial.field")
     codes continued `shouldContain` [AggregateExpressionPathInvalid]
     codes continued `shouldSatisfy` (not . elem AggregateExpressionWriteInitialShadowed)
+  it "keeps initial-named ID literal syntax outside the contextual construction marker" $ do
+    let source version = T.unlines ["language keiro-dsl " <> version, "context roots", "aggregate Roots", "  regs value Int = 0", "  states Empty Done!", "  command Set { value:Int }", "  event SetEvent = fields(Set)", "  Empty -- Set -->", "    write value := initial(\"example\")", "    emit SetEvent", "    goto Done", "  wire kind=ctorName fields=camelCase schemaVersion=1"]
+    old <- parseChecked (source "5")
+    new <- parseChecked (source "6")
+    let expressions service = map (canonicalExpr . snd) (concatMap (.writes) (aggregate service).transitions)
+    expressions old `shouldBe` ["initial(\"example\")"]
+    expressions new `shouldBe` expressions old
   it "rejects absent lifts, incomplete blocks, and duplicate declarations at their boundary" $ do
     source <- fixture
     let withoutLift = T.unlines (takeWhile (not . T.isInfixOf "write-lift from") (T.lines source)) <> "}\n" <> snd (T.breakOn "aggregate Lifecycle" source)

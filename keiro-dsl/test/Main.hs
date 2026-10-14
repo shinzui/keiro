@@ -1967,6 +1967,7 @@ main = hspec $ do
             "language-misplaced.keiro",
             "language-v1.keiro",
             "language-zero.keiro",
+            "mapped-register-construction.keiro",
             "mapped-keyed-map-enum-key.keiro",
             "mapped-keyed-map-language5.keiro",
             "mapped-nominal-leaf-default.keiro",

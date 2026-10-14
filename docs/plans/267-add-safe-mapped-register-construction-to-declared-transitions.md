@@ -74,6 +74,8 @@ construction remains outside the language. It also does not relax
 ## Progress
 
 
+- [x] (2026-10-14) Full corpus regeneration: 57 entries, source/suite and record/disk consistency pass, with no generated changes. `cabal build all --enable-tests --enable-benchmarks` passes. Focused construction regressions now pass 26 examples, including parenthesized initial shadowing and ID literal preservation.
+
 - [x] (2026-10-14) Recheck Hackage and upstream release tag, verify Z3 4.16.0 in Nix, and rerun all eight retained feasibility assertions successfully.
 
 - [x] (2026-10-14) Review against Keiro `65702725` and update the replay-impact,
@@ -108,6 +110,10 @@ construction remains outside the language. It also does not relax
 
 ## Surprises & Discoveries
 
+
+- Observation (2026-10-14 implementation): installed `mori v6.0.0.0 (9b6d0e1)` imposes native request metadata beyond the pinned local OKF profile: the full improvement-request command reports 74 missing `generated`/`completedAt` fields across existing requests, while strict pinned-profile validation passes all 54 concepts. This is not caused by mapped construction. Keep IR-34 accepted until the extra metadata gate is reconciled; do not invent historical authorship or completion times for unrelated requests.
+
+- Observation (2026-10-14 implementation): conformance discovery reads tracked ledger paths. New ledger/fragment sidecars match repository ignores and therefore require explicit force-add for this curated corpus. The first full regeneration left all pre-existing files unchanged but failed suite coverage until those new sidecars were tracked. A concurrent Cabal build/test run also collided on `Main.o.tmp`; serialize all remaining Cabal gates rather than share one build directory concurrently.
 
 - Observation (2026-10-14 implementation): the Nix/Cabal environment can register two instances of released Keiki 0.9.1.0. Fresh-stub compiler tests must use the exact selected package ID from Cabal `plan.json`, following the existing structural skeleton test, rather than `-package keiki`. The first strict stub test exposed this ambiguity; it was an environment selection issue, not a type/import workaround.
 
@@ -320,6 +326,8 @@ construction remains outside the language. It also does not relax
 
 ## Decision Log
 
+
+- Decision (2026-10-14 implementation): classify complete unqualified `initial` RHSs after the ordinary scalar parse, including redundant parentheses. This preserves `initial.field`, arithmetic, qualified roots, and initial-named ID literal syntax while preventing parentheses from bypassing shadowing and then losing their meaning during canonical rendering. Claim `mapped` only when its opening parenthesis follows, so legacy invalid bare-keyword diagnostics retain their parser path.
 
 - Decision (2026-10-14 implementation): lift-only metadata findings also bypass inherited projection findings. The primary mapped-build advisory already records consumer paths; adding projection review/rebuild consequences would incorrectly imply changed event or projection behavior for an unused register constructor. A dedicated event/queue/query/projection-only regression pins the complete vector and replay neutrality.
 

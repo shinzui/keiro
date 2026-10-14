@@ -24,19 +24,15 @@ pWriteExpr context = mappedWrite <|> initialWrite
   where
     mappedWrite = do
       loc <- getLoc
-      marker <- withOwnedSpan (keyword "mapped")
+      marker <- withOwnedSpan (try (keyword "mapped" <* lookAhead (symbol "(")))
       requireLanguageFeatureAt context MappedRegisterConstructionSyntax (spanOf marker)
       EWriteMapped loc <$> parens (pExpr context)
     initialWrite
-      | frontendSupportsFeature context MappedRegisterConstructionSyntax =
-          try
-            ( do
-                loc <- getLoc
-                keyword "initial"
-                notFollowedBy (choice [symbol token | token <- [".", "+", "-", "*", "/", "%", "==", "!=", "<", ">", "&&", "||"]])
-                pure (EWriteInitial loc)
-            )
-            <|> pExpr context
+      | frontendSupportsFeature context MappedRegisterConstructionSyntax = do
+          expression <- pExpr context
+          pure $ case expression of
+            EPath loc UnqualifiedRoot ["initial"] -> EWriteInitial loc
+            _ -> expression
       | otherwise = pExpr context
 
 pExpr :: FrontendContext -> P Expr
