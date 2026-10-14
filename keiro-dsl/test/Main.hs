@@ -8488,6 +8488,113 @@ main = hspec $ do
       codes `shouldContain` [TopicAffinityMismatch]
 
   describe "contract list fields" $ do
+    let probeSource declarations fields =
+          T.unlines
+            [ "language keiro-dsl 6",
+              "context parser-probe",
+              declarations,
+              "contract notices { schemaVersion 1 discriminator kind topic notices \"probe.notices\"",
+              "event Noticed on notices { " <> fields <> " } }"
+            ]
+        probeFields service =
+          [ ((.name) field, (.selector) field, (.wireKey) field, (.valueType) field)
+          | NContract contract <- (.nodes) (checkedSpec service),
+            event <- (.events) contract,
+            field <- (.fields) event
+          ]
+        checkProbe source = do
+          service <- checkedServiceFromText "parser-probe.keiro" source
+          validateService service `shouldBe` []
+          parsed <- either (\failure -> expectationFailure (show failure) >> fail "unreachable") pure (parseSource "parser-probe.keiro" source)
+          parseSource "parser-probe-pretty.keiro" (renderSource parsed) `shouldBe` Right parsed
+          pure service
+
+    forM_ ["Optional", "Map", "Set", "List", "Listing", "OptionalId", "MapId", "SetId", "ListId", "List_Id"] $ \nominal ->
+      it ("preserves scalar and list ASTs for declared " <> T.unpack nominal) $ do
+        service <- checkProbe (probeSource ("id " <> nominal <> " prefix=probe") ("value: " <> nominal <> " values: List " <> nominal))
+        probeFields service `shouldBe` [("value", Nothing, Nothing, CScalar (CDeclaredId nominal)), ("values", Nothing, Nothing, CList (CDeclaredId nominal))]
+
+    forM_ ["}", "; other: text }", "other: text }", "other haskell selected as \"wire_other\": text }", "other as \"wire_other\": text }", "# next field\n other haskell selected: text }"] $ \ending ->
+      it ("recognizes bare List at a field boundary: " <> T.unpack ending) $ do
+        let source = T.dropEnd 4 (probeSource "id List prefix=probe" "value: List") <> " " <> ending <> " }\n"
+        service <- checkProbe source
+        head (probeFields service) `shouldBe` ("value", Nothing, Nothing, CScalar (CDeclaredId "List"))
+        case drop 1 (probeFields service) of
+          [] -> ending `shouldBe` "}"
+          [(name, selector, wireKey, ty)] -> do
+            name `shouldBe` "other"
+            selector `shouldBe` (if "haskell" `T.isInfixOf` ending then Just "selected" else Nothing)
+            wireKey `shouldBe` (if " as " `T.isInfixOf` ending then Just "wire_other" else Nothing)
+            ty `shouldBe` CScalar CText
+          other -> expectationFailure (show other)
+
+    forM_ ["Optional", "Map", "Set", "List", "list", "LIST", "LiSt"] $ \nominal ->
+      it ("validates an unresolved bare " <> T.unpack nominal <> " as an unknown ID") $ do
+        service <- checkedServiceFromText "unknown-contract-id.keiro" (probeSource "" ("value: " <> nominal))
+        [(.code) diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error] `shouldBe` [ContractIdUnknown]
+
+    forM_ ["list", "LIST", "LiSt"] $ \word -> do
+      it ("rejects wrong-case container application " <> T.unpack word <> " at its extra operand") $ do
+        let source = probeSource "" ("values: " <> word <> " text")
+        case parseSurfaceSource "wrong-case-list.keiro" source of
+          Left FrontendFailure {span = SourceSpan {start = SourcePoint {offset = startOffset}}} ->
+            T.take 4 (T.drop startOffset source) `shouldBe` "text"
+          other -> expectationFailure (show other)
+      it ("admits a nominal identifier named " <> T.unpack word) $ do
+        service <- checkProbe (probeSource ("id " <> word <> " prefix=probe") ("value: " <> word))
+        probeFields service `shouldBe` [("value", Nothing, Nothing, CScalar (CDeclaredId word))]
+
+    it "preserves exact List applications for every scalar operand" $ do
+      service <- checkProbe (probeSource "id SomeId prefix=probe" "labels: List text positions: List int ids: List typeid \"probe\" named: List SomeId")
+      [ty | (_, _, _, ty) <- probeFields service] `shouldBe` [CList CText, CList CInt, CList (CTypeId "probe"), CList (CDeclaredId "SomeId")]
+
+    it "rejects genuine container applications even when their names are declared IDs" $ do
+      forM_ ["Optional", "Map", "Set", "List"] $ \nominal ->
+        forM_ (filter (/= "List text") [nominal <> " text", "List " <> nominal <> " text"]) $ \ty ->
+          parseSource "malformed-contract.keiro" (probeSource ("id " <> nominal <> " prefix=probe") ("values: " <> ty)) `shouldSatisfy` isLeft
+
+    it "retains scalar built-in and cross-declaration ambiguity checks" $ do
+      forM_
+        [ "id Text prefix=probe",
+          "id List prefix=probe\nenum List { First=first }",
+          "enum Optional { First=first }"
+        ]
+        $ \declarations -> do
+          service <- checkedServiceFromText "ambiguous-types.keiro" (probeSource declarations "value: text")
+          map (.code) (validateService service) `shouldContain` [MappedAmbiguousName]
+
+    it "resolves ambiguous nominal names from a later workspace member" $ do
+      withInlineWorkspace
+        "keiro-contract-nominal-workspace"
+        ( "parser-probe",
+          [ ("contract.keiro", probeSource "" "value: List values: List Optional"),
+            ("ids.keiro", "language keiro-dsl 6\ncontext parser-probe\nid List prefix=list\nid Optional prefix=optional\n")
+          ]
+        )
+        $ \root _ workspace -> do
+          validateService (checkedWorkspace workspace) `shouldBe` []
+          (code, output, err) <- runKeiroDsl ["check", root </> "service.keiro-workspace"]
+          code `shouldBe` ExitSuccess
+          output `shouldContain` "OK"
+          err `shouldBe` ""
+
+    it "scaffolds ambiguous nominal scalars and lists with stable codec shapes" $ do
+      service <- checkProbe (probeSource "id List prefix=list\nid Optional prefix=optional" "value: List values: List List optionalValue: Optional optionalValues: List Optional")
+      let modules = scaffoldServiceModules (defaultContext (checkedSpec service).context) service
+          rendered = generatedTextEndingIn "Notices/Contract.hs" modules
+      scaffoldServiceModules (defaultContext (checkedSpec service).context) service `shouldBe` modules
+      forM_
+        [ "value :: !Nominals.List",
+          "values :: ![Nominals.List]",
+          "optionalValue :: !Nominals.Optional",
+          "optionalValues :: ![Nominals.Optional]",
+          "\"value\" .= NominalLeaves.encodeListLeaf payload.value",
+          "\"values\" .= map NominalLeaves.encodeListLeaf payload.values",
+          "explicitParseField NominalLeaves.parseListLeaf o \"value\"",
+          "explicitParseField (parseContractList NominalLeaves.parseListLeaf) o \"values\""
+        ]
+        $ \fragment -> rendered `shouldSatisfy` T.isInfixOf fragment
+
     it "lowers list fields of every admitted element type" $ do
       service <- checkedServiceOf "test/fixtures/contract-list-fields.keiro"
       let modules = scaffoldServiceModules (defaultContext (checkedSpec service).context) service
@@ -8522,10 +8629,13 @@ main = hspec $ do
 
     it "refuses nested containers in contract list fields without consuming keyword prefixes" $ do
       source <- readTestText "test/fixtures/contract-list-fields.keiro"
-      forM_ ["List List TemplateId", "List list TemplateId", "List map text", "List Optional text", "List Set text", "Optional text", "Map text"] $ \fieldType ->
+      forM_ ["List List TemplateId", "List list TemplateId", "List Optional text", "List Set text", "Optional text", "Map text"] $ \fieldType ->
         case parseSource "nested.keiro" (T.replace "templateIds: List TemplateId" ("templateIds: " <> fieldType) source) of
           Left failure -> renderParseFailure failure `shouldSatisfy` T.isInfixOf "nested containers"
           Right _ -> expectationFailure ("accepted " <> T.unpack fieldType)
+      case parseSource "reserved-map.keiro" (T.replace "templateIds: List TemplateId" "templateIds: List map text" source) of
+        Left failure -> renderParseFailure failure `shouldSatisfy` T.isInfixOf "reserved word map"
+        Right _ -> expectationFailure "accepted List map text"
       listing <- checkedServiceFromText "listing.keiro" (T.replace "TemplateId" "Listing" source)
       validateService listing `shouldBe` []
 

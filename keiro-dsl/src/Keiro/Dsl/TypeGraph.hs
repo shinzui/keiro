@@ -691,7 +691,11 @@ ambiguityErrors spec declarations =
   [ TGAmbiguousName name origins
   | (name, origins) <- Map.toList allOrigins,
     length origins > 1,
-    "mapped" `elem` origins || "built-in" `elem` origins
+    "mapped" `elem` origins || "built-in" `elem` origins,
+    -- Container words introduce applications, not scalar types. A single ID
+    -- with that name is unambiguous in the separately owned contract grammar.
+    -- Retain every collision between declarations and all scalar built-ins.
+    not (name `elem` ["Optional", "List", "Map"] && sort origins == ["built-in", "id"])
   ]
   where
     builtins = ["Text", "Int", "Bool", "Natural", "Time", "UTCTime", "Json", "Optional", "List", "Map"]

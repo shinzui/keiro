@@ -12,7 +12,6 @@ import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion (LanguageFeature (ContractDeclaredIdSyntax, ContractListFieldSyntax, DelegatedInboxSyntax, FieldAliasSyntax))
 import Keiro.Dsl.Parser.Core
 import Text.Megaparsec
-import Text.Megaparsec.Char (char, string')
 
 -- Integration contract (EP-4)
 --------------------------------------------------------------------------------
@@ -61,27 +60,43 @@ pContract context = do
       ty <- pContractType
       _ <- optional (symbol ";")
       pure ContractField {name = n, selector = selector, wireKey = wireKey, valueType = ty, loc = loc}
-    pContractType =
+    pContractType = do
+      ty <-
+        choice
+          [ do
+              -- Recognize application syntax before claiming List's feature.
+              -- Backtracking here must not erase a located feature refusal.
+              _ <- try (lookAhead (keyword "List" *> notFollowedBy pContractTypeBoundary))
+              listKeyword <- withOwnedSpan (keyword "List")
+              requireLanguageFeatureAt context ContractListFieldSyntax (spanOf listKeyword)
+              CList <$> pContractScalarType,
+            CScalar <$> pContractScalarType
+          ]
+      offset <- getOffset
+      boundary <- optional (try (lookAhead pContractTypeBoundary))
+      case boundary of
+        Just () -> pure ty
+        Nothing -> failAt offset "contract field types admit typeid \"prefix\", text, int, a declared id, or List of one of those; nested containers, Optional, Map, and Set applications and records are not supported in public contracts"
+    -- Fields may be adjacent on one line. Only a complete field head, including
+    -- its aliases, proves the next identifier is not a list operand. This probe
+    -- deliberately has no feature gates or dependency on declared ID names.
+    pContractTypeBoundary =
       choice
-        [ do
-            listKeyword <- withOwnedSpan (contractContainerKeyword "List")
-            requireLanguageFeatureAt context ContractListFieldSyntax (spanOf listKeyword)
-            CList <$> pContractScalarType,
-          CScalar <$> pContractScalarType
+        [ () <$ symbol ";",
+          () <$ symbol "}",
+          do
+            _ <- ident
+            _ <- optional (keyword "haskell" *> ident)
+            _ <- optional (keyword "as" *> stringLit)
+            _ <- symbol ":"
+            pure ()
         ]
-    contractContainerKeyword word =
-      lexeme (try (string' word *> notFollowedBy (identChar <|> (char '-' *> identChar))))
     pContractScalarType =
       choice
         [ CTypeId <$> (keyword "typeid" *> stringLit),
           CText <$ keyword "text",
           CInt <$ keyword "int",
           do
-            offset <- getOffset
-            forbidden <- optional (lookAhead (choice (map contractContainerKeyword ["List", "Optional", "Map", "Set"])))
-            case forbidden of
-              Just () -> failAt offset "contract field types admit typeid \"prefix\", text, int, a declared id, or List of one of those; nested containers, Optional, Map, and records are not supported in public contracts"
-              Nothing -> pure ()
             declaredId <- withOwnedSpan ident
             requireLanguageFeatureAt context ContractDeclaredIdSyntax (spanOf declaredId)
             pure (CDeclaredId (locatedValue declaredId))
