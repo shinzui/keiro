@@ -113,6 +113,7 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 05:03Z) M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, aliases, envelope-key precedence, multi-event key refusals, and diff classification.
 - [x] (2026-10-14 05:07Z) M2. `nix develop -c cabal test keiro-dsl:test:keiro-dsl-test` passes.
 - [x] (2026-10-14 05:18Z) M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry; force-add the ignored ledger and Cabal fragment, then commit the corpus before regeneration.
+- [x] (2026-10-14 05:40Z) M3. Refresh the generated record-migration inventories discovered by the full gate.
 - [ ] M3. `keiro-dsl-corpus-regen -- regenerate --only …` is a no-op, the new suite passes, `scripts/check-conformance-corpus.sh` passes, `nix develop -c just verify` passes.
 - [ ] M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
 - [ ] M4. Record the change in `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md` under `[Unreleased]`.
@@ -167,6 +168,15 @@ implementation. Provide concise evidence.
   `-Werror` gate, including GHC's `-Wx-partial`. Its first build rejected `head` in
   the hand-owned harness (`GHC-63394`). Named scalar fixture constants avoid partial
   list extraction while keeping the intended empty/multi-element payload cases.
+
+
+- Observation (2026-10-14 implementation): the first repository-wide verify run
+  passed builds and tests, then stopped at `record-migration-policy` because the
+  grammar line changes and newly tracked corpus made the two generated inventories
+  stale. Regenerate `keiro-dsl/record-field-migration-0.15.md` and
+  `keiro-dsl/generated-haskell-edition-idiomatic-v2.md` with
+  `nix develop -c python3 scripts/generate-record-migration-manifests.py`, then
+  check them and rerun the full gate. This adds derived documentation only.
 
 
 ## Decision Log
@@ -568,6 +578,8 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
             CList <$> pContractScalarType,
           CScalar <$> pContractScalarType
         ]
+    contractContainerKeyword word =
+      lexeme (try (string' word *> notFollowedBy (identChar <|> (char '-' *> identChar))))
     pContractScalarType =
       choice
         [ CTypeId <$> (keyword "typeid" *> stringLit),
@@ -1306,3 +1318,15 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
   those constructions total. The CLI diff proof at `14db6350` reported public breaking
   List text -> List int with producer-last rollout and replay neutrality; the temporary
   fixture edit was restored. Registering and committing the corpus before regeneration.
+
+- 2026-10-14 (implement): Committed corpus `c6e66749` regenerated with no changes;
+  the formatted hand-owned harness again passed all 13 checks. The whole 56-entry
+  corpus check passed. Repository-wide `nix develop -c just verify` is running.
+
+- 2026-10-14 (implement): The first whole-repository gate passed builds and tests but
+  stopped at stale generated migration inventories. Added their regeneration to M3;
+  the full gate remains pending rather than being reported as successful.
+
+- 2026-10-14 (implement): Regenerated both migration inventories from current source
+  and the tracked corpus. Record-migration, generated-name (3 examples), and extension
+  policies pass. Retrying the complete repository gate after this derived-doc fix.
