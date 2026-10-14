@@ -1,0 +1,42 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/mapped-register-construction.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.MappedRegisterConstruction.Lift
+    Generated.MappedRegisterConstruction.BehaviorSourceMap
+    Generated.MappedRegisterConstruction.Lifecycle.BehaviorContract
+    Generated.MappedRegisterConstruction.Lifecycle.Codec
+    Generated.MappedRegisterConstruction.Lifecycle.Domain
+    Generated.MappedRegisterConstruction.Lifecycle.EventStream
+    Generated.MappedRegisterConstruction.Lifecycle.Harness
+    Generated.MappedRegisterConstruction.Lifecycle.Projection
+    Generated.MappedRegisterConstruction.Lifecycle.Transducer
+    Generated.MappedRegisterConstruction.ReplayAudit
+    Generated.MappedRegisterConstruction.StructuralConformance
+    MappedRegisterConstruction.Lifecycle.BehaviorHoles
+
+build-depends:
+    , aeson
+    , base
+    , keiki
+    , keiro
+    , keiro-dsl
+    , text
+    , time
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.MappedRegisterConstruction.Bindings
+    Conformance.MappedRegisterConstruction.Domain
+    Conformance.MappedRegisterConstruction.Lift

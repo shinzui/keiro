@@ -1,0 +1,60 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/mapped-register-construction.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context mapped-register-construction structural conformance","path":"Generated/MappedRegisterConstruction/StructuralConformance.hs"}
+module-role {"family":"BehaviorSourceMap","kind":"generated","ownerKind":"context","ownerName":"context mapped-register-construction behavior source map","path":"Generated/MappedRegisterConstruction/BehaviorSourceMap.hs"}
+module-role {"family":"Lift","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.MappedRegisterConstruction.Lift","path":"Conformance/MappedRegisterConstruction/Lift.hs"}
+module-role {"family":"ReplayAudit","kind":"generated","ownerKind":"context","ownerName":"context mapped-register-construction replay-audit assembly","path":"Generated/MappedRegisterConstruction/ReplayAudit.hs"}
+module-role {"family":"Domain","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Domain.hs"}
+module-role {"family":"Codec","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Codec.hs"}
+module-role {"family":"Transducer","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Transducer.hs"}
+module-role {"family":"BehaviorContract","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/BehaviorContract.hs"}
+module-role {"family":"BehaviorHoles","kind":"hole","ownerKind":"aggregate","ownerName":"aggregate behavior witnesses Lifecycle (line 17)","path":"MappedRegisterConstruction/Lifecycle/BehaviorHoles.hs"}
+module-role {"family":"EventStream","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/EventStream.hs"}
+module-role {"family":"Projection","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Projection.hs"}
+module-role {"family":"Harness","kind":"generated","ownerKind":"aggregate","ownerName":"aggregate Lifecycle (line 17)","path":"Generated/MappedRegisterConstruction/Lifecycle/Harness.hs"}
+generated Generated/MappedRegisterConstruction/StructuralConformance.hs
+generated Generated/MappedRegisterConstruction/BehaviorSourceMap.hs
+hole Conformance/MappedRegisterConstruction/Lift.hs
+generated Generated/MappedRegisterConstruction/ReplayAudit.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/Domain.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/Codec.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/Transducer.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/BehaviorContract.hs
+hole MappedRegisterConstruction/Lifecycle/BehaviorHoles.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/EventStream.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/Projection.hs
+generated Generated/MappedRegisterConstruction/Lifecycle/Harness.hs
+mapping {"codecIdentity":"conformance.MaybeTime.json","codecVersion":"1","mode":"opaque","module":"Conformance.MappedRegisterConstruction.Domain","package":"keiro-dsl","schema":1,"specName":"MaybeTime","type":"MaybeTime","writeLift":{"fixtures":"Conformance.MappedRegisterConstruction.Lift.atTimeCases","function":"Conformance.MappedRegisterConstruction.Lift.atTime","sourceType":"Time","version":"1"}}
+binding {"kind":"write-lift-function","mappedName":"MaybeTime","module":"Conformance.MappedRegisterConstruction.Lift","path":null,"schema":1,"signature":"atTime :: UTCTime -> Conformance.MappedRegisterConstruction.Domain.MaybeTime","symbol":"atTime"}
+binding {"kind":"write-lift-cases","mappedName":"MaybeTime","module":"Conformance.MappedRegisterConstruction.Lift","path":null,"schema":1,"signature":"atTimeCases :: NonEmpty (Text, UTCTime, Conformance.MappedRegisterConstruction.Domain.MaybeTime)","symbol":"atTimeCases"}
+behavior {"aggregate":"Lifecycle","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-0cc99c7503ca9831","kind":"live-transition","outputs":[{"command":"Ping","ownership":"generated-command-identity"}],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-1f04e07a5ea312c1","kind":"required-rejection","outputs":[],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Mark","evidence":"generated-authoritative","key":"behavior-v1-325f4ed937c478c5","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Lifecycle","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-33fcaede253a4bed","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Lifecycle","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-386bbbf74705f45f","kind":"live-transition","outputs":[{"command":"Ping","ownership":"generated-command-identity"}],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Mark","evidence":"generated-authoritative","key":"behavior-v1-466916eb8981b08e","kind":"required-rejection","outputs":[],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Awaken","evidence":"generated-authoritative","key":"behavior-v1-5253e620452fc4cf","kind":"live-transition","outputs":[{"command":"Awaken","ownership":"generated-command-identity"}],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Reopen","evidence":"generated-authoritative","key":"behavior-v1-5e7d15bcad88b1ae","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Lifecycle","command":"Reopen","evidence":"generated-authoritative","key":"behavior-v1-66c78f3ed9bc6b52","kind":"required-rejection","outputs":[],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Reopen","evidence":"generated-authoritative","key":"behavior-v1-7705536a045d1c60","kind":"live-transition","outputs":[{"command":"Reopen","ownership":"generated-command-identity"}],"source":"Closed"}
+behavior {"aggregate":"Lifecycle","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-88ef8671c7c631bb","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Lifecycle","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-959d3fbbbce2b4e4","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Lifecycle","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-968db04037ee20f0","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Lifecycle","command":"Create","evidence":"generated-authoritative","key":"behavior-v1-994dec94076c02d0","kind":"live-transition","outputs":[{"command":"Create","ownership":"generated-command-identity"}],"source":"Empty"}
+behavior {"aggregate":"Lifecycle","command":"Ping","evidence":"generated-authoritative","key":"behavior-v1-9b56eeea9fa900fd","kind":"required-rejection","outputs":[],"source":"Awake"}
+behavior {"aggregate":"Lifecycle","command":"Awaken","evidence":"generated-authoritative","key":"behavior-v1-a1419cde22483b02","kind":"required-rejection","outputs":[],"source":"Awake"}
+behavior {"aggregate":"Lifecycle","command":"Create","evidence":"generated-authoritative","key":"behavior-v1-a8c781dd6ca46f4b","kind":"required-rejection","outputs":[],"source":"Dormant"}
+behavior {"aggregate":"Lifecycle","command":"Mark","evidence":"generated-authoritative","key":"behavior-v1-b7cc059e78b68a92","kind":"live-transition","outputs":[{"command":"Mark","ownership":"generated-command-identity"}],"source":"Awake"}
+behavior {"aggregate":"Lifecycle","command":"Create","evidence":"generated-authoritative","key":"behavior-v1-c1dbeb960bc50979","kind":"required-rejection","outputs":[],"source":"Awake"}
+behavior {"aggregate":"Lifecycle","command":"Awaken","evidence":"generated-authoritative","key":"behavior-v1-c8967a7d2e58d904","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Lifecycle","command":"Create","evidence":"generated-authoritative","key":"behavior-v1-cc4529515153ea38","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Lifecycle","command":"Awaken","evidence":"generated-authoritative","key":"behavior-v1-d87956d864ea179b","kind":"required-rejection","outputs":[],"source":"Closed"}
+behavior {"aggregate":"Lifecycle","command":"Reopen","evidence":"generated-authoritative","key":"behavior-v1-da9ee154eb2f350c","kind":"required-rejection","outputs":[],"source":"Awake"}
+behavior {"aggregate":"Lifecycle","command":"Mark","evidence":"generated-authoritative","key":"behavior-v1-dddc6f0d9aa7b262","kind":"required-rejection","outputs":[],"source":"Empty"}
+behavior {"aggregate":"Lifecycle","command":"Close","evidence":"generated-authoritative","key":"behavior-v1-f2c991f59a1a8e7e","kind":"live-transition","outputs":[{"command":"Close","ownership":"generated-command-identity"}],"source":"Awake"}
+semantic-impact {"declarations":[{"consequences":[{"consumer":"Lifecycle","kind":"consumer-build"},{"aggregate":"Lifecycle","kind":"snapshot-hydration"}],"consumerEvidence":[{"consumer":"Lifecycle","operation":null,"path":"Lifecycle register dormantSince : MaybeTime","surface":"snapshot-register"}],"consumers":["Lifecycle"],"declaration":"MaybeTime","identity":"opaque\u001fkeiro-dsl:Conformance.MappedRegisterConstruction.Domain:MaybeTime\u001fconformance.MaybeTime.json\u001f1\u001fConformance.MappedRegisterConstruction.Bindings.maybeTimeCases\u001fConformance.MappedRegisterConstruction.Bindings.noTime\u001f686ff6108af0cfe8"}],"mappedSurfaceEvidenceVersion":1,"serviceInventory":["MaybeTime"]}
