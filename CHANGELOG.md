@@ -6,14 +6,35 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
-- Candidate Language 6 generated transitions can clear or construct mapped
-  registers through target `initial` and versioned scalar `write-lift` declarations,
-  with conformance, fold/snapshot identity, replay impact, and a recurring mutation
-  proof. Public DSL constructor/record additions require a shared PVP-major release;
-  Language 6 publication and consumer adoption remain separate.
+## 0.21.0.0 — 2026-10-14
 
-- Candidate Language 6 adds scalar list fields to integration contracts and splits
-  the library contract-type API; see [keiro-dsl changes](keiro-dsl/CHANGELOG.md#unreleased).
+### Breaking Changes
+
+- `keiro-dsl` splits `ContractType` into `CScalar ContractScalarType` and
+  `CList ContractScalarType`; scalar constructors now belong to
+  `ContractScalarType`. Library clients must wrap scalar fields in `CScalar`.
+- Mapped construction adds public expression constructors, optional lift fields
+  on raw/checked mapped declarations and mapping identities, diagnostic codes,
+  and binding obligation kinds. Record construction and exhaustive matches must
+  handle the new fields and cases.
+- Regenerated workqueue and read-model declarations derive names from whole
+  logical names. Reserved segments retain word boundaries: `jobtype…` becomes
+  `jobType…`, and `thingtypeWitness`/`thingtypeGet` become
+  `thingTypeWitness`/`thingTypeGet`. Update consumer references and create-once
+  read-model holes while preserving application bodies.
+
+### New Features
+
+- Candidate Language 6 supports scalar list fields in integration contracts,
+  with ordered JSON arrays, required-field and per-element decoding, and rejection
+  of list-valued outbox or dedupe keys.
+- Candidate Language 6 generated transitions can clear or construct mapped
+  registers through target `initial` and a pure, total, versioned scalar
+  `write-lift` with finite cases. Used-lift provenance enters fold/snapshot identity
+  and replay analysis; unused lifts and cases-only edits are build advisories.
+  A compiled lifecycle service and mutation proof run in `just verify`.
+- `keiro-migrations` adds `managedObjectSnapshotKeys` and
+  `compareSchemaSnapshotWithManaged`, retaining the original pure comparison.
 
 ### Bug Fixes
 
@@ -23,20 +44,35 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
   All-rows external-read contracts no longer trigger drift warnings or mutation
   refusal in `keiro-ops`. Missing table `SELECT` or schema `USAGE` preserves the
   previous comparison; migration-owned differences and unregistered additions
-  remain drift. `keiro-migrations` exports `managedObjectSnapshotKeys` and
-  `compareSchemaSnapshotWithManaged`; the original pure comparison is unchanged.
-
-- `keiro-dsl` derives read-model and workqueue declarations from their whole
-  logical names, fixing [BUG-11](docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md), and checks provably missing imports between generated modules before writing. Affected generated names require consumer source updates after re-scaffolding.
-- Generated aggregate harnesses prove Hole-owned live initial transitions with
+  remain drift.
+- Generated read-model definitions, query contracts, holes, and harness imports
+  share one whole-name stem, fixing
+  [BUG-11](docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md).
+  Scaffolding also checks provably missing imports between generated modules
+  before writing.
+- Generated aggregate harnesses prove hole-owned live initial transitions using
   the consumer's history-backed `LiveWitness` through `BehaviorContract`, which
-  now exports `behaviorObligationReport`. Their forward/replay rows are labelled
-  `hole witness filled` and `hole witness verified`; pending or invalid witnesses
-  fail whole-service conformance. Generated-owned probes, replay semantics, wire
-  shapes, fold fingerprints, and snapshot identity are unchanged; this requires
-  no data migration or DSL diff impact. Fixes
-  [BUG-10](mori://shinzui/keiro/okf/bug-reports/concepts/BUG-10) under
-  [plan 309](docs/plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md).
+  exports `behaviorObligationReport`. Pending or invalid witnesses fail
+  whole-service conformance, fixing
+  [BUG-10](docs/bug-reports/10-initial-hole-harness-requires-acceptance-from-empty-registers.md).
+  Existing wire shapes, replay semantics, fold fingerprints, and snapshot identity
+  remain unchanged for this fix.
+- `diff --since` classifies command/event/state removals and writes compatibility
+  and replay-impact reports before its breaking gate exits nonzero. Replay
+  analysis resolves each revision against its own declarations.
+- Contract parsing accepts declared IDs named `List`, `Optional`, `Map`, and `Set`,
+  including adjacent fields without semicolons. Literal/declared contract ID
+  comparisons include resolved admission, so same-prefix widening or narrowing
+  is classified as public breaking.
+
+### Other Changes
+
+- All seven packages advance together to 0.21.0.0; upstream dependency bounds
+  retain the 0.20.0.0 cohort. Language 5 remains stable and Language 6 remains
+  a candidate. No language publication or database migration is required.
+- The `keiro-upgrade` blueprint adds a 0.20.0.0 → 0.21.0.0 edge for DSL API
+  adaptations, generated-name updates, and witness-backed harness regeneration.
+  No upstream edge is entailed because the dependency cohort is unchanged.
 
 ## 0.20.0.0 — 2026-10-12
 

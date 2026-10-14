@@ -6,6 +6,8 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.21.0.0 — 2026-10-14
+
 ### Bug Fixes
 
 - `verify-schema` and `Keiro.Migrations.SchemaCheck.verifyExpectedSchema` no longer

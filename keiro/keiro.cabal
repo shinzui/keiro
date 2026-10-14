@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: keiro
-version: 0.20.0.0
+version: 0.21.0.0
 synopsis: Event sourcing framework and workflow engine
 description:
   A library that composes kiroku, keiki, and shibuya into an
@@ -170,7 +170,7 @@ library
     hs-opentelemetry-semantic-conventions >=1.40 && <2,
     keiki >=0.9 && <0.10,
     keiki-codec-json >=0.9 && <0.10,
-    keiro-core ^>=0.20.0.0,
+    keiro-core ^>=0.21.0.0,
     kiroku-store ^>=0.11.0.0,
     lens >=5.2 && <5.4,
     mmzk-typeid >=0.7 && <0.8,
@@ -240,8 +240,8 @@ test-suite keiro-test
     keiki,
     keiki-codec-json,
     keiro,
-    keiro-migrations ^>=0.20.0.0,
-    keiro-test-support ^>=0.20.0.0,
+    keiro-migrations ^>=0.21.0.0,
+    keiro-test-support ^>=0.21.0.0,
     kiroku-store ^>=0.11.0.0,
     process >=1.6 && <1.7,
     shibuya-core ^>=0.10.0.1,
@@ -277,8 +277,8 @@ test-suite keiro-retention
     keiki >=0.9 && <0.10,
     keiki-codec-json >=0.9 && <0.10,
     keiro,
-    keiro-core ^>=0.20.0.0,
-    keiro-test-support ^>=0.20.0.0,
+    keiro-core ^>=0.21.0.0,
+    keiro-test-support ^>=0.21.0.0,
     kiroku-store ^>=0.11.0.0,
     shibuya-core ^>=0.10.0.1,
     shibuya-kiroku-adapter ^>=0.6.0.1,
@@ -325,8 +325,8 @@ benchmark keiro-bench
     hs-opentelemetry-sdk >=1.0 && <1.1,
     keiki >=0.9 && <0.10,
     keiro,
-    keiro-core ^>=0.20.0.0,
-    keiro-test-support ^>=0.20.0.0,
+    keiro-core ^>=0.21.0.0,
+    keiro-test-support ^>=0.21.0.0,
     kiroku-store ^>=0.11.0.0,
     process >=1.6 && <1.7,
     shibuya-core ^>=0.10.0.1,

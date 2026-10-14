@@ -6,6 +6,13 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+## 0.21.0.0 — 2026-10-14
+
+### Other Changes
+
+- No user-facing changes this release. Version and internal dependency bounds
+  advance with the shared 0.21.0.0 release.
+
 ## 0.20.0.0 — 2026-10-12
 
 ### Breaking Changes

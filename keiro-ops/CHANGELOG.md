@@ -6,6 +6,8 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.21.0.0 — 2026-10-14
+
 ### Bug Fixes
 
 - Schema verification no longer warns about, or refuses mutations because of, the

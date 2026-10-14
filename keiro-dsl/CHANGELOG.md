@@ -6,6 +6,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+## 0.21.0.0 — 2026-10-14
+
 ### Breaking Changes
 
 - Candidate mapped construction extends public `Expr`, `MappedDecl`, checked
@@ -13,7 +15,8 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   binding obligation kinds. Library clients constructing those records must
   supply the optional lift field (`Nothing` for prior declarations), and clients
   matching constructors must handle the new cases. These source API changes
-  require a shared PVP-major release; this change does not choose or publish it.
+  require the shared PVP-major release. Language 6 remains a candidate;
+  publishing the language contract and consumer adoption are separate decisions.
 
 - `Keiro.Dsl.Grammar.ContractType` is now `CScalar ContractScalarType | CList
   ContractScalarType`; `CTypeId`, `CDeclaredId`, `CText`, and `CInt` belong to
@@ -30,7 +33,7 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   local type aliases, exports, and contract imports by hand while preserving
   their application bodies.
 
-### Added
+### New Features
 
 - Candidate Language 6 supports complete mapped-register `initial` and
   `mapped(expression)` writes under generated guard/slot ownership, backed by one
@@ -48,9 +51,6 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   [IR-54](../docs/improvement-requests/support-list-fields-in-integration-contracts.md).
 
 ### Bug Fixes
-
-- Generated contract list codecs qualify Aeson's `Index` constructor so a public
-  event named `Index` compiles and retains indexed decoding errors.
 
 - `diff --since` classifies command/event/state removals and writes compatibility
   and replay-impact reports before the usual breaking gate exits nonzero.
