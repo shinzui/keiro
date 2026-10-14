@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: BUG-12 confirmed: compiled all-rows contract fixture reproduces unexpected binding-view drift on master; evidence retained and regression pending plan 311.
 * **Update**: BUG-11 fixed: whole-name generated stems and bounded import audit pass Language 6 keyword-segment conformance and full verification
 * **Update**: BUG-11 in progress: Language 6 conformance suite reproduces GHC-61689
 * **Update**: BUG-10 fixed/unreleased: history-backed aggregate and whole-service proofs, all eight witness mutations, corpus freshness, and the full Nix-shell verification gate pass.

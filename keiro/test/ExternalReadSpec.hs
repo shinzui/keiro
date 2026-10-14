@@ -24,6 +24,7 @@ import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Hasql.Transaction qualified as Tx
 import Hasql.Transaction.Sessions qualified as TxSessions
+import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchema)
 import Keiro.Prelude
 import Keiro.Projection.Catalog
 import Keiro.ReadModel.External
@@ -40,6 +41,22 @@ spec fixture =
   describe "managed external read contracts"
     $ around (withFreshDatabase fixture)
     $ do
+      -- Pending until plan 311 Milestone 2 lands the registry-aware comparison.
+      xit "leaves schema verification clean after reconciling an all-rows contract" $ \connectionString ->
+        withPool connectionString $ \pool ->
+          Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
+            let settings = ConnectionSettings.connectionString connectionString
+            runScript pool allRowsFixtureSql
+            beforeDrifts <- verifyExpectedSchema settings >>= expectUsage
+            (renderSchemaDrift <$> beforeDrifts) `shouldBe` []
+            catalog <- expectValid Catalog.bridgeCatalog
+            register store catalog
+            runScript pool activateV1Sql
+            expectStore store (reconcileExternalReadContracts catalog) >>= shouldBeRight
+            runStatement pool () bindingExistsStmt `shouldReturn` True
+            afterDrifts <- verifyExpectedSchema settings >>= expectUsage
+            (renderSchemaDrift <$> afterDrifts) `shouldBe` []
+
       it "fences lifecycle transitions, holds cutover behind readers, and enforces execute-only grants" $ \connectionString ->
         withPool connectionString $ \pool ->
           Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
@@ -788,3 +805,10 @@ keyedPlanStmt =
     "EXPLAIN (COSTS OFF) SELECT ROW(counter.id, counter.total)::app_contract.counter_row_v1 FROM app.counter AS counter WHERE counter.id = 2"
     E.noParams
     (D.rowList (D.column (D.nonNullable D.text)))
+
+bindingExistsStmt :: Statement () Bool
+bindingExistsStmt =
+  preparable
+    "SELECT to_regclass('keiro.external_read_counter_reader_v1_binding') IS NOT NULL"
+    E.noParams
+    (D.singleRow (D.column (D.nonNullable D.bool)))

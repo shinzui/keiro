@@ -1,0 +1,40 @@
+BUG-12 owner reproduction on keiro master (0.20.0.0 development tree), 2026-10-14
+Commit: b82e308eb3d0570501928309b909e7b4b2ec6656
+Environment: nix develop shell, GHC 9.12.4, PostgreSQL 18.6, aarch64-darwin
+Verifier source unchanged; only the regression fixture and its test dependency added.
+
+Command (exit 1):
+nix develop -c cabal test keiro:keiro-test --test-show-details=direct --test-options='--match "managed external read contracts"'
+
+Running 1 test suites...
+Test suite keiro-test: RUNNING...
+
+managed external read contracts
+  leaves schema verification clean after reconciling an all-rows contract [✘]
+  fences lifecycle transitions, holds cutover behind readers, and enforces execute-only grants [✔]
+  enforces the all-row small-model boundary before returning partial results [✔]
+  revalidates retirement after a reader waits for the lifecycle lock [✔]
+  refuses rolling downgrades and preserves consumer-owned dependents [✔]
+  wraps a selective keyed implementation without granting the implementation itself [✔]
+  refuses a keyed implementation whose set result differs from the public row type [✔]
+
+Failures:
+
+  test/ExternalReadSpec.hs:57:43: 
+  1) managed external read contracts leaves schema verification clean after reconciling an all-rows contract
+       expected: []
+        but got: ["schema drift: unexpected view keiro.external_read_counter_reader_v1_binding (actual: columns=1:id bigint,2:total bigint)"]
+
+  To rerun use: --match "/managed external read contracts/leaves schema verification clean after reconciling an all-rows contract/" --seed 1227510559
+
+Randomized with seed 1227510559
+
+Finished in 3.6932 seconds
+7 examples, 1 failure
+Test suite keiro-test: FAIL
+Test suite logged to:
+/Users/shinzui/Keikaku/bokuno/keiro/dist-newstyle/build/aarch64-osx/ghc-9.12.4/keiro-0.20.0.0/t/keiro-test/test/keiro-0.20.0.0-keiro-test.log
+0 of 1 test suites (0 of 1 test cases) passed.
+Error: [Cabal-7125]
+Tests failed for test:keiro-test from keiro-0.20.0.0.
+

@@ -4,9 +4,9 @@ title: Operator schema verification flags Keiro's own external-read binding view
 description: "keiro-ops verifies the live keiro schema against a migrations-only snapshot, so the binding view Keiro creates for every all-rows external-read contract is reported as unexpected drift and every mutating operator command refuses without --allow-schema-drift."
 generated:
   by: process:claude-code
-  at: "2026-10-13T14:55:03Z"
+  at: "2026-10-14T03:33:25Z"
 bugId: BUG-12
-status: reported
+status: confirmed
 severity: degraded
 origin: mori://tan/notification-render-service
 affects: mori://shinzui/keiro
@@ -135,3 +135,9 @@ which makes `verifyExpectedSchema` consult `keiro.keiro_managed_read_objects` so
 live object Keiro's runtime created and recorded is expected rather than unexpected, while
 an unregistered view is still reported. Its first milestone reproduces the drift with a
 compiled fixture before the status moves to `confirmed`.
+
+The owning repository reproduced the exact unexpected binding view on master with
+a compiled all-rows fixture on 2026-10-14. The clean pre-reconciliation assertion
+passed; the final assertion failed. See the retained
+[evidence transcript](evidence/BUG-12-master-binding-view-drift.txt). The fixture is
+committed pending the registry-aware comparison.

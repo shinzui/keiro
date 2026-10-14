@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-14T01:20:56Z
       mode: "update"
       note: "Correct noncompiling test examples and schema privilege guard; strengthen fallback/drift acceptance and align documentation, closure, and release guidance"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T03:29:55Z
+      mode: "implement"
+      note: "Implement registry-aware verification and reproduce BUG-12 with runtime and operator regression coverage"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -76,8 +81,8 @@ binding view.
 
 - [x] 2026-10-13: reviewed the plan against runtime, migration, operator, and dependency
       source; reproduced the missing-schema-privilege guard failure on PostgreSQL 18.6;
-      corrected the plan. Feature implementation and BUG-12 confirmation remain pending.
-- [ ] Milestone 0: reproduce BUG-12 with a compiled fixture on master, retain the failing
+      corrected the plan. This entry records review-only validation; implementation evidence follows.
+- [x] 2026-10-14 03:35Z: Milestone 0: reproduce BUG-12 with a compiled fixture on master, retain the failing
       transcript under `docs/bug-reports/evidence/`, commit the fixture as a pending `xit`
       example together with the `keiro-test` dependency, set the report `confirmed`, and log it.
 - [ ] Milestone 1: make `Keiro.Migrations.SchemaCheck` registry-aware (`managedObjectSnapshotKeys`,
@@ -102,6 +107,12 @@ binding view.
 
 ## Surprises & Discoveries
 
+
+Implementation fixture compilation found that `ExternalReadSpec` does not import
+`map` from its restricted Prelude. The two fixture assertions now use `<$>`; this
+changes no verifier behavior. The Nix shell supplies GHC 9.12.4, PostgreSQL 18.6,
+and Z3 4.16.0. Hackage and upstream cohort tags both confirm 0.20.0.0 for the
+added local test dependency.
 
 The 2026-10-13 correctness review found that table `SELECT` does not imply schema
 `USAGE`. A disposable PostgreSQL 18.6 cluster, started and stopped by a Python probe
@@ -220,14 +231,17 @@ helper for the same reason.
 ## Outcomes & Retrospective
 
 
-The correctness review updated this plan only. It confirmed the source-level cause of
-BUG-12 and reproduced a defect in the proposed privilege guard, corrected the Hasql test
-API, repaired an assertion requiring a nonexistent `Eq MigrationError` instance, expanded
-negative-path acceptance, and aligned documentation and closure sequencing.
-No feature code, bug status, or accepted ADR has changed; all implementation milestones
-remain pending. Record feature-test results here during implementation. Missing or altered
-runtime-object definitions remain outside this fix: a registry row establishes which
-runtime additions are allowed, not that their live definition is correct.
+Implementation reproduced BUG-12 at baseline commit
+`b82e308eb3d0570501928309b909e7b4b2ec6656`: the all-rows fixture had a clean schema
+before reconciliation and exactly one unexpected binding view afterwards. The
+retained transcript is `docs/bug-reports/evidence/BUG-12-master-binding-view-drift.txt`.
+The fixture block reported `7 examples, 1 failure`, with all six existing examples
+passing. BUG-12 is now confirmed and its strict bundle check passes. The pending fixture run passed with `7 examples, 0 failures, 1 pending`; the
+registry-aware implementation follows in Milestone 1.
+
+Missing or altered runtime-object definitions remain outside this fix: a registry
+row establishes which runtime additions are allowed, not that their live definition
+is correct.
 
 Review validation ran the existing suite from the repository root:
 
@@ -392,15 +406,15 @@ Add `keiro-migrations ^>=0.20.0.0` to the `build-depends` of `test-suite keiro-t
           Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
             let settings = ConnectionSettings.connectionString connectionString
             runScript pool allRowsFixtureSql
-            before <- verifyExpectedSchema settings >>= expectUsage
-            map renderSchemaDrift before `shouldBe` []
+            beforeDrifts <- verifyExpectedSchema settings >>= expectUsage
+            (renderSchemaDrift <$> beforeDrifts) `shouldBe` []
             catalog <- expectValid Catalog.bridgeCatalog
             register store catalog
             runScript pool activateV1Sql
             expectStore store (reconcileExternalReadContracts catalog) >>= shouldBeRight
             runStatement pool () bindingExistsStmt `shouldReturn` True
-            after <- verifyExpectedSchema settings >>= expectUsage
-            map renderSchemaDrift after `shouldBe` []
+            afterDrifts <- verifyExpectedSchema settings >>= expectUsage
+            (renderSchemaDrift <$> afterDrifts) `shouldBe` []
 ```
 
 `expectUsage` is already defined in this spec and fails an example on `Left` using
@@ -1115,3 +1129,9 @@ named in Context and Orientation. None of that changes.
   documentation promises to the actual binding-view rule, moved full verification before
   bug closure, made validation commands explicitly use Nix, and clarified release bounds
   and executable rebuilding. Implementation and BUG-12 status remain unchanged.
+
+- 2026-10-14: implementation started; corrected the fixture mapping expression for
+  this spec’s restricted Prelude and recorded the verified environment and dependency.
+
+- 2026-10-14: Milestone 0 complete: saved exact failing evidence, confirmed BUG-12,
+  validated its bundle, and verified the pending regression leaves the suite green.
