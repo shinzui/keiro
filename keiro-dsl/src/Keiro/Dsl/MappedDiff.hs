@@ -140,10 +140,12 @@ diffDeclaration :: TypeGraph -> TypeGraph -> ResolvedMappedDecl -> ResolvedMappe
 diffDeclaration oldGraph newGraph oldResolved newResolved =
   case (declView oldResolved, declView newResolved) of
     (StructuralView oldDeclaration oldShape, StructuralView newDeclaration newShape) ->
-      metadataDiff paths oldDeclaration newDeclaration
+      liftDiff paths name oldDeclaration.writeLift newDeclaration.writeLift
+        ++ metadataDiff paths oldDeclaration newDeclaration
         ++ diffShape paths name oldShape newShape
     (OpaqueView oldDeclaration, OpaqueView newDeclaration) ->
-      opaqueMetadataDiff paths oldDeclaration newDeclaration
+      liftDiff paths name oldDeclaration.writeLift newDeclaration.writeLift
+        ++ opaqueMetadataDiff paths oldDeclaration newDeclaration
     _ ->
       [ finding
           paths
@@ -155,6 +157,17 @@ diffDeclaration oldGraph newGraph oldResolved newResolved =
   where
     name = resolvedName newResolved
     paths = pathsFor oldGraph newGraph name
+
+liftDiff :: [UsePath] -> Name -> Maybe MappedWriteLift -> Maybe MappedWriteLift -> [MappedFinding]
+liftDiff paths name old new =
+  [ finding paths name "write-lift" MappedWriteLiftChanged "write-lift source, function, or version changed; rebuild consumers and run conformance; used lifts independently change the aggregate fold"
+  | execution old /= execution new
+  ]
+    <> [ finding paths name "write-lift.fixtures" MappedWriteLiftFixturesChanged "write-lift cases symbol changed; run conformance"
+       | fmap (.fixtures) old /= fmap (.fixtures) new
+       ]
+  where
+    execution = fmap (\lift -> (lift.source, lift.function, lift.version))
 
 metadataDiff :: [UsePath] -> StructuralDecl -> StructuralDecl -> [MappedFinding]
 metadataDiff paths oldDeclaration newDeclaration =

@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-10-14
+* **Update**: DOC-27, DOC-26, and DOC-12 document candidate mapped register construction, pure/total versioned lifts, create-once cases, and replay/adoption boundaries (plan 267).
 * **Update**: DOC-34 documents command/event/state removal reports and the normal failing compatibility gate status (plan 314).
 * **Update**: DOC-29 clarifies exact List spelling, nominal container-name IDs, and adjacent field boundaries.
 * **Update**: Document List fields in integration contracts (Language 6 candidate): element types, codec policy, identity refusal, and evolution rules.

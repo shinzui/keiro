@@ -233,7 +233,30 @@ removedAggregateImpact aggregate =
     }
 
 matchedAggregateImpact :: CheckedService -> CheckedService -> ReplaySurfaceContext -> ReplaySurfaceContext -> Aggregate -> Aggregate -> Either FoldSurfaceError AggregateImpact
-matchedAggregateImpact oldService newService oldContext newContext oldAggregate newAggregate = do
+matchedAggregateImpact oldService newService oldContext newContext oldAggregate newAggregate
+  | usesConstruction oldAggregate || usesConstruction newAggregate = do
+      oldSurface <- aggregateFoldSurfaceForService oldService oldAggregate
+      newSurface <- aggregateFoldSurfaceForService newService newAggregate
+      let (transitionEvents, transitionChanged) = changedTransitionEvents oldAggregate.transitions newAggregate.transitions
+          foldChanged = oldSurface /= newSurface
+      pure
+        AggregateImpact
+          { eventTypes =
+              decodeSurfaceAffected oldContext newContext oldAggregate newAggregate
+                <> if foldChanged then Set.fromList (map (.name) oldAggregate.events) else transitionEvents,
+            includeSnapshotStreams = foldChanged || transitionChanged
+          }
+  | otherwise = matchedOrdinaryAggregateImpact oldService newService oldContext newContext oldAggregate newAggregate
+
+usesConstruction :: Aggregate -> Bool
+usesConstruction aggregate = any (any (construction . snd) . (.writes)) aggregate.transitions
+  where
+    construction EWriteInitial {} = True
+    construction EWriteMapped {} = True
+    construction _ = False
+
+matchedOrdinaryAggregateImpact :: CheckedService -> CheckedService -> ReplaySurfaceContext -> ReplaySurfaceContext -> Aggregate -> Aggregate -> Either FoldSurfaceError AggregateImpact
+matchedOrdinaryAggregateImpact oldService newService oldContext newContext oldAggregate newAggregate = do
   oldEvidence <- aggregateFoldEvidenceForService oldService oldAggregate
   newEvidence <- aggregateFoldEvidenceForService newService newAggregate
   let nonTransitionFoldChanged = oldEvidence.aggregateSegments /= newEvidence.aggregateSegments

@@ -275,6 +275,8 @@ checkProcessReaction _languageContract graph spec process = case (.body) process
           then failure (exprLoc left) ProcessReactionGuardNotBoolean "ordering comparison requires Text, a number, or Time"
           else Right AggregateBool
       EPath loc UnqualifiedRoot ["input", field] -> requireInputType symbols input loc field
+      EWriteInitial loc -> failure loc ProcessReactionGuardNotBoolean "initial is write-only"
+      EWriteMapped loc _ -> failure loc ProcessReactionGuardNotBoolean "mapped construction is write-only"
       EPath loc _ _ -> failure loc ProcessStateAccessUnsupported "reaction guards may read only input.<field>; saga/register/command state is unsupported"
       ELiteral _ (LiteralBool _) -> Right AggregateBool
       ELiteral _ (LiteralText _) -> Right AggregateText

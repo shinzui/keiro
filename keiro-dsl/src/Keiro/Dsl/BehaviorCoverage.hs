@@ -486,6 +486,8 @@ crossesOneWayProjection expression = case expression of
   EMultiply _ left right -> crossesOneWayProjection left || crossesOneWayProjection right
   EPath _ _ (_ : _ : _) -> True
   EPath {} -> False
+  EWriteMapped _ child -> crossesOneWayProjection child
+  EWriteInitial {} -> False
   ELiteral {} -> False
   EAtom {} -> False
 

@@ -32,6 +32,12 @@ module Keiro.Dsl.TypeGraph
     checkScalarLeaf,
     MappedDeclError (..),
     CheckedMappedDecl (..),
+    LiftSource (..),
+    liftSourceName,
+    LiftVersion (..),
+    unLiftVersion,
+    MappedWriteLift (..),
+    mappedWriteLift,
     StructuralDecl (..),
     OpaqueDecl (..),
     checkMappedDecl,
@@ -138,6 +144,7 @@ data MappedDeclError
   | EmptyCanonicalTypeId !Text
   | EmptyBindingVersion !Text
   | EmptyCodecIdentity !Text
+  | InvalidMappedWriteLift !Loc !Text
   | EmptyCodecVersion !Text
   deriving stock (Eq, Show, Generic)
 
@@ -323,6 +330,60 @@ scalarLeafRepresentation = \case
   "UTCTime" -> Just NominalTime
   _ -> Nothing
 
+data LiftSource = LiftText | LiftInt | LiftInteger | LiftBool | LiftNatural | LiftTime
+  deriving stock (Eq, Ord, Show, Generic)
+
+liftSourceName :: LiftSource -> Text
+liftSourceName = \case
+  LiftText -> "Text"
+  LiftInt -> "Int"
+  LiftInteger -> "Integer"
+  LiftBool -> "Bool"
+  LiftNatural -> "Natural"
+  LiftTime -> "Time"
+
+newtype LiftVersion = LiftVersion {unLiftVersion :: Text}
+  deriving stock (Eq, Ord, Show, Generic)
+
+unLiftVersion :: LiftVersion -> Text
+unLiftVersion (LiftVersion value) = value
+
+data MappedWriteLift = MappedWriteLift
+  { source :: !LiftSource,
+    function :: !QualifiedValueName,
+    version :: !LiftVersion,
+    fixtures :: !QualifiedValueName,
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
+mappedWriteLift :: CheckedMappedDecl -> Maybe MappedWriteLift
+mappedWriteLift (CheckedStructural declaration _) = declaration.writeLift
+mappedWriteLift (CheckedOpaque declaration) = declaration.writeLift
+
+checkWriteLift :: MappedWriteLiftDecl -> Either (NonEmpty MappedDeclError) MappedWriteLift
+checkWriteLift declaration = do
+  source <- case declaration.source of
+    TText -> pure LiftText
+    TInt -> pure LiftInt
+    TInteger -> pure LiftInteger
+    TBool -> pure LiftBool
+    TNatural -> pure LiftNatural
+    TTime -> pure LiftTime
+    _ -> invalid "write-lift source must be a direct Text, Int, Integer, Bool, Natural, or Time scalar"
+  function <- symbol "function" declaration.function
+  fixtures <- symbol "fixtures" declaration.fixtures
+  version <- case declaration.version of
+    Just value | not (T.null (T.strip value)) -> pure (LiftVersion value)
+    _ -> invalid "write-lift requires a non-empty version"
+  pure MappedWriteLift {source, function, version, fixtures, loc = declaration.loc}
+  where
+    invalid :: Text -> Either (NonEmpty MappedDeclError) a
+    invalid message = Left (InvalidMappedWriteLift declaration.loc message :| [])
+    symbol key = \case
+      Just value | not (T.null (T.strip value)) -> pure (QualifiedValueName value)
+      _ -> invalid ("write-lift requires a qualified " <> key <> " symbol")
+
 data StructuralDecl = StructuralDecl
   { name :: !Name,
     haskell :: !HaskellSource,
@@ -331,6 +392,7 @@ data StructuralDecl = StructuralDecl
     canonical :: !CanonicalTypeId,
     fixtures :: !QualifiedValueName,
     initial :: !(Maybe QualifiedValueName),
+    writeLift :: !(Maybe MappedWriteLift),
     loc :: !Loc
   }
   deriving stock (Eq, Show, Generic)
@@ -340,6 +402,7 @@ data OpaqueDecl = OpaqueDecl
     haskell :: !HaskellSource,
     codecIdentity :: !CodecIdentity,
     codecVersion :: !CodecVersion,
+    writeLift :: !(Maybe MappedWriteLift),
     fixtures :: !QualifiedValueName,
     initial :: !(Maybe QualifiedValueName),
     loc :: !Loc
@@ -352,13 +415,14 @@ data CheckedMappedDecl
   deriving stock (Eq, Show, Generic)
 
 checkMappedDecl :: MappedDecl -> Either (NonEmpty MappedDeclError) CheckedMappedDecl
-checkMappedDecl MappedStructural {msName = name, msHaskell = haskell, msBinding = binding, msBindingVersion = bindingVersion, msCanonical = canonical, msFixtures = fixtures, msInitial = initial, msShape = shape, msLoc = loc} = do
+checkMappedDecl MappedStructural {msName = name, msHaskell = haskell, msBinding = binding, msBindingVersion = bindingVersion, msCanonical = canonical, msFixtures = fixtures, msInitial = initial, msShape = shape, msWriteLift = writeLift, msLoc = loc} = do
   checkedHaskell <- require (MissingHaskellSource name) haskell
   checkedBinding <- require (MissingStructuralBinding name) binding >>= liftOne . mkQualifiedValueName
   checkedBindingVersion <- require (MissingStructuralBindingVersion name) bindingVersion >>= liftOne . mkBindingVersion
   checkedCanonical <- require (MissingCanonicalType name) canonical >>= liftOne . mkCanonicalTypeId
   checkedFixtures <- require (MissingFixtureCases name) fixtures >>= liftOne . mkQualifiedValueName
   checkedInitial <- traverse (liftOne . mkQualifiedValueName) initial
+  checkedLift <- traverse checkWriteLift writeLift
   pure
     ( CheckedStructural
         StructuralDecl
@@ -369,6 +433,7 @@ checkMappedDecl MappedStructural {msName = name, msHaskell = haskell, msBinding 
             canonical = checkedCanonical,
             fixtures = checkedFixtures,
             initial = checkedInitial,
+            writeLift = checkedLift,
             loc = loc
           }
         shape
@@ -390,16 +455,18 @@ checkMappedDecl MappedRefined {mrName = name, mrHaskell = haskell, mrBinding = b
             canonical = checkedCanonical,
             fixtures = checkedFixtures,
             initial = checkedInitial,
+            writeLift = Nothing,
             loc = loc
           }
         (ShapeRefined policy)
     )
-checkMappedDecl MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codecIdentity, moCodecVersion = codecVersion, moFixtures = fixtures, moInitial = initial, moLoc = loc} = do
+checkMappedDecl MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codecIdentity, moCodecVersion = codecVersion, moFixtures = fixtures, moInitial = initial, moWriteLift = writeLift, moLoc = loc} = do
   checkedHaskell <- require (MissingHaskellSource name) haskell
   checkedCodecIdentity <- require (MissingOpaqueCodecIdentity name) codecIdentity >>= liftOne . mkCodecIdentity
   checkedCodecVersion <- require (MissingOpaqueCodecVersion name) codecVersion >>= liftOne . mkCodecVersion
   checkedFixtures <- require (MissingFixtureCases name) fixtures >>= liftOne . mkQualifiedValueName
   checkedInitial <- traverse (liftOne . mkQualifiedValueName) initial
+  checkedLift <- traverse checkWriteLift writeLift
   pure
     ( CheckedOpaque
         OpaqueDecl
@@ -409,6 +476,7 @@ checkMappedDecl MappedOpaque {moName = name, moHaskell = haskell, moCodecId = co
             codecVersion = checkedCodecVersion,
             fixtures = checkedFixtures,
             initial = checkedInitial,
+            writeLift = checkedLift,
             loc = loc
           }
     )

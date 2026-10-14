@@ -26,6 +26,7 @@ data MappedClause
   | MCBindingVersion Text
   | MCCanonical Text
   | MCFixtures Text
+  | MCWriteLift MappedWriteLiftDecl
   | MCInitial Text
   | MCCodec Text
   | MCCodecVersion Text
@@ -45,7 +46,7 @@ pMappedTopItem context = do
           fail "unreachable enabled nominal syntax in predecessor grammar",
       SurfaceMapped <$> pMappedStructural context loc,
       SurfaceMapped <$> pMappedRefined context loc,
-      SurfaceMapped <$> pMappedOpaque loc
+      SurfaceMapped <$> pMappedOpaque context loc
     ]
 
 pMappedStructural :: FrontendContext -> Loc -> P MappedDecl
@@ -66,6 +67,7 @@ pMappedStructural context loc = do
   canonical <- oneClause "canonical-type" (\case MCCanonical value -> Just value; _ -> Nothing) clauses
   fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
   initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+  writeLift <- oneClause "write-lift" (\case MCWriteLift value -> Just value; _ -> Nothing) clauses
   shape <- requiredClause "wire" (\case MCShape value -> Just value; _ -> Nothing) clauses
   pure
     MappedStructural
@@ -76,20 +78,22 @@ pMappedStructural context loc = do
         msCanonical = canonical,
         msFixtures = fixtures,
         msInitial = initial,
+        msWriteLift = writeLift,
         msShape = shape,
         msLoc = loc
       }
 
-pMappedOpaque :: Loc -> P MappedDecl
-pMappedOpaque loc = do
+pMappedOpaque :: FrontendContext -> Loc -> P MappedDecl
+pMappedOpaque context loc = do
   keyword "opaque"
   name <- ident
-  clauses <- braces (many pOpaqueClause)
+  clauses <- braces (many (pOpaqueClause context))
   hs <- oneClause "haskell" (\case MCHaskell value -> Just value; _ -> Nothing) clauses
   codec <- oneClause "codec" (\case MCCodec value -> Just value; _ -> Nothing) clauses
   version <- oneClause "version" (\case MCCodecVersion value -> Just value; _ -> Nothing) clauses
   fixtures <- oneClause "fixtures" (\case MCFixtures value -> Just value; _ -> Nothing) clauses
   initial <- oneClause "initial" (\case MCInitial value -> Just value; _ -> Nothing) clauses
+  writeLift <- oneClause "write-lift" (\case MCWriteLift value -> Just value; _ -> Nothing) clauses
   pure
     MappedOpaque
       { moName = name,
@@ -98,6 +102,7 @@ pMappedOpaque loc = do
         moCodecVersion = version,
         moFixtures = fixtures,
         moInitial = initial,
+        moWriteLift = writeLift,
         moLoc = loc
       }
 
@@ -187,18 +192,45 @@ pStructuralClause context kind =
       MCCanonical <$> pQuotedFact "canonical-type",
       MCFixtures <$> pQuotedFact "fixtures",
       MCInitial <$> pQuotedFact "initial",
+      MCWriteLift <$> pWriteLift context,
       MCShape <$> pMappedShape context kind
     ]
 
-pOpaqueClause :: P MappedClause
-pOpaqueClause =
+pOpaqueClause :: FrontendContext -> P MappedClause
+pOpaqueClause context =
   choice
     [ MCHaskell <$> pHaskellSource,
+      MCWriteLift <$> pWriteLift context,
       MCCodec <$> pQuotedFact "codec",
       MCCodecVersion <$> pQuotedFact "version",
       MCFixtures <$> pQuotedFact "fixtures",
       MCInitial <$> pQuotedFact "initial"
     ]
+
+pWriteLift :: FrontendContext -> P MappedWriteLiftDecl
+pWriteLift context = do
+  loc <- getLoc
+  languageFeatureKeyword context MappedRegisterConstructionSyntax "write-lift"
+  keyword "from"
+  source <- pMappedTypeExpr context
+  facts <-
+    braces
+      ( many
+          ( choice
+              [ ("function",) <$> pQuotedFact "function",
+                ("version",) <$> pQuotedFact "version",
+                ("fixtures",) <$> pQuotedFact "fixtures"
+              ]
+          )
+      )
+  let fact key = case [value | (name, value) <- facts, name == key] of
+        [] -> pure Nothing
+        [value] -> pure (Just value)
+        _ -> fail ("duplicate " <> key <> " in write-lift")
+  function <- fact "function"
+  version <- fact "version"
+  fixtures <- fact "fixtures"
+  pure MappedWriteLiftDecl {source, function, version, fixtures, loc}
 
 pRefinedClause :: P MappedClause
 pRefinedClause =

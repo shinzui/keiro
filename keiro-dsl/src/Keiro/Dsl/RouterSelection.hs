@@ -397,6 +397,8 @@ resolveSelectionExpr graph inputType rowType expected expression = case expressi
         (scalarType, path) <- resolvePath graph loc rootType fields
         requireExpected loc expected scalarType
         pure (CheckedScalarExpr scalarType (CheckedPath root path) loc)
+  EWriteInitial loc -> selectionFailure loc SelectionOperatorUnsupported "initial is write-only"
+  EWriteMapped loc _ -> selectionFailure loc SelectionOperatorUnsupported "mapped construction is write-only"
   EPath loc _ _ -> selectionFailure loc SelectionExpressionRootUnknown "selection expressions do not admit aggregate reg/cmd roots"
   ELiteral loc (LiteralText value) -> literal loc SelectionText (CheckedTextLiteral value)
   ELiteral loc (LiteralIntegral value) -> case expected of

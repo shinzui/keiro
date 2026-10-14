@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-10-14T15:27:59Z
+timestamp: 2026-10-14T17:10:13Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -137,6 +137,26 @@ consumers read the shared graph instead of resolving independently. A caller tha
 needs a modified graph must use `checkedServiceWithSpec`, which preserves the
 effective language contract and constructs a fresh lazy analysis; record updates
 cannot pair a replacement spec with stale derived state.
+
+
+Candidate Language 6 mapped construction adds syntax to profile 5 without a new
+global runtime capability or fold segment. Canonical expressions render complete
+write RHSs as `initial` and `mapped(child)`. Only a transition using a lift appends
+one `mapped-write-lifts=` field after its existing fields. Its compact JSON array
+contains `[register,mapped-name,source-type,function,version]` tuples in write order,
+with JSON string escaping; fixture names and source locations are excluded. No empty
+field is appended, preserving every lift-free canonical surface and digest.
+
+Construction-aware replay comparisons resolve the old and new complete folds against
+their own checked declarations. If either aggregate uses construction and those
+surfaces differ, select all its old event types and snapshot streams, unioning normal
+decode impact. Equal surfaces retain normal transition/decode selection. Aggregates
+using neither form retain the existing body/dependency algorithm. Unused declaration
+lifts and cases-only edits remain replay-neutral; actual invalid writes return
+`FoldWriteResolutionFailed`. Lift metadata is explicitly a consumer-build advisory;
+only aggregate use independently creates the fold/snapshot advisory. Removing a lift
+or changing its source with a corresponding write remains a valid comparison, never
+an unresolved hybrid of old expressions and new declarations.
 
 
 ## Consequences

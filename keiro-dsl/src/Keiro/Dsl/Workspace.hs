@@ -1476,6 +1476,8 @@ instance HasLocs InputDecl
 
 instance HasLocs IntakeNode
 
+instance HasLocs MappedWriteLiftDecl
+
 instance HasLocs MappedDecl
 
 instance HasLocs MappedShape

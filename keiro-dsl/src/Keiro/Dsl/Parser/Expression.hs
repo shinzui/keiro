@@ -1,6 +1,7 @@
 -- | Legacy and typed scalar expression syntax.
 module Keiro.Dsl.Parser.Expression
   ( pExpr,
+    pWriteExpr,
   )
 where
 
@@ -15,6 +16,28 @@ import Text.Megaparsec
 
 -- Expr sublanguage
 --------------------------------------------------------------------------------
+
+-- Construction is contextual only at a complete write RHS. Continuations retain
+-- their ordinary expression meaning, including an unqualified initial root.
+pWriteExpr :: FrontendContext -> P Expr
+pWriteExpr context = mappedWrite <|> initialWrite
+  where
+    mappedWrite = do
+      loc <- getLoc
+      marker <- withOwnedSpan (keyword "mapped")
+      requireLanguageFeatureAt context MappedRegisterConstructionSyntax (spanOf marker)
+      EWriteMapped loc <$> parens (pExpr context)
+    initialWrite
+      | frontendSupportsFeature context MappedRegisterConstructionSyntax =
+          try
+            ( do
+                loc <- getLoc
+                keyword "initial"
+                notFollowedBy (choice [symbol token | token <- [".", "+", "-", "*", "/", "%", "==", "!=", "<", ">", "&&", "||"]])
+                pure (EWriteInitial loc)
+            )
+            <|> pExpr context
+      | otherwise = pExpr context
 
 pExpr :: FrontendContext -> P Expr
 pExpr context

@@ -32,6 +32,7 @@ module Keiro.Dsl.Grammar
     NominalBindingDecl (..),
     NominalScalarDecl (..),
     MappedDecl (..),
+    MappedWriteLiftDecl (..),
 
     -- * Shared mapping type
     Mapping (..),
@@ -374,6 +375,17 @@ data NominalScalarDecl = NominalScalarDecl
   }
   deriving stock (Eq, Show, Generic)
 
+-- | A declaration-owned unary register constructor. Missing facts remain raw
+-- until checking, so omissions have located diagnostics rather than exceptions.
+data MappedWriteLiftDecl = MappedWriteLiftDecl
+  { source :: !TypeExpr,
+    function :: !(Maybe Text),
+    version :: !(Maybe Text),
+    fixtures :: !(Maybe Text),
+    loc :: !Loc
+  }
+  deriving stock (Eq, Show, Generic)
+
 data MappedDecl
   = MappedStructural
       { msName :: !Name,
@@ -383,6 +395,7 @@ data MappedDecl
         msCanonical :: !(Maybe Text),
         msFixtures :: !(Maybe Text),
         msInitial :: !(Maybe Text),
+        msWriteLift :: !(Maybe MappedWriteLiftDecl),
         msShape :: !MappedShape,
         msLoc :: !Loc
       }
@@ -404,6 +417,7 @@ data MappedDecl
         moCodecVersion :: !(Maybe Text),
         moFixtures :: !(Maybe Text),
         moInitial :: !(Maybe Text),
+        moWriteLift :: !(Maybe MappedWriteLiftDecl),
         moLoc :: !Loc
       }
   deriving stock (Eq, Show, Generic)
@@ -429,6 +443,8 @@ data Expr
   | EMultiply !Loc !Expr !Expr
   | EPath !Loc !ExprRoot ![Name]
   | ELiteral !Loc !ScalarLiteral
+  | EWriteMapped !Loc !Expr
+  | EWriteInitial !Loc
   | EAtom !Atom
   deriving stock (Eq, Show, Generic)
 
@@ -466,6 +482,8 @@ exprLoc = \case
   EMultiply loc _ _ -> loc
   EPath loc _ _ -> loc
   ELiteral loc _ -> loc
+  EWriteMapped loc _ -> loc
+  EWriteInitial loc -> loc
   EAtom {} -> noLoc
   where
     firstLocated left right = case exprLoc left of

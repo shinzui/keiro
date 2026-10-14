@@ -272,12 +272,12 @@ setNominalScalarLoc loc NominalScalarDecl {name, representation, binding} =
   NominalScalarDecl {name, representation, binding, loc}
 
 setMappedLoc :: Loc -> MappedDecl -> MappedDecl
-setMappedLoc loc (MappedStructural name haskell binding bindingVersion canonical fixtures initial shape _) =
-  MappedStructural name haskell binding bindingVersion canonical fixtures initial shape loc
+setMappedLoc loc (MappedStructural name haskell binding bindingVersion canonical fixtures initial writeLift shape _) =
+  MappedStructural name haskell binding bindingVersion canonical fixtures initial writeLift shape loc
 setMappedLoc loc (MappedRefined name haskell binding bindingVersion canonical fixtures initial policy _) =
   MappedRefined name haskell binding bindingVersion canonical fixtures initial policy loc
-setMappedLoc loc (MappedOpaque name haskell codecId codecVersion fixtures initial _) =
-  MappedOpaque name haskell codecId codecVersion fixtures initial loc
+setMappedLoc loc (MappedOpaque name haskell codecId codecVersion fixtures initial writeLift _) =
+  MappedOpaque name haskell codecId codecVersion fixtures initial writeLift loc
 
 setNodeLoc :: Loc -> Node -> Node
 setNodeLoc loc = \case

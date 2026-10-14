@@ -2212,6 +2212,8 @@ sourceLanguageLabel sourceLanguage =
 obligationKindLabel :: BindingObligationKind -> Text
 obligationKindLabel BindingValue = "binding"
 obligationKindLabel FixtureValue = "fixtures"
+obligationKindLabel WriteLiftFunction = "write-lift-function"
+obligationKindLabel WriteLiftCases = "write-lift-cases"
 obligationKindLabel InitialValue = "initial-value"
 
 renderBracketed :: [Text] -> Text

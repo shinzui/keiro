@@ -8,6 +8,13 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- Candidate mapped construction extends public `Expr`, `MappedDecl`, checked
+  structural/opaque declarations, mapping identities, diagnostic codes, and
+  binding obligation kinds. Library clients constructing those records must
+  supply the optional lift field (`Nothing` for prior declarations), and clients
+  matching constructors must handle the new cases. These source API changes
+  require a shared PVP-major release; this change does not choose or publish it.
+
 - `Keiro.Dsl.Grammar.ContractType` is now `CScalar ContractScalarType | CList
   ContractScalarType`; `CTypeId`, `CDeclaredId`, `CText`, and `CInt` belong to
   `ContractScalarType`. Update library clients to wrap scalar fields in `CScalar`.
@@ -24,6 +31,15 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   their application bodies.
 
 ### Added
+
+- Candidate Language 6 supports complete mapped-register `initial` and
+  `mapped(expression)` writes under generated guard/slot ownership, backed by one
+  pure, total, versioned declaration-owned scalar `write-lift` and finite cases.
+  Recursive projected/predicate inputs and mixed Hole ownership remain refused.
+  Used-lift provenance enters fold/snapshot identity; own-revision replay comparison
+  handles lift removal/source replacement. Unused lifts and cases-only edits are
+  replay-neutral build advisories. Schema-1 mapping ledgers remain readable.
+  A compiled lifecycle service and restoring mutation proof run in `just verify`.
 
 - Candidate Language 6 contracts accept `List <typeid | declared id | text | int>`
   fields under `ContractListFieldSyntax`, generating Haskell lists and ordered JSON

@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: ADR-18 freezes conditional compact-JSON used-lift identity and own-revision conservative construction replay comparison (plan 267).
+* **Update**: ADR-17 preserves generated guard/slot ownership for contextual mapped construction and rejects recursive projections and mixed Hole ownership (plan 267).
+* **Update**: ADR-12 records declaration-owned total scalar write lifts, finite cases, typed create-once obligations, and backward-readable ledger provenance (plan 267).
+* **Update**: ADR-3 records manual mapped-lift versioning, snapshot invalidation, and retained-history limits (plan 267).
 * **Update**: ADR-18 requires own-revision resolved fold evidence; ADR-4 requires complete removal reports before compatibility gate exit (plan 314).
 * **Update**: ADR-52 clarifies contextual, case-sensitive List applications and legal nominal ID names under plan 313.
 * **Update**: ADR-46 clarifies that literal/declared public ID transitions require equal admission and shape, as implemented by ADR-52.

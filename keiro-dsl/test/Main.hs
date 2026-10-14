@@ -87,6 +87,7 @@ import Keiro.Dsl.Manifest (manifestDependencies, manifestDependenciesForService,
 import Keiro.Dsl.MappedCodecPlan
 import Keiro.Dsl.MappedConsumer (ConsumerPlan (..), MappingIdentity (..), consumerPlan)
 import Keiro.Dsl.MappedDiff (MappedFinding (..), diffMapped)
+import Keiro.Dsl.MappedRegisterConstruction (mappedRegisterConstructionSpec)
 import Keiro.Dsl.NominalType hiding (NominalInvalidHaskellSource, NominalInvalidIdPrefix, NominalInvalidIdentity, NominalMissingIngredient)
 import Keiro.Dsl.Parser (parseSource, parseSourceDocument, parseSpec)
 import Keiro.Dsl.PrettyPrint (renderSource, renderSpec, renderTransition)
@@ -242,6 +243,7 @@ main = hspec $ do
   conformanceBaselineSpec
   frontendCompatibilitySpec
   frontendSurfaceSpec
+  mappedRegisterConstructionSpec
   frontendProfilesSpec
 
   describe "calendar-day codec policy v1" $ do
@@ -4968,6 +4970,7 @@ main = hspec $ do
                 moCodecVersion = Just "1",
                 moFixtures = Just "Conformance.RefinedBase16.Bindings.contentHashFixtures",
                 moInitial = Just "Conformance.RefinedBase16.Bindings.initialContentHash",
+                moWriteLift = Nothing,
                 moLoc = noLoc
               }
           opaqueSpec =
@@ -5088,6 +5091,7 @@ main = hspec $ do
                 moCodecVersion = Just "1",
                 moFixtures = Just "Conformance.StructuralTextSets.Bindings.textLabelsFixtures",
                 moInitial = Just "Conformance.StructuralTextSets.Bindings.initialTextLabels",
+                moWriteLift = Nothing,
                 moLoc = noLoc
               }
           opaqueSpec =
@@ -5244,6 +5248,7 @@ main = hspec $ do
                 moCodecVersion = Just "1",
                 moFixtures = Just "Example.Mapped.maybeTextCases",
                 moInitial = Nothing,
+                moWriteLift = Nothing,
                 moLoc = noLoc
               }
       inlineGraph <- shouldResolveTypeGraph (mappedSpec [inlineEnvelope])
@@ -15667,6 +15672,7 @@ completeStructural name shape =
       msCanonical = Just ("example.mapped." <> name),
       msFixtures = Just ("Example.Mapped." <> T.toLower name <> "Cases"),
       msInitial = Nothing,
+      msWriteLift = Nothing,
       msShape = shape,
       msLoc = noLoc
     }
@@ -16829,6 +16835,7 @@ genMappedDecl names name =
         <*> genMaybe genAdversarialText
         <*> genMaybe genAdversarialText
         <*> genMaybe genAdversarialText
+        <*> pure Nothing
         <*> genMappedShape names
         <*> pure noLoc,
       MappedOpaque name
@@ -16837,6 +16844,7 @@ genMappedDecl names name =
         <*> genMaybe genAdversarialText
         <*> genMaybe genAdversarialText
         <*> genMaybe genAdversarialText
+        <*> pure Nothing
         <*> pure noLoc
     ]
 

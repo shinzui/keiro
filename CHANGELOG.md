@@ -6,6 +6,12 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- Candidate Language 6 generated transitions can clear or construct mapped
+  registers through target `initial` and versioned scalar `write-lift` declarations,
+  with conformance, fold/snapshot identity, replay impact, and a recurring mutation
+  proof. Public DSL constructor/record additions require a shared PVP-major release;
+  Language 6 publication and consumer adoption remain separate.
+
 - Candidate Language 6 adds scalar list fields to integration contracts and splits
   the library contract-type API; see [keiro-dsl changes](keiro-dsl/CHANGELOG.md#unreleased).
 

@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Werror=incomplete-patterns #-}
+
 -- | Canonical identities for the aggregate fold surface used while hydrating
 -- event streams. The fingerprint deliberately excludes payload codecs,
 -- projections, snapshot policy, and source locations: those inputs do not change
@@ -13,6 +15,8 @@ module Keiro.Dsl.FoldEvidence
   )
 where
 
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as LazyBytes
 import Data.List (find)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -20,6 +24,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TextEncoding
 import Keiro.Codec.IdDomain (v5OrV7IdDomainVersion)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CanonicalEncoding (canonicalExpr, foldFingerprint128)
@@ -41,6 +46,7 @@ data FoldSurfaceError
   | FoldRegisterTypeResolutionFailed !Name !Text
   | FoldRegisterInitialResolutionFailed !Name !Text
   | FoldGuardResolutionFailed !Name !Name !Text
+  | FoldWriteResolutionFailed !Name !Name !Text
   | FoldEventOutputResolutionFailed !Name !Name !Name !Text
   deriving stock (Eq, Show)
 
@@ -54,6 +60,7 @@ renderFoldSurfaceError = \case
     "aggregate fold register '" <> registerName <> "' initial resolution failed: " <> detail
   FoldGuardResolutionFailed aggregateName commandName detail ->
     "aggregate fold guard resolution failed for '" <> aggregateName <> "." <> commandName <> "': " <> detail
+  FoldWriteResolutionFailed aggregateName registerName detail -> "aggregate fold write resolution failed for " <> aggregateName <> "." <> registerName <> ": " <> detail
   FoldEventOutputResolutionFailed aggregateName commandName eventName detail ->
     "aggregate fold output resolution failed for '"
       <> aggregateName
@@ -278,6 +285,8 @@ equalityIdentities languageContract expression =
       AggregateNominal nominal -> [((.name) nominal, identity) | identity <- maybeToList (nominalEqualityIdentityForService languageContract nominal)]
       _ -> []
     children = case (.node) expression of
+      TypedMappedLift _ _ child -> equalityIdentities languageContract child
+      TypedMappedInitial {} -> []
       TypedLiteral {} -> []
       TypedRoot {} -> []
       TypedProject {} -> []
@@ -304,6 +313,7 @@ equalitySites contract syntax expression =
       _ -> Map.empty
     site = Map.singleton (canonicalExpr syntax) (Set.fromList (map snd (equalityIdentities contract expression)))
     syntaxChildren = case syntax of
+      EWriteMapped _ child -> [child]
       EOr left right -> [left, right]
       EAnd left right -> [left, right]
       ECmp _ left right -> [left, right]
@@ -312,6 +322,7 @@ equalitySites contract syntax expression =
       EMultiply _ left right -> [left, right]
       _ -> []
     typedChildren = case expression.node of
+      TypedMappedLift _ _ child -> [child]
       TypedOr left right -> [left, right]
       TypedAnd left right -> [left, right]
       TypedEqual left right -> [left, right]
@@ -434,6 +445,22 @@ registerSegment symbols register = do
 transitionSegment :: TypeGraph -> Spec -> Aggregate -> Transition -> Either FoldSurfaceError Text
 transitionSegment graph spec aggregate transition = do
   outputOwnershipSegment <- transitionOutputSegments graph spec aggregate transition
+  resolvedWrites <-
+    traverse
+      ( \(register, expression) ->
+          fmap
+            (register,)
+            ( mapLeft
+                (FoldWriteResolutionFailed aggregate.name register . showText)
+                (resolveWriteExpr (expressionEnvironmentFromGraph graph spec aggregate transition) register expression)
+            )
+      )
+      [(register, expression) | (register, expression) <- transition.writes, case expression of EWriteInitial {} -> True; EWriteMapped {} -> True; _ -> False]
+  let lifts =
+        [ [register, name, liftSourceName lift.source, unQualifiedValueName lift.function, unLiftVersion lift.version]
+        | (register, TypedScalarExpr {node = TypedMappedLift name lift _}) <- resolvedWrites
+        ]
+      liftSegment = ["mapped-write-lifts=" <> TextEncoding.decodeUtf8 (LazyBytes.toStrict (Aeson.encode lifts)) | not (null lifts)]
   pure
     ( T.intercalate
         "|"
@@ -448,6 +475,7 @@ transitionSegment graph spec aggregate transition = do
                ]
             ++ outputOwnershipSegment
             ++ ["goto=" <> (.goto) transition]
+            ++ liftSegment
         )
     )
   where
@@ -528,6 +556,8 @@ exprNames = \case
   EMultiply _ left right -> exprNames left <> exprNames right
   EPath _ _ (name : _) -> Set.singleton name
   EPath _ _ [] -> Set.empty
+  EWriteMapped _ child -> exprNames child
+  EWriteInitial {} -> Set.empty
   ELiteral {} -> Set.empty
   EAtom (AName name) -> Set.singleton name
   EAtom (ABool _) -> Set.empty

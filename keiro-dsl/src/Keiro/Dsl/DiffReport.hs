@@ -300,7 +300,7 @@ remediationFor context code
   | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged] =
       RemedyRecompileConsumers :| [RemedyRunConformance]
   | code == MappedBindingChanged = mappedConformanceRemedy
-  | code == MappedFixturesChanged = RemedyRunConformance :| []
+  | code `elem` [MappedFixturesChanged, MappedWriteLiftChanged, MappedWriteLiftFixturesChanged] = RemedyRunConformance :| []
   | code == MappedInitialChanged = mappedSnapshotConformanceRemedy
   | code == MappedCanonicalTypeChanged = mappedCanonicalRemedy
   | code == MappedDeclAdded = RemedyRunConformance :| []

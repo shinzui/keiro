@@ -5,8 +5,8 @@ description: Declare Keiro DSL IDs, enums, rules, direct types, and consumer-own
 docId: DOC-26
 tags: [keiro, dsl, types, mappings, reference]
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: 2026-09-28T00:00:00Z
+  by: openai-codex/gpt-6.1-sol
+  at: 2026-10-14T17:10:13Z
 ---
 
 # Keiro DSL Types and Mappings
@@ -624,3 +624,13 @@ impact` names checked consumers and service conformance, while
 `generated-artifact impact` names bytes that changed. A legacy ledger has no
 historic semantic snapshot, so its first report says `baseline: unavailable
 (legacy ledger)` rather than guessing an empty old consumer set.
+
+## Candidate mapped write lifts
+
+Candidate Language 6 opaque and structural declarations may include one nested
+`write-lift from <scalar> { function = "Module.value" version = "token" fixtures = "Module.cases" }`.
+It declares a pure, total unary constructor for generated register writes; its
+cases have type `NonEmpty (Text, source, target)`. This does not change the
+mapping's codec or binding laws. Refined mappings admit target `initial` writes
+but do not declare lifts. The [aggregate construction reference](keiro-dsl-aggregates.md#mapped-register-construction-in-candidate-language-6)
+explains source restrictions, create-once stubs, manual versioning, and replay.

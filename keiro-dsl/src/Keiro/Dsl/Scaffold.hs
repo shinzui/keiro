@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Werror=incomplete-patterns #-}
+
 -- | The scaffold engine. Given an 'Aggregate' (and a 'Context' naming the
 -- service and output module-namespace root), it emits deterministic
 -- @-- \@generated@ modules plus create-if-absent Hole modules for the behavior
@@ -1065,7 +1067,7 @@ emitBindingSkeleton ctx spec graph owner obligations =
         | any (\obligation -> (.category) obligation == "structural" && (.kind) obligation `elem` [BindingValue, FixtureValue]) obligations
         ]
           <> [ "Keiro.Codec.Nominal (NominalBinding (..), NominalFixtureCases)"
-             | any ((/= "structural") . (.category)) obligations
+             | any (\obligation -> "nominal-" `T.isPrefixOf` obligation.category) obligations
              ]
           <> [ "Data.KindID (KindID)"
              | obligation <- obligations,
@@ -1087,11 +1089,27 @@ emitBindingSkeleton ctx spec graph owner obligations =
                Just (nominal, _) <- [nominalFor obligation],
                ScalarRepresentation NominalNatural <- [(.representation) nominal]
              ]
-    renderObligation obligation = case structuralFor obligation of
+    liftFor obligation = case Map.lookup (MappedKey obligation.mappedName) graph.declarations of
+      Just (ResolvedStructural declaration _) -> (declaration.haskell,) <$> declaration.writeLift
+      Just (ResolvedOpaque declaration) -> (declaration.haskell,) <$> declaration.writeLift
+      Nothing -> Nothing
+    renderLiftObligation obligation = case liftFor obligation of
+      Just (source, lift) ->
+        [ "-- HOLE: supply a pure total versioned write-lift and finite labelled cases.",
+          renderLiftSignature importPlan source lift obligation,
+          obligation.symbol <> " = error " <> tshow ("HOLE: fill " <> obligation.mappedName <> " " <> obligation.symbol)
+        ]
+      Nothing -> error "checked lift obligation has no declaration"
+    renderObligation obligation
+      | obligation.kind `elem` [WriteLiftFunction, WriteLiftCases] = renderLiftObligation obligation
+      | otherwise = renderOrdinaryObligation obligation
+    renderOrdinaryObligation obligation = case structuralFor obligation of
       Nothing -> case nominalFor obligation of
         Just (nominal, binding) -> renderNominalObligation nominal binding obligation
         Nothing -> ["-- HOLE: declaration disappeared before skeleton rendering"]
       Just (declaration, shape) -> case (.kind) obligation of
+        WriteLiftFunction -> renderLiftObligation obligation
+        WriteLiftCases -> renderLiftObligation obligation
         BindingValue -> renderBinding importPlan ctx declaration shape obligation
         FixtureValue ->
           [ "-- HOLE: provide deterministic labelled conformance fixtures for " <> (.name) declaration,
@@ -1114,6 +1132,8 @@ emitBindingSkeleton ctx spec graph owner obligations =
         GeneratedNominal -> Nothing
       pure (nominal, binding)
     renderNominalObligation nominal binding obligation = case (.kind) obligation of
+      WriteLiftFunction -> error "mapped lift on nominal obligation"
+      WriteLiftCases -> error "mapped lift on nominal obligation"
       BindingValue ->
         [ "-- HOLE: complete both total directions; the generated codec remains wire authority.",
           renderNominalObligationSignature importPlan ctx nominal binding obligation,
@@ -1135,6 +1155,35 @@ emitBindingSkeleton ctx spec graph owner obligations =
         ]
     intercalateBlank [] = []
     intercalateBlank (section : rest) = section <> concatMap ("" :) rest
+
+liftScalarReference :: LiftSource -> Maybe HaskellReference
+liftScalarReference = \case
+  LiftText -> Just (HaskellReference "Data.Text" "Text" TypeNamespace PreferUnqualified)
+  LiftTime -> Just (HaskellReference "Data.Time" "UTCTime" TypeNamespace PreferUnqualified)
+  LiftNatural -> Just (HaskellReference "Numeric.Natural" "Natural" TypeNamespace PreferUnqualified)
+  LiftInt -> Nothing
+  LiftInteger -> Nothing
+  LiftBool -> Nothing
+
+liftSignatureReferences :: BindingObligationKind -> MappedWriteLift -> [HaskellReference]
+liftSignatureReferences kind lift =
+  maybe [] pure (liftScalarReference lift.source)
+    <> [HaskellReference "Data.Text" "Text" TypeNamespace PreferUnqualified | kind == WriteLiftCases]
+    <> [HaskellReference "Data.List.NonEmpty" "NonEmpty" TypeNamespace PreferUnqualified | kind == WriteLiftCases]
+
+renderLiftSignature :: HaskellImportPlan -> HaskellSource -> MappedWriteLift -> BindingObligation -> Text
+renderLiftSignature importPlan source lift obligation = obligation.symbol <> " :: " <> signature
+  where
+    target = renderReferenceOrDie importPlan (haskellTypeReference source)
+    scalar = maybe (liftSourceName lift.source) (renderReferenceOrDie importPlan) (liftScalarReference lift.source)
+    textType = renderReferenceOrDie importPlan (HaskellReference "Data.Text" "Text" TypeNamespace PreferUnqualified)
+    nonEmpty = renderReferenceOrDie importPlan (HaskellReference "Data.List.NonEmpty" "NonEmpty" TypeNamespace PreferUnqualified)
+    signature = case obligation.kind of
+      WriteLiftFunction -> scalar <> " -> " <> target
+      WriteLiftCases -> nonEmpty <> " (" <> textType <> ", " <> scalar <> ", " <> target <> ")"
+      BindingValue -> error "binding obligation is not a lift"
+      FixtureValue -> error "fixture obligation is not a lift"
+      InitialValue -> error "initial obligation is not a lift"
 
 renderBinding :: HaskellImportPlan -> Context -> StructuralDecl -> ResolvedMappedShape -> BindingObligation -> [Text]
 renderBinding importPlan ctx declaration shape obligation =
@@ -1207,8 +1256,14 @@ renderBinding importPlan ctx declaration shape obligation =
 
 bindingSkeletonImportPlan :: Context -> Spec -> TypeGraph -> Text -> [BindingObligation] -> HaskellImportPlan
 bindingSkeletonImportPlan ctx spec graph owner obligations =
-  planImportsOrDie owner (Set.fromList (map (.symbol) obligations)) (Set.fromList (concatMap obligationReferences obligations))
+  planImportsOrDie owner (Set.fromList (map (.symbol) obligations) <> if any ((`elem` [WriteLiftFunction, WriteLiftCases]) . (.kind)) obligations then Set.fromList ["Bool", "Int", "Integer"] else Set.empty) (Set.fromList (concatMap (\obligation -> obligationReferences obligation <> liftReferences obligation) obligations))
   where
+    liftReferences obligation
+      | obligation.kind `elem` [WriteLiftFunction, WriteLiftCases] = case Map.lookup (MappedKey obligation.mappedName) graph.declarations of
+          Just (ResolvedStructural declaration _) -> maybe [] (liftSignatureReferences obligation.kind) declaration.writeLift
+          Just (ResolvedOpaque declaration) -> maybe [] (liftSignatureReferences obligation.kind) declaration.writeLift
+          Nothing -> []
+      | otherwise = []
     obligationReferences obligation = case Map.lookup (MappedKey ((.mappedName) obligation)) ((.declarations) graph) of
       Just (ResolvedStructural declaration shape) ->
         haskellTypeReference ((.haskell) declaration)
@@ -1225,6 +1280,7 @@ bindingSkeletonImportPlan ctx spec graph owner obligations =
                ]
         where
           shapeModuleName = structuralShapeModule ctx ((.name) declaration)
+      Just (ResolvedOpaque declaration) -> [haskellTypeReference declaration.haskell]
       _ -> case nominalForName ((.mappedName) obligation) of
         Just (nominal, binding) ->
           haskellTypeReference ((.haskell) binding)
@@ -1300,6 +1356,8 @@ renderStructuralObligationSignature importPlan declaration obligation =
     <> case (.kind) obligation of
       BindingValue -> error "structural binding signatures are rendered with renderBinding"
       FixtureValue -> "FixtureCases " <> domainType
+      WriteLiftFunction -> error "lift signatures use renderLiftSignature"
+      WriteLiftCases -> error "lift signatures use renderLiftSignature"
       InitialValue -> domainType
   where
     domainType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) declaration))
@@ -1311,6 +1369,8 @@ renderNominalObligationSignature importPlan ctx nominal binding obligation =
     <> case (.kind) obligation of
       BindingValue -> "NominalBinding " <> domainType <> " " <> representationType
       FixtureValue -> "NominalFixtureCases " <> domainType
+      WriteLiftFunction -> error "lift signatures use renderLiftSignature"
+      WriteLiftCases -> error "lift signatures use renderLiftSignature"
       InitialValue -> domainType
   where
     domainType = renderReferenceOrDie importPlan (haskellTypeReference ((.haskell) binding))
@@ -6846,6 +6906,8 @@ renderGuardExpr = \case
   ESubtract _ left right -> binary "-" left right
   EMultiply _ left right -> binary "*" left right
   EPath _ UnqualifiedRoot ["input", field] -> field
+  EWriteInitial {} -> error "write-only initial in selection"
+  EWriteMapped {} -> error "write-only mapped construction in selection"
   EPath _ _ path -> T.intercalate "." path
   ELiteral _ literal -> case literal of
     LiteralText value -> tshow value
@@ -8623,6 +8685,8 @@ anyTypedExpression predicate expression =
 
 typedExpressionChildren :: TypedScalarExpr -> [TypedScalarExpr]
 typedExpressionChildren expression = case (.node) expression of
+  TypedMappedLift _ _ child -> [child]
+  TypedMappedInitial {} -> []
   TypedLiteral {} -> []
   TypedRoot {} -> []
   TypedProject {} -> []
@@ -8870,6 +8934,8 @@ renderNominalProjectionTerm importPlan aggregate transition nominal provenance =
 
 renderKeikiTerm :: HaskellImportPlan -> [ProjectionAlias] -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
 renderKeikiTerm importPlan aliases aggregate transition expression = case (.node) expression of
+  TypedMappedLift _ lift child -> renderedAtom ("K.TApp1 " <> renderReferenceOrDie importPlan (qualifiedValueReference lift.function) <> " (" <> (.text) (renderKeikiTerm importPlan aliases aggregate transition child) <> ")")
+  TypedMappedInitial _ value -> renderedAtom ("K.opaqueLit " <> renderReferenceOrDie importPlan (qualifiedValueReference value))
   TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate ((.valueType) expression) value)
   TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
   TypedRoot (ScalarCommandRoot name _) ->
@@ -8948,6 +9014,8 @@ renderOutcomeComparisonTerm importPlan aggregate transition expression = case ((
 
 renderOutcomeKeikiTerm :: HaskellImportPlan -> Agg -> Transition -> TypedScalarExpr -> RenderedKeikiExpr
 renderOutcomeKeikiTerm importPlan aggregate transition expression = case (.node) expression of
+  TypedMappedLift {} -> error "write-only mapped construction in outcome"
+  TypedMappedInitial _ value -> renderedAtom ("K.opaqueLit " <> renderReferenceOrDie importPlan (qualifiedValueReference value))
   TypedLiteral value -> renderedAtom (renderKeikiLiteral importPlan aggregate ((.valueType) expression) value)
   TypedRoot (ScalarRegisterRoot registerName _) -> renderedAtom ("B.reg @" <> tshow registerName)
   TypedRoot (ScalarCommandRoot name ownerType) ->
@@ -9173,7 +9241,7 @@ emitGeneratedTransducer aggregate =
             <> concatMap typedExpressionLiteralTypes resolvedExpressions
         )
     consumerLiteralNominals = nub [nominal | expression <- resolvedExpressions, nominal <- typedConsumerLiteralNominals expression]
-    importPlan = transducerImportPlan aggregate expressionImportTypes consumerLiteralNominals
+    importPlan = transducerImportPlan aggregate expressionImportTypes consumerLiteralNominals (concatMap typedWriteValueReferences resolvedExpressions)
     -- Only a literal names `parse<Id>`; see 'generatedNominalTypeImportsWithParsers'.
     generatedLiteralNominals =
       stableNominals
@@ -9223,15 +9291,16 @@ transducerUsesRecordDot aggregate =
       TypedRoot ScalarCommandRoot {} -> True
       _ -> False
 
-transducerImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> HaskellImportPlan
-transducerImportPlan aggregate importedTypes literalNominals =
+transducerImportPlan :: Agg -> [ResolvedAggregateType] -> [ResolvedNominalType] -> [HaskellReference] -> HaskellImportPlan
+transducerImportPlan aggregate importedTypes literalNominals writeReferences =
   planImportsOrDie
     ((.genPrefix) aggregate <> ".Transducer")
     (Set.fromList [(.name) aggregate <> "Regs", (.name) aggregate <> "Command", (.name) aggregate <> "Event"])
-    ( Set.unions
-        [ aggregateSourceReferences (aggregateConsumerHaskellSource ((.symbols) aggregate) resolvedType)
-        | resolvedType <- importedTypes
-        ]
+    ( Set.fromList writeReferences
+        <> Set.unions
+          [ aggregateSourceReferences (aggregateConsumerHaskellSource ((.symbols) aggregate) resolvedType)
+          | resolvedType <- importedTypes
+          ]
         <> Set.fromList
           [ reference
           | nominal <- literalNominals,
@@ -9246,6 +9315,14 @@ transducerImportPlan aggregate importedTypes literalNominals =
                   _ -> []
           ]
     )
+
+typedWriteValueReferences :: TypedScalarExpr -> [HaskellReference]
+typedWriteValueReferences expression = own <> concatMap typedWriteValueReferences (typedExpressionChildren expression)
+  where
+    own = case (.node) expression of
+      TypedMappedLift _ lift _ -> [qualifiedValueReference lift.function]
+      TypedMappedInitial _ value -> [qualifiedValueReference value]
+      _ -> []
 
 typedExpressionImportTypes :: TypedScalarExpr -> [ResolvedAggregateType]
 typedExpressionImportTypes expression = own <> concatMap typedExpressionImportTypes (typedExpressionChildren expression)
@@ -9415,12 +9492,24 @@ generatedOnCmdBlock importPlan aggregate resolvedTransitions index transition =
       | payloadIsUsed = "d"
       | otherwise = "_d"
     payloadIsUsed = case (.implementation) transition of
-      GeneratedImplementation ->
-        isJust ((.guard) resolved)
-          || not (null ((.writes) resolved))
-          || any outputUsesPayload (zip [1 ..] ((.emits) transition))
+      GeneratedImplementation
+        | any isConstruction (map snd resolved.writes) ->
+            any (anyTypedExpression usesCommand) (maybe [] pure resolved.guard <> map snd resolved.writes)
+              || any outputUsesPayload (zip [1 ..] transition.emits)
+        | otherwise ->
+            isJust ((.guard) resolved)
+              || not (null ((.writes) resolved))
+              || any outputUsesPayload (zip [1 ..] ((.emits) transition))
       HoleImplementation -> True
       LegacyHoleImplementation -> True
+    isConstruction expression = case expression.node of
+      TypedMappedInitial {} -> True
+      TypedMappedLift {} -> True
+      _ -> False
+    usesCommand expression = case expression.node of
+      TypedRoot ScalarCommandRoot {} -> True
+      TypedProject ScalarCommandRoot {} _ -> True
+      _ -> False
     outputUsesPayload (emitIndex, _) = case outputMappingFor aggregate index emitIndex of
       GeneratedCommandIdentity _ fields -> not (null fields)
       HandOwnedEventOutput {} -> True

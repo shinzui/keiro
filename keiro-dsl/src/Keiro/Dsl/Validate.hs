@@ -608,6 +608,13 @@ data DiagnosticCode
     AggGuardRelationUnknown
   | -- ExecPlan 266: a computed replay-only remedy failed its source proof.
     AggGuardRemedyUnavailable
+  | AggregateExpressionMappedLiftUnsupported
+  | AggregateExpressionMappedLiftProjectionUnsupported
+  | MappedWriteLiftInvalid
+  | AggregateExpressionWriteInitialUnsupported
+  | AggregateExpressionWriteInitialShadowed
+  | MappedWriteLiftChanged
+  | MappedWriteLiftFixturesChanged
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 -- | Which command pipeline can actually produce a given 'DiagnosticCode'.
@@ -704,6 +711,8 @@ diagnosticOrigin diagnosticCode = case diagnosticCode of
   MappedFieldAddedWithDefault -> DiffDiagnostic
   MappedFieldRemoved -> DiffDiagnostic
   MappedFieldTypeChanged -> DiffDiagnostic
+  MappedWriteLiftChanged -> DiffDiagnostic
+  MappedWriteLiftFixturesChanged -> DiffDiagnostic
   MappedFixturesChanged -> DiffDiagnostic
   MappedHaskellSourceChanged -> DiffDiagnostic
   MappedInitialChanged -> DiffDiagnostic
@@ -1015,6 +1024,10 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       ScalarBooleanOperandRequired -> AggregateExpressionBooleanRequired
       ScalarGuardBoolRequired -> AggregateExpressionGuardBoolRequired
       ScalarWriteTargetUnknown -> AggregateExpressionWriteTargetUnknown
+      ScalarMappedLiftUnsupported -> AggregateExpressionMappedLiftUnsupported
+      ScalarMappedLiftProjectionUnsupported -> AggregateExpressionMappedLiftProjectionUnsupported
+      ScalarWriteInitialUnsupported -> AggregateExpressionWriteInitialUnsupported
+      ScalarWriteInitialShadowed -> AggregateExpressionWriteInitialShadowed
       ScalarWriteTypeMismatch -> AggregateExpressionWriteTypeMismatch
 
     comparisonRule aggregate transition (operator, left, right) =
@@ -1055,6 +1068,8 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       EAdd _ left _ -> expressionType aggregate transition left
       ESubtract _ left _ -> expressionType aggregate transition left
       EMultiply _ left _ -> expressionType aggregate transition left
+      EWriteMapped loc _ -> Left (AggregateTypeError loc RegisterUse (UnknownAggregateType "<target-mapped-lift>"))
+      EWriteInitial loc -> Left (AggregateTypeError loc RegisterUse (UnknownAggregateType "<target-initial>"))
       EPath loc _ path -> case path of
         name : _ -> atomType aggregate transition name
         [] -> Left (AggregateTypeError loc EqualityGuardUse (UnknownAggregateType "<empty-path>"))
@@ -1095,6 +1110,8 @@ validateAggregateTypes typeGraphResult spec = case Nominal.resolveNominalTypes s
       EAdd _ left right -> comparisons left <> comparisons right
       ESubtract _ left right -> comparisons left <> comparisons right
       EMultiply _ left right -> comparisons left <> comparisons right
+      EWriteMapped _ child -> comparisons child
+      EWriteInitial {} -> []
       EPath {} -> []
       ELiteral {} -> []
       EAtom {} -> []
@@ -1180,7 +1197,7 @@ validateMapped languageContract typeGraphResult spec =
 typeGraphDiagnostic :: Spec -> TypeGraphError -> [Diagnostic]
 typeGraphDiagnostic spec = \case
   TGDeclError name declarationError ->
-    [ mkErr (mappedLine spec name) diagnosticCode $
+    [ mkErr (case declarationError of InvalidMappedWriteLift loc _ -> locLine loc; _ -> mappedLine spec name) diagnosticCode $
         "mapped declaration '" <> name <> "': " <> declarationErrorMessage declarationError
     ]
     where
@@ -1197,6 +1214,7 @@ typeGraphDiagnostic spec = \case
         EmptyBindingVersion {} -> MappedInvalidIdentity
         EmptyCodecIdentity {} -> MappedInvalidIdentity
         EmptyCodecVersion {} -> MappedInvalidIdentity
+        InvalidMappedWriteLift {} -> MappedWriteLiftInvalid
   TGAmbiguousName name origins ->
     [ mkErr (mappedLine spec name) MappedAmbiguousName $
         "type name '" <> name <> "' is ambiguous across " <> T.intercalate ", " origins
@@ -1259,6 +1277,7 @@ declarationErrorMessage = \case
   EmptyBindingVersion _ -> "binding-version must be non-empty"
   EmptyCodecIdentity _ -> "opaque codec identity must be non-empty"
   EmptyCodecVersion _ -> "opaque codec version must be non-empty"
+  InvalidMappedWriteLift _ message -> message
 
 mappedLine :: Spec -> Name -> Int
 mappedLine spec name =
@@ -1304,12 +1323,14 @@ mappedLexicalRules spec = concatMap declarationRules ((.mapped) spec)
            | not (constructorSafe ((.valueType) source))
            ]
 
-    qualifiedFacts MappedStructural {msBinding = binding, msFixtures = fixtures, msInitial = initial, msLoc = loc} =
-      concatMap (qualifiedRule loc) [("binding", binding), ("fixtures", fixtures), ("initial", initial)]
+    qualifiedFacts MappedStructural {msBinding = binding, msFixtures = fixtures, msInitial = initial, msWriteLift = writeLift, msLoc = loc} =
+      liftFacts writeLift ++ concatMap (qualifiedRule loc) [("binding", binding), ("fixtures", fixtures), ("initial", initial)]
     qualifiedFacts MappedRefined {mrBinding = binding, mrFixtures = fixtures, mrInitial = initial, mrLoc = loc} =
       concatMap (qualifiedRule loc) [("binding", binding), ("fixtures", fixtures), ("initial", initial)]
-    qualifiedFacts MappedOpaque {moFixtures = fixtures, moInitial = initial, moLoc = loc} =
-      concatMap (qualifiedRule loc) [("fixtures", fixtures), ("initial", initial)]
+    qualifiedFacts MappedOpaque {moFixtures = fixtures, moInitial = initial, moWriteLift = writeLift, moLoc = loc} =
+      liftFacts writeLift ++ concatMap (qualifiedRule loc) [("fixtures", fixtures), ("initial", initial)]
+
+    liftFacts = maybe [] (\lift -> concatMap (qualifiedRule lift.loc) [("write-lift function", lift.function), ("write-lift fixtures", lift.fixtures)])
 
     qualifiedRule loc (category, value) = case value of
       Just symbol
@@ -5265,6 +5286,8 @@ exprNames (ESubtract _ a b) = exprNames a ++ exprNames b
 exprNames (EMultiply _ a b) = exprNames a ++ exprNames b
 exprNames (EPath _ _ (name : _)) = [name]
 exprNames (EPath _ _ []) = []
+exprNames (EWriteMapped _ child) = exprNames child
+exprNames EWriteInitial {} = []
 exprNames ELiteral {} = []
 exprNames (EAtom (AName n)) = [n]
 exprNames (EAtom (ABool _)) = []

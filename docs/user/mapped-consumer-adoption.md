@@ -5,8 +5,8 @@ description: Adopt Language 5 mapped declaration surfaces through the stable rol
 docId: DOC-12
 tags: [keiro, dsl, mappings, adoption]
 generated:
-  by: human:nadeem
-  at: 2026-09-17T17:16:09Z
+  by: openai-codex/gpt-6.1-sol
+  at: 2026-10-14T17:10:13Z
 ---
 
 # Adopting Mapped Consumer Surfaces
@@ -120,3 +120,21 @@ coordination. See [Evolution And Replayability](../guides/evolution-and-replayab
 [Work Queues](work-queues.md), and
 [Read Models And Projections](read-models-and-projections.md) for the operational
 procedures.
+
+## Candidate construction rollout
+
+Language 6 adds declaration-owned mapped register construction through `initial`
+and `mapped(expression)`. Follow the [aggregate construction contract](keiro-dsl-aggregates.md#mapped-register-construction-in-candidate-language-6).
+Keep the transition generated-owned and run declared lift cases, default runtime
+validation, complementary-guard checks, and complete encoded/full replay. Review
+the pure/total consumer function and bump its lift version whenever behavior changes.
+
+Lift metadata is a consumer-build change; actual use independently changes the
+aggregate fold and snapshot discriminator. Cases-only edits and unused lifts do
+not select replay. Construction-aware replay comparisons resolve each actual
+revision separately, including valid lift removal and source replacement, and
+conservatively select the affected aggregate's old events and snapshot streams.
+A cases table, bumped version, or rebuilt snapshot is finite repository evidence,
+not consumer retained-history approval. Compare the required historical observations
+before deployment and retain a compatible replay path where needed. No consumer
+repository, deployment, or stored data is changed by this feature.

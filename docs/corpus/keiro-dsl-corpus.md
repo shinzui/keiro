@@ -15,11 +15,11 @@ coordination changes aggregate replay semantics.
 
 ## Published stable and compatibility lanes
 
-Language 5 is the published stable contract and authoring default. Language 4 remains a published,
+Language 5 is the published stable contract; candidate Language 6 is the authoring default. Language 4 remains a published,
 immutable compatibility contract. The machine-checked baseline contains the released fixture
-inventory plus the candidate delegated-intake source and its generated plan. It accounts for all
-43 compiled conformance components: four `candidate-primary` Language-6 suites, eight
-`stable-primary` Language-5 suites, 27 `published-compatibility` Language-4 suites, three focused
+inventory plus candidate sources and their generated plans. It accounts for all
+55 compiled conformance components: 17 `candidate-primary` Language-6 suites, eight
+`stable-primary` Language-5 suites, 26 `published-compatibility` Language-4 suites, three focused
 compatibility proofs, and one version-independent codec comparison.
 
 Stable suites exercise Language 5's syntax profile 4 and runtime semantics 4, including typed
@@ -64,13 +64,13 @@ General source/workspace upgrade automation remains deferred to
 
 ## Core fixture inventory
 
-This curated inventory covers the primary feature, negative, and evolution surfaces. Every
-ordinary source below declares Language 4; names such as `reservation-v2.keiro` describe event
+This curated inventory covers the primary feature, negative, and evolution surfaces. Sources declare their explicit published or candidate language; names such as `reservation-v2.keiro` describe event
 schema evolution or historical fixture naming, not the source-language version. The complete
-machine-checked fixture set contains 309 `.keiro` files as of 2026-09-16.
+machine-checked fixture set contains 357 `.keiro` files as of 2026-10-14.
 
 | Fixture | Role / primary coverage |
 | --- | --- |
+| `test/fixtures/mapped-register-construction.keiro` | candidate Language-6 target initial and versioned unary mapped writes under generated guard ownership |
 | `test/fixtures/aggregate-bad-refs.keiro` | negative aggregate register, command, and write references |
 | `test/fixtures/behavior-complete.keiro` | stable complete finite behavior inventory: later/terminal cells, guarded siblings, no-op, generated command identity, and replay-only twin |
 | `test/fixtures/behavior-complete-workspace/service.keiro-workspace` | the same behavior inventory split across attributable workspace members |
@@ -213,6 +213,7 @@ the stable Language-5 feature lanes and form the primary product baseline.
 
 | Component | Proves |
 | --- | --- |
+| `test/conformance-mapped-register-construction/` (`keiro-dsl-conformance-mapped-register-construction`) | candidate Language-6 initial/lift/clearing branches, complementary guard verification, every-register encoded/full replay, snapshots, finite cases, and all behavior witnesses |
 | `test/conformance/` (`keiro-dsl-conformance`) | canonical generated aggregate plus filled transducer, replay validation, codec round-trips, and behavior |
 | `test/conformance-behavior-complete/` (`keiro-dsl-conformance-behavior-complete`) | all 14 static requirements have typed later-state, terminal-rejection, no-op, guarded-sibling, and replay-only witnesses with exact Keiki 0.8 attribution; 13 verify and one conservative guard surface remains unverified |
 | `test/conformance-aggregate-scalars/` (`keiro-dsl-conformance-aggregate-scalars`) | generated direct scalar aggregate codecs, snapshots, and transition behavior compile and execute |
@@ -262,6 +263,7 @@ the stable Language-5 feature lanes and form the primary product baseline.
 
 | Script | Shows |
 | --- | --- |
+| `test/mapped-register-construction-mutation-test.sh` | nine named negative gates for cases, lift identity, recovery, generated guards/slots, write-only output placement, recursive projections, and exclusive ownership; restores bytes and reruns green; recurring `mapped-register-construction-proof` in `verify` |
 | `test/aggregate-scalar-expression-mutation-test.sh` | arithmetic, generated guard/write, explicit-Hole envelope/fold, and verification mutations fail while fresh scaffolding restores exact bytes |
 | `test/aggregate-scalars-mutation-test.sh` | dishonest `Natural` event persistence fails the named replay-safety register boundary |
 | `test/behavior-complete-mutation-test.sh` | twelve missing, dishonest, wrong-command, misattributed, codec, register, and generated-output mutations fail exact behavior obligations while an obsolete output hook stays unable to affect execution |
@@ -301,3 +303,5 @@ to those trees are the worked fills. The most useful starting points are:
   for separate live/replay applies, a total category decoder, and event-id dedup under one generated catalog.
 - `test/conformance-workflow-full/HospitalCapacity/HospitalTransferReservation/WorkflowBody.hs`
   for an ordered durable workflow body.
+
+Candidate Language 6 mapped register construction is covered by the new lifecycle suite and its recurring mutation recipe. Existing published suites and skeletons keep their owners and exact generated bytes; publication and the later support cutoff remain separate release work.

@@ -5,12 +5,13 @@
 module Keiro.Dsl.MappedConsumer
   ( ConsumerPlan (..),
     MappingIdentity (..),
+    WriteLiftIdentity (..),
     consumerPlan,
     consumerPlanForService,
   )
 where
 
-import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), object, withObject, (.:), (.:?), (.=))
 import Data.List (nub, sort)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -29,6 +30,27 @@ data ConsumerPlan = ConsumerPlan
   }
   deriving stock (Eq, Show)
 
+data WriteLiftIdentity = WriteLiftIdentity
+  { sourceType :: !Text,
+    function :: !Text,
+    version :: !Text,
+    fixtures :: !Text
+  }
+  deriving stock (Eq, Show)
+
+instance ToJSON WriteLiftIdentity where
+  toJSON lift = object ["sourceType" .= lift.sourceType, "function" .= lift.function, "version" .= lift.version, "fixtures" .= lift.fixtures]
+
+instance FromJSON WriteLiftIdentity where
+  parseJSON = withObject "mapped write-lift identity" $ \value ->
+    WriteLiftIdentity <$> value .: "sourceType" <*> value .: "function" <*> value .: "version" <*> value .: "fixtures"
+
+writeLiftIdentity :: MappedWriteLift -> WriteLiftIdentity
+writeLiftIdentity lift = WriteLiftIdentity (liftSourceName lift.source) (unQualifiedValueName lift.function) (unLiftVersion lift.version) (unQualifiedValueName lift.fixtures)
+
+liftModules :: Maybe MappedWriteLift -> [Text]
+liftModules = maybe [] (\lift -> map qualifiedModule [lift.function, lift.fixtures])
+
 data MappingIdentity
   = StructuralMapping
       { specName :: !Text,
@@ -37,7 +59,8 @@ data MappingIdentity
         moduleName :: !Text,
         valueType :: !Text,
         bindingSymbol :: !Text,
-        bindingVersion :: !Text
+        bindingVersion :: !Text,
+        writeLift :: !(Maybe WriteLiftIdentity)
       }
   | OpaqueMapping
       { specName :: !Text,
@@ -45,7 +68,8 @@ data MappingIdentity
         moduleName :: !Text,
         valueType :: !Text,
         codecIdentity :: !Text,
-        codecVersion :: !Text
+        codecVersion :: !Text,
+        writeLift :: !(Maybe WriteLiftIdentity)
       }
   | NominalMapping
       { specName :: !Text,
@@ -63,8 +87,8 @@ data MappingIdentity
   deriving stock (Eq, Show)
 
 instance ToJSON MappingIdentity where
-  toJSON StructuralMapping {specName, canonicalType, package, moduleName, valueType, bindingSymbol, bindingVersion} =
-    object
+  toJSON StructuralMapping {specName, canonicalType, package, moduleName, valueType, bindingSymbol, bindingVersion, writeLift} =
+    object $
       [ "schema" .= (1 :: Int),
         "mode" .= ("structural" :: Text),
         "specName" .= specName,
@@ -75,8 +99,9 @@ instance ToJSON MappingIdentity where
         "bindingSymbol" .= bindingSymbol,
         "bindingVersion" .= bindingVersion
       ]
-  toJSON OpaqueMapping {specName, package, moduleName, valueType, codecIdentity, codecVersion} =
-    object
+        <> maybe [] (\lift -> ["writeLift" .= lift]) writeLift
+  toJSON OpaqueMapping {specName, package, moduleName, valueType, codecIdentity, codecVersion, writeLift} =
+    object $
       [ "schema" .= (1 :: Int),
         "mode" .= ("opaque" :: Text),
         "specName" .= specName,
@@ -86,6 +111,7 @@ instance ToJSON MappingIdentity where
         "codecIdentity" .= codecIdentity,
         "codecVersion" .= codecVersion
       ]
+        <> maybe [] (\lift -> ["writeLift" .= lift]) writeLift
   toJSON NominalMapping {specName, nominalCategory = resolvedNominalCategory, nominalRepresentation, canonicalType, package, moduleName, valueType, bindingSymbol, bindingVersion, fixtureSymbol, initialSymbol} =
     object
       [ "schema" .= (1 :: Int),
@@ -120,6 +146,7 @@ instance FromJSON MappingIdentity where
               <*> value .: "type"
               <*> value .: "bindingSymbol"
               <*> value .: "bindingVersion"
+              <*> value .:? "writeLift"
           "opaque" ->
             OpaqueMapping
               <$> value .: "specName"
@@ -128,6 +155,7 @@ instance FromJSON MappingIdentity where
               <*> value .: "type"
               <*> value .: "codecIdentity"
               <*> value .: "codecVersion"
+              <*> value .:? "writeLift"
           "nominal" ->
             NominalMapping
               <$> value .: "specName"
@@ -174,11 +202,11 @@ mappedModules (ResolvedStructural declaration _) =
   (.moduleName) ((.haskell) declaration)
     : qualifiedModule ((.binding) declaration)
     : qualifiedModule ((.fixtures) declaration)
-    : maybe [] (pure . qualifiedModule) ((.initial) declaration)
+    : (maybe [] (pure . qualifiedModule) ((.initial) declaration) <> liftModules declaration.writeLift)
 mappedModules (ResolvedOpaque declaration) =
   (.moduleName) ((.haskell) declaration)
     : qualifiedModule ((.fixtures) declaration)
-    : maybe [] (pure . qualifiedModule) ((.initial) declaration)
+    : (maybe [] (pure . qualifiedModule) ((.initial) declaration) <> liftModules declaration.writeLift)
 
 mappingIdentity :: ResolvedMappedDecl -> MappingIdentity
 mappingIdentity (ResolvedStructural declaration _) =
@@ -189,7 +217,8 @@ mappingIdentity (ResolvedStructural declaration _) =
       moduleName = (.moduleName) ((.haskell) declaration),
       valueType = (.valueType) ((.haskell) declaration),
       bindingSymbol = unQualifiedValueName ((.binding) declaration),
-      bindingVersion = unBindingVersion ((.bindingVersion) declaration)
+      bindingVersion = unBindingVersion ((.bindingVersion) declaration),
+      writeLift = writeLiftIdentity <$> declaration.writeLift
     }
 mappingIdentity (ResolvedOpaque declaration) =
   OpaqueMapping
@@ -198,7 +227,8 @@ mappingIdentity (ResolvedOpaque declaration) =
       moduleName = (.moduleName) ((.haskell) declaration),
       valueType = (.valueType) ((.haskell) declaration),
       codecIdentity = unCodecIdentity ((.codecIdentity) declaration),
-      codecVersion = unCodecVersion ((.codecVersion) declaration)
+      codecVersion = unCodecVersion ((.codecVersion) declaration),
+      writeLift = writeLiftIdentity <$> declaration.writeLift
     }
 
 nominalMappingIdentity :: (ResolvedNominalType, ConsumerNominalBinding) -> MappingIdentity

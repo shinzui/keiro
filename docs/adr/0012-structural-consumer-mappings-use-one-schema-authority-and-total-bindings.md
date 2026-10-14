@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Structural consumer mappings use one schema authority and total bindings
 description: Keiro-generated structural and nominal representations own private-event wire policy; aggregate, queue, query, and projection consumers resolve through checked schema authorities, consumer bindings are total isomorphisms, snapshots remain separately invalidated, and Keiki projections come from those authorities.
-timestamp: 2026-09-20T20:55:54Z
+timestamp: 2026-10-14T17:10:13Z
 docId: ADR-12
 status: Accepted
 date: 2026-07-28
@@ -422,6 +422,20 @@ boundary codec assertions. Mapping provenance is persisted in the scaffold recor
 the declared wire, binding, initial value, or projection identity produces visible drift rather
 than silently reusing a generated ring. These checks are finite evidence, not a replacement for
 the totality and ownership requirements above.
+
+
+Candidate Language 6 opaque and structural declarations may own one checked unary
+write lift from a direct Text, Int, Integer, Bool, Natural, or Time scalar to that
+mapped domain. This is a register constructor, not a second wire authority or a
+binding isomorphism. The source/function/version/cases contract lives on the target
+declaration. Service conformance type-checks and executes nonblank, uniquely labelled
+`NonEmpty (Text, source, target)` cases, including unused lifts. These finite cases
+do not prove arbitrary Haskell pure or total; the consumer owns that requirement.
+Keiki forces written slots and reruns updates during replay, so a partial function
+can fail stored-history replay. Explicit structural and opaque create-once lift
+obligations import their consumer/scalar types through the module import plan and
+never overwrite existing hand-owned implementations. Optional schema-1 ledger lift
+metadata uses absent-field decoding to preserve pre-lift drift history.
 
 
 ## Consequences

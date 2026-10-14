@@ -9,7 +9,7 @@ import Keiro.Dsl.Frontend.Internal (FrontendContext, frontendSupportsFeature)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.LanguageVersion
 import Keiro.Dsl.Parser.Core
-import Keiro.Dsl.Parser.Expression (pExpr)
+import Keiro.Dsl.Parser.Expression (pExpr, pWriteExpr)
 import Keiro.Dsl.Parser.Mapped (pMappedTypeExpr)
 import Keiro.Dsl.Source (Located, mapLocated)
 import Keiro.Dsl.Syntax (SurfaceElement (..))
@@ -408,7 +408,7 @@ pClause context =
       do
         register <- keyword "write" *> ident
         _ <- symbol ":="
-        expression <- withOwnedSpan (pExpr context)
+        expression <- withOwnedSpan (pWriteExpr context)
         pure (CWrite register (locatedValue expression), [mapLocated SurfaceExpression expression]),
       try $ do
         keyword "emit"

@@ -1,0 +1,76 @@
+language keiro-dsl 6
+context mapped-register-construction
+
+mapped opaque MaybeTime {
+  haskell package=keiro-dsl module=Conformance.MappedRegisterConstruction.Domain type=MaybeTime
+  codec = "conformance.MaybeTime.json"
+  version = "1"
+  fixtures = "Conformance.MappedRegisterConstruction.Bindings.maybeTimeCases"
+  initial = "Conformance.MappedRegisterConstruction.Bindings.noTime"
+  write-lift from Time {
+    function = "Conformance.MappedRegisterConstruction.Lift.atTime"
+    version = "1"
+    fixtures = "Conformance.MappedRegisterConstruction.Lift.atTimeCases"
+  }
+}
+
+aggregate Lifecycle
+  regs
+    dormantSince MaybeTime = initial
+    automatic Bool = False
+  states Empty Awake Dormant Closed
+
+  command Create { automatic:Bool }
+  command Mark { markedAt:Time }
+  command Ping { markedAt:Time }
+  command Awaken { awakenedAt:Time }
+  command Close { closedAt:Time }
+  command Reopen { reopenedAt:Time }
+  event Created = fields(Create)
+  event Marked = fields(Mark)
+  event Pinged = fields(Ping)
+  event Awakened = fields(Awaken)
+  event ClosedEvent = fields(Close)
+  event Reopened = fields(Reopen)
+
+  Empty -- Create -->
+    write dormantSince := initial
+    write automatic := cmd.automatic
+    emit Created
+    goto Awake
+
+  Awake -- Mark -->
+    write dormantSince := mapped(cmd.markedAt)
+    emit Marked
+    goto Dormant
+
+  Dormant -- Ping -->
+    guard reg.automatic == true
+    write dormantSince := initial
+    emit Pinged
+    goto Awake
+
+  Dormant -- Ping -->
+    guard reg.automatic == false
+    write dormantSince := mapped(cmd.markedAt)
+    emit Pinged
+    goto Dormant
+
+  Dormant -- Awaken -->
+    write dormantSince := initial
+    emit Awakened
+    goto Awake
+
+  Awake -- Close -->
+    emit ClosedEvent
+    goto Closed
+
+  Closed -- Reopen -->
+    write dormantSince := initial
+    emit Reopened
+    goto Awake
+
+  snapshot every 1
+    state-codec version=1 shape-hash="mapped-register-construction-v1"
+
+  wire kind=ctorName fields=camelCase schemaVersion=1

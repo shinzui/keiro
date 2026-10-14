@@ -39,6 +39,8 @@ data BindingResolutionError
 data BindingObligationKind
   = BindingValue
   | FixtureValue
+  | WriteLiftFunction
+  | WriteLiftCases
   | InitialValue
   deriving stock (Eq, Ord, Show)
 
@@ -148,6 +150,7 @@ bindingObligationsForService service = do
       [ obligationsFor graph declaration
       | ResolvedStructural declaration _ <- Map.elems ((.declarations) graph)
       ]
+      <> concatMap (liftObligationsFor graph) (Map.elems graph.declarations)
       <> concatMap (nominalObligationsFor service graph) (Map.elems (nominalTypes nominalRegistry))
   where
     spec = checkedSpec service
@@ -279,6 +282,38 @@ obligationsFor graph declaration = bindingEntry : fixtureEntry : initialEntries
       (_, Just initialValue) ->
         [ obligationFor declaration initialValue InitialValue consumerType registerPaths Nothing (Just (unCanonicalTypeId ((.canonical) declaration)))
         ]
+
+liftObligationsFor :: TypeGraph -> ResolvedMappedDecl -> [BindingObligation]
+liftObligationsFor graph resolved = case details of
+  (_, _, Nothing) -> []
+  (name, source, Just lift) ->
+    [ entry WriteLiftFunction lift.function (scalar <> " -> " <> target),
+      entry WriteLiftCases lift.fixtures ("NonEmpty (Text, " <> scalar <> ", " <> target <> ")")
+    ]
+    where
+      scalar = if lift.source == LiftTime then "UTCTime" else liftSourceName lift.source
+      target = source.moduleName <> "." <> source.valueType
+      entry kind qualified signature =
+        BindingObligation
+          { mappedName = name,
+            package = source.package,
+            moduleName = owner,
+            symbol = symbol,
+            kind = kind,
+            signature = symbol <> " :: " <> signature,
+            useSites = map renderUsePath (usePaths graph name),
+            bindingVersion = Just (unLiftVersion lift.version),
+            canonicalType = Nothing,
+            equalityContract = Nothing,
+            idDomainContract = Nothing,
+            category = case resolved of ResolvedStructural {} -> "structural"; ResolvedOpaque {} -> "opaque"
+          }
+        where
+          (owner, symbol) = splitQualified (unQualifiedValueName qualified)
+  where
+    details = case resolved of
+      ResolvedStructural declaration _ -> (declaration.name, declaration.haskell, declaration.writeLift)
+      ResolvedOpaque declaration -> (declaration.name, declaration.haskell, declaration.writeLift)
 
 obligationFor :: StructuralDecl -> QualifiedValueName -> BindingObligationKind -> Text -> [Text] -> Maybe Text -> Maybe Text -> BindingObligation
 obligationFor declaration qualified kindValue signature paths version canonical =
@@ -449,9 +484,13 @@ holeSortKey hole =
 renderKind :: BindingObligationKind -> Text
 renderKind BindingValue = "binding"
 renderKind FixtureValue = "fixtures"
+renderKind WriteLiftFunction = "write-lift-function"
+renderKind WriteLiftCases = "write-lift-cases"
 renderKind InitialValue = "initial-value"
 
 parseKind :: Text -> Maybe BindingObligationKind
+parseKind "write-lift-function" = Just WriteLiftFunction
+parseKind "write-lift-cases" = Just WriteLiftCases
 parseKind "binding" = Just BindingValue
 parseKind "fixtures" = Just FixtureValue
 parseKind "initial-value" = Just InitialValue

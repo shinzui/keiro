@@ -76,6 +76,7 @@ frontendProfilesSpec = do
               DomainCommandOutcomeSyntax -> version 5
               DeclarativeRouterSelectionSyntax -> version 5
               SeparatedProjectionQueryPolicySyntax -> version 5
+              MappedRegisterConstructionSyntax -> version 6
               DelegatedInboxSyntax -> version 6
               ProcessReactionSyntax -> version 6
               WorkqueueFifoHeadsSyntax -> version 6
@@ -217,6 +218,7 @@ featureCases =
 
 featureBody :: LanguageFeature -> Text
 featureBody = \case
+  MappedRegisterConstructionSyntax -> T.unlines ["context profile", "aggregate Counter", "  regs count Int = 0", "  states Open", "  command Add { amount:Int }", "  event Added = fields(Add)", "  Open -- Add --> write count := mapped(cmd.amount) ; emit Added ; goto Open"]
   ExplicitIdAdmissionDomainSyntax -> T.unlines ["context profile", "id ProfileId prefix=profile domain=typeid-v5-or-v7"]
   NominalBindingSyntax -> T.unlines ["context profile", "id ProfileId prefix=profile using {}"]
   IntegerScalarSyntax -> T.unlines ["context profile", "aggregate Counter", "  regs", "    count Integer = 0", "  states Open"]
@@ -374,7 +376,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [ContractListFieldSyntax, ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
+allFeatures = [MappedRegisterConstructionSyntax, ContractListFieldSyntax, ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

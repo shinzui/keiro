@@ -5,8 +5,8 @@ description: Write Keiro DSL aggregate expressions, registers, commands, events,
 docId: DOC-27
 tags: [keiro, dsl, aggregates, reference]
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: 2026-09-28T00:00:00Z
+  by: openai-codex/gpt-6.1-sol
+  at: 2026-10-14T17:10:13Z
 ---
 
 # Keiro DSL Aggregates
@@ -15,6 +15,90 @@ This page covers the aggregate node: its typed guard and write expressions,
 registers, states, commands, events, transitions, typed domain outcomes,
 event evolution, projections, and snapshots. It is part of the [Keiro DSL Reference](keiro-dsl-reference.md), which
 introduces the language, its versions, and source file structure.
+
+## Mapped register construction in candidate Language 6
+
+A generated transition can select its mapped target's declared initial value or
+apply one declaration-owned unary constructor:
+
+```keiro
+mapped opaque MaybeTime {
+  haskell package=example module=Example.Domain type=MaybeTime
+  codec = "example.MaybeTime.v1"
+  version = "1"
+  fixtures = "Example.Bindings.maybeTimeCases"
+  initial = "Example.Bindings.noTime"
+  write-lift from Time {
+    function = "Example.Bindings.atTime"
+    version = "1"
+    fixtures = "Example.Bindings.atTimeCases"
+  }
+}
+
+# Inside a generated transition:
+write dormantSince := initial
+write dormantSince := mapped(cmd.markedAt)
+```
+
+These are complete write right-hand sides. They are unavailable in guards,
+event fields, outcomes, and nested arithmetic. `initial` requires a mapped
+register with a declared initial symbol; consumer nominal and direct targets
+receive `AggregateExpressionWriteInitialUnsupported`. Structural and refined
+mapped targets can also select their initial. If a register or the active
+command has a field named `initial`, use `reg.initial` or `cmd.initial` for that
+ordinary root; the bare construction spelling reports
+`AggregateExpressionWriteInitialShadowed` under Language 6. Language 5 keeps its
+ordinary-root meaning.
+
+An opaque or structural declaration can own one `write-lift`. Its source must
+be exactly `Text`, `Int`, `Integer`, `Bool`, `Natural`, or `Time` (`UTCTime` is an
+alias). The target is the declaration itself. Inputs can use direct scalar
+literals, command/register roots, and admitted arithmetic. Predicates and
+projected fields are rejected recursively, including projections hidden under
+arithmetic. Refined declarations do not accept a lift. Whole mapped-value
+copies continue to use ordinary writes.
+
+The generated edge still owns its guard, ordered slots, events, mode, and target.
+It lowers clearing to `K.opaqueLit` and construction to `K.TApp1` inside the
+selected `B.slot` assignment. A lift never receives an `EdgeBuilder`; adding
+`implementation hole` beside a guard or write still reports
+`AggregateTransitionOwnershipConflict`. This feature preserves Keiki's
+projection and command-recovery validation. Every command field must be recovered
+from the head emitted event; the generated conformance harness checks that
+runtime requirement, which `check` alone does not establish.
+
+The consumer supplies a pure, total function, a non-empty version token, and
+`NonEmpty (Text, source, target)` cases. For the example:
+
+```haskell
+noTime :: MaybeTime
+atTime :: UTCTime -> MaybeTime
+atTimeCases :: NonEmpty (Text, UTCTime, MaybeTime)
+```
+
+Service conformance checks nonblank, unique case labels and every expected
+result, including unused declaration lifts. Missing function/case modules get
+typed create-once stubs; later missing symbols are reported without rewriting
+an existing module. Finite cases cannot prove arbitrary Haskell total or pure.
+Keiki forces each written slot to weak head normal form and re-runs the function
+during replay. A throwing function can therefore fail stored-history replay.
+Changing its body without changing its version silently changes replayed register
+values; Keiro cannot inspect or hash that body.
+
+Function/source/version changes produce a consumer-build advisory. A used lift
+also changes the aggregate fold fingerprint and invalidates its snapshots;
+replay impact conservatively selects all old event types and snapshot streams
+of an aggregate using construction when its fold changes. Cases-only edits and
+unused lifts remain replay-neutral. The optional lift ledger field is readable
+alongside pre-lift schema-1 rows. Before consumer adoption, compare complete
+observations under both revisions over retained history. A version bump or
+snapshot rebuild does not authorize a changed historical interpretation.
+
+See the compiled [mapped construction fixture](../../keiro-dsl/test/fixtures/mapped-register-construction.keiro)
+and run `nix develop -c just mapped-register-construction-proof` for the restoring
+negative mutation proof. Language 6 remains candidate; publication and the
+staged support cutoff in [ADR-49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+are separate release work.
 
 ## Aggregate expressions
 

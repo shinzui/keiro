@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Aggregate transitions have explicit generated or Hole behavior ownership
 description: Each aggregate transition is exclusively generated-owned or explicitly Hole-owned, preserving an honest permanent escape hatch without allowing hand-written code to override checked DSL behavior.
-timestamp: 2026-10-13T23:30:33Z
+timestamp: 2026-10-14T17:10:13Z
 docId: ADR-17
 status: Accepted
 date: 2026-07-31
@@ -174,6 +174,18 @@ Replay-only edges retain replay evidence and never receive forward probes.
 Legacy version-1 transducers retain their existing synthetic probes while that
 source contract remains supported. No replay, wire, fold, or snapshot identity
 changes follow from choosing the appropriate harness evidence.
+
+Candidate Language 6 mapped-register `initial` and `mapped(expression)` writes
+remain generated-owned. The generated edge selects the named slot and calls a
+target-declaration-owned initial value or one typed, versioned unary function through
+Keiki's existing opaque literal/application terms. Consumer code supplies only that
+value/function and finite cases; it receives no edge builder and cannot replace the
+guard or other updates. Construction is a complete write RHS only. Predicate inputs
+and projected fields are rejected recursively before lowering, preserving Keiki's
+guard-only projection boundary. Head-event command recovery remains a runtime
+conformance requirement. Normal `implementation hole` still cannot coexist with a
+declared guard or write.
+
 
 ## Consequences
 

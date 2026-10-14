@@ -160,6 +160,7 @@ renderStructuralConformance rendering =
       <> concatMap (bindingAssertionDecl rendering) structural
       <> concatMap (nominalAssertionDecl rendering) consumerNominals
       <> concatMap (opaqueAssertionDecl rendering) opaque
+      <> concatMap (writeLiftAssertionDecl rendering) lifts
       <> concatMap (coverageDecl rendering) structural
       <> projectionAssertionDecls rendering structural
   where
@@ -167,10 +168,12 @@ renderStructuralConformance rendering =
     opaque = [declaration | ResolvedOpaque declaration <- (.declarations) rendering]
     consumerNominals = [leaf | leaf@NominalLeaf {ownership = ConsumerLeaf {}} <- (.nominals) rendering]
     generatedIdAssertions = structuralGeneratedIdAssertions rendering structural
+    lifts = writeLifts ((.declarations) rendering)
     assertionLists =
       [lowerFirst ((.name) declaration) <> "BindingAssertions" | (declaration, _) <- structural]
         <> [lowerFirst ((.name) declaration) <> "OpaqueAssertions" | declaration <- opaque]
         <> [lowerFirst ((.name) leaf) <> "NominalAssertions" | leaf <- consumerNominals]
+        <> [lowerFirst name <> "WriteLiftAssertions" | (name, _, _) <- lifts]
         <> map (generatedIdAssertionList rendering) generatedIdAssertions
         <> [ "[(\"fixture coverage: "
                <> unCanonicalTypeId ((.canonical) declaration)
@@ -262,7 +265,7 @@ conformanceImportPlan ctx graph declarations nominals _projections =
     ( planHaskellImports
         ImportEnvironment
           { targetModule = structuralConformanceModuleName ctx,
-            localNames = Set.fromList ["structuralConformanceAssertions", "validFixtureLabels"],
+            localNames = Set.fromList (["structuralConformanceAssertions", "validFixtureLabels"] <> if null (writeLifts declarations) then [] else ["Int", "Integer", "Bool"]),
             reservedQualifiers = Set.fromList ["Aeson", "NonEmpty", "StructuralProjections", "T"]
           }
         references
@@ -324,7 +327,7 @@ conformanceImportPlan ctx graph declarations nominals _projections =
         [ (.name) leaf
         | leaf@NominalLeaf {kind = NominalIdLeaf {}, ownership = GeneratedLeaf} <- nominals
         ]
-    references = declarationReferences <> shapeReferences <> generatedShapeReferences <> nominalReferences <> generatedNominalReferences
+    references = Set.fromList [reference | (_, _, lift) <- writeLifts declarations, reference <- maybe [] pure (writeLiftScalarReference lift.source)] <> Set.fromList [reference | (_, source, lift) <- writeLifts declarations, reference <- [conformanceTypeReference source, conformanceQualifiedValueReference lift.function, conformanceQualifiedValueReference lift.fixtures]] <> declarationReferences <> shapeReferences <> generatedShapeReferences <> nominalReferences <> generatedNominalReferences
 
 conformanceTypeReference :: HaskellSource -> HaskellReference
 conformanceTypeReference source =
@@ -558,6 +561,45 @@ conjunction expressions = T.intercalate " && " (map parenthesize expressions)
 
 parenthesize :: Text -> Text
 parenthesize value = "(" <> value <> ")"
+
+writeLifts :: [ResolvedMappedDecl] -> [(Name, HaskellSource, MappedWriteLift)]
+writeLifts =
+  concatMap
+    ( \case
+        ResolvedStructural declaration _ -> [(declaration.name, declaration.haskell, lift) | lift <- maybe [] pure declaration.writeLift]
+        ResolvedOpaque declaration -> [(declaration.name, declaration.haskell, lift) | lift <- maybe [] pure declaration.writeLift]
+    )
+
+writeLiftScalarReference :: LiftSource -> Maybe HaskellReference
+writeLiftScalarReference = \case
+  LiftTime -> Just (HaskellReference "Data.Time" "UTCTime" TypeNamespace PreferUnqualified)
+  LiftNatural -> Just (HaskellReference "Numeric.Natural" "Natural" TypeNamespace PreferUnqualified)
+  LiftText -> Nothing
+  LiftInt -> Nothing
+  LiftInteger -> Nothing
+  LiftBool -> Nothing
+
+writeLiftAssertionDecl :: ConformanceRendering -> (Name, HaskellSource, MappedWriteLift) -> [Text]
+writeLiftAssertionDecl rendering (name, source, lift) =
+  [ "",
+    lowerFirst name <> "WriteLiftAssertions :: [(String, Bool)]",
+    lowerFirst name <> "WriteLiftAssertions =",
+    "  (" <> tshow ("write-lift fixture labels: " <> name) <> ", all (not . T.null . T.strip) labels && length labels == length (nub labels)) :",
+    "  [ (" <> tshow ("write-lift case: " <> name <> "/") <> " <> T.unpack label, apply input == expected)",
+    "  | (label, input, expected) <- NonEmpty.toList cases",
+    "  ]",
+    "  where",
+    "    apply :: " <> scalar <> " -> " <> target,
+    "    apply = " <> function,
+    "    cases :: NonEmpty.NonEmpty (T.Text, " <> scalar <> ", " <> target <> ")",
+    "    cases = " <> fixtures,
+    "    labels = [label | (label, _, _) <- NonEmpty.toList cases]"
+  ]
+  where
+    scalar = case lift.source of LiftText -> "T.Text"; other -> maybe (liftSourceName other) (renderReference rendering) (writeLiftScalarReference other)
+    target = renderReference rendering (conformanceTypeReference source)
+    function = renderReference rendering (conformanceQualifiedValueReference lift.function)
+    fixtures = renderReference rendering (conformanceQualifiedValueReference lift.fixtures)
 
 opaqueAssertionDecl :: ConformanceRendering -> OpaqueDecl -> [Text]
 opaqueAssertionDecl rendering declaration =

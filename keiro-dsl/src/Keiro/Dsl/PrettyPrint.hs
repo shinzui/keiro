@@ -147,7 +147,7 @@ docRule d =
     cas (c, e) = pretty c <+> "=>" <+> docExpr 0 e
 
 docMapped :: MappedDecl -> Doc ann
-docMapped MappedStructural {msName = name, msHaskell = haskell, msBinding = binding, msBindingVersion = bindingVersion, msCanonical = canonical, msFixtures = fixtures, msInitial = initial, msShape = shape} =
+docMapped MappedStructural {msName = name, msHaskell = haskell, msBinding = binding, msBindingVersion = bindingVersion, msCanonical = canonical, msFixtures = fixtures, msInitial = initial, msShape = shape, msWriteLift = writeLift} =
   vsep $
     ["mapped structural" <+> docShapeKind shape <+> pretty name <+> "{"]
       ++ maybe [] (pure . indent 2 . docHaskellSource) haskell
@@ -156,6 +156,7 @@ docMapped MappedStructural {msName = name, msHaskell = haskell, msBinding = bind
       ++ maybe [] (pure . indent 2 . docQuotedFact "canonical-type") canonical
       ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
       ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
+      ++ maybe [] (pure . indent 2 . docWriteLift) writeLift
       ++ [indent 2 (docMappedShape shape), "}"]
 docMapped MappedRefined {mrName = name, mrHaskell = haskell, mrBinding = binding, mrBindingVersion = bindingVersion, mrCanonical = canonical, mrFixtures = fixtures, mrInitial = initial, mrPolicy = policy} =
   vsep $
@@ -167,7 +168,7 @@ docMapped MappedRefined {mrName = name, mrHaskell = haskell, mrBinding = binding
       ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
       ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
       ++ [indent 2 ("wire" <+> docRefinedWirePolicy policy), "}"]
-docMapped MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codec, moCodecVersion = version, moFixtures = fixtures, moInitial = initial} =
+docMapped MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codec, moCodecVersion = version, moFixtures = fixtures, moInitial = initial, moWriteLift = writeLift} =
   vsep $
     ["mapped opaque" <+> pretty name <+> "{"]
       ++ maybe [] (pure . indent 2 . docHaskellSource) haskell
@@ -175,6 +176,16 @@ docMapped MappedOpaque {moName = name, moHaskell = haskell, moCodecId = codec, m
       ++ maybe [] (pure . indent 2 . docQuotedFact "version") version
       ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") fixtures
       ++ maybe [] (pure . indent 2 . docQuotedFact "initial") initial
+      ++ maybe [] (pure . indent 2 . docWriteLift) writeLift
+      ++ ["}"]
+
+docWriteLift :: MappedWriteLiftDecl -> Doc ann
+docWriteLift declaration =
+  vsep $
+    ["write-lift from" <+> docTypeExpr declaration.source <+> "{"]
+      ++ maybe [] (pure . indent 2 . docQuotedFact "function") declaration.function
+      ++ maybe [] (pure . indent 2 . docQuotedFact "version") declaration.version
+      ++ maybe [] (pure . indent 2 . docQuotedFact "fixtures") declaration.fixtures
       ++ ["}"]
 
 docNominalScalar :: NominalScalarDecl -> Doc ann
@@ -1151,6 +1162,8 @@ docExpr ctx e = parensIf (precOf e < ctx) (body e)
     body (EAdd _ l r) = docExpr 4 l <+> "+" <+> docExpr 5 r
     body (ESubtract _ l r) = docExpr 4 l <+> "-" <+> docExpr 5 r
     body (EMultiply _ l r) = docExpr 5 l <+> "*" <+> docExpr 6 r
+    body (EWriteMapped _ child) = "mapped" <> parens (docExpr 0 child)
+    body EWriteInitial {} = "initial"
     body (EPath _ root path) = docPath root path
     body (ELiteral _ literal) = docLiteral literal
     body (EAtom a) = docAtom a
@@ -1162,6 +1175,8 @@ precOf ECmp {} = 3
 precOf EAdd {} = 4
 precOf ESubtract {} = 4
 precOf EMultiply {} = 5
+precOf EWriteMapped {} = 6
+precOf EWriteInitial {} = 6
 precOf EPath {} = 6
 precOf ELiteral {} = 6
 precOf EAtom {} = 6

@@ -376,7 +376,7 @@ classifyCompatibility context code
   | code == MappedFieldAddedWithDefault = mappedFieldAdditionVector context
   | code `elem` [MappedArmAdded, MappedEnumValueAdded] = mappedDirectionalAdditionVector context
   | code `elem` mappedWireBreakingCodes = mappedWireBreakingVector context
-  | code `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] = mappedBuildVector
+  | code `elem` [MappedWriteLiftChanged, MappedWriteLiftFixturesChanged, MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged] = mappedBuildVector
   | code == MappedBindingChanged = mappedBindingVector context
   | code `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] = mappedSnapshotBuildVector context
   | code == NominalFixturesChanged = mappedBuildVector
@@ -1013,7 +1013,12 @@ mappedDeclarationDiff env =
 -- Category/all owners never appear because they have no single mapped event
 -- authority. Operational targets and observers are evidence, not SQL claims.
 mappedProjectionFindingChanges :: DiffEnv -> MappedFinding -> [Change]
-mappedProjectionFindingChanges env finding = case (projectionImpactFor ((.old) env), projectionImpactFor ((.new) env)) of
+mappedProjectionFindingChanges env finding
+  | finding.code `elem` [MappedWriteLiftChanged, MappedWriteLiftFixturesChanged] = []
+  | otherwise = inheritedProjectionFindingChanges env finding
+
+inheritedProjectionFindingChanges :: DiffEnv -> MappedFinding -> [Change]
+inheritedProjectionFindingChanges env finding = case (projectionImpactFor ((.old) env), projectionImpactFor ((.new) env)) of
   (Nothing, Nothing) -> []
   (oldImpact, newImpact) ->
     let derivedConsumers =
@@ -1112,7 +1117,7 @@ mappedSemanticImpactForServices oldService newService = case (resolveTypeGraph o
 mappedFindingChanges :: MappedFinding -> [Change]
 mappedFindingChanges finding
   | (.code) finding == MappedDeclAdded = [mappedDeclarationChange LabelAdditive finding]
-  | (.code) finding `elem` [MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged, GeneratedHaskellNameChanged] =
+  | (.code) finding `elem` [MappedWriteLiftChanged, MappedWriteLiftFixturesChanged, MappedHaskellSourceChanged, MappedRecordConstructorChanged, MappedFixturesChanged, GeneratedHaskellNameChanged] =
       [mappedBuildChange finding]
   | (.code) finding `elem` [MappedInitialChanged, MappedCanonicalTypeChanged] =
       mappedBuildChange finding : map (mappedUseChange finding) registerPaths

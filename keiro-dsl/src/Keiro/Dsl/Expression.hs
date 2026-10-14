@@ -110,6 +110,8 @@ data ScalarValue
 
 data TypedScalarNode
   = TypedLiteral !ScalarValue
+  | TypedMappedLift !Name !MappedWriteLift !TypedScalarExpr
+  | TypedMappedInitial !Name !QualifiedValueName
   | TypedRoot !ScalarRootProvenance
   | TypedProject !ScalarRootProvenance !ResolvedScalarProjection
   | TypedAdd !ArithmeticEvidence !TypedScalarExpr !TypedScalarExpr
@@ -143,6 +145,10 @@ data ExpressionDiagnosticCode
   | ScalarBooleanOperandRequired
   | ScalarGuardBoolRequired
   | ScalarWriteTargetUnknown
+  | ScalarMappedLiftUnsupported
+  | ScalarMappedLiftProjectionUnsupported
+  | ScalarWriteInitialUnsupported
+  | ScalarWriteInitialShadowed
   | ScalarWriteTypeMismatch
   deriving stock (Eq, Ord, Show)
 
@@ -164,6 +170,8 @@ resolveScalarExpr environment expected expression =
       EAdd loc left right -> resolveArithmetic loc TypedAdd left right wanted
       ESubtract loc left right -> resolveArithmetic loc TypedSubtract left right wanted
       EMultiply loc left right -> resolveArithmetic loc TypedMultiply left right wanted
+      EWriteMapped loc _ -> failure loc ScalarMappedLiftUnsupported "mapped construction is supported only as a complete write"
+      EWriteInitial loc -> failure loc ScalarWriteInitialUnsupported "initial is supported only as a complete mapped write"
       EPath loc root path -> resolvePath environment loc root path
       ELiteral loc literal -> resolveLiteral environment loc wanted literal
       EAtom (ABool value) -> pure (literalExpr noLoc AggregateBool (ScalarBoolValue value))
@@ -318,16 +326,44 @@ resolveWriteExpr environment registerName expression =
         ("write target '" <> registerName <> "' is not an aggregate register")
     Just register -> case resolveAggregateType ((.symbols) environment) ((.loc) register) RegisterUse ((.valueType) register) of
       Left _ -> Right unresolvedSentinel
-      Right expected -> case resolveScalarExpr environment (ExpectScalarType expected) expression of
-        Left diagnostics -> Left (fmap writeDiagnostic diagnostics)
-        Right resolved
-          | predicateValued resolved ->
-              failure
-                ((.loc) resolved)
-                ScalarOperatorUnsupported
-                "comparison and Boolean operators are guard predicates and cannot be written as scalar terms"
-          | otherwise -> Right resolved
+      Right expected -> case expression of
+        EWriteMapped loc child -> case expected of
+          AggregateMapped key -> case mappedLiftFor key of
+            Nothing -> failure loc ScalarMappedLiftUnsupported "mapped target must declare a write-lift"
+            Just lift -> do
+              input <- resolveScalarExpr environment (ExpectScalarType (liftSourceType lift.source)) child
+              validateLiftChild input
+              Right (TypedScalarExpr expected loc (TypedMappedLift (unMappedKey key) lift input))
+          _ -> failure loc ScalarMappedLiftUnsupported "mapped construction requires a mapped target"
+        EWriteInitial loc
+          | shadowed -> failure loc ScalarWriteInitialShadowed "bare initial shadows an existing root; use reg.initial or cmd.initial explicitly"
+          | otherwise -> case expected of
+              AggregateMapped _ -> case resolveRegisterInitial ((.symbols) environment) loc expected (RegInitBare "initial") of
+                Right (InitialMapped key value) -> Right (TypedScalarExpr expected loc (TypedMappedInitial (unMappedKey key) value))
+                _ -> failure loc ScalarWriteInitialUnsupported "mapped target must declare an initial symbol"
+              _ -> failure loc ScalarWriteInitialUnsupported "initial writes require a mapped target; direct and nominal targets are unsupported"
+        _ -> resolveOrdinary expected
         where
+          mappedLiftFor key = do
+            graph <- environment.typeGraph
+            declaration <- Map.lookup key graph.declarations
+            case declaration of
+              ResolvedStructural value _ -> value.writeLift
+              ResolvedOpaque value -> value.writeLift
+          shadowed =
+            any ((== "initial") . (.name)) ((.regs) ((.aggregate) environment))
+              || any
+                ((== "initial") . (.name))
+                [field | command <- (.commands) ((.aggregate) environment), (.name) command == (.command) ((.transition) environment), field <- (.fields) command]
+          resolveOrdinary expected = case resolveScalarExpr environment (ExpectScalarType expected) expression of
+            Left diagnostics -> Left (fmap writeDiagnostic diagnostics)
+            Right resolved
+              | predicateValued resolved ->
+                  failure
+                    ((.loc) resolved)
+                    ScalarOperatorUnsupported
+                    "comparison and Boolean operators are guard predicates and cannot be written as scalar terms"
+              | otherwise -> Right resolved
           writeDiagnostic diagnostic
             | (.code) diagnostic `elem` [ScalarOperandTypeMismatch, ScalarNominalTypeMismatch] =
                 replaceExpressionDiagnostic
@@ -343,6 +379,34 @@ resolveWriteExpr environment registerName expression =
     -- The aggregate type validator reports the primary type error first. This
     -- value is never scaffolded because any error prevents generation.
     unresolvedSentinel = TypedScalarExpr AggregateBool noLoc (TypedLiteral (ScalarBoolValue False))
+
+liftSourceType :: LiftSource -> ResolvedAggregateType
+liftSourceType = \case
+  LiftText -> AggregateText
+  LiftInt -> AggregateInt
+  LiftInteger -> AggregateInteger
+  LiftBool -> AggregateBool
+  LiftNatural -> AggregateNatural
+  LiftTime -> AggregateTime
+
+validateLiftChild :: TypedScalarExpr -> Either (NonEmpty ExpressionDiagnostic) ()
+validateLiftChild expression = case expression.node of
+  TypedProject {} -> failure expression.loc ScalarMappedLiftProjectionUnsupported "write-lift inputs cannot contain mapped or nominal projections; use a direct scalar command or register root"
+  TypedLiteral {} -> pure ()
+  TypedRoot {} -> pure ()
+  TypedAdd _ left right -> recurse left right
+  TypedSubtract _ left right -> recurse left right
+  TypedMultiply _ left right -> recurse left right
+  TypedEqual {} -> predicate
+  TypedNotEqual {} -> predicate
+  TypedCompare {} -> predicate
+  TypedAnd {} -> predicate
+  TypedOr {} -> predicate
+  TypedMappedInitial {} -> predicate
+  TypedMappedLift {} -> predicate
+  where
+    recurse left right = validateLiftChild left >> validateLiftChild right
+    predicate = failure expression.loc ScalarOperatorUnsupported "comparison and Boolean operators are guard predicates and cannot be written as scalar terms"
 
 replaceExpressionDiagnostic :: ExpressionDiagnosticCode -> Text -> ExpressionDiagnostic -> ExpressionDiagnostic
 replaceExpressionDiagnostic code message diagnostic =
@@ -582,6 +646,8 @@ scalarLeaf = \case
 
 predicateValued :: TypedScalarExpr -> Bool
 predicateValued expression = case (.node) expression of
+  TypedMappedInitial {} -> False
+  TypedMappedLift {} -> False
   TypedEqual {} -> True
   TypedNotEqual {} -> True
   TypedCompare {} -> True

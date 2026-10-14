@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Snapshot compatibility is a three-component discriminator
 description: Snapshot compatibility is gated on state codec version, register-layout hash, and control-state/replay-fold hash together.
-timestamp: 2026-08-01T19:21:22Z
+timestamp: 2026-10-14T17:10:13Z
 docId: ADR-3
 status: Accepted
 date: 2026-07-23
@@ -100,6 +100,15 @@ event codecs alone retain the explicit internal legacy constructor. A replayed
 state that still contains legacy-invalid text is not promoted into an accepted
 current snapshot: a cache containing it will miss again until later history
 overwrites the value or an explicit domain migration changes the state.
+
+
+Candidate Language 6 declaration-owned mapped write lifts carry the same manual
+behavior-version obligation. Only a transition actually invoking a lift adds its
+mapped target, source type, function, and version to fold identity. Its cases symbol
+is evidence-only. A version change invalidates snapshots without claiming retained
+history is semantically unchanged; compare required old/new replay observations
+before consumer adoption. Changing a function body without its version remains an
+undetectable contract violation.
 
 
 ## Consequences
