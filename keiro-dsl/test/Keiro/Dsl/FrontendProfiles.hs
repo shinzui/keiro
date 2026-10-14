@@ -80,6 +80,7 @@ frontendProfilesSpec = do
               ProcessReactionSyntax -> version 6
               WorkqueueFifoHeadsSyntax -> version 6
               ContractDeclaredIdSyntax -> version 6
+              ContractListFieldSyntax -> version 6
               KeyedMapSyntax -> version 6
               BareStructuralMappingSyntax -> version 6
               CalendarDaySyntax -> version 6
@@ -207,6 +208,7 @@ featureCases =
     FeatureCase ProcessReactionSyntax "reactions" processReactionFeatureBody,
     FeatureCase WorkqueueFifoHeadsSyntax "fifo-heads" (featureBody WorkqueueFifoHeadsSyntax),
     FeatureCase ContractDeclaredIdSyntax "ProfileId" (featureBody ContractDeclaredIdSyntax),
+    FeatureCase ContractListFieldSyntax "List" (featureBody ContractListFieldSyntax),
     FeatureCase BareStructuralMappingSyntax "value" (featureBody BareStructuralMappingSyntax),
     FeatureCase CalendarDaySyntax "Day" (featureBody CalendarDaySyntax),
     FeatureCase TextSetSyntax "Set" (featureBody TextSetSyntax),
@@ -294,6 +296,7 @@ featureBody = \case
         "  disposition { storeFailure -> retry 5s commandRejected -> deadLetter decodeFailure -> deadLetter onCodecReject -> deadLetter }",
         "}"
       ]
+  ContractListFieldSyntax -> T.replace "profileId: ProfileId" "profileIds: List ProfileId" (featureBody ContractDeclaredIdSyntax)
   ContractDeclaredIdSyntax ->
     T.unlines
       [ "context profile",
@@ -371,7 +374,7 @@ featureBody = \case
       ]
 
 allFeatures :: [LanguageFeature]
-allFeatures = [ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
+allFeatures = [ContractListFieldSyntax, ExplicitIdAdmissionDomainSyntax, NominalBindingSyntax, IntegerScalarSyntax, TypedAggregateExpressionSyntax, ExplicitTransitionImplementationSyntax, FieldAliasSyntax, ProjectionCatalogSyntax, ExternalReadContractSyntax, MappedConsumerSurfaceSyntax, DomainCommandOutcomeSyntax, DeclarativeRouterSelectionSyntax, SeparatedProjectionQueryPolicySyntax, DelegatedInboxSyntax, ProcessReactionSyntax, WorkqueueFifoHeadsSyntax, ContractDeclaredIdSyntax, KeyedMapSyntax, BareStructuralMappingSyntax, CalendarDaySyntax, TextSetSyntax, RefinedBase16Syntax]
 
 processReactionFeatureBody :: Text
 processReactionFeatureBody =

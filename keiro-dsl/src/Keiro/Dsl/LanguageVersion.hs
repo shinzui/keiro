@@ -319,7 +319,7 @@ profileV5 :: SyntaxProfile
 profileV5 =
   SyntaxProfile
     "keiro-dsl/syntax-profile/5"
-    (Set.insert ExplicitIdAdmissionDomainSyntax (Set.insert RefinedBase16Syntax (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4)))))))))))
+    (Set.insert ContractListFieldSyntax (Set.insert ExplicitIdAdmissionDomainSyntax (Set.insert RefinedBase16Syntax (Set.insert TextSetSyntax (Set.insert CalendarDaySyntax (Set.insert BareStructuralMappingSyntax (Set.insert WorkqueueFifoHeadsSyntax (Set.insert KeyedMapSyntax (Set.insert ContractDeclaredIdSyntax (Set.insert ProcessReactionSyntax (Set.insert DelegatedInboxSyntax ((.features) profileV4))))))))))))
 
 runtimeProfileV1 :: RuntimeSemanticsProfile
 runtimeProfileV1 =
@@ -413,6 +413,7 @@ data LanguageFeature
   | TextSetSyntax
   | RefinedBase16Syntax
   | ExplicitIdAdmissionDomainSyntax
+  | ContractListFieldSyntax
   deriving stock (Eq, Ord, Show)
 
 -- | The first released contract that owns each grammar feature.

@@ -1,0 +1,13 @@
+language keiro-dsl 5
+context contract-list-fields-language5
+
+id TemplateId prefix=template
+
+contract templates {
+  schemaVersion 1
+  discriminator messageType
+  topic templateEvents "templates.events"
+  event TemplatesReassigned on templateEvents {
+    templateIds: List TemplateId
+  }
+}

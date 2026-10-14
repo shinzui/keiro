@@ -98,16 +98,16 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 01:08Z) Correctness review completed and plan revised; reproduced the admission-transition gap in a Nix-shell probe. Implementation has not started.
 - [x] (2026-10-14 04:08Z) M1. Move IR-54 to `in-progress` (frontmatter `status`, body Status, log entry).
 - [x] (2026-10-14 04:23Z) M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`. Land this first with no producer of `CList`: the full build and every existing suite must pass before the lowering and the parser.
-- [ ] M1. Add `ContractListFieldSyntax` to `LanguageFeature` and to `profileV5` in `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`.
-- [ ] M1. Parse `List <scalar>` in `pContractType` (`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`), gate it, and refuse nested containers with a stable message.
+- [x] (2026-10-14 04:45Z) M1. Add `ContractListFieldSyntax` to `LanguageFeature` and to `profileV5` in `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`.
+- [x] (2026-10-14 04:45Z) M1. Parse `List <scalar>` in `pContractType` (`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`), gate it, and refuse nested containers with a stable message.
 - [x] (2026-10-14 04:23Z) M1. Print `List <scalar>` in `docContractType` (`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).
 - [x] (2026-10-14 04:08Z) M1. Update every scalar-only match site through `contractScalar`: `Validate.hs`, `IdDomain.hs`, `Manifest.hs`, `TypeGraph.hs`, `Diff.hs`, `Scaffold.hs`, `Workspace.hs`, `test/Main.hs`.
 - [x] (2026-10-14 04:08Z) M1. Require equal resolved ID admission domains for the literal-to-declared advisory; M2 proves widened/narrowed admission and both shape-change directions.
 - [x] (2026-10-14 04:30Z) M1. Lower list fields in `emitContractGen` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`): record type, array encoder, `parseContractList` decoder and its imports.
-- [ ] M1. Add fixtures `keiro-dsl/test/fixtures/contract-list-fields.keiro` and `contract-list-fields-language5.keiro`; register them in the fixture inventory test.
-- [ ] M1. Update `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` (minimum version map, `allFeatures`, `FeatureCase`, feature body).
+- [x] (2026-10-14 04:45Z) M1. Add fixtures `keiro-dsl/test/fixtures/contract-list-fields.keiro` and `contract-list-fields-language5.keiro`; register them in the fixture inventory test.
+- [x] (2026-10-14 04:45Z) M1. Update `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` (minimum version map, `allFeatures`, `FeatureCase`, feature body).
 - [x] (2026-10-14 04:23Z) M1. Write the ADR (handle from `okf id next`), add its log entry, and record the revisit outcome in RES-18.
-- [ ] M1. `nix develop -c cabal build all --enable-tests --enable-benchmarks` passes; `check`, `pretty`, Language 5 refusal, and nested refusal behave as specified.
+- [x] (2026-10-14 04:45Z) M1. `nix develop -c cabal build all --enable-tests --enable-benchmarks` passes; `check`, `pretty`, Language 5 refusal, and nested refusal behave as specified.
 - [ ] M2. Add `ContractListFieldUsedAsKey` to `DiagnosticCode`; refuse a list field as publisher `outboxId` and as intake `dedupe` key.
 - [ ] M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`, and `contract-list-fields-admission-change.keiro`; register them.
 - [ ] M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, aliases, envelope-key precedence, multi-event key refusals, and diff classification.
@@ -152,6 +152,15 @@ implementation. Provide concise evidence.
   keywords was incorrect. Use a contract-local case-insensitive container keyword
   parser with the same identifier boundary for List and forbidden containers. This
   preserves global keyword behavior and makes the specified mixed-case refusals stable.
+
+
+- Observation (2026-10-14 implementation): the compatibility renderer in
+  `LanguageVersion.hs:489-494` deliberately hard-codes column 1 because
+  `SourceLanguageDiagnostic` retains only a line (`Loc`). The Language 5 CLI probe
+  prints `contract-list-fields-language5.keiro:11:1`, while `withOwnedSpan` retains
+  the exact List token in `FrontendFailure.span`. Test the exact frontend span;
+  preserve the byte-compatible facade rather than broaden this feature into a
+  diagnostic API redesign.
 
 
 ## Decision Log
@@ -264,24 +273,31 @@ implementation. Provide concise evidence.
   Date: 2026-10-13
 
 
+- Decision: Preserve the released line-only compatibility CLI diagnostic format.
+  Require the Language 5 refusal on the correct field line and prove the exact List
+  token and column in the structured frontend span instead.
+  Rationale: The working tree explicitly preserves byte-identical compatibility
+  diagnostics; the plan's CLI-column assertion assumed a field the facade does not
+  contain. Adding a column to that public API is unrelated to list support.
+  Date: 2026-10-14
+
+
 ## Outcomes & Retrospective
 
-Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
-Compare the result against the original purpose. Before marking the plan complete,
-distill durable project context from the Decision Log, Surprises & Discoveries, and
-this section into docs/adr/. Keep task-local execution details here.
+Milestone 1 completed on 2026-10-14. The grammar separates scalar facts from field
+shape; candidate Language 6 accepts and prints List fields of every admitted scalar;
+scaffolding emits ordered arrays and strict required-field decoders with indexed element
+errors. The first type-split and lowering steps each passed the full build, every existing
+suite, and unchanged corpus regeneration before the parser produced lists. The syntax
+step passed the full build and every DSL suite (806 unit examples), including profile
+and fixture inventories. Compiled CLI checks inside Nix accepted the base fixture and
+pretty round-trip and refused Language 5 and nested/mixed-case containers. ADR-52 records
+the decision; ADR-46 now explicitly requires admission equality for build-only ID moves.
 
-Correctness review updated the implementation instructions and acceptance cases on
-2026-10-14. At review time the differ reproduced the admission bug described above, before
-implementation began. The shared predicate has now been corrected. Implementation started on 2026-10-14. IR-54 is in progress; the type split,
-scalar fact consumers, and admission-aware literal/declared comparison are implemented.
-The first compiling step passed the full all-components build, `cabal test all`
-(including 806 DSL unit examples), and corpus drift verification. Parser production of
-lists remains pending. ADR-52 and the research/improvement-request bundles validate.
-ADR-46 now states the shared resolved-admission requirement explicitly. The review verified Z3 4.16.0 in `nix develop`, ran the focused scalar
-admission probe successfully, and passed document checks for section order, tagged code
-blocks, ADR links, and whitespace. The feature-specific parser and compiled corpus remain pending; scalar-only
-builds, existing tests, and corpus drift passed the type-split step.
+Identity refusals and focused evolution regressions remain Milestone 2; the compiled list
+corpus remains Milestone 3. User documentation and changelogs are drafted and their
+validation passed, but IR-54 remains in progress until implementation gates close.
+Release publication and downstream communication remain the separate Release item.
 
 
 ## Context and Orientation
@@ -482,7 +498,7 @@ Each milestone ends in a commit that carries the trailers
 At the end of this milestone the build passes, `keiro-dsl check` accepts a Language 6
 contract with list fields of every admitted element type, `keiro-dsl pretty` prints them
 back as `List <scalar>`, the Language 5 copy fails with `LanguageFeatureRequiresVersion`
-pointing at `List`, a nested container fails with one stable message, and `scaffold` emits
+on the List field line, with the structured frontend span pointing at `List`, a nested container fails with one stable message, and `scaffold` emits
 the list lowering shown below. The ADR exists and validates. Begin by moving IR-54 to
 `in-progress`: set `status: in-progress` in its frontmatter, say so in its body Status
 section, and run `okf log add docs/improvement-requests --kind Update -m "IR-54 implementation started under ExecPlan 312."`.
@@ -749,7 +765,7 @@ that this plan's creation added so that it names the ADR, advance `timestamp`, a
 
 Acceptance for Milestone 1: the full build passes; `check` on the Language 6 fixture prints
 `OK`; `check` on the Language 5 copy prints an `error [LanguageFeatureRequiresVersion]`
-whose location is the `List` token; `pretty` on the fixture prints each list field as
+on the List field line, with the structured frontend span selecting the `List` token; `pretty` on the fixture prints each list field as
 `List <scalar>` and `check` accepts the printed text; a scratch source with
 `templateIds: List List TemplateId` fails with a message containing "nested containers";
 every existing test suite still passes; the ADR and research bundles validate strictly.
@@ -1031,7 +1047,7 @@ nix develop -c cabal run -v0 keiro-dsl -- pretty keiro-dsl/test/fixtures/contrac
 ```
 
 Expected: the first prints `OK`; the second exits non-zero and prints a line containing
-`error [LanguageFeatureRequiresVersion]` whose column points at `List`; the third prints
+`error [LanguageFeatureRequiresVersion]` on the List field line (the compatibility CLI renderer prints column 1); the structured frontend span selects `List`; the third prints
 the six fields with `List TemplateId`, `List ClaimId`, `List typeid "template"`,
 `List text`, and `List int`; the fourth prints `OK`.
 
@@ -1110,7 +1126,8 @@ Authoring: a Language 6 source with the `NotificationTypeChanged` event from Pur
 Picture passes `keiro-dsl check` with `OK`. For the Language 5 refusal probe, replace the
 preceding scalar `typeId: NotificationTypeId`
 with `typeId: typeid "notification_type"` before lowering the preamble to Language 5. It
-then fails with `LanguageFeatureRequiresVersion` at `List`; retaining the earlier declared
+then fails with `LanguageFeatureRequiresVersion` on the List field line; its structured
+frontend span selects `List`. Retaining the earlier declared
 scalar field would instead trip `ContractDeclaredIdSyntax` first. A source with
 `List List TemplateId` fails with
 a message containing "nested containers". A source with `List Channel` where `Channel` is an
@@ -1247,3 +1264,17 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
 - 2026-10-14 (implement): The lowering step passed the full build, every existing
   suite (806 DSL examples), and the unchanged 55-entry corpus drift check before
   any parser could produce CList. Proceeding to the language feature and fixtures.
+
+- 2026-10-14 (implement): CLI acceptance passed for Language 6, canonical pretty
+  round-trip, nested/mixed-case container refusals, and scaffold list lowering. Corrected
+  the CLI column expectation: its compatibility renderer is intentionally line-only,
+  while frontend spans retain the precise List token for structured consumers.
+
+- 2026-10-14 (implement): The Language 6 gate and fixtures passed the full build;
+  direct compiled CLI checks inside the Nix shell accepted the fixture and canonical
+  printing, refused Language 5 and nested/mixed-case containers, and proved list lowering.
+  All DSL suites are running to close Milestone 1.
+
+- 2026-10-14 (implement): Milestone 1 is complete. The List syntax and profiles passed
+  all DSL suites (806 unit examples) and the full build; CLI authoring, printing, refusal,
+  and scaffold checks passed. Starting identity and evolution regression coverage.

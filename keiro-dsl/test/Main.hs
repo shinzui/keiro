@@ -1938,6 +1938,8 @@ main = hspec $ do
             "contract-declared-id-literal-to-declared.keiro",
             "contract-declared-id-prefix-change.keiro",
             "contract-declared-id.keiro",
+            "contract-list-fields.keiro",
+            "contract-list-fields-language5.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
             "direct-optional-id.keiro",
