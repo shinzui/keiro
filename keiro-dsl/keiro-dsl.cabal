@@ -163,6 +163,7 @@ library
   other-modules:
     Keiro.Dsl.AggregateGenerationPlan
     Keiro.Dsl.FieldIdentity
+    Keiro.Dsl.FoldEvidence
     Keiro.Dsl.Frontend.Internal
     Keiro.Dsl.HaskellName
     Keiro.Dsl.Parser.Aggregate

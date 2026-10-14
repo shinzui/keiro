@@ -1,0 +1,11 @@
+language keiro-dsl 6
+context retirement
+aggregate Example
+  regs
+  states Active Retired
+  command Keep { note:Text }
+  command Retire { note:Text }
+  event Kept = fields(Keep)
+  event RetiredEvent = fields(Retire)
+  Active -- Keep --> emit Kept ; goto Active
+  Active -- Retire --> emit RetiredEvent ; goto Retired

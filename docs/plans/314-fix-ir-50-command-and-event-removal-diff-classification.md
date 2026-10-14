@@ -16,6 +16,11 @@ provenance:
       at: 2026-10-14T13:54:09Z
       mode: "other"
       note: "Completed initial IR-50 plan with own-revision fold evidence, CLI and workspace regressions, and report acceptance criteria."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-14T15:03:11Z
+      mode: "implement"
+      note: "Implement own-revision replay evidence and IR-50 removal report regressions."
 ---
 
 # Fix IR-50 command and event removal diff classification
@@ -33,14 +38,27 @@ This implements [IR-50](../improvement-requests/classify-removal-of-a-command-to
 ## Progress
 
 
-- [ ] M1: Add independently valid old/new Language 6 removal fixtures and failing library, single-source CLI, and workspace CLI regressions.
-- [ ] M2: Replace mixed-revision fold resolution with sound comparison of separately resolved evidence while retaining replay-impact precision and frozen fold bytes.
+- [x] (2026-10-14 15:07Z) M1: Add independently valid old/new Language 6 removal fixtures and failing library, single-source CLI, and workspace CLI regressions.
+- [x] (2026-10-14 15:17Z) M2 implementation: Replace mixed-revision fold resolution with private own-service evidence and deterministic removed-command/state details; isolated CLI removal emits both reports and the normal breaking exit.
+- [x] (2026-10-14 15:27Z) M2 focused validation: All ten IR-50 examples pass, including retained equality expressions under simultaneous guard loosening and type changes.
+- [x] (2026-10-14 15:33Z) M2/M3 full DSL validation: All 58 test suites pass; the main suite reports 858 examples and zero failures. API-boundary and record-migration policies pass.
+- [ ] M3 remaining gates: Commit the validated new fixtures to satisfy the corpus clean-path guard, then finish corpus/documentation validation and request closeout.
 - [ ] M3: Verify complete classification/report emission, document the correction, reconcile IR-50, and run the DSL/corpus/documentation gates.
 
 ## Surprises & Discoveries
 
 
-None recorded during implementation yet.
+2026-10-14: The focused baseline ran five examples with four failures. Both real revisions passed validation and their own fold resolution; library removal comparisons failed with `FoldEventOutputResolutionFailed "Example" "Retire" "RetiredEvent" "OutputEventMissing ..."`. Both CLI paths aborted before their `BREAKING` headline. The invalid-input control passed. A separate isolated CLI probe confirmed exit 1 and absent reports before the fix.
+
+2026-10-14: The first post-fix focused run passed nine of ten examples, including the library and both CLI removals, narrow same-state impact, deleted event-only types, rule closure, mapped binding, and output ownership. The remaining new nominal fixture incorrectly combined `implementation hole` with a guard, which validation correctly rejects; the fixture now uses a generated transition with a valid hand-owned event output. Full DSL verification is running on the corrected fixture.
+
+2026-10-14: API-boundary policy passed; the record-migration inventory required regeneration for the two new private evidence records and moved line locations. ADR descriptors type-check, and strict ADR/user-documentation validation passes.
+
+2026-10-14: The expanded nominal guard test exposed that hand-owned output obligation keys include guard text. Comparing those keys would turn a proven guard loosening into replay impact. Comparison now retains the resolved ownership marker and generated field mapping, while the persisted renderer keeps the complete original obligation key. Retained equality expressions are compared independently of surrounding guard syntax so loosening cannot hide a simultaneous nominal-to-primitive type change.
+
+2026-10-14: The first full DSL run passed all 57 conformance/auxiliary suites. Its 858-example main suite found two issues: the new Language 6 fixture filenames needed the existing explicit language-inventory entries, and the new hand-owned guard-loosening control exposed guard provenance in output obligation keys. Both are corrected; final focused and full reruns are pending. No canonical golden or generated corpus file was updated to bless the correction.
+
+2026-10-14: The final full DSL run passes all 58 suites and all 858 main-suite examples. The corpus gate then refuses the three staged new fixture paths because it requires clean corpus inputs before scaffolding. Commit the tested implementation and fixtures first, then rerun the ordinary gate without `--allow-dirty`; no generated corpus file has changed.
 
 ## Decision Log
 
@@ -53,19 +71,21 @@ None recorded during implementation yet.
 
 2026-10-14: Keep one dedicated intention and plan for IR-50, independent of the parser plan, as requested by the user.
 
+2026-10-14: Keep the public fold API unchanged by moving its resolver into private `Keiro.Dsl.FoldEvidence` and re-exporting the original API from `FoldFingerprint`. The frozen renderer and comparison evidence share segment constructors. Evidence is partitioned into aggregate, event, and structural replay-body dependencies; only retained bodies compare dependency identities. Removed bodies never consult new declarations.
+
 ## Outcomes & Retrospective
 
 
-Not implemented. Record the observed before/after reports and checks here when the milestones complete. Do not mark IR-50 completed on the strength of creating this plan.
+The core repair is implemented. The isolated single-source probe now exits 1 with `EvtRemovedNotDeprecated`, `AggGuardRemedyUnavailable`, and `AggFoldSurfaceChanged` naming `Retire` and `Retired`. It writes schema `keiro-dsl/diff-report/1` and replay impact for `Example` with sorted events `[Kept,RetiredEvent]` and snapshot inclusion. All 58 DSL suites pass, including 858 main-suite examples; API-boundary and record-migration policies pass. Final clean-corpus and documentation gates remain before IR-50 is marked completed.
 
 ## Context and Orientation
 
 
 Work from `/Users/shinzui/Keikaku/bokuno/keiro`. An aggregate is a state machine with commands, emitted events, control states, and registers. Replay reconstructs its state by interpreting stored events. A fold surface is the canonical text describing that interpretation; its digest identifies snapshot compatibility. A replay-impact report selects aggregate event types and whether to include streams with snapshots for a later audit; it does not itself inspect a database or prove historical safety.
 
-`keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` pairs a normalized source graph with its language/runtime contract in `CheckedService`. `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` resolves an aggregate against that service and returns either canonical text or `FoldSurfaceError`. Resolution includes register types and initials, nominal identity, nominal equality used by guards, referenced rules, and event-output ownership. `eventOutputMappingFromGraph` in `keiro-dsl/src/Keiro/Dsl/EventOutput.hs` needs the actual command/event declarations for a transition.
+`keiro-dsl/src/Keiro/Dsl/SemanticContract.hs` pairs a normalized source graph with its language/runtime contract in `CheckedService`. `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` preserves the public fold API and delegates to private `keiro-dsl/src/Keiro/Dsl/FoldEvidence.hs`, which resolves an aggregate against that service and returns either canonical evidence/text or `FoldSurfaceError`. Resolution includes register types and initials, nominal identity, nominal equality used by guards, referenced rules, and event-output ownership. `eventOutputMappingFromGraph` in `keiro-dsl/src/Keiro/Dsl/EventOutput.hs` needs the actual command/event declarations for a transition.
 
-`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` first validates the full fold surface of both revisions in `replayImpactServices`. However, `matchedAggregateImpact` then constructs `replaceAggregateTransitions oldAggregate.transitions newAggregate` and resolves that hybrid against `newService`. A removed old transition consequently refers to commands, events, or state-dependent expressions that the new declaration set no longer contains. The operation intended to isolate non-transition changes is not a valid semantic graph.
+`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` validates the full fold surface of both revisions in `replayImpactServices`. Before this repair, `matchedAggregateImpact` then constructed `replaceAggregateTransitions oldAggregate.transitions newAggregate` and resolved that hybrid against `newService`. A removed old transition consequently referred to commands, events, or state-dependent expressions that the new declaration set no longer contained. That comparison graph was invalid. The implemented comparison instead consumes separately resolved aggregate-wide, event, and replay-body evidence from each real revision. The hybrid constructor has been removed.
 
 `keiro-dsl/src/Keiro/Dsl/TransitionFamily.hs` supplies duplicate-aware, order-independent transition and replay-body comparisons. `changedTransitionEvents` in `ReplayImpact.hs` uses them to preserve precision: additions are normally replay-neutral, while changed/removed old bodies select affected event types. Guard loosening, equivalent split/merged unions, replay-only edges, and no-emission edges already have distinct treatment. Retain that behavior. `decodeSurfaceAffected` and `mappedRegisterSurface` separately identify decoder and register dependencies.
 
@@ -233,3 +253,11 @@ Retain `replayImpactServices :: CheckedService -> CheckedService -> Either FoldS
 No external library or dependency upgrade is expected. If dependency source is needed, locate it through Mori before relying on its API, and verify any proposed bounds against the authoritative package registry and upstream tags. Never traverse `/nix/store` or the filesystem root. This plan changes comparison/reporting only and does not add a reader, migration, or rollout bypass.
 
 Creation note (2026-10-14): Authored from the reproduced IR-50 failure, the replay/fold/diff implementation, existing precision tests, and ADRs. Implementation remains pending under the linked intention.
+
+Implementation note (2026-10-14): Recorded the failing own-valid removal regressions and the private evidence design; implementation and final validation are in progress.
+
+Implementation note (2026-10-14): Recorded successful CLI report delivery, dependency regression coverage, private evidence partitioning, and validation progress. Final corpus and suite checks remain pending.
+
+Validation note (2026-10-14): The corrected ten-example IR-50 group passes in the Nix shell, including both report-writing CLI paths. The final full gate run is in progress.
+
+Validation note (2026-10-14): All ten focused regressions and all 58 DSL suites pass on the final code. API-boundary and record-migration checks pass. The corpus gate requires the new fixtures to be committed before its ordinary clean-path run; final request completion remains pending that gate.

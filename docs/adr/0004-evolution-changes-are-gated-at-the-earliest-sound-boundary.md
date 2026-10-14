@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Evolution changes are gated at the earliest sound boundary
 description: Each evolution hazard is checked at the earliest boundary with enough evidence, while later boundaries independently defend runtime assembly.
-timestamp: 2026-09-19T22:31:32Z
+timestamp: 2026-10-14T15:11:47Z
 docId: ADR-4
 status: Accepted
 date: 2026-07-23
@@ -177,6 +177,15 @@ read-model registry and subscription names. Workspace reports retain schema
 `keiro-dsl/diff-report/1` and add only ignore-unknown `workspace`,
 `declaration`, and `useSites` keys. ADR 0014 defines the workspace identity,
 single-owner rule, and manifest authority used at this boundary.
+
+When both revisions independently resolve, declaration removals reach ordinary
+compatibility classification. Single-source and workspace diff write requested
+compatibility and replay-impact reports before returning the normal failing gate
+status. Removing an emitted event remains a historical-reader break, with removed
+command/state details carried by the existing fold-change finding. A replay-only
+suggestion is withheld when its required declarations are absent. Genuine
+resolution errors still precede report construction; they are never converted to
+replay neutrality.
 
 The replay-impact machine contract is
 `{"verdict":"replay-neutral"}` or

@@ -1794,8 +1794,16 @@ transitionSurfaceDiff oldSpec newSpec oldAgg newAgg
           "transitions"
           ((.name) newAgg)
           AggFoldSurfaceChanged
-          "aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change."
+          ( "aggregate fold surface changed: replay now interprets the existing log under the new fold. Old snapshots are invalidated automatically once the regenerated fold fingerprint deploys; if the change is fold-neutral confirm it, otherwise re-scaffold and redeploy, and bump `state-codec version=` for any accompanying Holes-only change."
+              <> removedDetails "commands" (map (.name) oldAgg.commands) (map (.name) newAgg.commands)
+              <> removedDetails "states" (map (.name) oldAgg.states) (map (.name) newAgg.states)
+          )
       ]
+  where
+    removedDetails label oldNames newNames =
+      case Set.toAscList (Set.fromList oldNames `Set.difference` Set.fromList newNames) of
+        [] -> ""
+        names -> " Removed " <> label <> ": " <> T.intercalate ", " names <> "."
 
 -- | Plan 143: guard changes are replay-relevant. Hydration re-inverts each
 -- stored event and re-checks the edge guard, so a stored event legally appended

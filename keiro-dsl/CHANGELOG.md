@@ -33,6 +33,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Bug Fixes
 
+- `diff --since` classifies command/event/state removals and writes compatibility
+  and replay-impact reports before the usual breaking gate exits nonzero.
+  Replay analysis resolves each revision against its own declarations, retaining
+  narrow event impact for same-state removals and existing additive/guard controls.
+
 - Contract parsing admits declared IDs named `List`, `Optional`, `Map`, and `Set`
   as scalars and list elements, including adjacent fields without semicolons.
   The list keyword is exactly `List`; wrong-case applications are rejected.

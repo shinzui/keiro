@@ -34,6 +34,7 @@ import Keiro.Codec.IdDomain (v5OrV7IdDomainVersion)
 import Keiro.Dsl.AggregateType
 import Keiro.Dsl.CanonicalEncoding (canonicalExpr, canonicalTransition)
 import Keiro.Dsl.FieldIdentity (ResolvedFieldIdentity (..), resolveAggregateFieldIdentity)
+import Keiro.Dsl.FoldEvidence (BodyEvidence (..), FoldEvidence (..), aggregateFoldEvidenceForService)
 import Keiro.Dsl.FoldFingerprint (FoldSurfaceError, aggregateFoldSurfaceForService)
 import Keiro.Dsl.Grammar
 import Keiro.Dsl.NominalType
@@ -233,21 +234,35 @@ removedAggregateImpact aggregate =
 
 matchedAggregateImpact :: CheckedService -> CheckedService -> ReplaySurfaceContext -> ReplaySurfaceContext -> Aggregate -> Aggregate -> Either FoldSurfaceError AggregateImpact
 matchedAggregateImpact oldService newService oldContext newContext oldAggregate newAggregate = do
-  oldSurface <- aggregateFoldSurfaceForService oldService oldAggregate
-  newNonTransitionSurface <-
-    aggregateFoldSurfaceForService
-      newService
-      (replaceAggregateTransitions oldAggregate.transitions newAggregate)
-  let nonTransitionFoldChanged = oldSurface /= newNonTransitionSurface
+  oldEvidence <- aggregateFoldEvidenceForService oldService oldAggregate
+  newEvidence <- aggregateFoldEvidenceForService newService newAggregate
+  let nonTransitionFoldChanged = oldEvidence.aggregateSegments /= newEvidence.aggregateSegments
+      eventDependencyAffected = Map.keysSet (Map.filter id (Map.intersectionWith (/=) oldEvidence.eventSegments newEvidence.eventSegments))
+      changedBodies = Map.elems (Map.intersectionWith changedBody oldEvidence.bodySegments newEvidence.bodySegments)
+      dependencyAffected = Set.unions [events | (True, events) <- changedBodies]
+      dependencyFoldChanged = not (Set.null eventDependencyAffected) || any fst changedBodies
   pure
     AggregateImpact
       { eventTypes =
           decodeAffected
+            <> eventDependencyAffected
+            <> dependencyAffected
             <> transitionAffected
             <> if nonTransitionFoldChanged then oldEventTypes else Set.empty,
-        includeSnapshotStreams = transitionFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
+        includeSnapshotStreams = transitionFoldChanged || dependencyFoldChanged || nonTransitionFoldChanged || mappedRegisterChanged
       }
   where
+    -- Only retained bodies can inherit changed dependencies. Added bodies
+    -- have no old history; removed bodies are already selected structurally.
+    -- Guard loosening may drop dependencies, so compare shared rule/equality
+    -- names rather than treating their absence as changed replay semantics.
+    changedBody old new =
+      ( old.outputSegments /= new.outputSegments
+          || or (Map.elems (Map.intersectionWith (/=) old.ruleSegments new.ruleSegments))
+          || or (Map.elems (Map.intersectionWith (/=) old.equalitySegments new.equalitySegments))
+          || or (Map.elems (Map.intersectionWith (/=) old.guardEqualitySegments new.guardEqualitySegments)),
+        old.emittedEvents <> new.emittedEvents
+      )
     oldEventTypes = Set.fromList ((.name) <$> (.events) oldAggregate)
     decodeAffected = decodeSurfaceAffected oldContext newContext oldAggregate newAggregate
     mappedRegisterChanged =
@@ -447,23 +462,6 @@ guardOnlyLoosening :: Transition -> Transition -> Bool
 guardOnlyLoosening oldTransition newTransition =
   replaceTransitionGuard newTransition.guard oldTransition == newTransition
     && guardImplies oldTransition.guard newTransition.guard
-
-replaceAggregateTransitions :: [Transition] -> Aggregate -> Aggregate
-replaceAggregateTransitions transitions aggregate =
-  Aggregate
-    { name = aggregate.name,
-      regs = aggregate.regs,
-      states = aggregate.states,
-      commands = aggregate.commands,
-      events = aggregate.events,
-      transitions,
-      domainOutcomeTypes = aggregate.domainOutcomeTypes,
-      domainOutcomeDuplicateLocs = aggregate.domainOutcomeDuplicateLocs,
-      wire = aggregate.wire,
-      projection = aggregate.projection,
-      snapshot = aggregate.snapshot,
-      loc = aggregate.loc
-    }
 
 replaceTransitionGuard :: Maybe Expr -> Transition -> Transition
 replaceTransitionGuard guard transition =

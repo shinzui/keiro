@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Runtime semantics use capability profiles and frozen fold identity
 description: Released runtime behavior is selected by explicit monotone capabilities, while replay identity is derived by a total frozen encoder and a fold-only FNV-1a-128 digest.
-timestamp: 2026-09-20T05:09:38Z
+timestamp: 2026-10-14T15:27:59Z
 docId: ADR-18
 status: Accepted
 date: 2026-08-02
@@ -96,6 +96,26 @@ preservation for diff and replay impact. Replay-only and no-emit comparison keep
 their independent structural treatment. Source location, declaration order,
 and forward-only domain outcomes do not participate in exact cancellation or
 body identity.
+
+Cross-revision replay comparison resolves both complete real aggregates against
+their own checked services before comparing evidence. It never attaches old
+transitions to new command, event, state, or type declarations. A valid removal
+therefore yields compatibility findings and replay targets rather than an output
+resolution error. Genuinely invalid inputs still fail explicitly.
+
+Private fold evidence shares the frozen renderer's segment constructors and
+separates aggregate-wide state/register/runtime dependencies, event nominal
+uses, and dependencies of retained structural replay bodies. Body evidence
+includes resolved output ownership, referenced-rule closure, and nominal
+equality contracts, including retained equality expressions that now resolve to a
+different type. A removed body needs only old evidence; added bodies do not
+select prior history. Guard loosening may drop dependencies without changing
+retained ones. Aggregate-wide changes conservatively select all old events and
+snapshot streams; local changes retain event-level attribution. Hand-owned output obligation keys include guard provenance; comparison retains
+resolved ownership while guard coverage remains the replay-body analysis's
+responsibility. The persisted renderer keeps the full original keys. This comparison
+projection is not a new persisted encoding or public API. Its refactoring must
+leave every unchanged canonical fold surface and digest byte-identical.
 
 Aggregate fold identity uses a dedicated FNV-1a-128 fold over the canonical
 UTF-8 octets. The offset basis, prime, XOR-then-multiply order, and modulo-2^128

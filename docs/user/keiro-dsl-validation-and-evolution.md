@@ -6,7 +6,7 @@ docId: DOC-34
 tags: [keiro, dsl, validation, evolution, reference]
 generated:
   by: process:codex-cli
-  at: 2026-10-14T04:19:11Z
+  at: 2026-10-14T15:11:47Z
 ---
 
 # Keiro DSL Validation and Evolution
@@ -135,6 +135,17 @@ For any persisted or public change:
    service integration conformance tests.
 9. Follow the rollout constraints from `diff`; run the real-log replay gate
    when replay impact is reported.
+
+Removing a command together with its emitted event and destination state is a
+valid source edit that `diff` classifies as breaking. Each revision resolves
+against its own declarations. Use `--report-out diff.json --replay-impact-out
+replay.json` to retain both reports: a breaking compatibility gate normally exits
+1 after writing them. The compatibility report names the removed event, command,
+and state; replay impact selects affected event types and snapshot-bearing streams.
+An aggregate-wide state-layout change can select every old event; a same-state
+removal selects the removed event without adding unrelated event types. A replay-only
+remedy is unavailable when its required declarations have been deleted. These reports
+identify migration and audit work; they do not establish that stored history is safe.
 
 Do not treat a green parse as semantic validation, a green check as proof of
 hand-owned behavior, or finite fixtures as proof of every possible consumer

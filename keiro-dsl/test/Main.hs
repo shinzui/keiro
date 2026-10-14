@@ -6,7 +6,7 @@
 module Main (main) where
 
 import Control.Exception (bracket)
-import Control.Monad (filterM, forM, forM_, unless)
+import Control.Monad (filterM, forM, forM_, unless, when)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
@@ -1954,6 +1954,8 @@ main = hspec $ do
             "id-admission-domains.keiro",
             "id-domain-migration-v3.keiro",
             "intake-delegated.keiro",
+            "ir50-removal-new.keiro",
+            "ir50-removal-old.keiro",
             "keyword-segments.keiro",
             "language-duplicate.keiro",
             "language-identifier-v1.keiro",
@@ -9454,6 +9456,162 @@ main = hspec $ do
               kind.code `elem` [AggGuardTightened, AggGuardRemedyUnavailable]
             ]
       map (.code) findings `shouldBe` [AggGuardTightened, AggGuardTightened]
+
+  describe "IR-50 removal diff" $ do
+    it "checks and fingerprints each real revision before classifying the removal" $ do
+      old <- checkedServiceOf "test/fixtures/ir50-removal-old.keiro"
+      new <- checkedServiceOf "test/fixtures/ir50-removal-new.keiro"
+      forM_ [old, new] $ \service -> do
+        filter ((== Error) . (.severity)) (validateService service) `shouldBe` []
+        CheckedFold.aggregateFoldSurfaceForService service (onlyAggregate (checkedSpec service)) `shouldSatisfy` isRight
+      changes <- either (fail . show) pure (CheckedDiff.diffServices old new)
+      map changeCode changes `shouldContain` [EvtRemovedNotDeprecated, AggGuardRemedyUnavailable]
+      let detailOf (Additive kind) = kind.detail
+          detailOf (Advisory kind) = kind.detail
+          detailOf (Breaking kind) = kind.detail
+          details = T.intercalate "\n" (map detailOf changes)
+      details `shouldSatisfy` T.isInfixOf "Removed commands: Retire."
+      details `shouldSatisfy` T.isInfixOf "Removed states: Retired."
+      details `shouldNotSatisfy` T.isInfixOf "\n\nreplay-only "
+      expected <- readTestText "test/fixtures/ir50-removal-replay.json"
+      impact <- either (fail . show) pure (ReplayImpact.replayImpactServices old new)
+      Aeson.eitherDecodeStrict (TextEncoding.encodeUtf8 expected) `shouldBe` Right (Aeson.toJSON impact)
+
+    it "keeps same-state removal narrow, renames affected, additions and identity neutral" $ do
+      oldText <- readTestText "test/fixtures/ir50-removal-old.keiro"
+      newText <- readTestText "test/fixtures/ir50-removal-new.keiro"
+      old <- checkedServiceFromText "old.keiro" (T.replace "goto Retired" "goto Active" (T.replace "states Active Retired" "states Active" oldText))
+      new <- checkedServiceFromText "new.keiro" newText
+      ReplayImpact.replayImpactServices old new
+        `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.singleton "RetiredEvent") True)))
+      ReplayImpact.replayImpactServices old old `shouldBe` Right ReplayNeutral
+      ReplayImpact.replayImpactServices new old `shouldBe` Right ReplayNeutral
+      renamed <- checkedServiceFromText "renamed.keiro" (T.replace "Retire" "Archive" (T.replace "RetiredEvent" "ArchivedEvent" oldText))
+      ReplayImpact.replayImpactServices old renamed `shouldSatisfy` either (const False) (/= ReplayNeutral)
+      let removed = checkedServiceWithSpec ((checkedSpec new) {nodes = []}) new
+      ReplayImpact.replayImpactServices old removed
+        `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.fromList ["Kept", "RetiredEvent"]) True)))
+
+    it "still refuses genuinely invalid output references on either side" $ do
+      old <- checkedServiceOf "test/fixtures/ir50-removal-old.keiro"
+      let brokenSpec = modifyAggregate "Example" (\aggregate -> aggregate {events = []}) (checkedSpec old)
+          broken = checkedServiceWithSpec brokenSpec old
+      ReplayImpact.replayImpactServices broken old `shouldSatisfy` isLeft
+      ReplayImpact.replayImpactServices old broken `shouldSatisfy` isLeft
+
+    it "retains rule closure evidence while removed declarations disappear" $ do
+      oldText <- readTestText "test/fixtures/ir50-removal-old.keiro"
+      newText <- readTestText "test/fixtures/ir50-removal-new.keiro"
+      let decorate =
+            T.replace "aggregate Example" "enum Permission { Allowed=allowed Denied=denied }\nrule permitted : Permission -> Bool\n  ex Allowed => true ; Denied => false\naggregate Example"
+              . T.replace "command Keep { note:Text }" "command Keep { note:Text permitted:Bool }"
+              . T.replace "Keep --> emit" "Keep --> guard cmd.permitted ; emit"
+          changed = T.replace "Allowed => true" "Allowed => false"
+      old <- checkedServiceFromText "rule-old.keiro" (decorate oldText)
+      new <- checkedServiceFromText "rule-new.keiro" (changed (decorate newText))
+      forM_ [old, new] $ \service -> filter ((== Error) . (.severity)) (validateService service) `shouldBe` []
+      -- Retain the states so only the removed body and changed rule can select events.
+      let sameStates service = checkedServiceWithSpec (modifyAggregate "Example" (\aggregate -> aggregate {states = (onlyAggregate (checkedSpec old)).states}) (checkedSpec service)) service
+      ReplayImpact.replayImpactServices old (sameStates new)
+        `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.fromList ["Kept", "RetiredEvent"]) True)))
+
+    it "detects command-only nominal equality dependencies without broadening unrelated events" $ do
+      base <- readTestText "test/fixtures/ir50-removal-old.keiro"
+      let source =
+            T.replace "aggregate Example" "id TokenId prefix=token\naggregate Example"
+              . T.replace "command Keep { note:Text }" "command Keep { note:Text left:TokenId right:TokenId }"
+              . T.replace "event Kept = fields(Keep)" "event Kept { note:Text }"
+              . T.replace "Keep --> emit" "Keep --> guard cmd.left == cmd.right ; emit"
+              $ base
+      old <- checkedServiceFromText "nominal-old.keiro" source
+      new <- checkedServiceFromText "nominal-new.keiro" (T.replace "prefix=token" "prefix=changed" source)
+      forM_ [old, new] $ \service -> filter ((== Error) . (.severity)) (validateService service) `shouldBe` []
+      ReplayImpact.replayImpactServices old new
+        `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.singleton "Kept") True)))
+      forM_ [T.replace "TokenId" "RenamedId" source, T.replace "left:TokenId right:TokenId" "left:Text right:Text" source] $ \candidate -> do
+        changedType <- checkedServiceFromText "nominal-type-new.keiro" candidate
+        ReplayImpact.replayImpactServices old changedType
+          `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.singleton "Kept") True)))
+      loosened <- checkedServiceFromText "nominal-loosened.keiro" (T.replace "guard cmd.left == cmd.right ; " "" source)
+      ReplayImpact.replayImpactServices old loosened `shouldBe` Right ReplayNeutral
+      let guardedSource = T.replace "right:TokenId" "right:TokenId permitted:Bool" (T.replace "guard cmd.left == cmd.right" "guard cmd.left == cmd.right && cmd.permitted" source)
+      guarded <- checkedServiceFromText "nominal-guarded.keiro" guardedSource
+      retypedLoosening <- checkedServiceFromText "nominal-retyped-loosening.keiro" (T.replace " && cmd.permitted" "" (T.replace "left:TokenId right:TokenId" "left:Text right:Text" guardedSource))
+      ReplayImpact.replayImpactServices guarded retypedLoosening
+        `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.singleton "Kept") True)))
+
+    it "keeps mapped register binding changes replay-visible" $ do
+      source <- readTestText "test/fixtures/consumer-types.keiro"
+      let current = T.replace "language keiro-dsl 4" "language keiro-dsl 6" source
+      old <- checkedServiceFromText "mapped-old.keiro" current
+      new <- checkedServiceFromText "mapped-new.keiro" (T.replace "binding-version = \"1\"" "binding-version = \"2\"" current)
+      forM_ [old, new] $ \service -> filter ((== Error) . (.severity)) (validateService service) `shouldBe` []
+      ReplayImpact.replayImpactServices old new
+        `shouldBe` Right (ReplayAffected (Map.singleton "Catalog" (AggregateImpact (Set.singleton "ArtifactObserved") True)))
+
+    it "detects output ownership changes on otherwise identical replay bodies" $ do
+      source <- readTestText "test/fixtures/ir50-removal-old.keiro"
+      old <- checkedServiceFromText "output-old.keiro" source
+      new <- checkedServiceFromText "output-new.keiro" (T.replace "event Kept = fields(Keep)" "event Kept { note:Text }" source)
+      ReplayImpact.replayImpactServices old new
+        `shouldBe` Right (ReplayAffected (Map.singleton "Example" (AggregateImpact (Set.singleton "Kept") True)))
+
+    it "resolves deleted event-only nominal types solely in the old revision" $ do
+      oldText <- readTestText "test/fixtures/ir50-removal-old.keiro"
+      newText <- readTestText "test/fixtures/ir50-removal-new.keiro"
+      old <- checkedServiceFromText "deleted-type-old.keiro" (T.replace "aggregate Example" "id RetiredId prefix=retired\naggregate Example" (T.replace "command Retire { note:Text }" "command Retire { note:RetiredId }" oldText))
+      new <- checkedServiceFromText "deleted-type-new.keiro" newText
+      forM_ [old, new] $ \service -> filter ((== Error) . (.severity)) (validateService service) `shouldBe` []
+      ReplayImpact.replayImpactServices old new `shouldSatisfy` either (const False) (/= ReplayNeutral)
+
+    forM_ [False, True] $ \workspace ->
+      it ("writes both reports before the breaking gate exits for " <> if workspace then "a workspace with a removed historical member" else "a source") $
+        withTempDirectory "keiro-ir50" $ \repository -> do
+          oldText <- readTestText "test/fixtures/ir50-removal-old.keiro"
+          newText <- readTestText "test/fixtures/ir50-removal-new.keiro"
+          let source = repository </> "service.keiro"
+              manifest = repository </> "service.keiro-workspace"
+              input = if workspace then manifest else source
+              diffPath = repository </> "diff.json"
+              replayPath = repository </> "replay.json"
+              git arguments = readProcessWithExitCode "git" ("-C" : repository : arguments) ""
+              gitOk arguments = do
+                (code, out, err) <- git arguments
+                code `shouldBe` ExitSuccess
+                pure (out <> err)
+              writeManifest members = TIO.writeFile manifest (T.unlines (["service retirement", "module Retirement", "layout collocated"] <> map ("spec " <>) members))
+          TIO.writeFile source oldText
+          when workspace $ do
+            TIO.writeFile (repository </> "removed.keiro") "language keiro-dsl 6\ncontext retirement\nid UnusedId prefix=unused\n"
+            writeManifest ["service.keiro", "removed.keiro"]
+          (oldCode, oldOut, oldErr) <- runKeiroDsl ["check", input]
+          (oldCode, oldOut <> oldErr) `shouldSatisfy` ((== ExitSuccess) . fst)
+          _ <- gitOk ["init", "--quiet"]
+          _ <- gitOk ["add", "."]
+          _ <- gitOk ["-c", "user.name=IR50 Test", "-c", "user.email=ir50@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "test: capture removal baseline"]
+          before <- gitOk ["rev-parse", "HEAD"]
+          TIO.writeFile source newText
+          when workspace $ do
+            removeFile (repository </> "removed.keiro")
+            writeManifest ["service.keiro"]
+          (newCode, _, _) <- runKeiroDsl ["check", input]
+          newCode `shouldBe` ExitSuccess
+          (code, out, err) <-
+            withCurrentDirectory repository $
+              runKeiroDsl ["diff", input, "--since", "HEAD", "--explain", "--report-out", diffPath, "--replay-impact-out", replayPath]
+          code `shouldBe` ExitFailure 1
+          out `shouldContain` "BREAKING"
+          (out <> err) `shouldNotContain` "OutputEventMissing"
+          forM_ ["Removed commands: Retire.", "RetiredEvent", "Removed states: Retired."] $ \name -> out `shouldContain` name
+          report <- Aeson.eitherDecodeFileStrict diffPath :: IO (Either String Value)
+          report `shouldSatisfy` isRight
+          T.pack (show report) `shouldSatisfy` T.isInfixOf "EvtRemovedNotDeprecated"
+          expected <- readTestText "test/fixtures/ir50-removal-replay.json"
+          replay <- Aeson.eitherDecodeFileStrict replayPath :: IO (Either String Value)
+          replay `shouldBe` Aeson.eitherDecodeStrict (TextEncoding.encodeUtf8 expected)
+          TIO.readFile source `shouldReturn` newText
+          gitOk ["show", "HEAD:service.keiro"] `shouldReturn` T.unpack oldText
+          gitOk ["rev-parse", "HEAD"] `shouldReturn` before
 
   describe "replay impact" $ do
     it "treats new events and transitions as replay-neutral" $ do
