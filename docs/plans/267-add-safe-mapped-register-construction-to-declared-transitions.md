@@ -12,12 +12,22 @@ provenance:
       at: 2026-09-21T19:48:40Z
       mode: "update"
       note: "Refresh candidate baseline and validate released-Keiki feasibility; reject projected lift inputs without weakening validation."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T14:13:59Z
+      mode: "update"
+      note: "Address review with own-revision replay comparison, explicit build-only lift diff, opaque skeleton/lexical checks, recurring mutation gate, Nix commands, and ADR-49 release sequencing; 8 probe assertions and 814 baseline tests pass."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
       at: 2026-09-21T19:57:26Z
       verdict: "comments"
       note: "Refreshed design has released-Keiki feasibility evidence: 8 probe assertions, 791 unit examples, and structural/snapshot suites pass."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T14:11:07Z
+      verdict: "changes-requested"
+      note: "Pre-update review: hybrid replay-impact resolution breaks valid lift removal/source changes; specify opaque skeletons, lexical validation, diff classification, recurring mutation gate, Nix checks, and release ordering."
 ---
 
 # Add safe mapped-register construction to declared transitions
@@ -59,6 +69,12 @@ construction remains outside the language. It also does not relax
 ## Progress
 
 
+- [x] (2026-10-14) Review against Keiro `65702725` and update the replay-impact,
+      lexical-validation, opaque-skeleton, diff, verification, and release-ordering instructions.
+      Re-run the retained feasibility probe in Nix: eight assertions pass. This is plan review,
+      not feature implementation or release approval.
+- [ ] Add regression coverage for valid lift removal and source-type changes without resolving
+      old writes against new declarations; preserve exact lift-free replay-impact behavior.
 - [x] (2026-09-21) Refresh against Keiro `0d7cea6c`, verify released Keiki 0.9.1.0,
       and run the standalone default-validation/guard/replay feasibility probe. This is
       planning evidence; the DSL feature remains unimplemented.
@@ -85,6 +101,31 @@ construction remains outside the language. It also does not relax
 
 ## Surprises & Discoveries
 
+
+- Observation (2026-10-14): `matchedAggregateImpact` in
+  `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` compares the old fold against a hybrid made from
+  the new service and old transitions (`replaceAggregateTransitions oldAggregate.transitions
+  newAggregate`). Resolving new lift metadata in that hybrid would fail for two individually
+  valid revisions: remove a lift and replace its write with `initial`, or change its source from
+  `Time` to `Bool` and change the command expression accordingly. The previous claim that the
+  conditional fold field requires no replay-classifier work was incorrect. Resolve each real
+  revision against its own declarations and use the bounded comparison defined below.
+
+- Observation (2026-10-14): `mkQualifiedValueName` in `TypeGraph.hs` checks only nonblank text.
+  `mappedLexicalRules` / `qualifiedFacts` in `Validate.hs` separately check module/value spelling.
+  Adding lift fields only to the checked declaration would let malformed nonempty symbols reach
+  generation. Both function and cases must enter that lexical pass at the lift location.
+
+- Observation (2026-10-14): `bindingObligationsForService` in `ExplainBindings.hs` enumerates
+  structural and nominal declarations, not opaque ones. `emitBindingSkeleton` and
+  `bindingSkeletonImportPlan` in `Scaffold.hs` likewise have no opaque branch; their fallback
+  assumes a nominal declaration. The motivating opaque lift therefore needs an explicit
+  obligation/render/import path. Extending only the structural path is insufficient.
+
+- Observation (2026-10-14): ADR 49 approves a future staged Language-6-only cutoff, but the
+  working tree still registers stable Language 5 and candidate Language 6 with the schema-2
+  mixed corpus. Preserve that current baseline in this feature and sequence it before Language
+  6 finalization; do not claim perpetual legacy support or perform plan 304's retirement here.
 
 - Observation (2026-09-21): the old plan's language bootstrap instructions are obsolete.
   `LanguageVersion.hs` already registers candidate 6 with syntax profile 5 and runtime profile 5;
@@ -205,8 +246,9 @@ construction remains outside the language. It also does not relax
   only when one of its registers has that type, and `ReplayImpact` recomputes
   `aggregateFoldSurfaceForService` rather than classifying diff codes. A lift field appended to
   every transition segment, even empty, would move every pinned digest; appended only when a lift
-  is used, it yields the "only aggregates that use the lift" replay property with no further
-  classification work.
+  is used, it preserves lift-free identity. The 2026-10-14 review below corrects the earlier
+  inference that this alone settles replay selection: the classifier also builds a hybrid graph
+  that cannot safely resolve changed lift contracts.
   Evidence: `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` (`aggregateFoldSurface`,
   `mappedRegisterSegments`, `transitionSegment` with its conditional `outputOwnershipSegment`),
   `keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` (`matchedAggregateImpact`),
@@ -265,6 +307,36 @@ construction remains outside the language. It also does not relax
 
 ## Decision Log
 
+
+- Decision (2026-10-14): For an aggregate using either new construction form in either revision,
+  `ReplayImpact` compares complete fold surfaces of the two real, validated aggregates against
+  their own checked services. If those surfaces differ, select all old event types for that
+  aggregate and include its snapshot streams. Union normal decode impact as before. If the
+  surfaces are equal, retain the existing transition/decode impact calculation. Never run the
+  old-transition/new-declaration hybrid on this branch. Aggregates using neither form retain
+  the existing algorithm byte-for-byte in their observable reports.
+  Rationale: this deliberately conservative aggregate-level selection avoids invalid hybrid
+  resolution without introducing another fingerprint or weakening errors. It may select more
+  event types for an aggregate using construction when another fold component changes. Narrower
+  event selection is optional future work, not a release prerequisite. Unused declaration lifts
+  and cases-only edits remain replay-neutral because they do not alter the complete fold.
+
+- Decision (2026-10-14): Both new mapped-lift diff codes produce consumer-build advisories through
+  `mappedBuildChange`, `mappedBuildVector`, and `RemedyRunConformance`. Actual use in an aggregate
+  independently produces the existing `AggFoldSurfaceChanged` snapshot advisory and replay
+  selection. Do not send lift metadata through all mapped use paths as a wire/queue change.
+  Rationale: the function constructs register values; it does not change mapped codec policy.
+  A declaration used only in events, a queue, or a read-model contract needs a rebuild and
+  conformance, not a false wire incompatibility or aggregate replay requirement.
+
+- Decision (2026-10-14): Implement before candidate Language 6 is finalized for ADR 49's
+  deprecation release D; leave publication and the later breaking release R to their release
+  work. If Language 6 has become published before work starts, revise the language placement
+  before changing its grammar. Run every build, test, mutation, and repository gate inside
+  `nix develop`, with `z3 --version` checked first.
+  Rationale: package release numbering, source-language publication, and consumer deployment are
+  separate decisions. New public constructors/record fields also require a PVP API review for
+  the shared package release; this plan does not choose or publish a version.
 
 - Decision: Extend candidate Language 6's existing syntax profile 5 and preserve its runtime
   profile 5, all existing capabilities, and every pre-feature corpus owner and fold byte.
@@ -417,7 +489,8 @@ construction remains outside the language. It also does not relax
   Rationale: only the new payload needs unambiguous framing; a positional field present
   but empty on lift-free transitions would move every pinned digest, which this plan classifies as
   a design stop. Conditional presence also yields "only aggregates whose transition uses the lift"
-  in `ReplayImpact`, which recomputes fold surfaces rather than classifying diff codes.
+  in identity; replay selection additionally needs the own-revision comparison recorded on
+  2026-10-14 because its existing hybrid graph cannot safely resolve changed lift contracts.
   Date: 2026-08-22
 
 - Decision: A lift is lowered only into a `B.slot` update and never into an event field or
@@ -440,6 +513,14 @@ construction remains outside the language. It also does not relax
 
 ## Outcomes & Retrospective
 
+
+The 2026-10-14 review found a release-blocking plan defect in replay comparison and incomplete
+instructions for opaque binding skeletons, symbol validation, and automated mutation coverage.
+This update supplies the missing design and regression requirements. The core dependency probe
+still passes under the required Nix shell. The feature is a reasonable candidate for the next
+package release only after implementation and all acceptance gates; no DSL feature or release
+has been completed by this review. Previous recorded work is a `gpt-6-astra` revision and a
+`comments` review on 2026-09-21; original authorship remains unknown.
 
 The 2026-09-21 refresh establishes feasibility for direct scalar lift inputs using released
 Keiki, corrects the candidate-language baseline, and narrows the argument grammar to preserve
@@ -474,7 +555,16 @@ resolves the target register type, then checks the right-hand side against it. I
 write-specific surface node for target initial selection and one for mapped lifting, and add
 typed nodes that retain the checked target declaration, qualified symbol, lift version, source
 type, and child expression. Do not teach `resolveScalarExpr` used by guards or outcomes to infer a
-write target.
+write target. Add the raw lift declaration to the generic `HasLocs` traversal in
+`keiro-dsl/src/Keiro/Dsl/Workspace.hs`, so workspace member diagnostic locations survive
+composition. Exercise malformed declarations and lifted-child errors in a multi-member workspace
+as well as a standalone source.
+
+`keiro-dsl/src/Keiro/Dsl/Validate.hs` owns `mappedLexicalRules`, including `qualifiedFacts`;
+add function and cases references there. `TypeGraph.mkQualifiedValueName` alone does not validate
+Haskell spelling. Preserve existing external spelling rules, and use the lift's location for
+malformed module/value diagnostics. Append expression and declaration diagnostic codes through
+the existing validation translation; do not leave errors as generator exceptions.
 
 `keiro-dsl/src/Keiro/Dsl/Parser/Aggregate.hs` currently calls the general `pExpr` for every
 `write`. Change only that clause to call a new `pWriteExpr`. Under Language 6, it recognizes the
@@ -511,7 +601,17 @@ case symbol has the generated type expectation `NonEmpty (Text, source, target)`
 be non-empty and unique, and every tuple must satisfy `function source == expected`. Extend the
 create-once obligation and skeleton machinery in `keiro-dsl/src/Keiro/Dsl/ExplainBindings.hs` and
 `keiro-dsl/src/Keiro/Dsl/Scaffold.hs` so a missing hand-owned module receives correctly typed
-function and cases stubs exactly once.
+function and cases stubs exactly once. Add explicit lift-function and lift-cases obligation kinds,
+including their stable ledger spellings in `renderKind` and `parseKind`. Enumerate lifts for both
+structural and opaque declarations, even when unused by aggregates, because service conformance
+checks every declared lift. The opaque branch must render the consumer type and source scalar
+through the import plan; it must not fall through to nominal rendering or import nominal binding
+helpers. Plan `NonEmpty`, `Text`, and the selected scalar type (`UTCTime` or `Natural` when needed)
+without unused imports. Preserve existing lift-free opaque scaffolds: this work adds the new lift
+obligations, not a general opaque codec/domain skeleton generator. The fixture's opaque domain,
+codec instances, outer codec cases, and initial value remain hand-supplied as today. When an
+existing hand-owned module needs a new lift symbol, report the obligation without overwriting it;
+test both fresh separate modules and later additions to existing modules.
 
 `keiro-dsl/src/Keiro/Dsl/MappedConsumer.hs` records dependency modules and persisted mapping
 identity. Add an optional lift identity containing source type, function, version, and cases to
@@ -542,12 +642,18 @@ segment through its canonical spelling.
 `MappedWriteLiftChanged` for add/remove/source/function/version changes and
 `MappedWriteLiftFixturesChanged` for evidence-only case-symbol changes, copying the
 `MappedFixturesChanged` classification (`mappedBuildVector`, `RemedyRunConformance`, build-only
-change shape) for the latter. The former always requests a consumer rebuild and attributes
-aggregate consequences through the existing use-path machinery.
-`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` does not classify diff codes; it recomputes
-`aggregateFoldSurfaceForService`, so the conditional transition field above is what confines
-replay/snapshot impact to aggregates whose transition actually uses the lift. Changing only the
-cases symbol remains replay-neutral.
+change shape) for the latter. Both codes take the explicit consumer-build branch of `mappedFindingChanges`, rather than its
+fallback over all use paths. Used execution changes independently produce
+`AggFoldSurfaceChanged`. Private/public wire, queue, and read-model compatibility dimensions stay
+unchanged for a lift-only edit; tests must assert the full compatibility vector, not just a code.
+`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` must also change: when either actual aggregate contains
+`EWriteInitial` or `EWriteMapped`, compare its actual old/new fold surfaces and apply the
+conservative aggregate-level selection in the 2026-10-14 Decision Log. Retain existing
+`changedTransitionEvents` and decode impact, but bypass the hybrid surface in that branch.
+Propagate failures from either actual service. Never suppress a failed hybrid with an empty
+fingerprint or treat unresolved writes as replay-neutral. Cases-only edits and unused lifts stay
+replay-neutral; valid lift removal and source replacement must produce an impact report rather
+than `FoldSurfaceError`.
 
 The compiled proof should be a new fixture at
 `keiro-dsl/test/fixtures/mapped-register-construction.keiro`, generated output under
@@ -582,6 +688,12 @@ behavior change; it does not prove old events retain their meaning. Rebuilding s
 necessary but is not deployment approval. Compare retained-history observations before consumer
 adoption, preserving an old replay path when the new lift changes required historical meaning.
 No consumer adoption, implementation retirement, or dependency patch belongs to this plan.
+[ADR 49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
+and [plan 304](304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md) scope the
+retained-history rule: D retains old source/data support; R deliberately retires enumerated
+contracts and requires current data or an application-owned migration. Implement this feature
+before Language 6 finalization for D. Its legacy-preservation assertions describe today's
+supported baseline and do not override R's later deletion of retired compatibility coverage.
 
 During implementation amend ADRs 3, 12, and 17 if needed to record the implemented lift boundary,
 and ADR 18 for the new used-lift identity encoding. ADR 16 already authorizes amendment of the
@@ -642,7 +754,9 @@ enum, union, and bare-value declarations, opaque declarations, and refined-initi
 the checker/scaffold matrix. Pass `FrontendContext` into the opaque parser so nested `write-lift`
 uses `languageFeatureKeyword` at its own marker without globally reserving another identifier.
 Parse, pretty-print, validate, and resolve its direct source
-type, qualified function, non-empty version, qualified cases symbol, and exact location. Reject
+type, qualified function, non-empty version, qualified cases symbol, and exact location. Update
+`Validate.mappedLexicalRules` for both symbols and the workspace location traversal for the new
+raw declaration. Reject
 duplicates, partial blocks, unsupported source types, invalid symbols/versions, a lift used for a
 non-mapped target, a target without a lift, and a source expression whose resolved type differs
 from the declared source. Preserve direct same-type mapped copies through the existing
@@ -651,14 +765,22 @@ from the declared source. Preserve direct same-type mapped copies through the ex
 Add `mapped(expression)` to `pWriteExpr`, a resolved typed node whose entire child tree is
 rejected when it contains a predicate or `TypedProject`, import occurrences through the write-side
 collector, and `K.TApp1` lowering.
-Extend mapping identities with an `.:?`-decoded optional field and create-once obligations, and
-add a test that decodes a checked-in pre-lift ledger. Generate service-level conformance
+Extend mapping identities with an `.:?`-decoded optional field and explicit structural/opaque
+create-once lift obligations, including stable obligation-kind encoding and decoding. Test a
+checked-in pre-lift ledger, new obligation round trips, and opaque lift stubs in separate modules
+with type-correct imports under generated `-Werror`. Existing hand-owned modules must receive
+missing-obligation reports rather than rewritten content. Generate service-level conformance
 assertions for the declared function/cases. Add exact diff classifications and the conditional
 transition fold field. Use the same resolved checked graph and propagate `FoldSurfaceError`;
 never manufacture a fingerprint after failed lift resolution. Freeze the compact JSON encoding
 with goldens covering multiple writes, non-ASCII versions, quotes, colons, pipes, and newlines;
-fixture names and locations are excluded. Then verify that add/remove, function, source, and version
-changes are visible,
+fixture names and locations are excluded. Implement the construction-aware replay branch and explicit build-only mapped diff classification
+before testing evolution. Compare individually valid old/new specs for lift removal plus rewrite
+to `initial`, and `Time`-to-`Bool` source replacement plus a corresponding new child expression.
+Both comparisons must succeed and select the affected aggregate's old event types and snapshots.
+Invalid actual revisions still fail resolution. Include another aggregate holding the same mapped
+type but using only whole-value copies: its fold and replay selection must stay unchanged on a
+lift version edit. Then verify that add/remove, function, source, and version changes are visible,
 a cases-only change is replay-neutral, an unused lift does not move aggregate identity, and every
 lift-free fixture's fingerprint and generated `<aggregate>FoldFingerprint` literal is unchanged.
 At the end of this milestone the complete source surface checks and scaffolds deterministically,
@@ -677,7 +799,8 @@ enforce recoverability, so this requirement is proven by the generated harness's
 `validateTransducer` row and the forward/replay equality row, not by `check`.
 
 Scaffold the generated modules, fill only the create-once domain, binding, lift, lift-case, and
-behavior-witness files, and register the suite in Cabal and the baseline as
+behavior-witness files (supply the opaque domain/codec and existing outer cases manually, as
+explained above), and register the suite in Cabal and the baseline as
 `candidate-primary` Language 6. Its `Main.hs` must assert exact register values, complementary
 branch selection, unchanged Keiki guard verification, generated ownership, forward/encoded/full
 replay agreement, fold-fingerprint composition, snapshot invalidation, and that no generated
@@ -689,7 +812,11 @@ Keiki's schema-wide recoverability gate and is a regression guard, not evidence 
 a generated guard or slot is bypassed, a projected argument is wrapped inside a lift or arithmetic,
 a lift is moved into an event
 output (rejected by this feature's own write-only placement policy), or a guard/write is
-combined with `implementation hole`. Always rerun the green baseline after restoration.
+combined with `implementation hole`. Check a named diagnostic or failed assertion for every expected-red case, rather than accepting
+any nonzero exit (a syntax error, missing solver, or unrelated compiler failure is not evidence).
+Always rerun the green baseline after restoration. Add a `mapped-register-construction-proof`
+recipe in `justfile`, include it in `verify`, and have it invoke the mutation driver. This makes
+the release gate exercise the safety proof on later changes as well as on initial implementation.
 
 Regenerate the conformance corpus. Accept only the new Language-6 suite and provenance
 attributable to that input; preserve all pre-existing candidate suites and skeletons. The
@@ -707,6 +834,12 @@ add matching OKF log entries. Keep every plan-local implementation detail here r
 the ADRs into a
 task transcript.
 
+Review public `keiro-dsl` exports changed by added constructors and record fields, follow the
+repository API-boundary checks, and document any required consumer source updates for the shared
+PVP release. Confirm Language 6 is still candidate; if finalization or retirement work has landed,
+reconcile the plan's language/corpus assumptions before proceeding. This plan prepares release
+content but does not publish or perform the D/R cutoff.
+
 Run the complete package and repository gates. Only after they pass, set IR-34 to implemented,
 link this plan from the request, and add its improvement-request log event. Review this plan's
 Decision Log, discoveries, and outcome before marking Progress complete; promote any newly
@@ -716,7 +849,8 @@ durable boundary into an existing ADR or a newly allocated ADR as required by th
 ## Concrete Steps
 
 
-Work from the repository root. Before relying on Keiki, repeat the dependency lookup and release
+Work from the repository root. All verification commands below run inside the Nix development
+shell; the shell is required even when host tools happen to exist. Before relying on Keiki, repeat the dependency lookup and release
 check because the Mori corpus may lag the authoritative registry:
 
 ```bash
@@ -736,10 +870,11 @@ treating it as released source. Inspect `dist-newstyle/cache/plan.json` to verif
 selection is 0.9.1.0, not an unpublished local dependency. If the released API no longer has the behavior
 described here, stop and revise this plan instead of guessing or adding a bound workaround.
 
-Run the retained feasibility probe (GHC from the repository environment and z3 on `PATH`):
+Verify the solver, then run the retained feasibility probe in the same Nix environment:
 
 ```bash
-cabal exec -- runghc -XOverloadedLabels docs/plans/evidence/267-mapped-register-feasibility.hs
+nix develop -c z3 --version
+nix develop -c cabal exec -- runghc -XOverloadedLabels docs/plans/evidence/267-mapped-register-feasibility.hs
 ```
 
 Expected: eight `PASS` lines and exit 0. This probe directly constructs typed Keiki terms using
@@ -750,12 +885,12 @@ An unavailable compiler, dependency, or z3 is a failed prerequisite, not passing
 Run focused tests after each implementation slice:
 
 ```bash
-cabal test keiro-dsl-test --test-options='--match "FrontendProfiles"'
-cabal test keiro-dsl-test --test-options='--match "mapped register construction"'
-cabal test keiro-dsl-test --test-options='--match "mapped types"'
-cabal test keiro-dsl-test --test-options='--match "aggregate fold fingerprints"'
-cabal test keiro-dsl-test --test-options='--match "replay impact"'
-cabal test keiro-dsl-test --test-options='--match "conformance baseline"'
+nix develop -c cabal test keiro-dsl-test --test-options='--match "FrontendProfiles"'
+nix develop -c cabal test keiro-dsl-test --test-options='--match "mapped register construction"'
+nix develop -c cabal test keiro-dsl-test --test-options='--match "mapped types"'
+nix develop -c cabal test keiro-dsl-test --test-options='--match "aggregate fold fingerprints"'
+nix develop -c cabal test keiro-dsl-test --test-options='--match "replay impact"'
+nix develop -c cabal test keiro-dsl-test --test-options='--match "conformance baseline"'
 ```
 
 Require a nonzero example count for every focused command. Hspec `--match` is a substring
@@ -766,13 +901,17 @@ run the full `cabal test keiro-dsl-test --test-show-details=direct` baseline.
 The focused output must distinguish the released and candidate contracts:
 
 ```text
-Language 5: bare initial keeps its released unknown-root result
+Language 5: bare initial keeps ordinary-root resolution (or the existing unknown-root error)
 Language 5: mapped(...) fails with LanguageFeatureRequiresVersion
 Language 6: mapped target initial checks and scaffolds
 Language 6: declared Time -> MaybeTime lift checks and scaffolds
 Language 6: predicate-valued lift child is rejected at check time
 Language 6: mapped/nominal projection beneath lift or arithmetic is rejected at check time
 Language 6: bare initial beside a register named initial is diagnosed
+Language 6: invalid lift function/cases symbols fail at their workspace member location
+valid lift removal/source replacement: replay-impact succeeds and selects the changed aggregate
+unused lift/cases-only edit: replay-impact remains neutral
+fresh opaque lift skeleton: correct signatures/imports and repeat-scaffold preservation
 mixed implementation hole plus guard/write: AggregateTransitionOwnershipConflict
 pre-lift mapping ledger still decodes
 lift-free fold surfaces are byte-identical
@@ -782,12 +921,12 @@ Generate the new candidate fixture in place, then fill only create-once files an
 second scaffold run does not overwrite them:
 
 ```bash
-cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/mapped-register-construction.keiro
-cabal run -v0 keiro-dsl -- scaffold \
+nix develop -c cabal run -v0 keiro-dsl -- check keiro-dsl/test/fixtures/mapped-register-construction.keiro
+nix develop -c cabal run -v0 keiro-dsl -- scaffold \
   keiro-dsl/test/fixtures/mapped-register-construction.keiro \
   --out keiro-dsl/test/conformance-mapped-register-construction
-cabal test keiro-dsl-conformance-mapped-register-construction --test-show-details=direct
-cabal run -v0 keiro-dsl -- scaffold \
+nix develop -c cabal test keiro-dsl-conformance-mapped-register-construction --test-show-details=direct
+nix develop -c cabal run -v0 keiro-dsl -- scaffold \
   keiro-dsl/test/fixtures/mapped-register-construction.keiro \
   --out keiro-dsl/test/conformance-mapped-register-construction
 git diff --check
@@ -806,16 +945,16 @@ PASS  lift version participates in fold and snapshot identity
 Run the mutation proof and confirm it restores every touched file:
 
 ```bash
-bash keiro-dsl/test/mapped-register-construction-mutation-test.sh
+nix develop -c just mapped-register-construction-proof
 git diff --check
 ```
 
 Regenerate and validate candidate corpus ownership:
 
 ```bash
-just corpus-regen
-cabal test keiro-dsl-test --test-options='--match "conformance baseline"'
-cabal test keiro-dsl-conformance-mapped-register-construction --test-show-details=direct
+nix develop -c just corpus-regen
+nix develop -c cabal test keiro-dsl-test --test-options='--match "conformance baseline"'
+nix develop -c cabal test keiro-dsl-conformance-mapped-register-construction --test-show-details=direct
 ```
 
 Inspect the diff. Existing Language-1-through-5 fixtures and generated modules may not change.
@@ -828,27 +967,27 @@ not part of the plan-only validation completed below. Use an isolated verificati
 
 
 ```bash
-cabal build all
-cabal test keiro-dsl:tests
+nix develop -c cabal build all --enable-tests --enable-benchmarks
+nix develop -c cabal test keiro-dsl:tests
 nix fmt -- --check
 git diff --check
-okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
-mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
-okf validate docs/improvement-requests --strict \
+nix develop -c okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
+nix develop -c mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
+nix develop -c okf validate docs/improvement-requests --strict \
   --profile mori/improvement-requests-profile.dhall \
   --profile-enforce --log-enforce
-JITSUREI_DATABASE=jitsurei_plan267_verify just verify
+JITSUREI_DATABASE=jitsurei_plan267_verify nix develop -c just verify
 ```
 
 After every ADR timestamp change, add the matching reserved-bundle log event with `okf log add`
 before strict validation. After all gates pass, close IR-34 and validate it again:
 
 ```bash
-okf log add docs/improvement-requests IR-34 \
+nix develop -c okf log add docs/improvement-requests IR-34 \
   --kind Implemented \
   --message "Implement IR-34 through ExecPlan 267 with candidate Language-6 target initial and versioned mapped-lift writes under generated ownership."
-mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
-okf validate docs/improvement-requests --strict \
+nix develop -c mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
+nix develop -c okf validate docs/improvement-requests --strict \
   --profile mori/improvement-requests-profile.dhall \
   --profile-enforce --log-enforce
 git status --short
@@ -899,7 +1038,10 @@ Acceptance requires all of the following observable behavior, not merely a succe
   cases, rejects blank or duplicate labels, and fails when `atTime source /= expected`. Missing
   consumer files receive correctly typed create-once stubs; a second scaffold run preserves the
   user's implementations. These finite cases are evidence, not a claim that arbitrary Haskell
-  purity or totality has been proved.
+  purity or totality has been proved. Both structural and opaque declarations have typed lift
+  obligations and fresh create-once skeleton tests; new obligations in existing modules are
+  reported without rewriting those modules. Malformed nonempty function/cases names fail the
+  lexical checker, including exact member attribution in composed workspaces.
 - The compiled fixture exercises complementary guarded siblings and observes exact register
   values after initial, lifted, clearing, dormant-complement, explicit-awakening, and reopen
   paths. Keiki sibling verification succeeds. Forward execution, encoded-event replay, and full
@@ -912,17 +1054,27 @@ Acceptance requires all of the following observable behavior, not merely a succe
 - A used lift's target mapped name, direct source type, qualified function, and version change
   transition fold identity, aggregate fingerprint, semantic diff, replay impact, and snapshot
   admission. Changing only its cases symbol reports `MappedWriteLiftFixturesChanged` and is
-  replay-neutral. Adding or changing an unused declaration lift may request a consumer rebuild
+  replay-neutral. Removing a lift while changing its write to `initial`, or changing source type
+  together with its child expression, yields a successful diff/replay-impact report for two valid
+  services. Actual invalid services still fail; no old write is resolved against new declarations.
+  Construction-aware fold changes conservatively select all old event types and snapshot streams
+  in that aggregate. Lift-free aggregates retain their existing replay-impact reports.
+  Adding or changing an unused declaration lift may request a consumer rebuild
   but does not change an unrelated aggregate fingerprint. Every lift-free fixture's fold surface,
   `fold-identity-baseline.golden`, and generated `<aggregate>FoldFingerprint` literal remain
   byte-identical.
 - The mapping ledger records the optional lift with `.:?` decoding and `schema` 1, and a test
   decodes a checked-in ledger written before the field existed. Add/remove/source/function/
   version changes report `MappedWriteLiftChanged`; cases-symbol drift reports the evidence-only
-  code. Function and cases modules are attributed to the mapped declaration's consumer package.
+  code. Both codes have a consumer-build advisory and conformance remedy; lift-only edits do not
+  claim private/public wire, queue, or read-model incompatibility. Actual aggregate fold changes
+  separately receive the existing fold advisory. Function and cases modules are attributed to the
+  mapped declaration's consumer package.
 - `keiro-dsl-conformance-mapped-register-construction`, its restoring mutation test, the focused
   tests in Concrete Steps, `cabal test keiro-dsl:tests`, `cabal build all`, the corpus policy,
-  formatting, strict ADR and improvement-request validation, and `just verify` all pass. IR-34
+  formatting, strict ADR and improvement-request validation, and `just verify` all pass inside
+  Nix. `just verify` includes the new mutation recipe, whose negative checks require the expected
+  diagnostic/assertion rather than an arbitrary failing exit. IR-34
   remains accepted until this evidence exists and becomes implemented only in the final verified
   change.
 
@@ -970,7 +1122,9 @@ are larger compatibility decisions, not recovery tactics for this plan.
 ## Interfaces and Dependencies
 
 
-No new package dependency is required. `keiro-dsl` continues to use the released
+Before release, account for changed public AST, checked-declaration, diagnostic, and obligation
+constructors under the existing PVP policy and API-boundary rules. Syntax remains candidate-only
+until the separate Language 6 publication decision. No new package dependency is required. `keiro-dsl` continues to use the released
 `mori://shinzui/keiki/packages/keiki` 0.9.1.0 through its existing `keiki >=0.9 && <0.10` bound.
 The implementation relies only on Keiki's public typed term/update surface: `K.opaqueLit` (or its
 exported `TOpaqueLit` constructor), `K.TApp1`, and `B.slot ... =:`. Confirm the exact exported
@@ -1082,8 +1236,11 @@ available from Keiki.
 `keiro-dsl/src/Keiro/Dsl/FoldFingerprint.hs` receives a used-lift provenance segment containing
 the target mapped key, resolved direct source type, qualified function, and lift version.
 `keiro-dsl/src/Keiro/Dsl/MappedDiff.hs`, `keiro-dsl/src/Keiro/Dsl/Diff.hs`, and
-`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` expose and classify
-`MappedWriteLiftChanged` and `MappedWriteLiftFixturesChanged` as described in Acceptance. No new
+`keiro-dsl/src/Keiro/Dsl/ReplayImpact.hs` handle evolution as described in Acceptance: mapped
+metadata codes are build advisories, ordinary aggregate fold comparison detects used changes,
+and replay resolves the two real service versions independently for aggregates containing the
+new construction forms. Keep the existing hybrid algorithm only for aggregates using neither
+form; no hybrid may attempt typed lift resolution. No new
 Keiki type, `EdgeBuilder` callback, public `keiro-core` API, or external service is part of this
 plan.
 
@@ -1127,3 +1284,32 @@ released-dependency feasibility milestone and reproducible probe; excluded recur
 arguments instead of weakening Keiki; removed the proposed module cycle; accounted for refined
 mapped declarations; made new lift identity framing explicit; and preserved retained-history
 gates. The feature remains unimplemented and IR-34 remains accepted.
+
+
+## Review Validation Evidence (2026-10-14)
+
+
+Reviewed Keiro `65702725`, with a clean worktree before the review. Hackage's preferred-version
+endpoint still reports Keiki 0.9.1.0 as latest; upstream tag `v0.9.1.0` still peels to
+`15bc83b1eb38d78488862f24bb1d873aa32a919a`. Cabal's plan selects the Hackage repository tarball
+for 0.9.1.0. The Mori checkout has since changed `keiki.cabal` and added SCXML rendering, so do
+not repeat the September claim that the whole checkout matches the release. Its `Core.hs`,
+`Symbolic.hs`, and `Shape.hs` are unchanged from that tag. The reviewed term, validation, and
+replay APIs therefore still match released source.
+
+```text
+nix develop -c z3 --version: Z3 4.16.0
+nix develop -c cabal exec -- runghc -XOverloadedLabels docs/plans/evidence/267-mapped-register-feasibility.hs:
+8 PASS, exit 0
+nix develop -c cabal test keiro-dsl-test --test-show-details=direct:
+814 examples, 0 failures; PASS (240.9 seconds test execution)
+```
+
+This review does not claim that future DSL syntax, generated lift modules, mutation driver, or
+release gates already pass. IR-34 remains accepted. No dependency or runtime code was changed.
+
+Revision note (2026-10-14): corrected hybrid replay comparison for valid lift contract evolution;
+made mapped diff classification explicitly build-only with independent used-fold impact; added
+opaque obligation/render/import and lexical/workspace validation instructions; required a named,
+recurring mutation gate; moved prospective verification into Nix; and reconciled release
+sequencing with ADR 49. The core scope and the eight-check feasibility result remain unchanged.
