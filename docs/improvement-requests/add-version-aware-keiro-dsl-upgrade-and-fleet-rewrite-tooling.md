@@ -4,10 +4,14 @@ title: Add version-aware keiro-dsl upgrade and fleet rewrite tooling
 description: >-
   Upgrade declared Keiro DSL source versions through checked sequential rewrites with dry-run,
   workspace atomicity, and fleet-wide reporting instead of blind syntax replacement.
-timestamp: 2026-09-16T04:45:00Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-5
-status: proposed
+status: accepted
 origin: mori://shinzui/keiro
+plan: docs/plans/296-add-checked-dsl-source-upgrades-and-mori-fleet-planning.md
+relatedPlans:
+  - docs/plans/160-add-an-explicit-keiro-dsl-language-version-contract.md
+  - docs/plans/304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md
 reviews:
   - kind: model
     reviewer: codex
@@ -47,18 +51,22 @@ reviews:
 
 ## Status
 
-Proposed for later work. The prerequisite
-[Plan 160](../plans/160-add-an-explicit-keiro-dsl-language-version-contract.md) is complete, and
-Languages 1 through 5 now exist, so the request is unblocked. No plan implements it. The
-`keiro-dsl` CLI offers `parse`, `pretty`, `check`, `inspect`, `behavior-obligations`, `scaffold`,
-`diff`, and `new`; not one of them rewrites a `.keiro` source or upgrades a fleet. The two
-reviewed-migration switches that exist — `scaffold --apply-name-migrations` and
-`scaffold --apply-generated-haskell-edition` — move and rewrite *generated Haskell* and its
-sidecars, never the specification source, so they neither satisfy nor overlap this request.
-MasterPlans 29 and 34 and Plan 176 explicitly left source rewriting and fleet upgrade automation
-to this request. No
-registered fleet is treated as production, so dependent sources may later be rewritten in place
-after review.
+Accepted for the narrowed scope of
+[Plan 296](../plans/296-add-checked-dsl-source-upgrades-and-mori-fleet-planning.md),
+revised on 2026-09-22; implementation has not started. The prerequisite
+[Plan 160](../plans/160-add-an-explicit-keiro-dsl-language-version-contract.md) is complete.
+Plan 296 replaces the proposed upgrade engine with a documented, regression-tested
+Language 5 → 6 preamble/check/diff recipe and a read-only Mori dependent inventory.
+Its documentation, recipe test, changelog, and request closeout remain unchecked.
+
+The original command, rewrite transaction engine, and fleet writer were declined for
+this edge. Reconsider an upgrade command when a future language edge requires a
+semantic source change beyond the preamble. The original acceptance list below is
+historical requested scope; Plan 296's Milestone 2 records how each item is met or
+retired under the narrower decision. Language retirement is separately planned in
+[Plan 304](../plans/304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md).
+Existing `scaffold --apply-name-migrations` and `scaffold --apply-generated-haskell-edition`
+operate on generated Haskell and sidecars, not specification sources.
 
 ## Context
 

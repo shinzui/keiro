@@ -6,12 +6,13 @@ description: >-
   category, hydrate current state for display through the existing snapshot-plus-fold
   machinery, and expose snapshot metadata — and only then endpoints wrapping them, so an
   operator can see what aggregates exist and what state they hold.
-timestamp: 2026-09-30T23:53:54Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-28
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/278-expose-aggregate-inspection-read-apis.md
 relatedPlans:
+  - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
@@ -39,7 +40,7 @@ reviews:
 
 ## Status
 
-Proposed by the keiro runtime UI initiative
+Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
 Library-first by design: the read APIs are the request's substance, the endpoints (served

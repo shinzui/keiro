@@ -5,11 +5,13 @@ description: >-
   Make Keiro DSL distinguish live from replay-only transitions at the initial vertex when
   generating acceptance probes, transition blocks, predicate edge indices, behavior witnesses,
   and service conformance.
-timestamp: 2026-08-05T14:23:30Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-18
 status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/191-unify-generated-transition-layout-for-replay-only-conformance.md
+relatedPlans:
+  - docs/plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md
 reviews:
   - kind: model
     reviewer: codex
@@ -55,6 +57,10 @@ deliberately relocated source-line evidence, and a passing generated whole-servi
 package. Semantic and lexical declaration collisions are both refused before writes. Mori may
 remove its runtime-only composition after adopting a Keiro release containing this repair and
 passing its historical replay proof.
+
+The completed [Plan 309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md)
+subsequently added history-backed witnesses for Hole-owned initial edges (BUG-10).
+That separate follow-up preserves this request's completed replay-only transition scope.
 
 ## Context
 

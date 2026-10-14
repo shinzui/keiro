@@ -6,12 +6,13 @@ description: >-
   JSON endpoints reusing the OpsResult envelope, with mutations exposed only behind the existing
   preview/force discipline and the fail-closed schema-drift handshake, so a browser UI can reach
   the operational surface applications already embed as a CLI.
-timestamp: 2026-09-30T23:53:54Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-26
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/276-serve-the-keiro-ops-surface-over-http.md
 relatedPlans:
+  - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
@@ -37,7 +38,7 @@ reviews:
 
 ## Status
 
-Proposed by the keiro runtime UI initiative
+Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`). The
 initiative is preparing a browser UI for applications built on the keiro runtime; per its

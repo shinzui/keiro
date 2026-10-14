@@ -5,10 +5,13 @@ description: >-
   Detect valid but outdated Keiro DSL usage against an explicit target language, distinguish
   provable replacements from consumer-evidence candidates, and emit stable actionable diagnostics
   without rewriting source or weakening compatibility guarantees.
-timestamp: 2026-09-22T00:58:20Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-48
 status: proposed
 origin: mori://shinzui/rei
+relatedPlans:
+  - docs/plans/296-add-checked-dsl-source-upgrades-and-mori-fleet-planning.md
+  - docs/plans/304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md
 reviews:
   - kind: model
     reviewer: codex-author
@@ -35,7 +38,9 @@ Proposed. Keiro validates a source against the language contract it declares, ca
 minimum language version, and can report opaque persisted roots. It does not currently answer the
 different authoring question: “Which usages are valid but outdated relative to the language I am
 preparing to adopt, and what evidence is still needed before replacing them?” No plan implements
-this request.
+this request. [Plan 296](../plans/296-add-checked-dsl-source-upgrades-and-mori-fleet-planning.md)
+plans the checked upgrade recipe, and [Plan 304](../plans/304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md)
+plans language retirement; neither implements modernization linting.
 
 Scope (revised 2026-09-22): the linter supports only Language 5 (stable) and Language 6
 (candidate) sources. Languages 1–4 and unversioned sources are being retired and their code
@@ -43,7 +48,7 @@ removed, so the linter adds no rules, fixtures, or advisories for them. It rejec
 with the ordinary language-contract diagnostic and does not produce a modernization verdict. The
 only version pair in scope is a Language 5 source linted against target Language 6, plus a
 Language 6 source linted against itself. Both the target and the source must be one of these two
-languages. Moving the preamble from 5 to 6 is covered by the tested check-and-diff recipe in
+languages. Moving the preamble from 5 to 6 is planned as a regression-tested check-and-diff recipe in
 [Plan 296](../plans/296-add-checked-dsl-source-upgrades-and-mori-fleet-planning.md). The lint
 value that remains is in the body: finding opaque mappings and workarounds that a Language 6
 checked construct may replace.

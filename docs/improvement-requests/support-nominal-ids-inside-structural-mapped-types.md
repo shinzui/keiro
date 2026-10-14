@@ -5,11 +5,14 @@ description: >-
   Resolve and lower declared IDs inside structural records, unions, and containers with
   the same nominal identity and checked TypeID contract as direct aggregate fields,
   without requiring an opaque codec or a text-keyed replacement model.
-timestamp: 2026-09-17T17:16:09Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-40
 status: in-progress
 origin: mori://tan/notification-render-service
 plan: docs/plans/287-support-nominal-ids-inside-structural-mapped-types.md
+relatedPlans:
+  - docs/plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md
+  - docs/plans/304-retire-legacy-language-and-runtime-compatibility-before-keiro-1-0.md
 reviews:
   - kind: model
     reviewer: codex-author
@@ -55,13 +58,13 @@ Repository implementation and conformance evidence completed on 2026-09-17 under
 Language 6 now resolves generated and consumer-bound IDs plus `mapped nominal` scalars as
 structural leaves, preserves nominal Haskell types, applies Keiro-owned TypeID/scalar admission,
 and carries their paths through coverage, snapshot identity, semantic diff, compiled single-spec
-and workspace corpora, and historical codec comparison. ExecPlan 288 Milestone 1 extends the
+and workspace corpora, and historical codec comparison. [ExecPlan 288](../plans/288-complete-nominal-id-support-across-contracts-expressions-nested-enums-and-direct-optional-fields.md) Milestone 1 extends the
 same structural-leaf authority to generated and consumer-bound nominal enums, including declared
 wire spellings and constructor defaults.
 
 The request remains **in progress** because implementation is available only through the
-unpublished Language 6 candidate. Supported-language publication and downstream consumer
-migration/replay evidence are still pending; no package delivery or candidate check alone closes
+Language 6 candidate (now included in package releases). Its supported-language delivery
+gate and the originating consumer's migration/replay evidence remain open; no package delivery or candidate check alone closes
 the production need. Record those two pieces of evidence before changing this request to
 `completed` or adding `completedAt` and `resolution`. Request ID was allocated with `okf id next`
 using `mori/improvement-requests-profile.dhall`.

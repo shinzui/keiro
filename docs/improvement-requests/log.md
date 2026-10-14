@@ -1,6 +1,33 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Status audit**: Reviewed all 54 requests against the current tree at `a0c82a42`,
+  their implementation-plan progress, release tags and Hackage metadata, and retained
+  consumer evidence. IR-42 through IR-46 move from in-progress to completed: MasterPlan 44
+  records the coherent Keiro 0.18.0.0 release and the reader-first production rollout in
+  `mori://shinzui/rei/plans/241-adopt-checked-keiro-value-mappings-with-a-reader-first-rollout`.
+  Its final twin-clone comparison at high-water 42,667 selected 11,152 streams with identical
+  reports, zero unexpected failures, and zero rejected checked values. Completion timestamps
+  record this reconciliation; the release and rollout occurred in September.
+* **Status correction**: IR-5 is accepted under the revised, unstarted Plan 296, which plans
+  a checked Language 5 → 6 upgrade recipe and Mori inventory rather than an upgrade engine.
+  IR-49 is in-progress: commit `2c3a5389`, included in Keiro 0.20.0.0, rejects shard-count
+  mismatches before inserting rows and has a passing no-write regression. Its full
+  competing-count startup acceptance and external scenario rerun are not recorded.
+* **Plan links**: Added structured links for IR-5 (296 and its prerequisite/retirement
+  context), IR-16 (310), IR-18 (309), IR-26 through IR-31 (release closeout 303),
+  IR-40 (288 and 304), IR-42 through IR-46 (MasterPlan 44), and IR-48 (related upgrade
+  and retirement plans, with no linter implementation). IR-49 links its actual owner,
+  `mori://shinzui/kiroku/plans/85-release-the-subscription-hardening-cohort-and-coordinate-downstream-adoption`.
+  IR-50 links the new working-tree Plan 314 skeleton and remains proposed; IR-54 links
+  the new Plan 313 parser follow-up skeleton without reopening its accepted completed scope.
+* **Unchanged gates**: IR-7 still awaits Plan 232's committed generation baseline and
+  regression wiring. IR-26 through IR-31 and IR-34 remain accepted with implementation
+  milestones open; IR-40 remains in-progress with supported-language and originating-consumer
+  acceptance open. IR-33 retains the bundle's existing implemented status for the completed
+  accepted structural scope, with its semantic engine explicitly deferred. IR-53 and IR-54
+  remain completed under their recorded accepted scopes. Other proposed, completed, and
+  superseded dispositions have no contradictory implementation evidence in this audit.
 * **Update**: IR-54 completed under ExecPlan 312: candidate Language 6 scalar lists, strict array codecs, identity refusal, admission-aware evolution, and compiled conformance pass all repository gates; release handoff remains separately tracked.
 * **Update**: IR-54 implementation started under ExecPlan 312.
 

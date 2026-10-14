@@ -5,10 +5,11 @@ description: >-
   keiro-dsl diff --since GIT-REF fails with an aggregate fold output resolution error instead of a
   classification when one change removes a command, the event it emitted, and the state it led
   to, so a consumer's generated-code gate cannot run on that change until it is committed.
-timestamp: 2026-09-24T14:45:00Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-50
 status: proposed
 origin: mori://tan/notification-hub
+plan: docs/plans/314-fix-ir-50-command-and-event-removal-diff-classification.md
 acceptanceCriteria:
   - id: AC-1
     statement: Removing a command, the event it emits, and the state that event leads to in one spec change is classified by diff --since GIT-REF as a breaking aggregate change naming the removed command, event, and state, with exit status governed by the usual gates.
@@ -38,6 +39,13 @@ reviews:
 ---
 
 # Classify removal of a command together with its emitted event in keiro-dsl diff
+
+## Status
+
+Proposed. [ExecPlan 314](../plans/314-fix-ir-50-command-and-event-removal-diff-classification.md)
+exists in the working tree as an untracked planning skeleton as of 2026-10-14.
+Its implementation and acceptance sections are still placeholders, so this link
+does not establish acceptance, implementation, or completion of the request.
 
 ## Context
 

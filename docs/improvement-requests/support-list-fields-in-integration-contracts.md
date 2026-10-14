@@ -6,7 +6,7 @@ description: >-
   typeid, text or int), lowered to a Haskell list and a JSON array by the generated codec and
   governed by diff as public contract evolution, so a service whose integration message names
   several entities at once can keep that contract DSL-owned instead of hand-writing its codec.
-timestamp: 2026-10-14T06:00:05Z
+timestamp: 2026-10-14T13:54:48Z
 generated:
   by: process:claude-code
   at: 2026-10-07T06:30:00Z
@@ -20,6 +20,8 @@ resolution: >-
   gates pass; publication and consumer adoption remain the separately tracked release.
 origin: mori://tan/notification-render-service
 plan: docs/plans/312-support-list-fields-in-integration-contracts.md
+relatedPlans:
+  - docs/plans/313-fix-contract-parser-nominal-names-and-case-sensitive-list-syntax.md
 reviews:
   - kind: model
     reviewer: claude-code
@@ -77,6 +79,10 @@ clauses retain their existing descriptive behavior because they do not resolve f
 Raised by `mori://tan/notification-render-service`, the notification renderer's Haskell domain
 service, from
 `mori://tan/notification-render-service/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox`.
+
+[Plan 313](../plans/313-fix-contract-parser-nominal-names-and-case-sensitive-list-syntax.md)
+is a newly created, untracked planning skeleton for contract-parser follow-up
+work as of 2026-10-14. It does not reopen this request's completed accepted list-field scope.
 
 ## Problem and evidence
 

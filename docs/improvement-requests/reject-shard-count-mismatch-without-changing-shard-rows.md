@@ -4,10 +4,11 @@ title: Reject shard count mismatch without changing shard rows
 description: >-
   Validate a sharded subscription's configured bucket count before inserting
   rows, so a misconfigured worker cannot prevent correct workers from starting.
-timestamp: 2026-09-24T13:34:00Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-49
-status: proposed
+status: in-progress
 origin: mori://shinzui/keiro-runtime-kenshou
+plan: mori://shinzui/kiroku/plans/85-release-the-subscription-hardening-cohort-and-coordinate-downstream-adoption
 reviews:
   - kind: model
     reviewer: codex-cli
@@ -24,6 +25,23 @@ reviews:
 ---
 
 # Improvement Request: Reject Shard Count Mismatch Without Changing Shard Rows
+
+## Status
+
+Implemented in Keiro commit `2c3a5389353d290b532cafff14122bf9ab1af79a`
+as downstream work under
+`mori://shinzui/kiroku/plans/85-release-the-subscription-hardening-cohort-and-coordinate-downstream-adoption`,
+and included in the published Keiro 0.20.0.0 tag. `ensureShards` now acquires the
+subscription-name transaction lock, checks existing counts, and inserts only
+when they agree. The regression in `keiro/test/Main.hs` verifies a count-six
+refusal leaves the four original rows intact; the retained
+[shard test report](../../keiro/bench/results/mp12-kiroku-adoption/focused-shards.log)
+passes all 22 examples.
+
+The request remains in progress: the full two/six/four worker-start sequence,
+competing-count concurrent startup, and a passing rerun of the originating
+external scenario are not recorded in the retained acceptance evidence.
+The historical failure below describes the original 0.17.0.0 reproduction.
 
 ## Observed behavior
 

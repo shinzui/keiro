@@ -6,12 +6,13 @@ description: >-
   built on Keiro.Wake and speaking the cross-project protocol convention, with every feed
   paired to an authoritative polling read because NOTIFY is a best-effort hint, so a UI stays
   fresh without polling storms and without ever trusting push as truth.
-timestamp: 2026-09-30T23:53:54Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-27
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md
 relatedPlans:
+  - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
@@ -37,7 +38,7 @@ reviews:
 
 ## Status
 
-Proposed by the keiro runtime UI initiative
+Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
 Companion to `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26` (the HTTP layer

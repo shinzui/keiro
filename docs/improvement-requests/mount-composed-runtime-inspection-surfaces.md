@@ -6,12 +6,13 @@ description: >-
   keiro's inspection surface with kiroku-metrics', shibuya-metrics', and pgmq-hs's future
   surface under per-surface path prefixes, so an application serves its whole runtime's
   inspection API on one process and one port.
-timestamp: 2026-09-30T23:53:54Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-31
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md
 relatedPlans:
+  - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
@@ -36,7 +37,7 @@ reviews:
 
 ## Status
 
-Proposed by the keiro runtime UI initiative
+Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
 Composition is the one cross-cutting concern the initiative's layer-ownership matrix

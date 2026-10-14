@@ -3,12 +3,20 @@ type: Improvement Request
 title: Support explicit legacy ID admission domains
 description: >-
   Support explicit legacy ID admission domains while preserving explicit codec ownership and historical compatibility.
-timestamp: 2026-09-19T22:13:18Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-46
-status: in-progress
+status: completed
+completedAt: 2026-10-14T13:54:48Z
+resolution: >-
+  Completion reconciled from MasterPlan 44: Plans 289-295 delivered the checked
+  mapping contract and the coherent Keiro 0.18.0.0 release shipped it.
+  mori://shinzui/rei/plans/241-adopt-checked-keiro-value-mappings-with-a-reader-first-rollout
+  records production adoption and matching historical replay at high-water 42667
+  with zero unexpected failures.
 origin: mori://shinzui/rei
 plan: docs/plans/294-add-explicit-versioned-uuid-admission-domains-with-sound-keiki-evidence.md
 relatedPlans:
+  - docs/masterplans/44-add-checked-value-mappings-while-preserving-stream-and-workflow-replay-across-refactors.md
   - docs/plans/289-gate-mapping-evolution-with-serialized-and-cross-version-replay-evidence.md
   - docs/plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md
 reviews:
@@ -78,7 +86,20 @@ on 2026-09-19.
 
 Plan 294 implements explicit TypeID UUIDv5-or-v7 admission with one runtime and
 symbolic character authority, structural and keyed-map propagation, exact owner
-reconstruction, public contracts, and mixed-history replay. Plan 295's integrated
-repository replay suite is also green. Adoption by `mori://shinzui/rei` remains
-pending an authorized read-only export or isolated restored copy and independent
-baseline/candidate capture; repository fixtures are not consumer history.
+reconstruction, public contracts, and mixed-history replay.
+[Plan 295](../plans/295-rehearse-checked-mapping-adoption-against-historical-streams-and-workflow-journals.md)
+completed the integrated repository corpus and immutable Rei history rehearsal.
+
+**Completed; status reconciled on 2026-10-14.**
+[MasterPlan 44](../masterplans/44-add-checked-value-mappings-while-preserving-stream-and-workflow-replay-across-refactors.md)
+records the subsequent Keiro 0.18.0.0 release from
+`b12bbdd7abc8c1a59e7a09891471ef182a4d801a` and production adoption under
+`mori://shinzui/rei/plans/241-adopt-checked-keiro-value-mappings-with-a-reader-first-rollout`.
+The final old/new comparison at event-store high-water 42,667 selected 11,152
+streams, retained the documented 13-stream/89-event exclusion, and produced
+identical replay reports with zero unexpected failures and zero rejected
+checked values. Note-to-Task continuation preserved durable state; workflow
+history was explicitly empty (`not-applicable-empty-history`), so this evidence
+does not claim an exercised workflow continuation. Consumer rollout completed
+on 2026-09-21. Language 6 remains a candidate in the language registry; the
+accepted feature, release, and adoption scope of this request is complete.

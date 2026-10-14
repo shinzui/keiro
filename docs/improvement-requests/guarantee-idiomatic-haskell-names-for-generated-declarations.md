@@ -4,11 +4,13 @@ title: Guarantee idiomatic Haskell names for every generated declaration
 description: >-
   Make Keiro's checked naming model guarantee UpperCamelCase module/type names and lowerCamelCase
   value names, independently of DSL, wire, registry, schema, and table spellings.
-timestamp: 2026-08-04T04:14:15Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-16
 status: completed
 origin: mori://shinzui/mori
 plan: docs/plans/190-guarantee-idiomatic-haskell-names-for-generated-declarations.md
+relatedPlans:
+  - docs/plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md
 reviews:
   - kind: model
     reviewer: codex
@@ -49,6 +51,10 @@ delivered one checked naming plan, pre-write normalization/collision diagnostics
 generated declarations, explicit and recoverable scaffold-tree migration, source-only diff impact,
 rewritten conformance fixtures, and authoring/upgrade documentation. Its complete package,
 conformance, policy, ADR, and repository validation passed.
+
+The completed [Plan 310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md)
+subsequently repaired whole-name stem derivation for keyword segments (BUG-11).
+This follow-up strengthens the delivered naming invariant; the original request remains completed.
 
 ## Context
 

@@ -6,12 +6,13 @@ description: >-
   journal streams, list shard ownership from keiro_subscription_shards, and list a process
   manager's pending timers — then endpoints wrapping them — so an operator can see what a
   process manager last did and what it is waiting on.
-timestamp: 2026-09-30T23:53:54Z
+timestamp: 2026-10-14T13:54:48Z
 requestId: IR-29
 status: accepted
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/274-expose-process-manager-inspection-reads.md
 relatedPlans:
+  - docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md
   - docs/masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md
 reviews:
   - kind: model
@@ -38,7 +39,7 @@ reviews:
 
 ## Status
 
-Proposed by the keiro runtime UI initiative
+Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
 Library-first like its sibling
