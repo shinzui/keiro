@@ -16,6 +16,17 @@ provenance:
       at: 2026-10-13T14:43:45Z
       mode: "update"
       note: "Stem formula corrected to lowerFirst . pascal for byte-identity; stability example and fail-open re-export rule added"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:09:00Z
+      mode: "update"
+      note: "Corrected import-audit soundness, corpus sequencing, runtime assertion, Language 6 coverage, naming scope and migration guidance"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:09:38Z
+      verdict: "approved"
+      note: "Approved after corrections: verified source, ADRs and three Nix-shell scaffolds; bounded audit and repaired validation workflow and compatibility coverage"
 ---
 
 # Derive generated declaration stems from whole logical names to fix BUG-11
@@ -48,28 +59,42 @@ from one derivation of the whole logical name. `validate_custom_type` yields
 spelling; `job_type` yields `jobTypeJobCodec`, `jobTypePayloadCodec`, and
 `JobTypeOutcome`. A new compiled conformance suite built from a Language 6 fixture that
 declares both names fails to compile before the repair and passes after it. The scaffolder
-additionally refuses to write any generated tree in which one generated module's explicit
-import of a sibling generated module names something that sibling does not export, so this
-class of mismatch cannot reach a consumer again. Whole-name keywords such as
+additionally refuses a planned generated-to-generated import of a plain value name when an
+explicit sibling export list proves that name absent. This bounded audit catches BUG-11;
+GHC remains the authority for import forms and export sets the audit cannot resolve. Whole-name keywords such as
 `readmodel type` continue to be rejected by `check` with `GeneratedOccurrenceReserved`.
 
 
 ## Progress
 
 
+- [x] (2026-10-13) Correctness review: verified the Language 6 scaffold and source claims; corrected audit scope, compatibility coverage, sample code, and corpus sequencing. Implementation remains pending.
 - [x] (2026-10-13) Milestone 0: validate BUG-11 from source on master, reproduce it with the public CLI and GHC 9.12.4, merge GitHub PR #6 as BUG-11, set the report `confirmed`, retain the transcript under `docs/bug-reports/evidence/`, create this plan with its intention, link it from the report body, index, and log, and prove that the Language 6 fixture in this plan checks and scaffolds.
-- [ ] Milestone 1: add `keiro-dsl/test/fixtures/keyword-segments.keiro` and the focused generator tests in `keiro-dsl/test/Main.hs` (harness import resolves against the definition's exports, no glued-keyword spellings, every reserved word as a middle and as a trailing segment, whole-name keyword still rejected); run them and record the failures in Surprises & Discoveries.
+- [ ] Milestone 1: add `keiro-dsl/test/fixtures/keyword-segments.keiro` and the focused generator tests in `keiro-dsl/test/Main.hs` (harness import resolves against the definition's exports, no glued-keyword spellings, every reserved word in leading, middle, and trailing positions in both declaration kinds, whole-name keyword still rejected); run them and record the failures in Surprises & Discoveries.
 - [ ] Milestone 1: scaffold the fixture into `keiro-dsl/test/conformance-keyword-segments/` with the public CLI, add `Main.hs` and the `keiro-dsl-conformance-keyword-segments` stanza, track the ledger and fragment, run the suite before the repair and record GHC-61689; set BUG-11 `status: in-progress`, advance `generated`, and log it.
 - [ ] Milestone 2: add `deriveUpperCamelName` to `Keiro.Dsl.HaskellName` with unit tests in `keiro-dsl/test/haskell-name/Main.hs`; route the upper branch of `generatedCase` in `Keiro.Dsl.Scaffold` and `pascal` in `Keiro.Dsl.AggregateType` through it.
-- [ ] Milestone 2: replace the per-segment stems in `readModelStem`, `emitQueueCodec`, and `emitQueuePolicy` with whole-name derivations; export `readModelStem` and use it in `emitReadModelHarness`; run the focused tests, the keyword-segment suite, and `scripts/check-generated-name-policy.sh`.
-- [ ] Milestone 2: delete the two hole stubs of the keyword-segment suite, regenerate the corpus with `just corpus-regen`, confirm only that suite changed, and run `scripts/check-conformance-corpus.sh` and `cabal test keiro-dsl:tests --keep-going`.
-- [ ] Milestone 3: add `generatedImportResolutionViolations` to `Keiro.Dsl.ScaffoldRun`, refuse before writes beside `generatedNameInvariantViolations`, add the mutated-module unit test, and prove the whole corpus produces no violation.
-- [ ] Milestone 4: update `docs/user/keiro-dsl-reference.md`, add Unreleased entries to `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md`, write ADR-51 and validate the ADR bundle.
+- [ ] Milestone 2: replace the per-segment stems in `readModelStem`, `emitQueueCodec`, and `emitQueuePolicy` with whole-name derivations; export `readModelStem` and use it in `emitReadModelHarness`; add the structural projection regression and run the focused tests; run the compiled suite and policy gate after regeneration.
+- [ ] Milestone 2: refresh only the two untouched test hole stubs, regenerate with the explicit local `--allow-dirty` option, review all corpus changes, run the tests, commit the green change, and then run `scripts/check-conformance-corpus.sh` on clean corpus paths.
+- [ ] Milestone 3: add `generatedImportResolutionViolations` to `Keiro.Dsl.ScaffoldRun`, refuse before writes beside `generatedNameInvariantViolations`, add mutation and conservative-resolution tests, and prove the clean corpus produces no violation.
+- [ ] Milestone 4: update `docs/user/keiro-dsl-reference.md`, add Unreleased entries to `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md`, allocate the naming ADR handle and validate the ADR bundle.
 - [ ] Milestone 4: run `nix develop -c just verify` and read the exit marker inside the log; set BUG-11 `fixed` with `fixedVersion: unreleased` and a `resolution`, update the index row and log; write Outcomes & Retrospective and perform the ADR distillation pass.
 
 
 ## Surprises & Discoveries
 
+
+- (2026-10-13 review) The public CLI successfully scaffolded the exact Language 6 fixture in
+  a scratch directory through `nix develop -c cabal run -v0 keiro-dsl:exe:keiro-dsl`. Its
+  fragment confirms all fourteen proposed module entries and the dependency inventory.
+  Source inspection confirms `JobOutcome` derives `Show` only, corpus regeneration rejects
+  dirty paths by default, and corpus check requires a committed clean tree. Two additional
+  Nix-shell scaffolds confirmed `a_b_test` yields `AbTestQueryInput`, and a `type` wire key
+  in the Language 6 mapped fixture exports `templateStatetypeWitness`, `templateStatetypeGet`,
+  and `templateStatetypeRawGet`, confirming the public projection rename scope.
+- (2026-10-13 review) `normaliseAliasPart` feeds exported structural witness/getter names as
+  well as local aliases. An import audit that strips `T(..)` to `T` cannot prove a separately
+  imported constructor absent; implicit exports also include unsigned bindings. The revised
+  audit refuses only cases with a complete known export set and leaves unknown cases to GHC.
 
 - (2026-10-13) The compile failure is confined to one cross-module reference. In the scaffold of
   the report's specification, `ReadModel.hs`, `ReadModelTable.hs`, the hole stub, and (under
@@ -101,6 +126,12 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
 ## Decision Log
 
 
+- Decision: keep pre-fix failures as recorded working-tree evidence until the repair is green;
+  use the corpus driver's documented dirty override only for reviewed local regeneration,
+  and commit corpus changes before drift checks. Do not undo committed work with `git stash`.
+  Rationale: the actual corpus tool enforces clean paths for both ordinary regeneration and
+  every check, and intermediate committed failures conflict with the ExecPlan commit contract.
+  Date: 2026-10-13
 - Decision: fix the generator, not the validator. `validate_custom_type` is a legitimate name
   whose whole-name derivation `validateCustomType` is a valid, non-reserved identifier;
   rejecting keyword segments would contradict completed IR-16 and break accepted
@@ -122,19 +153,18 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
   export"; `Keiro.Dsl.ScaffoldRun` already parses every planned module before writing, and
   IR-16 promised that planned and emitted occurrences agree.
   Date: 2026-10-13
-- Decision: the fixture and conformance suite use Language 6 (a catalog read model with a
-  `projection-owner`), matching ADR-49 and the reporting consumer, instead of the report's
-  Language 4 form. The focused unit tests still cover the Language 4 inline form through the
-  report's own specification text.
-  Rationale: Language 6 is the sole pre-1.0 coverage baseline; Language 4 remains accepted and
-  covered by the existing corpus.
+- Decision: the fixture, conformance suite, and new inline positive examples use Language 6
+  (a catalog read model with a `projection-owner`), matching ADR-49. The Language 4 report
+  remains historical reproduction evidence.
+  Rationale: ADR-49 requires new positive DSL coverage, including embedded source, to use 6.
   Date: 2026-10-13
 - Decision: no new generated-Haskell naming edition. The repair changes generated spellings
-  only for declarations whose snake_case name contains a reserved segment; read models of that
-  shape cannot compile today and workqueues of that shape receive an idiomatic rename recorded
-  as a breaking changelog entry.
-  Rationale: an edition exists to migrate every consumer; this change touches a shape that is
-  either broken or rare, and `scaffold` already reports every overwritten module.
+  for affected read-model and workqueue names and for structural projection names derived
+  from keyword wire-path pieces. Record all those public renames and the required edits to
+  existing consumer hole modules as breaking changelog guidance.
+  Rationale: retain the plan's targeted bug-fix scope within `idiomatic-v2`, but explicitly
+  advertise the affected source API changes and require consumer recompilation. Do not infer
+  that all affected code was previously unbuildable or that regeneration updates hand-owned code.
   Date: 2026-10-13
 - Decision: the whole-name stem is `lowerFirst . pascal`, never `lowerFirst` alone, and the
   plan pins `a_b_test` and `x_y_coords` as regression guards.
@@ -144,10 +174,12 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
   `abTest…`), a consumer-visible change the bug does not justify. Verified on master on
   2026-10-13 by scaffolding `a_b_test`.
   Date: 2026-10-13
-- Decision: the import audit treats a `module M` re-export in an export list as "resolve `M`
-  if planned, otherwise unknown and never a violation".
-  Rationale: the audit refuses scaffold writes, so a false positive blocks every consumer; an
-  unknown export set must fail open.
+- Decision: the import audit checks plain value imports against complete explicit sibling
+  export lists only. Unsupported syntax, wildcard children, module re-exports, and implicit
+  export lists make absence unknown; they never justify a refusal. Only `Generated` modules
+  are import targets for this audit, because planned hole templates do not describe existing
+  hand-owned files.
+  Rationale: a pre-write gate must never treat an incomplete export inventory as complete.
   Date: 2026-10-13
 - Decision: BUG-11 moves from `confirmed` to `in-progress` when the compiled suite fails in
   Milestone 1 and to `fixed` with `fixedVersion: unreleased` at the end of Milestone 4.
@@ -158,7 +190,9 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+Correctness review on 2026-10-13 verified the Language 6 fixture with the public CLI in
+the Nix shell and corrected the implementation and validation instructions below. No
+generator implementation or passing post-fix conformance result is claimed yet.
 
 
 ## Context and Orientation
@@ -337,11 +371,12 @@ unchanged.
 One more per-piece caller exists for a different reason. `normaliseAliasPart` (line 8681)
 builds a projection alias from the segments of a JSON pointer, splitting on every
 non-alphanumeric character and applying `pascal` to each piece; the pieces can begin with a
-digit, so joining them and deriving once would fail the identifier check. Those aliases are
-used only inside the generated module that defines them (`projectionAliasFor`, lines 8688 to
-8838), so they compile today, but a pointer segment `type` is spelled `type` inside the alias.
-Making `pascal` case a lone reserved word as `Type` fixes this site without changing its
-structure.
+digit, so joining them and deriving once would fail the identifier check. Some aliases are local, but `normaliseAliasPart` also feeds `projectionNameStem` near
+line 2668, and `emitStructuralProjections` exports the resulting witness/getter functions.
+A root `Thing` with wire key `type` currently yields `thingtypeWitness` and `thingtypeGet`;
+the upper-only repair yields `thingTypeWitness` and `thingTypeGet`. This is public API churn
+outside read-model/workqueue logical names and needs a focused regression and migration note.
+The wire key and JSON pointer retain their original bytes.
 
 `Keiro.Dsl.AggregateType` (file `keiro-dsl/src/Keiro/Dsl/AggregateType.hs`, line 482) has its
 own `pascal` with the same fallback; it must follow the same upper-only derivation so the two
@@ -352,8 +387,9 @@ time that every node's whole logical name derives: `checkedLogicalName` (line 19
 failed derivation to `IdentUnsafeNormalization` or `GeneratedOccurrenceReserved` through
 `nameErrorDiagnostic` (line 1971), and `nodeNameAndLoc` (line 2203) lists `readmodel` and
 `workqueue` among the node kinds. That is why `readmodel type` is rejected while
-`validate_custom_type` is accepted, and why no accepted specification can reach the
-`Left _ -> name` fallback through a whole-name derivation. The collision inventory in the same
+`validate_custom_type` is accepted, and why direct derivation of an accepted declaration
+name succeeds. This does not validate arbitrary renderer fragments, such as digit-leading
+wire-path pieces, which remain outside that guarantee. The collision inventory in the same
 file (`nodeModuleOccurrences`, line 2006, and the following helpers) registers module
 segments, shared types, aggregate fields, aggregate harness helpers, and workflow awaits; it
 does not register read-model or workqueue values, so nothing there needs to change.
@@ -433,8 +469,8 @@ governs the ledger and fragment sidecar names the conformance suite tracks; it d
 to declaration stems. [ADR-49](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
 makes Language 6 the sole pre-1.0 coverage baseline, which is why the new fixture is Language
 6. No ADR states that every generated name of one declaration must come from one derivation
-of the whole logical name; Milestone 4 writes that decision as ADR-51 (confirm the handle
-with `okf id next docs/adr --profile docs/adr/profile.dhall ADR` before writing). The
+of the whole logical name; Milestone 4 writes a naming ADR (allocate its handle
+with `okf id next docs/adr --profile docs/adr/profile.dhall ADR` at implementation time). The
 completed improvement request
 [IR-16](../improvement-requests/guarantee-idiomatic-haskell-names-for-generated-declarations.md)
 and its [plan 190](190-guarantee-idiomatic-haskell-names-for-generated-declarations.md)
@@ -482,7 +518,7 @@ drift.
 This milestone adds the fixture, the focused generator tests, and the compiled conformance
 suite, and runs all of them against the unrepaired generator so the failures are recorded
 before any generator line changes. At the end, `keyword-segments.keiro` exists,
-`keiro-dsl-test` has four new failing examples, and `keiro-dsl-conformance-keyword-segments`
+`keiro-dsl-test` has five examples, three failing before the repair and two passing, and `keiro-dsl-conformance-keyword-segments`
 fails to compile with GHC-61689.
 
 Create `keiro-dsl/test/fixtures/keyword-segments.keiro` with exactly this content; it was
@@ -547,9 +583,9 @@ workqueue job_type {
 ```
 
 Add a new `describe "Haskell.keyword-segments"` block directly after the
-`describe "Haskell.name-audit"` block in `keiro-dsl/test/Main.hs` (so the name-policy gate's
-`--match Haskell.` prefix also selects it only if you widen that match; otherwise it runs with
-the full suite, which is sufficient). It holds five examples.
+`describe "Haskell.name-audit"` block in `keiro-dsl/test/Main.hs`. The existing name-policy
+gate selects only `Haskell.name-audit`; run this new block explicitly using the command below
+and in the full DSL suite. It initially holds five examples.
 
 The first example scaffolds the fixture with `scaffoldServiceModules` and checks that the
 harness import resolves. Take the text of the module whose path ends in
@@ -567,34 +603,35 @@ returned for the fixture and assert that none of `Customtype`, `customtype`, `Jo
 `data JobTypeOutcome` do occur, and that `concatMap auditGeneratedHaskell modules` is empty.
 
 The third example covers every reserved word. For each word `k` in
-`Set.toList haskellKeywords`, assert `pascal k == upperFirstOf k` where `upperFirstOf` upper-cases
-the first character (write this small helper inline), assert
-`pascal ("check_" <> k <> "_name") == "Check" <> upperFirstOf k <> "Name"`, and assert
-`lowerFirst ("check_" <> k <> "_name") == "check" <> upperFirstOf k <> "Name"` and
-`lowerFirst ("check_" <> k) == "check" <> upperFirstOf k`. Then build the report's Language 4
-specification text inline (the `keyword.keiro` text quoted in the bug report, whose two
-occurrences of `validate_custom_type` become `check_<k>_name`), parse it with `parseSource`,
-scaffold it with `scaffoldServiceModules (defaultContext parsed.spec.context) (checkedSource
-parsed)`, and assert the harness import resolves exactly as in the first example. Before the
-repair, `pascal "type"` is `"type"` and the stems are glued, so this fails for every word.
+`Set.toList haskellKeywords`, assert `pascal k == upperFirstOf k`, where the small test helper
+`upperFirstOf` upper-cases the first character. For each of `<k>_registry`, `check_<k>_name`,
+and `check_<k>`, derive the expected upper spelling by upper-casing each underscore-delimited
+piece and concatenating, and the expected lower spelling by lower-casing its first character.
+Assert the casing helpers agree. Then load the Language 6 fixture text and, separately for
+read models and workqueues, replace only the declaration line (`readmodel validate_custom_type {`
+or `workqueue job_type {`) with that variant. Leave catalog identities, SQL/wire names, and
+payload type unchanged. Parse each variant with `parseSource`, obtain `checkedSource parsed`,
+assert `validateService` has no Error diagnostics, and scaffold it. For read models compare
+harness imports with actual exports and assert the expected value/type spellings; for workqueues
+assert both codec names and the outcome type. This catches all three positions in both emitter
+families, rather than testing only the already-correct whole-name helper.
 
-The fourth example proves the rejection that must survive. Build the Language 4 text with the
-read model named `type` and the projection line `projection type key=subscriptionId`, parse
-it, run the same validation the CLI runs (the `check` path used elsewhere in `test/Main.hs`,
-for example through `errorCodesOf` near line 2289 if it accepts text, or by writing the text
-to a temporary fixture and calling the file-based helper), and assert the diagnostic codes
-include `GeneratedOccurrenceReserved`. This passes before and after the repair; it exists so
-the repair cannot accidentally widen acceptance.
+The fourth example proves the rejection that must survive. Replace only the fixture's read-model
+declaration line with `readmodel type {`, parse it with `parseSource`, and inspect
+`validateService (checkedSource parsed)`: select `.code` from diagnostics whose `.severity`
+is `Error` and assert it includes `GeneratedOccurrenceReserved`. `errorCodesOf` accepts a file
+path, not source text. Do not scaffold this invalid service. This example passes before and
+after the repair.
 
-The fifth example pins the names the repair must not change. Build the report's Language 4
-text with the read model renamed to `a_b_test`, and again to `x_y_coords`, scaffold each, and
-assert the `ReadModel.hs` text declares `abTestReadModel ::` and `xyCoordsReadModel ::`
-respectively and that each harness imports the same name. These are the spellings today's
-generator produces for names made of single-letter segments; the example passes before the
-repair and must still pass after it, proving the whole-name formula is byte-identical for every
-name without a reserved segment.
+The fifth example pins names the repair must not change. Make Language 6 variants by replacing
+only the fixture's read-model declaration line with `readmodel a_b_test {` and
+`readmodel x_y_coords {`. Assert `ReadModel.hs` declares `abTestReadModel ::` and
+`xyCoordsReadModel ::`, and each harness imports the same name. Also pin the contract types
+`AbTestQueryInput` and `XyCoordsQueryInput`: query type names derive from the lower stem,
+whereas the module segments remain `ABTest` and `XYCoords`. These are passing controls, not
+an exhaustive proof over all possible logical names.
 
-Run the suite before touching the generator and record the four failures:
+Run the suite before touching the generator and record the three failures and two passing controls:
 
 ```bash
 nix develop -c cabal test keiro-dsl-test --test-show-details=direct --test-options='--match Haskell.keyword-segments'
@@ -641,7 +678,9 @@ main = do
         validateCustomTypeReadModel.name == "keyword-segments-validate-custom-type"
           && validateCustomTypeReadModel.tableName == "validate_custom_type"
           && validateCustomTypeReadModel.schema == "billing"
-      policyOk = jobOutcomeFor StoreFailure == Retry (RetryDelay 1)
+      policyOk = case jobOutcomeFor StoreFailure of
+        Retry (RetryDelay 1) -> True
+        _ -> False
       allOk = factsOk && all (\(_, expected, actual) -> expected == actual) readModelFacts && recordOk && policyOk
   putStrLn ("read-model facts: " <> show factsOk)
   putStrLn ("runtime record: " <> show recordOk)
@@ -656,8 +695,7 @@ _usesJobCodec = jobTypeJobCodec
 ```
 
 The import lines for `JobCodec`, `Codec`, `JobOutcome`, and `RetryDelay` mirror the headers of
-the generated `QueueCodec.hs` and `QueuePolicy.hs`; if `JobOutcome` lacks an `Eq` instance,
-replace `policyOk` with a `case` that matches `Retry (RetryDelay 1) -> True`. The read-model
+the generated `QueueCodec.hs` and `QueuePolicy.hs`; `JobOutcome` derives only `Show`, so the case match above is required. The read-model
 field values come from the generated blueprint: the registry name is the context and
 read-model name joined with hyphens, and the table and schema come from the target.
 
@@ -706,7 +744,7 @@ Run it before the repair:
 nix develop -c cabal build keiro-dsl:test:keiro-dsl-conformance-keyword-segments
 ```
 
-The build must fail, and the first error must be GHC-61689 on
+The build must fail with GHC-61689 on
 `Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs` naming
 `validateCustomTypeReadModel`; `Main.hs` itself also fails on the not-yet-existing
 `jobTypeJobCodec`, `jobTypePayloadCodec`, and `JobTypeOutcome` imports. Copy the first error
@@ -714,18 +752,18 @@ into Surprises & Discoveries. Then edit the bug report: `status: in-progress`, a
 `generated.at` to the current UTC time, append one sentence to the owner-confirmation section
 saying the compiled suite in this plan fails as predicted, run `okf log add docs/bug-reports
 --kind Update -m "…"`, update the BUG-11 row in `docs/bug-reports/index.md`, and run `just
-bug-reports-validate`. Commit with the `ExecPlan:` and `Intention:` trailers; the repository
-stays buildable except for the deliberately failing new suite, so run the commit with the rest
-of the tests green.
+bug-reports-validate`. Keep the failing proof uncommitted until Milestone 2 repairs it; record its output here now.
+Commit the tests and repair together when they are green, using the `ExecPlan:` and
+`Intention:` trailers. Staging files for corpus discovery does not require a failing commit.
 
 
 ### Milestone 2: the generator repair
 
 
 This milestone makes every stem a whole-name derivation and removes the silent lowercase
-fallback for lone reserved words in upper positions. At the end, the four examples and the
-conformance suite pass, the existing corpus is byte-identical, and the generated-name policy
-gate passes.
+fallback for lone reserved words in upper positions. At the end, all six focused examples (including the projection regression added below) and
+the conformance suite pass, all corpus diffs are accounted for, and the generated-name policy
+gate passes. Review any structural projection rename as well as declaration stems.
 
 In `keiro-dsl/src/Keiro/Dsl/HaskellName.hs`, add an upper-only derivation directly after
 `deriveHaskellName` and export it from the module header:
@@ -753,7 +791,8 @@ by normalization": `deriveUpperCamelName LogicalIdentifier (logicalSite "type")`
 "type")`; `deriveUpperCamelName LogicalIdentifier (logicalSite "validate_custom_type")`
 renders `"ValidateCustomType"`, equal to the upper half of `deriveHaskellName`; and
 `deriveUpperCamelName` rejects `"foo__bar"`, `"_foo"`, and a hyphenated `LogicalIdentifier`
-exactly as `deriveHaskellName` does (reuse `shouldReject` with a wrapper).
+exactly as `deriveHaskellName` does (assert `isLeft` directly; the existing `shouldReject`
+helper is specialized to `deriveHaskellName`).
 
 In `keiro-dsl/src/Keiro/Dsl/Scaffold.hs`, change `generatedCase` so its upper branch uses the
 new derivation and its lower branch is unchanged:
@@ -810,103 +849,125 @@ where-binding to `stem = lowerFirst (pascal ((.name) w))` for the same reason, a
 `keiro-dsl/src/Keiro/Dsl/Harness.hs` replace line 320 with `stem = readModelStem readModel`.
 Search the file for any other `T.splitOn "_"` combined with `map pascal` and confirm none
 remains except `normaliseAliasPart`, whose per-piece structure stays because pieces may begin
-with digits; it now cases `type` as `Type` through the repaired `pascal`. If
-`scripts/check-keiro-dsl-api-boundaries.py` (the `dsl-api-boundaries` gate) objects to the
-new export, keep `readModelStem` internal and instead export a `readModelHarnessStem` wrapper
-with the same body under whichever module the script allows, but do not re-derive the stem in
-`Keiro.Dsl.Harness`.
+with digits; it now cases `type` as `Type` through the repaired `pascal`. The export is not among the protected constructors or accessors in
+`scripts/check-keiro-dsl-api-boundaries.py`; retain the shared `readModelStem` export and run
+that gate during full verification.
 
-Run the focused tests and the compiled suite:
+Add one additional regression under `Haskell.keyword-segments` during this milestone: adapt
+the Language 6 source in `keiro-dsl/test/fixtures/mapped-nominal-leaf.keiro` so the `templateId`
+field's wire key is `type`, then scaffold and assert the structural projection module exports
+`templateStateTypeWitness` and `templateStateTypeGet` (and its raw getter where emitted).
+Keep the logical field name `templateId` and its nominal type unchanged. Assert the emitted
+pointer remains `/type`. This sixth example covers the shared helper's public impact. Inspect
+all `normaliseAliasPart` uses; do not describe their output as private-only.
+
+Run the focused tests first:
 
 ```bash
 nix develop -c cabal test keiro-dsl-haskell-name-test --test-show-details=direct
 nix develop -c cabal test keiro-dsl-test --test-show-details=direct --test-options='--match Haskell.keyword-segments'
-nix develop -c cabal test keiro-dsl:test:keiro-dsl-conformance-keyword-segments --test-show-details=direct
 ```
 
-The third command still fails at this point because the tracked tree was scaffolded before the
-repair. Delete the two hole stubs, regenerate the corpus, and inspect what changed:
+Before refreshing holes, assert that the two new test hole files still contain only the
+untouched scaffold stubs from Milestone 1. Delete just those disposable stubs; never use this
+procedure for consumer files containing application code. The deletion and staged new suite
+make the corpus dirty. `just corpus-regen` refuses dirty paths, so use the driver's explicit
+local-iteration override after reviewing `git status --short keiro-dsl/test`:
 
 ```bash
 rm keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ValidateCustomType/ReadModelHoles.hs
 rm keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs
-nix develop -c just corpus-regen
-git status --short keiro-dsl/test
-```
-
-Only files under `keiro-dsl/test/conformance-keyword-segments/` may change; every other suite
-is byte-identical because no existing fixture uses a reserved segment. If any other file
-changes, the repair altered a spelling it must not have: stop, diff it, and record the finding
-before continuing. Then run the suite again and expect it to pass, printing `read-model facts:
-True`, `runtime record: True`, and `queue policy: True`. Finish the milestone with the
-policy gate and the corpus check:
-
-```bash
+nix develop -c cabal run -v0 keiro-dsl-corpus-regen -- regenerate --allow-dirty
+git diff -- keiro-dsl/test
+nix develop -c cabal test keiro-dsl:test:keiro-dsl-conformance-keyword-segments --test-show-details=direct
 nix develop -c scripts/check-generated-name-policy.sh
-nix develop -c scripts/check-conformance-corpus.sh
+nix develop -c z3 --version
 nix develop -c cabal test keiro-dsl:tests --keep-going
 ```
 
-Commit with the trailers.
+Expect the compiled suite to print `read-model facts: True`, `runtime record: True`, and
+`queue policy: True`. Existing corpora are expected to remain byte-identical unless they
+exercise an affected keyword wire-path piece; inspect and explain any such diff, and retain
+all unrelated local edits. Do not infer compatibility solely from absence of corpus changes.
+Stage and commit the green implementation, tests, generated tree, and bug-report progress
+with both trailers. Only then run the drift check, which requires clean corpus paths and
+rejects even staged changes:
+
+```bash
+nix develop -c scripts/check-conformance-corpus.sh
+```
+
+Expect `conformance corpus: ok` and no corpus diff. Record the result in this plan.
 
 
 ### Milestone 3: the import-resolution audit
 
 
-This milestone adds the guard that would have caught BUG-11 before any file was written: when
-one planned generated module imports a sibling planned generated module with an explicit
-import list, every listed name must be exported by that sibling. At the end, the scaffolder
-refuses a mutated pair of modules with a named diagnostic and accepts the entire corpus.
+This milestone adds a conservative guard for the exact BUG-11 failure: a plain value imported
+from a planned generated sibling whose explicit export list proves it absent. At the end,
+a mutated read-model/harness pair is refused before writes, supported valid pairs pass, and
+the clean corpus passes the guard. It is not a complete Haskell name resolver.
 
-In `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`, beside `generatedNameInvariantViolations`, add:
+In `keiro-dsl/src/Keiro/Dsl/ScaffoldRun.hs`, beside `generatedNameInvariantViolations`, add
+and export:
 
 ```haskell
--- | Every explicit import of a sibling planned module must name something that
--- sibling exports. A planned occurrence that the sibling never emits is exactly
--- the BUG-11 shape (the read-model harness imported a spelling the definition
--- did not declare), so it is refused before any write.
+-- | Refuse a plain value import only when a planned generated sibling's explicit
+-- export list proves it absent. Unknown export sets remain GHC's responsibility.
 generatedImportResolutionViolations :: [ScaffoldModule] -> [Text]
 ```
 
-Implement it as follows. Build a map from module name (via `moduleNameOf . (.path)`) to the
-set of names the module exports: parse the `module M (…) where` header after `maskNonCode`;
-when the header has an export list, the set is its entries with any `(..)` or `(A, B)` suffix
-removed, skipping operator sections in parentheses; when an export list contains a
-`module M` re-export, add the export set of `M` if `M` is itself a planned module (resolve
-transitively) and otherwise mark the exporting module as unknown and never report a violation
-against it, so a re-export of a runtime module can never cause a false refusal (no generated
-module in today's corpus re-exports a whole module, but the rule must be safe when one does); when the header has no export list, the set is every top-level
-signature name (`name ::` at column one) plus every `data`, `newtype`, `type`, and `class`
-head. Then, for every planned module whose `kind` is `Generated` or `HoleStub`, scan its masked
-text for lines beginning `import` that name a module present in the map and carry a
-parenthesised import list without `hiding`; qualified imports with a list are included. For
-each listed name (same suffix stripping; skip operators), report
-`<path>:<line>: imports '<name>' from <Module>, which exports no such name` when the name is
-absent from the sibling's set. Modules not in the map (runtime libraries, consumer modules)
-are skipped. Re-exports are honoured because the export list is consulted first.
+Use `moduleNameOf . (.path)` to index only modules whose `kind` is `Generated`. Both generated
+modules and planned `HoleStub` templates may be importers, but never use a hole template as
+an authoritative export set: an existing hand-owned file may differ and is not overwritten.
+Mask comments and literals with `maskNonCode`. Read balanced module-header and import-list
+parentheses across lines, splitting commas at depth zero; `T(A, B)` must remain one item.
+Recognize ordinary, pre-qualified and post-qualified imports, optional aliases, and explicit
+lists; skip `hiding` imports. Unsupported syntax yields unknown, not a guessed empty set.
 
-Wire it where `namingViolations` is computed (line 603): compute `importViolations =
-generatedImportResolutionViolations modules` and append it to the same refusal so the
-scaffolder returns the existing generated-name refusal with the new lines included. Read the
-refusal rendering (`renderRefusals`) to keep the output shape.
+For this guard, check only plain lower-case value identifiers in import lists. Skip type,
+constructor, operator, `pattern`, and explicit `type` import items. For a sibling's explicit
+export list, collect standalone plain names and named children of `T(A, field)`. An export
+`T(..)` has unknown children, a `module M` re-export has an unknown imported scope, and an
+implicit export list requires more Haskell analysis than this guard supplies. Treat all of
+those export sets as unknown for absence checks, including alias re-exports and cycles;
+do not recursively union another module's entire export list. Also treat unsupported export
+syntax as unknown. A known set may legitimately contain re-exported named values: do not
+require every exported name to have a local signature (the fixture's qualified-table value
+is such a re-export).
 
-Add two examples to a new `describe "Haskell.import-resolution"` block in
-`keiro-dsl/test/Main.hs`. The first builds two `ScaffoldModule` values by hand, a definition at
-`Generated/Demo/Foo/ReadModel.hs` exporting `fooReadModel` and a harness at
-`Generated/Demo/Foo/ReadModelHarness.hs` importing `fooReadmodel`, and asserts the violation
-list has one entry mentioning `ReadModelHarness.hs`, `fooReadmodel`, and
-`Generated.Demo.Foo.ReadModel`; it also asserts that a sibling pair with a re-export (a module
-whose export list names `Bar` imported from a third module) and an import of a runtime module
-produce no violation. The second scaffolds `test/fixtures/keyword-segments.keiro` and
-`test/fixtures/incident-paging/incident-paging.keiro` and asserts the violation list is empty.
-Finally prove the corpus:
+For a supported plain value import missing from a known explicit export set, report
+`<path>:<line>: imports '<name>' from <Module>, which exports no such name`. Preserve source
+line numbers while masking and joining multiline syntax. Runtime modules, external consumer
+modules, and hole targets are outside this map. `fooReadmodel` imported from a generated
+module explicitly exporting only `fooReadModel` must fail; importing a constructor from
+`T(..)` must not produce a false refusal.
+
+Append `generatedImportResolutionViolations modules` to `namingViolations` in
+`pureRefusalsForService`, so the existing `GeneratedNameInvariantViolation` rendering and
+pre-write path handle it for single-file and workspace planning. Do not add an IO-only check
+that one of those entry points bypasses.
+
+Add a `describe "Haskell.import-resolution"` block in `keiro-dsl/test/Main.hs`. Cover the
+mismatched pair, corrected pair, multiline lists, named value re-exports, qualified imports,
+and `hiding`. Include conservative controls for `T(..)` with separate constructor/field
+imports, nested named children, implicit exports (including an unsigned binding), module
+re-exports through aliases/restricted imports/cycles, external runtime targets, and hole
+targets. Unknown cases must terminate and produce no refusal. Assert the shared
+`pureRefusalsForService` path returns `GeneratedNameInvariantViolation` for the mutated
+pair, not just that the helper returns text. Scaffold the Language 6 keyword fixture and
+`test/fixtures/incident-paging/incident-paging.keiro` and assert no violations.
+
+Run the focused suite, commit the green change with both trailers, and check the corpus from
+clean corpus paths:
 
 ```bash
+nix develop -c cabal test keiro-dsl-test --test-show-details=direct --test-options='--match Haskell.import-resolution'
 nix develop -c scripts/check-conformance-corpus.sh
 ```
 
-The corpus check re-runs every recorded scaffold invocation through the same refusal path, so a
-false positive anywhere in the corpus fails here. Commit with the trailers.
+The corpus check re-runs recorded scaffold invocations through the refusal path. It tests the
+planned module sets; compilation separately checks actual retained consumer hole files.
 
 
 ### Milestone 4: documentation, changelog, ADR, gate, and lifecycle
@@ -914,7 +975,7 @@ false positive anywhere in the corpus fails here. Commit with the trailers.
 
 This milestone records the behaviour for users and maintainers and closes the bug report. At
 the end, the reference explains segment versus whole-name reserved words, both changelogs carry
-Unreleased entries, ADR-51 exists and validates, `just verify` passes, and BUG-11 is `fixed`.
+Unreleased entries, the naming ADR exists and validates, `just verify` passes, and BUG-11 is `fixed`.
 
 In `docs/user/keiro-dsl-reference.md`, add a row `| validate_custom_type | ValidateCustomType
 | validateCustomType |` to the naming table near line 168 and, after the sentence ending
@@ -929,24 +990,31 @@ In `keiro-dsl/CHANGELOG.md` under `## [Unreleased]`, add a `### Breaking Changes
 workqueue whose snake_case name contains a reserved segment now scaffolds idiomatic names
 (`job_type` gives `jobTypeJobCodec`, `jobTypePayloadCodec`, and `JobTypeOutcome` instead of
 `jobtypeJobCodec`, `jobtypePayloadCodec`, and `JobtypeOutcome`); consumers of such names
-rename their references after re-scaffolding. Add a `### Fixed` entry for BUG-11: read models
+rename their references after re-scaffolding. Also document keyword wire-path projection
+renames (`thingtypeWitness`/`thingtypeGet` become `thingTypeWitness`/`thingTypeGet`). Existing
+read-model holes are create-once: consumers must rename affected query bindings, local type
+aliases, exports, and contract imports by hand, preserving application bodies. Re-scaffolding
+alone does not repair those files. Add this migration procedure to the user reference as well. Add a `### Fixed` entry for BUG-11: read models
 with a reserved segment now compile because the definition, query contract, hole, and harness
-share one whole-name stem, and `scaffold` refuses a generated tree whose generated-to-generated
-explicit imports do not resolve. In the root `CHANGELOG.md` under `## [Unreleased]`, add one
+share one whole-name stem, and `scaffold` refuses provably missing plain-value imports between generated modules with
+known explicit export lists; unresolved Haskell forms remain compiler checks. In the root `CHANGELOG.md` under `## [Unreleased]`, add one
 `keiro-dsl` bullet summarising both, pointing at
 `docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md`.
 
-Write ADR-51 in `docs/adr/` following `docs/adr/profile.dhall` and the frontmatter of
-`docs/adr/0050-…md` (fields `type`, `title`, `description`, `timestamp`, `docId`, `status`,
+Write the naming ADR in `docs/adr/` following `docs/adr/profile.dhall` and the frontmatter of
+`docs/adr/0050-shard-resize-composes-public-checkpoints-with-stopped-lease-rows.md` (fields `type`, `title`, `description`, `timestamp`, `docId`, `status`,
 `date`). Allocate the handle with `okf id next docs/adr --profile docs/adr/profile.dhall ADR`
-and name the file `0051-generated-declaration-names-derive-once-from-the-whole-logical-name.md`.
+and use the returned stable `ADR-N`, with its corresponding padded filename prefix.
+Do not reserve or assume `ADR-51` merely because it was next when this plan was written.
 Its decision: every generated occurrence that belongs to one declaration is derived from one
 derivation of that declaration's whole logical name; the reserved term-level word set applies
 to complete lowerCamel occurrences only, so an upper-position derivation never consults it;
-generators must not case underscore segments independently; and a planned explicit import
-between generated modules is audited against the sibling's exports before any write. Record
+generators must not case underscore segments independently; and supported plain-value imports
+between generated modules are checked against known explicit exports before any write, with
+unknown cases left to GHC. Record
 the rejected alternative (reject keyword segments at `check`) and the consequence (consumers
-with reserved segments in workqueue names see an idiomatic rename). Append the ADR to
+with affected workqueue names, structural projection paths, or retained read-model holes need
+source edits). Append the ADR to
 `docs/adr/log.md` with `okf log add docs/adr --kind Addition -m "…"` and run:
 
 ```bash
@@ -956,6 +1024,7 @@ okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforc
 Run the full gate and read the exit marker inside the log rather than trusting the terminal:
 
 ```bash
+nix develop -c z3 --version
 nix develop -c just verify > /tmp/keiro-verify-310.log 2>&1; echo "exit: $?" >> /tmp/keiro-verify-310.log
 tail -5 /tmp/keiro-verify-310.log
 ```
@@ -970,7 +1039,7 @@ to `fixed` with the plan link and "Implemented; keyword-segment conformance suit
 run `okf log add docs/bug-reports --kind Update -m "…"`, and run `just
 bug-reports-validate`. Write the Outcomes & Retrospective section of this plan, then perform
 the ADR distillation pass: re-read the Decision Log and Surprises & Discoveries and confirm
-ADR-51 carries everything durable (the per-segment pattern, the upper-only derivation, and the
+the naming ADR carries everything durable (the per-segment pattern, the upper-only derivation, and the
 import audit) while the `cabal exec` environment note stays here. Commit with the trailers.
 
 
@@ -983,30 +1052,22 @@ trailers `ExecPlan:
 docs/plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md`
 and `Intention: intention_01m4tsyezzeg487dsvychmr0xg`.
 
-Milestone 1, in order: write `keiro-dsl/test/fixtures/keyword-segments.keiro`; run
-`cabal run -v0 keiro-dsl:exe:keiro-dsl -- check keiro-dsl/test/fixtures/keyword-segments.keiro`
-and expect `OK`; add the four examples to `keiro-dsl/test/Main.hs`; run
-`cabal test keiro-dsl-test --test-show-details=direct --test-options='--match Haskell.keyword-segments'`
-and expect three failures and two passes (the rejection and stability examples); scaffold the suite tree,
-write `Main.hs`, add the stanza; run
-`cabal build keiro-dsl:test:keiro-dsl-conformance-keyword-segments` and expect GHC-61689;
-update the bug report, index, and log; run `just bug-reports-validate`; commit.
+Milestone 1 writes the fixture and five examples, observes three failures and two passing
+controls, stages the generated suite for corpus discovery, records GHC-61689, and updates the
+bug report to `in-progress`. Keep the deliberately failing proof uncommitted.
 
-Milestone 2, in order: edit `HaskellName.hs`, its test, `Scaffold.hs`, `AggregateType.hs`,
-`Harness.hs`; run the haskell-name suite and the focused examples and expect all green; delete
-the two hole stubs; run `just corpus-regen`; confirm with `git status --short keiro-dsl/test`
-that only `keiro-dsl/test/conformance-keyword-segments/` changed; run the conformance suite
-and expect `read-model facts: True`, `runtime record: True`, `queue policy: True`; run
-`scripts/check-generated-name-policy.sh`, `scripts/check-conformance-corpus.sh`, and
-`cabal test keiro-dsl:tests --keep-going`; commit.
+Milestone 2 repairs the generator, adds the structural projection regression (six focused
+examples in total), refreshes only untouched test holes, and uses the explicit
+`regenerate --allow-dirty` command above for the reviewed local iteration. Run the focused
+and compiled tests, verify Z3 before the full DSL suite, commit the green change, then run the
+clean-corpus drift check. Record outcomes before moving on.
 
-Milestone 3, in order: add `generatedImportResolutionViolations` and wire it; add the two
-examples; run `cabal test keiro-dsl-test --test-options='--match Haskell.import-resolution'`;
-run `scripts/check-conformance-corpus.sh`; commit.
+Milestone 3 adds the bounded audit and its conservative controls, tests the shared refusal
+path, commits the green change, and runs the clean-corpus check.
 
-Milestone 4, in order: edit the reference, both changelogs, write ADR-51 and log it; validate
-the ADR bundle; run `just verify` into a log and read its exit marker; close BUG-11; write
-Outcomes & Retrospective; commit.
+Milestone 4 updates migration documentation and changelogs, allocates and validates the new
+naming ADR, runs `just verify`, and closes BUG-11. Commit any corpus changes before that gate;
+its corpus check refuses dirty paths. Run bug-report validation again after the lifecycle edit.
 
 
 ## Validation and Acceptance
@@ -1020,20 +1081,22 @@ nothing, while `grep -rn "validateCustomTypeReadModel ::" ` finds the definition
 harness's import line names the same identifier.
 
 `cabal test keiro-dsl:test:keiro-dsl-conformance-keyword-segments --test-show-details=direct`
-passes and prints the three `True` lines; `git stash`-ing the Milestone 2 generator change and
-re-running `just corpus-regen` followed by the same test reproduces GHC-61689, proving the
-suite guards the repair (do this once, then `git stash pop` and regenerate again).
+passes and prints the three `True` lines. The recorded Milestone 1 pre-repair build failure
+and Milestone 2 post-repair success establish the regression. Do not use `git stash` to undo
+committed generator changes: it cannot do that, and reverting only the stem fix after adding
+the audit makes scaffolding refuse rather than reproduce the original GHC failure.
 
 `cabal test keiro-dsl-test --test-options='--match Haskell.keyword-segments'` and
 `--match Haskell.import-resolution` pass; `cabal test keiro-dsl-haskell-name-test` passes;
 `cabal run -v0 keiro-dsl:exe:keiro-dsl -- check` on a specification declaring `readmodel
-type` still prints `error[GeneratedOccurrenceReserved]`; scaffolding the report's text with
+type` still prints `error[GeneratedOccurrenceReserved]`; scaffolding the Language 6 variant with
 `a_b_test` still declares and imports `abTestReadModel`.
 
 Hand-mutating one generated module's import list and feeding the pair to
 `generatedImportResolutionViolations` yields a diagnostic naming the importing path, the
 missing name, and the sibling module; `scripts/check-conformance-corpus.sh` passes, proving
-the audit accepts every tracked suite.
+the bounded audit accepts every regenerated tracked suite. Its conservative-resolution tests
+produce no false refusals, and consumer hole migration is explicitly documented.
 
 `just verify` ends with `exit: 0` in its log; `okf validate docs/adr …` and `just
 bug-reports-validate` pass; BUG-11 is `fixed` with `fixedVersion: unreleased`.
@@ -1043,11 +1106,12 @@ bug-reports-validate` pass; BUG-11 is `fixed` with `fixedVersion: unreleased`.
 
 
 Scaffolding into `keiro-dsl/test/conformance-keyword-segments/` is repeatable: generated
-modules are overwritten and hole modules are left alone, so deleting the two hole stubs before
-`just corpus-regen` is the only way to pick up their corrected spellings after Milestone 2.
-`just corpus-regen` is safe to run at any time; if it changes a suite other than the new one,
-revert that suite with `git checkout -- <dir>` and investigate the generator change before
-proceeding.
+modules are overwritten and hole modules are left alone. Refresh only the new suite's
+untouched disposable stubs after the repair. Consumer holes require manual renaming while
+preserving their bodies. Review corpus status before using `regenerate --allow-dirty` for local
+iteration; ordinary regeneration and check mode both require clean corpus paths. Commit
+reviewed generated changes before check mode. If another suite changes unexpectedly, inspect
+and explain the diff; do not discard existing edits with a blanket checkout or restore.
 
 If the conformance suite fails to compile for a reason other than GHC-61689 in Milestone 1 (for
 example a runtime import name in `Main.hs` that does not exist), compare `Main.hs` against the
@@ -1081,8 +1145,9 @@ be derived. It exports `readModelStem :: ReadModelNode -> Text`, now `lowerFirst
 `emitQueueCodec` and `emitQueuePolicy` derive from the whole workqueue name. The generated
 module and value names for a read model `n` are, with `S = pascal n` and `s = lowerFirst S`:
 module segment `S`, values `sReadModel`, `sQualifiedTable`, `sQuery`, rebuild helpers
-`startSRebuild`/`finishSRebuild`/`abandonSRebuild` where emitted, and types `SQueryInput` and
-`SQueryResult`. For a workqueue `n`: module segment `S`, values `sPayloadCodec` and
+with prefixes `start`/`finish`/`abandon` and suffix `pascal(s) <> "Rebuild"` where emitted, and types `pascal(s) <> "QueryInput"` and
+`pascal(s) <> "QueryResult"`. Rebuild helpers likewise use `pascal(s)`, not necessarily `S`: for
+`a_b_test`, `S = ABTest`, `s = abTest`, and `pascal(s) = AbTest`. For a workqueue `n`: module segment `S`, values `sPayloadCodec` and
 `sJobCodec`, and type `SOutcome`.
 
 `Keiro.Dsl.AggregateType` (`keiro-dsl/src/Keiro/Dsl/AggregateType.hs`) keeps `pascal` with the
@@ -1111,7 +1176,7 @@ ledger, fragment); the `keiro-dsl-conformance-keyword-segments` stanza in
 `keiro-dsl/test/Main.hs`; three examples in `keiro-dsl/test/haskell-name/Main.hs`.
 
 Documents: `docs/user/keiro-dsl-reference.md`, `keiro-dsl/CHANGELOG.md`, `CHANGELOG.md`,
-`docs/adr/0051-…md` plus `docs/adr/log.md`, and
+the allocated naming ADR file plus `docs/adr/log.md`, and
 `docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md` with
 `docs/bug-reports/index.md` and `docs/bug-reports/log.md`. External tools: `okf` for bundle
 validation, logging, and ID allocation; `just` recipes `corpus-regen`, `bug-reports-validate`,
@@ -1128,3 +1193,10 @@ validation, logging, and ID allocation; `just` recipes `corpus-regen`, `bug-repo
   Decision Log entries, a fail-open rule for `module M` re-exports in the import audit, and the
   stability check in Validation and Acceptance. Reason: a reviewer asked whether the fix is
   safe, and the byte-identity claim in Milestone 2 was only true for the composed formula.
+
+- 2026-10-13: correctness review against the source and a fresh Language 6 scaffold corrected
+  dirty-corpus sequencing, the non-Eq runtime assertion, positive-test language and counts,
+  query type casing, and ADR allocation. Bounded the import audit to provable plain-value
+  failures, added unknown-syntax controls, and documented structural projection and retained
+  hole migration. These changes prevent false refusals, unbuildable sample tests, and an
+  implementation workflow that would stop before regeneration or falsely promise compatibility.
