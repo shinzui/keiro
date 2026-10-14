@@ -1,0 +1,49 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/keyword-segments.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context keyword-segments structural conformance","path":"Generated/KeywordSegments/StructuralConformance.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context keyword-segments generated nominal declarations","path":"Generated/KeywordSegments/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context keyword-segments generated nominal ID internals","path":"Generated/KeywordSegments/Nominals/Internal.hs"}
+module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context keyword-segments structural nominal leaves","path":"Generated/KeywordSegments/Structural/NominalLeaves.hs"}
+module-role {"family":"ProjectionCatalog","kind":"generated","ownerKind":"projection-catalog","ownerName":"projection-catalog keyword-segments","path":"Generated/KeywordSegments/ProjectionCatalog.hs"}
+module-role {"family":"ProjectionCatalogHoles","kind":"hole","ownerKind":"projection-catalog","ownerName":"projection-catalog keyword-segments","path":"KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs"}
+module-role {"family":"ReadModelTable","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel validate_custom_type (line 29)","path":"Generated/KeywordSegments/ValidateCustomType/ReadModelTable.hs"}
+module-role {"family":"QueryContract","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel validate_custom_type (line 29)","path":"Generated/KeywordSegments/ValidateCustomType/QueryContract.hs"}
+module-role {"family":"ReadModel","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel validate_custom_type (line 29)","path":"Generated/KeywordSegments/ValidateCustomType/ReadModel.hs"}
+module-role {"family":"ReadModelHoles","kind":"hole","ownerKind":"readmodel","ownerName":"readmodel validate_custom_type (line 29)","path":"KeywordSegments/ValidateCustomType/ReadModelHoles.hs"}
+module-role {"family":"ReadModelHarness","kind":"generated","ownerKind":"readmodel","ownerName":"readmodel validate_custom_type (line 29)","path":"Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs"}
+module-role {"family":"Queue","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue job_type (line 40)","path":"Generated/KeywordSegments/JobType/Queue.hs"}
+module-role {"family":"QueuePolicy","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue job_type (line 40)","path":"Generated/KeywordSegments/JobType/QueuePolicy.hs"}
+module-role {"family":"QueueCodec","kind":"generated","ownerKind":"workqueue","ownerName":"workqueue job_type (line 40)","path":"Generated/KeywordSegments/JobType/QueueCodec.hs"}
+generated Generated/KeywordSegments/StructuralConformance.hs
+generated Generated/KeywordSegments/Nominals.hs
+generated Generated/KeywordSegments/Nominals/Internal.hs
+generated Generated/KeywordSegments/Structural/NominalLeaves.hs
+generated Generated/KeywordSegments/ProjectionCatalog.hs
+hole KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs
+generated Generated/KeywordSegments/ValidateCustomType/ReadModelTable.hs
+generated Generated/KeywordSegments/ValidateCustomType/QueryContract.hs
+generated Generated/KeywordSegments/ValidateCustomType/ReadModel.hs
+hole KeywordSegments/ValidateCustomType/ReadModelHoles.hs
+generated Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs
+generated Generated/KeywordSegments/JobType/Queue.hs
+generated Generated/KeywordSegments/JobType/QueuePolicy.hs
+generated Generated/KeywordSegments/JobType/QueueCodec.hs
+id-domain id-domain|name=SubscriptionId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=subscription|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=SubscriptionId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:subscription:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+projection-catalog-fact cursor|validate_custom_type|validate-custom-type-writer|29
+projection-catalog-fact delivery|validate_custom_type_writer|subscription|17
+projection-catalog-fact freshness|validate_custom_type|wait-for-head:entire-log|29
+projection-catalog-fact group|validate_custom_type_rebuild|validate_custom_type_table|validate_custom_type_table|12
+projection-catalog-fact owner|validate_custom_type_writer|all|validate_custom_type_rebuild|validate_custom_type_table|10|validate-custom-type-writer|validate-custom-type-writer-v1|from-beginning|explicit|17
+projection-catalog-fact query|validate_custom_type|validate_custom_type_rebuild|validate_custom_type_table|validate_custom_type_table|29
+projection-catalog-fact supply|validate_custom_type|validate_custom_type_writer|validate_custom_type_rebuild|validate_custom_type_table|29|17
+projection-catalog-fact target|validate_custom_type_table|billing|validate_custom_type|clear||6
+query-contract-baseline v1
+query-contract {"mappedDependencies":[],"position":"input","readModel":"validate_custom_type","typeExpression":"SubscriptionId"}
+query-contract {"mappedDependencies":[],"position":"result","readModel":"validate_custom_type","typeExpression":"List SubscriptionId"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

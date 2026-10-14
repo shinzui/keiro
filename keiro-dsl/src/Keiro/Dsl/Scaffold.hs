@@ -62,6 +62,7 @@ module Keiro.Dsl.Scaffold
     scaffoldWorkqueue,
     scaffoldWorkqueueForService,
     scaffoldReadModel,
+    readModelStem,
     scaffoldReadModelForService,
     resolveCatalogReadModel,
     scaffoldProjectionCatalog,
@@ -4733,7 +4734,7 @@ emitQueueCodec genPrefix w =
     ]
   where
     payloadTy = (.payloadName) w
-    stem = lowerFirst (T.concat (map pascal (T.splitOn "_" ((.name) w))))
+    stem = lowerFirst (pascal ((.name) w))
 
 -- | Emit the pgmq retry policy + JobOutcome disposition compiled against the
 -- LIVE @Keiro.PGMQ.Job@ runtime (RetryPolicy / JobOutcome / RetryDelay). This pins
@@ -4781,7 +4782,7 @@ emitQueuePolicy genPrefix w =
     ]
       ++ ["  " <> pascal ((.outcome) r) <> " -> " <> outcome ((.action) r) | r <- (.disposition) w]
   where
-    outcomeType = T.concat (map pascal (T.splitOn "_" ((.name) w))) <> "Outcome"
+    outcomeType = pascal ((.name) w) <> "Outcome"
     queuePolicyImports =
       [ "JobOrdering (..)",
         "JobOutcome (..)",
@@ -5564,8 +5565,10 @@ catalogSourceId (CatalogAggregate aggregateName) = "aggregate:" <> aggregateName
 modulePathFor :: Text -> Text -> FilePath
 modulePathFor prefix leaf = T.unpack (T.replace "." "/" prefix <> "/" <> leaf <> ".hs")
 
+-- | The shared lowerCamel stem for a read model's declarations and imports.
+-- Derive from the complete logical name so keyword segments remain capitalized.
 readModelStem :: ReadModelNode -> Text
-readModelStem = lowerFirst . T.concat . map pascal . T.splitOn "_" . (.name)
+readModelStem = lowerFirst . pascal . (.name)
 
 emitReadModelTable :: Text -> Text -> ReadModelNode -> Text
 emitReadModelTable tableModule stem readModel =
@@ -10474,12 +10477,13 @@ pascalFromKebab :: Text -> Text
 pascalFromKebab = generatedCase HaskellName.LogicalWireWord True
 
 generatedCase :: HaskellName.NameSourceKind -> Bool -> Text -> Text
-generatedCase source upper name =
-  case HaskellName.deriveHaskellName source site of
-    Right derived
-      | upper -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
-      | otherwise -> HaskellName.renderLowerCamelName ((.lowerCamel) derived)
-    Left _ -> name
+generatedCase source upper name
+  | upper = case HaskellName.deriveUpperCamelName source site of
+      Right derived -> HaskellName.renderUpperCamelName derived
+      Left _ -> name
+  | otherwise = case HaskellName.deriveHaskellName source site of
+      Right derived -> HaskellName.renderLowerCamelName ((.lowerCamel) derived)
+      Left _ -> name
   where
     site =
       HaskellName.NameSite

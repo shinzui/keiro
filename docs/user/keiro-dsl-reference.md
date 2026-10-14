@@ -168,13 +168,25 @@ selectors become lowerCamelCase.
 | `ThingID` | `ThingID` | `thingID` |
 | `HTTP_server2` | `HTTPServer2` | `httpServer2` |
 | `version2_event` | `Version2Event` | `version2Event` |
+| `validate_custom_type` | `ValidateCustomType` | `validateCustomType` |
 
 Leading, trailing, or repeated underscores are rejected as unsafe. Names such as
 `foo_bar` and `fooBar` are rejected when they converge in the same generated
 namespace, and normalization to a Haskell keyword is rejected before scaffolding.
+The keyword check applies to the whole generated occurrence, never to one
+underscore segment: `type` alone is rejected, while `validate_custom_type` is
+accepted and its declarations, imports, and harness use `validateCustomType…`.
 This never changes external spellings: wire keys and tags, queue names, SQL names,
 registry/subscription identities, and explicit consumer-owned Haskell references
 remain exactly declared.
+
+When re-scaffolding an existing read model whose name contains a keyword segment,
+update its create-once `ReadModelHoles.hs` by hand. Rename the query binding, local
+type aliases, exports, and `QueryContract` imports to match the newly generated
+names while preserving the application body. Re-scaffolding does not overwrite
+hand-owned holes. Consumers of affected workqueue codecs, outcome types, or
+structural projection witness/getter names likewise need to rename their Haskell
+references and recompile.
 
 After changing a deployed specification, run a compatibility diff before
 scaffolding:
@@ -232,6 +244,8 @@ source or workspace manifest rather than relying on repeated CLI flags.
   `infixr`, `instance`, `let`, `module`, `newtype`, `of`, `then`, `type`, and
   `where`. Contextual words such as `family`, `via`, and `qualified` are valid.
   Use a field's `haskell` alias when its DSL name must remain a hard keyword.
+  A reserved word inside a longer underscore-separated declaration name is
+  accepted when the complete generated occurrence is valid.
 - A *wire word* may also contain hyphens. Context names, ID prefixes, enum wire
   values, state-map values, and workflow labels use this form.
 - Double-quoted strings support `\"`, `\\`, `\n`, `\t`, and `\r`. Raw newlines

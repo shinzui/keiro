@@ -6,8 +6,26 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- After re-scaffolding, workqueues with reserved snake-case segments use the
+  whole-name spelling: `job_type` now generates `jobTypeJobCodec`,
+  `jobTypePayloadCodec`, and `JobTypeOutcome` instead of the glued `jobtype…`
+  names. Keyword wire-path projection names also change, for example
+  `thingtypeWitness` and `thingtypeGet` become `thingTypeWitness` and
+  `thingTypeGet`. Rename consumer references and recompile. Create-once
+  read-model holes are not overwritten: rename affected query bindings,
+  local type aliases, exports, and contract imports by hand while preserving
+  their application bodies.
+
 ### Bug Fixes
 
+- Read models with reserved segments now compile because definitions, query
+  contracts, holes, and harness imports share one whole-name stem. Scaffolding
+  also refuses a plain value import from a generated sibling when its known
+  explicit export list proves the name absent; GHC checks unresolved import
+  forms. Fixes [BUG-11](mori://shinzui/keiro/okf/bug-reports/concepts/BUG-11)
+  under [plan 310](../docs/plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md).
 - Generated aggregate harnesses prove Hole-owned live initial transitions with
   the consumer's history-backed `LiveWitness` through `BehaviorContract`, which
   now exports `behaviorObligationReport`. Their forward/replay rows are labelled

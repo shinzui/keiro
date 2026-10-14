@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: BUG-11 in progress: Language 6 conformance suite reproduces GHC-61689
 * **Update**: BUG-10 fixed/unreleased: history-backed aggregate and whole-service proofs, all eight witness mutations, corpus freshness, and the full Nix-shell verification gate pass.
 
 ## 2026-10-13

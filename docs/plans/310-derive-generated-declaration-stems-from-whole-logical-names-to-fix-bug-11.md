@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-14T01:09:00Z
       mode: "update"
       note: "Corrected import-audit soundness, corpus sequencing, runtime assertion, Language 6 coverage, naming scope and migration guidance"
+    - model: "gpt-6-sol"
+      harness: "codex-cli"
+      at: 2026-10-14T02:05:29Z
+      mode: "implement"
+      note: "Began regression fixture and conformance implementation"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -70,18 +75,23 @@ GHC remains the authority for import forms and export sets the audit cannot reso
 
 - [x] (2026-10-13) Correctness review: verified the Language 6 scaffold and source claims; corrected audit scope, compatibility coverage, sample code, and corpus sequencing. Implementation remains pending.
 - [x] (2026-10-13) Milestone 0: validate BUG-11 from source on master, reproduce it with the public CLI and GHC 9.12.4, merge GitHub PR #6 as BUG-11, set the report `confirmed`, retain the transcript under `docs/bug-reports/evidence/`, create this plan with its intention, link it from the report body, index, and log, and prove that the Language 6 fixture in this plan checks and scaffolds.
-- [ ] Milestone 1: add `keiro-dsl/test/fixtures/keyword-segments.keiro` and the focused generator tests in `keiro-dsl/test/Main.hs` (harness import resolves against the definition's exports, no glued-keyword spellings, every reserved word in leading, middle, and trailing positions in both declaration kinds, whole-name keyword still rejected); run them and record the failures in Surprises & Discoveries.
-- [ ] Milestone 1: scaffold the fixture into `keiro-dsl/test/conformance-keyword-segments/` with the public CLI, add `Main.hs` and the `keiro-dsl-conformance-keyword-segments` stanza, track the ledger and fragment, run the suite before the repair and record GHC-61689; set BUG-11 `status: in-progress`, advance `generated`, and log it.
-- [ ] Milestone 2: add `deriveUpperCamelName` to `Keiro.Dsl.HaskellName` with unit tests in `keiro-dsl/test/haskell-name/Main.hs`; route the upper branch of `generatedCase` in `Keiro.Dsl.Scaffold` and `pascal` in `Keiro.Dsl.AggregateType` through it.
-- [ ] Milestone 2: replace the per-segment stems in `readModelStem`, `emitQueueCodec`, and `emitQueuePolicy` with whole-name derivations; export `readModelStem` and use it in `emitReadModelHarness`; add the structural projection regression and run the focused tests; run the compiled suite and policy gate after regeneration.
-- [ ] Milestone 2: refresh only the two untouched test hole stubs, regenerate with the explicit local `--allow-dirty` option, review all corpus changes, run the tests, commit the green change, and then run `scripts/check-conformance-corpus.sh` on clean corpus paths.
-- [ ] Milestone 3: add `generatedImportResolutionViolations` to `Keiro.Dsl.ScaffoldRun`, refuse before writes beside `generatedNameInvariantViolations`, add mutation and conservative-resolution tests, and prove the clean corpus produces no violation.
-- [ ] Milestone 4: update `docs/user/keiro-dsl-reference.md`, add Unreleased entries to `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md`, allocate the naming ADR handle and validate the ADR bundle.
+- [x] (2026-10-14T02:05Z) Milestone 1: added the Language 6 fixture and five focused generator examples. The pre-repair run produced three failures and two passing controls as predicted.
+- [x] (2026-10-14T02:07Z) Milestone 1: scaffolded the fixture, added the compiled suite and stanza, and reproduced GHC-61689 at `ReadModelHarness.hs:4:64`; BUG-11 advanced to `in-progress`.
+- [x] (2026-10-14T02:13Z) Milestone 2: added `deriveUpperCamelName` and its three unit tests; routed upper-case helpers through it. The Haskell-name suite passes (25 examples).
+- [x] (2026-10-14T02:16Z) Milestone 2: replaced the per-segment stems, shared `readModelStem` with the harness, and added the structural projection regression. Six focused examples pass; the regenerated conformance suite compiles and prints three `True` lines. Policy and full-suite validation are underway.
+- [ ] Milestone 2: refreshed the untouched read-model query hole and regenerated with `--allow-dirty`; reviewed the new-suite-only corpus diff, and passed the focused tests and compiled suite. The first full DSL matrix found two inventories missing the new suite/fixture; both entries now pass their focused tests. Commit the green change, then run `scripts/check-conformance-corpus.sh` on clean corpus paths. The filled projection-catalog hole is test-owned and retained.
+- [ ] Milestone 3: added `generatedImportResolutionViolations` to the shared pre-write refusal path, and its initial four focused examples passed. The second corpus regeneration accepted all 55 planned invocations; expanded conservative controls are compiling. Commit and check the clean corpus.
+- [x] (2026-10-14T02:20Z) Milestone 4: updated the user reference and both Unreleased changelogs; allocated ADR-51, typechecked its profile, and passed strict ADR bundle validation (51 concepts).
 - [ ] Milestone 4: run `nix develop -c just verify` and read the exit marker inside the log; set BUG-11 `fixed` with `fixedVersion: unreleased` and a `resolution`, update the index row and log; write Outcomes & Retrospective and perform the ADR distillation pass.
 
 
 ## Surprises & Discoveries
 
+
+- (2026-10-14) The main DSL test suite cannot import `Keiro.Dsl.HaskellName` because it is an internal library module. Its 23-word test inventory mirrors `haskellKeywords`; the dedicated Haskell-name suite exercises the internal module directly. Before the repair, `Haskell.keyword-segments` ran five examples: the harness/export agreement, generated spelling, and keyword-position examples failed; whole-name rejection and single-letter stability passed.
+- (2026-10-14) The plan's conformance stanza needed `keiki` because the generated nominal module imports `Keiki.Shape`; the fragment omitted that dependency. The generated projection-catalog hole exported its event type without its constructor, triggering `-Werror=unused-top-binds`. The new test hole exports `ValidateCustomTypeWriterEvent (..)` as other conformance holes do. After those two corrections, the pre-repair build reached the intended failure: `ReadModelHarness.hs:4:64: error: [GHC-61689]` because `ReadModel` does not export `validateCustomTypeReadModel`.
+- (2026-10-14) The fresh projection-catalog hole compiled but its `error "HOLE"` bodies were forced by `runReadModelFacts`, so the first post-repair runtime run crashed in `decodeValidateCustomTypeWriterReplay`. The test-owned hole now supplies no-op transaction handlers, the recorded event ID, and a relevant replay decode, following the existing projection-catalog conformance pattern. The suite then passed with `read-model facts: True`, `runtime record: True`, and `queue policy: True`.
+- (2026-10-14) The first full DSL matrix completed 802 main-suite examples with two inventory failures: `test/conformance-baseline.json` did not list the new compiled component, and the source-language fixture inventory in `keiro-dsl/test/Main.hs` did not list `keyword-segments.keiro`. Both inventories now include the Language 6 proof. All other reported conformance components passed in that run.
 
 - (2026-10-13 review) The public CLI successfully scaffolded the exact Language 6 fixture in
   a scratch directory through `nix develop -c cabal run -v0 keiro-dsl:exe:keiro-dsl`. Its
@@ -185,6 +195,9 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
   Milestone 1 and to `fixed` with `fixedVersion: unreleased` at the end of Milestone 4.
   Rationale: the bundle's lifecycle rules; `confirmed` already records the owner reproduction.
   Date: 2026-10-13
+- Decision: retain and fill the new conformance suite's projection-catalog hole rather than deleting it during regeneration; refresh only the untouched read-model query hole whose generated identifier changed. The test-owned catalog hole needs real, harmless functions for the runtime facts to execute.
+  Rationale: the original create-once stub had an unused hidden constructor under `-Werror` and `error "HOLE"` functions that runtime catalog validation evaluates. Regeneration does not own the filled stub.
+  Date: 2026-10-14
 
 
 ## Outcomes & Retrospective
@@ -1200,3 +1213,10 @@ validation, logging, and ID allocation; `just` recipes `corpus-regen`, `bug-repo
   failures, added unknown-syntax controls, and documented structural projection and retained
   hole migration. These changes prevent false refusals, unbuildable sample tests, and an
   implementation workflow that would stop before regeneration or falsely promise compatibility.
+
+- 2026-10-14: implementation added the failing Language 6 fixture, then repaired whole-name
+  stems and upper-only casing, regenerated its compiled suite, and added the bounded import
+  audit. The conformance example needed `keiki` and a filled test-owned catalog hole to run;
+  the repository's conformance and source-language inventories also needed explicit entries.
+  The plan records those discoveries and keeps the remaining clean-corpus and full-gate work
+  visible rather than treating the initial compiled success as completion.

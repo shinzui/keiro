@@ -98,9 +98,9 @@ import Keiro.Dsl.ReadModelShape (canonicalShape, deriveShapeHash, registryNameFo
 import Keiro.Dsl.ReplayImpact (AggregateImpact (..), CatalogReplayImpact (..), ReplayImpact (..))
 import Keiro.Dsl.ReplayImpact qualified as ReplayImpact
 import Keiro.Dsl.RouterSelection qualified as RouterSelection
-import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
+import Keiro.Dsl.Scaffold (Context (..), ModuleKind (..), ModuleRole (..), NominalGenerationOwner (..), NominalUseSite (..), ScaffoldModule (..), StructuralProjection (..), codecComparisonBanner, codecComparisonModule, defaultContext, firewallBreaches, genPrefixFor, generatedBanner, generatedBannerFor, generatedNominalModule, holePrefixFor, isGeneratedBannerLine, moduleRole, obsoleteGeneratedOutputHooks, pascal, planNominalGeneration, projectionSpecs, scaffoldAggregate, scaffoldAggregateForService, scaffoldContract, scaffoldContractForService, scaffoldIntake, scaffoldProcess, scaffoldProjectionCatalog, scaffoldPublisher, scaffoldReadModel, scaffoldReadModelForService, scaffoldRefusals, scaffoldReplayAudit, scaffoldRouter, scaffoldStructural, scaffoldWorkqueue, scaffoldWorkqueueForService, windowSeconds)
 import Keiro.Dsl.ScaffoldRecord (GeneratedHaskellNamingEdition (..), ScaffoldModuleRoleRow (..), ScaffoldRecord (..), parseRecord, projectionCatalogFacts, projectionCatalogFactsForService, recordFileName, renderRecord)
-import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), GeneratedHaskellEditionImpact (..), GeneratedHaskellEditionUse (..), HoleUseForm (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndMigrations, executeServiceScaffoldWithRuntimePackageAndNameMigrations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
+import Keiro.Dsl.ScaffoldRun (GeneratedArtifactCategory (..), GeneratedArtifactImpact (..), GeneratedHaskellEditionImpact (..), GeneratedHaskellEditionUse (..), HoleUseForm (..), MappingDrift (..), QueryContractMigration (..), Refusal (..), ScaffoldReport (..), SourceLanguageDrift (..), StaleGeneratedEvidence (..), StaleModule (..), WriteDisposition (..), auditGeneratedHaskell, checkIndexedServiceDiagnostics, executeScaffold, executeScaffoldWithLanguage, executeServiceScaffold, executeServiceScaffoldWithRuntimePackage, executeServiceScaffoldWithRuntimePackageAndMigrations, executeServiceScaffoldWithRuntimePackageAndNameMigrations, generatedImportResolutionViolations, planIndexedServiceScaffold, planIndexedServiceScaffoldWithRuntimePackage, planningRefusalDiagnostics, pureRefusalsForService, renderRefusals, renderScaffoldReport, renderSemanticImpactReport, scaffoldModules, scaffoldServiceModules)
 import Keiro.Dsl.SemanticContract
 import Keiro.Dsl.SemanticImpact
 import Keiro.Dsl.ServiceHarness
@@ -1947,6 +1947,7 @@ main = hspec $ do
             "id-admission-domains.keiro",
             "id-domain-migration-v3.keiro",
             "intake-delegated.keiro",
+            "keyword-segments.keiro",
             "language-duplicate.keiro",
             "language-identifier-v1.keiro",
             "language-identifier-v2.keiro",
@@ -6085,6 +6086,191 @@ main = hspec $ do
                 origin = "test repeated declaration"
               }
       auditGeneratedHaskell mutated `shouldSatisfy` any (T.isInfixOf "repeated top-level type signature 'sameValue'")
+
+  describe "Haskell.keyword-segments" $ do
+    let fixturePath = "test/fixtures/keyword-segments.keiro"
+        readModelLine = "readmodel validate_custom_type {"
+        queueLine = "workqueue job_type {"
+        upperFirstOf value = T.toUpper (T.take 1 value) <> T.drop 1 value
+        expectedUpper = T.concat . map upperFirstOf . T.splitOn "_"
+        expectedLower value = T.toLower (T.take 1 value) <> T.drop 1 value
+        keywordSegments =
+          [ "case",
+            "class",
+            "data",
+            "default",
+            "deriving",
+            "do",
+            "else",
+            "foreign",
+            "forall",
+            "if",
+            "import",
+            "in",
+            "infix",
+            "infixl",
+            "infixr",
+            "instance",
+            "let",
+            "module",
+            "newtype",
+            "of",
+            "then",
+            "type",
+            "where"
+          ]
+        modulesFor service = scaffoldServiceModules (defaultContext ((checkedSpec service).context)) service
+        textFor suffix = generatedTextEndingIn suffix
+        importedReadModelName modules =
+          let harness = textFor "ReadModelHarness.hs" modules
+              matching = filter (T.isPrefixOf "import Generated.KeywordSegments.") (T.lines harness)
+              readModelImports = filter (T.isInfixOf ".ReadModel (") matching
+           in case readModelImports of
+                [line] -> T.strip (T.dropEnd 1 (snd (T.breakOnEnd "(" line)))
+                _ -> "<missing read-model import>"
+        assertHarnessImport modules = do
+          let definition = textFor "ReadModel.hs" modules
+              imported = importedReadModelName modules
+          imported `shouldNotBe` "<missing read-model import>"
+          forM_ (map T.strip (T.splitOn "," imported)) $ \value ->
+            definition `shouldSatisfy` T.isInfixOf (value <> " ::")
+
+    it "imports the read-model value actually exported by its definition" $ do
+      spec <- specOf fixturePath
+      assertHarnessImport (modulesFor (legacyCheckedService spec))
+
+    it "emits whole-name spellings for read models and workqueues" $ do
+      spec <- specOf fixturePath
+      let modules = modulesFor (legacyCheckedService spec)
+          output = T.concat (map (.text) modules)
+      forM_ ["Customtype", "customtype", "Jobtype", "jobtype"] $ \bad ->
+        output `shouldSatisfy` (not . T.isInfixOf bad)
+      forM_
+        [ "validateCustomTypeReadModel ::",
+          "ValidateCustomTypeQueryInput",
+          "validateCustomTypeQualifiedTable ::",
+          "jobTypeJobCodec ::",
+          "jobTypePayloadCodec ::",
+          "data JobTypeOutcome"
+        ]
+        (\wanted -> output `shouldSatisfy` T.isInfixOf wanted)
+      concatMap auditGeneratedHaskell modules `shouldBe` []
+
+    it "handles every reserved segment in all positions for both declaration kinds" $ do
+      fixture <- TIO.readFile fixturePath
+      -- Keiro.Dsl.HaskellName is intentionally internal to the library. This
+      -- inventory mirrors its 23 reserved term words for the public generator.
+      forM_ keywordSegments $ \keyword -> do
+        pascal keyword `shouldBe` upperFirstOf keyword
+        forM_ [keyword <> "_registry", "check_" <> keyword <> "_name", "check_" <> keyword] $ \variant -> do
+          let upper = expectedUpper variant
+              lower = expectedLower upper
+          pascal variant `shouldBe` upper
+          readService <- checkedServiceFromText "keyword-readmodel.keiro" (T.replace readModelLine ("readmodel " <> variant <> " {") fixture)
+          [(.code) d | d <- validateService readService, (.severity) d == Error] `shouldBe` []
+          let readModules = modulesFor readService
+              readOutput = T.concat (map (.text) readModules)
+          assertHarnessImport readModules
+          readOutput `shouldSatisfy` T.isInfixOf (lower <> "ReadModel ::")
+          readOutput `shouldSatisfy` T.isInfixOf (pascal lower <> "QueryInput")
+          queueService <- checkedServiceFromText "keyword-workqueue.keiro" (T.replace queueLine ("workqueue " <> variant <> " {") fixture)
+          [(.code) d | d <- validateService queueService, (.severity) d == Error] `shouldBe` []
+          let queueOutput = T.concat (map (.text) (modulesFor queueService))
+          queueOutput `shouldSatisfy` T.isInfixOf (lower <> "JobCodec ::")
+          queueOutput `shouldSatisfy` T.isInfixOf (lower <> "PayloadCodec ::")
+          queueOutput `shouldSatisfy` T.isInfixOf ("data " <> upper <> "Outcome")
+
+    it "still rejects a whole-name Haskell keyword" $ do
+      fixture <- TIO.readFile fixturePath
+      service <- checkedServiceFromText "whole-keyword.keiro" (T.replace readModelLine "readmodel type {" fixture)
+      [(.code) d | d <- validateService service, (.severity) d == Error]
+        `shouldSatisfy` elem GeneratedOccurrenceReserved
+
+    it "keeps single-letter segment names byte-identical" $ do
+      fixture <- TIO.readFile fixturePath
+      forM_ [("a_b_test", "abTest", "AbTest"), ("x_y_coords", "xyCoords", "XyCoords")] $ \(variant, stem, contractStem) -> do
+        service <- checkedServiceFromText "stable-name.keiro" (T.replace readModelLine ("readmodel " <> variant <> " {") fixture)
+        let modules = modulesFor service
+            output = T.concat (map (.text) modules)
+        textFor "ReadModel.hs" modules `shouldSatisfy` T.isInfixOf (stem <> "ReadModel ::")
+        importedReadModelName modules `shouldBe` stem <> "ReadModel"
+        output `shouldSatisfy` T.isInfixOf (contractStem <> "QueryInput")
+
+    it "capitalizes a reserved wire-path piece in public structural projections" $ do
+      source <- TIO.readFile "test/fixtures/mapped-nominal-leaf.keiro"
+      service <-
+        checkedServiceFromText
+          "mapped-keyword-wire.keiro"
+          (T.replace "templateId as \"templateId\"" "templateId as \"type\"" source)
+      let output = T.concat (map (.text) (modulesFor service))
+      forM_ ["templateStateTypeWitness", "templateStateTypeGet", "templateStateTypeRawGet", "\"/type\""] $ \wanted ->
+        output `shouldSatisfy` T.isInfixOf wanted
+
+  describe "Haskell.import-resolution" $ do
+    let definitionName = "Generated.KeywordSegments.Definition"
+        importerName = "Generated.KeywordSegments.Importing"
+        generated path source = ScaffoldModule path source Generated "import audit fixture"
+        definition exports declarations =
+          generated
+            "Generated/KeywordSegments/Definition.hs"
+            ("module " <> definitionName <> exports <> " where\n" <> declarations)
+        importer imports =
+          generated
+            "Generated/KeywordSegments/Importing.hs"
+            ("module " <> importerName <> " (value) where\n" <> imports <> "\nvalue :: Int\nvalue = 1\n")
+        namedDefinition = definition " (fooReadModel)" "fooReadModel :: Int\nfooReadModel = 1\n"
+        violations target imports = generatedImportResolutionViolations [target, importer imports]
+
+    it "refuses a missing plain value through the shared pre-write path" $ do
+      let missing = "import " <> definitionName <> " (fooReadmodel)"
+      violations namedDefinition missing
+        `shouldBe` ["Generated/KeywordSegments/Importing.hs:2: imports 'fooReadmodel' from " <> definitionName <> ", which exports no such name"]
+      spec <- specOf "test/fixtures/keyword-segments.keiro"
+      let service = legacyCheckedService spec
+          ctx = defaultContext (spec.context)
+      pureRefusalsForService ctx service [namedDefinition, importer missing]
+        `shouldSatisfy` any (\case GeneratedNameInvariantViolation messages -> any (T.isInfixOf "fooReadmodel") messages; _ -> False)
+
+    it "accepts matching, multiline, named-child, and qualified value imports" $ do
+      violations namedDefinition ("import " <> definitionName <> " (fooReadModel)") `shouldBe` []
+      violations namedDefinition ("import " <> definitionName <> "\n  ( fooReadModel\n  , missingValue\n  )")
+        `shouldBe` ["Generated/KeywordSegments/Importing.hs:4: imports 'missingValue' from " <> definitionName <> ", which exports no such name"]
+      let namedChild = definition " (T(Ctor, fooReadModel))" "data T = Ctor\nfooReadModel :: Int\nfooReadModel = 1\n"
+      violations namedChild ("import " <> definitionName <> " (fooReadModel)") `shouldBe` []
+      let namedReexport = definition "\n  ( fooReadModel\n  )" "import Generated.KeywordSegments.Origin (fooReadModel)\n"
+      violations namedReexport ("import " <> definitionName <> " (fooReadModel)") `shouldBe` []
+      violations namedDefinition ("import qualified " <> definitionName <> " as Def (missingValue)")
+        `shouldSatisfy` any (T.isInfixOf "missingValue")
+      violations namedDefinition ("import " <> definitionName <> " qualified as Def (fooReadModel)") `shouldBe` []
+      violations namedDefinition ("import " <> definitionName <> " hiding (missingValue)") `shouldBe` []
+
+    it "leaves incomplete export inventories and non-value imports to GHC" $ do
+      let unknownHeaders =
+            [ definition " (T(..), fooReadModel)" "data T = Ctor {field :: Int}\nfooReadModel = 1\n",
+              definition "" "unsignedBinding = 1\n",
+              definition " (module Alias)" "import Generated.KeywordSegments.Alias as Alias\n",
+              definition " (module Alias, fooReadModel)" "import Generated.KeywordSegments.Alias (fooReadModel) as Alias\n",
+              definition " (module Other)" "import Generated.KeywordSegments.Other as Other\n"
+            ]
+      forM_ unknownHeaders $ \target ->
+        violations target ("import " <> definitionName <> " (missingValue)") `shouldBe` []
+      let cyclicA = definition " (module Generated.KeywordSegments.B)" "import Generated.KeywordSegments.B\n"
+          cyclicB = generated "Generated/KeywordSegments/B.hs" ("module Generated.KeywordSegments.B (module " <> definitionName <> ") where\nimport " <> definitionName <> "\n")
+      generatedImportResolutionViolations [cyclicA, cyclicB, importer ("import " <> definitionName <> " (missingValue)")]
+        `shouldBe` []
+      violations namedDefinition ("import " <> definitionName <> " (T(..))") `shouldBe` []
+      violations namedDefinition ("import " <> definitionName <> " (T(Ctor, field))") `shouldBe` []
+      generatedImportResolutionViolations
+        [ importer "import Keiro.ReadModel (missingValue)",
+          ScaffoldModule "KeywordSegments/DefinitionHoles.hs" ("module " <> definitionName <> " (fooReadModel) where\n") HoleStub "test hole"
+        ]
+        `shouldBe` []
+
+    it "accepts current Language 6 and existing generated module sets" $ do
+      forM_ ["test/fixtures/keyword-segments.keiro", "test/fixtures/incident-paging/incident-paging.keiro"] $ \fixture -> do
+        spec <- specOf fixture
+        generatedImportResolutionViolations (scaffoldServiceModules (defaultContext (spec.context)) (legacyCheckedService spec))
+          `shouldBe` []
 
   describe "Haskell.name-migration" $ do
     it "pairs a legacy module path with its stable idiomatic artifact" $ do

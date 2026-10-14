@@ -8,6 +8,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Bug Fixes
 
+- `keiro-dsl` derives read-model and workqueue declarations from their whole
+  logical names, fixing [BUG-11](docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md), and checks provably missing imports between generated modules before writing. Affected generated names require consumer source updates after re-scaffolding.
 - Generated aggregate harnesses prove Hole-owned live initial transitions with
   the consumer's history-backed `LiveWitness` through `BehaviorContract`, which
   now exports `behaviorObligationReport`. Their forward/replay rows are labelled

@@ -1,0 +1,38 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/keyword-segments.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Generated.KeywordSegments.JobType.Queue
+    Generated.KeywordSegments.JobType.QueueCodec
+    Generated.KeywordSegments.JobType.QueuePolicy
+    Generated.KeywordSegments.Nominals
+    Generated.KeywordSegments.Nominals.Internal
+    Generated.KeywordSegments.ProjectionCatalog
+    Generated.KeywordSegments.Structural.NominalLeaves
+    Generated.KeywordSegments.StructuralConformance
+    Generated.KeywordSegments.ValidateCustomType.QueryContract
+    Generated.KeywordSegments.ValidateCustomType.ReadModel
+    Generated.KeywordSegments.ValidateCustomType.ReadModelHarness
+    Generated.KeywordSegments.ValidateCustomType.ReadModelTable
+    KeywordSegments.ProjectionCatalog.ProjectionCatalogHoles
+    KeywordSegments.ValidateCustomType.ReadModelHoles
+
+build-depends:
+    , aeson
+    , base
+    , effectful-core
+    , hasql-transaction
+    , keiro
+    , keiro-core
+    , keiro-pgmq
+    , kiroku-store
+    , text

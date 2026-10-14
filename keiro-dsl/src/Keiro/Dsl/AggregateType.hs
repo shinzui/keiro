@@ -481,8 +481,8 @@ registerInitialCanonicalName initial = case initial of
 
 pascal :: Text -> Text
 pascal value =
-  case HaskellName.deriveHaskellName HaskellName.LogicalIdentifier site of
-    Right derived -> HaskellName.renderUpperCamelName ((.upperCamel) derived)
+  case HaskellName.deriveUpperCamelName HaskellName.LogicalIdentifier site of
+    Right derived -> HaskellName.renderUpperCamelName derived
     Left _ -> value
   where
     site =

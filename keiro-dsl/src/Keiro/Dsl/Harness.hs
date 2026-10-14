@@ -319,7 +319,7 @@ emitReadModelHarness genPrefix ctx spec supplyAnalysis readModel =
            "  pure (null failures)"
          ]
   where
-    stem = lowerFirst (pascal ((.name) readModel))
+    stem = readModelStem readModel
     readModelName = stem <> "ReadModel"
     asyncProjectionName = stem <> "AsyncProjection"
     readModelImports = readModelName : [asyncProjectionName | emitsLegacyAsync]

@@ -1469,6 +1469,40 @@ test-suite keiro-dsl-conformance-readmodel-runtime
     kiroku-store,
     text >=2.1 && <2.2,
 
+-- Plan 310 / BUG-11: keyword segments in read-model and workqueue names.
+test-suite keiro-dsl-conformance-keyword-segments
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-keyword-segments
+  main-is: Main.hs
+  other-modules:
+    Generated.KeywordSegments.JobType.Queue
+    Generated.KeywordSegments.JobType.QueueCodec
+    Generated.KeywordSegments.JobType.QueuePolicy
+    Generated.KeywordSegments.Nominals
+    Generated.KeywordSegments.Nominals.Internal
+    Generated.KeywordSegments.ProjectionCatalog
+    Generated.KeywordSegments.Structural.NominalLeaves
+    Generated.KeywordSegments.StructuralConformance
+    Generated.KeywordSegments.ValidateCustomType.QueryContract
+    Generated.KeywordSegments.ValidateCustomType.ReadModel
+    Generated.KeywordSegments.ValidateCustomType.ReadModelHarness
+    Generated.KeywordSegments.ValidateCustomType.ReadModelTable
+    KeywordSegments.ProjectionCatalog.ProjectionCatalogHoles
+    KeywordSegments.ValidateCustomType.ReadModelHoles
+
+  build-depends:
+    aeson,
+    base >=4.21 && <5,
+    effectful-core,
+    hasql-transaction,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-pgmq,
+    kiroku-store,
+    text >=2.1 && <2.2,
+
 -- MasterPlan 32 / EP-4: language-5 catalog declarations lower into one
 -- generated runtime-owned facade with typed inline views, catalog-derived
 -- async/query registration, and a group-scoped history-runner entry point.

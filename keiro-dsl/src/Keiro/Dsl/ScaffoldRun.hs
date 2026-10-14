@@ -53,6 +53,7 @@ module Keiro.Dsl.ScaffoldRun
     originLine,
     pureRefusalsForService,
     auditGeneratedHaskell,
+    generatedImportResolutionViolations,
     missingGeneratedBanners,
     staleAgainst,
     PreparedSourceMove,
@@ -600,10 +601,148 @@ pureRefusalsForService ctx service modules =
     <> [BehaviorRefusal errors | Left errors <- [deriveBehaviorRequirementsForService service]]
   where
     breaches = firewallBreaches modules
-    namingViolations = generatedNameInvariantViolations modules
+    namingViolations = generatedNameInvariantViolations modules <> generatedImportResolutionViolations modules
 
 generatedNameInvariantViolations :: [ScaffoldModule] -> [Text]
 generatedNameInvariantViolations = concatMap auditGeneratedHaskell
+
+-- | Refuse only plain value imports whose absence is proved by a generated
+-- sibling's complete explicit export list. All other Haskell forms remain
+-- unknown here and are checked by GHC when the consumer compiles the scaffold.
+generatedImportResolutionViolations :: [ScaffoldModule] -> [Text]
+generatedImportResolutionViolations modules = concatMap inspect modules
+  where
+    generatedByName =
+      Map.fromList
+        [ (moduleNameOf ((.path) planned), planned)
+        | planned <- modules,
+          (.kind) planned == Generated
+        ]
+
+    inspect importer = case maskNonCode ((.text) importer) of
+      Left _ -> []
+      Right masked -> concatMap (checkImport importer) (explicitImportStatements masked)
+
+    checkImport importer (importLine, statement) = case explicitValueImport statement of
+      Nothing -> []
+      Just (targetName, importedValues) -> case Map.lookup targetName generatedByName >>= knownExplicitExports of
+        Nothing -> []
+        Just exported ->
+          [ T.pack ((.path) importer)
+              <> ":"
+              <> tshow (importLine + offset)
+              <> ": imports '"
+              <> value
+              <> "' from "
+              <> targetName
+              <> ", which exports no such name"
+          | (offset, value) <- importedValues,
+            not (Set.member value exported)
+          ]
+
+-- Keep indented continuation lines with each top-level import. An import
+-- without an explicit list is intentionally outside this audit.
+explicitImportStatements :: Text -> [(Int, Text)]
+explicitImportStatements source =
+  [ (lineNumber, T.unlines (sourceLine : takeWhile continuation following))
+  | (lineNumber, sourceLine : following) <- zip [1 :: Int ..] (tailsOf (T.lines source)),
+    "import " `T.isPrefixOf` T.stripStart sourceLine
+  ]
+  where
+    continuation line = T.null line || line /= T.stripStart line
+    tailsOf [] = []
+    tailsOf allLines@(_ : rest) = allLines : tailsOf rest
+
+explicitValueImport :: Text -> Maybe (Text, [(Int, Text)])
+explicitValueImport statement = do
+  let (beforeList, listAndRest) = T.breakOn "(" statement
+      wordsBefore = T.words beforeList
+  if T.null listAndRest || "hiding" `elem` wordsBefore then Nothing else pure ()
+  target <- case wordsBefore of
+    "import" : "qualified" : name : _ -> Just name
+    "import" : name : _ -> Just name
+    _ -> Nothing
+  (inside, trailing) <- balancedParens listAndRest
+  if not (T.null (T.strip trailing)) then Nothing else pure ()
+  items <- commaItems inside
+  pure
+    ( target,
+      [ (T.count "\n" beforeList + itemLine + leadingLines item, value)
+      | (itemLine, item) <- items,
+        let value = T.strip item,
+        plainLowerValue value
+      ]
+    )
+
+knownExplicitExports :: ScaffoldModule -> Maybe (Set.Set Text)
+knownExplicitExports generated = do
+  masked <- either (const Nothing) Just (maskNonCode ((.text) generated))
+  header <- case dropWhile (not . T.isPrefixOf "module " . T.stripStart) (T.lines masked) of
+    [] -> Nothing
+    line : following -> Just (T.unlines (line : following))
+  let (beforeList, listAndRest) = T.breakOn "(" header
+  if T.null listAndRest || "where" `T.isInfixOf` beforeList then Nothing else pure ()
+  (inside, trailing) <- balancedParens listAndRest
+  if not ("where" `elem` T.words trailing) then Nothing else pure ()
+  items <- commaItems inside
+  Set.fromList . concat <$> traverse (exportedValueNames . snd) items
+
+exportedValueNames :: Text -> Maybe [Text]
+exportedValueNames raw
+  | plainLowerValue item = Just [item]
+  | plainUpperName item = Just []
+  | otherwise = do
+      let (typeName, childrenAndRest) = T.breakOn "(" item
+      if not (plainUpperName (T.strip typeName)) || T.null childrenAndRest then Nothing else pure ()
+      (children, trailing) <- balancedParens childrenAndRest
+      if not (T.null (T.strip trailing)) then Nothing else pure ()
+      childItems <- commaItems children
+      traverse namedChild (map (T.strip . snd) childItems) >>= pure . concat
+  where
+    item = T.strip raw
+    namedChild child
+      | plainLowerValue child = Just [child]
+      | plainUpperName child = Just []
+      | otherwise = Nothing
+
+plainLowerValue :: Text -> Bool
+plainLowerValue value = case T.uncons value of
+  Just (first, _) -> first >= 'a' && first <= 'z' && T.all identifierCharacter value
+  Nothing -> False
+
+plainUpperName :: Text -> Bool
+plainUpperName value = asciiUpperInitial value && T.all identifierCharacter value
+
+leadingLines :: Text -> Int
+leadingLines = T.count "\n" . T.takeWhile (`elem` [' ', '\t', '\n'])
+
+balancedParens :: Text -> Maybe (Text, Text)
+balancedParens source = case T.uncons source of
+  Just ('(', rest) -> go (1 :: Int) [] (T.unpack rest)
+  _ -> Nothing
+  where
+    go _ _ [] = Nothing
+    go 1 collected (')' : remaining) = Just (T.pack (reverse collected), T.pack remaining)
+    go depth collected ('(' : remaining) = go (depth + 1) ('(' : collected) remaining
+    go depth collected (')' : remaining) = go (depth - 1) (')' : collected) remaining
+    go depth collected (character : remaining) = go depth (character : collected) remaining
+
+-- The offset of each item is retained so a multiline import names the line
+-- containing its missing occurrence, rather than only the opening import line.
+commaItems :: Text -> Maybe [(Int, Text)]
+commaItems = go (0 :: Int) (0 :: Int) (0 :: Int) [] [] . T.unpack
+  where
+    go depth _ itemLine collected items []
+      | depth == 0 = Just (reverse ((itemLine, T.pack (reverse collected)) : items))
+      | otherwise = Nothing
+    go depth currentLine itemLine collected items (character : remaining)
+      | character == '(' = go (depth + 1) currentLine itemLine (character : collected) items remaining
+      | character == ')' && depth > 0 = go (depth - 1) currentLine itemLine (character : collected) items remaining
+      | character == ')' = Nothing
+      | character == ',' && depth == 0 =
+          go depth currentLine currentLine [] ((itemLine, T.pack (reverse collected)) : items) remaining
+      | character == '\n' = go depth (currentLine + 1) itemLine (character : collected) items remaining
+      | otherwise = go depth currentLine itemLine (character : collected) items remaining
 
 -- | Inventory and check declarations in one generated source file.  The
 -- lexical mask keeps comments and literals out of the declaration inventory;

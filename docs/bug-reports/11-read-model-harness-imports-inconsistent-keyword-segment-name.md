@@ -4,9 +4,9 @@ title: Read-model harness imports an inconsistent name for a keyword segment
 description: Keiro DSL accepts a read-model name ending in the snake-case segment type, but its generated definition and harness import disagree on capitalization and fail compilation.
 generated:
   by: process:claude-code
-  at: "2026-10-13T14:27:09Z"
+  at: "2026-10-14T02:07:43Z"
 bugId: BUG-11
-status: confirmed
+status: in-progress
 severity: degraded
 origin: mori://tan/notification-render-service
 affects: mori://shinzui/keiro
@@ -198,4 +198,7 @@ which derives every generated declaration stem once from the whole logical name,
 shares the read-model stem between the definition and the harness import, adds a
 compiled keyword-segment conformance suite that fails before the repair, and audits
 generated-to-generated explicit imports before scaffold writes. Status is
-`confirmed` until that plan's compiled proof fails and the repair lands.
+`in-progress` after the plan's Language 6 conformance suite reproduced GHC-61689.
+That suite fails on the untouched generated `ReadModelHarness.hs` import as
+predicted; the focused generator tests also report three failures and two passing
+controls before the repair.

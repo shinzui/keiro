@@ -1,0 +1,55 @@
+language keiro-dsl 6
+context keyword-segments
+
+id SubscriptionId prefix=subscription
+
+target validate_custom_type_table {
+  schema = "billing"
+  table = "validate_custom_type"
+  reset = clear
+}
+
+rebuild-group validate_custom_type_rebuild {
+  targets = [ validate_custom_type_table ]
+  order = [ validate_custom_type_table ]
+}
+
+projection-owner validate_custom_type_writer {
+  source = all
+  delivery = subscription
+  group = validate_custom_type_rebuild
+  targets = [ validate_custom_type_table ]
+  order = 10
+  subscription = "validate-custom-type-writer"
+  dedup = "validate-custom-type-writer-v1"
+  checkpoint-on-missing = from-beginning
+  replay = explicit
+}
+
+readmodel validate_custom_type {
+  columns {}
+  query input = SubscriptionId
+  query result = List SubscriptionId
+  version = 1
+  shape = "fnv1a:3c07a19c552c3547"
+  freshness = wait-for-head entire-log
+  group = validate_custom_type_rebuild
+  targets = [ validate_custom_type_table ]
+}
+
+workqueue job_type {
+  queue logical = "billing.job_type"
+  derive physical = "billing_job_type"
+         dlq = "billing_job_type_dlq"
+         table = "pgmq.q_billing_job_type"
+  payload JobTypePayload {
+    subscriptionId -> "subscription_id" : SubscriptionId
+  }
+  retry maxRetries = 3 delay = 1s dlq = on
+  disposition {
+    storeFailure -> retry 1s
+    commandRejected -> deadLetter
+    decodeFailure -> deadLetter
+    onCodecReject -> deadLetter
+  }
+}

@@ -26,6 +26,24 @@ main = hspec $ do
       deriveHaskellName LogicalIdentifier (logicalSite "Module")
         `shouldBe` Left (ReservedGeneratedOccurrence (logicalSite "Module") "module")
 
+    it "derives a reserved word in an UpperCamel-only position" $ do
+      fmap renderUpperCamelName (deriveUpperCamelName LogicalIdentifier (logicalSite "type"))
+        `shouldBe` Right "Type"
+      deriveHaskellName LogicalIdentifier (logicalSite "type")
+        `shouldBe` Left (ReservedGeneratedOccurrence (logicalSite "type") "type")
+
+    it "agrees with whole-name derivation for valid compound names" $ do
+      let site = logicalSite "validate_custom_type"
+      fmap renderUpperCamelName (deriveUpperCamelName LogicalIdentifier site)
+        `shouldBe` Right "ValidateCustomType"
+      fmap (renderUpperCamelName . (.upperCamel)) (deriveHaskellName LogicalIdentifier site)
+        `shouldBe` Right "ValidateCustomType"
+
+    it "keeps invalid logical separators invalid for UpperCamel-only names" $ do
+      mapM_
+        (\raw -> deriveUpperCamelName LogicalIdentifier (logicalSite raw) `shouldSatisfy` isLeft)
+        ["foo__bar", "_foo", "foo-bar"]
+
     it "admits contextual words accepted by the generated-language contract" $
       mapM_
         (\word -> checkedLowerOccurrence (logicalSite word) word `shouldSatisfy` isRight)

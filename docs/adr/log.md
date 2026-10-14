@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Addition**: ADR-51: derive generated declaration names from whole logical names and audit known sibling exports
 * **Update**: Clarify inspection isolation: default-off bounded provenance, admission and feed resource limits, and measured runtime interference before release.
 
 ## 2026-10-13
