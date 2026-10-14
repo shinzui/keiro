@@ -6,6 +6,9 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+- Candidate Language 6 adds scalar list fields to integration contracts and splits
+  the library contract-type API; see [keiro-dsl changes](keiro-dsl/CHANGELOG.md#unreleased).
+
 ### Bug Fixes
 
 - Schema verification allows runtime binding views recorded with

@@ -5,8 +5,8 @@ description: Declare Keiro DSL public contracts, Kafka intakes, emits, and outbo
 docId: DOC-29
 tags: [keiro, dsl, integration, kafka, reference]
 generated:
-  by: anthropic-claude-code/claude-opus-5
-  at: 2026-09-28T00:00:00Z
+  by: process:codex-cli
+  at: 2026-10-14T04:19:11Z
 ---
 
 # Keiro DSL Integration Contracts
@@ -51,6 +51,7 @@ Contract field types are:
 | `DeclaredId` (Language 6 candidate) | the declared ID's generated or consumer-bound Haskell type, with that declaration's admission domain (`typeid-v7` unless the declaration says `typeid-v5-or-v7`) |
 | `text` | `Text` |
 | `int` | `Int` |
+| `List <scalar>` (Language 6 candidate) | a Haskell list of the element type; JSON array in list order |
 
 Field names are unique within an event and cannot equal the contract
 discriminator. TypeID prefixes follow the same validity rules as shared IDs.
@@ -80,9 +81,38 @@ contract publicTemplates {
 This keeps the public field linked to the declaration's prefix and Haskell
 ownership. Only `id` declarations are accepted here; enums, nominal scalars,
 and mapped declarations are rejected. Moving between `typeid "template"` and
-`TemplateId` with the same prefix preserves JSON bytes but requires consumers
-to rebuild for the changed Haskell type. A prefix change remains a breaking
-public-contract change.
+`TemplateId` is a build-only change only when both prefix and resolved admission
+domain are unchanged: JSON bytes stay the same, while consumers rebuild for the
+changed Haskell type. Admission widening or narrowing and prefix changes are breaking
+public-contract changes.
+
+Candidate Language 6 also admits lists of any of these four scalar types:
+
+```keiro
+event TemplatesReassigned on templateEvents {
+  templateIds: List TemplateId
+  labels: List text
+}
+```
+
+This event belongs inside a contract with the `TemplateId` declaration above.
+Encoding writes an ordered JSON array and retains duplicates. Decoding requires every
+list field, rejects non-arrays and explicit null at `$.field`, and rejects any invalid
+or null element at `$.field[index]`. One bad element rejects the whole payload;
+`[]` is valid. Each ID element uses the same prefix and admission checks as a scalar.
+Nested containers, Optional, Map, Set, records, unions, enums, and structural references
+are refused in contracts.
+
+A list field cannot be a publisher `outboxId` or an intake `dedupe` key; the checker
+reports `ContractListFieldUsedAsKey`. Canonical envelope identity names take precedence
+over colliding payload fields. For publishers these are `messageId` and
+`idempotencyKey`; intakes retain their canonical envelope fields. A non-envelope name
+that denotes a list in any selected event is refused even if another selected event has
+a scalar of the same name. Emit `key` remains descriptive, as explained below.
+
+Changing between a scalar and a list, changing the element type, or changing an element's
+prefix or admission is breaking public evolution. Moving a literal ID element to a
+declared ID is build-only only when list shape, prefix, and admission are all unchanged.
 
 Contract fields use the same optional `haskell` selector and `as "wire-key"`
 aliases as aggregate fields. The generated record uses `payloadType` and

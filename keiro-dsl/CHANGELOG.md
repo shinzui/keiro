@@ -8,6 +8,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Breaking Changes
 
+- `Keiro.Dsl.Grammar.ContractType` is now `CScalar ContractScalarType | CList
+  ContractScalarType`; `CTypeId`, `CDeclaredId`, `CText`, and `CInt` belong to
+  `ContractScalarType`. Update library clients to wrap scalar fields in `CScalar`.
+  This requires a PVP-major release, without compatibility pattern synonyms.
+
 - After re-scaffolding, workqueues with reserved snake-case segments use the
   whole-name spelling: `job_type` now generates `jobTypeJobCodec`,
   `jobTypePayloadCodec`, and `JobTypeOutcome` instead of the glued `jobtype…`
@@ -18,7 +23,19 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
   local type aliases, exports, and contract imports by hand while preserving
   their application bodies.
 
+### Added
+
+- Candidate Language 6 contracts accept `List <typeid | declared id | text | int>`
+  fields under `ContractListFieldSyntax`, generating Haskell lists and ordered JSON
+  arrays with strict required-field and per-element decoding. Lists cannot supply
+  outbox or dedupe identity (`ContractListFieldUsedAsKey`). Resolves
+  [IR-54](../docs/improvement-requests/support-list-fields-in-integration-contracts.md).
+
 ### Bug Fixes
+
+- Literal/declared contract ID transitions compare resolved admission as well as
+  prefix and shape. Same-prefix admission widening or narrowing is public breaking,
+  including inside a list; equal admission retains the consumer-build advisory.
 
 - Read models with reserved segments now compile because definitions, query
   contracts, holes, and harness imports share one whole-name stem. Scaffolding

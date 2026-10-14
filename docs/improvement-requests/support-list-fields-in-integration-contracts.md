@@ -6,12 +6,18 @@ description: >-
   typeid, text or int), lowered to a Haskell list and a JSON array by the generated codec and
   governed by diff as public contract evolution, so a service whose integration message names
   several entities at once can keep that contract DSL-owned instead of hand-writing its codec.
-timestamp: 2026-10-14T04:08:00Z
+timestamp: 2026-10-14T06:00:05Z
 generated:
   by: process:claude-code
   at: 2026-10-07T06:30:00Z
 requestId: IR-54
-status: in-progress
+status: completed
+completedAt: 2026-10-14T06:00:05Z
+resolution: >-
+  Implemented under ExecPlan 312: candidate Language 6 admits lists of every contract
+  scalar with ordered strict JSON arrays, indexed element admission, scalar identity
+  keys, and shape/admission-aware public evolution. The compiled corpus and repository
+  gates pass; publication and consumer adoption remain the separately tracked release.
 origin: mori://tan/notification-render-service
 plan: docs/plans/312-support-list-fields-in-integration-contracts.md
 reviews:
@@ -56,21 +62,27 @@ reviews:
 
 ## Status
 
-Accepted on 2026-10-13 and planned as
-[ExecPlan 312](../plans/312-support-list-fields-in-integration-contracts.md), which adopts
-Option B of [RES-18](../research/15-containers-in-public-contract-fields.md): `List` of an
-admitted scalar inside the separately owned contract grammar, gated on candidate Language 6,
-with strict decoding, a rejected missing key, and no `Optional`, `Map`, or nesting. A list
-field is refused as a publisher `outboxId` or an intake `dedupe` key. Implementation is in progress under ExecPlan 312.
+Completed on 2026-10-14 under
+[ExecPlan 312](../plans/312-support-list-fields-in-integration-contracts.md) and
+[ADR-52](../adr/0052-integration-contracts-admit-lists-of-scalar-fields.md).
+Candidate Language 6 accepts List of an admitted scalar, with ordered strict arrays,
+required fields, indexed element admission, scalar outbox/dedupe identities, and
+public evolution reporting for shape, prefix, and admission changes. The compiled
+corpus passes 13 runtime checks and the full repository verification passes.
+The implementation is available in this working tree; release publication and
+consumer adoption remain separately tracked by the plan's Release item. Accepted
+scope treats identity keys as publisher outbox and intake dedupe fields; emit key
+clauses retain their existing descriptive behavior because they do not resolve fields.
 
 Raised by `mori://tan/notification-render-service`, the notification renderer's Haskell domain
-service, from its ExecPlan 17 (`docs/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox.md`).
+service, from
+`mori://tan/notification-render-service/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox`.
 
 ## Problem and evidence
 
-A `contract` event field accepts exactly four value types. `ContractType` in
-`keiro-dsl/src/Keiro/Dsl/Grammar.hs:1063` is `CTypeId Text | CDeclaredId Name | CText | CInt`,
-and `pContractType` in `keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs:63–72` parses only
+Before this change, a `contract` event field accepted exactly four value types. At request time, `ContractType` in
+`keiro-dsl/src/Keiro/Dsl/Grammar.hs:1063` was `CTypeId Text | CDeclaredId Name | CText | CInt`,
+and `pContractType` in `keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs:63–72` parsed only
 `typeid "prefix"`, `text`, `int` or a declared `id` name. Aggregate and read-model declarations,
 by contrast, lower through `TypeExpr`, which has `TList` and `TMap` (`Grammar.hs:269`), so a
 private event can carry `claimChanges : List AssignmentChange` while the public contract that
@@ -161,12 +173,13 @@ surface than the list the consumer needs.
 ## Consumer evidence
 
 Source: `mori://tan/notification-render-service`, project-relative files
-`docs/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox.md` (the contract
+`mori://tan/notification-render-service/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox` (the contract
 and its Decision Log), `notification-renderer-domain/domain/notification-type.keiro` (private events with `List` fields, lines
 123, 187, 252 and 326) and `docs/KEIRO-PATTERNS.md` (the hand-owned deviation row, once the plan
-lands). The gateway's one-tick-per-entity constraint is in `admin-graphql-server`,
+lands). Source-file artifact URIs for the consumer files above are pending. The gateway's
+one-tick-per-entity constraint is in `mori://tan/admin-graphql-server`,
 `src/schema/graphql/pushNodeUpdates.ts` (`parseTick` returns one entity id and foreign ticks are
-dropped).
+dropped); its source-file artifact URI is pending.
 
 Review basis: Keiro source at `b5ad9d57` and the released `keiro-dsl-0.18.0.0` tarball, whose
 `Parser/Integration.hs` has the same four-constructor grammar.

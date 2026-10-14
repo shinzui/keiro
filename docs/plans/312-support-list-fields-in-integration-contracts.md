@@ -49,7 +49,7 @@ If durable project context changes, update or create ADRs in docs/adr/ in the sa
 ## Purpose / Big Picture
 
 A `contract` declaration in the Keiro DSL is the public schema of the Kafka messages a
-service publishes to, or consumes from, other systems. Today a contract event field can
+service publishes to, or consumes from, other systems. Before this change, a contract event field could
 be one of exactly four scalar types: `typeid "prefix"`, the name of a declared `id`,
 `text`, or `int`. Private aggregate events, by contrast, can carry `List X`. A service whose
 public message must name several entities at once therefore cannot keep that message in the
@@ -95,7 +95,7 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 
 ## Progress
 
-- [x] (2026-10-14 01:08Z) Correctness review completed and plan revised; reproduced the admission-transition gap in a Nix-shell probe. Implementation has not started.
+- [x] (2026-10-14 01:08Z) Correctness review completed and plan revised; reproduced the admission-transition gap in a Nix-shell probe. Implementation had not started at that review.
 - [x] (2026-10-14 04:08Z) M1. Move IR-54 to `in-progress` (frontmatter `status`, body Status, log entry).
 - [x] (2026-10-14 04:23Z) M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`. Land this first with no producer of `CList`: the full build and every existing suite must pass before the lowering and the parser.
 - [x] (2026-10-14 04:45Z) M1. Add `ContractListFieldSyntax` to `LanguageFeature` and to `profileV5` in `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`.
@@ -114,10 +114,10 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 05:07Z) M2. `nix develop -c cabal test keiro-dsl:test:keiro-dsl-test` passes.
 - [x] (2026-10-14 05:18Z) M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry; force-add the ignored ledger and Cabal fragment, then commit the corpus before regeneration.
 - [x] (2026-10-14 05:40Z) M3. Refresh the generated record-migration inventories discovered by the full gate.
-- [ ] M3. `keiro-dsl-corpus-regen -- regenerate --only …` is a no-op, the new suite passes, `scripts/check-conformance-corpus.sh` passes, `nix develop -c just verify` passes.
-- [ ] M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
-- [ ] M4. Record the change in `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md` under `[Unreleased]`.
-- [ ] M4. Move IR-54 to `completed` with `completedAt` and `resolution`; log it; distill ADRs; write Outcomes & Retrospective.
+- [x] (2026-10-14 06:00Z) M3. `keiro-dsl-corpus-regen -- regenerate --only …` is a no-op, the new suite passes, `scripts/check-conformance-corpus.sh` passes, `nix develop -c just verify` passes.
+- [x] (2026-10-14 06:00Z) M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
+- [x] (2026-10-14 06:00Z) M4. Record the change in `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md` under `[Unreleased]`.
+- [x] (2026-10-14 06:00Z) M4. Move IR-54 to `completed` with `completedAt` and `resolution`; log it; distill ADRs; write Outcomes & Retrospective.
 - [ ] Release. Ship in the next keiro-dsl release per the shared release convention; tick this box with the version; notify the consumer (see Milestone 4).
 
 
@@ -300,23 +300,39 @@ implementation. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
-Milestone 1 completed on 2026-10-14. The grammar separates scalar facts from field
-shape; candidate Language 6 accepts and prints List fields of every admitted scalar;
-scaffolding emits ordered arrays and strict required-field decoders with indexed element
-errors. The first type-split and lowering steps each passed the full build, every existing
-suite, and unchanged corpus regeneration before the parser produced lists. The syntax
-step passed the full build and every DSL suite (806 unit examples), including profile
-and fixture inventories. Compiled CLI checks inside Nix accepted the base fixture and
-pretty round-trip and refused Language 5 and nested/mixed-case containers. ADR-52 records
-the decision; ADR-46 now explicitly requires admission equality for build-only ID moves.
+All four implementation milestones completed on 2026-10-14. Candidate Language 6
+accepts List of literal TypeID, generated declared ID, consumer-bound declared ID,
+text, and int elements. Generated records use Haskell lists; codecs preserve array
+order and duplicates, accept empty arrays, require every field, and reject invalid
+or null elements at their wire-key/index path. Lists cannot supply selected payload
+outbox or dedupe identities; canonical envelope names retain precedence. Evolution
+compares shape, prefix, and resolved admission, including the corrected scalar
+literal/declared compatibility predicate.
 
-Milestone 2 implementation and its eight focused tests now pass: identity keys are
-refused once per clause with envelope precedence, aliases and import selection are preserved,
-and both shape and admission evolution directions are classified correctly. The full unit
-suite passed: 814 examples, 0 failures, including stable diagnostic spelling and fixture
-inventories. The compiled list corpus remains Milestone 3. User documentation and changelogs are drafted and their
-validation passed, but IR-54 remains in progress until implementation gates close.
-Release publication and downstream communication remain the separate Release item.
+The all-components builds passed. The two derived record-migration inventories
+were regenerated to include the grammar locations and newly tracked corpus. The full DSL unit suite passed 814 examples with
+zero failures, including eight new focused examples. The compiled corpus passed all
+13 runtime checks. Focused regeneration was a no-op, the 56-entry whole corpus check
+passed, and `nix develop -c just verify` passed with its actual zero exit status
+preserved. The CLI diff proof reported the element change as public breaking with
+producer-last rollout and replay neutrality. User documentation validates; both
+changelogs record the feature and breaking library API. IR-54 is completed with its
+implementation resolution.
+
+ADR distillation is complete: ADR-52 records the separately owned public array
+policy, strict decoding, identity precedence, deliberate exclusions, import/dependency
+rule, and evolution conditions. ADR-46 now explicitly requires resolved admission
+equality for literal/declared public ID transitions. No additional durable decision
+was discovered. Task-local discoveries remain here: container keywords need a local
+case-insensitive parser, the compatibility CLI renderer is line-only while structured
+spans are exact, and the hand-owned corpus must avoid partial fixture extraction.
+
+The plan remains open only for its separate Release item. Publication must use the
+shared PVP-major package cohort because ContractType's library API changed without
+a shim. Downstream library-consumer inventory and notification, and the handoff to
+`mori://tan/notification-render-service`, await that release. Both editor grammar
+implementations in `mori://shinzui/keiro-syntax` already recognize List in contract
+field positions; no spelling change was needed.
 
 
 ## Context and Orientation
@@ -1330,3 +1346,13 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
 - 2026-10-14 (implement): Regenerated both migration inventories from current source
   and the tracked corpus. Record-migration, generated-name (3 examples), and extension
   policies pass. Retrying the complete repository gate after this derived-doc fix.
+
+- 2026-10-14 (implement): Closed all four implementation milestones after the full
+  repository gate, 814 unit examples, 13 compiled codec checks, no-op focused regeneration,
+  and 56-entry corpus verification passed. Completed IR-54, documented the feature and
+  breaking API, and distilled ADR-52/ADR-46. Publication and consumer handoff remain the
+  explicitly separate Release item; neither is claimed as performed.
+
+- 2026-10-14 (implement): Final ADR, research, improvement-request, and user-documentation
+  bundle validations all passed; IR-54 was read back as completed with its timestamp and
+  resolution. Only the future Release checkbox remains open.

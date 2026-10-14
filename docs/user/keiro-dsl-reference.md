@@ -5,8 +5,8 @@ description: Introduce the Keiro DSL, its stable Language 5 and candidate Langua
 docId: DOC-23
 tags: [keiro, dsl, language-5, language-6, reference]
 generated:
-  by: human:nadeem
-  at: 2026-09-18T04:05:10Z
+  by: process:codex-cli
+  at: 2026-10-14T04:19:11Z
 ---
 
 # Keiro DSL Reference
@@ -39,6 +39,7 @@ is published. It extends Language 5 with the following additions:
 | `ordering fifo-heads` work queues | [Work queues](keiro-dsl-queues-and-read-models.md#work-queues) |
 | Declared `id`, `enum`, and `mapped nominal` leaves inside structural mappings, typed queue fields, and query types | [Consumer-owned nominal declarations](keiro-dsl-types-and-mappings.md#consumer-owned-nominal-declarations) |
 | `Map[DeclaredId] T` identifier-keyed maps | [Mapped type expressions](keiro-dsl-types-and-mappings.md#mapped-type-expressions) |
+| List fields in public contracts | [Integration contracts](keiro-dsl-integration.md#integration-contracts) |
 | Declared ID fields in public contracts | [Integration contracts](keiro-dsl-integration.md#integration-contracts) |
 | Named bare container values (`wire Optional Text`, `wire List T`, `wire Map T`) | [Structural bare values](keiro-dsl-types-and-mappings.md#structural-bare-values) |
 | `Day` calendar days and `Set Text` text sets | [Checked value wire policies](keiro-dsl-types-and-mappings.md#checked-value-wire-policies) |

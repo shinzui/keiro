@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: IR-54 completed under ExecPlan 312: candidate Language 6 scalar lists, strict array codecs, identity refusal, admission-aware evolution, and compiled conformance pass all repository gates; release handoff remains separately tracked.
 * **Update**: IR-54 implementation started under ExecPlan 312.
 
 ## 2026-10-13
