@@ -1939,6 +1939,11 @@ main = hspec $ do
             "contract-declared-id-prefix-change.keiro",
             "contract-declared-id.keiro",
             "contract-list-fields.keiro",
+            "contract-list-fields-element-change.keiro",
+            "contract-list-fields-scalar-shape.keiro",
+            "contract-list-fields-literal-to-declared.keiro",
+            "contract-list-fields-prefix-change.keiro",
+            "contract-list-fields-admission-change.keiro",
             "contract-list-fields-language5.keiro",
             "declarative-router/unbounded.keiro",
             "declarative-router/valid.keiro",
@@ -8481,6 +8486,162 @@ main = hspec $ do
     it "rejects emit events declared on another topic" $ do
       codes <- errorCodesOf "test/fixtures/emit-topic-mismatch.keiro"
       codes `shouldContain` [TopicAffinityMismatch]
+
+  describe "contract list fields" $ do
+    it "lowers list fields of every admitted element type" $ do
+      service <- checkedServiceOf "test/fixtures/contract-list-fields.keiro"
+      let modules = scaffoldServiceModules (defaultContext (checkedSpec service).context) service
+          contractModule = generatedTextEndingIn "Templates/Contract.hs" modules
+          leaves = generatedTextEndingIn "Structural/NominalLeaves.hs" modules
+      validateService service `shouldBe` []
+      forM_
+        [ "templateIds :: ![Nominals.TemplateId]",
+          "claimIds :: ![ClaimId]",
+          "legacyTemplateIds :: ![(KindID \"template\")]",
+          "labels :: ![Text]",
+          "positions :: ![Int]",
+          "\"templateIds\" .= map NominalLeaves.encodeTemplateIdLeaf payload.templateIds",
+          "\"claimIds\" .= map NominalLeaves.encodeClaimIdLeaf payload.claimIds",
+          "\"legacyTemplateIds\" .= map KindID.toText payload.legacyTemplateIds",
+          "explicitParseField (parseContractList NominalLeaves.parseTemplateIdLeaf) o \"templateIds\"",
+          "explicitParseField (parseContractList NominalLeaves.parseClaimIdLeaf) o \"claimIds\"",
+          "explicitParseField (parseContractList (parseKindIdV7Value @\"template\")) o \"legacyTemplateIds\"",
+          "explicitParseField (parseContractList parseJSON) o \"labels\"",
+          "explicitParseField (parseContractList parseJSON) o \"positions\"",
+          "parseContractList :: (Value -> Parser a) -> Value -> Parser [a]",
+          "element item <?> Index index"
+        ]
+        $ \fragment -> contractModule `shouldSatisfy` T.isInfixOf fragment
+      forM_ ["parseTemplateIdLeaf", "parseClaimIdLeaf"] $ \fragment -> leaves `shouldSatisfy` T.isInfixOf fragment
+      forM_ [("templateIds", "template"), ("claimIds", "claim"), ("legacyTemplateIds", "template")] $ \(field, prefix) ->
+        idDomainIdentitiesForService service
+          `shouldContain` ["id-domain|name=contract:templates.TemplatesReassigned." <> field <> "|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=" <> prefix <> "|separator=_|json=canonical-json-text"]
+      obligations <- either (\failures -> expectationFailure (show failures) >> fail "unreachable") pure (bindingObligationsForService service)
+      [site | obligation <- obligations, (.mappedName) obligation == "ClaimId", site <- (.useSites) obligation]
+        `shouldContain` ["contract templates event TemplatesReassigned .claimIds : ClaimId"]
+
+    it "refuses nested containers in contract list fields without consuming keyword prefixes" $ do
+      source <- readTestText "test/fixtures/contract-list-fields.keiro"
+      forM_ ["List List TemplateId", "List list TemplateId", "List map text", "List Optional text", "List Set text", "Optional text", "Map text"] $ \fieldType ->
+        case parseSource "nested.keiro" (T.replace "templateIds: List TemplateId" ("templateIds: " <> fieldType) source) of
+          Left failure -> renderParseFailure failure `shouldSatisfy` T.isInfixOf "nested containers"
+          Right _ -> expectationFailure ("accepted " <> T.unpack fieldType)
+      listing <- checkedServiceFromText "listing.keiro" (T.replace "TemplateId" "Listing" source)
+      validateService listing `shouldBe` []
+
+    it "refuses a contract list field element that is not a declared id" $ do
+      source <- readTestText "test/fixtures/contract-list-fields.keiro"
+      service <- checkedServiceFromText "enum-list.keiro" (T.replace "id TemplateId prefix=template" "id TemplateId prefix=template\nenum Channel { Email=email }" (T.replace "labels: List text" "labels: List Channel" source))
+      let failures = [diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error]
+      map (.code) failures `shouldBe` [ContractIdUnknown]
+      map (.message) failures `shouldSatisfy` any (T.isInfixOf "is an enum")
+
+    it "gates the contract list field token on Language 6" $ do
+      (status, _, err) <- runKeiroDsl ["check", "test/fixtures/contract-list-fields-language5.keiro"]
+      status `shouldBe` ExitFailure 1
+      err `shouldContain` "LanguageFeatureRequiresVersion"
+      err `shouldContain` "contract-list-fields-language5.keiro:11:1"
+      source <- readTestText "test/fixtures/contract-list-fields-language5.keiro"
+      case parseSurfaceSource "list-language5.keiro" source of
+        Left FrontendFailure {code = SourceLanguageError LanguageFeatureRequiresVersion, span = SourceSpan {start = SourcePoint {offset = startOffset, line = startLine, column = startColumn}, end = SourcePoint {offset = endOffset}}} -> do
+          T.take (endOffset - startOffset) (T.drop startOffset source) `shouldBe` "List"
+          (startLine, startColumn) `shouldBe` (11, 18)
+        other -> expectationFailure (show other)
+
+    it "keeps contract list field aliases and import selection" $ do
+      source <- readTestText "test/fixtures/contract-list-fields.keiro"
+      service <- checkedServiceFromText "aliased-list.keiro" (T.replace "templateIds: List TemplateId" "templateIds haskell selectedTemplates as \"template_ids\": List TemplateId" source)
+      let text = generatedTextEndingIn "Templates/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec service).context) service)
+      forM_ ["selectedTemplates :: ![Nominals.TemplateId]", "\"template_ids\" .= map NominalLeaves.encodeTemplateIdLeaf payload.selectedTemplates", "o \"template_ids\""] $ \fragment -> text `shouldSatisfy` T.isInfixOf fragment
+      forM_ [False, True] $ \withScalar -> do
+        primitive <- checkedServiceFromText "primitive-list.keiro" (T.unlines ["language keiro-dsl 6", "context primitive", "contract values { schemaVersion 1 discriminator kind topic events \"values.events\"", "event Values on events { labels: List text " <> (if withScalar then "name: text" else "") <> " } }"])
+        let rendered = generatedTextEndingIn "Values/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec primitive).context) primitive)
+        validateService primitive `shouldBe` []
+        forM_ ["parseJSON", "JSONPathElement (Index)", "(<?>)"] $ \fragment -> rendered `shouldSatisfy` T.isInfixOf fragment
+        ("(.:)" `T.isInfixOf` rendered) `shouldBe` withScalar
+
+    it "refuses contract list fields as identity once per clause with envelope precedence" $ do
+      emitFixture <- readTestText "test/fixtures/emit.keiro"
+      intakeFixture <- readTestText "test/fixtures/intake.keiro"
+      let emitNodes = snd (T.breakOn "emit reservationResponse" emitFixture)
+          intakeNode = snd (T.breakOn "intake incidentInbox" intakeFixture)
+          sourceFor key selectedList =
+            T.unlines
+              [ "language keiro-dsl 6",
+                "context hospital-capacity",
+                "contract emergency { schemaVersion 1 discriminator messageType",
+                "topic hospitalEvents \"emergency.hospital.events\"",
+                "event TransferReservationAccepted on hospitalEvents { " <> key <> ": text }",
+                "event TransferReservationRejected on hospitalEvents { " <> key <> (if selectedList then ": List text }" else ": text }"),
+                "event TransferExpired on hospitalEvents { " <> key <> ": text }",
+                "event PatientAdmitted on hospitalEvents { " <> key <> ": text }",
+                "event Unselected on hospitalEvents { " <> key <> ": List text } }",
+                T.replace "outboxId stable from messageId" ("outboxId stable from " <> key) emitNodes,
+                T.replace
+                  "dedupe key messageId"
+                  ("bind " <> key <> " from body\n  dedupe key " <> key)
+                  ( T.replace
+                      "  bind "
+                      "  # bind "
+                      ( T.replace
+                          "accept IncidentTransferNeedDeclared"
+                          "accept TransferReservationAccepted TransferReservationRejected"
+                          (T.replace "topic incidentEvents" "topic hospitalEvents" intakeNode)
+                      )
+                  )
+              ]
+      forM_ [("values", True, 2), ("messageId", True, 0), ("idempotencyKey", True, 0), ("source", True, 1), ("values", False, 0)] $ \(key, selectedList, count) -> do
+        service <- checkedServiceFromText "list-identity.keiro" (sourceFor key selectedList)
+        let failures = [diagnostic | diagnostic <- validateService service, (.severity) diagnostic == Error]
+        length [() | diagnostic <- failures, (.code) diagnostic == ContractListFieldUsedAsKey] `shouldBe` count
+        map (.code) failures `shouldNotContain` [PublisherOutboxFieldUnresolved, IntakeDedupeKeyUnresolved]
+        map (.code) failures `shouldBe` replicate count ContractListFieldUsedAsKey
+
+    it "classifies contract list field evolution in both directions" $ do
+      let base = "test/fixtures/contract-list-fields.keiro"
+          mutant suffix = "test/fixtures/contract-list-fields-" <> suffix <> ".keiro"
+      forM_ [("element-change", "List text -> List int"), ("scalar-shape", "List TemplateId -> TemplateId")] $ \(suffix, detail) -> do
+        forward <- diffFixtures base (mutant suffix)
+        backward <- diffFixtures (mutant suffix) base
+        forM_ [forward, backward] $ \changes -> do
+          let findings = [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged]
+          findings `shouldSatisfy` (not . null)
+          forM_ findings $ \finding -> verdictFor PublicConsumer (finding.vector) `shouldBe` VBreaking
+        [(.detail) finding | Breaking finding <- forward] `shouldSatisfy` any (T.isInfixOf detail)
+      forM_ [(base, mutant "literal-to-declared"), (mutant "literal-to-declared", base)] $ \(old, new) -> do
+        changes <- diffFixtures old new
+        [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged] `shouldBe` []
+        case [finding | Advisory finding <- changes, (.code) finding == ContractFieldChanged] of
+          [finding] -> do
+            verdictFor PublicConsumer (finding.vector) `shouldBe` VNotApplicable
+            verdictFor ConsumerBuild (finding.vector) `shouldBe` VAdvisory
+          findings -> expectationFailure (show findings)
+      prefixChanges <- diffFixtures base (mutant "prefix-change")
+      [finding | Breaking finding <- prefixChanges, (.code) finding == IdPrefixChanged, (.facet) finding == "nominal-contract", ".templateIds" `T.isSuffixOf` (.subject) finding]
+        `shouldSatisfy` any (\finding -> verdictFor PublicConsumer (finding.vector) == VBreaking)
+      forM_ [(base, mutant "admission-change"), (mutant "admission-change", base)] $ \(old, new) -> do
+        changes <- diffFixtures old new
+        [finding | Breaking finding <- changes, (.code) finding == ContractTypeIdDomainChanged, ".templateIds" `T.isSuffixOf` (.subject) finding]
+          `shouldSatisfy` any (\finding -> verdictFor PublicConsumer (finding.vector) == VBreaking)
+
+    it "requires shape and resolved admission equality for literal-declared contract list field transitions" $ do
+      source <- readTestText "test/fixtures/contract-list-fields.keiro"
+      forM_ ["", "List "] $ \shape -> do
+        let wider = T.replace "id TemplateId prefix=template" "id TemplateId prefix=template domain=typeid-v5-or-v7" source
+            oldText = T.replace "legacyTemplateIds: List typeid" ("legacyTemplateIds: " <> shape <> "typeid") wider
+            newText = T.replace ("legacyTemplateIds: " <> shape <> "typeid \"template\"") ("legacyTemplateIds: " <> shape <> "TemplateId") oldText
+        old <- checkedServiceFromText "admission-old.keiro" oldText
+        new <- checkedServiceFromText "admission-new.keiro" newText
+        forM_ [(old, new), (new, old)] $ \(before, after) -> do
+          let changes = diffServices before after
+          [finding | Breaking finding <- changes, (.code) finding == ContractFieldChanged, (.subject) finding == "TemplatesReassigned.legacyTemplateIds"]
+            `shouldSatisfy` any (\finding -> verdictFor PublicConsumer (finding.vector) == VBreaking && "admission" `T.isInfixOf` (.detail) finding)
+          [finding | Advisory finding <- changes, (.code) finding == ContractFieldChanged] `shouldBe` []
+      old <- checkedServiceFromText "shape-old.keiro" (T.replace "legacyTemplateIds: List typeid" "legacyTemplateIds: typeid" source)
+      new <- checkedServiceFromText "shape-new.keiro" (T.replace "legacyTemplateIds: List typeid \"template\"" "legacyTemplateIds: List TemplateId" source)
+      forM_ [(old, new), (new, old)] $ \(before, after) ->
+        [finding | Breaking finding <- diffServices before after, (.code) finding == ContractFieldChanged]
+          `shouldSatisfy` any (\finding -> verdictFor PublicConsumer (finding.vector) == VBreaking)
 
   describe "pgmq workqueue/dispatch (EP-5)" $ do
     it "round-trips the reservation-work spec through parse . pretty" $ do

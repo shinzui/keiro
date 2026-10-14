@@ -108,10 +108,10 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 04:45Z) M1. Update `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` (minimum version map, `allFeatures`, `FeatureCase`, feature body).
 - [x] (2026-10-14 04:23Z) M1. Write the ADR (handle from `okf id next`), add its log entry, and record the revisit outcome in RES-18.
 - [x] (2026-10-14 04:45Z) M1. `nix develop -c cabal build all --enable-tests --enable-benchmarks` passes; `check`, `pretty`, Language 5 refusal, and nested refusal behave as specified.
-- [ ] M2. Add `ContractListFieldUsedAsKey` to `DiagnosticCode`; refuse a list field as publisher `outboxId` and as intake `dedupe` key.
-- [ ] M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`, and `contract-list-fields-admission-change.keiro`; register them.
-- [ ] M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, aliases, envelope-key precedence, multi-event key refusals, and diff classification.
-- [ ] M2. `nix develop -c cabal test keiro-dsl:test:keiro-dsl-test` passes.
+- [x] (2026-10-14 05:03Z) M2. Add `ContractListFieldUsedAsKey` to `DiagnosticCode`; refuse a list field as publisher `outboxId` and as intake `dedupe` key.
+- [x] (2026-10-14 05:03Z) M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`, and `contract-list-fields-admission-change.keiro`; register them.
+- [x] (2026-10-14 05:03Z) M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, aliases, envelope-key precedence, multi-event key refusals, and diff classification.
+- [x] (2026-10-14 05:07Z) M2. `nix develop -c cabal test keiro-dsl:test:keiro-dsl-test` passes.
 - [ ] M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry; force-add the ignored ledger and Cabal fragment, then commit the corpus before regeneration.
 - [ ] M3. `keiro-dsl-corpus-regen -- regenerate --only …` is a no-op, the new suite passes, `scripts/check-conformance-corpus.sh` passes, `nix develop -c just verify` passes.
 - [ ] M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
@@ -294,8 +294,11 @@ and fixture inventories. Compiled CLI checks inside Nix accepted the base fixtur
 pretty round-trip and refused Language 5 and nested/mixed-case containers. ADR-52 records
 the decision; ADR-46 now explicitly requires admission equality for build-only ID moves.
 
-Identity refusals and focused evolution regressions remain Milestone 2; the compiled list
-corpus remains Milestone 3. User documentation and changelogs are drafted and their
+Milestone 2 implementation and its eight focused tests now pass: identity keys are
+refused once per clause with envelope precedence, aliases and import selection are preserved,
+and both shape and admission evolution directions are classified correctly. The full unit
+suite passed: 814 examples, 0 failures, including stable diagnostic spelling and fixture
+inventories. The compiled list corpus remains Milestone 3. User documentation and changelogs are drafted and their
 validation passed, but IR-54 remains in progress until implementation gates close.
 Release publication and downstream communication remain the separate Release item.
 
@@ -1278,3 +1281,14 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
 - 2026-10-14 (implement): Milestone 1 is complete. The List syntax and profiles passed
   all DSL suites (806 unit examples) and the full build; CLI authoring, printing, refusal,
   and scaffold checks passed. Starting identity and evolution regression coverage.
+
+- 2026-10-14 (implement): Added identity refusal, five registered diff mutants, and
+  eight focused examples covering lowering, domains, use sites, nested containers, enum
+  refusal, exact gate spans, aliases/imports, selected-event key precedence, and evolution
+  in both directions. Focused run passed: 8 examples, 0 failures. Full unit run is pending.
+
+- 2026-10-14 (implement): Milestone 2 unit acceptance passed: 814 examples, 0 failures.
+  Building every component before committing the validation and evolution coverage.
+
+- 2026-10-14 (implement): Milestone 2 also passed the all-components build.
+  Identity and evolution behavior is proven and ready for the compiled corpus.

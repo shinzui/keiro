@@ -488,6 +488,7 @@ data DiagnosticCode
     ContractInvalidTypeIdPrefix
   | ContractIdUnknown
   | ContractTypeIdDomainChanged
+  | ContractListFieldUsedAsKey -- ExecPlan 312 / IR-54: list fields are values, never identities.
   | -- ExecPlan 180: accepted-but-unenforced spec surfaces.
     PublisherOrderingUnknown
   | PublisherBackoffInvalid
@@ -3615,9 +3616,15 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ 
               binding <- (.binds) i,
               (.field) binding `Set.notMember` resolvableFields c
             ],
+            [ mkErr (locLine ((.loc) i)) ContractListFieldUsedAsKey $
+                "intake '" <> (.name) i <> "' dedupe key '" <> (.dedupeKey) i <> "' is a List field of accepted events " <> T.intercalate ", " (listDedupeEvents c) <> "; dedupe identity must be a scalar envelope or event field"
+            | enforcesSpecSurfaceClosures languageContract,
+              not (null (listDedupeEvents c))
+            ],
             [ mkErr (locLine ((.loc) i)) IntakeDedupeKeyUnresolved $
                 "intake '" <> (.name) i <> "' dedupe key '" <> (.dedupeKey) i <> "' is not an envelope or accepted-event field"
             | enforcesSpecSurfaceClosures languageContract,
+              null (listDedupeEvents c),
               (.dedupeKey) i `Set.notMember` resolvableFields c
             ],
             [ mkErr (locLine ((.loc) i)) IntakeDecodeSchemaVersionMismatch $
@@ -3652,6 +3659,14 @@ intakeCoupling languageContract spec i = bindFlagWarnings ++ bindHeaderNames ++ 
         (.required) binding || (.crossCheck) binding
       ]
     lookupContract n = case [c | c <- specContracts spec, (.name) c == n] of (c : _) -> Just c; [] -> Nothing
+    listDedupeEvents contract
+      | (.dedupeKey) i `Set.member` canonicalIntakeEnvelopeFields = []
+      | otherwise =
+          [ (.name) event
+          | event <- (.events) contract,
+            (.name) event `elem` (.accept) i,
+            any (\field -> (.name) field == (.dedupeKey) i && contractIsList ((.valueType) field)) ((.fields) event)
+          ]
     resolvableFields contract =
       canonicalIntakeEnvelopeFields
         <> Set.fromList
@@ -3734,13 +3749,31 @@ validatePublisher languageContract spec p =
     outboxField = case [emitNode | NEmit emitNode <- (.nodes) spec, (.name) emitNode == (.emit) p] of
       [] -> []
       emitNode : _ ->
-        [ mkErr publisherLine PublisherOutboxFieldUnresolved $
-            "publisher '" <> (.name) p <> "' outboxId field '" <> (.outboxField) p <> "' is not messageId, idempotencyKey, or a field of an event mapped by emit '" <> (.emit) p <> "'"
+        [ mkErr publisherLine ContractListFieldUsedAsKey $
+            "publisher '" <> (.name) p <> "' outboxId field '" <> (.outboxField) p <> "' is a List field of an event mapped by emit '" <> (.emit) p <> "'; outbox identity must be messageId, idempotencyKey, or a scalar contract field"
         | enforcesSpecSurfaceClosures languageContract,
-          (.outboxField) p `Set.notMember` allowedOutboxFields emitNode
+          usesListIdentity emitNode
         ]
+          ++ [ mkErr publisherLine PublisherOutboxFieldUnresolved $
+                 "publisher '" <> (.name) p <> "' outboxId field '" <> (.outboxField) p <> "' is not messageId, idempotencyKey, or a field of an event mapped by emit '" <> (.emit) p <> "'"
+             | enforcesSpecSurfaceClosures languageContract,
+               not (usesListIdentity emitNode),
+               (.outboxField) p `Set.notMember` allowedOutboxFields emitNode
+             ]
+    usesListIdentity emitNode =
+      (.outboxField) p `notElem` ["messageId", "idempotencyKey"]
+        && (.outboxField) p `elem` listContractFields emitNode
+    listContractFields emitNode =
+      [ (.name) field
+      | contract <- specContracts spec,
+        (.name) contract == (.contract) emitNode,
+        event <- (.events) contract,
+        (.name) event `elem` map (.event) ((.map) emitNode),
+        field <- (.fields) event,
+        contractIsList ((.valueType) field)
+      ]
     allowedOutboxFields emitNode =
-      Set.fromList ("messageId" : "idempotencyKey" : mappedContractFields emitNode)
+      Set.fromList ("messageId" : "idempotencyKey" : filter (`notElem` listContractFields emitNode) (mappedContractFields emitNode))
     mappedContractFields emitNode =
       [ (.dslName) (resolveContractFieldIdentity field)
       | contract <- specContracts spec,
