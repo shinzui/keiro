@@ -1325,6 +1325,31 @@ test-suite keiro-dsl-conformance-contract-declared-id
     mmzk-typeid >=0.7 && <0.8,
     text >=2.1 && <2.2,
 
+-- Plan 312: strict ordered arrays of every admitted public contract scalar.
+test-suite keiro-dsl-conformance-contract-list-fields
+  import: warnings, generated-output
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/conformance-contract-list-fields
+  main-is: Main.hs
+  other-modules:
+    Conformance.ContractListFields.Bindings
+    Conformance.ContractListFields.Domain
+    Generated.ContractListFields.Nominals
+    Generated.ContractListFields.Nominals.Internal
+    Generated.ContractListFields.Structural.NominalLeaves
+    Generated.ContractListFields.StructuralConformance
+    Generated.ContractListFields.Templates.Contract
+
+  build-depends:
+    aeson >=2.2 && <2.3,
+    base >=4.21 && <5,
+    keiki >=0.9 && <0.10,
+    keiro,
+    keiro-core,
+    keiro-dsl,
+    mmzk-typeid >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+
 -- Language-1 compatibility proof: the historical permissive Text contract DTO
 -- still accepts pre-TypeID-v7 samples and retains its released JSON image.
 test-suite keiro-dsl-conformance-contract-v1-compat

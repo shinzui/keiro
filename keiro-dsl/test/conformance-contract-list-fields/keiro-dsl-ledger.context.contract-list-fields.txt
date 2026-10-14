@@ -1,0 +1,31 @@
+keiro-dsl scaffold record v1
+spec: keiro-dsl/test/fixtures/contract-list-fields.keiro
+module-root: (none)
+layout: prefixed
+source-language {"declaredLanguageVersion":6,"effectiveLanguageVersion":6,"sourceForm":"declared"}
+semantic-contract {"languageSupport":"candidate","languageVersion":6,"runtimeSemantics":"keiro-dsl/runtime-semantics/5"}
+naming-edition idiomatic-v2
+module-role {"family":"StructuralConformance","kind":"generated","ownerKind":"context","ownerName":"context contract-list-fields structural conformance","path":"Generated/ContractListFields/StructuralConformance.hs"}
+module-role {"family":"Nominals","kind":"generated","ownerKind":"context","ownerName":"context contract-list-fields generated nominal declarations","path":"Generated/ContractListFields/Nominals.hs"}
+module-role {"family":"Internal","kind":"generated","ownerKind":"context","ownerName":"context contract-list-fields generated nominal ID internals","path":"Generated/ContractListFields/Nominals/Internal.hs"}
+module-role {"family":"NominalLeaves","kind":"generated","ownerKind":"context","ownerName":"context contract-list-fields structural nominal leaves","path":"Generated/ContractListFields/Structural/NominalLeaves.hs"}
+module-role {"family":"Bindings","kind":"hole","ownerKind":"consumer","ownerName":"consumer binding skeleton Conformance.ContractListFields.Bindings","path":"Conformance/ContractListFields/Bindings.hs"}
+module-role {"family":"Contract","kind":"generated","ownerKind":"contract","ownerName":"contract templates (line 14)","path":"Generated/ContractListFields/Templates/Contract.hs"}
+generated Generated/ContractListFields/StructuralConformance.hs
+generated Generated/ContractListFields/Nominals.hs
+generated Generated/ContractListFields/Nominals/Internal.hs
+generated Generated/ContractListFields/Structural/NominalLeaves.hs
+hole Conformance/ContractListFields/Bindings.hs
+generated Generated/ContractListFields/Templates/Contract.hs
+nominal-mapping {"bindingSymbol":"Conformance.ContractListFields.Bindings.claimIdBinding","bindingVersion":"1","canonicalType":"conformance.contract-list-fields.ClaimId.v1","category":"id","fixtureSymbol":"Conformance.ContractListFields.Bindings.claimIdFixtures","initialSymbol":null,"mode":"nominal","module":"Conformance.ContractListFields.Domain","package":"keiro-dsl","representation":"KindID:claim","schema":1,"specName":"ClaimId","type":"ClaimId"}
+id-domain id-domain|name=TemplateId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+id-domain id-domain|name=ClaimId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=claim|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplatesReassigned.typeId|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplatesReassigned.templateIds|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplatesReassigned.claimIds|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=claim|separator=_|json=canonical-json-text
+id-domain id-domain|name=contract:templates.TemplatesReassigned.legacyTemplateIds|contract=keiro-dsl/id-domain/typeid-v7/1|prefix=template|separator=_|json=canonical-json-text
+nominal-equality nominal-equality|name=ClaimId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:claim:keiro-dsl/id-domain/typeid-v7/1|owner=consumer;canonical=conformance.contract-list-fields.ClaimId.v1;binding=Conformance.ContractListFields.Bindings.claimIdBinding;binding-version=1
+nominal-equality nominal-equality|name=TemplateId|contract=keiro-dsl/nominal-equality/2|key=Text|domain=typeid-v7-text:template:keiro-dsl/id-domain/typeid-v7/1|owner=generated
+binding {"kind":"binding","mappedName":"ClaimId","module":"Conformance.ContractListFields.Bindings","path":null,"schema":1,"signature":"claimIdBinding :: NominalBinding Conformance.ContractListFields.Domain.ClaimId (KindID \"claim\")","symbol":"claimIdBinding"}
+binding {"kind":"fixtures","mappedName":"ClaimId","module":"Conformance.ContractListFields.Bindings","path":null,"schema":1,"signature":"claimIdFixtures :: NominalFixtureCases Conformance.ContractListFields.Domain.ClaimId","symbol":"claimIdFixtures"}
+semantic-impact {"declarations":[],"mappedSurfaceEvidenceVersion":1,"serviceInventory":[]}

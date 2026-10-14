@@ -1,0 +1,34 @@
+-- keiro-dsl build manifest for keiro-dsl/test/fixtures/contract-list-fields.keiro
+-- Paste the complete fragment below into the consuming Cabal stanza.
+-- The generated layer is overwritten on every scaffold; hole modules are
+-- create-if-absent (filled by hand).
+
+default-language: GHC2024
+default-extensions:
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedRecordDot
+    OverloadedStrings
+
+other-modules:
+    Conformance.ContractListFields.Bindings
+    Generated.ContractListFields.Nominals
+    Generated.ContractListFields.Nominals.Internal
+    Generated.ContractListFields.Structural.NominalLeaves
+    Generated.ContractListFields.StructuralConformance
+    Generated.ContractListFields.Templates.Contract
+
+build-depends:
+    , aeson
+    , base
+    , keiro-core
+    , keiro-dsl
+    , mmzk-typeid
+    , text
+
+consumer-packages:
+    keiro-dsl
+
+consumer-modules:
+    Conformance.ContractListFields.Bindings
+    Conformance.ContractListFields.Domain

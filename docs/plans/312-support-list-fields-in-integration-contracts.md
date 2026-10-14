@@ -112,7 +112,7 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 05:03Z) M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`, and `contract-list-fields-admission-change.keiro`; register them.
 - [x] (2026-10-14 05:03Z) M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, aliases, envelope-key precedence, multi-event key refusals, and diff classification.
 - [x] (2026-10-14 05:07Z) M2. `nix develop -c cabal test keiro-dsl:test:keiro-dsl-test` passes.
-- [ ] M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry; force-add the ignored ledger and Cabal fragment, then commit the corpus before regeneration.
+- [x] (2026-10-14 05:18Z) M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry; force-add the ignored ledger and Cabal fragment, then commit the corpus before regeneration.
 - [ ] M3. `keiro-dsl-corpus-regen -- regenerate --only …` is a no-op, the new suite passes, `scripts/check-conformance-corpus.sh` passes, `nix develop -c just verify` passes.
 - [ ] M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
 - [ ] M4. Record the change in `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md` under `[Unreleased]`.
@@ -161,6 +161,12 @@ implementation. Provide concise evidence.
   the exact List token in `FrontendFailure.span`. Test the exact frontend span;
   preserve the byte-compatible facade rather than broaden this feature into a
   diagnostic API redesign.
+
+
+- Observation (2026-10-14 implementation): the corpus inherits the generated-output
+  `-Werror` gate, including GHC's `-Wx-partial`. Its first build rejected `head` in
+  the hand-owned harness (`GHC-63394`). Named scalar fixture constants avoid partial
+  list extraction while keeping the intended empty/multi-element payload cases.
 
 
 ## Decision Log
@@ -1292,3 +1298,11 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
 
 - 2026-10-14 (implement): Milestone 2 also passed the all-components build.
   Identity and evolution behavior is proven and ready for the compiled corpus.
+
+- 2026-10-14 (implement): The compiled list corpus passed all 13 runtime checks,
+  covering exact arrays, every scalar family, empty arrays, order, duplicates, required
+  keys, nulls, element paths, and nominal conformance. The generated-output Werror gate
+  refused partial `head` calls in the hand-owned harness; named fixture constants made
+  those constructions total. The CLI diff proof at `14db6350` reported public breaking
+  List text -> List int with producer-last rollout and replay neutrality; the temporary
+  fixture edit was restored. Registering and committing the corpus before regeneration.
