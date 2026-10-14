@@ -16,6 +16,17 @@ provenance:
       at: 2026-10-13T15:01:56Z
       mode: "update"
       note: "Self-guarding registry lookup with privilege fallback, keiro-managed rows only, Milestone 0 fixture committed pending"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:20:56Z
+      mode: "update"
+      note: "Correct noncompiling test examples and schema privilege guard; strengthen fallback/drift acceptance and align documentation, closure, and release guidance"
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:21:51Z
+      verdict: "approved"
+      note: "Approved after correcting Eq MigrationError and Session.sql compile blockers, reproducing and fixing the schema-USAGE guard, and strengthening acceptance; baseline schema tests pass"
 ---
 
 # Recognise runtime-managed read objects in schema verification to fix BUG-12
@@ -52,8 +63,9 @@ recorded in its managed-object registry (`keiro.keiro_managed_read_objects`) as 
 Keiro's schema. A service with an all-rows contract runs `keiro-ops rebuild versioned
 resume <run-id>` without a warning and without the flag, `keiro-migrate verify-schema`
 prints `schema verification succeeded` against the same database, and a view in the
-`keiro` schema that Keiro did not create is still reported as drift. Three regression
-tests prove it: a registry-level test in `keiro-migrations`, an end-to-end test in `keiro`
+`keiro` schema that Keiro did not create is still reported as drift. Regression
+coverage spans three layers: registry and comparison tests in `keiro-migrations`, an
+end-to-end test in `keiro`
 that reconciles a real all-rows contract and then verifies the schema, and an executable
 test in `keiro-ops` that runs a forced mutation against a database carrying a registered
 binding view.
@@ -62,13 +74,16 @@ binding view.
 ## Progress
 
 
+- [x] 2026-10-13: reviewed the plan against runtime, migration, operator, and dependency
+      source; reproduced the missing-schema-privilege guard failure on PostgreSQL 18.6;
+      corrected the plan. Feature implementation and BUG-12 confirmation remain pending.
 - [ ] Milestone 0: reproduce BUG-12 with a compiled fixture on master, retain the failing
       transcript under `docs/bug-reports/evidence/`, commit the fixture as a pending `xit`
       example together with the `keiro-test` dependency, set the report `confirmed`, and log it.
 - [ ] Milestone 1: make `Keiro.Migrations.SchemaCheck` registry-aware (`managedObjectSnapshotKeys`,
       `compareSchemaSnapshotWithManaged`, the guarded lookup inside `verifyExpectedSchema`).
-- [ ] Milestone 1: add the pure comparison test, the hand-altered-database test, and the
-      restricted-role test to `keiro-migrations/test/Main.hs`; all three pass.
+- [ ] Milestone 1: add pure comparison, hand-altered-database, restricted-role, and
+      absent-registry tests to `keiro-migrations/test/Main.hs`; all four pass.
 - [ ] Milestone 1: record the fix under `[Unreleased]` in `keiro-migrations/CHANGELOG.md`.
 - [ ] Milestone 2: flip the Milestone 0 fixture in `keiro/test/ExternalReadSpec.hs` from
       `xit` to `it`; it passes.
@@ -88,7 +103,38 @@ binding view.
 ## Surprises & Discoveries
 
 
-(None yet.)
+The 2026-10-13 correctness review found that table `SELECT` does not imply schema
+`USAGE`. A disposable PostgreSQL 18.6 cluster, started and stopped by a Python probe
+inside `nix develop`, created the registry and granted a probe role table `SELECT` but
+no access to the `keiro` schema. Under `SET ROLE`, the original guard accepted the role,
+then the proposed registry query failed. Adding the schema privilege check rejected it:
+
+```text
+ original_guard | schema_usage | revised_guard
+----------------+--------------+---------------
+ t              | f            | f
+ERROR: permission denied for schema keiro
+psql exit: 3
+```
+
+This is evidence for the guard correction, not the compiled BUG-12 reproduction required
+by Milestone 0. PostgreSQL permits catalog inspection without schema `USAGE`, which is
+why the previous catalog-only verifier worked for this role.
+
+The restricted-role example also used `Session.sql`, which is absent from the repository's
+Hasql 1.10 API. The Mori guide `mori://hasql/hasql/docs/hasql-1.10-migration` records the
+rename to `Session.script :: Text -> Session ()`; existing calls in
+`keiro-migrations/test/Main.hs` already use `Session.script`. The corrected example uses
+that API and resets the role with the existing IO-level `finally` import even if the
+session fails.
+
+The original Milestone 0 fixture also compared `Either MigrationError [Text]` with
+`shouldBe Right []`. `MigrationError` from
+`mori://shinzui/pg-migrate/packages/pg-migrate` has `Show` but no `Eq` instance, so that
+fixture would fail to compile before it could reproduce BUG-12. Unwrap it with the
+existing `expectUsage` helper in `keiro/test/ExternalReadSpec.hs`, then compare only the
+rendered drift list. In `keiro-migrations/test/Main.hs`, use its existing `requireRight`
+helper for the same reason.
 
 
 ## Decision Log
@@ -120,16 +166,22 @@ binding view.
   Date: 2026-10-13
 - Decision: the registry lookup guards itself with one catalog statement that is true only
   when `keiro.keiro_managed_read_objects` exists as a table and the connected role holds
-  `SELECT` on it; otherwise the managed set is empty and verification behaves exactly as it
-  did before this plan.
+  `SELECT` on it and `USAGE` on its schema; otherwise the managed set is empty and
+  verification behaves exactly as it did before this plan.
   Rationale: a database that predates migration 0027 has no registry table, and today's
   check reads only `pg_catalog`, which every role can read. Without the guard, a missing
-  table or a role lacking `SELECT` would turn every invocation into
+  table or a role lacking either privilege would turn every invocation into
   `schema verification failed`, which blocks even read-only `keiro-ops` commands. With it,
   the pre-0027 database keeps its ordinary `MissingObject` list and the restricted role sees
   the binding view reported as drift: fail-closed rather than fail-stop. Resolving the
   relation through `pg_class` avoids the error the text form of `has_table_privilege`
   raises for a missing relation.
+  Date: 2026-10-13; amended after the correctness review's PostgreSQL privilege probe.
+- Decision: test absent-registry fallback and preserve migration-owned differences even
+  when the same key appears in the managed set.
+  Rationale: ignoring runtime additions must not hide a missing or changed object from the
+  migration snapshot. The table-absence guard is a separate branch from denied privileges
+  and needs its own database test.
   Date: 2026-10-13
 - Decision: a registry row whose object no longer exists is not reported by this plan.
   Rationale: BUG-12 is a false positive. Reporting a missing managed object is a new
@@ -168,7 +220,30 @@ binding view.
 ## Outcomes & Retrospective
 
 
-(To be filled during and after implementation.)
+The correctness review updated this plan only. It confirmed the source-level cause of
+BUG-12 and reproduced a defect in the proposed privilege guard, corrected the Hasql test
+API, repaired an assertion requiring a nonexistent `Eq MigrationError` instance, expanded
+negative-path acceptance, and aligned documentation and closure sequencing.
+No feature code, bug status, or accepted ADR has changed; all implementation milestones
+remain pending. Record feature-test results here during implementation. Missing or altered
+runtime-object definitions remain outside this fix: a registry row establishes which
+runtime additions are allowed, not that their live definition is correct.
+
+Review validation ran the existing suite from the repository root:
+
+```bash
+nix develop -c cabal test keiro-migrations:keiro-migrations-test --test-show-details=direct \
+  --test-options='--match "native expected schema"'
+```
+
+```text
+3 examples, 0 failures
+Test suite keiro-migrations-test: PASS
+```
+
+This verifies the unchanged baseline, not the four proposed regression examples or the
+feature fix. The review also checked local links, required sections, code-fence language
+tags, and whitespace. The full implementation gate has not been run for this plan review.
 
 
 ## Context and Orientation
@@ -317,16 +392,19 @@ Add `keiro-migrations ^>=0.20.0.0` to the `build-depends` of `test-suite keiro-t
           Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
             let settings = ConnectionSettings.connectionString connectionString
             runScript pool allRowsFixtureSql
-            before <- verifyExpectedSchema settings
-            fmap (map renderSchemaDrift) before `shouldBe` Right []
+            before <- verifyExpectedSchema settings >>= expectUsage
+            map renderSchemaDrift before `shouldBe` []
             catalog <- expectValid Catalog.bridgeCatalog
             register store catalog
             runScript pool activateV1Sql
             expectStore store (reconcileExternalReadContracts catalog) >>= shouldBeRight
             runStatement pool () bindingExistsStmt `shouldReturn` True
-            after <- verifyExpectedSchema settings
-            fmap (map renderSchemaDrift) after `shouldBe` Right []
+            after <- verifyExpectedSchema settings >>= expectUsage
+            map renderSchemaDrift after `shouldBe` []
 ```
+
+`expectUsage` is already defined in this spec and fails an example on `Left` using
+only `Show`; it avoids requiring an unavailable `Eq MigrationError` instance.
 
 `bindingExistsStmt` is a small `Statement () Bool` beside the other statements at the
 bottom of the file: `SELECT to_regclass('keiro.external_read_counter_reader_v1_binding')
@@ -423,8 +501,9 @@ did before this plan. The module already uses multiline string literals for
 -- @keiro.keiro_managed_read_objects@ with @managed_by = 'keiro'@. Every state
 -- counts: retirement marks a managed object retired without dropping it. Rows
 -- whose kind has no snapshot line (functions and types) map to nothing. When
--- the registry table does not exist, or the connected role lacks @SELECT@ on
--- it, the set is empty and verification reports every live object as before.
+-- the registry table does not exist, or the connected role lacks table @SELECT@
+-- or schema @USAGE@, the set is empty and verification reports every live object
+-- as before.
 managedObjectSnapshotKeys :: Session (Set Text)
 managedObjectSnapshotKeys = do
   readable <- Session.statement () registryReadableStatement
@@ -444,7 +523,8 @@ registryReadableStatement =
   Statement.preparable
     """
     SELECT coalesce(
-      ( SELECT has_table_privilege(c.oid, 'SELECT')
+      ( SELECT pg_catalog.has_table_privilege(c.oid, 'SELECT')
+                 AND pg_catalog.has_schema_privilege(n.oid, 'USAGE')
         FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'keiro'
@@ -496,11 +576,13 @@ needed here) and returns it alongside the text. Then compare with
         else pure (Left (UnsupportedPostgresVersion majorVersion))
 ```
 
-Update the module's Haddock on `verifyExpectedSchema` to say that runtime-managed read
-objects recorded in the registry are not drift and that a role unable to read the registry
-gets the previous behaviour.
+Update the module's Haddock on `verifyExpectedSchema` to say that runtime-managed
+binding views recorded as Keiro-managed are allowed additions and that a role without
+table `SELECT` or schema `USAGE` gets the previous behaviour. Only unexpected `binding-view` keys are suppressed; missing
+and changed migration-owned objects remain drift. Registry identity does not validate the
+live definition or `definition_hash` of a runtime-only view.
 
-Add three tests to the `describe "native expected schema"` block of
+Add four tests to the `describe "native expected schema"` block of
 `keiro-migrations/test/Main.hs`. The first is pure:
 
 ```haskell
@@ -518,11 +600,19 @@ Add three tests to the `describe "native expected schema"` block of
       compareSchemaSnapshot expected actual `shouldSatisfy` ((== 2) . length)
 ```
 
+In the same pure example, include a migration-owned view key in both the expected
+snapshot and the managed set. Assert that a changed column signature still produces the
+exact `ChangedObject`, and that removing the live line still produces the exact
+`MissingObject`. Also assert empty-set equivalence with `compareSchemaSnapshot` over
+these cases. These assertions prevent implementing the exclusion by deleting managed
+keys from either snapshot before comparison.
+
 The second mirrors "detects named drift after a hand-altered database": migrate a fresh
 database with `withKeiroPg`, assert a clean verification, then run one script that creates
 a binding view with a Keiro-managed registry row, a second view with no row, and a third
 view with a `consumer`-managed row, and assert that only the second and third are reported;
-then retire the Keiro-managed row and assert the same:
+then set the Keiro-managed row to `pending-retirement` and finally `retired`,
+asserting the same drift list at each state:
 
 ```sql
 CREATE VIEW keiro.external_read_demo_v1_binding
@@ -542,7 +632,16 @@ VALUES ('keiro', 'external_read_foreign_v1_binding', 'binding-view', '',
         'consumer', 'test-definition', 1, 'active');
 ```
 
-followed, after the first assertion, by:
+followed, after the first assertion, by the pending state (assert the same drift list
+before applying the retirement update):
+
+```sql
+UPDATE keiro.keiro_managed_read_objects
+SET state = 'pending-retirement', updated_at = now()
+WHERE object_name = 'external_read_demo_v1_binding';
+```
+
+Then retire the object:
 
 ```sql
 UPDATE keiro.keiro_managed_read_objects
@@ -550,7 +649,7 @@ SET state = 'retired', retired_at = now(), updated_at = now()
 WHERE object_name = 'external_read_demo_v1_binding';
 ```
 
-Both assertions check `map renderSchemaDrift drifts` with `shouldBe` against the two lines
+All three assertions check `map renderSchemaDrift drifts` with `shouldBe` against the two lines
 `schema drift: unexpected view keiro.external_read_foreign_v1_binding (actual: columns=1:id bigint)`
 and `schema drift: unexpected view keiro.external_read_rogue_v1_binding (actual: columns=1:id bigint)`,
 in that order, because drifts are emitted in ascending key order. The registry rows need no
@@ -587,16 +686,49 @@ GRANT USAGE ON SCHEMA keiro TO keiro_verify_probe;
           restricted <-
             useSession
               connection
-              (Session.sql "SET ROLE keiro_verify_probe" *> managedObjectSnapshotKeys <* Session.sql "RESET ROLE")
+              (Session.script "SET ROLE keiro_verify_probe" *> managedObjectSnapshotKeys)
+              `finally` useSession connection (Session.script "RESET ROLE")
           restricted `shouldBe` Set.empty
 ```
 
 `registryProbeSql` is the demo view, its row, and the role script above in one literal. The
 `DO` block keeps the role creation repeatable, and `GRANT ... TO CURRENT_USER` lets a
-non-superuser test role switch to the probe role. `SET ROLE` lasts for the connection, which
-is why the example resets it on the same session; `ephemeral-pg` discards the cluster
+test administrator switch to the probe role; creating the role still requires
+`CREATEROLE` or superuser rights, supplied by the disposable fixture. `SET ROLE` lasts
+for the connection, which is why the example resets it on the same session; `ephemeral-pg` discards the cluster
 afterwards in any case. The owner assertion pins that the privileged path still returns the
 key, so the fallback is not masking a broken query.
+
+Extend this example with a second permission configuration, applied as the administrator:
+
+```sql
+REVOKE USAGE ON SCHEMA keiro FROM keiro_verify_probe;
+GRANT SELECT ON keiro.keiro_managed_read_objects TO keiro_verify_probe;
+```
+
+Now run the helper on a fresh connection under `SET ROLE keiro_verify_probe` and again
+expect `Set.empty`. Using a fresh connection avoids previously prepared queries affecting
+schema-lookup evidence. The schema has no `PUBLIC` usage grant; preserve that fixture
+condition. For each permission configuration, also snapshot `keiro` and `keiro_read` in
+the restricted session and compare them with the returned set. Expect exactly the demo
+binding view as `UnexpectedObject`, not a session error. Reset the role using `finally`
+as above. Finally grant schema `USAGE` back and prove that the probe role with both grants
+gets the demo key and a clean comparison. This tests the actual privilege boundary rather
+than merely distinguishing an owner from every other role.
+
+The fourth example, named "falls back to ordinary drift when the registry is absent",
+uses a fresh `withKeiroPg` database. Before migrating, run `managedObjectSnapshotKeys`
+and expect `Set.empty`, then call `verifyExpectedSchema` and require `Right` with a
+`MissingObject` for `table<TAB>keiro_managed_read_objects<TAB>kind=r`. Next migrate normally,
+create the demo view and its registry row, and drop only
+`keiro.keiro_managed_read_objects` in this disposable database, without `CASCADE`. This
+covers an existing `keiro` schema with an absent registry table. Read the raw snapshots,
+assert the helper returns `Set.empty`, unwrap `verifyExpectedSchema` with the existing
+`requireRight`, and compare the drift list with
+`compareSchemaSnapshot expectedSchemaSnapshot actual`. The result must include
+both the missing registry table and the unexpected demo view. Neither absence case may
+produce `DatabaseSessionFailed`. The test covers lookup fallback, not historical migration
+compatibility, and must never run against an operator's database.
 
 Add to `keiro-migrations/CHANGELOG.md` under `## [Unreleased]`:
 
@@ -608,14 +740,15 @@ Add to `keiro-migrations/CHANGELOG.md` under `## [Unreleased]`:
   `keiro.keiro_managed_read_objects`, such as the
   `keiro.external_read_<function>_binding` view behind an all-rows external-read
   contract, as unexpected drift. Only rows with `managed_by = 'keiro'` count; a role
-  without `SELECT` on the registry keeps the previous behaviour. New exports
+  without table `SELECT` or schema `USAGE` keeps the previous behaviour. New exports
   `managedObjectSnapshotKeys` and `compareSchemaSnapshotWithManaged`;
   `compareSchemaSnapshot` is unchanged.
 ```
 
 Commit this milestone on its own. Acceptance: `cabal test keiro-migrations:keiro-migrations-test`
-passes, including the three new tests and the unchanged "detects named drift after a
-hand-altered database" test, which proves foreign objects are still reported.
+passes, including the four new tests and the unchanged "detects named drift after a
+hand-altered database" test, which proves migration-owned missing and changed objects
+are still reported; the new neighbour assertions prove unregistered objects remain drift.
 
 
 ### Milestone 2: end-to-end and operator regressions
@@ -673,8 +806,8 @@ Add to `keiro-ops/CHANGELOG.md` under `## [Unreleased]`:
 
 - Schema verification no longer warns about, or refuses mutations because of, the
   `keiro.external_read_<function>_binding` view that Keiro creates for an all-rows
-  external-read contract. Objects recorded in `keiro.keiro_managed_read_objects` are
-  part of Keiro's schema; `--allow-schema-drift` is again reserved for schemas this
+  external-read contract. Binding views recorded with `managed_by = 'keiro'` are allowed runtime
+  additions when verification can read the registry; `--allow-schema-drift` is again reserved for schemas this
   binary was not built for. Fixed in `keiro-migrations`; no `keiro-ops` source change.
 ```
 
@@ -690,10 +823,12 @@ still refused.
 
 Update the operator-facing documentation so the new rule is stated where operators read
 about the gate. In `docs/user/operations.md`, after the sentence "Mutations fail closed on
-drift unless the operator explicitly supplies `--allow-schema-drift`...", add one sentence:
-objects that Keiro's runtime creates and records in `keiro.keiro_managed_read_objects`,
-such as the `keiro.external_read_<function>_binding` view behind an all-rows external-read
-contract, are part of Keiro's schema and are not reported as drift. In
+drift unless the operator explicitly supplies `--allow-schema-drift`...", add a paragraph:
+binding views recorded in `keiro.keiro_managed_read_objects` with `managed_by = 'keiro'`,
+such as `keiro.external_read_<function>_binding`, are allowed runtime additions when the
+verifier has table `SELECT` and schema `USAGE`. State explicitly that consumer-managed
+and unregistered objects are still drift, migration-owned missing or changed objects
+remain checked, and a missing or unreadable registry preserves the previous comparison. In
 `docs/user/migrations.md`, extend the `verify-schema` bullet the same way. Both pages carry
 a `timestamp` (and `operations.md` a `generated` block) in their frontmatter; advance them
 to the current UTC time, add one entry with `okf log add docs/user -m "..."`, and run
@@ -704,9 +839,13 @@ its Decision section, after the paragraph describing the two layers of `SchemaCh
 a paragraph recording that the expected snapshot describes only what the migrations build,
 that Keiro's runtime also creates read objects inside `keiro` and records each one in
 `keiro.keiro_managed_read_objects` in the same transaction, and that `verifyExpectedSchema`
-therefore treats a live object with a registry row as expected rather than unexpected while
-still reporting every unregistered object; note that the registry is consulted only when the
-snapshot shows the table, and that a registry row without a live object is not reported. Add
+therefore suppresses only `UnexpectedObject` for a `binding-view` key recorded with
+`managed_by = 'keiro'`, in every lifecycle state. Missing and changed migration-owned
+objects and unregistered additions remain drift. The lookup uses a catalog existence and
+privilege guard, requiring an ordinary table plus table `SELECT` and schema `USAGE`; it
+does not infer readability from a snapshot line. A registry row without a live runtime
+object is not reported, and a runtime-only view's definition is not validated by this
+identity-based exception. Add
 a Consequences bullet that a service with an all-rows external-read contract runs operator
 mutations without `--allow-schema-drift`, and a References bullet pointing at this plan.
 Advance the ADR's `timestamp`, run `okf log add docs/adr --kind Update -m "..."`, and run
@@ -715,18 +854,23 @@ Advance the ADR's `timestamp`, run `okf log add docs/adr --kind Update -m "..."`
 Add to the root `CHANGELOG.md` under `## [Unreleased]` a `### Bug Fixes` entry mirroring the
 `keiro-migrations` one and naming BUG-12.
 
-Close the bug report: in `docs/bug-reports/12-ops-schema-verification-flags-keiro-managed-binding-view.md`
+Run `nix develop -c just verify` after the implementation and documentation edits and
+before changing BUG-12 from `confirmed` to `fixed`. Repair any failure before closure.
+
+Then close the bug report: in `docs/bug-reports/12-ops-schema-verification-flags-keiro-managed-binding-view.md`
 set `status: fixed`, add `fixedVersion: "unreleased"` and a one-sentence `resolution`
 naming the registry-aware comparison and this plan, advance `generated.at`, and append a
-paragraph to the body describing the fix and the three regression tests. Update the
+paragraph to the body describing the fix and regression coverage across all three packages. Update the
 BUG-12 row in `docs/bug-reports/index.md` (status `fixed`, plan 311, implementation note),
 add a log entry, and run `just bug-reports-validate`. The profile requires `resolution` for
 every terminal status and `fixedVersion` for `fixed`; `unreleased` is the agreed value
 while the fix is only on master.
 
-Run the full gate, `nix develop -c just verify`, and fix anything it reports. Fill in
-Outcomes & Retrospective, record the "missing registered object" follow-up there, and record
-a provenance revision entry. Commit.
+After that strict bug-report validation passes, fill in Outcomes & Retrospective
+with the full-gate evidence and the "missing registered object" follow-up. Record one
+provenance revision entry at the first plan write in this implementation session, not a
+second entry at completion. Commit. If implementation changes after the successful full
+gate, rerun the affected checks before retaining `fixed`.
 
 Acceptance: `just verify` passes; the bug report validates as `fixed`; ADR 9 and the two
 user pages describe the registry rule; the three changelogs carry the entry.
@@ -761,8 +905,8 @@ Expected before the fix, in the new example:
 ```text
   leaves schema verification clean after reconciling an all-rows contract FAILED [1]
   ...
-  expected: Right []
-   but got: Right ["schema drift: unexpected view keiro.external_read_counter_reader_v1_binding (actual: columns=1:id bigint,2:total bigint)"]
+  expected: []
+   but got: ["schema drift: unexpected view keiro.external_read_counter_reader_v1_binding (actual: columns=1:id bigint,2:total bigint)"]
 ```
 
 Record it:
@@ -770,13 +914,13 @@ Record it:
 ```bash
 git rev-parse HEAD
 nix develop -c ghc --version
-# paste the command, the environment lines, and the failing example verbatim into
-docs/bug-reports/evidence/BUG-12-master-binding-view-drift.txt
+# Paste the command, environment lines, and failing example verbatim into:
+# docs/bug-reports/evidence/BUG-12-master-binding-view-drift.txt
 # change the example's `it` to `xit` with the pending comment, then confirm the suite is green:
 nix develop -c cabal test keiro:keiro-test --test-show-details=direct \
   --test-options='--match "managed external read contracts"'
 okf log add docs/bug-reports --kind Update -m "BUG-12 is confirmed by the owning repository: reconciling the bridge catalog's all-rows contract on master after 0.20.0.0 makes verifyExpectedSchema report keiro.external_read_counter_reader_v1_binding as unexpected; the transcript is retained under evidence/ and the fixture is committed pending plan 311 Milestone 2."
-just bug-reports-validate
+nix develop -c just bug-reports-validate
 git add docs/bug-reports keiro/keiro.cabal keiro/test/ExternalReadSpec.hs
 git commit -m "test(keiro): add pending binding-view drift fixture and confirm BUG-12" \
   -m "ExecPlan: docs/plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md" \
@@ -794,7 +938,8 @@ nix develop -c cabal test keiro-migrations:keiro-migrations-test --test-show-det
 Expected: every example in the block passes, including
 `treats a managed live object as expected and still reports its unregistered neighbours`,
 `ignores registered binding views and still reports unregistered and consumer-managed views`,
-`returns no managed keys for a role that cannot read the registry`, and the existing
+`returns no managed keys for a role that cannot read the registry`,
+`falls back to ordinary drift when the registry is absent`, and the existing
 `detects named drift after a hand-altered database`. Then commit:
 
 ```bash
@@ -829,12 +974,13 @@ Milestone 3, documentation and closure:
 
 ```bash
 okf log add docs/user -m "Operations and migrations: objects recorded in keiro.keiro_managed_read_objects, such as all-rows binding views, are not schema drift."
-just user-documentation-validate
+nix develop -c just user-documentation-validate
 okf log add docs/adr --kind Update -m "ADR-9: live-schema verification treats registry-recorded runtime read objects as expected."
-just adr-validate
-okf log add docs/bug-reports --kind Update -m "BUG-12 is fixed on master: verifyExpectedSchema consults keiro.keiro_managed_read_objects; regression coverage in keiro-migrations, keiro, and keiro-ops."
-just bug-reports-validate
+nix develop -c just adr-validate
 nix develop -c just verify
+# Only after the full gate passes, set BUG-12 fixed and update its index row.
+okf log add docs/bug-reports --kind Update -m "BUG-12 is fixed on master: verifyExpectedSchema consults keiro.keiro_managed_read_objects; regression coverage in keiro-migrations, keiro, and keiro-ops."
+nix develop -c just bug-reports-validate
 git add CHANGELOG.md docs
 git commit -m "docs: record registry-aware schema verification and close BUG-12" \
   -m "ExecPlan: docs/plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md" \
@@ -859,9 +1005,13 @@ A fresh PostgreSQL 18 database migrated by `keiro-migrations`, with a view
 `schema drift: unexpected view keiro.external_read_rogue_v1_binding (actual: columns=1:id bigint)`,
 and exits non-zero. A database with a hand-added column on `keiro.keiro_timers` is still
 reported as changed, exactly as before. A view with a `consumer`-managed registry row is
-reported. A role with `USAGE` on `keiro` but no `SELECT` on the registry receives an empty
-managed set from `managedObjectSnapshotKeys`, so verification for such a role reports a
-binding view exactly as it did before this plan instead of failing.
+reported. Roles missing either table `SELECT` or schema `USAGE` receive an empty managed set from
+`managedObjectSnapshotKeys`; snapshotting and comparison in those sessions report the
+binding view as drift instead of failing. A non-owner with both privileges gets the
+managed key and a clean comparison. An absent registry, both with and without the schema
+present, returns an empty managed set and the original missing/unexpected drift results.
+A missing or changed migration-owned view remains drift even if its key is registered.
+`pending-retirement`, as well as `active` and `retired`, remains an allowed registry state.
 
 In the `keiro` test suite, registering `Catalog.bridgeCatalog`, activating revision
 `counter-v1`, and reconciling creates `keiro.external_read_counter_reader_v1_binding` and
@@ -917,7 +1067,9 @@ set contains snapshot keys in the exact `kind<TAB>name` form used by `snapshotOb
 for a `binding-view` row with `managed_by = 'keiro'` that is
 `"view\t" <> object_schema <> "." <> object_name`. `managedObjectSnapshotKeys` is
 self-guarding: it returns the empty set when the registry table is absent or the connected
-role lacks `SELECT` on it, and never raises for either case. The private
+role lacks table `SELECT` or schema `USAGE`. These steady-state absence and privilege
+cases must not raise. This is not a guarantee against concurrent DDL, privilege changes,
+connection failures, or a structurally damaged registry. The private
 `registryReadableStatement` and `managedObjectsStatement` are not exported. The
 module already imports `Data.Set` qualified as `Set`, `Data.Map.Strict` qualified as `Map`,
 `Hasql.Session`, `Hasql.Statement`, `Hasql.Encoders`, and `Hasql.Decoders`; `Data.Set (Set)`
@@ -927,9 +1079,12 @@ must be imported for the signatures.
 `build-depends` in Milestone 0. No library component changes.
 
 `keiro-ops` has no source change; its behaviour changes through its existing
-`keiro-migrations ^>=0.20.0.0` dependency. If the fix ships in a `keiro-migrations` minor
-release ahead of the next cohort, `keiro-ops` picks it up through that bound without a
-rebuild of its own sources.
+`keiro-migrations ^>=0.20.0.0` dependency when rebuilt against the fixed library.
+That bound means `>=0.20.0.0 && <0.21`, so it can select a `0.20.x` fix but also permits
+the unfixed `0.20.0.0`; a `0.21` cohort requires a bound update in the release work.
+An installed executable does not acquire the fix until rebuilt or replaced. The release
+work must select the fixed version and update cohort bounds as required; this plan changes
+no package version or release policy.
 
 Runtime behaviour relied upon: `Keiro.ReadModel.External.reconcileBinding` creates the view
 and upserts its registry row in one transaction; `retireContractStmt` sets `state = 'retired'`
@@ -950,3 +1105,13 @@ named in Context and Orientation. None of that changes.
   and four were rewritten, a new entry was added for the pending fixture, and Progress,
   Context, Plan of Work, Concrete Steps, Validation, Idempotence, and Interfaces were updated
   to match.
+
+- 2026-10-13: correctness review against the current tree corrected the fixture
+  assertions to avoid `Eq MigrationError`, replaced `Session.sql` with `Session.script`,
+  and extended the registry guard to require schema `USAGE`, with
+  PostgreSQL 18.6 evidence above. Expanded acceptance for both privilege failures,
+  authorised non-owners, absent registries, every lifecycle state, and preservation of
+  missing/changed migration objects. Replaced stale snapshot-based ADR guidance, narrowed
+  documentation promises to the actual binding-view rule, moved full verification before
+  bug closure, made validation commands explicitly use Nix, and clarified release bounds
+  and executable rebuilding. Implementation and BUG-12 status remain unchanged.
