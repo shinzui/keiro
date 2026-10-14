@@ -38,7 +38,7 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-8](8-child-completion-crash-strands-the-waiting-parent.md) | `reported` | No plan for this failure | Open; reported from the Kenshou child completion crash-window scenario. |
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
 | [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `fixed` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Completed; history-backed initial-hole acceptance and persisted-codec replay pass aggregate and whole-service proofs, all eight witness mutations fail by name, and the full verification gate passes. Fixed version: `unreleased`. |
-| [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `in-progress` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Language 6 keyword-segment conformance suite reproduces GHC-61689; generator repair is underway. |
+| [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `fixed` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Implemented; keyword-segment conformance suite compiles and the full verification gate passes. Fixed version: `unreleased`. |
 | [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `reported` | [311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md) | Unimplemented; 0/12 progress items checked; source-level cause validated by the owning repository on master after 0.20.0.0 (binding view created at reconciliation, snapshot lists every view, expected snapshot carries only `projection_group_status_v1`). Reported through GitHub PR #7 as BUG-9 and renumbered on merge because BUG-9 was already allocated. |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
@@ -51,7 +51,8 @@ completed IR-18's replay-only mode/layout repair.
 
 BUG-11 was merged from GitHub PR #6 on 2026-10-13. The owning repository reproduced
 it on master the same day, set `confirmed`, and wrote plan 310. The compiled
-Language 6 regression now reproduces GHC-61689 and the report is `in-progress`.
+Language 6 regression reproduced GHC-61689 before the repair; it and the full
+verification gate now pass. The report is `fixed` with `fixedVersion: unreleased`.
 
 BUG-12 was merged from GitHub PR #7 on 2026-10-13. The owning repository confirmed the
 cause from master source the same day and wrote plan 311; no compiled reproduction or fix

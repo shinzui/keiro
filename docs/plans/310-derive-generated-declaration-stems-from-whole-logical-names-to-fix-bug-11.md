@@ -82,7 +82,7 @@ GHC remains the authority for import forms and export sets the audit cannot reso
 - [x] (2026-10-14T02:48Z) Milestone 2: refreshed the untouched read-model query hole, regenerated the new suite, and passed focused, compiled, and full DSL tests. The first full DSL matrix found two missing inventory entries; both were fixed. The committed corpus passes the clean-path drift check. The filled projection-catalog hole is test-owned and retained.
 - [x] (2026-10-14T02:48Z) Milestone 3: added `generatedImportResolutionViolations` to the shared pre-write refusal path; all four focused examples, including conservative controls, pass. The regenerated corpus covers all 55 planned invocations and passes the clean-path drift check.
 - [x] (2026-10-14T02:20Z) Milestone 4: updated the user reference and both Unreleased changelogs; allocated ADR-51, typechecked its profile, and passed strict ADR bundle validation (51 concepts).
-- [ ] Milestone 4: run `nix develop -c just verify` and read the exit marker inside the log; set BUG-11 `fixed` with `fixedVersion: unreleased` and a `resolution`, update the index row and log; write Outcomes & Retrospective and perform the ADR distillation pass.
+- [x] (2026-10-14T03:11Z) Milestone 4: the second `nix develop -c just verify` run ended with `exit: 0`; BUG-11 is `fixed` with `fixedVersion: unreleased` and a resolution. The report, index, log, and Outcomes & Retrospective are updated, and the ADR distillation pass is complete.
 
 
 ## Surprises & Discoveries
@@ -204,9 +204,22 @@ Generated/NamingRepro/ValidateCustomType/ReadModelHarness.hs:4:60: error: [GHC-6
 ## Outcomes & Retrospective
 
 
-Correctness review on 2026-10-13 verified the Language 6 fixture with the public CLI in
-the Nix shell and corrected the implementation and validation instructions below. No
-generator implementation or passing post-fix conformance result is claimed yet.
+BUG-11 is fixed in the unreleased generator. The Language 6 regression reproduced
+GHC-61689 before the repair; after whole-name stem sharing and upper-only segment
+casing, its generated read-model, runtime-record, and queue-policy checks all pass.
+The bounded import audit catches a provably absent generated value before writes
+and defers unknown Haskell export forms to GHC. Focused naming and import tests,
+all 55 clean-corpus invocations, and the second full Nix-shell `just verify` run
+passed (`exit: 0`). The first full gate found stale checked record inventories
+from the new suite and shifted source lines; regenerating both manifests resolved
+that drift.
+
+The repair intentionally changes Haskell source names for affected workqueues,
+structural projections, and retained read-model holes. The user reference and
+Unreleased changelogs give the required consumer edits; no persisted wire-key
+or registry identity change is claimed. ADR-51 carries the durable whole-name,
+upper-only, and bounded-audit decisions. The environment-specific `cabal exec`
+observation remains only in this plan.
 
 
 ## Context and Orientation
@@ -1185,7 +1198,7 @@ New test artefacts: `keiro-dsl/test/fixtures/keyword-segments.keiro`;
 `keiro-dsl/test/conformance-keyword-segments/` (generated tree, two hole stubs, `Main.hs`,
 ledger, fragment); the `keiro-dsl-conformance-keyword-segments` stanza in
 `keiro-dsl/keiro-dsl.cabal` depending on `aeson`, `base`, `effectful-core`,
-`hasql-transaction`, `keiro`, `keiro-core`, `keiro-pgmq`, `kiroku-store`, and `text`; the
+`hasql-transaction`, `keiki`, `keiro`, `keiro-core`, `keiro-pgmq`, `kiroku-store`, and `text`; the
 `Haskell.keyword-segments` and `Haskell.import-resolution` blocks in
 `keiro-dsl/test/Main.hs`; three examples in `keiro-dsl/test/haskell-name/Main.hs`.
 
@@ -1218,6 +1231,6 @@ validation, logging, and ID allocation; `just` recipes `corpus-regen`, `bug-repo
 - 2026-10-14: implementation added the failing Language 6 fixture, then repaired whole-name
   stems and upper-only casing, regenerated its compiled suite, and added the bounded import
   audit. The conformance example needed `keiki` and a filled test-owned catalog hole to run;
-  the repository's conformance and source-language inventories also needed explicit entries.
-  The plan records those discoveries and keeps the remaining clean-corpus and full-gate work
-  visible rather than treating the initial compiled success as completion.
+  the conformance and source-language inventories needed explicit entries. The full gate also
+  required refreshing checked record inventories. The second full gate passed, BUG-11 closed,
+  and the ADR distillation pass confirmed that ADR-51 captures the durable decisions.

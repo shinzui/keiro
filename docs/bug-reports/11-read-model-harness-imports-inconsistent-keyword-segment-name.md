@@ -3,14 +3,16 @@ type: Bug Report
 title: Read-model harness imports an inconsistent name for a keyword segment
 description: Keiro DSL accepts a read-model name ending in the snake-case segment type, but its generated definition and harness import disagree on capitalization and fail compilation.
 generated:
-  by: process:claude-code
-  at: "2026-10-14T02:07:43Z"
+  by: process:codex
+  at: "2026-10-14T03:11:15Z"
 bugId: BUG-11
-status: in-progress
+status: fixed
 severity: degraded
 origin: mori://tan/notification-render-service
 affects: mori://shinzui/keiro
 affectedVersion: "0.18.0.0"
+fixedVersion: "unreleased"
+resolution: Generated declarations and harness imports now share stems derived from whole logical names, while the scaffolder refuses provably absent plain-value imports between generated modules.
 environment: Released keiro-dsl and keiro 0.18.0.0; GHC 9.12.4 on aarch64 Darwin; accepted Language-4 reproduction and Language-6 consumer workspace.
 observed: The generated ReadModel exports validateCustomtypeReadModel, but ReadModelHarness imports validateCustomTypeReadModel. GHC rejects the import with GHC-61689. validate_recipient_type has the same mismatch.
 expected: An accepted read-model declaration should generate one consistent Haskell identifier across definitions and imports, as promised by the completed IR-16 naming policy.
@@ -194,11 +196,17 @@ The report was filed as BUG-8 in GitHub PR #6 and renumbered on merge because BU
 was already allocated on master.
 
 Tracked by [plan 310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md),
-which derives every generated declaration stem once from the whole logical name,
-shares the read-model stem between the definition and the harness import, adds a
-compiled keyword-segment conformance suite that fails before the repair, and audits
-generated-to-generated explicit imports before scaffold writes. Status is
-`in-progress` after the plan's Language 6 conformance suite reproduced GHC-61689.
-That suite fails on the untouched generated `ReadModelHarness.hs` import as
-predicted; the focused generator tests also report three failures and two passing
-controls before the repair.
+whose Language 6 keyword-segment conformance suite reproduced GHC-61689 before
+the repair. The focused generator tests also reported three failures and two
+passing controls before the repair.
+
+## Resolution (2026-10-14)
+
+Plan 310 now derives generated declaration stems from whole logical names and
+shares the read-model stem between its definition and harness. The scaffolder
+also refuses a plain-value generated import when a complete explicit sibling
+export list proves it absent. The new
+`keiro-dsl-conformance-keyword-segments` suite compiles and passes its read-model,
+runtime-record, and queue-policy checks, and the full Nix-shell `just verify`
+gate passes. Existing create-once consumer holes with affected names require
+manual source renames after re-scaffolding, as documented in the user reference.
