@@ -92,7 +92,7 @@ later steps that this plan names but does not perform.
 - [x] (2026-10-13) Milestone 2: validate the added focused generator tests to `keiro-dsl/test/Main.hs` (witness rows for hole-owned edges, unchanged synthetic rows for generated edges, replay-only still excluded, import gating when every initial edge is hole-owned, repeat scaffold byte stability).
 - [x] (2026-10-13) Milestone 2: regenerate the corpus, review the contract-only changes outside the new fixture/workspace, verify the ordinary Journey Harness is byte-identical, and pass `scripts/check-conformance-corpus.sh` from the committed baseline.
 - [x] (2026-10-13) Milestone 2: register the Language 6 suite and fixture in both explicit inventories; targeted reruns pass all three inventory examples. All five new generator tests and CLI workspace idempotency pass.
-- [ ] Milestone 2: confirm all 56 DSL suites pass after inventory registration through `just verify` (its `cabal test keiro-dsl:tests` runs the same complete target).
+- [x] (2026-10-14T00:11:26Z) Milestone 2: confirm all 56 DSL suites pass after inventory registration through `just verify` (its `cabal test keiro-dsl:tests` runs the same complete target).
 - [x] (2026-10-13) Milestone 3: add `domain/assignment.keiro` to the service-package workspace with its consumer modules and fills, extend the runtime library's module list and the CLI idempotency test's source list, regenerate, and pass `keiro-workspace-proof-conformance`.
 - [x] (2026-10-13) Milestone 4: add `keiro-dsl/test/history-dependent-holes-mutation-test.sh` proving named failures for every mutation BUG-10 lists, and wire it into `just verify` through a new `initial-hole-proof` recipe.
 - [x] (2026-10-13) Milestone 5: update `docs/user/replay-safety.md`, `docs/user/keiro-dsl-workspaces-and-generated-code.md`, and `docs/guides/choosing-keiro-dsl.md`; add Unreleased changelog entries; amend ADR-17; validate every bundle.
@@ -162,6 +162,28 @@ later steps that this plan names but does not perform.
   explicit list of fixtures outside Language 4. Both inventories now include
   the new fixture; the workspace mutation and all five new generator examples
   passed in that run.
+
+- The repository gate's complete DSL target now passes all 56 suites. Its main
+  suite reports `796 examples, 0 failures`, including both inventory fixes,
+  the five new generator checks, repeat scaffolding, and the compiled workspace
+  mutation proof. Runtime, retention, PGMQ, and operator suites also pass;
+  the remaining gate recipes are still running.
+
+- The first full gate passed all runtime and DSL suites plus documentation
+  validation, then stopped at `record-migration-policy` with `EXIT=1`.
+  `scripts/generate-record-migration-manifests.py` must refresh both checked
+  inventories after source lines and generated modules change. The package
+  manifest diff is solely source line numbers; the generated-edition manifest
+  records the 18 new generated modules, their records, and added field-label
+  occurrences in the uniformly extended contracts. These are generated
+  documentation updates, with no additional executable change.
+
+- After refreshing the manifests, the remaining gate recipes all pass:
+  record migration, generated names, clean-baseline corpus regeneration,
+  reaction mutations, instrumented hydration/recovery counts, all eight
+  initial-hole witness mutations, replay compatibility, and checked-mapping
+  adoption. Their execution restores every mutated source to its committed bytes.
+  A fresh full `just verify` run is still required for the final `EXIT=0` marker.
 
 ## Decision Log
 
@@ -702,6 +724,11 @@ coverageReportFor :: [BehaviorRequirement] -> [BehaviorWitness] -> BehaviorConfo
 coverageReportFor requirements witnesses = …
 ```
 
+The snippets above and below use the emitter's field names before edition
+modernization. Committed idiomatic-v2 output uses `requirement.key` and
+`report.required`, `report.filled`, and `report.failed`; the generated-language
+modernizer applies those translations to the rendered module.
+
 where `coverageReportFor` is today's `behaviorCoverageReport` body with `requiredByKey`
 built from the `requirements` argument. Everything else in the contract is unchanged.
 
@@ -989,6 +1016,17 @@ Advance the ADR's `timestamp`, add `okf log add docs/adr --kind Update -m "ADR-1
 evidence follows transition ownership (plan 309)"`, and run `nix develop -c just
 adr-validate`.
 
+Refresh and validate the generated record inventories after corpus changes:
+
+```bash
+nix develop -c python3 scripts/generate-record-migration-manifests.py
+nix develop -c just record-migration-policy
+```
+
+Review `keiro-dsl/record-field-migration-0.15.md` (source line shifts) and
+`keiro-dsl/generated-haskell-edition-idiomatic-v2.md` (new fixture modules and
+contract field-label occurrences), and commit them with the corpus repair.
+
 Run the full gate and read the marker inside the log rather than the shell's exit code:
 
 ```bash
@@ -1160,8 +1198,8 @@ behaviorObligationReport :: BehaviorKey -> [BehaviorWitness] -> BehaviorConforma
 ```
 
 with the law that `behaviorObligationReport key witnesses` equals the full
-`behaviorCoverageReport` projected onto `key`: its `reportRequired` is `[key]` when `key` is
-a requirement and `[]` otherwise, and its `reportStale` is `[]` for a known requirement key; an unknown key
+`behaviorCoverageReport` projected onto `key`: its generated `required` field is `[key]` when `key` is
+a requirement and `[]` otherwise, and its generated `stale` field is `[]` for a known requirement key; an unknown key
 with a supplied matching witness is reported stale.
 
 In `keiro-dsl/src/Keiro/Dsl/Harness.hs`, after Milestone 2:
@@ -1201,3 +1239,7 @@ Revision note (2026-10-13): the broad run exposed two explicit fixture inventori
 omitted by the original plan. Registered the new Language 6 proof in both; focused
 inventory reruns pass. The repository gate will rerun the entire DSL target, avoiding
 an additional duplicate run of its isolated workspace compilation test.
+
+Revision note (2026-10-14): the full gate exposed stale generated record inventories.
+Refreshed both through the repository generator, reviewed their source-line and
+new-fixture changes, and passed every remaining recipe before the full rerun.
