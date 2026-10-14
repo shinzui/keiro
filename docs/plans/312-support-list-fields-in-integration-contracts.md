@@ -130,7 +130,7 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 06:00Z) M4. Move IR-54 to `completed` with `completedAt` and `resolution`; log it; distill ADRs; write Outcomes & Retrospective.
 - [x] (2026-10-14) Follow-up: qualify the generated list index constructor and add an `Index` event to the compiled corpus and evolution fixtures.
 - [x] (2026-10-14) Follow-up: the regenerated contract compiles and all 15 list-codec checks pass, including the Index round-trip and indexed-error regression.
-- [ ] Follow-up: finish the DSL unit suite, repository policies, and clean-baseline corpus drift check.
+- [x] (2026-10-14) Follow-up: all 884 DSL unit examples, 15 compiled list-codec checks, 57-entry corpus drift verification, record-migration policy, generated-name policy (3 examples), extension policy, and formatting checks pass. Fix committed as `bade340b`.
 - [ ] Release. Ship in the next keiro-dsl release per the shared release convention; tick this box with the version; notify the consumer (see Milestone 4).
 
 
@@ -322,9 +322,10 @@ implementation. Provide concise evidence.
 The implementation-review follow-up qualifies Aeson’s index constructor using the
 already reserved `Aeson` qualifier, preserving legal event names without changing
 array semantics. The expanded compiled corpus passes 15 checks, including an `Index`
-event round-trip and its indexed error path. The full unit suite, policy checks,
-and clean-baseline corpus drift check are pending. This repairs the implementation
-of ADR-52; no architectural policy change is required.
+event round-trip and its indexed error path. All 884 DSL unit examples pass, as do
+the 57-entry clean-baseline corpus drift check, record-migration, generated-name
+(3 examples), extension, and formatting policies. The fix is committed as `bade340b`.
+This repairs the implementation of ADR-52; no architectural policy change is required.
 
 All four implementation milestones completed on 2026-10-14. Candidate Language 6
 accepts List of literal TypeID, generated declared ID, consumer-bound declared ID,
@@ -1388,4 +1389,6 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
   generated Aeson index constructor. Added a public `Index` event with a list field
   to the compiled corpus and matching evolution fixtures, with exact JSON round-trip
   and indexed-error checks. Updated import assertions and changelog. The regenerated corpus passes all 15 checks;
-  full unit, policy, and clean-baseline drift verification remain pending.
+  all 884 unit examples and the 57-entry clean-baseline drift check pass, along with
+  record-migration, generated-name, extension, and formatting policies. The review
+  finding is resolved by `bade340b`; the separate Release item remains open.
