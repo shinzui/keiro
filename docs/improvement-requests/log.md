@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-14
+* **Update**: IR-54 implementation started under ExecPlan 312.
+
 ## 2026-10-13
 * **Planning**: IR-54 accepted and planned as ExecPlan 312: List of an admitted scalar in contract fields (RES-18 Option B), gated on candidate Language 6, lowered to a Haskell list and an ordered JSON array with strict per-element admission, refused as outbox or dedupe identity, and classified by diff as public contract evolution.
 

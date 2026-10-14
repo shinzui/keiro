@@ -681,10 +681,12 @@ docContract c =
         )
         <> ":"
         <+> docContractType ((.valueType) f)
-    docContractType (CTypeId p) = "typeid" <+> dquoted p
-    docContractType (CDeclaredId name) = pretty name
-    docContractType CText = "text"
-    docContractType CInt = "int"
+    docContractType (CScalar scalar) = docContractScalar scalar
+    docContractType (CList scalar) = "List" <+> docContractScalar scalar
+    docContractScalar (CTypeId p) = "typeid" <+> dquoted p
+    docContractScalar (CDeclaredId name) = pretty name
+    docContractScalar CText = "text"
+    docContractScalar CInt = "int"
 
 --------------------------------------------------------------------------------
 -- Process + timer (EP-3)

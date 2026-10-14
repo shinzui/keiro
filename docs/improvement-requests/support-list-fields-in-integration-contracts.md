@@ -6,12 +6,12 @@ description: >-
   typeid, text or int), lowered to a Haskell list and a JSON array by the generated codec and
   governed by diff as public contract evolution, so a service whose integration message names
   several entities at once can keep that contract DSL-owned instead of hand-writing its codec.
-timestamp: 2026-10-13T15:16:00Z
+timestamp: 2026-10-14T04:08:00Z
 generated:
   by: process:claude-code
   at: 2026-10-07T06:30:00Z
 requestId: IR-54
-status: accepted
+status: in-progress
 origin: mori://tan/notification-render-service
 plan: docs/plans/312-support-list-fields-in-integration-contracts.md
 reviews:
@@ -61,8 +61,7 @@ Accepted on 2026-10-13 and planned as
 Option B of [RES-18](../research/15-containers-in-public-contract-fields.md): `List` of an
 admitted scalar inside the separately owned contract grammar, gated on candidate Language 6,
 with strict decoding, a rejected missing key, and no `Optional`, `Map`, or nesting. A list
-field is refused as a publisher `outboxId` or an intake `dedupe` key. Implementation has not
-started.
+field is refused as a publisher `outboxId` or an intake `dedupe` key. Implementation is in progress under ExecPlan 312.
 
 Raised by `mori://tan/notification-render-service`, the notification renderer's Haskell domain
 service, from its ExecPlan 17 (`docs/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox.md`).

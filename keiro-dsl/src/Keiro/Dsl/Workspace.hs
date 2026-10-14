@@ -1407,6 +1407,8 @@ instance HasLocs ContractNode
 
 instance HasLocs DomainOutcomeTypes
 
+instance HasLocs ContractScalarType
+
 instance HasLocs ContractType
 
 instance HasLocs CorrelateDecl

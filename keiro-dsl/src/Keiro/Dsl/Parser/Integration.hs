@@ -60,7 +60,8 @@ pContract context = do
       ty <- pContractType
       _ <- optional (symbol ";")
       pure ContractField {name = n, selector = selector, wireKey = wireKey, valueType = ty, loc = loc}
-    pContractType =
+    pContractType = CScalar <$> pContractScalarType
+    pContractScalarType =
       choice
         [ CTypeId <$> (keyword "typeid" *> stringLit),
           CText <$ keyword "text",

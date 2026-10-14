@@ -110,7 +110,10 @@ module Keiro.Dsl.Grammar
     RouterNode (..),
 
     -- * The integration contract node (EP-4)
+    ContractScalarType (..),
     ContractType (..),
+    contractScalar,
+    contractIsList,
     ContractField (..),
     ContractEvent (..),
     ContractNode (..),
@@ -1060,8 +1063,20 @@ data RouterNode = RouterNode
 -- EP-4: the cross-service @contract@ (shared Kafka message schema, define-once).
 
 -- | A contract field type: @typeid \"inc\"@, a declared ID, @text@, or @int@.
-data ContractType = CTypeId !Text | CDeclaredId !Name | CText | CInt
+data ContractScalarType = CTypeId !Text | CDeclaredId !Name | CText | CInt
   deriving stock (Eq, Show, Generic)
+
+-- | A scalar or a list of one scalar; nesting is unrepresentable.
+data ContractType = CScalar !ContractScalarType | CList !ContractScalarType
+  deriving stock (Eq, Show, Generic)
+
+contractScalar :: ContractType -> ContractScalarType
+contractScalar (CScalar scalar) = scalar
+contractScalar (CList scalar) = scalar
+
+contractIsList :: ContractType -> Bool
+contractIsList CList {} = True
+contractIsList CScalar {} = False
 
 data ContractField = ContractField
   { name :: !Name,

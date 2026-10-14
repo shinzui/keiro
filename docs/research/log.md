@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-14
+* **Update**: RES-18 outcome recorded as ADR-52.
+
 ## 2026-10-13
 * **Update**: RES-18 is revisited by IR-54: ExecPlan 312 adopts Option B for List fields of an admitted scalar only; the outcome ADR is written in that plan's first milestone.
 

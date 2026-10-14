@@ -26,7 +26,7 @@ import Data.List (find)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Keiro.Codec.IdDomain
-import Keiro.Dsl.Grammar (ContractEvent (..), ContractField (..), ContractNode (..), ContractType (..), IdDecl (..), Node (..), Spec (..))
+import Keiro.Dsl.Grammar (ContractEvent (..), ContractField (..), ContractNode (..), ContractScalarType (..), IdDecl (..), Node (..), Spec (..), contractScalar)
 import Keiro.Dsl.LanguageVersion (RuntimeCapability (..), runtimeProfileHasCapability)
 import Keiro.Dsl.SemanticContract (CheckedService, EffectiveLanguageContract (..), checkedLanguageContract, checkedSpec)
 
@@ -100,7 +100,7 @@ idDomainIdentitiesForService service =
         Just (admission, prefix) <- [contractFieldAdmission field],
         Just contract <- [contractIdDomainContractForAdmission languageContract admission prefix]
       ]
-    contractFieldAdmission field = case (.valueType) field of
+    contractFieldAdmission field = case contractScalar ((.valueType) field) of
       CTypeId prefix -> Just (TypeIdV7, prefix)
       CDeclaredId name -> (\declaration -> ((.admission) declaration, (.prefix) declaration)) <$> find ((== name) . (.name)) ((.ids) spec)
       _ -> Nothing

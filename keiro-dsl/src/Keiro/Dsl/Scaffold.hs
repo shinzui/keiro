@@ -3903,16 +3903,16 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     <> if hasTypedTypeIds then "\n" else ""
   where
     payloadTy = pascal ((.name) c) <> "Payload"
-    hasTypedTypeIds = any (any (isTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
-    hasLiteralTypedTypeIds = any (any (isLiteralTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
-    usesPlainFieldDecode = any (any (not . isTypedTypeId . (.valueType)) . (.fields)) ((.events) c)
+    hasTypedTypeIds = any (any (isTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
+    hasLiteralTypedTypeIds = any (any (isLiteralTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
+    usesPlainFieldDecode = any (any (not . isTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
     moduleName = genPrefix <> ".Contract"
     declaredLeaves =
       Map.fromList
         [ (name, declaredLeaf name)
         | event <- (.events) c,
           field <- (.fields) event,
-          CDeclaredId name <- [(.valueType) field]
+          CDeclaredId name <- [contractScalar ((.valueType) field)]
         ]
     importPlan =
       planImportsOrDie
@@ -3939,12 +3939,14 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
         RequireQualified
     renderedDeclaredLeafHelper prefix name =
       renderReferenceOrDie importPlan (declaredLeafHelperReference prefix (declaredLeaf name))
-    contractValueType CText = "Text"
-    contractValueType CInt = "Int"
-    contractValueType (CTypeId prefix)
+    contractValueType (CScalar scalar) = contractScalarType scalar
+    contractValueType (CList scalar) = "[" <> contractScalarType scalar <> "]"
+    contractScalarType CText = "Text"
+    contractScalarType CInt = "Int"
+    contractScalarType (CTypeId prefix)
       | isJust (contractIdDomainContractFor languageContract prefix) = "(KindID " <> tshow prefix <> ")"
       | otherwise = "Text"
-    contractValueType (CDeclaredId name) =
+    contractScalarType (CDeclaredId name) =
       renderReferenceOrDie importPlan (nominalLeafTypeReference ctx (declaredLeaf name))
     pragmas =
       renderGeneratedLanguagePragmas
@@ -4009,14 +4011,14 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     encodeField field =
       tshow ((.wireKey) identity)
         <> " .= "
-        <> case (.valueType) field of
+        <> case contractScalar ((.valueType) field) of
           CTypeId prefix
             | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> (.selector) identity
           CDeclaredId name -> renderedDeclaredLeafHelper "encode" name <> " payload." <> (.selector) identity
           _ -> "payload." <> (.selector) identity
       where
         identity = resolveContractFieldIdentity field
-    decodeField field = case (.valueType) field of
+    decodeField field = case contractScalar ((.valueType) field) of
       CTypeId prefix
         | isJust (contractIdDomainContractFor languageContract prefix) ->
             "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow wireKey
@@ -4035,7 +4037,7 @@ emitPayloadAdt :: EffectiveLanguageContract -> (ContractType -> Text) -> Text ->
 emitPayloadAdt languageContract valueType tyName events =
   sectionsOf [map dataRecord events, [sumDecl]]
   where
-    hasTypedTypeIds = any (any (isTypedTypeId . (.valueType)) . (.fields)) events
+    hasTypedTypeIds = any (any (isTypedTypeId . contractScalar . (.valueType)) . (.fields)) events
     isTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
     isTypedTypeId CDeclaredId {} = True
     isTypedTypeId _ = False

@@ -938,7 +938,7 @@ collectUseSites keyByName nominalByName enumNames spec =
           )
       | event <- (.events) contract,
         field <- (.fields) event,
-        CDeclaredId nominalName <- [(.valueType) field],
+        CDeclaredId nominalName <- [contractScalar ((.valueType) field)],
         Just NominalLeaf {kind = NominalIdLeaf {}} <- [Map.lookup nominalName nominalByName]
       ]
 

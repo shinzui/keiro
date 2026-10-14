@@ -211,7 +211,7 @@ depsForNode service n = case n of
     integration = ["effectful-core", "hasql-transaction", "keiro", "kiroku-store"]
     hasTypedContractId contract =
       or
-        [ case (.valueType) field of
+        [ case contractScalar ((.valueType) field) of
             CTypeId prefix -> contractIdDomainContractFor (checkedLanguageContract service) prefix /= Nothing
             CDeclaredId {} -> True
             _ -> False

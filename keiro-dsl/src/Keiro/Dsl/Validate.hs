@@ -2448,7 +2448,7 @@ validateContract languageContract spec contract =
             <> T.pack (show reason)
       | event <- (.events) contract,
         field <- (.fields) event,
-        CTypeId prefix <- [(.valueType) field],
+        CTypeId prefix <- [contractScalar ((.valueType) field)],
         Just _ <- [contractIdDomainContractFor languageContract prefix],
         Just reason <- [TypeID.checkPrefix prefix]
       ]
@@ -2466,7 +2466,7 @@ validateContract languageContract spec contract =
             <> declaredIdProblem declaredName
       | event <- (.events) contract,
         field <- (.fields) event,
-        CDeclaredId declaredName <- [(.valueType) field],
+        CDeclaredId declaredName <- [contractScalar ((.valueType) field)],
         all ((/= declaredName) . (.name)) ((.ids) spec)
       ]
     declaredIdProblem declaredName

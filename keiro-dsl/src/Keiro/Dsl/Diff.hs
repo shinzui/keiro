@@ -896,7 +896,7 @@ renderIdDomainContract (Just contract) =
   idDomainVersion contract <> "(prefix=" <> idDomainPrefix contract <> ",json=" <> idDomainJsonRepresentation contract <> ")"
 
 contractFieldIdDomain :: Spec -> EffectiveLanguageContract -> ContractField -> Maybe IdDomainContract
-contractFieldIdDomain spec languageContract field = case (.valueType) field of
+contractFieldIdDomain spec languageContract field = case contractScalar ((.valueType) field) of
   CTypeId prefix -> contractIdDomainContractFor languageContract prefix
   CDeclaredId name -> do
     declaration <- find ((== name) . (.name)) ((.ids) spec)
@@ -923,7 +923,7 @@ renderContractIdDomainChange resolvedPrefix valueType oldContract newContract =
     <> renderIdDomainContract newContract
     <> representationChange
   where
-    prefix = case valueType of
+    prefix = case contractScalar valueType of
       CTypeId value -> value
       CDeclaredId _ -> fromMaybe "" resolvedPrefix
       _ -> ""
@@ -2831,15 +2831,21 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
             subject
             ContractFieldChanged
             (detail <> "; canonical JSON bytes and TypeID admission are unchanged, but generated consumers must rebuild for the declared Haskell type")
-      | otherwise = breaking ((.name) newContract) "contract-field" subject ContractFieldChanged detail
+      | otherwise = breaking ((.name) newContract) "contract-field" subject ContractFieldChanged (detail <> if oldDomain /= newDomain then renderIdDomainDirection oldDomain newDomain else "")
       where
         subject = (.name) newEvent <> "." <> (.name) newField
         detail = "field type changed " <> renderContractType ((.valueType) oldField) <> " -> " <> renderContractType ((.valueType) newField)
+        oldDomain = contractFieldIdDomain ((.old) env) (checkedLanguageContract ((.oldService) env)) oldField
+        newDomain = contractFieldIdDomain ((.new) env) (checkedLanguageContract ((.newService) env)) newField
         literalDeclaredSamePrefix =
           isLiteralDeclaredTransition ((.valueType) oldField) ((.valueType) newField)
+            && isJust oldDomain
+            && oldDomain == newDomain
             && contractTypePrefix ((.old) env) ((.valueType) oldField) == contractTypePrefix ((.new) env) ((.valueType) newField)
-    isLiteralDeclaredTransition CTypeId {} CDeclaredId {} = True
-    isLiteralDeclaredTransition CDeclaredId {} CTypeId {} = True
+    isLiteralDeclaredTransition (CScalar CTypeId {}) (CScalar CDeclaredId {}) = True
+    isLiteralDeclaredTransition (CScalar CDeclaredId {}) (CScalar CTypeId {}) = True
+    isLiteralDeclaredTransition (CList CTypeId {}) (CList CDeclaredId {}) = True
+    isLiteralDeclaredTransition (CList CDeclaredId {}) (CList CTypeId {}) = True
     isLiteralDeclaredTransition _ _ = False
     selectorFieldChanges =
       [ fieldSelectorChange
@@ -2878,15 +2884,22 @@ contractEventDiff env oldContract newContract oldEvent newEvent =
       ]
 
 renderContractType :: ContractType -> Text
-renderContractType (CTypeId prefix) = "typeid '" <> prefix <> "'"
-renderContractType (CDeclaredId name) = name
-renderContractType CText = "text"
-renderContractType CInt = "int"
+renderContractType (CScalar scalar) = renderContractScalar scalar
+renderContractType (CList scalar) = "List " <> renderContractScalar scalar
+
+renderContractScalar :: ContractScalarType -> Text
+renderContractScalar (CTypeId prefix) = "typeid '" <> prefix <> "'"
+renderContractScalar (CDeclaredId name) = name
+renderContractScalar CText = "text"
+renderContractScalar CInt = "int"
 
 contractTypePrefix :: Spec -> ContractType -> Maybe Text
-contractTypePrefix _ (CTypeId prefix) = Just prefix
-contractTypePrefix spec (CDeclaredId name) = (.prefix) <$> find ((== name) . (.name)) ((.ids) spec)
-contractTypePrefix _ _ = Nothing
+contractTypePrefix spec = contractScalarPrefix spec . contractScalar
+
+contractScalarPrefix :: Spec -> ContractScalarType -> Maybe Text
+contractScalarPrefix _ (CTypeId prefix) = Just prefix
+contractScalarPrefix spec (CDeclaredId name) = (.prefix) <$> find ((== name) . (.name)) ((.ids) spec)
+contractScalarPrefix _ _ = Nothing
 
 workqueueDiff :: DiffEnv -> [Change]
 workqueueDiff env =

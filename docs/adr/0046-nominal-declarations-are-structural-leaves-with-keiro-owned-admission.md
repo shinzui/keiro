@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Nominal declarations are structural leaves with Keiro-owned admission
 description: Candidate Language 6 preserves declared nominal domain types and explicit versioned ID admission inside structural shapes while generated leaf codecs retain TypeID, scalar, and declared-enum spelling authority across aggregate, queue, contract, and query roots.
-timestamp: 2026-09-20T14:34:41Z
+timestamp: 2026-10-14T04:22:12Z
 docId: ADR-46
 status: Accepted
 date: 2026-09-17
@@ -68,8 +68,11 @@ complete value.
 Public contract event fields may name a declared ID directly. The payload uses the declared
 generated or consumer-bound Haskell type while the declaration remains the sole prefix and
 TypeID admission authority. Moving between a literal `typeid` and a declaration with the
-same prefix preserves JSON bytes but changes the consumer build type; changing the prefix is a
-public wire break.
+same prefix and resolved admission domain preserves JSON bytes but changes the consumer
+build type. Equal prefix alone does not establish compatibility: widening or narrowing
+admission is public breaking. [ADR-52](0052-integration-contracts-admit-lists-of-scalar-fields.md)
+extends this rule to list elements and requires unchanged scalar/list shape. Changing the
+prefix is a public wire break.
 
 Candidate Language 6 ID declarations may explicitly select the frozen
 `keiro-dsl/id-domain/typeid-v5-or-v7/1` contract. Omitting the option preserves

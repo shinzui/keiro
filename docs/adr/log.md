@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: ADR-46 clarifies that literal/declared public ID transitions require equal admission and shape, as implemented by ADR-52.
+* **Addition**: ADR-52 admits List fields of scalar types in integration contracts (Option B of RES-18) for IR-54.
 * **Update**: ADR-9 records registry-aware verification, identity-only exclusions, and guarded catalog fallback under plan 311.
 * **Addition**: ADR-51: derive generated declaration names from whole logical names and audit known sibling exports
 * **Update**: Clarify inspection isolation: default-off bounded provenance, admission and feed resource limits, and measured runtime interference before release.

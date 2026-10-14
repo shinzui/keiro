@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-14T01:10:14Z
       mode: "update"
       note: "Correct admission-aware evolution, envelope-key precedence, parser/gate cases, corpus registration, CLI validation, and observable acceptance after correctness review."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-14T04:06:31Z
+      mode: "implement"
+      note: "Implement list contract fields, strict generated codecs, validation, evolution and conformance coverage."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -91,17 +96,17 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 ## Progress
 
 - [x] (2026-10-14 01:08Z) Correctness review completed and plan revised; reproduced the admission-transition gap in a Nix-shell probe. Implementation has not started.
-- [ ] M1. Move IR-54 to `in-progress` (frontmatter `status`, body Status, log entry).
-- [ ] M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`. Land this first with no producer of `CList`: the full build and every existing suite must pass before the lowering and the parser.
+- [x] (2026-10-14 04:08Z) M1. Move IR-54 to `in-progress` (frontmatter `status`, body Status, log entry).
+- [x] (2026-10-14 04:23Z) M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`. Land this first with no producer of `CList`: the full build and every existing suite must pass before the lowering and the parser.
 - [ ] M1. Add `ContractListFieldSyntax` to `LanguageFeature` and to `profileV5` in `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`.
 - [ ] M1. Parse `List <scalar>` in `pContractType` (`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`), gate it, and refuse nested containers with a stable message.
-- [ ] M1. Print `List <scalar>` in `docContractType` (`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).
-- [ ] M1. Update every scalar-only match site through `contractScalar`: `Validate.hs`, `IdDomain.hs`, `Manifest.hs`, `TypeGraph.hs`, `Diff.hs`, `Scaffold.hs`, `Workspace.hs`, `test/Main.hs`.
-- [ ] M1. Require equal resolved ID admission domains for the literal-to-declared advisory; M2 proves widened/narrowed admission and both shape-change directions.
+- [x] (2026-10-14 04:23Z) M1. Print `List <scalar>` in `docContractType` (`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).
+- [x] (2026-10-14 04:08Z) M1. Update every scalar-only match site through `contractScalar`: `Validate.hs`, `IdDomain.hs`, `Manifest.hs`, `TypeGraph.hs`, `Diff.hs`, `Scaffold.hs`, `Workspace.hs`, `test/Main.hs`.
+- [x] (2026-10-14 04:08Z) M1. Require equal resolved ID admission domains for the literal-to-declared advisory; M2 proves widened/narrowed admission and both shape-change directions.
 - [ ] M1. Lower list fields in `emitContractGen` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`): record type, array encoder, `parseContractList` decoder and its imports.
 - [ ] M1. Add fixtures `keiro-dsl/test/fixtures/contract-list-fields.keiro` and `contract-list-fields-language5.keiro`; register them in the fixture inventory test.
 - [ ] M1. Update `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` (minimum version map, `allFeatures`, `FeatureCase`, feature body).
-- [ ] M1. Write the ADR (handle from `okf id next`), add its log entry, and record the revisit outcome in RES-18.
+- [x] (2026-10-14 04:23Z) M1. Write the ADR (handle from `okf id next`), add its log entry, and record the revisit outcome in RES-18.
 - [ ] M1. `nix develop -c cabal build all --enable-tests --enable-benchmarks` passes; `check`, `pretty`, Language 5 refusal, and nested refusal behave as specified.
 - [ ] M2. Add `ContractListFieldUsedAsKey` to `DiagnosticCode`; refuse a list field as publisher `outboxId` and as intake `dedupe` key.
 - [ ] M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`, and `contract-list-fields-admission-change.keiro`; register them.
@@ -139,6 +144,13 @@ implementation. Provide concise evidence.
   `Validate.hs` resolves canonical envelope names independently of event fields. The new
   parser refusal must recognize keyword casing, and a payload list must not invalidate a
   canonical envelope identity with the same spelling.
+
+
+- Observation (2026-10-14 implementation): `Parser/Core.hs:145-147` aliases
+  `string'` to case-sensitive `chunk`; the review's assumption of case-insensitive
+  keywords was incorrect. Use a contract-local case-insensitive container keyword
+  parser with the same identifier boundary for List and forbidden containers. This
+  preserves global keyword behavior and makes the specified mixed-case refusals stable.
 
 
 ## Decision Log
@@ -260,8 +272,12 @@ this section into docs/adr/. Keep task-local execution details here.
 
 Correctness review updated the implementation instructions and acceptance cases on
 2026-10-14. The current differ reproduces the admission bug described above; no feature
-code has been changed and no milestone is implemented. Implementation outcomes remain
-to be recorded. The review verified Z3 4.16.0 in `nix develop`, ran the focused scalar
+code has been changed and no milestone is implemented. Implementation started on 2026-10-14. IR-54 is in progress; the type split,
+scalar fact consumers, and admission-aware literal/declared comparison are implemented.
+The first compiling step passed the full all-components build, `cabal test all`
+(including 806 DSL unit examples), and corpus drift verification. Parser production of
+lists remains pending. ADR-52 and the research/improvement-request bundles validate.
+ADR-46 now states the shared resolved-admission requirement explicitly. The review verified Z3 4.16.0 in `nix develop`, ran the focused scalar
 admission probe successfully, and passed document checks for section order, tagged code
 blocks, ADR links, and whitespace. Feature builds and conformance tests remain the work
 of the implementation milestones.
@@ -512,7 +528,8 @@ tells you what each one becomes.
 `ExplicitIdAdmissionDomainSyntax`, near line 416) and insert it into `profileV5` (line 322)
 with another `Set.insert`. Do not touch `profileV4`, any runtime profile, or the registry.
 
-**Parser.** In `keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`, import
+**Parser.** In `keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`, import `string'` and `char` from `Text.Megaparsec.Char` for a local
+case-insensitive container keyword parser with the existing identifier boundary. Import
 `ContractListFieldSyntax` beside `ContractDeclaredIdSyntax` and rewrite `pContractType`
 so that the `List` keyword is tried first, gated, and followed by one scalar:
 
@@ -520,7 +537,7 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
     pContractType =
       choice
         [ do
-            listKeyword <- withOwnedSpan (try (keyword "List"))
+            listKeyword <- withOwnedSpan (try (contractContainerKeyword "List"))
             requireLanguageFeatureAt context ContractListFieldSyntax (spanOf listKeyword)
             CList <$> pContractScalarType,
           CScalar <$> pContractScalarType
@@ -532,7 +549,7 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
           CInt <$ keyword "int",
           do
             offset <- getOffset
-            forbidden <- optional (lookAhead (choice (map keyword reservedContainerWords)))
+            forbidden <- optional (lookAhead (choice (map contractContainerKeyword reservedContainerWords)))
             case forbidden of
               Just () -> failAt offset nestedContainerMessage
               Nothing -> pure ()
@@ -549,7 +566,7 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
 a megaparsec source offset, not a span, so capture `getOffset` (from `Text.Megaparsec`,
 already imported) before the forbidden-keyword check and pass it. `withOwnedSpan`, `spanOf`, and `locatedValue`
 are exported by the same `Parser/Core.hs` (export list, lines 20 to 57). Check forbidden
-container keywords before `ident`, using `keyword` so case-insensitive spellings such as
+container keywords before `ident`, using the local `contractContainerKeyword` so case-insensitive spellings such as
 `List list TemplateId` and `List map text` get the same refusal. The requirement is a
 stable message at the offending token. Because the gate is checked before the
 declared-id branch, a Language 5 source fails at `List`, not at the element name. The
@@ -1205,3 +1222,19 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
   self-contained example, generated literal-ID type assertion, CLI diff invocation, corpus
   sidecar tracking/commit order, verification exit status, and corpus acceptance JSON.
   Added null, duplicate, alias, and import-selection coverage. Implementation remains pending.
+
+- 2026-10-14 (implement): Started IR-54, split contract shape from scalar facts without
+  a List parser producer, and corrected the literal/declared advisory predicate to compare
+  resolved admission. Allocated ADR-52 to preserve the public array and identity policy.
+
+- 2026-10-14 (implement): Corrected the parser instructions after reading Core.hs: its
+  keyword helper is case-sensitive despite the misleading local alias. Keep mixed-case
+  container refusal local to contracts rather than altering every language keyword.
+
+- 2026-10-14 (implement): Type-split step passed the full build, every existing suite,
+  and corpus drift check before introducing a List parser producer. Added ADR-52 and
+  clarified ADR-46; user documentation is drafted for the later documentation milestone.
+
+- 2026-10-14 (implement): Verified the `List` type keyword in both Vim and TextMate
+  implementations owned by `mori://shinzui/keiro-syntax`; no spelling change is needed
+  there. Release and downstream adoption communication remain the separate Release item.

@@ -16152,7 +16152,7 @@ genRouter =
     <*> pure noLoc
 
 genContractField :: Gen ContractField
-genContractField = ContractField <$> genName <*> pure Nothing <*> pure Nothing <*> oneof [CTypeId <$> genAdversarialText, pure CText, pure CInt] <*> pure noLoc
+genContractField = ContractField <$> genName <*> pure Nothing <*> pure Nothing <*> (CScalar <$> oneof [CTypeId <$> genAdversarialText, pure CText, pure CInt]) <*> pure noLoc
 
 genContractEvent :: Gen ContractEvent
 genContractEvent = ContractEvent <$> genName <*> genName <*> smallList genContractField
