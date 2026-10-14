@@ -103,7 +103,7 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 04:23Z) M1. Print `List <scalar>` in `docContractType` (`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).
 - [x] (2026-10-14 04:08Z) M1. Update every scalar-only match site through `contractScalar`: `Validate.hs`, `IdDomain.hs`, `Manifest.hs`, `TypeGraph.hs`, `Diff.hs`, `Scaffold.hs`, `Workspace.hs`, `test/Main.hs`.
 - [x] (2026-10-14 04:08Z) M1. Require equal resolved ID admission domains for the literal-to-declared advisory; M2 proves widened/narrowed admission and both shape-change directions.
-- [ ] M1. Lower list fields in `emitContractGen` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`): record type, array encoder, `parseContractList` decoder and its imports.
+- [x] (2026-10-14 04:30Z) M1. Lower list fields in `emitContractGen` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`): record type, array encoder, `parseContractList` decoder and its imports.
 - [ ] M1. Add fixtures `keiro-dsl/test/fixtures/contract-list-fields.keiro` and `contract-list-fields-language5.keiro`; register them in the fixture inventory test.
 - [ ] M1. Update `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` (minimum version map, `allFeatures`, `FeatureCase`, feature body).
 - [x] (2026-10-14 04:23Z) M1. Write the ADR (handle from `okf id next`), add its log entry, and record the revisit outcome in RES-18.
@@ -140,8 +140,9 @@ implementation. Provide concise evidence.
   fragments. `keiro-dsl/test/README.md` requires force-adding both. The driver in
   `keiro-dsl/tools/corpus-regen/src/Main.hs` also requires clean corpus paths before
   ordinary regeneration, so the initial corpus must be committed first.
-- Observation (2026-10-14): `Parser/Core.hs` implements case-insensitive keywords, and
-  `Validate.hs` resolves canonical envelope names independently of event fields. The new
+- Observation (2026-10-14): the review assumed case-insensitive keywords; implementation found that
+  `Parser/Core.hs` actually aliases its misleading `string'` name to case-sensitive
+  `chunk`. `Validate.hs` resolves canonical envelope names independently of event fields. The new
   parser refusal must recognize keyword casing, and a payload list must not invalidate a
   canonical envelope identity with the same spelling.
 
@@ -271,16 +272,16 @@ distill durable project context from the Decision Log, Surprises & Discoveries, 
 this section into docs/adr/. Keep task-local execution details here.
 
 Correctness review updated the implementation instructions and acceptance cases on
-2026-10-14. The current differ reproduces the admission bug described above; no feature
-code has been changed and no milestone is implemented. Implementation started on 2026-10-14. IR-54 is in progress; the type split,
+2026-10-14. At review time the differ reproduced the admission bug described above, before
+implementation began. The shared predicate has now been corrected. Implementation started on 2026-10-14. IR-54 is in progress; the type split,
 scalar fact consumers, and admission-aware literal/declared comparison are implemented.
 The first compiling step passed the full all-components build, `cabal test all`
 (including 806 DSL unit examples), and corpus drift verification. Parser production of
 lists remains pending. ADR-52 and the research/improvement-request bundles validate.
 ADR-46 now states the shared resolved-admission requirement explicitly. The review verified Z3 4.16.0 in `nix develop`, ran the focused scalar
 admission probe successfully, and passed document checks for section order, tagged code
-blocks, ADR links, and whitespace. Feature builds and conformance tests remain the work
-of the implementation milestones.
+blocks, ADR links, and whitespace. The feature-specific parser and compiled corpus remain pending; scalar-only
+builds, existing tests, and corpus drift passed the type-split step.
 
 
 ## Context and Orientation
@@ -571,7 +572,7 @@ container keywords before `ident`, using the local `contractContainerKeyword` so
 stable message at the offending token. Because the gate is checked before the
 declared-id branch, a Language 5 source fails at `List`, not at the element name. The
 words in `reservedContainerWords` are reserved only in the contract type position; a
-declared id named `Listing` still parses because `keyword` requires a word boundary.
+declared id named `Listing` still parses because the local container keyword parser requires the same word boundary.
 
 **Pretty printer.** In `keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`, line 684, replace
 `docContractType` with a function on `ContractType` that prints `"List" <+> docContractScalar s`
@@ -1238,3 +1239,11 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
 - 2026-10-14 (implement): Verified the `List` type keyword in both Vim and TextMate
   implementations owned by `mori://shinzui/keiro-syntax`; no spelling change is needed
   there. Release and downstream adoption communication remain the separate Release item.
+
+- 2026-10-14 (implement): List lowering passed the all-components build while no
+  parser produces CList. Existing suites are running against this generator before
+  enabling the new syntax. The type split was committed as `8802f372`.
+
+- 2026-10-14 (implement): The lowering step passed the full build, every existing
+  suite (806 DSL examples), and the unchanged 55-entry corpus drift check before
+  any parser could produce CList. Proceeding to the language feature and fixtures.

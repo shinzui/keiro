@@ -3852,7 +3852,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
              -- contract whose every field is one never uses (.:) and would warn
              -- under -Wunused-imports.
              "import Data.Aeson ("
-               <> T.intercalate ", " (["Value", "object", "withObject", "withText"] <> ["(.:)" | usesPlainFieldDecode] <> ["(.=)"])
+               <> T.intercalate ", " (["Value", "object", "withObject", "withText"] <> ["(.:)" | usesPlainFieldDecode] <> ["parseJSON" | hasListFields] <> ["(.=)"])
                <> ")",
              aesonTypesImport
            ]
@@ -3899,13 +3899,17 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
              "  | kind `elem` " <> renderTextList (map (.name) ((.events) c)) <> " = pure kind",
              "  | otherwise = " <> renderUnknownFailure "message type" "kind" (map (.name) ((.events) c))
            ]
+        ++ (if hasListFields then listParserHelper else [])
   )
     <> if hasTypedTypeIds then "\n" else ""
   where
     payloadTy = pascal ((.name) c) <> "Payload"
     hasTypedTypeIds = any (any (isTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
     hasLiteralTypedTypeIds = any (any (isLiteralTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
-    usesPlainFieldDecode = any (any (not . isTypedTypeId . contractScalar . (.valueType)) . (.fields)) ((.events) c)
+    hasListFields = any (any (contractIsList . (.valueType)) . (.fields)) ((.events) c)
+    usesPlainFieldDecode = any (any (isPlainScalar . (.valueType)) . (.fields)) ((.events) c)
+    isPlainScalar (CScalar scalar) = not (isTypedTypeId scalar)
+    isPlainScalar CList {} = False
     moduleName = genPrefix <> ".Contract"
     declaredLeaves =
       Map.fromList
@@ -3979,7 +3983,10 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     isTypedTypeId _ = False
     isLiteralTypedTypeId (CTypeId prefix) = isJust (contractIdDomainContractFor languageContract prefix)
     isLiteralTypedTypeId _ = False
-    aesonTypesImport = "import Data.Aeson.Types (Parser, explicitParseField, parseEither)"
+    aesonTypesImport =
+      "import Data.Aeson.Types (Parser, explicitParseField, parseEither"
+        <> (if hasListFields then ", JSONPathElement (Index), (<?>)" else "")
+        <> ")"
     encodeArm e =
       [ "  " <> (.name) e <> " payload ->",
         "    object"
@@ -4009,23 +4016,38 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
                  ]
               ++ ["                )"]
     encodeField field =
-      tshow ((.wireKey) identity)
-        <> " .= "
-        <> case contractScalar ((.valueType) field) of
-          CTypeId prefix
-            | isJust (contractIdDomainContractFor languageContract prefix) -> "KindID.toText payload." <> (.selector) identity
-          CDeclaredId name -> renderedDeclaredLeafHelper "encode" name <> " payload." <> (.selector) identity
-          _ -> "payload." <> (.selector) identity
+      tshow ((.wireKey) identity) <> " .= " <> encoded
       where
         identity = resolveContractFieldIdentity field
-    decodeField field = case contractScalar ((.valueType) field) of
-      CTypeId prefix
-        | isJust (contractIdDomainContractFor languageContract prefix) ->
-            "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow wireKey
-      CDeclaredId name -> "explicitParseField " <> renderedDeclaredLeafHelper "parse" name <> " o " <> tshow wireKey
-      _ -> "o .: " <> tshow wireKey
+        payloadField = "payload." <> (.selector) identity
+        encoded = case elementEncoder (contractScalar ((.valueType) field)) of
+          Nothing -> payloadField
+          Just encoder -> (if contractIsList ((.valueType) field) then "map " else "") <> encoder <> " " <> payloadField
+    elementEncoder (CTypeId prefix)
+      | isJust (contractIdDomainContractFor languageContract prefix) = Just "KindID.toText"
+    elementEncoder (CDeclaredId name) = Just (renderedDeclaredLeafHelper "encode" name)
+    elementEncoder _ = Nothing
+    decodeField field = case (.valueType) field of
+      CList scalar -> "explicitParseField (parseContractList " <> elementParser scalar <> ") o " <> tshow wireKey
+      CScalar scalar -> case scalar of
+        CTypeId prefix
+          | isJust (contractIdDomainContractFor languageContract prefix) ->
+              "explicitParseField (parseKindIdV7Value @" <> tshow prefix <> ") o " <> tshow wireKey
+        CDeclaredId name -> "explicitParseField " <> renderedDeclaredLeafHelper "parse" name <> " o " <> tshow wireKey
+        _ -> "o .: " <> tshow wireKey
       where
         wireKey = (.wireKey) (resolveContractFieldIdentity field)
+    elementParser (CTypeId prefix)
+      | isJust (contractIdDomainContractFor languageContract prefix) = "(parseKindIdV7Value @" <> tshow prefix <> ")"
+    elementParser (CDeclaredId name) = renderedDeclaredLeafHelper "parse" name
+    elementParser _ = "parseJSON"
+    listParserHelper =
+      [ "",
+        "parseContractList :: (Value -> Parser a) -> Value -> Parser [a]",
+        "parseContractList element value = do",
+        "  items <- parseJSON value :: Parser [Value]",
+        "  traverse (\\(index, item) -> element item <?> Index index) (zip [0 :: Int ..] items)"
+      ]
 
 contractNeedsDuplicateRecordFields :: ContractNode -> Bool
 contractNeedsDuplicateRecordFields = hasDuplicateNames . concatMap (map ((.selector) . resolveContractFieldIdentity) . (.fields)) . (.events)
