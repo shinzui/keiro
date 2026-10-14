@@ -1,3 +1,5 @@
+{-# LANGUAGE MultilineStrings #-}
+
 module Main (main) where
 
 import Control.Exception (bracket)
@@ -751,6 +753,45 @@ spec fixture = do
           ""
       mutationExit `shouldBe` ExitFailure 1
       mutationError `shouldSatisfy` Text.isInfixOf "refusing mutation" . Text.pack
+
+    it "does not treat a registered binding view as schema drift" $ \connectionString -> do
+      executable <- keiroOpsExecutable
+      executeSql
+        connectionString
+        """
+        CREATE VIEW keiro.external_read_demo_v1_binding
+          WITH (security_barrier = true, security_invoker = false)
+          AS SELECT 1::bigint AS id, 10::bigint AS total;
+        INSERT INTO keiro.keiro_managed_read_objects
+          (object_schema, object_name, object_kind, object_signature,
+           managed_by, definition_hash, surface_generation, state)
+        VALUES ('keiro', 'external_read_demo_v1_binding', 'binding-view', '',
+                'keiro', 'test-definition', 1, 'active');
+        """
+      (listExit, _, listError) <-
+        readProcessWithExitCode
+          executable
+          ["--database-url", Text.unpack connectionString, "wf", "list", "--json"]
+          ""
+      listExit `shouldBe` ExitSuccess
+      listError `shouldBe` ""
+      (mutationExit, _, mutationError) <-
+        readProcessWithExitCode
+          executable
+          [ "--database-url",
+            Text.unpack connectionString,
+            "wf",
+            "gc",
+            "run-once",
+            "--retention",
+            "0s",
+            "--force",
+            "--json"
+          ]
+          ""
+      mutationExit `shouldBe` ExitSuccess
+      mutationError `shouldSatisfy` not . Text.isInfixOf "schema drift" . Text.pack
+      mutationError `shouldSatisfy` not . Text.isInfixOf "refusing mutation" . Text.pack
 
   describe "workflow handlers" $ around (withFreshStore fixture) do
     it "previews and runs one bounded application-registry resume pass" $ \store -> do

@@ -41,8 +41,7 @@ spec fixture =
   describe "managed external read contracts"
     $ around (withFreshDatabase fixture)
     $ do
-      -- Pending until plan 311 Milestone 2 lands the registry-aware comparison.
-      xit "leaves schema verification clean after reconciling an all-rows contract" $ \connectionString ->
+      it "leaves schema verification clean after reconciling an all-rows contract" $ \connectionString ->
         withPool connectionString $ \pool ->
           Store.withStore (Store.defaultConnectionSettings connectionString) $ \store -> do
             let settings = ConnectionSettings.connectionString connectionString

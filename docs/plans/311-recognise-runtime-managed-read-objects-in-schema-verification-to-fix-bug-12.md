@@ -90,16 +90,16 @@ binding view.
 - [x] 2026-10-14 03:37Z: Milestone 1: add pure comparison, hand-altered-database, restricted-role, and
       absent-registry tests to `keiro-migrations/test/Main.hs`; all four pass.
 - [x] 2026-10-14 03:36Z: Milestone 1: record the fix under `[Unreleased]` in `keiro-migrations/CHANGELOG.md`.
-- [ ] Milestone 2: flip the Milestone 0 fixture in `keiro/test/ExternalReadSpec.hs` from
+- [x] 2026-10-14 03:40Z: Milestone 2: flip the Milestone 0 fixture in `keiro/test/ExternalReadSpec.hs` from
       `xit` to `it`; it passes.
-- [ ] Milestone 2: add the executable regression to `keiro-ops/test/Main.hs`; it passes.
-- [ ] Milestone 2: record the operator-visible change under `[Unreleased]` in
+- [x] 2026-10-14 03:40Z: Milestone 2: add the executable regression to `keiro-ops/test/Main.hs`; it passes.
+- [x] 2026-10-14 03:40Z: Milestone 2: record the operator-visible change under `[Unreleased]` in
       `keiro-ops/CHANGELOG.md`.
-- [ ] Milestone 3: update `docs/user/operations.md` and `docs/user/migrations.md`, advance
+- [x] 2026-10-14 03:38Z: Milestone 3: update `docs/user/operations.md` and `docs/user/migrations.md`, advance
       their timestamps, and log the user-documentation bundle.
-- [ ] Milestone 3: update ADR 9 with the registry-aware verification decision, advance its
+- [x] 2026-10-14 03:38Z: Milestone 3: update ADR 9 with the registry-aware verification decision, advance its
       timestamp, log the ADR bundle, and pass strict validation.
-- [ ] Milestone 3: record the fix under `[Unreleased]` in the root `CHANGELOG.md`.
+- [x] 2026-10-14 03:38Z: Milestone 3: record the fix under `[Unreleased]` in the root `CHANGELOG.md`.
 - [ ] Milestone 3: set BUG-12 `fixed` with `fixedVersion: unreleased` and a `resolution`,
       update the index coverage row, log the bundle, and pass strict validation.
 - [ ] Milestone 3: `nix develop -c just verify` passes; fill Outcomes & Retrospective.
@@ -240,7 +240,10 @@ passing. BUG-12 is now confirmed and its strict bundle check passes. The pending
 registry-aware implementation is complete. The full migration suite passed with
 `40 examples, 0 failures`, including all four new examples, every registry state,
 both missing-privilege paths, an authorised non-owner, absent registries, and
-unchanged migration-owned drift detection.
+unchanged migration-owned drift detection. The runtime block now passes with
+`7 examples, 0 failures`, including the previously failing fixture. Both operator
+executable examples pass (`2 examples, 0 failures`): registered views permit the
+forced mutation, and a hand-added column still triggers refusal.
 
 Missing or altered runtime-object definitions remain outside this fix: a registry
 row establishes which runtime additions are allowed, not that their live definition
@@ -846,8 +849,8 @@ such as `keiro.external_read_<function>_binding`, are allowed runtime additions 
 verifier has table `SELECT` and schema `USAGE`. State explicitly that consumer-managed
 and unregistered objects are still drift, migration-owned missing or changed objects
 remain checked, and a missing or unreadable registry preserves the previous comparison. In
-`docs/user/migrations.md`, extend the `verify-schema` bullet the same way. Both pages carry
-a `timestamp` (and `operations.md` a `generated` block) in their frontmatter; advance them
+`docs/user/migrations.md`, extend the `verify-schema` bullet the same way. Both pages carry a `generated` block; `operations.md` also has a `timestamp`.
+Add the missing `timestamp` to `migrations.md` and advance the revision times
 to the current UTC time, add one entry with `okf log add docs/user -m "..."`, and run
 `just user-documentation-validate`.
 
@@ -1141,3 +1144,10 @@ named in Context and Orientation. None of that changes.
 
 - 2026-10-14: Milestone 1 complete: guarded registry lookup, comparison exports,
   four regressions, and migration changelog; full migration suite passes (40 examples).
+
+- 2026-10-14: user documentation and ADR 9 now record the registry rule and its
+  exclusions; both strict bundles pass (34 user concepts, 51 ADRs). Added the
+  previously absent migrations-page timestamp and the root changelog entry.
+
+- 2026-10-14: Milestone 2 complete: enabled the runtime regression and verified the
+  operator executable success/refusal paths. Seven runtime and two operator examples pass.

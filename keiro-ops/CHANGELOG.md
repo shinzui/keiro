@@ -6,6 +6,14 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Schema verification no longer warns about, or refuses mutations because of, the
+  `keiro.external_read_<function>_binding` view that Keiro creates for an all-rows
+  external-read contract. Binding views recorded with `managed_by = 'keiro'` are allowed runtime
+  additions when verification can read the registry; `--allow-schema-drift` is again reserved for schemas this
+  binary was not built for. Fixed in `keiro-migrations`; no `keiro-ops` source change.
+
 ## 0.20.0.0 — 2026-10-12
 
 ### Breaking Changes
