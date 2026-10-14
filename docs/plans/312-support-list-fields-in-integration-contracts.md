@@ -16,6 +16,22 @@ provenance:
       at: 2026-10-13T23:28:57Z
       mode: "discuss"
       note: "Owner accepts the breaking ContractType API split; added plan 304 sequencing, M1 compile-at-each-step order, and three tree-checked corrections"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:10:14Z
+      mode: "update"
+      note: "Correct admission-aware evolution, envelope-key precedence, parser/gate cases, corpus registration, CLI validation, and observable acceptance after correctness review."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:07:58Z
+      verdict: "changes-requested"
+      note: "Initial correctness review: same-prefix ID transitions must compare admission domains; clarify envelope-key precedence, isolate the List gate, and track corpus sidecars before regeneration."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:12:53Z
+      verdict: "approved"
+      note: "Follow-up review of revised plan: initial findings addressed; repository/API paths, admission semantics, identity precedence, corpus sequencing, and document checks verified. Implementation remains pending."
 ---
 
 # Support list fields in integration contracts
@@ -33,11 +49,17 @@ be one of exactly four scalar types: `typeid "prefix"`, the name of a declared `
 `text`, or `int`. Private aggregate events, by contrast, can carry `List X`. A service whose
 public message must name several entities at once therefore cannot keep that message in the
 DSL at all: it hand-writes the payload type and its JSON codec, loses the generated
-`Contract` module, and loses `keiro-diff` evolution reporting for the whole event.
+`Contract` module, and loses `keiro-dsl diff` evolution reporting for the whole event.
 
 After this plan, a source that declares `language keiro-dsl 6` can write
 
 ```keiro
+language keiro-dsl 6
+context notification-changes
+
+id NotificationTypeId prefix=notification_type
+id TemplateId prefix=template
+
 contract uiEvents {
   schemaVersion 1
   discriminator messageType
@@ -53,7 +75,7 @@ contract uiEvents {
 and `keiro-dsl check` accepts it, `keiro-dsl scaffold` generates a record field
 `templateIds :: ![Nominals.TemplateId]` whose codec writes a JSON array in list order and
 decodes strictly with every element checked by the same TypeID admission as a scalar
-`TemplateId` field, and `keiro-diff` classifies a change of the element type, a change of
+`TemplateId` field, and `keiro-dsl diff` classifies a change of the element type, a change of
 the element's prefix, or a change between a scalar and a list on one wire key as public
 contract evolution. A source on stable Language 5 that writes `List` in a contract field is
 refused with the stable `LanguageFeatureRequiresVersion` diagnostic, and nested containers
@@ -68,22 +90,24 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 
 ## Progress
 
+- [x] (2026-10-14 01:08Z) Correctness review completed and plan revised; reproduced the admission-transition gap in a Nix-shell probe. Implementation has not started.
 - [ ] M1. Move IR-54 to `in-progress` (frontmatter `status`, body Status, log entry).
 - [ ] M1. Split `ContractType` into `ContractScalarType` and `ContractType` in `keiro-dsl/src/Keiro/Dsl/Grammar.hs`; add `contractScalar` and `contractIsList`. Land this first with no producer of `CList`: the full build and every existing suite must pass before the lowering and the parser.
 - [ ] M1. Add `ContractListFieldSyntax` to `LanguageFeature` and to `profileV5` in `keiro-dsl/src/Keiro/Dsl/LanguageVersion.hs`.
 - [ ] M1. Parse `List <scalar>` in `pContractType` (`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs`), gate it, and refuse nested containers with a stable message.
 - [ ] M1. Print `List <scalar>` in `docContractType` (`keiro-dsl/src/Keiro/Dsl/PrettyPrint.hs`).
-- [ ] M1. Update every scalar-only match site through `contractScalar`: `Validate.hs`, `IdDomain.hs`, `Manifest.hs`, `TypeGraph.hs`, `Diff.hs`, `Scaffold.hs`, `test/Main.hs`.
+- [ ] M1. Update every scalar-only match site through `contractScalar`: `Validate.hs`, `IdDomain.hs`, `Manifest.hs`, `TypeGraph.hs`, `Diff.hs`, `Scaffold.hs`, `Workspace.hs`, `test/Main.hs`.
+- [ ] M1. Require equal resolved ID admission domains for the literal-to-declared advisory; M2 proves widened/narrowed admission and both shape-change directions.
 - [ ] M1. Lower list fields in `emitContractGen` (`keiro-dsl/src/Keiro/Dsl/Scaffold.hs`): record type, array encoder, `parseContractList` decoder and its imports.
 - [ ] M1. Add fixtures `keiro-dsl/test/fixtures/contract-list-fields.keiro` and `contract-list-fields-language5.keiro`; register them in the fixture inventory test.
 - [ ] M1. Update `keiro-dsl/test/Keiro/Dsl/FrontendProfiles.hs` (minimum version map, `allFeatures`, `FeatureCase`, feature body).
 - [ ] M1. Write the ADR (handle from `okf id next`), add its log entry, and record the revisit outcome in RES-18.
 - [ ] M1. `nix develop -c cabal build all --enable-tests --enable-benchmarks` passes; `check`, `pretty`, Language 5 refusal, and nested refusal behave as specified.
 - [ ] M2. Add `ContractListFieldUsedAsKey` to `DiagnosticCode`; refuse a list field as publisher `outboxId` and as intake `dedupe` key.
-- [ ] M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`; register them.
-- [ ] M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, key refusals, diff classification.
+- [ ] M2. Add diff fixtures `contract-list-fields-element-change.keiro`, `contract-list-fields-scalar-shape.keiro`, `contract-list-fields-literal-to-declared.keiro`, `contract-list-fields-prefix-change.keiro`, and `contract-list-fields-admission-change.keiro`; register them.
+- [ ] M2. Add unit tests in `keiro-dsl/test/Main.hs`: lowering text, id-domain rows, binding use sites, nested refusal, aliases, envelope-key precedence, multi-event key refusals, and diff classification.
 - [ ] M2. `nix develop -c cabal test keiro-dsl:test:keiro-dsl-test` passes.
-- [ ] M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry.
+- [ ] M3. Create the compiled corpus `keiro-dsl/test/conformance-contract-list-fields/` (scaffold, hand-owned `Domain.hs` and `Bindings.hs`, `Main.hs`), add its Cabal stanza and `conformance-baseline.json` entry; force-add the ignored ledger and Cabal fragment, then commit the corpus before regeneration.
 - [ ] M3. `keiro-dsl-corpus-regen -- regenerate --only …` is a no-op, the new suite passes, `scripts/check-conformance-corpus.sh` passes, `nix develop -c just verify` passes.
 - [ ] M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
 - [ ] M4. Record the change in `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md` under `[Unreleased]`.
@@ -96,7 +120,25 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
 
-(None yet.)
+- Observation (2026-10-14): prefix equality does not imply equal TypeID admission.
+  `contractPairDiff.fieldTypeChange` in `keiro-dsl/src/Keiro/Dsl/Diff.hs` currently
+  compares only prefixes for literal/declared transitions, while
+  `contractTypeIdDomainChanges` visits only fields whose `valueType` is unchanged.
+  A `nix develop -c cabal exec -- runghc -package=keiro-dsl` probe kept
+  `id TemplateId prefix=template domain=typeid-v5-or-v7` unchanged on both sides and
+  changed only a scalar field from `typeid "template"` to `TemplateId`. `diffSources`
+  returned only `Advisory ContractFieldChanged`, with `PublicConsumer = VNotApplicable`,
+  incorrectly claiming admission was unchanged. Milestone 1 must correct this shared
+  predicate before extending it to lists; Milestone 2 must prove both directions.
+- Observation (2026-10-14): `keiro-dsl/tools/corpus-regen/src/CorpusPlan.hs` discovers
+  corpus entries through `git ls-files`; `.gitignore` excludes scaffold ledgers and Cabal
+  fragments. `keiro-dsl/test/README.md` requires force-adding both. The driver in
+  `keiro-dsl/tools/corpus-regen/src/Main.hs` also requires clean corpus paths before
+  ordinary regeneration, so the initial corpus must be committed first.
+- Observation (2026-10-14): `Parser/Core.hs` implements case-insensitive keywords, and
+  `Validate.hs` resolves canonical envelope names independently of event fields. The new
+  parser refusal must recognize keyword casing, and a payload list must not invalidate a
+  canonical envelope identity with the same spelling.
 
 
 ## Decision Log
@@ -147,23 +189,31 @@ implementation. Provide concise evidence.
 - Decision: A list field is not an identity. A publisher `outboxId stable from <field>`
   and an intake `dedupe <field>` that name a list field are refused with a new diagnostic
   code `ContractListFieldUsedAsKey`. The emit `key` clause gets no new rule.
+  Canonical envelope names retain precedence: `messageId` and `idempotencyKey` for
+  publishers, and `canonicalIntakeEnvelopeFields` for intakes. A non-envelope name that
+  denotes a list in any selected event is refused once per clause, even if another
+  selected event has a scalar of that name.
   Rationale: Outbox identity and dedupe identity must be scalar. The emit `key` is
   descriptive (`docs/user/keiro-dsl-integration.md`: "`source`, `key`, and the map's
   discriminant name are descriptive … their values are not field-resolution programs"), so
   there is nothing to resolve against; the documentation states that a list field is not a
   key. This satisfies IR-54's request that validation refuse a list used as a key.
-  Date: 2026-10-13
+  Date: 2026-10-13; envelope precedence clarified 2026-10-14.
 
 - Decision: Evolution classification. A change between a scalar and a list on one wire key,
   or a change of the element type, is `ContractFieldChanged` and breaking for public
-  consumers. A `List typeid "p"` to `List DeclaredId` move with the same prefix is the
-  existing build-only advisory. An element prefix or admission change is reported through
-  the existing `IdPrefixChanged` (facet `nominal-contract`) and
+  consumers. A `List typeid "p"` to `List DeclaredId` move is a build-only advisory only
+  when shape, prefix, and resolved ID admission domain are all equal. The same requirement
+  applies to scalar literal/declared transitions. A changed admission domain is public
+  breaking in either direction, even when prefixes agree. An element prefix or admission
+  change is reported through the existing `IdPrefixChanged` (facet `nominal-contract`) and
   `ContractTypeIdDomainChanged` findings because the list element shares the field's
-  id-domain identity row.
-  Rationale: These are the rules a direct field already has; the list adds the shape
-  dimension and nothing else.
-  Date: 2026-10-13
+  id-domain identity row. When the type spelling changes too, use breaking
+  `ContractFieldChanged`; the existing `ContractTypeIdDomainChanged` path remains for
+  unchanged type spelling with changed admission.
+  Rationale: ADR-46 requires both widening and narrowing to be breaking. Correct the
+  existing scalar exception while adding the list shape dimension.
+  Date: 2026-10-13; admission condition corrected 2026-10-14.
 
 - Decision: Compose the element decoder exactly as the private structural codec does
   (`keiro-dsl/src/Keiro/Dsl/MappedCodecPlan.hs`, line 152): parse the value as
@@ -208,7 +258,13 @@ Compare the result against the original purpose. Before marking the plan complet
 distill durable project context from the Decision Log, Surprises & Discoveries, and
 this section into docs/adr/. Keep task-local execution details here.
 
-(To be filled during and after implementation.)
+Correctness review updated the implementation instructions and acceptance cases on
+2026-10-14. The current differ reproduces the admission bug described above; no feature
+code has been changed and no milestone is implemented. Implementation outcomes remain
+to be recorded. The review verified Z3 4.16.0 in `nix develop`, ran the focused scalar
+admission probe successfully, and passed document checks for section order, tagged code
+blocks, ADR links, and whitespace. Feature builds and conformance tests remain the work
+of the implementation milestones.
 
 
 ## Context and Orientation
@@ -218,7 +274,8 @@ this section into docs/adr/. Keep task-local execution details here.
 The **Keiro DSL** is the `.keiro` specification language implemented by the `keiro-dsl`
 package in this repository (`keiro-dsl/`). Its command-line tool `keiro-dsl` has `check`
 (parse and validate), `pretty` (print canonical source), `scaffold` (generate Haskell
-modules), and the separate `keiro-diff` evolution report. Run it from the repository root
+modules), and `diff FILE --since GIT-REF` (report evolution against the same file at a Git
+revision). Run it from the repository root
 with `nix develop -c cabal run -v0 keiro-dsl -- <command>`.
 
 A **language version** is selected by the first line of a source, `language keiro-dsl N`.
@@ -283,8 +340,9 @@ languages this plan touches.
 **Evolution** is `keiro-dsl/src/Keiro/Dsl/Diff.hs`. `contractPairDiff` (line 2725) pairs
 old and new fields; `fieldTypeChange` (line 2825) reports a changed `valueType` as breaking
 `ContractFieldChanged`, except a `typeid`-to-declared move with the same prefix
-(`isLiteralDeclaredTransition`, line 2841, and `contractTypePrefix`, line 2887), which is
-a build-only advisory. `renderContractType` (line 2881) spells a type in reports.
+(`isLiteralDeclaredTransition`, line 2841, and `contractTypePrefix`, line 2887), which currently becomes
+a build-only advisory without checking admission equality; this is the correctness gap
+that this plan fixes. `renderContractType` (line 2881) spells a type in reports.
 `contractFieldIdDomain` (line 898) and `renderContractIdDomainChange` (line 921) report
 `ContractTypeIdDomainChanged` when a field's admission policy changes with an equal type.
 `publicBreakingCodes` (line 474) lists the codes that take the public-breaking
@@ -322,10 +380,12 @@ touched: a publication displaces a holder (two templates), a retirement archives
 type's templates, and the gateway emits one tick per changed entity. The consumer's
 private events already carry `claimChanges : List AssignmentChange` (project-relative
 `notification-renderer-domain/domain/notification-type.keiro`, lines 252 and 326) but its
-contract cannot carry `templateIds: List TemplateId`, so plan 17 of that project
-(project-relative `docs/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox.md`)
-hand-writes the payload codec. Artifact-level `mori://` URIs for those files are pending;
-the project URI above is canonical.
+contract cannot carry `templateIds: List TemplateId`, so
+`mori://tan/notification-render-service/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox`
+hand-writes the payload codec. The source file above is identified by the canonical project
+URI plus its project-relative path; its source-file artifact URI is pending. The plan
+file and frontmatter were verified on disk during this review; `mori path` did not yet
+resolve its canonical plan URI in the local registry.
 
 Validation on 2026-10-13 against master after 0.20.0.0 reproduced the gap. With the
 scratch source from Purpose / Big Picture saved as `contract-list-field.keiro`:
@@ -361,19 +421,23 @@ schema under JSON Schema or Avro, so the schema-registry framing anticipated by
 
 ### Architecture decision records consulted
 
-- `docs/adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md`
+- [docs/adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md](../adr/0012-structural-consumer-mappings-use-one-schema-authority-and-total-bindings.md)
   (ADR-12) separates wire authority from consumer build provenance and distinguishes an
   absent key from a present `null` for private structural records. This plan keeps that
   separation by refusing Option C and avoids the nullability question by admitting no
   `Optional` in contracts.
-- `docs/adr/0013-structural-coverage-is-reporting-first-and-opacity-gates-are-opt-in.md`
+- [docs/adr/0013-structural-coverage-is-reporting-first-and-opacity-gates-are-opt-in.md](../adr/0013-structural-coverage-is-reporting-first-and-opacity-gates-are-opt-in.md)
   (ADR-13) labels public contracts "not-applicable (separately owned grammar)" in coverage
   reports. Option B keeps the contract grammar separately owned, so that label stays true;
   the new ADR records that the separately owned grammar now admits lists of scalars.
-- `docs/adr/0021-direct-fields-have-independent-dsl-selector-and-wire-identities.md`
+- [docs/adr/0021-direct-fields-have-independent-dsl-selector-and-wire-identities.md](../adr/0021-direct-fields-have-independent-dsl-selector-and-wire-identities.md)
   (ADR-21): contract fields have a DSL name, an optional `haskell` selector, and an
   optional `as "wire-key"`. A list field uses all three unchanged.
-- `docs/adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md`
+- [ADR-46](../adr/0046-nominal-declarations-are-structural-leaves-with-keiro-owned-admission.md):
+  a declared ID owns its admission domain; widening is an old-reader/new-writer hazard and
+  narrowing is a retained-history read hazard. Both directions are breaking. The
+  literal-to-declared exception must therefore compare admission as well as prefix.
+- [docs/adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md](../adr/0049-language-6-is-the-sole-pre-1-0-coverage-and-data-support-baseline.md)
   (ADR-49): Language 6 is the pre-1.0 baseline and is finalised at a later release
   boundary; until then it is the candidate this plan amends in place. New positive fixtures
   select Language 6. Plan 304
@@ -382,8 +446,8 @@ schema under JSON Schema or Avro, so the schema-registry framing anticipated by
   Milestone 1 must land before that, or the gate moves to the next candidate and this plan
   is re-planned.
 
-No cross-repository ADR applies. The consumer's own plan 17 is evidence, not a decision
-record for this repository.
+No cross-repository ADR applies. The consumer plan cited above is evidence, not a
+decision record for this repository.
 
 
 ## Plan of Work
@@ -406,11 +470,13 @@ the list lowering shown below. The ADR exists and validates. Begin by moving IR-
 `in-progress`: set `status: in-progress` in its frontmatter, say so in its body Status
 section, and run `okf log add docs/improvement-requests --kind Update -m "IR-54 implementation started under ExecPlan 312."`.
 
-Work in three compiling steps and commit after each. First split the type and update every
-match site; nothing yet produces a `CList`, so the build, every test suite, and the corpus
-drift check must pass unchanged. Second add the scaffold lowering for `CList`, still with no
-parser producing it. Third add the parser branch, the language feature, the pretty printer
-arm, the fixtures, and the frontend-profile tests. The compiler drives the first step: after
+Work in three compiling steps and commit after each. First split the type, wrap the
+existing parser results in `CScalar`, and update every match site (including total printer
+and renderer arms for both constructors). Nothing yet produces a `CList`, so the build,
+every test suite, and the corpus drift check must pass unchanged. Second add the scaffold
+lowering for `CList`, still with no parser producing it. Third add the parser branch, the
+language feature, the fixtures, and the frontend-profile tests. The pretty printer already
+handles both shapes from the first step. The compiler drives the first step: after
 the type change, every old match on `ContractType` is a type error until it chooses between
 "same as the scalar" and "list-specific".
 
@@ -466,9 +532,11 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
           CInt <$ keyword "int",
           do
             offset <- getOffset
+            forbidden <- optional (lookAhead (choice (map keyword reservedContainerWords)))
+            case forbidden of
+              Just () -> failAt offset nestedContainerMessage
+              Nothing -> pure ()
             declaredId <- withOwnedSpan ident
-            when (locatedValue declaredId `elem` reservedContainerWords) $
-              failAt offset nestedContainerMessage
             requireLanguageFeatureAt context ContractDeclaredIdSyntax (spanOf declaredId)
             pure (CDeclaredId (locatedValue declaredId))
         ]
@@ -479,9 +547,11 @@ so that the `List` keyword is tried first, gated, and followed by one scalar:
 
 `failAt :: Int -> String -> P a` (`keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`, line 165) takes
 a megaparsec source offset, not a span, so capture `getOffset` (from `Text.Megaparsec`,
-already imported) before `ident` and pass it. `withOwnedSpan`, `spanOf`, and `locatedValue`
-are exported by the same `Parser/Core.hs` (export list, lines 20 to 57); `when` needs
-`Control.Monad`. The requirement is a stable message at the offending token. Because the gate is checked before the
+already imported) before the forbidden-keyword check and pass it. `withOwnedSpan`, `spanOf`, and `locatedValue`
+are exported by the same `Parser/Core.hs` (export list, lines 20 to 57). Check forbidden
+container keywords before `ident`, using `keyword` so case-insensitive spellings such as
+`List list TemplateId` and `List map text` get the same refusal. The requirement is a
+stable message at the offending token. Because the gate is checked before the
 declared-id branch, a Language 5 source fails at `List`, not at the element name. The
 words in `reservedContainerWords` are reserved only in the contract type position; a
 declared id named `Listing` still parses because `keyword` requires a word boundary.
@@ -491,8 +561,8 @@ declared id named `Listing` still parses because `keyword` requires a word bound
 for `CList s` and `docContractScalar s` for `CScalar s`, where `docContractScalar` is the
 old four-way function.
 
-**Sites that only need the scalar.** Each of these keeps its behaviour and reads the
-scalar through `contractScalar`:
+**Scalar facts and shape-aware sites.** Reuse `contractScalar` for element facts, while
+rendering and compatibility decisions retain the outer shape:
 
 - `keiro-dsl/src/Keiro/Dsl/Validate.hs`, `typeIdPrefixErrors` (line 2439) and
   `declaredIdErrors` (line 2457): change `CTypeId prefix <- [(.valueType) field]` to
@@ -519,6 +589,16 @@ scalar through `contractScalar`:
   that, `fieldTypeChange` already reports a scalar-to-list change and an element-type change
   as breaking `ContractFieldChanged` with the detail
   `field type changed List text -> List int`, and no new change code is needed.
+  Additionally, change the advisory predicate in `fieldTypeChange` to require equal,
+  resolved `Just` values from `contractFieldIdDomain` for the old and new checked language
+  contracts and specs. Prefix equality alone is insufficient, and `Nothing == Nothing`
+  is not evidence of an equal admission policy. Read those contracts from
+  `checkedLanguageContract ((.oldService) env)` and
+  `checkedLanguageContract ((.newService) env)` alongside `(.old) env` and `(.new) env`. When admission differs, fall through to
+  breaking `ContractFieldChanged` and include `renderIdDomainDirection` in the detail.
+  This applies to scalars and lists. Leave the equal-`valueType` filter on
+  `contractTypeIdDomainChanges` intact: unchanged declared-list types with changed
+  admission still emit that existing domain finding.
 - `keiro-dsl/src/Keiro/Dsl/Workspace.hs`, line 1410, `instance HasLocs ContractType`:
   give `ContractScalarType` the same location-free instance and cover both `ContractType`
   constructors; the compiler reports this site among the first.
@@ -537,7 +617,7 @@ scalar through `contractScalar`:
   `contractValueType (CScalar s) = contractScalarType s` and
   `contractValueType (CList s) = "[" <> contractScalarType s <> "]"`, where
   `contractScalarType` is the old four-way function (so a declared id lowers to
-  `[Nominals.TemplateId]`, a typed `typeid` to `[KindID "template"]`, `text` to `[Text]`,
+  `[Nominals.TemplateId]`, a typed `typeid` to `[(KindID "template")]`, `text` to `[Text]`,
   `int` to `[Int]`).
 - `encodeField`: for `CScalar s` keep the current cases. For `CList s`, when the element has
   an encoder (`KindID.toText` for a typed `typeid`, `renderedDeclaredLeafHelper "encode" name`
@@ -566,7 +646,7 @@ For the Milestone 3 fixture, the generated `Generated/ContractListFields/Templat
 must contain these lines (whitespace aside):
 
 ```haskell
-data TemplatesReassignedData = TemplatesReassignedData {typeId :: !Nominals.TemplateId, templateIds :: ![Nominals.TemplateId], claimIds :: ![ClaimId], legacyTemplateIds :: ![KindID "template"], labels :: ![Text], positions :: ![Int]}
+data TemplatesReassignedData = TemplatesReassignedData {typeId :: !Nominals.TemplateId, templateIds :: ![Nominals.TemplateId], claimIds :: ![ClaimId], legacyTemplateIds :: ![(KindID "template")], labels :: ![Text], positions :: ![Int]}
         "templateIds" .= map NominalLeaves.encodeTemplateIdLeaf payload.templateIds,
         "claimIds" .= map NominalLeaves.encodeClaimIdLeaf payload.claimIds,
         "legacyTemplateIds" .= map KindID.toText payload.legacyTemplateIds,
@@ -682,21 +762,28 @@ the spelling round-trip test at line 1157 covers the new code automatically.
       ]
 ```
 
-exclude those names from `allowedOutboxFields`, and emit, before the existing unresolved
-rule and gated the same way,
+Keep `messageId` and `idempotencyKey` as independently valid envelope names. For other
+names, remove list-bearing names from the mapped-field portion of `allowedOutboxFields`
+and emit one error if the selected name occurs in `listContractFields`, regardless of how
+many events contain it. Place this before the existing unresolved rule and gate it the
+same way:
 
 ```text
 publisher '<p>' outboxId field '<f>' is a List field of an event mapped by emit '<e>'; outbox identity must be messageId, idempotencyKey, or a scalar contract field
 ```
 
-with code `ContractListFieldUsedAsKey`. Make the unresolved rule skip a name that the list
-rule reported so one mistake yields one diagnostic.
+with code `ContractListFieldUsedAsKey`. A list field named `messageId` or `idempotencyKey`
+does not shadow the canonical envelope identity. Make the unresolved rule skip a name that
+the list rule reported so one mistake yields one diagnostic.
 
-**Intake rule.** In `intakeCoupling` (line 3561), exclude list fields of accepted events
-from `resolvableFields` for the dedupe check only, and emit
-`intake '<i>' dedupe key '<f>' is a List field of accepted event '<ev>'; dedupe identity must be a scalar envelope or event field`
-with code `ContractListFieldUsedAsKey`, again before the unresolved rule and skipping the
-unresolved rule for that name. `bind` rows are descriptive today (their flags raise
+**Intake rule.** In `intakeCoupling` (line 3561), keep the original `resolvableFields`
+for bind validation and introduce a separate dedupe-name check. A name in
+`canonicalIntakeEnvelopeFields` stays valid even if a payload list shares it. Otherwise,
+if any accepted event has a list field of that DSL name, emit one
+`ContractListFieldUsedAsKey` for the intake, listing the affected events in stable order:
+`intake '<i>' dedupe key '<f>' is a List field of accepted events <events>; dedupe identity must be a scalar envelope or event field`.
+A scalar field of the same name in another accepted event does not cancel this refusal.
+Only when no list refusal applies should the existing unresolved check run. `bind` rows are descriptive today (their flags raise
 `IntakeBindFlagUnenforced`), so a bind row naming a list field is unchanged.
 
 **Diff fixtures.** Beside the base fixture, add four one-line mutants of
@@ -708,6 +795,12 @@ unresolved rule for that name. `bind` rows are descriptive today (their flags ra
 `legacyTemplateIds: List typeid "template"` to `legacyTemplateIds: List TemplateId`;
 `contract-list-fields-prefix-change.keiro` changes `id TemplateId prefix=template` to
 `id TemplateId prefix=project`.
+Also add `contract-list-fields-admission-change.keiro`, changing only the base declaration
+of `TemplateId` to `id TemplateId prefix=template domain=typeid-v5-or-v7`, and register it.
+For the literal/declared admission regression, use two inline checked sources that both
+contain this wider declaration from the start; change only `legacyTemplateIds` from
+`List typeid "template"` to `List TemplateId`. Keeping the declaration identical prevents
+an unrelated nominal-domain finding from hiding a missing field compatibility check.
 
 **Unit tests.** In `keiro-dsl/test/Main.hs`, beside the declared-id tests (line 7958 and
 line 9555), add:
@@ -727,7 +820,7 @@ line 9555), add:
   `keiro-dsl/test/Main.hs`, line 7983, asserts the same `.claimId : ClaimId` form).
 - "refuses nested containers in contract fields": `parseSource` on an inline Language 6
   source with `templateIds: List List TemplateId` is `Left` and the rendered failure
-  contains "nested containers".
+  contains "nested containers"; repeat with `List list TemplateId` and `List map text`.
 - "refuses a list element that is not a declared id": inline source with
   `enum Channel { Email=email }` and `channels: List Channel` yields exactly one
   `ContractIdUnknown` whose message contains "is an enum".
@@ -737,7 +830,11 @@ line 9555), add:
   `dedupe templateIds`; the error codes contain `ContractListFieldUsedAsKey` exactly twice
   and contain neither `PublisherOutboxFieldUnresolved` nor `IntakeDedupeKeyUnresolved`. Use
   the existing emit, publisher, and intake fixtures (for example the hospital-capacity
-  sources near line 7117) as the syntax reference.
+  sources near line 7117) as the syntax reference. Also test canonical envelope names
+  sharing a spelling with a payload list (still accepted), a non-envelope DSL name shared
+  by scalar and list fields across selected events (one list refusal per clause), and a
+  list present only in an unselected event (no list refusal). Bind rows naming list
+  payloads retain their existing behavior.
 - "classifies list field evolution": with `diffFixtures` from the base to
   `-element-change`, the breaking codes contain `ContractFieldChanged` and a finding's detail
   contains `List text -> List int`; from the base to `-scalar-shape`, breaking codes contain
@@ -746,7 +843,20 @@ line 9555), add:
   advisory `ContractFieldChanged` whose `PublicConsumer` verdict is `VNotApplicable` and
   whose `ConsumerBuild` verdict is `VAdvisory`; from the base to `-prefix-change`, the
   breaking findings include `IdPrefixChanged` with facet `nominal-contract` and a subject
-  ending in `.templateIds`, with `PublicConsumer` verdict `VBreaking`.
+  ending in `.templateIds`, with `PublicConsumer` verdict `VBreaking`. Run the shape and
+  equal-domain literal/declared checks in both directions; also compare a scalar literal
+  to a declared list and the reverse, which must be breaking despite equal prefixes.
+  The inline wider-admission pair above and its reverse must produce a breaking
+  `ContractFieldChanged` on `legacyTemplateIds` with `PublicConsumer = VBreaking`, never
+  the build-only advisory. Repeat that pair with scalar fields to cover the shared fix.
+  The admission-change fixture and its reverse must include breaking
+  `ContractTypeIdDomainChanged` for `.templateIds`, with public verdict `VBreaking`.
+- "keeps list field aliases and import selection": use inline variants with
+  `templateIds haskell selectedTemplates as "template_ids": List TemplateId` and assert
+  that the generated selector, encoder key, and `explicitParseField` key use the resolved
+  identities. Scaffold a list-only primitive contract and a list plus scalar-text
+  contract: both need `parseJSON`, `Index`, and `(<?>)`, but only the latter needs `(.:)`.
+  Existing scalar-only golden output must remain unchanged.
 - Language gate: `runKeiroDsl ["check", "test/fixtures/contract-list-fields-language5.keiro"]`
   exits with failure and its stderr contains `LanguageFeatureRequiresVersion`.
 
@@ -782,6 +892,9 @@ exiting non-zero on any failure as the declared-id `Main.hs` does:
   for a payload whose every list is empty, whose encoding carries `[]` for each list member;
 - reversing `templateIds` produces a different encoding and decodes back in the reversed
   order;
+- explicit `null` for each list or a null element in each scalar family is refused; repeated
+  IDs round-trip without deduplication; wrong-prefix claim and literal-ID elements name
+  their own wire key and index;
 - a `templateIds` member that is a string (not an array) decodes to `Left` whose message
   mentions `$.templateIds`;
 - a `templateIds` array whose second element is `claim_…` decodes to `Left` whose message
@@ -799,14 +912,17 @@ nix develop -c cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/contr
 
 The scaffold writes the generated modules, the hole skeleton for `Bindings.hs`, the ledger
 `keiro-dsl-ledger.context.contract-list-fields.txt`, and the Cabal fragment. Fill the hole,
-add `Domain.hs` and `Main.hs`, add the Cabal stanza and the baseline entry, and then run
-the regeneration driver for this directory only and the drift check; both must report no
-change.
+add `Domain.hs` and `Main.hs`, and add the Cabal stanza and baseline entry. Follow
+`keiro-dsl/test/README.md`: force-add the ignored ledger and Cabal fragment, add the source,
+generated modules and hand-owned fills, and commit that initial corpus before invoking
+ordinary regeneration. Both the focused regeneration and drift check must then report
+no change. Adding the baseline JSON entry alone does not register a corpus invocation;
+the driver discovers tracked ledgers.
 
 Acceptance for Milestone 3: the new test suite passes; the regeneration driver is a no-op
 on a clean tree; `scripts/check-conformance-corpus.sh` passes; `nix develop -c just verify`
-passes end to end (read the exit code from inside the log, because `just verify` stops at
-the first failure).
+passes end to end with the actual command exit status preserved, because `just verify`
+stops at the first failure.
 
 ### Milestone 4: documentation, changelogs, bundles, and consumer handoff
 
@@ -816,15 +932,17 @@ what to change.
 
 In `docs/user/keiro-dsl-integration.md` (DOC-29), add a row to the contract field type
 table (line 46) reading `List <scalar>` (Language 6 candidate), generated type "a Haskell
-list of the element's generated type; JSON array in declaration order", and after the
+list of the element's generated type; JSON array in list order", and after the
 declared-id paragraph (line 86) add a paragraph with a `keiro` example using
 `templateIds: List TemplateId`, stating: the element is one of the four scalar types;
 nested containers, `Optional`, `Map`, and records are refused; the decoder rejects a
 non-array at the field path, a bad element at `$.field[index]`, and a missing key, while
 `[]` is valid; a list field cannot be a publisher `outboxId` or an intake `dedupe` key
 (`ContractListFieldUsedAsKey`); and changing between a scalar and a list or changing the
-element type is a breaking public change while an equal-prefix literal-to-declared move of
-the element is build-only. Update the page's `generated.at` to the edit time and keep
+element type is a breaking public change. A literal-to-declared move of the element is
+build-only only when both prefix and admission domain are unchanged. Correct the existing scalar paragraph to state that same
+condition, and document canonical envelope-key precedence in the identity rule. Update the
+page's `generated.at` to the edit time and keep
 `generated.by` as the process that edits it. In `docs/user/keiro-dsl-reference.md`
 (DOC-23), add a row "List fields in public contracts" to the Language 6 feature table (line
 42) linking to the integration page's contract section. In
@@ -846,8 +964,8 @@ registry, and the person releasing records the version in the Progress release i
 Because the `ContractType` split is a breaking library change, that release is a PVP-major
 bump of keiro-dsl with no compatibility shim (Decision Log). Before publishing, list the
 library consumers with `mori registry dependents shinzui/keiro --packages` and tell each one
-that imports `Keiro.Dsl.Grammar` (kotei-core's development dependency and the keiro-syntax
-automation among them) what changed.
+that imports `Keiro.Dsl.Grammar` what changed. Discover each canonical package/project URI
+through Mori rather than assuming the consumer inventory is unchanged.
 
 Move IR-54 to `completed`: set `status: completed`, `completedAt`, and a `resolution`
 sentence in its frontmatter, update the body Status section, advance `timestamp`, and run
@@ -856,9 +974,10 @@ Validate with the improvement-request command in Concrete Steps.
 
 Consumer handoff (outside this repository; record that it was sent, not done): tell the
 owner of `mori://tan/notification-render-service` that, once the keiro-dsl release carrying
-this change is published, plan 17 of that project can declare
+this change is published, `mori://tan/notification-render-service/plans/17-publish-admin-change-signals-to-kafka-through-the-keiro-outbox`
+can declare
 `templateIds: List TemplateId` in its `integration.keiro`, delete the hand-owned payload
-codec, re-scaffold, and run `keiro-diff`; if the diff reports the new event as a public
+codec, re-scaffold, and run `keiro-dsl diff integration.keiro --since <pre-migration-commit>`; if the diff reports the new event as a public
 change the project raises its contract epoch per its own convention. Also check
 `mori://shinzui/keiro-syntax` (the editor grammar fed by the keiro-dsl automation) for the
 `List` spelling in the contract field position and note any follow-up there.
@@ -912,7 +1031,9 @@ Improvement-request bundle validation (whenever IR-54 changes):
 okf validate docs/improvement-requests --profile mori/improvement-requests-profile.dhall --profile-enforce --log-enforce
 ```
 
-Expected: `OK: 54 concepts`.
+Expected: successful validation with zero errors; the concept count may grow independently.
+Read IR-54 back separately to verify its status and resolution rather than inferring them
+from a successful bundle validation.
 
 Milestone 2 tests (the focused run first, then the whole suite):
 
@@ -925,16 +1046,20 @@ Milestone 3 corpus:
 
 ```bash
 nix develop -c cabal run -v0 keiro-dsl -- scaffold keiro-dsl/test/fixtures/contract-list-fields.keiro --out keiro-dsl/test/conformance-contract-list-fields
+# After completing the hand-owned files and Cabal/baseline edits:
+git add -f keiro-dsl/test/conformance-contract-list-fields/keiro-dsl-ledger.context.contract-list-fields.txt keiro-dsl/test/conformance-contract-list-fields/keiro-dsl-cabal-fragment.context.contract-list-fields.txt
+git add keiro-dsl/test/conformance-contract-list-fields keiro-dsl/test/conformance-baseline.json keiro-dsl/test/fixtures/contract-list-fields*.keiro keiro-dsl/keiro-dsl.cabal
+# Commit the reviewed M3 files with the ExecPlan and Intention trailers before proceeding.
 nix develop -c cabal run -v0 keiro-dsl-corpus-regen -- regenerate --only keiro-dsl/test/conformance-contract-list-fields
 git status --short -- keiro-dsl/test
 nix develop -c cabal test keiro-dsl:test:keiro-dsl-conformance-contract-list-fields --test-show-details=direct
 nix develop -c scripts/check-conformance-corpus.sh
-nix develop -c just verify 2>&1 | tee /tmp/verify.log; tail -3 /tmp/verify.log
+nix develop -c bash -o pipefail -c 'just verify 2>&1 | tee /tmp/keiro-plan312-verify.log'
 ```
 
 Expected: after the first scaffold and your hand-owned fills are committed, the
 regeneration run changes nothing and `git status` lists nothing under `keiro-dsl/test`; the
-suite prints seven `PASS` lines; the corpus check and `just verify` exit zero.
+suite prints `PASS` for every named check and no `FAIL` lines; the corpus check and `just verify` exit zero.
 
 Milestone 4 documentation:
 
@@ -960,11 +1085,16 @@ Intention: intention_01m4tx3jnrevzsxfv5vwjh0344
 
 ## Validation and Acceptance
 
-The plan is complete when all of the following hold on a clean checkout.
+The four implementation milestones are complete when all of the following hold on a
+clean checkout. The whole plan remains open until its separate Release item is completed.
 
 Authoring: a Language 6 source with the `NotificationTypeChanged` event from Purpose / Big
-Picture passes `keiro-dsl check` with `OK`. The same source on Language 5 fails with
-`LanguageFeatureRequiresVersion` at `List`. A source with `List List TemplateId` fails with
+Picture passes `keiro-dsl check` with `OK`. For the Language 5 refusal probe, replace the
+preceding scalar `typeId: NotificationTypeId`
+with `typeId: typeid "notification_type"` before lowering the preamble to Language 5. It
+then fails with `LanguageFeatureRequiresVersion` at `List`; retaining the earlier declared
+scalar field would instead trip `ContractDeclaredIdSyntax` first. A source with
+`List List TemplateId` fails with
 a message containing "nested containers". A source with `List Channel` where `Channel` is an
 enum fails with `ContractIdUnknown` and "is an enum".
 
@@ -972,27 +1102,36 @@ Generated code: `keiro-dsl scaffold` on that source produces a `Contract` module
 `templateIds :: ![Nominals.TemplateId]`, an encoder line
 `"templateIds" .= map NominalLeaves.encodeTemplateIdLeaf payload.templateIds`, a decoder
 line `explicitParseField (parseContractList NominalLeaves.parseTemplateIdLeaf) o "templateIds"`,
-and the `parseContractList` helper. The committed corpus compiles it and proves, in a
-running Haskell program, that
+and the `parseContractList` helper. The committed corpus compiles the analogous `TemplatesReassigned`
+fixture and proves, in a running Haskell program, that
 
 ```json
-{"messageType":"NotificationTypeChanged","typeId":"notification_type_01h455vb4pex5vsknk084sn02q","templateIds":["template_01h455vb4pex5vsknk084sn02q","template_01h455vb4pex5vsknk084sn02r"],"messagePosition":"7"}
+{"messageType":"TemplatesReassigned","typeId":"template_01h455vb4pex5vsknk084sn02q","templateIds":["template_01h455vb4pex5vsknk084sn02q","template_01h455vb4pex5vsknk084sn02r"],"claimIds":["claim_01h455vb4pex5vsknk084sn02q"],"legacyTemplateIds":["template_01h455vb4pex5vsknk084sn02q"],"labels":["first","second"],"positions":[1,2]}
 ```
 
 round-trips with the two template ids in that order, that `"templateIds":[]` round-trips,
 that `"templateIds":"template_…"` is rejected at `$.templateIds`, that a wrong-prefix second
 element is rejected at `$.templateIds[1]`, and that a payload without `templateIds` is
-rejected. (The corpus uses the fixture's `TemplatesReassigned` event; the shape is the same.)
+rejected. Explicit `null` for the list, or for an element of each admitted scalar type,
+is rejected too; duplicates and their positions are retained. Include these cases in
+the corpus checks, together with wrong-prefix consumer-bound and literal ID elements.
 
 Identity: a publisher whose `outboxId` and an intake whose `dedupe` name a list field each
-produce one `ContractListFieldUsedAsKey` error and no unresolved-field error.
+produce one `ContractListFieldUsedAsKey` error and no unresolved-field error for a
+non-envelope name. Canonical envelope names remain valid despite colliding payload names,
+and a scalar/list name shared across selected events yields one refusal per clause.
 
-Evolution: `keiro-diff` between the base fixture and each mutant reports the classification
-in the Decision Log, and the unit tests assert the codes, facets, subjects, and verdicts.
+Evolution: `diffFixtures` compares the base and mutant files directly and asserts the
+Decision Log classifications, codes, facets, subjects, and verdicts. For a CLI proof, commit
+the base fixture, temporarily apply one mutant to that same path, then run
+`nix develop -c cabal run -v0 keiro-dsl -- diff keiro-dsl/test/fixtures/contract-list-fields.keiro --since <base-commit>`.
+The CLI compares one path against Git history, not two positional fixture paths. Restore
+only that temporary edit after inspection. Changed admission is public breaking in both
+directions; equal prefix alone never grants the build-only exception.
 
 Repository gates: `nix develop -c just verify` passes; the four OKF bundles validate with
-their strict commands; `okf validate docs/improvement-requests …` reports IR-54 as
-`completed`.
+their stated validation commands; IR-54 reads back as `completed` with the implementation
+resolution. Publication and the consumer handoff remain the separately tracked Release item until actually performed.
 
 
 ## Idempotence and Recovery
@@ -1003,8 +1142,9 @@ overwrites generated modules that carry the `@generated` banner, so re-running i
 corpus directory is safe; the regeneration driver refuses to run on a dirty corpus, so
 commit or `git stash` first. If a regeneration changes bytes unexpectedly, inspect
 `git diff -- keiro-dsl/test` and either accept the change (it means the generator changed)
-or `git checkout -- keiro-dsl/test` to recover. `okf log add` appends; if you add a log entry
-twice, delete the duplicate line by hand before validating. `okf id next` is read-only; if
+or restore only the generated files changed by that run from the known clean baseline.
+Never discard the entire test tree when it contains unrelated work. `okf log add` updates
+the bundle log; avoid duplicate entries by checking the existing log before retrying. `okf id next` is read-only; if
 another ADR lands first, re-run it and rename your file to the new handle before committing.
 Each milestone is a separate commit so a failed milestone can be reverted alone.
 
@@ -1057,3 +1197,11 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
   checking the plan against the tree: `failAt` takes a megaparsec offset, the
   `HasLocs ContractType` instance in `Workspace.hs` is a match site, and binding use-site
   text names the nominal (`: ClaimId`) rather than the field shape.
+
+- 2026-10-14 (update, correctness review): Required admission-domain equality for the
+  literal/declared compatibility exception and added widening/narrowing and shape regressions;
+  clarified canonical envelope precedence and multi-event identity refusal; made nested
+  keyword refusals case-insensitive and isolated the Language 5 List gate. Corrected the
+  self-contained example, generated literal-ID type assertion, CLI diff invocation, corpus
+  sidecar tracking/commit order, verification exit status, and corpus acceptance JSON.
+  Added null, duplicate, alias, and import-selection coverage. Implementation remains pending.
