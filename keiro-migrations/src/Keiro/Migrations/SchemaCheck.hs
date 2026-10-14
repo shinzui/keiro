@@ -3,6 +3,8 @@
 module Keiro.Migrations.SchemaCheck
   ( SchemaDrift (..),
     compareSchemaSnapshot,
+    compareSchemaSnapshotWithManaged,
+    managedObjectSnapshotKeys,
     expectedSchemaSnapshot,
     renderSchemaDrift,
     snapshotSchema,
@@ -15,6 +17,7 @@ import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (mapMaybe)
+import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
@@ -40,9 +43,12 @@ data SchemaDrift
       }
   deriving stock (Eq, Show)
 
--- | Compare canonical snapshots by their @kind<TAB>name@ object identity.
-compareSchemaSnapshot :: Text -> Text -> [SchemaDrift]
-compareSchemaSnapshot expected actual =
+-- | Compare canonical snapshots by their @kind<TAB>name@ object identity. A live
+-- object whose key is in the managed set is Keiro's own runtime object and is
+-- never reported as unexpected; it is still compared when the expected snapshot
+-- also lists it.
+compareSchemaSnapshotWithManaged :: Set Text -> Text -> Text -> [SchemaDrift]
+compareSchemaSnapshotWithManaged managed expected actual =
   mapMaybe driftFor allKeys
   where
     expectedObjects = snapshotObjects expected
@@ -55,8 +61,9 @@ compareSchemaSnapshot expected actual =
       case (Map.lookup key expectedObjects, Map.lookup key actualObjects) of
         (Just (expectedLine, _), Nothing) ->
           Just (MissingObject expectedLine)
-        (Nothing, Just (actualLine, _)) ->
-          Just (UnexpectedObject actualLine)
+        (Nothing, Just (actualLine, _))
+          | Set.member key managed -> Nothing
+          | otherwise -> Just (UnexpectedObject actualLine)
         (Just (_, expectedValue), Just (_, actualValue))
           | expectedValue /= actualValue ->
               Just
@@ -66,6 +73,10 @@ compareSchemaSnapshot expected actual =
                     actualDefinition = actualValue
                   }
         _ -> Nothing
+
+-- | Compare snapshots without allowing any runtime-managed additions.
+compareSchemaSnapshot :: Text -> Text -> [SchemaDrift]
+compareSchemaSnapshot = compareSchemaSnapshotWithManaged Set.empty
 
 -- | Render a drift as one operator-facing line with the affected object name.
 renderSchemaDrift :: SchemaDrift -> Text
@@ -113,7 +124,11 @@ expectedSchemaSnapshot =
   $(embedTextFile "expected-schema/native/keiro-v18.txt")
 
 -- | Compare the live @keiro@ and @keiro_read@ schemas with the embedded
--- PostgreSQL 18 snapshot.
+-- PostgreSQL 18 snapshot. Runtime binding views recorded as Keiro-managed are
+-- allowed additions when the role has registry table SELECT and schema USAGE;
+-- otherwise verification keeps its catalog-only comparison. Missing or changed
+-- migration objects remain drift. Registry identity does not validate a
+-- runtime-only view's definition or definition_hash.
 verifyExpectedSchema ::
   Settings.Settings ->
   IO (Either MigrationError [SchemaDrift])
@@ -129,10 +144,10 @@ verifyExpectedSchema settings = do
       pure $ case result of
         Left sessionError -> Left (DatabaseSessionFailed sessionError)
         Right (Left migrationError) -> Left migrationError
-        Right (Right actual) ->
-          Right (compareSchemaSnapshot expectedSchemaSnapshot actual)
+        Right (Right (managed, actual)) ->
+          Right (compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot actual)
   where
-    liveSnapshotSession :: Session (Either MigrationError Text)
+    liveSnapshotSession :: Session (Either MigrationError (Set Text, Text))
     liveSnapshotSession = do
       serverVersionNumber <- Session.statement () serverVersionStatement
       let majorVersion = fromIntegral serverVersionNumber `div` 10000
@@ -140,8 +155,64 @@ verifyExpectedSchema settings = do
         then do
           privateSchema <- snapshotSchema "keiro"
           publicSchema <- snapshotSchema "keiro_read"
-          pure (Right (privateSchema <> publicSchema))
+          managed <- managedObjectSnapshotKeys
+          pure (Right (managed, privateSchema <> publicSchema))
         else pure (Left (UnsupportedPostgresVersion majorVersion))
+
+-- | Snapshot keys of the objects Keiro's runtime created and recorded in
+-- @keiro.keiro_managed_read_objects@ with @managed_by = 'keiro'@. Every state
+-- counts: retirement marks a managed object retired without dropping it. Rows
+-- whose kind has no snapshot line (functions and types) map to nothing. When
+-- the registry table does not exist, or the connected role lacks table @SELECT@
+-- or schema @USAGE@, the set is empty and verification reports every live object
+-- as before.
+managedObjectSnapshotKeys :: Session (Set Text)
+managedObjectSnapshotKeys = do
+  readable <- Session.statement () registryReadableStatement
+  if readable
+    then Set.fromList . mapMaybe snapshotKey <$> Session.statement () managedObjectsStatement
+    else pure Set.empty
+  where
+    snapshotKey (schema, name, kind)
+      | kind == "binding-view" = Just ("view\t" <> schema <> "." <> name)
+      | otherwise = Nothing
+
+-- | True only when @keiro.keiro_managed_read_objects@ is a table the connected
+-- role may read. Resolving the relation through @pg_class@ avoids the error
+-- that the text form of @has_table_privilege@ raises for a missing relation.
+registryReadableStatement :: Statement () Bool
+registryReadableStatement =
+  Statement.preparable
+    """
+    SELECT coalesce(
+      ( SELECT pg_catalog.has_table_privilege(c.oid, 'SELECT')
+                 AND pg_catalog.has_schema_privilege(n.oid, 'USAGE')
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'keiro'
+          AND c.relname = 'keiro_managed_read_objects'
+          AND c.relkind = 'r' ),
+      false)
+    """
+    Encoders.noParams
+    (Decoders.singleRow (Decoders.column (Decoders.nonNullable Decoders.bool)))
+
+managedObjectsStatement :: Statement () [(Text, Text, Text)]
+managedObjectsStatement =
+  Statement.preparable
+    """
+    SELECT object_schema, object_name, object_kind
+    FROM keiro.keiro_managed_read_objects
+    WHERE managed_by = 'keiro'
+    """
+    Encoders.noParams
+    ( Decoders.rowList
+        ( (,,)
+            <$> Decoders.column (Decoders.nonNullable Decoders.text)
+            <*> Decoders.column (Decoders.nonNullable Decoders.text)
+            <*> Decoders.column (Decoders.nonNullable Decoders.text)
+        )
+    )
 
 snapshotObjects :: Text -> Map Text (Text, Text)
 snapshotObjects =

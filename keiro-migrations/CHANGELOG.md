@@ -6,6 +6,17 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- `verify-schema` and `Keiro.Migrations.SchemaCheck.verifyExpectedSchema` no longer
+  report a view that Keiro's runtime created and recorded in
+  `keiro.keiro_managed_read_objects`, such as the
+  `keiro.external_read_<function>_binding` view behind an all-rows external-read
+  contract, as unexpected drift. Only rows with `managed_by = 'keiro'` count; a role
+  without table `SELECT` or schema `USAGE` keeps the previous behaviour. New exports
+  `managedObjectSnapshotKeys` and `compareSchemaSnapshotWithManaged`;
+  `compareSchemaSnapshot` is unchanged.
+
 ## 0.20.0.0 — 2026-10-12
 
 ### Breaking Changes

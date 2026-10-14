@@ -288,6 +288,134 @@ main = hspec $ do
           `shouldSatisfy` any
             (Text.isInfixOf "keiro_read.projection_group_status_v1")
 
+    it "treats a managed live object as expected and still reports its unregistered neighbours" $ do
+      let expected = Text.unlines ["table\twidgets\tkind=r"]
+          actual =
+            Text.unlines
+              [ "table\twidgets\tkind=r",
+                "view\tkeiro.external_read_demo_v1_binding\tcolumns=1:id bigint",
+                "view\tkeiro.external_read_rogue_v1_binding\tcolumns=1:id bigint"
+              ]
+          managed = Set.singleton "view\tkeiro.external_read_demo_v1_binding"
+          migrationView = "view\tkeiro_read.status_v1\tcolumns=1:id bigint"
+          changedView = "view\tkeiro_read.status_v1\tcolumns=1:id text"
+          migrationManaged = Set.singleton "view\tkeiro_read.status_v1"
+      compareSchemaSnapshotWithManaged managed expected actual
+        `shouldBe` [UnexpectedObject "view\tkeiro.external_read_rogue_v1_binding\tcolumns=1:id bigint"]
+      compareSchemaSnapshot expected actual `shouldSatisfy` ((== 2) . length)
+      compareSchemaSnapshotWithManaged migrationManaged migrationView changedView
+        `shouldBe` [ChangedObject "view\tkeiro_read.status_v1" "columns=1:id bigint" "columns=1:id text"]
+      compareSchemaSnapshotWithManaged migrationManaged migrationView ""
+        `shouldBe` [MissingObject migrationView]
+      forM_ [(expected, actual), (migrationView, changedView), (migrationView, "")] $ \(expectedSnapshot, actualSnapshot) ->
+        compareSchemaSnapshotWithManaged Set.empty expectedSnapshot actualSnapshot
+          `shouldBe` compareSchemaSnapshot expectedSnapshot actualSnapshot
+
+    it "ignores registered binding views and still reports unregistered and consumer-managed views" $ do
+      plan <- requirePlan
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+            neighbours =
+              [ "schema drift: unexpected view keiro.external_read_foreign_v1_binding (actual: columns=1:id bigint)",
+                "schema drift: unexpected view keiro.external_read_rogue_v1_binding (actual: columns=1:id bigint)"
+              ]
+            check = do
+              drifts <- verifyExpectedSchema settings >>= requireRight
+              map renderSchemaDrift drifts `shouldBe` neighbours
+        _ <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+        verifyExpectedSchema settings >>= requireRight >>= (`shouldBe` [])
+        withConnection settings $ \connection -> do
+          useSession connection (Session.script managedBindingFixtureSql)
+          useSession connection $
+            Session.script
+              """
+              CREATE VIEW keiro.external_read_rogue_v1_binding AS SELECT 1::bigint AS id;
+              CREATE VIEW keiro.external_read_foreign_v1_binding AS SELECT 1::bigint AS id;
+              INSERT INTO keiro.keiro_managed_read_objects
+                (object_schema, object_name, object_kind, object_signature,
+                 managed_by, definition_hash, surface_generation, state)
+              VALUES ('keiro', 'external_read_foreign_v1_binding', 'binding-view', '',
+                      'consumer', 'test-definition', 1, 'active');
+              """
+          check
+          useSession connection $
+            Session.script
+              "UPDATE keiro.keiro_managed_read_objects SET state = 'pending-retirement', updated_at = now() WHERE object_name = 'external_read_demo_v1_binding'"
+          check
+          useSession connection $
+            Session.script
+              "UPDATE keiro.keiro_managed_read_objects SET state = 'retired', retired_at = now(), updated_at = now() WHERE object_name = 'external_read_demo_v1_binding'"
+          check
+
+    it "returns no managed keys for a role that cannot read the registry" $ do
+      plan <- requirePlan
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+            demoKeys = Set.singleton "view\tkeiro.external_read_demo_v1_binding"
+            demoDrift = [UnexpectedObject "view\tkeiro.external_read_demo_v1_binding\tcolumns=1:id bigint,2:total bigint"]
+            checkRole expectedKeys expectedDrifts =
+              withConnection settings $ \connection -> do
+                (keys, drifts) <-
+                  useSession
+                    connection
+                    ( do
+                        Session.script "SET ROLE keiro_verify_probe"
+                        managed <- managedObjectSnapshotKeys
+                        actual <- (<>) <$> snapshotSchema "keiro" <*> snapshotSchema "keiro_read"
+                        pure (managed, compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot actual)
+                    )
+                    `finally` useSession connection (Session.script "RESET ROLE")
+                keys `shouldBe` expectedKeys
+                drifts `shouldBe` expectedDrifts
+        _ <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+        withConnection settings $ \connection -> do
+          useSession connection (Session.script managedBindingFixtureSql)
+          useSession connection $
+            Session.script
+              """
+              DO $probe$
+              BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'keiro_verify_probe') THEN
+                  CREATE ROLE keiro_verify_probe NOLOGIN;
+                END IF;
+              END
+              $probe$;
+              GRANT keiro_verify_probe TO CURRENT_USER;
+              GRANT USAGE ON SCHEMA keiro TO keiro_verify_probe;
+              """
+          useSession connection managedObjectSnapshotKeys `shouldReturn` demoKeys
+          checkRole Set.empty demoDrift
+          useSession connection $
+            Session.script
+              """
+              REVOKE USAGE ON SCHEMA keiro FROM keiro_verify_probe;
+              GRANT SELECT ON keiro.keiro_managed_read_objects TO keiro_verify_probe;
+              """
+          checkRole Set.empty demoDrift
+          useSession connection (Session.script "GRANT USAGE ON SCHEMA keiro TO keiro_verify_probe")
+          checkRole demoKeys []
+
+    it "falls back to ordinary drift when the registry is absent" $ do
+      plan <- requirePlan
+      withKeiroPg $ \database -> do
+        let settings = Pg.connectionSettings database
+            missingRegistry = MissingObject "table\tkeiro_managed_read_objects\tkind=r"
+            unexpectedBinding = UnexpectedObject "view\tkeiro.external_read_demo_v1_binding\tcolumns=1:id bigint,2:total bigint"
+        withConnection settings $ \connection ->
+          useSession connection managedObjectSnapshotKeys `shouldReturn` Set.empty
+        emptyDrifts <- verifyExpectedSchema settings >>= requireRight
+        emptyDrifts `shouldSatisfy` elem missingRegistry
+        _ <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
+        actual <- withConnection settings $ \connection -> do
+          useSession connection (Session.script managedBindingFixtureSql)
+          useSession connection (Session.script "DROP TABLE keiro.keiro_managed_read_objects")
+          useSession connection managedObjectSnapshotKeys `shouldReturn` Set.empty
+          useSession connection ((<>) <$> snapshotSchema "keiro" <*> snapshotSchema "keiro_read")
+        drifts <- verifyExpectedSchema settings >>= requireRight
+        drifts `shouldBe` compareSchemaSnapshot expectedSchemaSnapshot actual
+        drifts `shouldSatisfy` elem missingRegistry
+        drifts `shouldSatisfy` elem unexpectedBinding
+
   describe "fresh native databases" $ do
     it "applies Kiroku then Keiro, verifies strictly, and is repeatable" $ do
       plan <- requirePlan
@@ -1531,3 +1659,16 @@ poisonedLedgerFactsStatement =
     )
   where
     column = Decoders.column . Decoders.nonNullable
+
+managedBindingFixtureSql :: Text
+managedBindingFixtureSql =
+  """
+  CREATE VIEW keiro.external_read_demo_v1_binding
+    WITH (security_barrier = true, security_invoker = false)
+    AS SELECT 1::bigint AS id, 10::bigint AS total;
+  INSERT INTO keiro.keiro_managed_read_objects
+    (object_schema, object_name, object_kind, object_signature,
+     managed_by, definition_hash, surface_generation, state)
+  VALUES ('keiro', 'external_read_demo_v1_binding', 'binding-view', '',
+          'keiro', 'test-definition', 1, 'active');
+  """

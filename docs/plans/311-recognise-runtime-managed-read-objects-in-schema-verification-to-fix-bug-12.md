@@ -85,11 +85,11 @@ binding view.
 - [x] 2026-10-14 03:35Z: Milestone 0: reproduce BUG-12 with a compiled fixture on master, retain the failing
       transcript under `docs/bug-reports/evidence/`, commit the fixture as a pending `xit`
       example together with the `keiro-test` dependency, set the report `confirmed`, and log it.
-- [ ] Milestone 1: make `Keiro.Migrations.SchemaCheck` registry-aware (`managedObjectSnapshotKeys`,
+- [x] 2026-10-14 03:36Z: Milestone 1: make `Keiro.Migrations.SchemaCheck` registry-aware (`managedObjectSnapshotKeys`,
       `compareSchemaSnapshotWithManaged`, the guarded lookup inside `verifyExpectedSchema`).
-- [ ] Milestone 1: add pure comparison, hand-altered-database, restricted-role, and
+- [x] 2026-10-14 03:37Z: Milestone 1: add pure comparison, hand-altered-database, restricted-role, and
       absent-registry tests to `keiro-migrations/test/Main.hs`; all four pass.
-- [ ] Milestone 1: record the fix under `[Unreleased]` in `keiro-migrations/CHANGELOG.md`.
+- [x] 2026-10-14 03:36Z: Milestone 1: record the fix under `[Unreleased]` in `keiro-migrations/CHANGELOG.md`.
 - [ ] Milestone 2: flip the Milestone 0 fixture in `keiro/test/ExternalReadSpec.hs` from
       `xit` to `it`; it passes.
 - [ ] Milestone 2: add the executable regression to `keiro-ops/test/Main.hs`; it passes.
@@ -237,7 +237,10 @@ before reconciliation and exactly one unexpected binding view afterwards. The
 retained transcript is `docs/bug-reports/evidence/BUG-12-master-binding-view-drift.txt`.
 The fixture block reported `7 examples, 1 failure`, with all six existing examples
 passing. BUG-12 is now confirmed and its strict bundle check passes. The pending fixture run passed with `7 examples, 0 failures, 1 pending`; the
-registry-aware implementation follows in Milestone 1.
+registry-aware implementation is complete. The full migration suite passed with
+`40 examples, 0 failures`, including all four new examples, every registry state,
+both missing-privilege paths, an authorised non-owner, absent registries, and
+unchanged migration-owned drift detection.
 
 Missing or altered runtime-object definitions remain outside this fix: a registry
 row establishes which runtime additions are allowed, not that their live definition
@@ -1135,3 +1138,6 @@ named in Context and Orientation. None of that changes.
 
 - 2026-10-14: Milestone 0 complete: saved exact failing evidence, confirmed BUG-12,
   validated its bundle, and verified the pending regression leaves the suite green.
+
+- 2026-10-14: Milestone 1 complete: guarded registry lookup, comparison exports,
+  four regressions, and migration changelog; full migration suite passes (40 examples).
