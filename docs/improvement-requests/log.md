@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Completion**: IR-50 completed under ExecPlan 314 in 3cd98914: own-revision removal classification, complete CLI reports, ten focused regressions, all 58 DSL suites, and clean corpus/documentation gates pass.
 * **Status audit**: Reviewed all 54 requests against the current tree at `a0c82a42`,
   their implementation-plan progress, release tags and Hackage metadata, and retained
   consumer evidence. IR-42 through IR-46 move from in-progress to completed: MasterPlan 44

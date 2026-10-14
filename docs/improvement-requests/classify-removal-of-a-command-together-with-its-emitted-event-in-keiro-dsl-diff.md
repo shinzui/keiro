@@ -5,9 +5,10 @@ description: >-
   keiro-dsl diff --since GIT-REF fails with an aggregate fold output resolution error instead of a
   classification when one change removes a command, the event it emitted, and the state it led
   to, so a consumer's generated-code gate cannot run on that change until it is committed.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-14T15:35:26Z
 requestId: IR-50
-status: proposed
+status: completed
+completedAt: 2026-10-14T15:35:26Z
 origin: mori://tan/notification-hub
 plan: docs/plans/314-fix-ir-50-command-and-event-removal-diff-classification.md
 acceptanceCriteria:
@@ -42,10 +43,23 @@ reviews:
 
 ## Status
 
-Proposed. [ExecPlan 314](../plans/314-fix-ir-50-command-and-event-removal-diff-classification.md)
-exists in the working tree as an untracked planning skeleton as of 2026-10-14.
-Its implementation and acceptance sections are still placeholders, so this link
-does not establish acceptance, implementation, or completion of the request.
+Completed by [ExecPlan 314](../plans/314-fix-ir-50-command-and-event-removal-diff-classification.md)
+and implementation commit `3cd98914` (unreleased). Each valid revision resolves
+against its own declarations. Single-source and workspace removals produce the
+breaking event finding, removed command/state details, and both JSON reports before
+the normal compatibility gate exits 1. A replay-only remedy whose declarations
+were deleted is withheld.
+
+The Language 6 fixtures `keiro-dsl/test/fixtures/ir50-removal-old.keiro` and
+`keiro-dsl/test/fixtures/ir50-removal-new.keiro` independently pass check and fold
+resolution. The `IR-50 removal diff` test group passes all ten examples, including
+same-state removal, deleted event-only types, dependency changes, invalid-input
+refusal, and both CLI paths. The replay report matches
+`keiro-dsl/test/fixtures/ir50-removal-replay.json`; same-state removal selects only
+`RetiredEvent`. All 58 DSL suites pass (858 main-suite examples), the clean corpus
+check passes all 56 invocations without generated-file churn, and API, inventory,
+ADR, and user-documentation gates pass. This closes the reporting defect; it does
+not certify a consumer's historical-data migration or deploy the breaking removal.
 
 ## Context
 

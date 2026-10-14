@@ -31,7 +31,7 @@ This ExecPlan is a living document. Keep Progress, Surprises & Discoveries, Deci
 ## Purpose / Big Picture
 
 
-A developer removing an aggregate command, the event it emits, and its destination state must receive a complete breaking-change report and a replay-audit target from `keiro-dsl diff --since REF`. Today both source revisions can pass `check`, yet the diff aborts with an output-resolution error and writes neither requested report. After this change, the command still exits nonzero when its normal compatibility gate finds a break, but it first explains the removed declarations and writes valid compatibility and replay-impact JSON.
+A developer removing an aggregate command, the event it emits, and its destination state must receive a complete breaking-change report and a replay-audit target from `keiro-dsl diff --since REF`. Before this repair, both source revisions could pass `check`, yet the diff aborted with an output-resolution error and wrote neither requested report. With this change, the command still exits nonzero when its normal compatibility gate finds a break, but it first explains the removed declarations and writes valid compatibility and replay-impact JSON.
 
 This implements [IR-50](../improvement-requests/classify-removal-of-a-command-together-with-its-emitted-event-in-keiro-dsl-diff.md), reproduced during the review of `keiro-dsl-0.20.0.0` through `a0c82a42`. The separate parser corrections are owned by [ExecPlan 313](313-fix-contract-parser-nominal-names-and-case-sensitive-list-syntax.md). They have no implementation dependency on this work. This plan does not authorize deployment, history deletion, or acceptance of the breaking removal by a consumer.
 
@@ -42,8 +42,8 @@ This implements [IR-50](../improvement-requests/classify-removal-of-a-command-to
 - [x] (2026-10-14 15:17Z) M2 implementation: Replace mixed-revision fold resolution with private own-service evidence and deterministic removed-command/state details; isolated CLI removal emits both reports and the normal breaking exit.
 - [x] (2026-10-14 15:27Z) M2 focused validation: All ten IR-50 examples pass, including retained equality expressions under simultaneous guard loosening and type changes.
 - [x] (2026-10-14 15:33Z) M2/M3 full DSL validation: All 58 test suites pass; the main suite reports 858 examples and zero failures. API-boundary and record-migration policies pass.
-- [ ] M3 remaining gates: Commit the validated new fixtures to satisfy the corpus clean-path guard, then finish corpus/documentation validation and request closeout.
-- [ ] M3: Verify complete classification/report emission, document the correction, reconcile IR-50, and run the DSL/corpus/documentation gates.
+- [x] (2026-10-14 15:35Z) M3 clean-path gates: Implementation committed as `3cd98914`; all 56 corpus invocations, strict ADR/user/guide profiles, API boundaries, and record inventory pass without generated changes.
+- [x] (2026-10-14 15:35Z) M3: Verify complete classification/report emission, document the correction, reconcile IR-50, and run the DSL/corpus/documentation gates.
 
 ## Surprises & Discoveries
 
@@ -76,7 +76,44 @@ This implements [IR-50](../improvement-requests/classify-removal-of-a-command-to
 ## Outcomes & Retrospective
 
 
-The core repair is implemented. The isolated single-source probe now exits 1 with `EvtRemovedNotDeprecated`, `AggGuardRemedyUnavailable`, and `AggFoldSurfaceChanged` naming `Retire` and `Retired`. It writes schema `keiro-dsl/diff-report/1` and replay impact for `Example` with sorted events `[Kept,RetiredEvent]` and snapshot inclusion. All 58 DSL suites pass, including 858 main-suite examples; API-boundary and record-migration policies pass. Final clean-corpus and documentation gates remain before IR-50 is marked completed.
+Implemented in `3cd98914`. The baseline had four failures among five initial
+regressions: independently valid sources could not be compared because replay
+analysis resolved deleted old outputs against new declarations. The final ten
+IR-50 regressions all pass. The single-source and workspace CLI paths exit 1 from
+the ordinary breaking gate after writing both reports. Findings include
+`EvtRemovedNotDeprecated`, `AggGuardRemedyUnavailable`, and `AggFoldSurfaceChanged`
+with removed command `Retire` and state `Retired`. Replay JSON selects `Example`
+with sorted events `[Kept,RetiredEvent]` and snapshot inclusion; the same-state
+variant selects exactly `RetiredEvent`.
+
+All 58 DSL suites pass, including 858 main-suite examples. The unchanged canonical
+fold goldens and full frontend/replay precision coverage pass. The clean corpus
+gate selects and passes all 56 invocations without changes to generated modules,
+snapshot identity, or golden files. API-boundary, record-migration, strict ADR,
+user-documentation, and guide checks pass. IR-50 is completed in the request bundle;
+no release or consumer deployment is claimed.
+
+The durable lesson is to resolve references in each real revision before matching
+comparison evidence. Persisted output obligation keys also contain guard provenance;
+comparison needs resolved ownership plus the independent guard-coverage analysis,
+while the frozen renderer retains those keys byte-for-byte. ADR-18 records this
+boundary and ADR-4 records complete removal-report delivery before gate failure.
+No required implementation work remains.
+
+Validation evidence from the Nix shell:
+
+```text
+Z3 version 4.16.0 - 64 bit
+IR-50 removal diff: 10 examples, 0 failures
+keiro-dsl-test: 858 examples, 0 failures
+All 58 DSL test suites: PASS
+corpus: 56 of 56 invocations selected
+conformance corpus: ok
+ADR profile: OK: 52 concepts
+User documentation: OK: 34 concepts
+Guides: OK: 29 concepts
+Improvement-request profile: OK: 54 concepts
+```
 
 ## Context and Orientation
 
@@ -261,3 +298,5 @@ Implementation note (2026-10-14): Recorded successful CLI report delivery, depen
 Validation note (2026-10-14): The corrected ten-example IR-50 group passes in the Nix shell, including both report-writing CLI paths. The final full gate run is in progress.
 
 Validation note (2026-10-14): All ten focused regressions and all 58 DSL suites pass on the final code. API-boundary and record-migration checks pass. The corpus gate requires the new fixtures to be committed before its ordinary clean-path run; final request completion remains pending that gate.
+
+Completion note (2026-10-14): Recorded implementation commit `3cd98914`, successful full DSL/corpus/policy/documentation evidence, unchanged generated/frozen artifacts, the ADR distillation, and completed IR-50 acceptance.
