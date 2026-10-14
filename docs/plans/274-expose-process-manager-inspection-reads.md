@@ -13,6 +13,17 @@ provenance:
       at: 2026-09-30T23:46:10Z
       mode: "update"
       note: "Adopted by MasterPlan 45: settled cursor codec, pending-timer read, hydration source, kiroku listStreams 0.10 gate, migration allocation"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: unconditional provenance, wrong manager identity input, misleading applied evidence, insufficient timer query proof, and stale listing API."
 ---
 
 # Expose process-manager inspection reads
@@ -64,6 +75,10 @@ whose Integration Points settle the artifacts this plan shares with its siblings
 
 ## Progress
 
+- [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
+- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+
+
 Milestone 0 is the validation gate; every later milestone starts only after its go decision is
 recorded in the Decision Log.
 
@@ -77,20 +92,26 @@ recorded in the Decision Log.
 - [ ] M2: add `Keiro.ProcessManager.Inspect` with the inspector descriptor, the smart constructors, and `inspectProcessManagerInstance` built on `Keiro.Command.hydrateWithSource` (creating `hydrateWithSource` to plan 278's interface if plan 278 has not landed).
 - [ ] M2: rebuild-equivalence test against `hydrateFull`, provenance rendering test, pre-provenance history test, missing-instance test, and dispatched-command status test.
 - [ ] M2: add `AppHooks.processManagers` (additive beside plan 278's `aggregates`) and the embedded-only `pm show` command in `keiro-ops` with tests.
-- [ ] M3: add `findPendingTimers` to `Keiro.Timer` over the shared `Keiro.Inspection.Cursor` codec (creating that module to plan 275's interface if absent); add the pending-timer index as the next migration only if Milestone 0 recorded a go.
+- [ ] M3: add `findPendingTimers` to `Keiro.Timer` over the shared `Keiro.Inspection.Cursor` codec (imported from prerequisite plan 275); add the pending-timer index as the next migration only if Milestone 0 recorded a go.
 - [ ] M3: tests for ordering, cursor stability, page bounds, fired-timer exclusion, and read-only behavior; `timer pending list` command and `pendingTimerItemJson` with tests.
 - [ ] M4: add `shardOwnershipView` and `listShardedSubscriptions` to `Keiro.Subscription.Shard` with heartbeat, lease age, and database-observed time.
 - [ ] M4: failover test (owner stops renewing, lease passes, new owner appears without restarting the read); `shard list` command and additive `shard status` fields with tests.
-- [ ] M5 (gated on `kiroku-store` 0.10.0.0 on Hackage): bump the `kiroku-store` bound in every package and `mori.dhall` unless plan 278's Milestone 4 already did; add `listProcessManagerInstances` and `pm list` wrapping kiroku's released `listStreams` with the `<category>-` prefix and an opaque `pm-list` cursor.
+- [ ] M5: integrate released `listStreams` without lowering the existing 0.11 bound; implement bounded raw-row pagination for `listProcessManagerInstances` and `pm list`.
 - [ ] M6: user documentation, capability records, changelogs, IR-29 evidence, ADR distillation, and the full `just verify` gate.
 
 
 ## Surprises & Discoveries
 
+2026-10-13 source review: Default-on unbounded provenance would add JSON traversal/WAL on every legacy reaction; actual target witnesses and the newer ADR-41 reaction family require narrower semantics. Timer ordering/filter indexes require realistic read/write evidence.
+
+
 (None yet.)
 
 
 ## Decision Log
+
+- Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Default-on unbounded provenance would add JSON traversal/WAL on every legacy reaction; actual target witnesses and the newer ADR-41 reaction family require narrower semantics. Timer ordering/filter indexes require realistic read/write evidence. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
+
 
 - Decision: Deliver the library reads in `keiro` (plus one primitive in kiroku-store) and the
   read-only `keiro-ops` commands that render them; do not build HTTP endpoints in this plan.
@@ -257,10 +278,22 @@ recorded in the Decision Log.
 
 ## Outcomes & Retrospective
 
+2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
+
+
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
+
+### Review baseline and implementation boundary (2026-10-13)
+
+This plan was reviewed against Keiro commit `cbcc593df2445780e2c42406c6b633ae530fb8ea`. Keiro is now 0.20.0.0 and already depends on released `kiroku-store ^>=0.11.0.0`; historical September version statements and Decision Log entries below are historical evidence, not instructions to downgrade. Hackage source and upstream tag `kiroku-store-v0.11.0.0` confirm the four-argument, `BrowsePageSize`-bounded listing API. Recheck the registry and upstream tags before changing bounds. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now also requires bounded inspection work and measured hot-path isolation.
+
+Shared implementation has one owner: plan 275 creates the cursor codec, plan 278 creates source-reporting hydration, plan 274 creates pending-timer reads, and plan 276 creates the transport and admission budget. Consumers wait for those artifacts; they do not implement an absent owner's module. The old create-first instructions are withdrawn. The hard prerequisites for this plan are plans 275 and 278.
+
+Application constructors allocate resources once in IO and return a bare WAI application: `opsApplication` and `opsApplicationWithFeeds` now return `IO Application`. Bind their results once during startup, never construct a new admission budget for each request. Pure composition still takes ordinary `Application` values. Per-request schema verification, handler execution, and feed refreshes share a bounded inspection budget; they must never use the writer's reserved pool capacity by default.
+
 
 This repository is a Cabal multi-package project. The packages that matter here are `keiro`
 (the runtime library, `keiro/src/Keiro/…`), `keiro-core` (shared types such as
@@ -295,7 +328,7 @@ manager-state append uses emit index `-1` and dispatched commands use `0, 1, …
 same source event therefore produces the same ids, and the store's uniqueness constraint turns
 the replay into a benign duplicate. The exported helpers `deterministicCommandIdProbes`,
 `firstExistingEventId`, and `eventAlreadyIn` implement the pre-dispatch check; this plan reuses
-`firstExistingEventId` to report whether each dispatched command landed. The seed cannot be
+`firstExistingEventId` to report an event-presence witness for each recorded dispatch. The seed cannot be
 inverted, which is why the journal alone cannot say which source event a manager event answers.
 
 Hydration is how keiro rebuilds an aggregate's state: `Keiro.Command.hydrate`
@@ -407,56 +440,33 @@ semantics; Milestone 6 distills one.
 
 ### Coordination under MasterPlan 45 (2026-09-30)
 
-This plan is child plan EP-4 of
-[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
-which coordinates the six keiro-side requests of the keiro runtime UI initiative (IR-26
-through IR-31). The MasterPlan's Integration Points section settles every artifact this plan
-shares with a sibling; the Decision Log entries dated 2026-09-30 above restate the settled
-shape for this plan, and the milestones below are written against it. The facts a novice must
-know before starting, as of 2026-09-30:
+This plan is coordinated by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md). Hard prerequisites: 275 (cursor and workflow reads) and 278 (source-reporting hydration). The 2026-10-13 Integration Points are the current contracts; older dated Decision Log and Revision notes preserve history, not alternative implementation instructions.
 
-- The working tree is at 0.19.0.0 and keiro 0.19.0.0 is the newest Hackage release. Recheck
-  both through `https://hackage.haskell.org/package/keiro/preferred.json` and
-  `git ls-remote --tags origin` before choosing any bound.
-- [ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
-  (`mori://shinzui/keiro/okf/adrs/concepts/ADR-40`) now exists. It sanctions the inspection
-  surface as a bounded exception to the no-UI stance under five conditions (sister-package
-  packaging, ADR 28 discipline on the wire, preview then confirm, push is a hint and poll is
-  truth, composition without duplication) and disposes of IR-29 explicitly. The ADR this plan
-  distills in Milestone 6 cites ADR 40 as the boundary decision and records only this plan's
-  narrower decisions; this plan does not amend `docs/why-keiro.md`. The next free ADR handle
-  at MasterPlan time was ADR-49; allocate with `okf id next`, never copy a number.
-- Kiroku's listing primitive is `Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es)
-  => Maybe Text -> Maybe StreamName -> Int32 -> Eff es (Vector StreamInfo)`: an exact
-  `starts_with` prefix filter, an exclusive stream-name cursor, and stream-name order. It is
-  built by kiroku plan 88 under
-  `mori://shinzui/kiroku/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui`
-  and released as `kiroku-store` 0.10.0.0 by kiroku plan 96. The current release is 0.9.0.1,
-  which has no listing, and every keiro package pins `kiroku-store >=0.9.0.1 && <0.10`.
-  Milestone 5 wraps the released primitive and never edits kiroku.
-- The sibling plans are [275](275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
-  (EP-2, workflow reads; owns `Keiro.Inspection.Cursor`, which this plan's cursors use),
-  [276](276-serve-the-keiro-ops-surface-over-http.md) (EP-1, the `keiro-ops-http` transport
-  that turns this plan's read-only commands into `GET` routes),
-  [277](277-publish-websocket-live-feeds-over-keiro-wake.md) (EP-5, live feeds; its `timers`
-  feed consumes this plan's `findPendingTimers` and `pendingTimerItemJson`),
-  [278](278-expose-aggregate-inspection-read-apis.md) (EP-3, aggregate reads; owns
-  `Keiro.Command.hydrateWithSource`, which Milestone 2 uses, and the `aggregates` hook beside
-  this plan's `processManagers` hook),
-  [302](302-mount-composed-runtime-inspection-surfaces-under-one-port.md) (EP-6, composed
-  mounting), and
-  [303](303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md)
-  (EP-7, the cohort release that completes IR-29). None is a hard prerequisite of Milestones
-  0 through 4; the "whoever lands first creates it to the fixed interface" rule applies to
-  the cursor module, `hydrateWithSource`, the pending-timer read, and `cursorReader`.
+Plan 275 creates `Keiro.Inspection.Cursor` and `Keiro.Ops.Parse.cursorReader`; 278 creates source-reporting hydration; 274 creates the pending-timer read and encoder; 276 creates the shared inspection budget and HTTP application; 277 consumes these and owns bounded feeds; 302 composes allocated applications; 303 requires all work and measured interference gates before closure. Consumers import these interfaces after their prerequisites, never create competing implementations. Every child preserves existing hooks while extending them.
 
-`docs/why-keiro.md` states keiro has no workflow-engine UI; this plan adds no listener and
-does not engage that stance beyond citing ADR 40.
-
+Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `listStreams` takes category, prefix, cursor and `BrowsePageSize`. The compatible released metrics surface is 0.3.0.0. Verify the registry and upstream tags again at implementation, retain supported current bounds, and do not defer listings on the obsolete 0.10 release gate. Allocate migration numbers and OKF handles at implementation. Strict ADR-40 and ADR-28 boundaries apply.
 
 ## Plan of Work
 
+### Cross-cutting constraints: opt-in provenance and honest observations
+
+Add `InspectionProvenancePolicy = NoInspectionProvenance | CaptureInspectionProvenance` and `inspectionProvenance :: InspectionProvenancePolicy` to `RunCommandOptions`, defaulting to `NoInspectionProvenance`. This additive record field requires a compatibility note for applications constructing the record. EP-4 owns it; EP-3's inspection options inherit the disabled default. Branch before building JSON, traversing follow-ups, resolving targets or computing timer IDs for inspection. With capture disabled, old write bytes, statement counts, retry behavior and worker retention remain unchanged. Capture requires explicit application opt-in, independently of whether an HTTP server is mounted. Do not backfill historical events or add a provenance table, index, trigger or notification.
+
+Capture is bounded to 64 target entries, 64 timer IDs, and 16 KiB encoded metadata for the added `keiro.pm` value, with a `truncated` marker. Traverse only the bounded prefixes plus one look-ahead element; do not compute total lengths of potentially large lazy follow-up lists. Oversized identifiers produce source-only provenance with `truncated = true`; no truncated record implies complete fan-out. Preserve caller metadata according to `Keiro.Codec.metadataFor`, preserving rejection of non-object caller metadata (`NonObjectCallerMetadata`); do not silently replace or wrap invalid caller metadata. Store intended dispatches, not outcomes: saga persistence precedes target transactions. Rejecting or losing a command must never be changed by capture.
+
+This cohort's write instrumentation covers the two legacy runners named in M1. `Keiro.ProcessManager.Reaction` (ADR-41) has distinct target-keyed identities and silent outcomes; it is deliberately not rewritten or inferred from positional metadata. Mark legacy provenance with an explicit identity family (`legacy-positional-v1`), reject unknown families as unavailable, and document that reactive-manager last-reaction provenance is unavailable in this cohort. Existing state/history references remain readable through descriptors. Do not advertise capture as covering generated reaction runners. A later extension requires its own identity-aware proof and opt-in budget.
+
+The instance view reports the last persisted manager event, not the last attempted reaction. No-op, rejected, eventless, multi-event and partially dispatched reactions make that distinction material. `waiting_for` describes candidate live input shapes, not proof that guards will pass. Pass the manager's configured name (never the physical journal name) to `deterministicCommandIdProbes`; then pass `inspectionRunCommandOptions`, the target stream name and those probes to `firstExistingEventId`. Probe results mean only `event_present` or `not_observed`; a missing event does not prove a target failed or never ran (silent outcomes and retention also have no witness). Include `observed_at` and provenance completeness. Never synthesize modern target IDs with legacy positional helpers.
+
+M2 may begin its module/descriptor work after its hard prerequisites, but it wires the pending-timer read only after this plan's M3. Validate timer page size before hydration, and add a `ProcessManagerInspectionError` wrapper for command, invalid-request, deleted-stream and budget failures; `CommandError` alone cannot represent invalid timer-page input. Soft-deleted instances show lifecycle metadata and null state instead of hydrating an empty history. Header, folded state, target probes and timers are individually timed observations; a ReadCommitted transaction is not a cross-stream atomic snapshot.
+
+
 ### Milestone 0: validation gate
+
+A row limit bounds response cardinality, not query work. Keep reproducible fixtures and EXPLAIN transcripts outside the fast unit suite. Seed 10,000 and 100,000 rows with skew (one owner has 90% of rows, rare/absent filters, and many equal timestamps), ANALYZE, and measure first and deep pages with `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` using the actual parameterized query under both `force_custom_plan` and `force_generic_plan`. Run with normal planner settings; `enable_seqscan = off` is a diagnostic only, never acceptance. Record rows examined, rows removed by filter, sort memory/spill, buffers, planning/execution time and query count. Separate absent/present-filter statement shapes where nullable-OR predicates defeat ordered index access. A repeatable dashboard query that scans or sorts the whole ledger at each refresh is not accepted merely because it returns 501 rows. Either provide an evidence-backed matching index, bound the supported filter workload and deadline explicitly, or keep that shape out of automatic feeds. Measure schedule/claim/resume throughput, WAL and HOT-update behavior before and after every index. An immutable index key does not guarantee that index maintenance costs zero on non-HOT updates.
+
+Cover all four pending-timer filter shapes: no filter, manager only, correlation only, and manager plus correlation, with/without cursor. Candidate key orders are `(fire_at,timer_id)`, `(process_manager_name,fire_at,timer_id)`, `(correlation_id,fire_at,timer_id)`, and `(process_manager_name,correlation_id,fire_at,timer_id)`, all partial on pending statuses. Choose the minimum set supported by actual evidence; the existing status-leading due index does not supply the requested combined status order. The manager-only candidate below is only one candidate, not the solution for every shape. If correlation-only cannot meet the declared workload budget, expose that limitation instead of presenting it as cheap. Index cost applies to inserts, removals and updates where HOT cannot apply; it is not confined to status changes.
+
 
 This milestone produces evidence, not features. It ends with a recorded go/no-go for the three
 design bets this plan rests on: provenance metadata is the only way to answer "what did it last
@@ -476,19 +486,7 @@ the expected finding is payloads, folded state, and canonical digests of decoded
 `RecordedEvent.metadata`. If either compares metadata, stop and revise the provenance decision
 before Milestone 1.
 
-Kiroku: run `mori registry show shinzui/kiroku --full`, open
-`kiroku-store/src/Kiroku/Store/Effect.hs` in that checkout, and record the `Store` constructor
-list in Surprises & Discoveries. Confirm there is no listing constructor visible to the
-released `<0.10` bound, record the Progress state of kiroku's
-`docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md` (the
-plan that adds `listStreams`) and the `listStreams` signature it specifies, and record the
-newest `kiroku-store` release from
-`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json`. Confirm that
-`kiroku-store-migrations/migrations/0001-kiroku-bootstrap.sql` defines the generated `category`
-column and `ix_streams_category`. Also record whether `keiro/src/Keiro/Inspection/Cursor.hs`
-(plan 275) and `hydrateWithSource` in `keiro/src/Keiro/Command.hs` (plan 278) exist on the
-current tree; Milestones 2 and 3 create whichever is absent to the interfaces in Interfaces
-and Dependencies.
+Kiroku: inspect `mori://shinzui/kiroku/packages/kiroku-store` through Mori and verify the released source and `kiroku-store-v0.11.0.0` tag. The API is already available under the current bound; record its four arguments and `mkBrowsePageSize` validation. Verify plan 275's cursor and plan 278's hydration implementation are complete before consuming them.
 
 Timers: add a temporary test that schedules, through `scheduleTimerTx`, ten thousand timers
 spread over one hundred manager names and one hundred correlation ids, marks a quarter of them
@@ -509,9 +507,7 @@ WHERE process_manager_name = 'pm-07' AND correlation_id = 'corr-42'
 ORDER BY fire_at, timer_id LIMIT 100;
 ```
 
-Go criterion for the index: without it, the plan reads buffers proportional to all pending
-rows rather than to the manager's rows. Delete the seeding test afterwards; keep nothing that
-takes seconds in the suite.
+These two queries illustrate only owner-filtered shapes. The go criterion also requires unfiltered, correlation-only, combined, rare/absent and deep-page shapes at 10,000 and 100,000 rows under custom and generic prepared plans, plus timer write/WAL evidence as required by Milestone 3. A manager-leading index alone cannot justify a global feed. Keep the fixture and query runner as an opt-in performance harness so later contributors can reproduce the evidence; do not put the large fixture in the fast unit suite.
 
 ### Milestone 1: reaction provenance on the manager-state append
 
@@ -525,7 +521,7 @@ that builds the object below, and a private `withProvenanceMetadata :: Value -> 
 that merges it into the caller's `metadata` field: when the caller passed an object, insert the
 `keiro.pm` key into it (the provenance key wins only for itself; every other caller key is kept);
 when the caller passed `Nothing`, use a fresh object. `Keiro.Codec.metadataFor` then stamps
-`schemaVersion` as it does today. Apply it to `managerOptions` in both `runProcessManagerOnce`
+`schemaVersion` as it does today. Apply it only inside the `CaptureInspectionProvenance` branch of `managerOptions` in both `runProcessManagerOnce`
 and `advanceDomainProcessManager`; dispatched target commands and timers are unchanged.
 
 ```json
@@ -533,6 +529,8 @@ and `advanceDomainProcessManager`; dispatched target commands and timers are unc
   "schemaVersion": 1,
   "keiro.pm": {
     "v": 1,
+    "family": "legacy-positional-v1",
+    "truncated": false,
     "source": { "eventId": "…uuid…", "globalPosition": 4211, "streamId": 17 },
     "dispatched": [ { "i": 0, "target": "counter-target-order-1" } ],
     "timers": [ "…timer uuid…" ]
@@ -552,7 +550,7 @@ owner; the write side in `Keiro.ProcessManager` imports the encoder from there. 
 an import cycle, place both encoder and decoder in a small internal module
 `Keiro.ProcessManager.Provenance` (listed under `other-modules`) that both public modules import.
 
-Tests, in the `describe "Keiro.ProcessManager"` group: the Milestone 0 red test turns green and
+Tests enable `CaptureInspectionProvenance` explicitly for metadata assertions and keep separate default-off cases. In the `describe "Keiro.ProcessManager"` group, the Milestone 0 red test turns green and
 additionally asserts the decoded provenance equals the expected source id, global position,
 surrogate stream id, dispatched list, and timer ids; a caller passing
 `metadata = Just (object ["actor" .= "ops"])` sees both `actor` and `keiro.pm` on the stored
@@ -580,32 +578,24 @@ Implement `inspectProcessManagerInstance` as this sequence, each step through an
 kiroku or keiro operation: resolve the manager stream name through the descriptor's
 `streamFor` and the event stream's `resolveStreamName`; call `Kiroku.Store.Read.getStream` and
 return `Right Nothing` when it is absent; call `Keiro.Command.hydrateWithSource` with
-`inspectionRunCommandOptions` (a `Left CommandError` propagates, since an unreplayable journal
-is exactly what an operator must see), which returns the `Hydrated` value together with a
+`inspectionRunCommandOptions` (wrap `Left CommandError` as `ProcessManagerHydrationFailed`, since an unreplayable journal is exactly what an operator must see), which returns the `Hydrated` value together with a
 `HydrationSource` saying whether the state came from a snapshot at a given version or from
-full replay and why; read the single event at the hydrated `streamVersion` with
+full replay and why; use its version as the view's state/stream version, and handle zero-version or retention gaps as missing last-event evidence rather than reading version -1; read the single event at the hydrated `streamVersion` with
 `readStreamForward name (streamVersion - 1) 1` so the reported last reaction is the event that
 produced the shown state even if a concurrent append lands mid-read; decode its provenance;
-for each dispatched entry compute `deterministicCommandIdProbes name correlationId sourceEventId i`
-and call `firstExistingEventId` against the recorded target stream, reporting `applied = True`
-when a probe exists; resolve the source stream name with `lookupStreamName`; take the first page
+for each dispatched entry compute `deterministicCommandIdProbes (inspector ^. #name) correlationId sourceEventId i`
+and call `firstExistingEventId` against the recorded target stream, reporting `event_present`
+when a probe exists, and `not_observed` otherwise; resolve the source stream name with `lookupStreamName`; take the first page
 of pending timers through Milestone 3's `findPendingTimers` (filter on this manager and this
 correlation id, page size from the request, default 20); and assemble the view with
 `hydration` set to the reported `HydrationSource`. Do not call `lookupSnapshotSeed` a second
 time and do not define a private source type: `hydrateWithSource` is the one primitive that
 answers "did this state come from a snapshot" for every keiro inspection read (plan 278 owns
-it; MasterPlan 45, Integration Points). If `hydrateWithSource` does not exist on the tree when
-this milestone starts, add it to `keiro/src/Keiro/Command.hs` to the interface in Interfaces
-and Dependencies: move the body of `hydrate` into `hydrateWithSource`, returning
-`FromSnapshot (seed ^. #streamVersion)` on a seed hit that replays, `FullReplay
-(SeededReplayFailed err)` when a seeded replay fails and the full replay is used instead,
-`FullReplay (SnapshotMissed reason)` on a miss, and `FullReplay NoStateCodec` when the stream
-has no `stateCodec`; redefine `hydrate` as `fmap (fmap fst) . hydrateWithSource` so no existing
-signature changes; and add `inspectionRunCommandOptions` as `defaultRunCommandOptions` with
-`seedVerifySampleRate = 0`, `metrics = Nothing`, `tracer = Nothing`, and
-`verifyReplayOnAppend = False`. Render `hydration` through plan 278's `hydrationSourceJson`
+it; MasterPlan 45, Integration Points). Plan 278 must have completed before this milestone. Import its specialized hydration worker and inspection entry point; do not create a second implementation or a `fst` wrapper that allocates source diagnostics on every command.
+
+Render `hydration` through plan 278's `hydrationSourceJson`
 shape, `{"source": "snapshot", "snapshot_version": n}` or `{"source": "full_replay",
-"reason": ...}` (creating that encoder beside the type if plan 278 has not landed). The view's
+"reason": ...}` (imported from prerequisite plan 278). The view's
 `waitingFor` is `enabledInputs` applied to the hydrated state. When the last event carries no
 provenance (history recorded before this change, or a no-op reaction that appended nothing
 since), `lastReaction.provenance` is `Nothing` and the JSON says `"provenance": null` with
@@ -624,14 +614,14 @@ display encoding of `hydrateFull`'s state and registers and its `streamVersion` 
 that `hydration` is `FromSnapshot` with the snapshot version; repeat without snapshots and
 assert `FullReplay (SnapshotMissed SnapshotNotFound)` on a stream with a state codec and
 `FullReplay NoStateCodec` on one without.
-Assert `lastReaction` names the third source event and lists the dispatched command as applied;
-delete the target stream's event with the test's own SQL and assert `applied = False`; append
+Assert `lastReaction` names the third source event and lists an `event_present` witness for the dispatched command;
+delete the target stream's event with the test's own SQL and assert `witness = NotObserved`; append
 a manager event without provenance through `runCommand` directly and assert `provenance =
 Nothing`; assert an unknown correlation id yields `Nothing`; assert `waitingFor` lists the
 live edges out of the current state and excludes a replay-only edge on a test transducer that
 has one. Add a jitsurei test in `describe "Jitsurei process manager"` that builds an inspector
 for `fulfillmentProcessManager` with category `fulfillment` and inspects an order after
-`PaymentApproved`, asserting the dispatched `MarkPacked` command is applied.
+`PaymentApproved`, asserting an `event_present` witness for the dispatched `MarkPacked` command.
 
 `keiro-ops`: add `processManagers :: !(Maybe ProcessManagerInspectors)` to `AppHooks` in
 `keiro-ops/src/Keiro/Ops/Embed.hs` (`emptyAppHooks` sets `Nothing`), where
@@ -658,8 +648,7 @@ command" tests, add a small counter-style manager to `keiro-ops/test/Main.hs` fo
 Scope: `Keiro.Timer` gains a bounded, cursor-paged read of pending timers, optionally
 narrowed to one manager and one instance; `keiro-ops timer pending list` renders it; the
 pending-timer index lands as the next migration if Milestone 0 said go. This read and this
-command are shared with plan 277, whose `timers` feed re-reads them: whichever of the two
-plans lands first creates them to exactly the interface in Interfaces and Dependencies, and
+command are owned here and consumed by plan 277, whose `timers` feed re-reads them. This plan creates them to exactly the interface in Interfaces and Dependencies, and
 the other imports them (MasterPlan 45, Integration Points).
 
 Cursors are opaque tokens from `keiro/src/Keiro/Inspection/Cursor.hs`, the module plan 275
@@ -704,8 +693,7 @@ precedent: inspect it with `git show --stat c351fceb` and `git show c351fceb -- 
 and add a `keiro-migrations/CHANGELOG.md` entry. If another plan's migration has landed since
 this plan was written, rebase the manifest line, the lock line, the expected schema, and the
 test counts on what exists rather than on the numbers in this text.
-The index is additive and reversible (`DROP INDEX`), touches no data, and is maintained on
-timer inserts and status changes only; state that cost in the changelog.
+The index is additive and reversible (`DROP INDEX`), does not rewrite application values, and adds index/WAL and possible non-HOT update costs; state that cost in the changelog.
 
 Tests, in the `describe "Keiro.Timer"` group: schedule timers for two managers and two
 correlation ids with interleaved due times; assert an unfiltered page (`anyPendingTimer`) lists
@@ -751,8 +739,7 @@ owned-and-unexpired, owned-and-expired, and unowned bucket counts plus the count
 unexpired owners (all computed in SQL against `now()` so one clock decides), and a
 `currentDatabaseTime` statement selecting `now()`. In `keiro/src/Keiro/Subscription/Shard.hs`
 add `shardOwnershipView` and `listShardedSubscriptions` per Interfaces and Dependencies; each
-runs its statements and the time read inside one `runTransaction` so `observedAt` and the rows
-are consistent. Add the pure helpers `leaseStateAt` and `leaseAgeAt`. Leave every existing
+runs its statements and the time read inside one `runTransaction` so ages use the database clock; a multi-statement ReadCommitted read remains observational. Add the pure helpers `leaseStateAt` and `leaseAgeAt`. Leave every existing
 export untouched.
 
 Tests, in the `describe "Shard lease"` group using explicit timestamps: after
@@ -774,53 +761,11 @@ and meaning. Test both in a new "shard handlers" group.
 
 ### Milestone 5: instance listing through a kiroku primitive
 
-Scope: keiro's `listProcessManagerInstances` and `pm list` wrap kiroku's released
-stream-listing primitive. This milestone is keiro-only: kiroku builds and releases the
-primitive itself (kiroku plan 88 under
-`mori://shinzui/kiroku/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui`,
-released as `kiroku-store` 0.10.0.0 by kiroku plan 96), and this plan edits nothing in the
-kiroku repository. The milestone starts only when
-`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` lists a 0.10
-release and that release's `Kiroku.Store.Read` export list contains `listStreams`; record the
-released version and the exact signature in Surprises & Discoveries before writing code. The
-primitive is `listStreams :: (HasCallStack, Store :> es) => Maybe Text -> Maybe StreamName ->
-Int32 -> Eff es (Vector StreamInfo)`: an exact `starts_with` prefix filter on the stream name,
-an exclusive stream-name cursor, stream-name order, soft-deleted streams included with
-`deletedAt` set. Because kiroku defines a stream's category as the text before its first `-`,
-the prefix `<category>-` selects exactly one category (`pm:counter-` does not match
-`pm:counters-`). Plan 278 lists aggregates through the same call with the same prefix rule.
+Scope: the `pm list` read and command over the already released listing primitive. The current bound is `kiroku-store ^>=0.11.0.0`; keep it. Inspect released source and tags before coding. `listStreams` takes optional exact category, optional literal prefix, exclusive stream-name cursor, and `BrowsePageSize`. Build the last with `mkBrowsePageSize (pageSize + 1)`, validating the public page size to 1..500 first. Pass both the inspector's exact category and its `<category>-` prefix; no private SQL or event scan is permitted.
 
-Keiro side, only after that release is on Hackage: bump the `kiroku-store` bound to
-`>=0.10 && <0.11` in every package that names it (`keiro-core`, `keiro`, `keiro-migrations`,
-`keiro-test-support`, `keiro-dsl`, `keiro-ops`, and `keiro-ops-http` if plan 276 has created
-it; check with `grep -rn "kiroku-store" --include='*.cabal' .`), update the matching
-dependency entries in `mori.dhall`, and rebuild everything; skip the bump if plan 278's
-Milestone 4 has already done it. If the release changed `Store` constructors in a way that
-breaks a mock interpreter in this repository, fix that first and record it. During development
-a local overlay in `cabal.project.local` is acceptable for compiling, but nothing that depends
-on it may be committed as released behavior (a local checkout is not consumer-reachable). Add
-`listProcessManagerInstances` to `Keiro.ProcessManager.Inspect`: validate `pageSize` (1
-through 500, else `Left (InvalidInstancePageSize n)`), decode the cursor with
-`decodeCursor "pm-list"` (else `Left (InvalidInstanceCursor err)`), call
-`listStreams (Just (categoryText category <> "-")) after (fromIntegral (pageSize + 1))` where
-`after` is the stream name carried by the cursor, map each `StreamInfo` through
-`correlationOf`, skip names the mapping rejects (a category can host streams the manager does
-not own; count and report them as `skipped`), return at most `pageSize` items, and set `next`
-to `encodeCursor "pm-list" lastStreamName` only when the extra row existed. Add
-`pm list --name NAME [--after CURSOR] [--limit N]` (`--after` through `cursorReader`, limit
-default 50 and at most 500) rendering
-`{"name": …, "items": [{"correlation_id", "stream_name", "stream_version", "created_at", "deleted_at"}], "skipped": n, "next_cursor": "…"}`
-with `next_cursor` omitted on the last page. The list read does no hydration; a client detects
-change from `stream_version`. Ordering is stream-name order, which is kiroku's order for this
-primitive.
+Decode the `pm-list` cursor and fetch one raw page only. Examine at most the first `pageSize` raw rows, run the inspector's membership mapping on them, count rejected rows as `skipped`, and use the extra raw row only to detect continuation. Mint the next cursor from the last raw row examined, even if every examined row was rejected and `items` is empty. Never fill a display page by draining upstream pages. Preserve upstream UTF-8 byte ordering. Bind the cursor payload to the category/inspector identity; a changed identity is an invalid cursor, not a restart at an arbitrary key.
 
-Tests: create five manager instances and one unrelated stream in the same category, list with
-page size two, assert complete and stable traversal in name order with `next` absent at the
-end and the unrelated stream counted as skipped; assert sizes 0 and 501 fail and a cursor
-minted for kind `timer-pending` fails with `InvalidInstanceCursor (CursorKindMismatch _ _)`;
-assert `pm list` renders the same page as the library read and a two-page traversal through
-the rendered `next_cursor` works. In `keiro-ops/test/Main.hs` extend the standalone-tree test
-to confirm `pm list` is embedded-only.
+Expose `pm list --name NAME [--after CURSOR] [--limit N]` (default 50, maximum 500), rendering the existing summary envelope through the library. Lists perform no hydration or snapshot reads. Tests create matching, rejected, non-ASCII, deleted and hard-deleted streams; traverse with page size two; and prove exact coverage of accepted rows, strictly advancing cursors through fully rejected pages, no loss of the look-ahead row, and no cursor at raw exhaustion. Test first, deep and empty-result pages. A malformed, foreign-kind or foreign-inspector cursor fails before SQL. Compare CLI rendering with the same library result. No upstream work or dependency downgrade is part of this milestone.
 
 ### Milestone 6: documentation, evidence, and distillation
 
@@ -929,12 +874,19 @@ evidence as they occur.
 
 ## Validation and Acceptance
 
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+
+Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
+
+The provenance-disabled branch must pass old metadata-byte goldens and execute no inspection encoder (use a deliberately failing injected encoder in its focused test). Capture-on tests cover 0/1/10/100 targets, >64 timers, oversized names, non-object caller metadata, a multi-event saga append, duplicates, partial target failure, no-op/rejection and missing/unknown provenance versions. Observe stored encoded bytes and WAL delta; no arbitrary ten-short-name fixture establishes a general size bound. The instance view tests assert family-aware IDs, a distinct manager name and stream name, bounded probes, unavailable reactive provenance, null state on soft deletion, and non-authoritative `not_observed` results.
+
+
 Acceptance 1 (IR-29): with `counterProcessManager` run three times for `order-1` and a
 snapshot present, `inspectProcessManagerInstance` returns a view whose `state` equals the
 display encoding of the state `hydrateFull` computes and whose `streamVersion` is 3; the test
 named "instance view equals the runtime's own rebuild" passes in both the snapshot and
 full-replay variants. The view's `lastReaction.provenance.sourceEventId` equals the third source
-event's id and `dispatched` has one entry with `applied = True`. `waitingFor` lists the live
+event's id and `dispatched` has one entry with `witness = EventPresent`. `waitingFor` lists the live
 inputs of the current state. Through `keiro-ops`, `pm show --name counter-pm --correlation order-1 --json`
 prints an object of this shape:
 
@@ -952,7 +904,7 @@ prints an object of this shape:
     "provenance_status": "available",
     "provenance": {
       "source_event_id": "…", "source_global_position": 88, "source_stream_name": "counter-order-1",
-      "dispatched_commands": [ { "emit_index": 0, "target_stream_name": "counter-target-order-1", "event_id": "…", "applied": true } ],
+      "dispatched_commands": [ { "emit_index": 0, "target_stream_name": "counter-target-order-1", "event_id": "…", "witness": "event_present" } ],
       "timer_ids": [ "…" ]
     }
   },
@@ -985,18 +937,7 @@ Acceptance 5: for each of `pm show`, `pm list`, `timer pending list`, `shard lis
 the `keiro-ops` test invokes the handler and compares its `jsonValue` field by field against
 the library read's result for the same database state.
 
-Performance evidence to record: the Milestone 0 EXPLAIN pairs; a statement in Surprises that
-`inspectProcessManagerInstance` performs one hydration (the same cost as a command against
-the instance), one stream lookup, one snapshot-seed lookup, one single-event read, `k`
-existence probes where `k` is the dispatched-command count, one stream-name lookup, and one
-pending-timer page, and no category or `$all` read; that the listing
-read performs one index-range page and no hydration; that the shard reads are one primary-key
-range read and one aggregate over a table of `N` rows per sharded subscription; and that the
-manager-state append grows by the provenance object only (measure one recorded event's
-`metadata` byte length in a test and assert it is below one kilobyte for a reaction with ten
-dispatched commands). Run `cabal bench keiro-bench --benchmark-options="-p command --time-mode wall --baseline bench/baseline-command.csv --fail-if-slower 25"`
-once after Milestone 1 to confirm the plain command path, which shares `runCommandWithSql`, is
-unchanged.
+Performance evidence to record: the Milestone 0 query plans under realistic skew and the MasterPlan's matched reaction, timer-write, allocation and WAL experiments. Default-off provenance adds no metadata encoding or database work. Enabled provenance stays within its count and byte caps, including huge identifiers and fan-out. Count all reads: one hydration (potentially full-history replay), stream lookup, final persisted-event read, bounded recorded-target probes, optional source lookup, and one timer page. Show cancellation under the transport deadline and no second snapshot-seed lookup. Listing performs one raw store page with no hydration. Shard reads can scale with subscription cardinality and remain subject to response/time limits. The old 25% command benchmark is smoke coverage, not proof of unchanged reaction performance. All measurements run in `nix develop`.
 
 
 ## Idempotence and Recovery
@@ -1075,7 +1016,9 @@ data ReactionProvenance = ReactionProvenance
     sourceGlobalPosition :: !GlobalPosition,
     sourceStreamId :: !StreamId,
     dispatched :: ![(Int, StreamName)],   -- emit index, resolved target stream
-    timerIds :: ![TimerId]
+    timerIds :: ![TimerId],
+    family :: !Text,                    -- legacy-positional-v1 only
+    truncated :: !Bool                 -- bounded prefix, never complete when True
   }
 
 encodeReactionProvenance :: ReactionProvenance -> Value
@@ -1084,8 +1027,10 @@ decodeReactionProvenance :: Value -> Maybe ReactionProvenance   -- Nothing when 
 -- HydrationSource is imported from Keiro.Command (plan 278's interface, reproduced below);
 -- this module defines no source type of its own.
 
+data DispatchWitness = EventPresent | NotObserved
+
 data DispatchedCommandStatus = DispatchedCommandStatus
-  { emitIndex :: !Int, targetStreamName :: !StreamName, eventId :: !EventId, applied :: !Bool }
+  { emitIndex :: !Int, targetStreamName :: !StreamName, eventId :: !EventId, witness :: !DispatchWitness }
 
 data LastReaction = LastReaction
   { eventId :: !EventId, eventType :: !EventType, streamVersion :: !StreamVersion,
@@ -1096,18 +1041,24 @@ data LastReaction = LastReaction
 
 data ProcessManagerInstanceView = ProcessManagerInstanceView
   { name :: !Text, correlationId :: !Text, journalStreamName :: !StreamName,
-    streamVersion :: !StreamVersion, hydration :: !HydrationSource,
-    stateLabel :: !Text, state :: !Value,
+    streamVersion :: !StreamVersion, hydration :: !(Maybe HydrationSource),
+    stateLabel :: !(Maybe Text), state :: !(Maybe Value),
     lastReaction :: !(Maybe LastReaction),
     waitingFor :: ![EnabledInput],
-    pendingTimers :: !PendingTimerPage }
+    pendingTimers :: !PendingTimerPage, observedAt :: !UTCTime }
+
+data ProcessManagerInspectionError
+  = ProcessManagerHydrationFailed !CommandError
+  | InvalidInstanceViewRequest !Text
+  | ProcessManagerStreamDeleted !StreamName
+  | ProcessManagerInspectionBudgetExceeded
 
 data InstanceViewRequest = InstanceViewRequest { timerPageSize :: !Int }   -- default 20
 
 inspectProcessManagerInstance ::
   (IOE :> es, Store :> es, BoolAlg phi (RegFile rs, ci), Eq co) =>
   ProcessManagerInspector phi rs s ci co -> InstanceViewRequest -> Text ->
-  Eff es (Either CommandError (Maybe ProcessManagerInstanceView))
+  Eff es (Either ProcessManagerInspectionError (Maybe ProcessManagerInstanceView))
 
 data InstanceListRequest = InstanceListRequest { pageSize :: !Int, after :: !(Maybe InspectionCursor) }
 data InstanceSummary = InstanceSummary
@@ -1115,7 +1066,7 @@ data InstanceSummary = InstanceSummary
     createdAt :: !UTCTime, deletedAt :: !(Maybe UTCTime) }
 data InstancePage = InstancePage { items :: ![InstanceSummary], skipped :: !Int, next :: !(Maybe InspectionCursor) }
 data InstanceListError = InvalidInstancePageSize !Int | InvalidInstanceCursor !CursorError
-instanceListCursorKind :: Text   -- "pm-list"; payload is the last returned stream name
+instanceListCursorKind :: Text   -- "pm-list"; payload binds manager/category and last raw stream examined
 
 listProcessManagerInstances ::
   (Store :> es) =>
@@ -1126,7 +1077,7 @@ listProcessManagerInstances ::
 Confirm the exact constraint set `Keiro.Command.hydrate` demands and copy it onto
 `inspectProcessManagerInstance` and the existential; the list above is the expected minimum.
 
-`Keiro.Command` (owned by plan 278; created here to this exact interface if absent):
+`Keiro.Command` (owned by plan 278; imported after plan 278 completes):
 
 ```haskell
 data HydrationSource
@@ -1150,8 +1101,7 @@ hydrateWithSource ::
 inspectionRunCommandOptions :: RunCommandOptions
 ```
 
-`Keiro.Inspection.Cursor` (owned by plan 275; created here to this exact interface if
-absent, together with `base64-bytestring >=1.2 && <1.3` in `keiro/keiro.cabal`):
+`Keiro.Inspection.Cursor` (owned and created by prerequisite plan 275):
 
 ```haskell
 newtype InspectionCursor = InspectionCursor { cursorText :: Text }
@@ -1166,8 +1116,7 @@ encodeCursor :: (ToJSON payload) => Text -> payload -> InspectionCursor
 decodeCursor :: (FromJSON payload) => Text -> InspectionCursor -> Either CursorError payload
 ```
 
-`Keiro.Timer` (re-exported from `Keiro.Timer.Schema`; shared with plan 277, whichever lands
-first creates it to this interface):
+`Keiro.Timer` (re-exported from `Keiro.Timer.Schema`; owned here; prerequisite for plan 277):
 
 ```haskell
 data PendingTimerFilter = PendingTimerFilter
@@ -1225,14 +1174,12 @@ kiroku-store (Milestone 5; consumed from the release kiroku plan 88 produces, ne
 here; verify the exact export against the released package before use):
 
 ```haskell
--- Kiroku.Store.Read, kiroku-store 0.10.0.0 or later
+-- Kiroku.Store.Read, released kiroku-store 0.11.0.0
 listStreams ::
   (HasCallStack, Store :> es) =>
-  Maybe Text ->        -- exact starts_with prefix filter; keiro passes Just (categoryText category <> "-")
-  Maybe StreamName ->  -- exclusive cursor: streams whose name sorts after this one
-  Int32 ->             -- limit; keiro passes pageSize + 1
+  Maybe CategoryName -> Maybe Text -> Maybe StreamName -> BrowsePageSize ->
   Eff es (Vector StreamInfo)
--- StreamInfo { id, name, version, createdAt, deletedAt, truncateBefore } unchanged from 0.9
+-- Use mkBrowsePageSize (pageSize + 1); category and prefix are both exact filters.
 ```
 
 `keiro-ops`:
@@ -1247,7 +1194,7 @@ data AppHooks = AppHooks
     processManagers :: !(Maybe ProcessManagerInspectors)
   }
 
--- Keiro.Ops.Parse (shared; created by whichever sibling plan first needs it)
+-- Keiro.Ops.Parse (owned and created by plan 275)
 cursorReader :: ReadM InspectionCursor      -- wraps the option text; the library read validates the kind
 
 -- Keiro.Ops.ProcessManager (new)
@@ -1268,11 +1215,10 @@ data Command = List | Status !Text | Relinquish !Text !WorkerId
 ```
 
 Dependencies: no new library enters any package except `base64-bytestring >=1.2 && <1.3` in
-`keiro`, added by whichever plan creates `Keiro.Inspection.Cursor` (it is already in the
+`keiro`, added by prerequisite plan 275 with `Keiro.Inspection.Cursor` (it is already in the
 build closure at 1.2.1.0). `keiro` already depends on `keiki`, `aeson`, `hasql`, `uuid`, and
 `time`; `keiro-ops` already depends on `containers`, `optparse-applicative`, and `aeson`. The
-`kiroku-store` bound changes only in Milestone 5, from `>=0.9.0.1 && <0.10` to
-`>=0.10 && <0.11`, once the release that carries `listStreams` is on Hackage. Read every
+`kiroku-store ^>=0.11.0.0` already supplies listing; retain it unless a newly verified release justifies a deliberate update. Read every
 dependency API from its Mori-located source before use, and verify released versions against
 Hackage and upstream tags before choosing bounds.
 
@@ -1299,3 +1245,5 @@ reservation); `AppHooks.processManagers` coexists additively with plan 278's `ag
 version facts (0.19.0.0 in the tree and on Hackage) and the existence of ADR 40 are
 recorded. Nothing has been implemented; the Progress checklist reflects the revised
 milestones.
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

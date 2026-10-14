@@ -13,6 +13,17 @@ provenance:
       at: 2026-09-30T23:44:28Z
       mode: "update"
       note: "Adopted by MasterPlan 45: kiroku-store 0.10.0.0 gate, hydrateWithSource hand-off to plan 274, hook coexistence, handle allocation"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: discarded hydration diagnostics on command path, concurrent state/version mismatch, filtered cursor loss, and stale released API."
 ---
 
 # Expose aggregate inspection read APIs
@@ -70,30 +81,40 @@ keiro-side requests of the keiro runtime UI initiative (`mori://shinzui/keiro-ui
 
 ## Progress
 
+- [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
+- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+
+
 Milestone 0 is a short preflight; every later milestone starts only after its findings are
 recorded in Surprises & Discoveries. Milestone 4 is gated on a kiroku release and may
 complete after Milestone 5.
 
 - [x] (2026-09-10T03:04Z) Plan created with intention `intention_01m24m6m00ev59wa81shymsktd`; IR-28 gained a "Planning (2026-09-10)" section linking this plan, its `timestamp` advanced, and the bundle log records the update. Status remains `proposed`.
 - [ ] M0: confirm that `Keiro.Command.hydrate` is the only snapshot-seeded hydration path used by every command runner, that a `seedVerifySampleRate` of zero schedules no background verification, and that no metrics or tracer are touched when both are `Nothing`; record the evidence.
-- [ ] M0: confirm through the kiroku checkout that `kiroku-store` 0.9.0.1 (the released bound on 2026-09-30) has no stream-listing primitive, record the `Store` constructor list, and record the Progress state of kiroku plan 88 (which adds `listStreams`) and of kiroku MasterPlan 13 (which releases it as 0.10.0.0).
+- [ ] M0: verify the current released `kiroku-store` listing API and supported bounds; record released source and tag evidence.
 - [ ] M0: record whether `keiro/src/Keiro/Inspection/Cursor.hs` (plan 275) exists on the current tree; if it does not, this plan creates it in Milestone 4 to plan 275's exact interface.
-- [ ] M1: add `HydrationSource`, `FullReplayReason`, `hydrateWithSource`, and `inspectionRunCommandOptions` to `keiro/src/Keiro/Command.hs`; redefine `hydrate` as a wrapper; tests prove source reporting for snapshot, full-replay, corrupt-snapshot, and no-codec cases; the command benchmark is unchanged.
+- [ ] M1: add `HydrationSource`, `FullReplayReason`, `hydrateWithSource`, and `inspectionRunCommandOptions` to `keiro/src/Keiro/Command.hs`; keep the ordinary hydration result path specialized; tests prove source reporting for snapshot, full-replay, corrupt-snapshot, and no-codec cases; the command benchmark is unchanged.
 - [ ] M1: add `SnapshotObservation` and `observeSnapshotRow` to `keiro/src/Keiro/Snapshot/Schema.hs`; `keiro-ops snapshot show` gains the additive `observed_at` and `age_seconds` keys with tests.
 - [ ] M2: add `keiro/src/Keiro/Inspection/Aggregate.hs` with the inspector descriptor, smart constructors, `inspectAggregate`, `snapshotStatusFor`, `listAggregateTypes`, the error type, and the library-owned JSON rendering.
 - [ ] M2: tests in a new `describe "Keiro.Inspection.Aggregate"` group: exhaustive fold-equivalence against `hydrateFull` with and without a snapshot, corrupt-snapshot fallback, soft-deleted stream, truncation gap, unknown aggregate, blank id, snapshot status present/absent/incompatible/unused, and JSON key inventory.
 - [ ] M3: add `AppHooks.aggregates` to `keiro-ops/src/Keiro/Ops/Embed.hs` and the embedded-only `aggregate` domain (`types`, `show`, `snapshot`) in `keiro-ops/src/Keiro/Ops/Aggregate.hs`; standalone-tree and embedded-tree tests updated; handler tests compare `jsonValue` with the library rendering.
 - [ ] M3: add `jitsurei/src/Jitsurei/Inspection.hs` with inspectors for `order` and `incident`, mount it in `jitsurei/app/Main.hs`, and add a `describe "Jitsurei aggregate inspection"` test group.
-- [ ] M4 (gated on `kiroku-store` 0.10.0.0 on Hackage, released by kiroku MasterPlan 13): bump the `kiroku-store` bound to `>=0.10 && <0.11` in every package and `mori.dhall` unless plan 274's Milestone 5 already did; add `listAggregates`, the `aggregate-list` cursor kind, `aggregate list`, and the two-category listing tests in `keiro`, `keiro-ops`, and `jitsurei`.
+- [ ] M4: integrate released listing with raw-row cursors, retaining the current supported store bound; add library, CLI and example tests.
 - [ ] M5: user documentation, API reference, the aggregate-inspection capability record (CAP-20 on 2026-09-30 unless plan 276 took it; allocate with `okf id next`) and updates to CAP-4 and CAP-16, changelogs, IR-28 implementation evidence, the new ADR plus the ADR-28 paragraph, and the full `just verify` gate.
 
 
 ## Surprises & Discoveries
 
+2026-10-13 source review: hydrate has a probe wrapper and bounded seed verification. The proposed diagnostic pair was on the command path; initial getStream and hydration can observe different versions.
+
+
 (None yet.)
 
 
 ## Decision Log
+
+- Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: hydrate has a probe wrapper and bounded seed verification. The proposed diagnostic pair was on the command path; initial getStream and hydration can observe different versions. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
+
 
 - Decision: Deliver the library reads in `keiro` and the read-only `keiro-ops` commands that
   render them; build no HTTP endpoint in this plan.
@@ -151,7 +172,7 @@ complete after Milestone 5.
   would cost one event scan per page, which a polling UI multiplies. Kiroku's plan
   `docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md`
   (canonical project `mori://shinzui/kiroku`, artifact-level URI pending) defines
-  `listStreams :: Maybe Text -> Maybe StreamName -> Int32 -> Eff es (Vector StreamInfo)` with
+  `listStreams :: Maybe CategoryName -> Maybe Text -> Maybe StreamName -> BrowsePageSize -> Eff es (Vector StreamInfo)` with
   an exact `starts_with` prefix filter and an exclusive name cursor. Because kiroku defines a
   stream's category as the text before its first `-`, the prefix `<category>-` selects exactly
   that category and nothing else (`order-` does not match `orders-1`). Plan 274 assumed a
@@ -290,22 +311,29 @@ complete after Milestone 5.
 
 ## Outcomes & Retrospective
 
+2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
+
+
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
+
+### Review baseline and implementation boundary (2026-10-13)
+
+This plan was reviewed against Keiro commit `cbcc593df2445780e2c42406c6b633ae530fb8ea`. Keiro is now 0.20.0.0 and already depends on released `kiroku-store ^>=0.11.0.0`; historical September version statements and Decision Log entries below are historical evidence, not instructions to downgrade. Hackage source and upstream tag `kiroku-store-v0.11.0.0` confirm the four-argument, `BrowsePageSize`-bounded listing API. Recheck the registry and upstream tags before changing bounds. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now also requires bounded inspection work and measured hot-path isolation.
+
+Shared implementation has one owner: plan 275 creates the cursor codec, plan 278 creates source-reporting hydration, plan 274 creates pending-timer reads, and plan 276 creates the transport and admission budget. Consumers wait for those artifacts; they do not implement an absent owner's module. The old create-first instructions are withdrawn. The hard prerequisites for this plan are plan 275.
+
+Application constructors allocate resources once in IO and return a bare WAI application: `opsApplication` and `opsApplicationWithFeeds` now return `IO Application`. Bind their results once during startup, never construct a new admission budget for each request. Pure composition still takes ordinary `Application` values. Per-request schema verification, handler execution, and feed refreshes share a bounded inspection budget; they must never use the writer's reserved pool capacity by default.
+
 
 This repository is a Cabal multi-package project (`cabal.project` at the root). The packages
 that matter here are `keiro` (the runtime library, `keiro/src/Keiro/…`), `keiro-core` (shared
 types, `keiro-core/src/Keiro/…`, re-exported by `keiro`), `keiro-ops` (the operator command
 tree, `keiro-ops/src/Keiro/Ops/…`), `keiro-test-support` (the PostgreSQL test fixture), and
 `jitsurei` (the example application, `jitsurei/src/Jitsurei/…` and `jitsurei/app/Main.hs`).
-Every package is at version 0.19.0.0 in the working tree, and 0.19.0.0 is also the newest
-`keiro` release on Hackage (checked 2026-09-30 through
-`https://hackage.haskell.org/package/keiro/preferred.json`; when this plan was written on
-2026-09-10 both were 0.16.0.0). The store dependency `kiroku-store` is bounded
-`>=0.9.0.1 && <0.10` in every package and 0.9.0.1 is its newest Hackage release, which does
-not export a stream-listing primitive. Recheck all of these before choosing any bound.
+The tree is at version 0.20.0.0 and uses `kiroku-store ^>=0.11.0.0`, which exports `listStreams`. Verify current registry releases and tags again before choosing bounds.
 
 Terms used throughout, in plain language:
 
@@ -414,123 +442,17 @@ opaque to clients; ADR 28's reporting vocabulary.
 
 ### Coordination under MasterPlan 45 (2026-09-30)
 
-This plan is EP-3 of
-[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
-whose Integration Points settle every artifact this plan shares with its siblings. The
-siblings are [274](274-expose-process-manager-inspection-reads.md) (EP-4, IR-29,
-process-manager reads), [275](275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
-(EP-2, IR-30, workflow reads), [276](276-serve-the-keiro-ops-surface-over-http.md) (EP-1,
-IR-26, the HTTP transport), [277](277-publish-websocket-live-feeds-over-keiro-wake.md) (EP-5,
-IR-27, feeds), [302](302-mount-composed-runtime-inspection-surfaces-under-one-port.md) (EP-6,
-IR-31, composed mounting), and
-[303](303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md)
-(EP-7, the cohort release). None is a prerequisite for Milestones 1 through 3. Every commit
-under this plan carries both `ExecPlan:` and `MasterPlan:` trailers (Concrete Steps). The
-settled rules that touch this plan:
+This plan is coordinated by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md). Hard prerequisites: 275 (cursor codec). The 2026-10-13 Integration Points are the current contracts; older dated Decision Log and Revision notes preserve history, not alternative implementation instructions.
 
-- Plan 274 consumes this plan's `hydrateWithSource`, `HydrationSource`, `FullReplayReason`,
-  `inspectionRunCommandOptions`, and the `hydrationSourceJson` shape for its process-manager
-  instance view, instead of its own two-constructor `HydrationSource` and a second
-  `lookupSnapshotSeed` call. Whichever of plans 274 and 278 lands first creates them to this
-  plan's exact interface (Interfaces and Dependencies); the other imports them.
-- Plan 275 owns `Keiro.Inspection.Cursor`, and the kind tag `aggregate-list` is registered
-  there for this plan (Milestone 0 already says this plan creates the module to plan 275's
-  exact interface if it is absent). The `optparse-applicative` reader that turns a
-  `--after CURSOR` option into an `InspectionCursor`, `cursorReader :: ReadM InspectionCursor`
-  in `keiro-ops/src/Keiro/Ops/Parse.hs`, is created by whichever plan first needs it and only
-  wraps the option text; the library read validates the kind.
-- `AppHooks.aggregates` is additive beside plan 274's `AppHooks.processManagers`; whichever
-  plan lands second extends the existing record, `emptyAppHooks`, the two command-tree tests,
-  `embeddedHooks` in `keiro-ops/test/Main.hs`, and `jitsureiOpsHooks` in
-  `jitsurei/app/Main.hs`. The domain word `aggregate` is reserved for this plan and `pm` for
-  plan 274.
-- The kiroku listing primitive is
-  `Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es) => Maybe Text -> Maybe StreamName -> Int32 -> Eff es (Vector StreamInfo)`,
-  built by kiroku plan 88 under
-  `mori://shinzui/kiroku/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui`
-  and released as `kiroku-store` 0.10.0.0 by kiroku plan 96, not 0.9.0.0 as this plan said
-  on 2026-09-10. On 2026-09-30 the current release is 0.9.0.1 with no listing and every keiro
-  package pins `>=0.9.0.1 && <0.10`. Plan 274's Milestone 5 wraps the same primitive with the
-  same category prefix (its original `listStreamsInCategory` is withdrawn), and the bound bump
-  to `>=0.10 && <0.11` in `keiro-core`, `keiro`, `keiro-migrations`, `keiro-test-support`,
-  `keiro-dsl`, `keiro-ops`, `keiro-ops-http` (if it exists) and the `mori.dhall` dependency
-  entries is done once, by whichever of this plan's Milestone 4 and plan 274's Milestone 5
-  executes first. Kiroku's plan is
-  `docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md` in the
-  checkout found by `mori registry show shinzui/kiroku --full`
-  (`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku`); on 2026-09-30 it had no checked
-  Progress item.
-- [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
-  now exists and is the stance decision this plan's own ADR (Milestone 5) cites as the
-  boundary; this plan's ADR records only its narrower aggregate-inspection decisions.
-- OKF handles are allocated with `okf id next` at creation. On 2026-09-30 the next free
-  handles were CAP-20 (plan 276 also expects it for its HTTP-surface record; whichever creates
-  its record first takes it) and ADR-49.
-- The working tree and the newest keiro Hackage release are 0.19.0.0; recheck before
-  choosing any bound.
-- Plan 303 ships the cohort without this plan's Milestone 4 if `kiroku-store` 0.10.0.0 is
-  late; IR-28 then records item 1a as pending until the next lockstep release.
+Plan 275 creates `Keiro.Inspection.Cursor` and `Keiro.Ops.Parse.cursorReader`; 278 creates source-reporting hydration; 274 creates the pending-timer read and encoder; 276 creates the shared inspection budget and HTTP application; 277 consumes these and owns bounded feeds; 302 composes allocated applications; 303 requires all work and measured interference gates before closure. Consumers import these interfaces after their prerequisites, never create competing implementations. Every child preserves existing hooks while extending them.
 
-Relevant local ADRs, summarized:
-
-- [ADR 28](../adr/0028-operator-commands-wrap-supported-library-apis-and-respect-schema-ownership.md)
-  (`mori://shinzui/keiro/okf/adrs/concepts/ADR-28`): every operator command is a thin adapter
-  over an exported operation of the library that owns the state; a missing primitive is added
-  to the owning library first; commands needing compiled application values are mounted
-  through hooks; reads are observations that reserve nothing. This plan's hook, its refusal
-  to query kiroku's `streams` table, and its wait for a kiroku primitive follow it directly.
-- [ADR 3](../adr/0003-snapshot-compatibility-is-a-three-component-discriminator.md): a
-  snapshot is loaded only when `state_codec_version`, `regfile_shape_hash`, and
-  `state_shape_hash` all match the current codec. The snapshot-health read reports exactly
-  those three comparisons.
-- [ADR 35](../adr/0035-projection-group-status-is-a-frozen-owner-rights-sql-contract.md) and
-  [ADR 36](../adr/0036-external-readers-use-versioned-guarded-sql-contracts.md): the
-  precedent IR-28 cites for "someone outside the process needs to see keiro state safely"
-  (frozen, versioned, guarded read contracts). This plan is the in-process analogue and adds
-  no SQL contract; it is cited for the discipline, not reused.
-- [ADR 9](../adr/0009-keiro-owns-live-schema-verification-under-pg-migrate.md): `keiro-ops`
-  verifies the live schema before any command; the new commands inherit that unchanged.
-
-Cross-repository ADRs, by the handles already recorded in IR-28 and the sibling plans:
-`mori://shinzui/kiroku/okf/adrs/concepts/ADR-1` (events from fan-in reads carry surrogate
-stream ids; this plan avoids fan-in reads entirely by addressing streams by name) and
-`mori://shinzui/keiro-ui/okf/adrs/concepts/ADR-1` (each endpoint lives in the project that
-owns the concept, which is why raw history is delegated to kiroku). No ADR records aggregate
-inspection semantics; Milestone 5 distills one.
-
+Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `listStreams` takes category, prefix, cursor and `BrowsePageSize`. The compatible released metrics surface is 0.3.0.0. Verify the registry and upstream tags again at implementation, retain supported current bounds, and do not defer listings on the obsolete 0.10 release gate. Allocate migration numbers and OKF handles at implementation. Strict ADR-40 and ADR-28 boundaries apply.
 
 ## Plan of Work
 
 ### Milestone 0: preflight
 
-Scope: three facts this plan rests on are checked on the current tree and recorded in
-Surprises & Discoveries with evidence. No code changes.
-
-First, read `hydrate`, `hydrateFull`, `hydrateSeeded`, and `scheduleSeedVerification` in
-`keiro/src/Keiro/Command.hs` (search for `hydrate ::` and `seedVerifySampleRate`). Confirm
-that every command runner reaches hydration through `hydrate` (search for `hydrate options`),
-that the `case options ^. #seedVerifySampleRate of` branch performs nothing for `0`, and that
-`recordSnapshotReadHits` and its siblings are no-ops for `metrics = Nothing`. Paste the
-relevant lines. If the rate-zero branch does schedule work, Milestone 1 must add an explicit
-guard before it.
-
-Second, run `mori registry show shinzui/kiroku --full`, open
-`kiroku-store/src/Kiroku/Store/Effect.hs` in that checkout, and record the `Store` constructor
-list; confirm there is no listing constructor in the released 0.9.0.1 that the `<0.10` bound
-can see, and record the Progress state of the kiroku plan
-`docs/plans/88-expose-a-rest-read-api-for-browsing-streams-categories-and-events.md`, the
-`listStreams` signature it specifies, and the Progress state of kiroku MasterPlan 13
-(`docs/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui.md`
-in the same checkout), whose plan 96 releases the primitive as `kiroku-store` 0.10.0.0. Run
-`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` and record the
-newest version.
-
-Third, check whether `keiro/src/Keiro/Inspection/Cursor.hs` exists (plan 275 creates it). If it
-does, Milestone 4 imports it; if not, Milestone 4 creates it to the interface in plan 275's
-"Interfaces and Dependencies" section (`InspectionCursor`, `CursorError`, `encodeCursor`,
-`decodeCursor`, base64url without padding over compact JSON with a kind tag) and adds
-`base64-bytestring >=1.2 && <1.3` to `keiro/keiro.cabal`, so whichever plan lands second finds
-the module already there.
+Read the runtime hydration worker, snapshot-seed validation and probe wrapper. Verify released store 0.11 source and tags through Mori and the registry as recorded in the MasterPlan. Plan 275 must have completed its cursor module and option reader; import them unchanged. Record baseline command allocation/query/latency measurements with snapshot hit, miss, corrupt seed, no state codec and long-history cases before editing hydration. Do not replace supported dependency bounds with the obsolete 0.10 range.
 
 ### Milestone 1: hydration that reports its source, and a clock-consistent snapshot observation
 
@@ -541,13 +463,8 @@ the database time it was observed at. `keiro-ops snapshot show` gains two keys.
 In `keiro/src/Keiro/Command.hs` add, in the "Hydration primitives" export group,
 `HydrationSource (..)`, `FullReplayReason (..)`, `hydrateWithSource`, and
 `inspectionRunCommandOptions`. Define the types as in Interfaces and Dependencies. Move the
-body of `hydrate` into `hydrateWithSource`, which returns `(hydrated, source)`: on a seed hit
-that replays, `FromSnapshot (seed ^. #streamVersion)`; on a seed hit whose seeded replay fails
-with `err`, fall back to `hydrateFull` and report `FullReplay (SeededReplayFailed err)`; on a
-miss, `FullReplay (SnapshotMissed reason)`; when the stream has no `stateCodec`,
-`FullReplay NoStateCodec`. Then define `hydrate options eventStream targetStream = fmap (fmap fst) (hydrateWithSource options eventStream targetStream)`.
-The metrics calls, the seed-verification scheduling, and the page size handling stay where
-they are, so the command runners' behavior is unchanged. `inspectionRunCommandOptions` is
+implementation behind a private result-continuation worker shared by `hydrate` and `hydrateWithSource`. The ordinary continuation returns only `Hydrated`; the inspection continuation records `FromSnapshot`, `SnapshotMissed`, `NoStateCodec`, or `SeededReplayFailed`. Do not build a `(Hydrated, HydrationSource)` pair and discard it on every ordinary command. Preserve `hydrateAfterProbe`, the compile-time reaction hydration probe, metrics, seed verification and `seedVerifyInFlightLimit`; no new store call, trace, IORef or allocation per replayed event belongs in the ordinary path. Inspect optimized output and benchmark allocations on both snapshot-hit and full-replay paths; if specialization does not erase diagnostic construction, fix the worker before proceeding. There must still be one replay implementation. `inspectionRunCommandOptions` is
+
 `defaultRunCommandOptions` with `seedVerifySampleRate = 0`, `metrics = Nothing`,
 `tracer = Nothing`, and `verifyReplayOnAppend = False` (the last is irrelevant to a read but
 documents intent). Update the module header's "Hydration primitives" paragraph to mention the
@@ -557,7 +474,7 @@ In `keiro/src/Keiro/Snapshot/Schema.hs` add `SnapshotObservation { row :: Maybe 
 observedAt :: UTCTime }` and `observeSnapshotRow :: (Store :> es) => StreamId -> Eff es
 SnapshotObservation`, implemented as one `runTransaction` that runs `lookupSnapshotRowStmt`
 and a `SELECT now()` statement (`D.singleRow (D.column (D.nonNullable D.timestamptz))`) in the
-same transaction, so both values come from one database moment. Export both from
+same transaction, so age uses one database clock (ReadCommitted does not freeze all rows across statements). Export both from
 `Keiro.Snapshot.Schema` (they are re-exported by `Keiro.Snapshot` automatically through the
 module re-export).
 
@@ -574,9 +491,8 @@ returns version 3 and `FromSnapshot (StreamVersion 2)`; on `counterEventStream` 
 `FullReplay (SnapshotMissed SnapshotNoStream)`; after corrupting the stored state with
 `corruptSnapshotStateStmt` (as the existing "falls back when snapshot JSON is corrupt" case
 does) it returns `FullReplay (SnapshotMissed (SnapshotDecodeFailed _))`; and a seeded replay
-that fails (write a snapshot row whose `state` decodes but whose `stream_version` exceeds the
-stream head, so the seeded replay observes a gap) returns `FullReplay (SeededReplayFailed
-(HydrationGapDetected _ _))` while `hydrate` still returns the same `Hydrated` value as
+that fails (write a decodable seed whose state makes an existing tail event fail replay, while replay from the initial state succeeds) returns `FullReplay (SeededReplayFailed
+(HydrationReplayFailed _))` (match the actual constructor fields) while `hydrate` still returns the same `Hydrated` value as
 `hydrateFull`. Assert that with `inspectionRunCommandOptions` the in-memory metric exporter
 used elsewhere in the group records no `keiro.snapshot.read.hits` point. Add a case that
 `observeSnapshotRow` returns `Nothing` and a timestamp for a stream without a row, and the row
@@ -618,8 +534,7 @@ on the resolved name, returning `Left (AggregateNotFound name)` for `Nothing`; w
 `stateLabel = Nothing`; otherwise `hydrateWithSource inspectionRunCommandOptions (unvalidated
 eventStream) stream`, mapping `Left err` to `Left (AggregateHydrationFailed name err)`; then
 `snapshotStatusOf inspector info` (below); and assemble `AggregateView` with
-`streamVersion = info.version` (the store's head, which equals the hydrated version for a live
-stream; assert that in a test), `state = Just (displayState state registers)`,
+`streamVersion = hydrated.streamVersion` for a live stream. The initial `getStream` and later hydration may observe different heads; never label new state with the earlier head. `history.headVersion` records the separately observed head, not a promise of an atomic view. Add `state_version` to the wire rendering as the explicit folded version (equal to `stream_version` for live state), and label separately timed metadata as observational, `state = Just (displayState state registers)`,
 `stateLabel = Just (stateLabel state)`, and `history = HistoryReference { owner = "kiroku",
 streamName, headVersion = info.version }`.
 
@@ -627,7 +542,7 @@ streamName, headVersion = info.version }`.
 `SnapshotStatus`: `configured` is `Nothing` when the event stream has no `stateCodec`, else
 the policy label and the codec's three discriminators; `stored` is `Nothing` when no row
 exists, else a `StoredSnapshot` with the row's version, timestamps, `ageSeconds`
-(`observedAt - updatedAt`), `eventsSince = info.version - row.streamVersion`, and
+(`observedAt - updatedAt`), `eventsSince = max 0 (info.version - row.streamVersion)` plus `ahead_of_observed_head = row.streamVersion > info.version`, and
 `compatibility`: `Unused` when no codec is configured, `Compatible` when all three
 discriminators equal the codec's, `Incompatible [names]` listing the differing discriminators
 (`state_codec_version`, `regfile_shape_hash`, `state_shape_hash`). `snapshotStatusFor
@@ -732,54 +647,13 @@ reports a compatible snapshot for an order written through `snapshotOrderEventSt
 two commands. Add the `ops aggregate …` invocations to the `ops` demo path only if the demo
 already exercises other commands; otherwise leave the demo alone and document the commands.
 
-### Milestone 4: listing aggregates through kiroku's `listStreams` (release-gated)
+### Milestone 4: listing aggregates through kiroku's `listStreams` (released API)
 
-Scope: the cursor-paged listing read and the `aggregate list` command. This milestone starts
-only when `kiroku-store` with `Kiroku.Store.Read.listStreams` is on Hackage (kiroku plan 88
-builds it and kiroku MasterPlan 13's plan 96 releases it as 0.10.0.0; check
-`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` and read the
-release's `Kiroku.Store.Read` export list). Record the released version and the exact
-signature in Surprises & Discoveries before writing code. If plan 274's Milestone 5 has
-already bumped the bound, skip the bump below and record that. During development a local
-overlay in `cabal.project.local` is acceptable for compiling, but nothing that depends on it
-may be committed: a local checkout is not consumer-reachable, and a `source-repository-package`
-pointing at a local path must never be committed.
+Scope: the `aggregate list` read and command over the already released listing primitive. The current bound is `kiroku-store ^>=0.11.0.0`; keep it. Inspect released source and tags before coding. `listStreams` takes optional exact category, optional literal prefix, exclusive stream-name cursor, and `BrowsePageSize`. Build the last with `mkBrowsePageSize (pageSize + 1)`, validating the public page size to 1..500 first. Pass both the inspector's exact category and its `<category>-` prefix; no private SQL or event scan is permitted.
 
-Bump the `kiroku-store` bound in every package that names it (`grep -rn "kiroku-store" --include=*.cabal .`
-lists `keiro-core`, `keiro`, `keiro-migrations`, `keiro-test-support`, `keiro-dsl`,
-`keiro-ops`) to the released major series, update `mori.dhall`'s dependency entries the same
-way, and rebuild everything (`cabal build all`). If the release also changed `Store`
-constructors in a way that breaks a mock interpreter in this repository, fix that first and
-record it.
+Decode the `aggregate-list` cursor and fetch one raw page only. Examine at most the first `pageSize` raw rows, run the inspector's membership mapping on them, count rejected rows as `skipped`, and use the extra raw row only to detect continuation. Mint the next cursor from the last raw row examined, even if every examined row was rejected and `items` is empty. Never fill a display page by draining upstream pages. Preserve upstream UTF-8 byte ordering. Bind the cursor payload to the category/inspector identity; a changed identity is an invalid cursor, not a restart at an arbitrary key.
 
-In `Keiro.Inspection.Aggregate` add `AggregateListRequest`, `AggregateSummary`,
-`AggregateListPage`, `listAggregates`, and the cursor helpers. `listAggregates inspector
-request` validates `pageSize` (1 through 500, else `Left (InvalidPageSize n)`), decodes the
-cursor with `decodeCursor "aggregate-list"` (else `Left (InvalidCursor err)`), calls
-`listStreams (Just (categoryText category <> "-")) after (pageSize + 1)`, maps each
-`StreamInfo` to an `AggregateSummary` through `aggregateIdOf` (names `mkStream` rejects are
-counted in `skipped`, not returned), returns at most `pageSize` items, and sets `next` to
-`encodeCursor "aggregate-list" (object ["after" .= lastStreamName])` only when the extra row
-existed. The page carries no hydration and no snapshot lookup; `streamVersion` is the change
-witness a client uses to skip unchanged renders. Ordering is stream-name order, which is
-kiroku's order for this primitive.
-
-In `keiro-ops/src/Keiro/Ops/Aggregate.hs` add `List ListOptions { name, limit (default 50,
-`positiveIntReader`), after :: Maybe Text }` and `aggregate list --name NAME [--limit N]
-[--after CURSOR]`, rendering through `aggregateListPageJson`; the human table shows
-`aggregate_id, stream_name, stream_version, created_at, deleted_at`.
-
-Tests. In `keiro/test/Main.hs`: create five aggregates in category `sc` and one stream
-`sc-extra` that the inspector's `mkStream` still accepts (so `skipped` stays 0 here) plus one
-inspector whose `mkStream` rejects ids containing `x` to exercise `skipped`; page with size 2
-and assert complete, duplicate-free traversal in name order with `next` absent on the final
-page; assert sizes 0 and 501 fail, a cursor minted for kind `workflow-list` fails with
-`InvalidCursor (CursorKindMismatch _ _)`, and a cursor from one category applied to another
-simply restarts the keyset (documented behavior, not an error). In `keiro-ops/test/Main.hs`:
-`List` renders the same page as the library read, and a two-page traversal through the
-rendered `next_cursor` works. In `jitsurei/test/Main.hs`: place three orders and two incidents,
-list each category, and assert each page lists exactly its own aggregates with ids and
-versions (IR-28 acceptance 1).
+Expose `aggregate list --name NAME [--after CURSOR] [--limit N]` (default 50, maximum 500), rendering the existing summary envelope through the library. Lists perform no hydration or snapshot reads. Tests create matching, rejected, non-ASCII, deleted and hard-deleted streams; traverse with page size two; and prove exact coverage of accepted rows, strictly advancing cursors through fully rejected pages, no loss of the look-ahead row, and no cursor at raw exhaustion. Test first, deep and empty-result pages. A malformed, foreign-kind or foreign-inspector cursor fails before SQL. Compare CLI rendering with the same library result. No upstream work or dependency downgrade is part of this milestone.
 
 ### Milestone 5: documentation, evidence, and distillation
 
@@ -878,12 +752,15 @@ curl -fsSL https://hackage.haskell.org/package/keiro/preferred.json
 git ls-remote --tags origin 'keiro-0.1[6-9]*'
 ```
 
-Milestone 4 gate (both must succeed before any listing code is written):
+Milestone 4 verifies the already released API instead of requiring an old 0.10 series:
 
 ```bash
-curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json | grep -q '"0.10' && echo released
-grep -rn "kiroku-store" --include='*.cabal' . | grep -v "0.10" ; echo "lines above still carry the old bound"
+mori registry show shinzui/kiroku --full
+curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json
+rg 'kiroku-store' --glob '*.cabal' keiro keiro-core keiro-migrations keiro-ops
 ```
+
+Retain the compatible current bound and verify the released signature; the 2026-10-13 proof used `kiroku-store` 0.11.0.0.
 
 Documentation and bundle validation (Milestone 5 and whenever a bundle changes):
 
@@ -920,6 +797,13 @@ with evidence as they occur.
 
 
 ## Validation and Acceptance
+
+The concurrency test interleaves an append between the initial stream lookup and hydration and checks that displayed state is labelled with the hydrated version. Interleave snapshot advancement, deletion, and truncation too: report a raced/deleted observation or a typed hydration error, never invented initial state or a negative event distance. Database timestamps describe each observation and do not claim a transaction-wide snapshot.
+
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+
+Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
+
 
 Acceptance 1 (IR-28, listing; Milestone 4): with three orders and two incidents in the
 jitsurei test database, `listAggregates` for the `order` inspector with page size 2 returns two
@@ -1010,16 +894,14 @@ the aggregate: one snapshot primary-key read plus the tail of the stream in 256-
 and one snapshot observation (one primary-key read plus `now()`); `snapshotStatusFor` performs
 the first and third only; `listAggregates` performs one prefix-filtered, name-ordered read of
 kiroku's `streams` table bounded by page size plus one and no hydration; `listAggregateTypes`
-touches no database. The Milestone 1 benchmark run proves the command path is unchanged.
+touches no database. The matched Milestone 1 benchmarks must satisfy the command-path interference gate; they cannot prove zero cost in every deployment.
 
 
 ## Idempotence and Recovery
 
 Every read is a query and may be repeated freely; tests clone a fresh database per example.
 No migration is added. The `Keiro.Command` refactor keeps `hydrate`'s signature and behavior;
-if the benchmark or any command test regresses, the fix is to restore the original body under
-`hydrateWithSource` verbatim and re-derive `hydrate` from it, never to keep two hydration
-implementations.
+if the benchmark or any command test regresses, fix specialization of the shared worker; never hide the cost by loosening the threshold or keeping two replay implementations.
 
 Cursor pagination is observational: a page reflects the streams that exist at the time of
 that query, a cursor means "strictly after this stream name", and a client that changes the
@@ -1149,7 +1031,7 @@ data SnapshotConfig = SnapshotConfig
   deriving stock (Eq, Show, Generic)
 
 data StoredSnapshot = StoredSnapshot
-  { streamVersion :: !StreamVersion, createdAt :: !UTCTime, updatedAt :: !UTCTime,
+  { aheadOfObservedHead :: !Bool, streamVersion :: !StreamVersion, createdAt :: !UTCTime, updatedAt :: !UTCTime,
     ageSeconds :: !Double, eventsSince :: !Int64,
     stateCodecVersion :: !Int, regfileShapeHash :: !Text, stateShapeHash :: !Text,
     compatibility :: !SnapshotCompatibility }
@@ -1210,8 +1092,7 @@ aggregateListPageJson :: AggregateListPage -> Value
 inspectionErrorText :: AggregateInspectionError -> Text
 ```
 
-`Keiro.Inspection.Cursor` (owned by plan 275; created here only if absent, to this exact
-interface):
+`Keiro.Inspection.Cursor` (owned by plan 275; imported after plan 275 completes, with this interface):
 
 ```haskell
 newtype InspectionCursor = InspectionCursor { cursorText :: Text }
@@ -1246,9 +1127,8 @@ isMutation :: Command -> Bool          -- always False
 runCommand :: OpsEnv -> AggregateInspectors -> Command -> IO OpsOutcome
 ```
 
-Kiroku (Milestone 4, consumed, not written here): `Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es) => Maybe Text -> Maybe StreamName -> Int32 -> Eff es (Vector StreamInfo)`
-from the `kiroku-store` release that carries kiroku plan 88 (0.10.0.0, released by kiroku
-MasterPlan 13's plan 96), with `StreamInfo { id, name, version, createdAt, deletedAt,
+Kiroku (Milestone 4, consumed, not written here): `Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es) => Maybe CategoryName -> Maybe Text -> Maybe StreamName -> BrowsePageSize -> Eff es (Vector StreamInfo)`
+from released `kiroku-store` 0.11.0.0, with `StreamInfo { id, name, version, createdAt, deletedAt,
 truncateBefore }` unchanged from 0.9.0.1. Verify the exact export against the released package
 before use.
 
@@ -1276,3 +1156,5 @@ plan's Milestone 4 and plan 274's Milestone 5 runs first. The working-tree and H
 facts were refreshed to 0.19.0.0, ADR-40 is cited as the existing stance ADR, and the CAP-20
 and ADR handles are stated as `okf id next` expectations rather than reservations. Five dated
 Decision Log entries record these changes; no earlier entry was rewritten.
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

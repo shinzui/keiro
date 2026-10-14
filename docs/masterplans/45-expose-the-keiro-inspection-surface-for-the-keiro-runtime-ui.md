@@ -10,6 +10,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-30T23:35:10Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: hot-path allocation and provenance costs, unbounded feed work, missing workflow routes, stale upstream API, and incomplete-release closure require correction."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
 ---
 
 # Expose the keiro inspection surface for the keiro runtime UI
@@ -42,7 +54,7 @@ Five of them were planned on 2026-09-10 by five parallel sessions as ExecPlans 2
 278, none of which has started, and each of which contains its own guess about the shared
 pieces: the cursor codec, the pending-timer read, the migration number, the kiroku listing
 primitive and its release, the package version, and the OKF handles. IR-31, composed mounting,
-has no plan. This MasterPlan coordinates all six requests into one cohort, settles the shared
+had no plan before this MasterPlan added plan 302. This MasterPlan coordinates all six requests into one cohort, settles the shared
 decisions, adds the two children no existing plan covers, and carries the cohort to a release
 that lets the requests be marked complete.
 
@@ -66,7 +78,7 @@ In scope: the library reads beneath every requested view (in `keiro`), the read-
 `keiro-ops` commands that render them, the `keiro-ops-http` package with its transport,
 feeds, and composition, the documentation, capability records, and ADRs that record the
 decisions, and the lockstep release that publishes the package set and completes IR-26 through
-IR-31. Explicitly out of scope: authentication, authorization, TLS, and rate limiting (the
+IR-31. Explicitly out of scope: authentication, authorization, TLS, and per-client edge rate limiting (internal admission, feed refresh and resource limits are in scope; the
 recorded posture of every inspection server in the stack is a trusted network or an
 authenticating reverse proxy, restated in each child's documentation); any dashboard, metrics
 endpoint, time-series retention, or trace view (ADR-40 keeps those in OpenTelemetry); the
@@ -75,52 +87,19 @@ or reshapes a lower layer's data (raw stream and event browsing stays kiroku's);
 implementation work in kiroku, shibuya, or pgmq-hs. Those three repositories are planning
 their own halves of the initiative in parallel: kiroku's cohort is
 `mori://shinzui/kiroku/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui`
-(it releases the `listStreams` primitive keiro's two listing milestones wait for as
-`kiroku-store` 0.10.0.0), shibuya's is
-`mori://shinzui/shibuya/masterplans/7-browser-ready-processor-inspection-and-control-surface`
-(a skeleton at the time of writing), and pgmq-hs's requests IR-1 through IR-3 in that
-repository are proposed and unplanned. Keiro's plans consume released artifacts from those
-repositories and never implement inside them.
+(its listing and composed application have since shipped in released packages; see Integration Points), while shibuya and pgmq surfaces are consumed only through their owning packages' public applications. Recheck their current published surfaces during EP-6; historical planning status is not a release gate. Keiro's plans never implement inside those repositories.
+
+
 
 
 ## Decomposition Strategy
 
-The initiative decomposes by functional concern into seven child plans in three waves. Five
-of the children already exist as plans 274, 275, 276, 277, and 278 and are adopted rather
-than rewritten: each is a complete, self-contained, reviewed specification of one request
-(their `reviews` are recorded on the requests, not on the plans, which carry no provenance
-block because they predate it), and rewriting three hundred kilobytes of plan text to change
-a dozen shared decisions would destroy more than it adds. Instead this MasterPlan settles the
-shared decisions in Integration Points, and each adopted plan carries a `master_plan`
-frontmatter field, a dated coordination note, and the targeted edits that make its text agree
-with the settled decisions. Two new children cover what no existing plan does: composed
+The initiative decomposes by functional concern into seven child plans in three waves. Plans 274 through 278 were adopted with their request reviews and later received plan-level review/revision provenance. The 2026-10-13 review updates their active instructions together with the shared contracts here. Earlier dated decisions remain historical; the current dependency graph and Integration Points govern implementation. Two new children cover what no existing plan does: composed
 mounting (IR-31) and the cohort release that completes the requests.
 
-Wave one is the four independent foundations, which touch disjoint modules and can be
-implemented in parallel by different sessions. EP-1 (plan 276) builds the transport package;
-it depends on nothing because its endpoints are derived from the `keiro-ops` parser rather
-than from a route list, so commands the other children add become routes the moment they
-merge. EP-2 (plan 275) adds the workflow reads and owns the two artifacts every other read
-plan needs, the opaque cursor codec `Keiro.Inspection.Cursor` and the `Keiro.Inspection`
-namespace, because it is the plan with the most readers and the smallest hook surface. EP-3
-(plan 278) adds the aggregate reads and owns the source-reporting hydration primitive in
-`Keiro.Command`, which EP-4 also needs. EP-4 (plan 274) adds the process-manager reads and
-owns the pending-timer read in `Keiro.Timer`, which EP-5 also needs. Each of EP-2, EP-3, and
-EP-4 produces a demonstrable behavior through `keiro-ops` commands without any of the others
-and without the transport.
+The seven work streams remain functional concerns, with explicit owners for shared implementation. EP-1 (276) builds the transport and request budget independently of EP-2 (275), which owns the cursor codec, workflow reads, and their bounded CLI routes. EP-3 (278) follows EP-2 and owns the source-reporting hydration implementation. EP-4 (274) follows EP-2 and EP-3 and owns pending-timer reads and opt-in legacy reaction provenance. EP-5 (277) follows EP-1, EP-2, and EP-4, consuming their code rather than creating substitute shared modules. EP-6 (302) follows EP-1; its stub routing tests can proceed independently, while its final integration proof includes EP-5. EP-7 (303) releases the completed cohort after all six children and the performance gates pass. The upstream listing API has shipped, so the aggregate and PM listings are required for completion.
 
-Wave two is the two children that build on the transport. EP-5 (plan 277) mounts WebSocket
-feeds onto the application EP-1 builds and hard-depends on EP-1's first three milestones; its
-own first milestone (the paired `keiro-ops` commands) is independent. EP-6 (plan 302)
-composes keiro's surface with kiroku's, shibuya's, and pgmq's under path prefixes and
-hard-depends on EP-1 because the thing it mounts must exist; it soft-depends on EP-5 so the
-composition test can prove keiro's own WebSocket endpoint works behind a prefix.
-
-Wave three is EP-7 (plan 303), the release: it dates the changelogs, verifies the two
-kiroku-gated listing milestones or records them as pending, publishes the eight-package set
-in dependency order with `keiro-ops-http` last, proves the release from a clean consumer, and
-moves IR-26 through IR-31 to `completed`. It hard-depends on everything because versions,
-bounds, and completion evidence can be chosen truthfully only from integrated code.
+The changed order is deliberate: an implementation that imports an absent shared module is not independently implementable. Research and test-fixture preparation may overlap, but consumers do not take ownership of another child's implementation. The existing seven scopes stay intact.
 
 Alternatives considered. Merging plans 274 and 277 because both add the pending-timer read
 was rejected: the read is one function, and the two plans' remaining scopes (provenance
@@ -193,9 +172,9 @@ keiro's composed mount embeds, which is the constraint EP-6 relies on.
 |---|-------|------|-----------|-----------|--------|
 | 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | Not Started |
 | 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | Not Started |
-| 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | None | EP-2 | Not Started |
-| 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | None | EP-2, EP-3 | Not Started |
-| 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1 | EP-2, EP-4 | Not Started |
+| 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 | None | Not Started |
+| 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2, EP-3 | None | Not Started |
+| 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1, EP-2, EP-4 | None | Not Started |
 | 6 | Mount composed runtime inspection surfaces under one port (IR-31) | docs/plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md | EP-1 | EP-5 | Not Started |
 | 7 | Release the keiro inspection surface cohort and complete the keiro-ui requests | docs/plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md | EP-1, EP-2, EP-3, EP-4, EP-5, EP-6 | None | Not Started |
 
@@ -213,63 +192,28 @@ Intention.
 
 ## Dependency Graph
 
-EP-1, EP-2, EP-3, and EP-4 have no hard dependencies and may be implemented in parallel by
-different sessions. EP-1 touches `keiro-ops/src/Keiro/Ops.hs` (exports only),
-`keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs` (a lifted session), and the new
-`keiro-ops-http/` tree. EP-2 touches `keiro/src/Keiro/Workflow/`, creates
-`keiro/src/Keiro/Inspection/Cursor.hs` and `keiro/src/Keiro/Workflow/Inspection.hs`, adds a
-migration, and rewrites the rendering in `keiro-ops/src/Keiro/Ops/Workflow.hs`. EP-3 touches
-`keiro/src/Keiro/Command.hs` and `keiro/src/Keiro/Snapshot/Schema.hs` additively, creates
-`keiro/src/Keiro/Inspection/Aggregate.hs` and `keiro-ops/src/Keiro/Ops/Aggregate.hs`, and
-mounts a hook. EP-4 touches `keiro/src/Keiro/ProcessManager.hs`, `keiro/src/Keiro/Timer/`, and
-`keiro/src/Keiro/Subscription/Shard/`, creates `keiro/src/Keiro/ProcessManager/Inspect.hs` and
-`keiro-ops/src/Keiro/Ops/ProcessManager.hs`, extends `keiro-ops/src/Keiro/Ops/Timer.hs` and
-`Shard.hs`, and mounts a hook. The only files two of them edit are `keiro-ops/src/Keiro/Ops.hs`
-and `keiro-ops/src/Keiro/Ops/Embed.hs` (both additive: new exports, new `Command`
-constructors, new `AppHooks` fields), `keiro-ops/test/Main.hs` (new groups and the
-`embeddedHooks` value), the `[Unreleased]` sections of the changelogs, and the bundle
-`log.md` files; whichever lands second appends after what exists.
+EP-1 and EP-2 can start independently. EP-2 precedes EP-3; EP-2 and EP-3 precede EP-4; EP-1, EP-2, and EP-4 precede EP-5. EP-1 precedes EP-6, with EP-5 an integration prerequisite for EP-6's final real-feed proof. All six precede EP-7. There is no cycle. The registry records full-plan hard dependencies; milestone-level research may proceed before code dependencies are available.
 
-The soft dependencies in wave one are shared artifacts with a "whoever lands first creates
-it to the fixed interface" rule, recorded in Integration Points: EP-3 and EP-4 consume EP-2's
-cursor codec; EP-4 consumes EP-3's source-reporting hydration. None of these blocks work,
-because the interfaces are fixed here and are small enough to create from the other plan's
-text. The two kiroku-gated milestones (plan 274 Milestone 5, plan 278 Milestone 4) depend on
-a `kiroku-store` release that exports `listStreams`; they are the last milestones of their
-plans and may complete after the rest of each plan, and after EP-7 has shipped the cohort if
-the kiroku release is late.
+Shared files include `keiro/keiro.cabal`, `keiro-ops/keiro-ops.cabal`, `keiro-ops/src/Keiro/Ops.hs`, `keiro-ops/src/Keiro/Ops/Embed.hs`, their test suites, `jitsurei/app/Main.hs`, migration manifests/locks/schema snapshots, changelogs, and OKF logs. Later plans extend the prior owner's artifacts and retain unrelated additions. EP-4 completes its timer-read milestone before wiring its instance view, which consumes that read.
 
-EP-5 hard-depends on EP-1's Milestones 1 through 3 because the feeds mount onto
-`Keiro.Ops.Http.Application.opsApplication` through `websocketsOr` and reuse plan 276's
-configuration, CORS, error envelope, and drift policy; plan 277's Decision Log already says
-that if EP-1 has not reached Milestone 3 when EP-5's Milestone 2 starts, the implementer
-finishes EP-1 to that point rather than creating a second package skeleton. EP-5's Milestone 1
-(the pending-timer read's consumer side and the two paired `keiro-ops` commands) is
-independent and may run in wave one; it soft-depends on EP-4 for the pending-timer read and
-on EP-2 for the workflow rendering, both under the first-lands-creates rule.
-
-EP-6 hard-depends on EP-1 because the composed router mounts `opsApplication` (or
-`opsApplicationWithFeeds` once EP-5 exists) at the `keiro` prefix and reuses
-`Keiro.Ops.Http.Server.withOpsHttpServer` as the single bind point; its unit tests over stub
-applications need nothing from EP-1, but its acceptance tests mount the real surface. It
-soft-depends on EP-5: when EP-5 has landed, EP-6's tests also drive keiro's `/keiro/ws` feed
-through the prefix; when it has not, they drive only kiroku's `/kiroku/ws/events`, which is
-what IR-31's acceptance names.
-
-EP-7 hard-depends on all six because it dates changelogs, chooses the shared version, adds
-`keiro-ops-http` to the release order, runs the full gate, publishes, proves the release from
-a clean consumer, and completes the requests, none of which can be done truthfully before the
-code is integrated. EP-7 does not wait for the kiroku-gated listing milestones: if
-`kiroku-store` 0.10.0.0 is not on Hackage when EP-7 starts, it ships without listing, records
-IR-28 and IR-29 item 1a as pending, and the listing milestones ship in the next lockstep
-release under a short follow-up entry in this MasterPlan's Progress.
-
-The recommended landing order is therefore EP-1, EP-2, EP-3, and EP-4 in parallel (with
-EP-5's Milestone 1 alongside), then EP-5 and EP-6 in parallel, then EP-7. The longest serial
-chain is three plans deep (EP-1, EP-5, EP-7).
-
+EP-7 requires complete listing and real composition evidence. An interim release is possible only as an explicitly rescoped task; it cannot mark a child, request, or this MasterPlan complete while required work is deferred.
 
 ## Integration Points
+
+**Performance and correctness boundary (2026-10-13 review).** EP-1 owns request admission and execution limits in `Keiro.Ops.Http.Budget`; EP-5 uses the same budget for feed reads. EP-2 owns cursor decoding and workflow query-cost proofs. EP-3 owns hydration specialization and its command-path benchmark. EP-4 owns opt-in reaction provenance and timer-index read/write evidence. EP-6 must preserve these limits through composition. EP-7 owns the integrated interference experiment below and cannot close the initiative without it. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) records the durable isolation requirement.
+
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+
+Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
+
+**Bounded workflow routes** (owner EP-2, consumed by EP-1 and EP-5). Add the read-only command subtree `wf inspect`: `list`, `header NAME ID`, `journal NAME ID`, `steps NAME ID`, `children NAME ID`, and `awakeables NAME ID`. It exposes the new page APIs directly, without draining them. List options are repeatable `--status-class`, `--workflow-name`, `--created-since`, `--created-before`, `--updated-since`, `--updated-before`, `--ordering key|created_desc`, `--limit`, and `--after`; detail reads use `--limit`, `--after`, and, for journal/steps, `--generation`. These mechanically become `/wf/inspect/...` routes; EP-1 does not write a second route table. EP-2 adds structured `InspectionFailed code message` outcomes and updates an existing transport match; if the transport lands later, EP-1 consumes that variant. Whichever integrates second proves HTTP codes without introducing a reverse package dependency. Old CLI commands keep their shapes and are explicitly expensive compatibility routes when they drain whole histories. EP-5's workflow feed consumes this bounded listing and the seven status classes; `/wf/inspect/list` is its authoritative poll route.
+
+**Resource limits** (EP-1 and EP-5). Application construction becomes `IO Application`, allocating one admission budget once per mount. Defaults: at most 4 concurrent inspection jobs including schema checks and feed reads, no unbounded waiting queue (HTTP excess returns 503 `inspection_busy`), 5-second overall read deadline, 2-second database statement timeout, 1 MiB encoded response/frame limit, 2 MiB queued bytes per socket, and 16 KiB request/cursor input limits (cursor maximum 4096 encoded bytes). EP-5 additionally caps distinct active views at 32, refreshes a view at most once per second, caps connections at 256 and subscriptions at three per socket, and accounts for in-flight construction as well as established resources. Oversized results fail explicitly, never truncate silently. Configure longer deadlines only through host policy. A Warp idle timeout is not a handler deadline. Use an inspection-owned pool in standalone/composed examples and recommend it for embedding; a shared pool remains supported only within these budgets and must pass interference tests. PostgreSQL CPU, IO, WAL and index-write costs are shared even with separate pools.
+
+Per-request schema verification remains fail-closed and runs inside the budget; pool reuse does not make its catalog scans cheap. Rejected admission, invalid input and disabled mutations do no schema work. No TTL cache may silently weaken drift refusal. Measure the scan at expected poll load; if it exceeds the interference gate, stop and revise the drift protocol explicitly rather than ship a cache. Existing feeds stop publishing when their next budgeted refresh discovers drift or verification failure; verification is shared once for an admitted refresh batch, not repeated per subscriber. No refresh is published under an unverified schema.
+
+**Released substrate (verified 2026-10-13).** Keiro's tree is 0.20.0.0 and already uses `kiroku-store ^>=0.11.0.0`. Hackage's `preferred.json`, released source, and upstream tags `kiroku-store-v0.11.0.0` and `kiroku-metrics-v0.3.0.0` agree (peeled commit `7394055de458bef8f6ec2e68231f3ca7932bb9be`). Canonical owners are `mori://shinzui/kiroku/packages/kiroku-store` and `mori://shinzui/kiroku/packages/kiroku-metrics`. The listing primitive has shipped; no 0.10 gate or downgrade remains. Its signature is `listStreams :: (HasCallStack, Store :> es) => Maybe CategoryName -> Maybe Text -> Maybe StreamName -> BrowsePageSize -> Eff es (Vector StreamInfo)`. Build the limit with `mkBrowsePageSize (pageSize + 1)` (upstream accepts 1..1001), pass the exact category plus the `<category>-` prefix, and preserve upstream UTF-8 byte order. Consumer filtering processes at most the first `pageSize` raw rows; the extra raw row is look-ahead only. Continue from the last raw row examined even when all display items are rejected. Empty display pages can therefore carry a cursor. Never drain upstream pages to fill a display page. EP-6 uses released `kiroku-metrics ^>=0.3.0.0`, `storeServerProviders`, and `combinedAppWithProviders`, subject to rechecking newer releases at implementation.
+
 
 **The `keiro-ops-http` package** (owner: EP-1, plan 276; extended by EP-5 and EP-6;
 released by EP-7). Shared artifact: `keiro-ops-http/` with modules `Keiro.Ops.Http`,
@@ -277,7 +221,7 @@ released by EP-7). Shared artifact: `keiro-ops-http/` with modules `Keiro.Ops.Ht
 `Keiro.Ops.Http.Route`, and `Keiro.Ops.Http.Server`, the standalone `keiro-ops-http`
 executable, and the test suite `keiro-ops-http-test`. EP-1 fixes the contract every later
 child consumes without change: `opsApplication :: OpsHttpConfig -> AppHooks -> KirokuStore ->
-Application`; `OpsHttpConfig { mutations, schemaDrift, allowedOrigins }` with
+IO Application`; `OpsHttpConfig { mutations, schemaDrift, allowedOrigins, inspectionLimits }` with
 `defaultOpsHttpConfig` (mutations disabled, refuse on drift, no origins);
 `withOpsHttpServer :: OpsHttpServerConfig -> Application -> (OpsHttpServer -> IO a) -> IO a`
 binding `127.0.0.1:9092` by default with port 0 meaning an OS-assigned port;
@@ -289,14 +233,10 @@ the command's `jsonValue` verbatim; every request runs
 `Keiro.Migrations.SchemaCheck.verifyExpectedSchemaSession` first. EP-5 adds
 `Keiro.Ops.Http.Protocol`, `Views`, `Feed`, and `WebSocket`, the `/ws` endpoint, and
 `Keiro.Ops.Http.opsApplicationWithFeeds :: OpsHttpConfig -> FeedHandle -> AppHooks ->
-KirokuStore -> Application`. EP-6 adds `Keiro.Ops.Http.Compose`. Every route matches
+KirokuStore -> IO Application`. EP-6 adds `Keiro.Ops.Http.Compose`. Every route matches
 `pathInfo` relative to the mount and no response carries an absolute URL, so the exported
 application is a prefix-agnostic value (the same constraint kiroku's MasterPlan 13 records for
-its own application). The package version equals the working tree's shared version at the
-moment the package is created (0.19.0.0 on 2026-09-30; plan 276's text said 0.16.0.0, which
-was the version when it was written), with `^>=` bounds on the sibling packages and the
-`kiroku-store` bound copied from `keiro-ops/keiro-ops.cabal` (`>=0.9.0.1 && <0.10` today,
-moved by the listing milestones). Plan 276 owns the `cabal.project`, `README.md`, `justfile`,
+its own application). The package version equals the shared version when created (0.20.0.0 in this review), with sibling bounds following that version and the supported `kiroku-store ^>=0.11.0.0` bound retained. Plan 276 owns the `cabal.project`, `README.md`, `justfile`,
 release-skill, and `mori.dhall` entries for the package; EP-5 and EP-6 add only their own
 dependencies and modules to those entries.
 
@@ -311,9 +251,9 @@ encodeCursor :: (ToJSON payload) => Text -> payload -> InspectionCursor
 decodeCursor :: (FromJSON payload) => Text -> InspectionCursor -> Either CursorError payload
 ```
 
-A token is unpadded base64url over the compact JSON object `{"k":<kind>,"v":<payload>}`;
+Reject tokens longer than 4096 encoded bytes before decoding. A token is unpadded base64url over the compact JSON object `{"k":<kind>,"v":<payload>}`;
 `decodeCursor` rejects a kind other than the one requested. `base64-bytestring >=1.2 && <1.3`
-is added to `keiro/keiro.cabal` by whichever plan creates the module. Kind tags are plain text
+is added to `keiro/keiro.cabal` by EP-2. Kind tags are plain text
 constants owned by the module that owns each read: `wf-key`, `wf-created`, `wf-steps`,
 `wf-journal`, `wf-children`, `wf-awakeables` (EP-2), `aggregate-list` (EP-3),
 `timer-pending` and `pm-list` (EP-4). Plan 277's proposed `Keiro.Ops.Cursor` in `keiro-ops`
@@ -322,12 +262,11 @@ inspection read mints interchangeable tokens from this one codec, and a client n
 arithmetic on them. The one `optparse-applicative` reader that turns a `--after CURSOR`
 option into an `InspectionCursor` lives in `keiro-ops/src/Keiro/Ops/Parse.hs` as
 `cursorReader :: ReadM InspectionCursor` (it only wraps the text; the library read validates
-the kind), created by whichever of EP-2, EP-3, EP-4, or EP-5 first needs it. Whoever lands
-first creates the module to this interface; the others import it. This decision becomes part
+the kind), created by EP-2 before its consumers start; the others import it. This decision becomes part
 of EP-2's ADR-28 paragraph.
 
 **The pending-timer read** (owner: EP-4, plan 274, Milestone 3; consumer: EP-5, plan 277,
-Milestone 1; created by whichever lands first, to this interface). Shared artifact:
+Milestone 1; EP-4 supplies this prerequisite interface). Shared artifact:
 `keiro/src/Keiro/Timer/Schema.hs`, re-exported from `keiro/src/Keiro/Timer.hs`:
 
 ```haskell
@@ -352,14 +291,13 @@ statement selects the `lookupTimerInspection` columns plus `now()` in one transa
 `status IN ('scheduled', 'firing')` with the optional exact matches, orders by
 `(fire_at, timer_id)`, applies the exclusive keyset `(fire_at, timer_id) > cursor` decoded
 from kind `timer-pending` with payload `[fire_at, timer_id]`, and fetches `pageSize + 1` rows.
-The decision whether a supporting partial index is needed stays with plan 274's Milestone 0
-evidence. The single `keiro-ops` command over this read is
+EP-4's M0 measures unfiltered, manager-only, correlation-only and combined filters, first and deep pages, using realistic skew and both prepared-plan modes. LIMIT bounds returned rows, not rows examined. Index selection must include timer write/WAL costs; the feed cannot bypass this gate. The single `keiro-ops` command over this read is
 `timer pending list [--manager NAME] [--correlation ID] [--after CURSOR] [--limit N]` in
 `Keiro.Ops.Timer` (limit defaults to 100, at most 500), read-only, rendering
 `{"observed_at", "manager"?, "correlation_id"?, "items": [...], "next_cursor"?}` where each
 item is `pendingTimerItemJson :: UTCTime -> TimerInspection -> Value`, exported from
 `Keiro.Ops.Timer`: the existing `timerJson` keys plus `last_error` and `due_in_seconds`
-(`fire_at` minus `observed_at`, negative when overdue). Plan 274's `timer pending --manager`
+(`fire_at` minus `observed_at`, negative when overdue; this volatile display value is excluded from feed change detection). Plan 274's `timer pending --manager`
 (manager required) and plan 277's `timer pending list --process-manager` (`read_at` key) are
 both replaced by this one command, which EP-1's transport serves as
 `GET /timer/pending/list`. EP-5's `timers` feed parses subscribe fields `manager`,
@@ -369,22 +307,16 @@ both replaced by this one command, which EP-1's transport serves as
 artifact: `Keiro.Workflow.Inspection.instanceToJson :: WorkflowInstanceRow -> Value`, which
 renders the keys `keiro-ops` publishes today plus the additive `status_class`. Plan 275
 deletes `keiro-ops`'s private `workflowInstanceJson` and renders `wf list` items through the
-library function. EP-5's `workflows` feed items must equal `wf list` items, so the feed uses
-`instanceToJson` when EP-2 has landed; if EP-5 lands first it exports the existing
-`workflowInstanceJson` from `Keiro.Ops.Workflow` temporarily and EP-2's Milestone 4 replaces
-that import. The seven-value status vocabulary (`running`, `retrying`, `sleeping`,
-`awaiting`, `completed`, `cancelled`, `failed`) and the `status_class` filter belong to EP-2;
-EP-5's subscribe `statuses` field keeps carrying the five stored statuses that
-`listWorkflowInstances` accepts, because the feed watches the legacy listing's first page.
+library function. EP-5's `workflows` feed uses this encoder after EP-2 has landed. The seven-value status vocabulary (`running`, `retrying`, `sleeping`, `awaiting`, `completed`, `cancelled`, `failed`) and filter belong to EP-2. EP-5 uses the bounded `wf inspect list` path with `status_class`, not the legacy stored-status listing.
 
 **Projection group status rendering** (owner: EP-5, plan 277, Milestone 1). Shared
-artifact: `Keiro.Ops.Projection.projectionGroupStatusJson :: ProjectionGroupStatusV1 -> Value`
+artifact: the bounded projection-status page with a `projection-groups` cursor and `Keiro.Ops.Projection.projectionGroupStatusJson :: ProjectionGroupStatusV1 -> Value`
 using the frozen v1 column names of ADR-35 as keys, and the read-only `projection status`
-command rendering `{"observed_at", "items", "visible_store_head"}`. The key is `observed_at`
+command with `--limit` and `--after`, rendering `{"observed_at", "items", "visible_store_head", "next_cursor"?}`. The key is `observed_at`
 (plan 277 said `read_at`) so every inspection page reports its clock under one name.
 
 **Source-reporting hydration** (owner: EP-3, plan 278, Milestone 1; consumer: EP-4, plan
-274, Milestone 2; created by whichever lands first, to this interface). Shared artifact, in
+274, Milestone 2; EP-3 supplies this prerequisite interface). Shared artifact, in
 `keiro/src/Keiro/Command.hs`:
 
 ```haskell
@@ -397,7 +329,7 @@ hydrateWithSource ::
 inspectionRunCommandOptions :: RunCommandOptions   -- sample rate 0, no metrics, no tracer
 ```
 
-`hydrate` keeps its signature and becomes a projection over `hydrateWithSource`. Plan 274's
+`hydrate` keeps its signature and its ordinary result path. Extract one private hydration worker with a specialized result continuation: the command continuation ignores source diagnostics without constructing a pair, reason object, or error text; the inspection continuation returns the pair. Verify optimized allocation and query counts instead of assuming GHC removes a `fst` wrapper. Preserve the current probe wrapper, telemetry and seed-verification behavior. Plan 274's
 Milestone 2 uses `hydrateWithSource` and this `HydrationSource` type instead of its own
 two-constructor `HydrationSource` and its second `lookupSnapshotSeed` call, and both views
 render `hydration` through EP-3's `hydrationSourceJson` (`{"source":"snapshot","snapshot_version":n}`
@@ -415,23 +347,7 @@ whichever lands second extends the record, the two tests, and `embeddedHooks` ra
 replacing them. EP-1's transport serves hook-dependent commands only when the host mounts the
 hook, exactly like the CLI, so no child writes endpoint code.
 
-**The kiroku listing primitive and the `kiroku-store` bound** (external owner: kiroku
-MasterPlan 13, plan 88, released by kiroku plan 96 as `kiroku-store` 0.10.0.0; consumers:
-EP-3 Milestone 4 and EP-4 Milestone 5). Shared artifact:
-`Kiroku.Store.Read.listStreams :: (HasCallStack, Store :> es) => Maybe Text -> Maybe StreamName
--> Int32 -> Eff es (Vector StreamInfo)`, an exact `starts_with` prefix filter with an
-exclusive stream-name cursor, ordered by name. Both keiro listings wrap it with the prefix
-`<category>-`; plan 274's `listStreamsInCategory` (a constructor keiro would have added to
-kiroku itself) is withdrawn, and its `pm list` cursor becomes an opaque `pm-list` token over
-the last stream name instead of a numeric stream id. Neither milestone starts until
-`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` lists a 0.10
-release whose `Kiroku.Store.Read` exports `listStreams` (the 2026-09-30 state is 0.9.0.1 with
-no listing, and every keiro package pins `>=0.9.0.1 && <0.10`). The bound bump to
-`>=0.10 && <0.11` in `keiro-core`, `keiro`, `keiro-migrations`, `keiro-test-support`,
-`keiro-dsl`, `keiro-ops`, `keiro-ops-http`, and the `mori.dhall` dependency entries is done
-once by whichever of the two milestones executes first; a local `cabal.project.local` overlay
-may be used to compile against the kiroku checkout but is never committed. Keiro issues no SQL
-against kiroku's schema and performs no event scan to discover streams.
+**The kiroku listing primitive and the `kiroku-store` bound** (upstream owner `mori://shinzui/kiroku/packages/kiroku-store`; consumers EP-3 M4 and EP-4 M5). Use the verified released substrate and raw-row continuation contract above. The workspace already carries the necessary 0.11 bound; do not lower it. EP-3 owns the first consumer integration proof; EP-4 reuses the verified API. Keiro issues no SQL against kiroku's private schema and scans no event history to discover streams.
 
 **Migration numbers** (EP-2 adds `keiro_workflows_created_idx`; EP-4 may add a pending-timer
 index if its Milestone 0 says go; plan 299 outside this MasterPlan also adds one). Shared
@@ -480,8 +396,7 @@ and applies one CORS policy to every mounted surface, adding headers only to res
 not already carry them. Keiro's own surface is mounted at `/keiro` as `opsApplicationWithFeeds`
 (or `opsApplication` before EP-5 lands), so `/keiro/health` and `/keiro/ws` are its composed
 paths. This is why EP-1's and EP-5's routes match relative paths and carry no absolute URLs,
-and why EP-5's WebSocket endpoint checks `requestPath == "/ws"` on the rewritten request rather
-than on any configured mount path.
+and why EP-5 matches WAI `pathInfo == ["ws"]` after stripping the mount, preserving query strings and raw suffix bytes.
 
 Cross-plan decisions that should become ADRs: the composition boundary (EP-6 writes it:
 prefix routing only, one CORS policy, no re-serving), the transport decision (EP-1 writes it),
@@ -491,6 +406,10 @@ consequences paragraph naming the shipped package and the release that carried i
 
 
 ## Progress
+
+- [x] (2026-10-13) Reviewed all seven child plans against runtime source and released upstream APIs; corrected hot-path, feed, pagination, dependency, and closure contracts. No implementation or performance result is claimed.
+- [ ] EP-7: pass the matched disabled/idle/active inspection interference and retention gates before release.
+
 
 Track milestone-level progress across all child plans. Each entry names the child plan
 and the milestone. This section provides an at-a-glance view of the entire initiative.
@@ -509,13 +428,13 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-3 (278) M0 and M1: preflight; `hydrateWithSource` and `observeSnapshotRow`.
 - [ ] EP-3 (278) M2: `Keiro.Inspection.Aggregate` with fold-equivalence tests.
 - [ ] EP-3 (278) M3: `AppHooks.aggregates`, the `aggregate` domain, and the jitsurei inspectors.
-- [ ] EP-3 (278) M4 (gated on `kiroku-store` 0.10.0.0): `listAggregates` and `aggregate list`.
+- [ ] EP-3 (278) M4: `listAggregates` and `aggregate list`.
 - [ ] EP-3 (278) M5: documentation, capability records, changelogs, IR-28 evidence, ADR.
-- [ ] EP-4 (274) M0 and M1: validation gate; reaction provenance on the manager-state append.
+- [ ] EP-4 (274) M0 and M1: validation gate; bounded opt-in reaction provenance, disabled by default.
 - [ ] EP-4 (274) M2: `Keiro.ProcessManager.Inspect`, the instance view, `AppHooks.processManagers`, `pm show`.
 - [ ] EP-4 (274) M3: `findPendingTimers` and `timer pending list`.
 - [ ] EP-4 (274) M4: shard ownership views, `shard list`, and the extended `shard status`.
-- [ ] EP-4 (274) M5 (gated on `kiroku-store` 0.10.0.0): `listProcessManagerInstances` and `pm list`.
+- [ ] EP-4 (274) M5: `listProcessManagerInstances` and `pm list`.
 - [ ] EP-4 (274) M6: documentation, capability records, changelogs, IR-29 evidence, ADR.
 - [ ] EP-5 (277) M1: the paired `keiro-ops` commands and encoders.
 - [ ] EP-5 (277) M2: the paired poll routes through the transport; WebSocket dependencies added.
@@ -526,12 +445,18 @@ and the milestone. This section provides an at-a-glance view of the entire initi
 - [ ] EP-6 (302) M2: keiro plus kiroku-metrics composed end to end, including WebSocket through a prefix.
 - [ ] EP-6 (302) M3: the example executable and the composition guide.
 - [ ] EP-6 (302) M4: capability record, changelogs, ADR, IR-31 evidence.
-- [ ] EP-7 (303) M1: preflight: gates, gated milestones, versions, and bounds.
+- [ ] EP-7 (303) M1: preflight: all implementation and performance gates, versions, and bounds.
 - [ ] EP-7 (303) M2: the lockstep release of eight packages.
 - [ ] EP-7 (303) M3: clean-consumer proof and request completion.
 
 
 ## Surprises & Discoveries
+
+- (2026-10-13) `Keiro.Wake.wakeSignalFromStore` duplicates an unbounded `TChan` once per call. Sharing that returned signal makes drivers consume each other's ticks; keeping it idle can retain a notification backlog. EP-5 now owns a continuously drained broadcast epoch while views exist, and drops the cursor at zero views.
+- (2026-10-13) Plan 275 added library pages but left CLI commands draining whole histories. Plan 276 cannot derive missing routes from those APIs. The `wf inspect` subtree closes the hand-off.
+- (2026-10-13) Existing `runTransaction` uses ReadCommitted in `mori://shinzui/kiroku/packages/kiroku-store`; two statements in a transaction do not establish one row snapshot. Database clock consistency and snapshot consistency are separate claims.
+- (2026-10-13) Existing command benchmarks use `snapshotPolicy = Never`; the 25% historical threshold cannot prove diagnostic hydration is allocation-neutral on snapshot hits. ADR-41 also defines a newer reaction identity family absent from plan 274's original design.
+
 
 Document cross-plan insights, dependency changes, scope adjustments, or unexpected
 interactions between child plans. Provide concise evidence.
@@ -555,6 +480,10 @@ interactions between child plans. Provide concise evidence.
 
 
 ## Decision Log
+
+- Decision (2026-10-13): replace create-first shared ownership with explicit code prerequisites; expose bounded workflow commands; keep inspection work within explicit budgets and measured writer-interference limits. Reaction provenance is opt-in and bounded; hydration diagnostics are absent from ordinary command results. Rationale: these are concrete hot-path and correctness risks in the reviewed plans, not measured regressions in shipped code.
+- Decision (2026-10-13): require all listing milestones and real composition tests before cohort closure. Rationale: released kiroku 0.11 already provides listing, and a partial delivery cannot satisfy the advertised initiative.
+
 
 - Decision: Adopt plans 274 through 278 as children instead of rewriting them, and settle
   the shared decisions here with targeted cascade edits and a dated coordination note in each.
@@ -629,9 +558,21 @@ interactions between child plans. Provide concise evidence.
 
 ## Outcomes & Retrospective
 
+Review validation (2026-10-13 local date): the ADR profile type-check and `just adr-validate` passed in `nix develop` (50 concepts); all eight plans passed tagged-fence, required-section and newly added local-link checks; `git diff --check` passed. ADR-40 now carries the durable isolation requirements. Only planning documents changed; no runtime benchmark, build, or implementation acceptance is claimed.
+
+
+2026-10-13 review/update: the coordination and acceptance contracts have been corrected. All implementation plans remain Not Started. The pre-update review was changes-requested; the changes below address that design review, while runtime performance remains unproven until the specified gates run. MasterPlan 45 and plans 302/303 were authored by `claude-fable-5-1`; adopted plans 274–278 have unknown original authorship and a recorded revision by that model. None had a plan-level review before this pass.
+
+
 Summarize outcomes, gaps, and lessons learned at major milestones or at completion.
 Compare the result against the original vision. Before marking the MasterPlan complete,
 distill durable project context from this MasterPlan and its child ExecPlans into
 docs/adr/. Keep task-local execution and coordination details here.
 
 (To be filled during and after implementation.)
+
+
+## Revision notes
+
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

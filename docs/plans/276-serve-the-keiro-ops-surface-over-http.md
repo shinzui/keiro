@@ -13,6 +13,17 @@ provenance:
       at: 2026-09-30T23:43:13Z
       mode: "update"
       note: "Adopted by MasterPlan 45: version and bounds from the working tree, ADR-40 cited, mount-relative routes for plan 302, CORS-once under composition"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: per-request catalog scans share runtime capacity; request and execution budgets are absent; preview transcript contradicts disabled mutations."
 ---
 
 # Serve the keiro-ops surface over HTTP
@@ -50,8 +61,7 @@ curl -s -X POST http://127.0.0.1:9092/outbox/maintenance-pass
 ```
 
 The first prints exactly what `keiro-ops --database-url "$DATABASE_URL" wf list --json` prints.
-The second prints a JSON object whose `outcome` is `"preview"` and whose `result` is the same
-preview the CLI renders; nothing in the database changes.
+The second returns 403 `mutations_disabled`. Restart with `--enable-mutations` to request a preview; only a subsequent explicitly confirmed invocation executes it.
 
 This plan implements [IR-26, Serve the keiro-ops surface over HTTP](../improvement-requests/serve-the-keiro-ops-surface-over-http.md)
 (canonical handle `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`), one of the
@@ -66,6 +76,10 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 
 ## Progress
+
+- [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
+- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+
 
 - [x] Planning: IR-26 records this plan (`## Planning` section and a bundle log entry,
       2026-09-10); the request stays `proposed` until implementation evidence exists.
@@ -86,10 +100,16 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Surprises & Discoveries
 
+2026-10-13 source review: SchemaCheck scans catalog definitions for two schemas per admitted request. Pool reuse does not remove that cost; bounded concurrency, execution/cancellation and byte limits are required.
+
+
 (None yet.)
 
 
 ## Decision Log
+
+- Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: SchemaCheck scans catalog definitions for two schemas per admitted request. Pool reuse does not remove that cost; bounded concurrency, execution/cancellation and byte limits are required. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
+
 
 - Decision: Name the package `keiro-ops-http` and lay it out as a sister package
   (`keiro-ops-http/`) that depends on `keiro-ops`, never the reverse.
@@ -282,10 +302,22 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Outcomes & Retrospective
 
+2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
+
+
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
+
+### Review baseline and implementation boundary (2026-10-13)
+
+This plan was reviewed against Keiro commit `cbcc593df2445780e2c42406c6b633ae530fb8ea`. Keiro is now 0.20.0.0 and already depends on released `kiroku-store ^>=0.11.0.0`; historical September version statements and Decision Log entries below are historical evidence, not instructions to downgrade. Hackage source and upstream tag `kiroku-store-v0.11.0.0` confirm the four-argument, `BrowsePageSize`-bounded listing API. Recheck the registry and upstream tags before changing bounds. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now also requires bounded inspection work and measured hot-path isolation.
+
+Shared implementation has one owner: plan 275 creates the cursor codec, plan 278 creates source-reporting hydration, plan 274 creates pending-timer reads, and plan 276 creates the transport and admission budget. Consumers wait for those artifacts; they do not implement an absent owner's module. The old create-first instructions are withdrawn. The hard prerequisites for this plan are none.
+
+Application constructors allocate resources once in IO and return a bare WAI application: `opsApplication` and `opsApplicationWithFeeds` now return `IO Application`. Bind their results once during startup, never construct a new admission budget for each request. Pure composition still takes ordinary `Application` values. Per-request schema verification, handler execution, and feed refreshes share a bounded inspection budget; they must never use the writer's reserved pool capacity by default.
+
 
 ### The repository and its build
 
@@ -511,59 +543,11 @@ Cross-repository, cited by the exact handles Mori returns:
 
 ### Coordination under MasterPlan 45 (2026-09-30)
 
-This plan is EP-1 of
-[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
-the foundation of its first wave. The MasterPlan's Integration Points settle every artifact
-this plan shares with its siblings; the settled facts that touch this plan are restated here so
-the plan stays self-contained.
+This plan is coordinated by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md). Hard prerequisites: none; bounded workflow routes become available when 275 lands. The 2026-10-13 Integration Points are the current contracts; older dated Decision Log and Revision notes preserve history, not alternative implementation instructions.
 
-The package version equals the working tree's shared version at the moment the package is
-created (0.19.0.0 on 2026-09-30; the `0.16.0.0` that appears in this plan's snippets and in
-the superseded Decision Log entry was the version when the plan was written), with `^>=`
-bounds on the sibling packages at that same version. The `kiroku-store` bound is copied from
-`keiro-ops/keiro-ops.cabal` at that moment (`>=0.9.0.1 && <0.10` on 2026-09-30); plans 274
-and 278 later move it to `>=0.10 && <0.11` in every package, including this one, when
-`kiroku-store` 0.10.0.0 ships with the stream-listing primitive their listing milestones wait
-for.
+Plan 275 creates `Keiro.Inspection.Cursor` and `Keiro.Ops.Parse.cursorReader`; 278 creates source-reporting hydration; 274 creates the pending-timer read and encoder; 276 creates the shared inspection budget and HTTP application; 277 consumes these and owns bounded feeds; 302 composes allocated applications; 303 requires all work and measured interference gates before closure. Consumers import these interfaces after their prerequisites, never create competing implementations. Every child preserves existing hooks while extending them.
 
-[ADR 40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md)
-(`mori://shinzui/keiro/okf/adrs/concepts/ADR-40`) now exists and is the stance decision, so the
-new ADR this plan writes in Milestone 5 and the runbook cite it by relative path and by that
-handle; the "if the stance ADR does not exist" branch of the IR-32 decision in the Decision
-Log no longer applies. OKF handles are allocated with `okf id next` at creation, never copied
-from a plan: on 2026-09-30 the next free handles were `CAP-20`, `ADR-49`, and `DOC-29` in
-`docs/guides`. Plan 278 also expected `CAP-20`, so whichever plan creates its capability record
-first takes it and the other takes the next.
-
-Plan 277 (EP-5) mounts WebSocket feeds onto `opsApplication` through `websocketsOr` as
-`Keiro.Ops.Http.opsApplicationWithFeeds`, adds `websockets` and `wai-websockets` to this
-package's dependencies, and serves the feeds from this plan's standalone executable. Plan 302
-(EP-6) adds `Keiro.Ops.Http.Compose` to this package and mounts `opsApplication` (or
-`opsApplicationWithFeeds`) at the path prefix `/keiro` behind `composeSurfaces`, so
-`/keiro/health` is the composed health path. That mounting imposes two constraints this plan
-already satisfies and must keep: every route matches `pathInfo` relative to the mount, and no
-response carries an absolute URL. Under composition the composed layer applies one CORS policy
-and adds CORS headers only to responses that do not already carry them, so a host may mount
-this application with `allowedOrigins = []` and configure origins once on the composed server;
-this package's own `corsMiddleware` stays as designed for standalone use. Plan 302's example
-executable sits behind a manual, default-off cabal flag and its test suite depends on
-`kiroku-metrics`; neither changes the install plan that this plan's acceptance-5 check
-inspects, because that check reads library components of the existing packages only.
-
-The commands the sibling plans add become routes with no transport change, because endpoints
-are derived from the parser: plan 274 adds `pm show`, `pm list`, `timer pending list`, and
-`shard list`; plan 275 adds paging to `wf show`, `wf steps`, and `wf journal`; plan 277 adds
-`projection status`; plan 278 adds `aggregate types`, `aggregate list`, `aggregate show`, and
-`aggregate snapshot`. Nothing here depends on them landing first. Plan 275's hand-off contract
-(query keys `status_class`, `workflow_name`, `created_since`, `ordering`, `limit`, `from`,
-error codes `invalid_page_size` and `invalid_cursor`) is satisfied by the generic mapping for
-the query keys; the two library error codes are inside the command's own failure text today
-and become distinct HTTP codes only when `keiro-ops` gains typed failures, which is noted as
-follow-up work in the runbook. Plan 303 (EP-7) dates the changelog entries this plan leaves
-under `## [Unreleased]`, verifies the release-skill, `justfile`, and `README.md` entries that
-Milestone 5 adds rather than redoing them, and publishes `keiro-ops-http` eighth in the
-lockstep release.
-
+Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `listStreams` takes category, prefix, cursor and `BrowsePageSize`. The compatible released metrics surface is 0.3.0.0. Verify the registry and upstream tags again at implementation, retain supported current bounds, and do not defer listings on the obsolete 0.10 release gate. Allocate migration numbers and OKF handles at implementation. Strict ADR-40 and ADR-28 boundaries apply.
 
 ## Plan of Work
 
@@ -733,6 +717,8 @@ module Keiro.Ops.Http.Config
   ( MutationPolicy (..),
     SchemaDriftPolicy (..),
     OpsHttpConfig (..),
+    InspectionLimits (..),
+    defaultInspectionLimits,
     defaultOpsHttpConfig,
     OpsHttpServerConfig (..),
     defaultOpsHttpServerConfig,
@@ -754,11 +740,18 @@ data OpsHttpConfig = OpsHttpConfig
     schemaDrift :: !SchemaDriftPolicy,
     -- | Exact origins (scheme, host, port) that receive CORS headers.
     -- Empty means CORS is disabled and no CORS header is ever sent.
-    allowedOrigins :: ![Text]
+    allowedOrigins :: ![Text],
+    inspectionLimits :: !InspectionLimits
   }
   deriving stock (Eq, Show)
 
-defaultOpsHttpConfig :: OpsHttpConfig   -- MutationsDisabled, RefuseOnDrift, []
+-- Host overrides must validate all values as positive at startup.
+data InspectionLimits = InspectionLimits
+  { maxConcurrentReads :: !Int, readDeadlineSeconds :: !Int,
+    statementTimeoutMillis :: !Int, maxResponseBytes :: !Int,
+    maxRequestBytes :: !Int }
+defaultInspectionLimits :: InspectionLimits -- 4, 5, 2000, 1048576, 16384
+defaultOpsHttpConfig :: OpsHttpConfig -- MutationsDisabled, RefuseOnDrift, [], defaultInspectionLimits
 
 -- | How the convenience runner binds. Port 0 asks the OS for a free port.
 data OpsHttpServerConfig = OpsHttpServerConfig
@@ -793,10 +786,9 @@ data RouteError
   | ReservedQueryKey !Text           -- json, force, database_url, allow_schema_drift, help
   deriving stock (Eq, Show)
 
--- | Every long name in the parser tree that is a boolean flag (a 'FlagReader'),
--- collected by descending into every 'CmdReader' subcommand. Computed once per
--- application from @commandParser hooks@.
-flagNames :: Parser a -> Set Text
+-- | Boolean option names for the subcommand selected by the supplied path.
+-- Derive the subcommand metadata once at startup, never union sibling grammars.
+flagNames :: Parser a -> [Text] -> Set Text
 
 -- | Path segments become command words and positional arguments in order; query
 -- items become options. A key @foo_bar@ becomes @--foo-bar@. A key in 'flagNames'
@@ -816,10 +808,7 @@ data ParseOutcome
 parseArguments :: AppHooks -> [Text] -> ParseOutcome
 ```
 
-Implement `flagNames` with `Options.Applicative.Common.mapParser (\_ opt -> namesOf opt)`
-where `namesOf` inspects `optMain opt`: for `FlagReader names _` return the `OptLong` names;
-for `CmdReader _ commands` recurse into `infoParser` of each command's `ParserInfo` and
-concatenate; for anything else return nothing; then take the union. Implement
+Implement `flagNames` by deriving subcommand metadata from the parser once, then selecting only the command path and its inherited options. Consult the Mori-located released optparse source before implementing this traversal; do not assume option names have uniform arity across siblings. Keep the final CLI parser authoritative for arity and validity. Implement
 `parseArguments` with `execParserPure defaultPrefs (info (commandParser hooks) fullDesc)
 (map Text.unpack arguments)` and render a `Failure` with `renderFailure failure "keiro-ops"`
 (first component of the pair). The reserved keys are refused before translation so a request
@@ -835,10 +824,7 @@ Create `keiro-ops-http/test/Main.hs` with hspec and, for this milestone, a pure 
 (`[("min_age", Just "5m")]` yields `--min-age=5m`); repeated keys keep order; a flag key with
 `true` yields the bare flag and with `false` yields nothing; a flag key with `yes` is
 `InvalidFlagValue`; an empty segment, a segment starting with `-`, a key with a hyphen or an
-upper-case letter, and each reserved key are rejected; `flagNames (commandParser
-emptyAppHooks)` contains `skip-preflight` and does not contain `limit`; and
-`flagNames (commandParser embeddedHooks)` additionally contains `full` and
-`include-snapshots` (define `embeddedHooks` exactly as `keiro-ops/test/Main.hs` does).
+upper-case letter, and each reserved key are rejected. Check route-specific flag selection against the actual CLI parsers, including two test subcommands that reuse an option name with different arity. Repeated single-value options preserve order. The legacy `wf list --after NAME ID` has a positional ID: prove the equivalent path/query translation through the real parser; the new inspection cursor is one value and requires no special case.
 Finally, `parseArguments emptyAppHooks ["wf","list","--limit=abc"]` is `Rejected` and
 `parseArguments emptyAppHooks ["wf","list"]` is `Parsed`, with `isMutation` `False`, while
 `["outbox","maintenance-pass"]` parses with `isMutation` `True`.
@@ -847,9 +833,18 @@ Commit as `feat(ops-http): scaffold keiro-ops-http with request translation`.
 
 ### Milestone 3: the WAI application
 
+Create `Keiro.Ops.Http.Budget` (this plan owns the shared module) and allocate its handle once in the now-IO `opsApplication` constructor. The default admission limit is 4 active jobs, shared across schema checks, handlers and feed refreshes; an excess HTTP request gets 503 `inspection_busy` without entering an unbounded queue or touching SQL. EP-5's `opsApplicationWithFeeds` reuses the feed handle's same budget through an internal constructor instead of allocating another one. Keep schema verification before every admitted operation; measure its full catalog-scan cost.
+
+Default read deadline is 5 seconds including schema verification, query and result encoding; set inspection database statements to a 2-second timeout on inspection-owned connections and reset connection-local settings before reuse. Return `inspection_timeout` explicitly. Cancel and join timed-out work, release connections/permits exception-safely, and never swallow asynchronous cancellation in the broad exception handler. Confirmed mutations use a separately documented finite host deadline and report an ambiguous outcome on cancellation; never automatically retry a potentially committed mutation. Limit request/query input to 16 KiB, confirmation bodies to 1 KiB, cursors to 4096 encoded bytes, and encoded responses to 1 MiB. Check body limits while reading chunks, not after `strictRequestBody` has allocated an unbounded value; stop encoding at the response cap, and return `inspection_result_too_large` rather than a silently partial successful result. A handler may still perform a full replay: it is an explicit expensive operation bounded by admission and deadline, never a feed read. No claim that page count caps the size of a stored JSON value is permitted.
+
+Use a separate small inspection store/pool in the executable and composed example; embedding documents the same arrangement. Shared-pool embedding must have a host-reserved writer capacity and pass the integrated interference gate. Health requests are budgeted too. Application construction returns `IO Application` solely to allocate these resources: bind once before calling WAI/Warp. Parser metadata and flag discovery are also computed once. Read the selected command's flag grammar, not a union that assumes every option name has the same arity in every domain; test repeated options and the legacy `--after NAME ID` parser explicitly.
+
+Map EP-2's additive structured `OpsOutcome` failure variant to its stable error code; keep `Failed Text` as 422 `command_failed`. Do not use error-text matching. Compare CLI/HTTP timestamped results using the same captured result or compare stable values plus clock invariants; two real-time reads need not share timestamps. Mutation-disabled requests return 403 before preview or schema work.
+
+
 Scope: `Keiro.Ops.Http.Application` and `Keiro.Ops.Http.Cors`, plus database-backed
-in-process tests. At the end, `opsApplication config hooks store` is a complete WAI
-`Application` implementing every rule in the Decision Log. Acceptance: the test groups listed
+in-process tests. At the end, `app <- opsApplication config hooks store` allocates a complete WAI
+`Application` once implementing every rule in the Decision Log. Acceptance: the test groups listed
 at the end of this milestone pass against a fresh migrated database.
 
 Create `keiro-ops-http/src/Keiro/Ops/Http/Cors.hs`:
@@ -895,15 +890,15 @@ errorResponse :: OpsHttpError -> Response
 -- | The complete surface: the health route, then every command of
 -- @commandParser hooks@ reachable through the request mapping, wrapped in the
 -- CORS middleware from @config.allowedOrigins@.
-opsApplication :: OpsHttpConfig -> AppHooks -> KirokuStore -> Application
+opsApplication :: OpsHttpConfig -> AppHooks -> KirokuStore -> IO Application
 ```
 
-The application computes `flags = flagNames (commandParser hooks)` once, then for each
+The application builds `flagsForPath = flagNames (commandParser hooks)` once, then for each
 request proceeds in this order, stopping at the first failure:
 
 1. `pathInfo == []` answers 404 `not_found`. `pathInfo == ["health"]` with `GET` answers the
    health route (below); with another method 405.
-2. Translate `pathInfo` and the UTF-8-decoded `queryString` with `translateRequest flags`.
+2. Translate `pathInfo` and the UTF-8-decoded `queryString` with `translateRequest (flagsForPath pathInfo)`.
    A `RouteError` answers 400 `invalid_request` with `renderRouteError` as the message and
    `details = {"path": pathInfo, "query": [...]}`. A query key or value that is not valid
    UTF-8 answers 400 `invalid_request`.
@@ -918,7 +913,7 @@ request proceeds in this order, stopping at the first failure:
 5. If `mutation` and `config.mutations == MutationsDisabled`, answer 403
    `mutations_disabled` ("this surface was mounted without mutations; enable them in
    OpsHttpConfig to allow this command").
-6. If `mutation`, read the body with `strictRequestBody`. An empty body means no
+6. If `mutation`, read the body incrementally with the 1 KiB confirmation cap. An empty body means no
    confirmation. Otherwise the body must decode as a JSON object whose only key is `confirm`
    with the string value `"execute"`; any other JSON, any other key, or any other value
    answers 400 `invalid_confirmation` whose message states the exact expected body.
@@ -932,9 +927,9 @@ request proceeds in this order, stopping at the first failure:
 8. Build `OpsEnv { store, outputMode = Json, force = confirmed, schemaDrift = drift,
    allowSchemaDrift = config.schemaDrift == AllowDrift }` where `confirmed` is `True` only for
    a mutation whose body carried the confirmation, and run
-   `try (runCommand hooks env command)`. An exception answers 500 `internal_error` with
+   the budgeted `runCommand hooks env command`. Catch synchronous exceptions only; cancellation and deadline exceptions retain their semantics. An ordinary exception answers 500 `internal_error` with
    `displayException`.
-9. Render the outcome. For a read: `Succeeded result` is 200 with `result.jsonValue` as the
+9. Render the outcome. `InspectionFailed code message` maps the structured page/validation code to 400 (invalid cursor/size) or 409 (generation mismatch), including when EP-2 adds it after this plan. For a read: `Succeeded result` is 200 with `result.jsonValue` as the
    entire body; `SucceededWithExit result (ExitFailure n)` is the same plus the header
    `Keiro-Ops-Exit-Code: n`; `Failed text` is 422 `command_failed` with `text` as the
    message. For a mutation: `PreviewRequired result reinvocation` is 200 with body
@@ -1061,7 +1056,7 @@ libpq variables work as for `keiro-ops`), `--bind HOST` (default `127.0.0.1`), `
 the store with `withStore (defaultConnectionSettings connectionString)`, runs
 `verifyExpectedSchema` once and prints each drift line to stderr prefixed with `warning: `
 (as the CLI does) so an operator sees drift at startup even though every request re-checks,
-builds `opsApplication config emptyAppHooks store`, prints
+binds `app <- opsApplication config emptyAppHooks store` once, prints
 `keiro-ops-http: listening on <host>:<port> (mutations <enabled|disabled>)` to stderr, and
 runs `withOpsHttpServer` until interrupted. The executable mounts `emptyAppHooks`, so like
 the `keiro-ops` binary it serves only database-only commands; an application that wants the
@@ -1246,8 +1241,7 @@ kill %1
 ```
 
 Expected, in order: `HTTP/1.1 200 OK` with `{"status":"ok","schema_drift":[],"mutations_enabled":false}`;
-`[]`; `HTTP/1.1 200 OK` with a body whose `outcome` is `"preview"` and whose
-`cli_reinvocation` is `'keiro-ops' 'outbox' 'maintenance-pass' '--json' '--force'`; and
+`[]`; `HTTP/1.1 403 Forbidden` with `mutations_disabled`; and
 `HTTP/1.1 403 Forbidden` with `{"error":{"code":"mutations_disabled",…}}`. Re-run the server
 with `--enable-mutations` and repeat the last request to observe `"outcome":"executed"`.
 Induce drift with `psql -d keiro_ops_http_demo -c 'ALTER TABLE keiro.keiro_timers ADD COLUMN demo_drift text'`
@@ -1294,6 +1288,13 @@ failing recipe. `just verify` runs every test suite and takes long; run
 
 ## Validation and Acceptance
 
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+
+Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
+
+Add deterministic admission/cancellation tests with a deliberately blocked injected handler: the fifth concurrent request is refused before SQL; cancelling one of four releases its permit and connection; oversized bodies and responses fail within the declared memory budget; a schema check cannot escape its deadline; an idle mounted application does no recurring SQL. Induce drift after startup and prove all admitted reads, mutation previews and upgrades refuse. Assert disabled mutations return 403 regardless of drift, while enabled mutations exercise the drift check. `requestTimeoutSeconds = 300` remains an idle-network setting only, not permission for unbounded database work.
+
+
 IR-26 lists six acceptance criteria. Each maps to observable behavior and to a named test:
 
 1. Every read-only command's endpoint returns the same `jsonValue` as `keiro-ops <command>
@@ -1314,7 +1315,7 @@ IR-26 lists six acceptance criteria. Each maps to observable behavior and to a n
 5. No existing Keiro package gains a web dependency and the new package exports the bare WAI
    `Application`. Proven by the `plan.json` query and the cabal-file grep in Concrete Steps
    (both print nothing), and by `Keiro.Ops.Http.Application.opsApplication :: OpsHttpConfig ->
-   AppHooks -> KirokuStore -> Application` being an exported symbol.
+   AppHooks -> KirokuStore -> IO Application` being an exported symbol.
 6. Responses use keiro's reporting vocabulary. Proven by "reporting vocabulary", which asserts
    `store_position` and `visible_store_head` in the subscriptions body and the absence of
    `lag`, `backlog`, and `events_behind` keys in every collected body; and by
@@ -1399,7 +1400,7 @@ verifyExpectedSchemaSession :: Hasql.Session.Session (Either MigrationError [Sch
 -- Keiro.Ops.Http.Config
 data MutationPolicy = MutationsDisabled | MutationsEnabled
 data SchemaDriftPolicy = RefuseOnDrift | AllowDrift
-data OpsHttpConfig = OpsHttpConfig { mutations :: MutationPolicy, schemaDrift :: SchemaDriftPolicy, allowedOrigins :: [Text] }
+data OpsHttpConfig = OpsHttpConfig { mutations :: MutationPolicy, schemaDrift :: SchemaDriftPolicy, allowedOrigins :: [Text], inspectionLimits :: InspectionLimits }
 defaultOpsHttpConfig :: OpsHttpConfig
 data OpsHttpServerConfig = OpsHttpServerConfig { bindHost :: Text, port :: Int, requestTimeoutSeconds :: Int }
 defaultOpsHttpServerConfig :: OpsHttpServerConfig
@@ -1407,7 +1408,7 @@ defaultOpsHttpServerConfig :: OpsHttpServerConfig
 -- Keiro.Ops.Http.Route
 data RouteError = EmptyPathSegment | OptionLikePathSegment Text | InvalidQueryKey Text | InvalidFlagValue Text Text | ReservedQueryKey Text
 renderRouteError :: RouteError -> Text
-flagNames        :: Options.Applicative.Parser a -> Data.Set.Set Text
+flagNames        :: Options.Applicative.Parser a -> [Text] -> Data.Set.Set Text
 translateRequest :: Data.Set.Set Text -> [Text] -> [(Text, Maybe Text)] -> Either RouteError [Text]
 data ParseOutcome = Parsed Keiro.Ops.Command | Rejected Text
 parseArguments   :: Keiro.Ops.AppHooks -> [Text] -> ParseOutcome
@@ -1418,7 +1419,7 @@ corsMiddleware :: [Text] -> Network.Wai.Middleware
 -- Keiro.Ops.Http.Application
 data OpsHttpError = OpsHttpError { status :: Network.HTTP.Types.Status, code :: Text, message :: Text, details :: Maybe Data.Aeson.Value }
 errorResponse  :: OpsHttpError -> Network.Wai.Response
-opsApplication :: OpsHttpConfig -> Keiro.Ops.AppHooks -> Kiroku.Store.Connection.KirokuStore -> Network.Wai.Application
+opsApplication :: OpsHttpConfig -> Keiro.Ops.AppHooks -> Kiroku.Store.Connection.KirokuStore -> IO Network.Wai.Application
 
 -- Keiro.Ops.Http.Server
 data OpsHttpServer = OpsHttpServer { serverThread :: Control.Concurrent.Async.Async (), serverPort :: Int }
@@ -1477,3 +1478,5 @@ The reason for each change is that five parallel sessions planned this cohort on
 and the shared decisions, the working tree version (now 0.19.0.0), and the ADR bundle have
 moved since; the MasterPlan settles them and this plan must agree with it without ceasing to
 be self-contained.
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

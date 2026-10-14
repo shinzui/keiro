@@ -13,6 +13,17 @@ provenance:
       at: 2026-09-30T23:42:28Z
       mode: "update"
       note: "Adopted by MasterPlan 45: cursor kind registry, cursorReader placement, instanceToJson hand-off to plan 277, migration number allocation"
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: paged library reads have no CLI routes; forced-index proofs do not bound filtered scans; host clocks and generation cursors need correction."
 ---
 
 # Add cursor-paged workflow inspection reads for the HTTP surface
@@ -51,6 +62,10 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Progress
 
+- [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
+- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+
+
 - [ ] Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
       listing over `keiro_workflows` in key order and creation order, with the legacy
       `listWorkflowInstances` re-based onto the shared statements.
@@ -68,10 +83,16 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Surprises & Discoveries
 
+2026-10-13 source review: Library-only pages never become routes through the parser. Forced index use and owner-only indexes do not establish bounded filtering/sorting, and host time is not the database observation clock.
+
+
 (None yet.)
 
 
 ## Decision Log
+
+- Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Library-only pages never become routes through the parser. Forced index use and owner-only indexes do not establish bounded filtering/sorting, and host time is not the database observation clock. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
+
 
 - Decision: Scope this plan to the owning library (`keiro`) plus `keiro-ops` adoption; do
   not create the HTTP sister package or any endpoint here.
@@ -213,10 +234,22 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Outcomes & Retrospective
 
+2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
+
+
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
+
+### Review baseline and implementation boundary (2026-10-13)
+
+This plan was reviewed against Keiro commit `cbcc593df2445780e2c42406c6b633ae530fb8ea`. Keiro is now 0.20.0.0 and already depends on released `kiroku-store ^>=0.11.0.0`; historical September version statements and Decision Log entries below are historical evidence, not instructions to downgrade. Hackage source and upstream tag `kiroku-store-v0.11.0.0` confirm the four-argument, `BrowsePageSize`-bounded listing API. Recheck the registry and upstream tags before changing bounds. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now also requires bounded inspection work and measured hot-path isolation.
+
+Shared implementation has one owner: plan 275 creates the cursor codec, plan 278 creates source-reporting hydration, plan 274 creates pending-timer reads, and plan 276 creates the transport and admission budget. Consumers wait for those artifacts; they do not implement an absent owner's module. The old create-first instructions are withdrawn. The hard prerequisites for this plan are none.
+
+Application constructors allocate resources once in IO and return a bare WAI application: `opsApplication` and `opsApplicationWithFeeds` now return `IO Application`. Bind their results once during startup, never construct a new admission budget for each request. Pure composition still takes ordinary `Application` values. Per-request schema verification, handler execution, and feed refreshes share a bounded inspection budget; they must never use the writer's reserved pool capacity by default.
+
 
 ### What a durable workflow is, and the four tables behind it
 
@@ -329,51 +362,11 @@ inspection vocabulary or cursor contract today.
 
 ### Coordination under MasterPlan 45 (2026-09-30)
 
-This plan is EP-2 of
-[MasterPlan 45, Expose the keiro inspection surface for the keiro runtime UI](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md),
-which coordinates the seven plans of the keiro-ui inspection cohort: 274 (process-manager
-reads, EP-4), this plan (EP-2), 276 (the HTTP transport, EP-1), 277 (live feeds, EP-5), 278
-(aggregate reads, EP-3), 302 (composed mounting, EP-6), and 303 (the cohort release, EP-7).
-The MasterPlan's Integration Points settle every artifact this plan shares with a sibling;
-the settled forms are restated here so this plan stays self-contained.
+This plan is coordinated by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md). Hard prerequisites: none. The 2026-10-13 Integration Points are the current contracts; older dated Decision Log and Revision notes preserve history, not alternative implementation instructions.
 
-`docs/plans/270-expose-reason-bearing-dead-timer-inspection-and-bounded-reads.md` shipped the
-bounded timer reads whose conventions (validate page size, `LIMIT n+1`, immutable keys,
-observation semantics, read-only proof by column comparison) this plan reuses; it remains the
-precedent for bounded reads.
+Plan 275 creates `Keiro.Inspection.Cursor` and `Keiro.Ops.Parse.cursorReader`; 278 creates source-reporting hydration; 274 creates the pending-timer read and encoder; 276 creates the shared inspection budget and HTTP application; 277 consumes these and owns bounded feeds; 302 composes allocated applications; 303 requires all work and measured interference gates before closure. Consumers import these interfaces after their prerequisites, never create competing implementations. Every child preserves existing hooks while extending them.
 
-This plan owns `keiro/src/Keiro/Inspection/Cursor.hs` and the registry of cursor kind tags.
-The tags are plain text constants owned by the module that owns each read: `wf-key`,
-`wf-created`, `wf-steps`, `wf-journal`, `wf-children`, and `wf-awakeables` belong to this plan;
-`aggregate-list` belongs to plan 278 (EP-3); `timer-pending` and `pm-list` belong to plan 274
-(EP-4). Whichever of plans 274, 275, 277, or 278 lands first creates the module to the exact
-interface in Interfaces and Dependencies and adds `base64-bytestring >=1.2 && <1.3` to
-`keiro/keiro.cabal`; the others import it. No other cursor codec exists in keiro: plan 277's
-earlier proposal of a `Keiro.Ops.Cursor` module in `keiro-ops` and plan 274's earlier textual
-`<fire_at>/<uuid>` timer cursor are withdrawn by the MasterPlan.
-
-The one `optparse-applicative` reader that turns a `--after CURSOR` option into an
-`InspectionCursor`, `cursorReader :: ReadM InspectionCursor`, lives in
-`keiro-ops/src/Keiro/Ops/Parse.hs` beside `positiveIntReader` and is created by whichever plan
-first needs it. It only wraps the option text as an `InspectionCursor`; the library read
-validates the kind and reports `InvalidCursor`, so the CLI and the HTTP layer fail the same
-way for a foreign token.
-
-Plan 277 (EP-5, the feeds) renders its `workflows` feed items with this plan's
-`instanceToJson`, so that feed items equal `wf list` items. If plan 277 lands before this
-plan's Milestone 4, it exports the existing private `workflowInstanceJson` from
-`Keiro.Ops.Workflow` temporarily, and Milestone 4 replaces that import with `instanceToJson`
-at the moment it deletes `workflowInstanceJson`.
-
-Plan 276 (EP-1) is the transport that serves the reads this plan produces; it exists as a
-plan now, so the first Decision Log entry's rationale that no IR-26 plan existed was true on
-2026-09-10 and is historical. The hand-off contract at the end of Interfaces and Dependencies
-is still what plan 276's mechanical request translation consumes.
-[ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now
-exists and is the stance decision every child of the cohort ships under; this plan's ADR-28
-paragraph cites it. The working tree is at version 0.19.0.0 (the `0.16.0.0` figures elsewhere
-in this cohort's plans were the version on 2026-09-10). The migration this plan adds is "the
-next migration", allocated at implementation, as Milestone 2 describes.
+Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `listStreams` takes category, prefix, cursor and `BrowsePageSize`. The compatible released metrics surface is 0.3.0.0. Verify the registry and upstream tags again at implementation, retain supported current bounds, and do not defer listings on the obsolete 0.10 release gate. Allocate migration numbers and OKF handles at implementation. Strict ADR-40 and ADR-28 boundaries apply.
 
 ### Test infrastructure
 
@@ -400,8 +393,7 @@ At the end of this milestone a caller can page `keiro_workflows` in primary-key 
 newest-created-first with a documented class filter, name filter, and creation or update
 windows, receiving an opaque continuation token that is absent on the last page. Both
 orderings are correct here; the index that makes the creation ordering fast arrives in
-Milestone 2. The legacy `listWorkflowInstances` still exists with its exact signature and
-behavior but runs on the same SQL, so there is one listing implementation.
+Milestone 2. The legacy `listWorkflowInstances` keeps its exact signature and existing SQL; new inspection filters must not add CASE evaluation or wider planning work to existing callers.
 
 Create `keiro/src/Keiro/Inspection/Cursor.hs` (add it to `exposed-modules` in
 `keiro/keiro.cabal`, and add `base64-bytestring >=1.2 && <1.3` to the library
@@ -431,11 +423,11 @@ Define the query and page records exactly as written in Interfaces and Dependenc
 (`WorkflowListOrdering`, `WorkflowListQuery`, `defaultWorkflowListQuery`, `WorkflowListPage`,
 `InspectionError`) and `listWorkflowInstancesPage`. The function validates `pageSize` against
 `maxInspectionPageSize = 500`, decodes the cursor with the kind tag for the requested ordering
-(`wf-key` or `wf-created`), reads `getCurrentTime` for `observedAt`, runs the statement for
+(`wf-key` or `wf-created`), reads the database clock for `observedAt` in the row statement (including an empty-page result), runs the statement for
 the requested ordering with `LIMIT pageSize + 1`, and returns the first `pageSize` rows plus
 a cursor minted from the last returned row's key only when the extra row was present.
 
-In `keiro/src/Keiro/Workflow/Instance.hs`, replace `listWorkflowInstancesStmt` with two
+In `keiro/src/Keiro/Workflow/Instance.hs`, retain `listWorkflowInstancesStmt` and add two inspection-only
 statements, one per ordering, built by concatenating one shared filter fragment (parameters
 `$1` to `$7` below) with an ordering-specific cursor predicate, `ORDER BY`, and `LIMIT`. The
 `ByKey` statement is:
@@ -468,12 +460,7 @@ round-trips microsecond values exactly and the tuple comparison happens in SQL a
 `timestamptz` precision, so no drift is possible.
 
 The `CASE` expression must be the SQL twin of `statusClassOf`; a test in this milestone
-proves they agree on every fixture row. Keep the legacy `listWorkflowInstances` signature and
-`WorkflowInstanceFilter` record unchanged: implement it by mapping each requested
-`WorkflowStatus` to the classes it implies (`WfRunning` to `running` and `retrying`,
-`WfSuspended` to `sleeping` and `awaiting`, terminal statuses one-to-one), passing no time
-windows, and passing the caller's page size unbounded as before. Windows are half-open:
-`since` is inclusive, `before` is exclusive.
+proves they agree on every fixture row. Keep the legacy `listWorkflowInstances` signature, record and SQL unchanged. Inspection windows are half-open: `since` inclusive and `before` exclusive. Share row decoding, not a more complex optional-filter statement with runtime callers.
 
 Add a new `describe "Keiro.Workflow.Inspection"` group to `keiro/test/Main.hs` with these
 examples, seeding rows through `Instance.upsertInstanceTx` plus direct column updates
@@ -520,6 +507,11 @@ Run the focused command in Concrete Steps; all examples pass and the pre-existin
 groups are unaffected.
 
 ### Milestone 2: The creation-order index
+
+A row limit bounds response cardinality, not query work. Keep reproducible fixtures and EXPLAIN transcripts outside the fast unit suite. Seed 10,000 and 100,000 rows with skew (one owner has 90% of rows, rare/absent filters, and many equal timestamps), ANALYZE, and measure first and deep pages with `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` using the actual parameterized query under both `force_custom_plan` and `force_generic_plan`. Run with normal planner settings; `enable_seqscan = off` is a diagnostic only, never acceptance. Record rows examined, rows removed by filter, sort memory/spill, buffers, planning/execution time and query count. Separate absent/present-filter statement shapes where nullable-OR predicates defeat ordered index access. A repeatable dashboard query that scans or sorts the whole ledger at each refresh is not accepted merely because it returns 501 rows. Either provide an evidence-backed matching index, bound the supported filter workload and deadline explicitly, or keep that shape out of automatic feeds. Measure schedule/claim/resume throughput, WAL and HOT-update behavior before and after every index. An immutable index key does not guarantee that index maintenance costs zero on non-HOT updates.
+
+The proposed creation index supports unfiltered creation order but does not prove bounded cost for rare status/name/update-window filters or key-order sorting. Inspect those shapes separately. For child and awakeable pages, owner-only indexes still sort all of one owner's rows; measure owners with 100,000 children/awakeables and evaluate `(parent_id,parent_name,created_at,child_id,child_name)` and `(owner_workflow_name,owner_workflow_id,created_at,awakeable_id)` indexes. Add only indexes justified by the read/write experiment, allocated through normal migrations. Do not claim one index serves every order or that a creation index is never maintained on updates.
+
 
 At the end of this milestone the creation ordering and creation windows from Milestone 1 are
 served by an index, proven by `EXPLAIN`, and the migration suite, lockfile, and native
@@ -580,13 +572,7 @@ and inserts and reads back one instance row to show the table is unaffected. Add
 Unreleased entry to `keiro-migrations/CHANGELOG.md` in the style of the 0.16.0.0 entry for
 0032, naming the allocated number.
 
-Add one test to the inspection group, "plans the creation-order listing through
-keiro_workflows_created_idx": mirror the discovery-index example (`SET LOCAL enable_seqscan = off`,
-then `EXPLAIN (FORMAT TEXT)` of the literal `ByCreatedDesc` query with a bound creation window
-and the DESC ordering) and assert the plan text contains `keiro_workflows_created_idx`; then
-`EXPLAIN` the same query with only a `created_at >= ...` window and the key ordering and
-assert the index is still named, because the window alone is served by it. The test carries
-its own literal SQL, as the discovery test does, so the library statement text stays private.
+Verify the index exists and preserves row semantics in the migration test. The normal-planner, actual-parameterized-query experiments above supply the performance evidence; do not assert that key-order queries must name the creation-order index or use forced index selection as acceptance.
 
 ### Milestone 3: Paged detail reads
 
@@ -609,11 +595,10 @@ existing `lookupChildrenOfParent` shape, and keep every existing function unchan
 
 In `Keiro.Workflow.Inspection` add the four page queries and page types from Interfaces and
 Dependencies and their functions `readWorkflowJournalPage`, `loadStepIndexPage`,
-`listWorkflowChildrenPage`, and `listWorkflowAwakeablesPage`. Generation resolution is
-shared: `Nothing` means `currentGeneration name wid`. The journal page reads
+`listWorkflowChildrenPage`, and `listWorkflowAwakeablesPage`. Generation resolution is shared: on the first page, `Nothing` means `currentGeneration name wid`; decode and validate subsequent cursor generation and owner before reading. If an implicit current generation changed, return `CursorGenerationMismatch` and let the client retry with an explicit generation. Journal cursors carry `[workflow_name, workflow_id, generation, stream_version]`; step cursors carry `[workflow_name, workflow_id, generation, step_name]`. Match the owner as well as the kind and reject nonpositive/out-of-range payloads before SQL. The journal page reads
 `readStreamForward (workflowGenerationStreamName name wid gen) (StreamVersion from) (pageSize + 1)`
 where `from` is `0` without a cursor (kiroku's cursor is exclusive and the first event has
-version 1, so `0` reads from the beginning) and the cursor payload is the last returned
+version 1, so `0` reads from the beginning) and the cursor payload includes owner, resolved generation and the last returned
 event's `streamVersion`. Each recorded event is decoded with
 `Keiro.Codec.decodeRecorded workflowJournalCodec`; a decode failure throws
 `WorkflowJournalDecodeError` (see the Decision Log). Build `WorkflowJournalEntry` exactly as
@@ -652,6 +637,11 @@ by hand where the runtime can produce them:
    `WorkflowJournalDecodeError`.
 
 ### Milestone 4: Canonical JSON rendering and keiro-ops adoption
+
+Add read-only `wf inspect list`, `wf inspect header NAME ID`, `wf inspect journal NAME ID`, `wf inspect steps NAME ID`, `wf inspect children NAME ID`, and `wf inspect awakeables NAME ID`. These call exactly one new library page (header does only `lookupInstance`) and return its JSON unchanged. List flags are repeatable `--status-class`, `--workflow-name`, half-open `--created-since/--created-before` and `--updated-since/--updated-before`, `--ordering key|created_desc`, `--limit` and `--after`; journal/steps also take `--generation`. Use `cursorReader`, validate before SQL, and cover all six commands through the parser, `isMutation`, and handler tests. EP-1 then serves `/wf/inspect/...` mechanically, using these same option names in snake_case. Legacy `wf list/show/steps/journal` remain compatible and may be expensive; a browser uses the bounded subtree. Typed page failures require `InspectionFailed !Text !Text` in `OpsOutcome` (stable code and message; owned by EP-2, with updates to CLI rendering and all matches) so EP-1 maps `invalid_page_size`, `invalid_cursor`, and `cursor_generation_mismatch` without parsing error text. Existing `Failed Text` remains supported. If EP-1 already exists, this milestone updates its outcome match and HTTP tests; otherwise EP-1 consumes the variant when it lands. The variant introduces no HTTP dependency in `keiro-ops`.
+
+Header/page rendering equality tests compare values from one injected/captured library result. Independent calls with different `observed_at` timestamps cannot be byte-equal. Integration tests compare stable fields and separately assert clock/age relations. Do not discard real state differences to force equality.
+
 
 At the end of this milestone the library owns the snake_case JSON rendering of every
 inspection value, `keiro-ops` renders through it, `wf show` no longer performs an N+1
@@ -828,6 +818,11 @@ suites green.
 
 ## Validation and Acceptance
 
+A row limit bounds response cardinality, not query work. Keep reproducible fixtures and EXPLAIN transcripts outside the fast unit suite. Seed 10,000 and 100,000 rows with skew (one owner has 90% of rows, rare/absent filters, and many equal timestamps), ANALYZE, and measure first and deep pages with `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` using the actual parameterized query under both `force_custom_plan` and `force_generic_plan`. Run with normal planner settings; `enable_seqscan = off` is a diagnostic only, never acceptance. Record rows examined, rows removed by filter, sort memory/spill, buffers, planning/execution time and query count. Separate absent/present-filter statement shapes where nullable-OR predicates defeat ordered index access. A repeatable dashboard query that scans or sorts the whole ledger at each refresh is not accepted merely because it returns 501 rows. Either provide an evidence-backed matching index, bound the supported filter workload and deadline explicitly, or keep that shape out of automatic feeds. Measure schedule/claim/resume throughput, WAL and HOT-update behavior before and after every index. An immutable index key does not guarantee that index maintenance costs zero on non-HOT updates.
+
+Acceptance also requires parsed CLI invocations for all six `wf inspect` commands, bounded handler query counts and results, and the sibling transport's end-to-end page traversal. With 100,000 children, the header command reads only the instance row; page routes never drain all children or generations. Generation rotation between pages and cross-owner cursor reuse must return the documented mismatch rather than mix histories. Retain legacy rendering tests separately; a compatibility route that drains pages must remain inside the HTTP execution/response budget.
+
+
 IR-30 acceptance item 1 (complete, stable paging by status class): with 23 seeded instances
 and `pageSize = 5`, five pages under `ByKey` return every instance exactly once in key order
 and only the fifth page lacks `nextCursor`; with 12 instances, three pages under
@@ -852,12 +847,7 @@ IR-30 acceptance item 5 (no ad-hoc SQL): every new statement lives in the schema
 owns its table, and `keiro-ops` contains no SQL; a reviewer verifies this by reading the diff
 of `keiro-ops/src/Keiro/Ops/Workflow.hs`, which only deletes private decoding code.
 
-Performance: the `EXPLAIN` examples prove the creation-order listing and creation windows use
-`keiro_workflows_created_idx`, and the step, child, and awakeable pages are bounded by their
-owning primary or parent indexes. `wf show` issues one page query per 500 awakeables instead
-of one `loadStepIndex` per generation plus one lookup per awakeable. Every page fetches at
-most 501 rows. Record the plan text of each `EXPLAIN` in Surprises & Discoveries if it differs
-from expectation.
+Performance acceptance is the realistic prepared-query and write-cost proof above. The old forced-index tests may remain as smoke tests but do not establish bounded scan or sort cost. At most 501 returned rows is a cardinality bound only.
 
 Read-only behavior: the column-comparison example proves no listing changes any instance
 row, and the discovery query returns the same set before and after.
@@ -1036,8 +1026,8 @@ instance ToJSON WorkflowAwakeablePage
 
 The cursor payloads and kind tags, which the HTTP layer never needs to know but a debugger
 will: `wf-key` carries `[workflow_name, workflow_id]`; `wf-created` carries
-`[created_at, workflow_name, workflow_id]`; `wf-steps` carries `[generation, step_name]`;
-`wf-journal` carries `[generation, stream_version]`; `wf-children` carries
+`[created_at, workflow_name, workflow_id]`; `wf-steps` carries `[workflow_name, workflow_id, generation, step_name]`;
+`wf-journal` carries `[workflow_name, workflow_id, generation, stream_version]`; `wf-children` carries
 `[created_at, child_id, child_name]`; `wf-awakeables` carries `[created_at, awakeable_id]`.
 The generation inside a journal or step cursor must equal the page's resolved generation,
 otherwise `CursorGenerationMismatch resolved cursorGeneration` is returned, so a
@@ -1048,17 +1038,10 @@ Schema-module additions (all `Eff`-level, read-only, mirroring the existing look
 `Keiro.Workflow.Schema.loadStepIndexPage :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Maybe Text -> Int -> Eff es [WorkflowStepRow]`,
 `Keiro.Workflow.Child.Schema.lookupChildrenOfParentPage :: (Store :> es) => Text -> Text -> Maybe (UTCTime, Text, Text) -> Int -> Eff es [ChildRow]`,
 `Keiro.Workflow.Awakeable.Schema.lookupAwakeablesOfOwnerPage :: (Store :> es) => Text -> Text -> Maybe (UTCTime, UUID) -> Int -> Eff es [AwakeableRow]`,
-and in `Keiro.Workflow.Instance` the two ordering statements behind a private
-`listInstancesBy` that `listWorkflowInstances` (unchanged signature) and
-`listWorkflowInstancesPage` both call. All existing exports of these modules keep their
+and in `Keiro.Workflow.Instance` separate inspection-only ordering statements and shared row decoding. The legacy `listWorkflowInstances` retains its original SQL and does not call the richer inspection statement. All existing exports of these modules keep their
 signatures and behavior.
 
-Hand-off contract for the IR-26 plan (not implemented here): each read maps to one GET route
-whose query parameters are the query record's fields in snake_case (`status_class`
-repeatable, `workflow_name`, `created_since`, `created_before`, `updated_since`,
-`updated_before`, `ordering` in `key` or `created_desc`, `limit`, `from`), whose body is the
-page's `ToJSON` rendering verbatim, and whose `InvalidPageSize` and `InvalidCursor` results
-become the conventions' error envelope with codes `invalid_page_size` and `invalid_cursor`.
+Hand-off contract: this plan implements the bounded `wf inspect` command subtree and typed failures in M4. Plan 276 parses these commands mechanically into `/wf/inspect/...` routes, preserving page JSON, using `after` for the opaque cursor, and mapping the structured failure codes. No library-only endpoint hand-off remains. Plan 277 consumes `listWorkflowInstancesPage`, `instanceToJson` and `/wf/inspect/list`; its filter field is repeatable `status_class` over the seven classes, not legacy `statuses`.
 
 Dependency sources consulted through Mori: kiroku-store at
 `mori://shinzui/kiroku/packages/kiroku-store` (`Kiroku.Store.Read.readStreamForward` takes an
@@ -1082,3 +1065,5 @@ free number on 2026-09-10, and plans 274 and 299 also add migrations); Interface
 Dependencies lists the registered kind tags and the `cursorReader` signature. Why: the five
 request plans were written in parallel and disagreed on these artifacts, and the MasterPlan
 settles them once so each plan stays independently implementable.
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

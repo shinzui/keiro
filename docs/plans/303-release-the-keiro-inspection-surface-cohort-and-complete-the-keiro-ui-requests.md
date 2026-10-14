@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-30T23:35:20Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: 25-percent benchmark tolerance is insufficient; partial plans cannot be marked Complete and listing release gate is stale."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
 ---
 
 # Release the keiro inspection surface cohort and complete the keiro-ui requests
@@ -44,14 +56,13 @@ Progress, and Outcomes are final; and the durable lessons of the initiative are 
 in Milestone 3, which prints keiro's health body from a process that links only released
 packages.
 
-This plan is EP-7 of MasterPlan 45 and hard-depends on EP-1 through EP-6. It does not wait
-for the two kiroku-gated listing milestones (plan 274 Milestone 5 and plan 278 Milestone 4):
-if `kiroku-store` 0.10.0.0 is not on Hackage when Milestone 1 runs, the cohort ships without
-aggregate and process-manager listing, IR-28 and IR-29 record their item 1a as pending, and a
-follow-up release carries the listing milestones.
-
+This plan is EP-7 of MasterPlan 45 and hard-depends on all six implementation children in full. The previously deferred upstream listing primitive has shipped. An interim release with omitted requirements leaves those children, their requests, and the MasterPlan open; it is not completion of this plan.
 
 ## Progress
+
+- [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
+- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+
 
 - [ ] Milestone 1: preflight: sibling plans complete, the kiroku gate decided, the release
       surface (skill, `justfile`, `README.md`, `mori.dhall`, capability records) verified, the
@@ -65,10 +76,16 @@ follow-up release carries the listing milestones.
 
 ## Surprises & Discoveries
 
+2026-10-13 source review: Current store 0.11 already provides listing; partial release instructions conflict with Complete status and cannot discharge missing performance evidence.
+
+
 (None yet.)
 
 
 ## Decision Log
+
+- Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Current store 0.11 already provides listing; partial release instructions conflict with Complete status and cannot discharge missing performance evidence. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
+
 
 - Decision: Release all six children as one lockstep release rather than one release per
   child.
@@ -101,10 +118,22 @@ follow-up release carries the listing milestones.
 
 ## Outcomes & Retrospective
 
+2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
+
+
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
+
+### Review baseline and implementation boundary (2026-10-13)
+
+This plan was reviewed against Keiro commit `cbcc593df2445780e2c42406c6b633ae530fb8ea`. Keiro is now 0.20.0.0 and already depends on released `kiroku-store ^>=0.11.0.0`; historical September version statements and Decision Log entries below are historical evidence, not instructions to downgrade. Hackage source and upstream tag `kiroku-store-v0.11.0.0` confirm the four-argument, `BrowsePageSize`-bounded listing API. Recheck the registry and upstream tags before changing bounds. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now also requires bounded inspection work and measured hot-path isolation.
+
+Shared implementation has one owner: plan 275 creates the cursor codec, plan 278 creates source-reporting hydration, plan 274 creates pending-timer reads, and plan 276 creates the transport and admission budget. Consumers wait for those artifacts; they do not implement an absent owner's module. The old create-first instructions are withdrawn. The hard prerequisites for this plan are all six implementation plans, including both listings and real composed-feed tests.
+
+Application constructors allocate resources once in IO and return a bare WAI application: `opsApplication` and `opsApplicationWithFeeds` now return `IO Application`. Bind their results once during startup, never construct a new admission budget for each request. Pure composition still takes ordinary `Application` values. Per-request schema verification, handler execution, and feed refreshes share a bounded inspection budget; they must never use the writer's reserved pool capacity by default.
+
 
 ### The package set and the release skill
 
@@ -212,29 +241,31 @@ is the sibling procedure whose clean-consumer proof this plan mirrors.
 
 ### Coordination under MasterPlan 45
 
-Hard dependencies: EP-1 (276), EP-2 (275), EP-3 (278), EP-4 (274), EP-5 (277), EP-6 (302),
-each marked Complete in the registry, with the exception of the two kiroku-gated milestones.
-This plan owns dating the changelogs, the shared version, the release order, the upgrade edge,
-the consumer proof, request completion, and the MasterPlan's closure.
+This plan is coordinated by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md). Hard prerequisites: all six implementation children, including all listing and performance milestones. The 2026-10-13 Integration Points are the current contracts; older dated Decision Log and Revision notes preserve history, not alternative implementation instructions.
 
+Plan 275 creates `Keiro.Inspection.Cursor` and `Keiro.Ops.Parse.cursorReader`; 278 creates source-reporting hydration; 274 creates the pending-timer read and encoder; 276 creates the shared inspection budget and HTTP application; 277 consumes these and owns bounded feeds; 302 composes allocated applications; 303 requires all work and measured interference gates before closure. Consumers import these interfaces after their prerequisites, never create competing implementations. Every child preserves existing hooks while extending them.
+
+Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `listStreams` takes category, prefix, cursor and `BrowsePageSize`. The compatible released metrics surface is 0.3.0.0. Verify the registry and upstream tags again at implementation, retain supported current bounds, and do not defer listings on the obsolete 0.10 release gate. Allocate migration numbers and OKF handles at implementation. Strict ADR-40 and ADR-28 boundaries apply.
 
 ## Plan of Work
 
 ### Milestone 1: preflight
+
+Both listings are required: released `kiroku-store` 0.11.0.0 already exposes the API and the workspace already depends on it. Every implementation child must be fully complete, including real kiroku composition and Keiro WebSocket-through-prefix tests; `pendingWith`, stubs, absent routes, or an unchecked performance gate are not release-completion evidence. Keep unfinished plans and requests in progress rather than approving an exception by marking them complete.
+
+Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or allocated bytes per completed operation increase over 5% blocks the milestone. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
+
+Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
+
+EP-7 collects the per-child measurements and runs the integrated workload on the final candidate. Add a reproducible `keiro-ops-http:bench:inspection-interference` harness, seeded through supported APIs, with command-line modes `disabled`, `idle`, `active-shared`, `active-distinct`, `slow-reader`, and `churn`; each emits machine-readable measurements and its complete configuration. Separate the unchanged runtime workload into a driver that builds against both revisions; build it in isolated checkouts with the same compiler/settings. The pre-change checkout has no `keiro-ops-http` package: do not try to build the new benchmark there or link it against candidate runtime libraries. Use the HTTP/feed load generator only against the candidate, and compare its writer workload with the independently built baseline. Run it with `nix develop -c cabal bench keiro-ops-http:bench:inspection-interference --benchmark-options="--mode <mode>"`. Record baseline/candidate revisions and raw output paths in this plan; the harness is an implementation deliverable, not an existing command claimed to have passed. Existing focused checks include `nix develop -c cabal test keiro-retention --test-show-details=direct` and `nix develop -c just bench-regression`. Run `nix develop -c z3 --version` before DSL symbolic conformance gates.
+
 
 Scope: establish, with evidence, that the cohort is releasable, and prepare every edit the
 release commit needs. At the end, the proposed version, the dated changelogs, the blueprint
 edge, and the documentation audit are ready for the user's confirmation, and nothing is
 committed.
 
-First, read MasterPlan 45's registry and confirm EP-1 through EP-6 are `Complete`. Open each
-child's Progress and confirm every non-gated milestone is checked; for plan 274 Milestone 5
-and plan 278 Milestone 4, run
-`curl -fsSL https://hackage.haskell.org/package/kiroku-store/preferred.json` and record the
-newest version. If a 0.10 release exists and the milestones are unchecked, stop this plan and
-have those milestones implemented first (they are their plans' work, not this one's); if no
-0.10 release exists, record the decision to ship without listing in this plan's Decision Log
-and in MasterPlan 45's, and note that IR-28 and IR-29 will record item 1a as pending.
+First, read MasterPlan 45's registry and every child's Progress. Require all implementation and performance criteria to be checked with evidence. Verify the current released dependency APIs and retain the existing compatible bounds; do not downgrade to 0.10 or treat presence of an old version in preferred.json as evidence of a missing release.
 
 Second, verify the release surface plan 276 promised: `agents/skills/release/SKILL.md` lists
 `keiro-ops-http` as package 8 in the dependency-ordered list, in every `for pkg in …` loop,
@@ -313,7 +344,7 @@ or `mktemp -d`), create a cabal project with one executable that depends on `kei
 == <version>`, `keiro-ops == <version>`, `keiro-migrations == <version>`, `kiroku-store`,
 `wai`, and `warp`, with no `cabal.project` pointing at any local path and no
 `source-repository-package`. Its `Main.hs` opens a store on `DATABASE_URL`, builds
-`opsApplication defaultOpsHttpConfig emptyAppHooks store`, composes it with `composeSurfaces
+binds `app <- opsApplication defaultOpsHttpConfig emptyAppHooks store` once, then composes `app` with `composeSurfaces
 defaultComposeConfig [MountedSurface keiroPrefix app]`, and serves it with
 `withOpsHttpServer defaultOpsHttpServerConfig { port = 9093 }`. Run `cabal update`, `cabal
 build`, then against a migrated scratch database run the executable and
@@ -323,22 +354,9 @@ resolved versions and the curl output in Surprises & Discoveries. If the solve f
 Hackage's index lag before anything else; if the failure is real, the release is defective and
 the fix is a follow-up patch release of the affected package, not a rewrite of this one.
 
-Request completion. For each of IR-26 through IR-31: set `status: completed`, add
-`completedAt` (the upload time, ISO-8601 UTC), add `resolution` naming the plan, the shipped
-modules or commands, the implementation commit range, the tag, and the Hackage release;
-advance `timestamp`; where a listing milestone was deferred (IR-28, IR-29 item 1a), say so in
-the resolution and keep the request `completed` only if the user agrees that item 1a is
-tracked by the follow-up entry in MasterPlan 45's Progress, otherwise leave those two at
-`in-progress` with the deferral recorded in the body; append a `Completion` entry to
-`docs/improvement-requests/log.md` for each; run the bundle validation. Tick the release
-checkboxes in each child plan's Progress if it has any, and add an Outcomes line naming the
-release.
+Request completion. Only after all acceptance items, uploads, and the consumer proof succeed, set IR-26 through IR-31 to `completed` with `completedAt` equal to the actual completion time and a resolution naming the release, commits, commands, and evidence. If any item remains unfinished, leave that request `in-progress` without a false completion timestamp. Append accurate log entries and validate the bundle.
 
-MasterPlan closure. In MasterPlan 45: mark EP-7 `Complete` in the registry, check the EP-7
-Progress items, add a Progress entry for the deferred listing milestones if any, write the
-Outcomes & Retrospective (what shipped, what was deferred, what the parallel-plan
-disagreements cost and how the Integration Points resolved them), and record the closing
-provenance revision.
+MasterPlan closure. Mark EP-7 Complete and finalize MasterPlan 45 only when every required milestone is complete, including listings and integrated performance acceptance. A deferred checkbox is unfinished work, not permission to close. Record the release and measured interference limits in Outcomes; do not extrapolate a passing fixture to all deployment sizes.
 
 Distillation. Re-read the Decision Logs, Surprises & Discoveries, and Outcomes of MasterPlan
 45 and all seven children. Decide whether ADR-40's Consequences should gain a paragraph
@@ -376,8 +394,7 @@ grep -n "^version" */*.cabal
 mori registry dependents shinzui/keiro --packages
 ```
 
-Expected: six `Complete` rows; zero unchecked items per child except the gated milestone
-lines of 274 and 278; the kiroku-store and keiro version lists; the anchor tag; a positive
+Expected: six `Complete` rows; zero unchecked required items per child, including the listing milestones of 274 and 278; the kiroku-store and keiro version lists; the anchor tag; a positive
 commit count; hits in all five files; eight matching `version:` lines (plus `jitsurei`, which
 may differ); the dependents list, used to judge the `AppHooks` breaking-change question.
 
@@ -455,12 +472,11 @@ lists the new version for all eight packages; `gh release view keiro-<version>` 
 only released versions; and `git tag --list '*-<version>'` prints eight tags.
 
 Request completion is accepted when `okf validate` on the improvement-requests bundle
-passes with IR-26 through IR-31 at `completed` (or IR-28 and IR-29 at `in-progress` with the
-deferral recorded, if the user chose that), each with `completedAt` and `resolution`, and
+passes with IR-26 through IR-31 at `completed`, each with `completedAt` and `resolution`, and
 `docs/improvement-requests/log.md` carries a dated entry per request.
 
 MasterPlan closure is accepted when every registry row is `Complete`, every Progress item is
-checked (or a deferred-milestone entry exists for the listing work), Outcomes & Retrospective
+checked, including the listing work, Outcomes & Retrospective
 is written, and the provenance revision is recorded.
 
 Distillation is accepted when `just adr-validate` passes after any ADR change and the
@@ -471,7 +487,7 @@ none were needed, with the reason).
 ## Idempotence and Recovery
 
 Milestone 1 writes only uncommitted edits and can be redone from a clean tree with
-`git checkout -- .` before the user's confirmation. Version bumps, changelog dating, and the
+reverting only this plan's reviewed edits before confirmation, preserving unrelated work. Version bumps, changelog dating, and the
 blueprint edge are one commit; if the gate fails after the commit, fix forward with a new
 commit before tagging, never amend a pushed commit. Tags are created only after the gate;
 if an upload fails partway, stop, do not upload dependents, and resolve before continuing;
@@ -487,7 +503,7 @@ Steps, because a synced copy left behind makes the next release's preview lie.
 
 ## Interfaces and Dependencies
 
-This plan writes no code. It consumes: the release skill (`agents/skills/release/SKILL.md`),
+This plan adds the reproducible interference benchmark harness and consumes: the release skill (`agents/skills/release/SKILL.md`),
 the Seihou blueprint tooling (`seihou validate-blueprint`, `seihou agent --debug migrate`),
 the OKF tooling (`okf log add`, `okf validate`, `okf id next`), the provenance script
 (`agents/skills/exec-plan/record-provenance.ts`), `cabal`, `gh`, `curl`, and Mori
@@ -500,3 +516,9 @@ the `Keiro.Timer` pending read, the `Keiro.Command` hydration primitive, and the
 migrations and the exported verifier session. The consumer proof's cabal file depends on
 `keiro-ops-http == <version>`, `keiro-ops == <version>`, `keiro-migrations == <version>`,
 `kiroku-store` at keiro's released bound, `wai`, and `warp`, and nothing else.
+
+
+## Revision notes
+
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

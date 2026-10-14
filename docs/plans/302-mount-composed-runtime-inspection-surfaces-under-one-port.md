@@ -11,6 +11,18 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-09-30T23:35:20Z
+  reviews:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:22:22Z
+      verdict: "changes-requested"
+      note: "Pre-update review: stale metrics dependency conflicts with current store; trailing-slash rewriting changes mounted routes; real integration evidence must gate release."
+  revisions:
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T01:38:52Z
+      mode: "update"
+      note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
 ---
 
 # Mount composed runtime inspection surfaces under one port
@@ -70,6 +82,10 @@ reshapes, or re-implements an endpoint another library owns.
 
 ## Progress
 
+- [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
+- [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
+
+
 - [ ] Milestone 1: `Keiro.Ops.Http.Compose` (prefix type, router, root index, unmounted-prefix
       refusal, and the once-only CORS middleware), exported from `Keiro.Ops.Http`, with
       database-free tests over stub applications including a WebSocket upgrade through a prefix
@@ -86,10 +102,16 @@ reshapes, or re-implements an endpoint another library owns.
 
 ## Surprises & Discoveries
 
+2026-10-13 source review: Released metrics 0.3 matches store 0.11. Stripping all trailing empty segments changes mounted route semantics. Real composed-feed tests are required at completion.
+
+
 (None yet.)
 
 
 ## Decision Log
+
+- Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Released metrics 0.3 matches store 0.11. Stripping all trailing empty segments changes mounted route semantics. Real composed-feed tests are required at completion. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
+
 
 - Decision: The composition API lives in `keiro-ops-http` as the module
   `Keiro.Ops.Http.Compose`, not in a new package.
@@ -152,7 +174,7 @@ reshapes, or re-implements an endpoint another library owns.
   Date: 2026-09-30
 
 - Decision: The example executable `keiro-ops-http-compose-example` and the composition tests
-  depend on `kiroku-metrics ^>=0.1.0.10`; the executable is behind a manual, default-off
+  depend on `kiroku-metrics ^>=0.3.0.0`; the executable is behind a manual, default-off
   cabal flag `compose-example`, switched on for this workspace in `cabal.project`, and the
   test suite depends on it unconditionally.
   Rationale: The released `keiro-ops-http` must not pull sibling metrics packages into a
@@ -187,10 +209,22 @@ reshapes, or re-implements an endpoint another library owns.
 
 ## Outcomes & Retrospective
 
+2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
+
+
 (To be filled during and after implementation.)
 
 
 ## Context and Orientation
+
+### Review baseline and implementation boundary (2026-10-13)
+
+This plan was reviewed against Keiro commit `cbcc593df2445780e2c42406c6b633ae530fb8ea`. Keiro is now 0.20.0.0 and already depends on released `kiroku-store ^>=0.11.0.0`; historical September version statements and Decision Log entries below are historical evidence, not instructions to downgrade. Hackage source and upstream tag `kiroku-store-v0.11.0.0` confirm the four-argument, `BrowsePageSize`-bounded listing API. Recheck the registry and upstream tags before changing bounds. [ADR-40](../adr/0040-inspection-surfaces-are-a-bounded-exception-to-the-no-ui-stance.md) now also requires bounded inspection work and measured hot-path isolation.
+
+Shared implementation has one owner: plan 275 creates the cursor codec, plan 278 creates source-reporting hydration, plan 274 creates pending-timer reads, and plan 276 creates the transport and admission budget. Consumers wait for those artifacts; they do not implement an absent owner's module. The old create-first instructions are withdrawn. The hard prerequisites for this plan are plan 276 (plan 277 is also required for the final integrated feed proof).
+
+Application constructors allocate resources once in IO and return a bare WAI application: `opsApplication` and `opsApplicationWithFeeds` now return `IO Application`. Bind their results once during startup, never construct a new admission budget for each request. Pure composition still takes ordinary `Application` values. Per-request schema verification, handler execution, and feed refreshes share a bounded inspection budget; they must never use the writer's reserved pool capacity by default.
+
 
 ### The repository and the package this plan extends
 
@@ -227,7 +261,7 @@ requests through `Network.Wai.Test` (`runSession`, `srequest`, `SRequest`, `setP
 `defaultRequest`) and socket-level requests through `http-client`. When
 [plan 277](277-publish-websocket-live-feeds-over-keiro-wake.md) has landed, the package also
 exposes `Keiro.Ops.Http.opsApplicationWithFeeds :: OpsHttpConfig -> FeedHandle -> AppHooks ->
-KirokuStore -> Application`, `Keiro.Ops.Http.Feed.withFeedHandle`, and
+KirokuStore -> IO Application`, `Keiro.Ops.Http.Feed.withFeedHandle`, and
 `defaultFeedConfig`, and the `/ws` endpoint that dispatches on the raw request path.
 
 ### WAI facts this plan relies on
@@ -254,31 +288,7 @@ package's `Network.WebSockets.runClient host port path` drives a client in tests
 
 ### The kiroku surface that is mounted
 
-`kiroku-metrics` (canonical project `mori://shinzui/kiroku`, package
-`mori://shinzui/kiroku/packages/kiroku-metrics`, checkout
-`/Users/shinzui/Keikaku/bokuno/kiroku-project/kiroku/kiroku-metrics`, Hackage 0.1.0.10,
-pinning `kiroku-store ^>=0.9.0.1` and `kiroku-cli ^>=0.2.0.8`) exposes, through
-`Kiroku.Metrics` and its submodules: `Kiroku.Metrics.Server.httpApp :: MetricsServerConfig ->
-KirokuMetrics -> [DependencyCheck] -> Maybe SubscriptionStatusProvider -> Application`, which
-routes by matching `pathInfo` (`["metrics"]`, `["metrics","prometheus"]`, `["health"]`,
-`["health","live"]`, `["health","ready"]`, `["subscriptions"]`, and answers anything else
-with `404` and the frozen body `{"error":"Not found"}`);
-`Kiroku.Metrics.WebSocket.websocketApp :: MetricsServerConfig -> KirokuMetrics -> KirokuStore
--> WebSocketState -> WS.ServerApp`, which dispatches on `requestPath` (`/ws/metrics` sends a
-`snapshot` frame on connect and answers `{"type":"ping"}` with `{"type":"pong"}`;
-`/ws/events` is the replayable event tail; any other path is rejected);
-`Kiroku.Metrics.WebSocket.newWebSocketState :: Int -> IO WebSocketState`;
-`Kiroku.Metrics.Collector.newKirokuMetrics :: KirokuStore -> IO KirokuMetrics`; and
-`Kiroku.Metrics.Config.defaultConfig :: MetricsServerConfig` with fields `port`
-(`9091`), `enableJSON`, `enablePrometheus`, `enableWebSocket`, `wsMaxConnections`, and more.
-Its own server composes `websocketsOr WS.defaultConnectionOptions wsApp (httpApp cfg m deps
-mProvider)` inside a private `combinedApp`, so a host today builds the same expression
-itself; kiroku MasterPlan 13
-(`mori://shinzui/kiroku/masterplans/13-expose-the-kiroku-inspection-surface-for-the-keiro-runtime-ui-and-a-standalone-kiroku-ui`)
-exports that value as `combinedAppWithProviders` in `kiroku-metrics` 0.2.0.0 and records
-that it must stay a prefix-agnostic value for exactly this plan. Verify every signature above
-in the checkout before use (`grep -n "^httpApp\|^websocketApp\|^newWebSocketState\|^newKirokuMetrics" -A6`
-over the files named); the checkout can run ahead of the released 0.1.0.10.
+The released substrate verified on 2026-10-13 is `mori://shinzui/kiroku/packages/kiroku-metrics` 0.3.0.0, compatible with `mori://shinzui/kiroku/packages/kiroku-store` 0.11.0.0. Locate source with Mori and verify Hackage plus upstream release tags before implementation. Public constructors are `storeServerProviders :: MetricsServerConfig -> KirokuMetrics -> KirokuStore -> IO ServerProviders` and `combinedAppWithProviders :: MetricsServerConfig -> KirokuMetrics -> [DependencyCheck] -> ServerProviders -> Application`. Allocate collectors/providers once at startup and honor their lifecycle. Mount the returned application unchanged; do not reconstruct the old private HTTP/WebSocket composition or import private modules.
 
 ### What exists elsewhere in the stack
 
@@ -332,19 +342,18 @@ creation with `okf id next`.
 
 ### Coordination under MasterPlan 45
 
-This plan hard-depends on plan 276 (EP-1) and soft-depends on plan 277 (EP-5): Milestone 2's
-keiro WebSocket case runs only when `Keiro.Ops.Http.opsApplicationWithFeeds` exists. Plan 303
-(EP-7) releases the package that carries this module. The MasterPlan's Integration Points
-record the composition contract this plan owns: prefixes `keiro`, `kiroku`, `shibuya`, `pgmq`;
-both `pathInfo` and `rawPathInfo` rewritten; `GET /` index; `surface_not_mounted` refusal;
-CORS once with add-if-absent; keiro mounted at `/keiro` so `/keiro/health` and `/keiro/ws`
-are its composed paths; every mounted route mount-relative with no absolute URLs. Plans 276
-and 277 carry that constraint in their own coordination notes.
+This plan is coordinated by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md). Hard prerequisites: 276 (HTTP); 277 is required before the final composed WebSocket acceptance. The 2026-10-13 Integration Points are the current contracts; older dated Decision Log and Revision notes preserve history, not alternative implementation instructions.
 
+Plan 275 creates `Keiro.Inspection.Cursor` and `Keiro.Ops.Parse.cursorReader`; 278 creates source-reporting hydration; 274 creates the pending-timer read and encoder; 276 creates the shared inspection budget and HTTP application; 277 consumes these and owns bounded feeds; 302 composes allocated applications; 303 requires all work and measured interference gates before closure. Consumers import these interfaces after their prerequisites, never create competing implementations. Every child preserves existing hooks while extending them.
+
+Keiro's current tree is 0.20.0.0 with `kiroku-store ^>=0.11.0.0`; released `listStreams` takes category, prefix, cursor and `BrowsePageSize`. The compatible released metrics surface is 0.3.0.0. Verify the registry and upstream tags again at implementation, retain supported current bounds, and do not defer listings on the obsolete 0.10 release gate. Allocate migration numbers and OKF handles at implementation. Strict ADR-40 and ADR-28 boundaries apply.
 
 ## Plan of Work
 
 ### Milestone 1: the composition module and its database-free tests
+
+Normalize only the mount root: `/kiroku` and `/kiroku/` delegate to `/`. Preserve the remainder for `/kiroku/x/`, including its trailing slash, empty interior segments and query string; mounted routes may distinguish `/x` from `/x/`. Match the decoded prefix and strip exactly its raw path segment without re-encoding the remaining bytes. Reject an inconsistent pathInfo/rawPathInfo pair in the pure test helper instead of silently changing the target. The router must forward response bodies as streams; it must not buffer, decode, aggregate, run SQL, or create child stores on each request. Precompute the mount lookup and root-index bytes once. Extend the echo tests with encoded prefixes, `%2F`, `%25`, non-ASCII paths, trailing slashes, duplicate slashes, queries and streaming responses.
+
 
 Scope: `keiro-ops-http/src/Keiro/Ops/Http/Compose.hs`, its re-export from `Keiro.Ops.Http`,
 and a test module that proves the routing contract with stub applications, including a
@@ -358,15 +367,14 @@ Dependencies and this behavior. `mkSurfacePrefix` accepts exactly one path segme
 `composeSurfaces config surfaces` returns `Left NoSurfaces` for an empty list and
 `Left (DuplicatePrefix p)` when two surfaces share a prefix (compare `surfacePrefixText`);
 otherwise it returns `composedCorsMiddleware config.allowedOrigins router` where `router` is
-the application that, per request, computes `segments = dropTrailingEmpty (pathInfo req)`
-(remove one trailing `""` if present, so `["kiroku", ""]` becomes `["kiroku"]` and `[""]`
-becomes `[]`), then: for `segments == []`, answers `GET` with `200` and the JSON body
+the application that, per request, computes the decoded segments, normalizing only the mount root as specified above, then: for `segments == []`, answers `GET` with `200` and the JSON body
 `{"surfaces":[{"prefix":p,"path":"/" <> p} …]}` in mount order and any other method with
 `405` through `errorResponse (OpsHttpError status405 "method_not_allowed" "the composed root
 answers GET only" Nothing)` plus an `Allow: GET` header; for `segments == (p : rest)` with a
 mounted prefix `p`, calls that surface's application with `req { pathInfo = rest,
-rawPathInfo = rebuilt }` where `rebuilt` is `toStrict (toLazyByteString (encodePathSegments
-rest))` when `rest` is non-empty and `"/"` otherwise; for any other first segment, answers
+rawPathInfo = rebuilt }` where `rebuilt` strips exactly the first raw path segment, preserving the remaining bytes and using `"/"` for an empty remainder;
+
+for any other first segment, answers
 `404` through `errorResponse (OpsHttpError status404 "surface_not_mounted" ("no surface is
 mounted at /" <> p) (Just (object ["mounted" .= mountedPrefixes])))`. Export
 `stripSurfacePrefix :: SurfacePrefix -> Request -> Maybe Request` as the pure piece the router
@@ -445,7 +453,7 @@ Scope: prove IR-31's acceptance criteria against the real surfaces. At the end,
 `cabal test keiro-ops-http-test --test-options='--match "composed surfaces"'` passes against
 a fresh migrated store.
 
-Add `kiroku-metrics ^>=0.1.0.10`, `wai-websockets >=3.0 && <3.1`, and `websockets >=0.13 &&
+Add `kiroku-metrics ^>=0.3.0.0`, `wai-websockets >=3.0 && <3.1`, and `websockets >=0.13 &&
 <0.14` (the latter two if plan 277 has not already added them) to the `keiro-ops-http-test`
 stanza's `build-depends`. Because `kiroku-metrics` depends on `kiroku-cli`, run `cabal build
 keiro-ops-http:test:keiro-ops-http-test --dry-run` first and record in Surprises & Discoveries
@@ -454,14 +462,11 @@ workspace, stop and record it before changing any bound.
 
 Create `keiro-ops-http/test/Test/ComposedSurfacesSpec.hs` with `spec :: Fixture -> Spec`,
 called from `Main.hs` inside `withMigratedSuiteWith [pgmq]`, using `around (withFreshStore
-fixture)`. Define `kirokuSurface :: KirokuStore -> IO Application` as `do km <-
-newKirokuMetrics store; ws <- newWebSocketState (wsMaxConnections cfg); pure (websocketsOr
-WS.defaultConnectionOptions (websocketApp cfg km store ws) (httpApp cfg km [] Nothing))`
-with `cfg = defaultConfig` (when `kiroku-metrics` 0.2.0.0 is the pinned version, replace the
-expression with its exported `combinedAppWithProviders` and record the swap in the Decision
-Log). Define `keiroSurface store = opsApplication defaultOpsHttpConfig emptyAppHooks store`
-(or `opsApplicationWithFeeds defaultOpsHttpConfig handle emptyAppHooks store` under
-`withFeedHandle defaultFeedConfig store` when plan 277 has landed). Cases:
+fixture)`. Define `kirokuSurface :: KirokuStore -> IO Application` using the released public constructor: allocate metrics once, obtain providers with `storeServerProviders cfg metrics store`, and return `combinedAppWithProviders cfg metrics [] providers`. Use the dependency's bracketed lifecycle where provided and release provider resources on shutdown; verify it in released source before copying the example. `kiroku-metrics` 0.3.0.0 matches `kiroku-store` 0.11.0.0. Bind Keiro's `app <- opsApplication ...` once (or `opsApplicationWithFeeds` with its bracketed feed handle). Use an inspection-owned store and pool rather than the writer store in the final example. The compose function itself still receives plain WAI Applications.
+
+Cases:
+
+Cases:
 
 - "serves kiroku routes byte-identical to standalone": for each of `/health/live`,
   `/health/ready`, `/metrics`, and `/nope`, run the request once against `kirokuSurface`
@@ -529,7 +534,7 @@ executable keiro-ops-http-compose-example
     , keiro-migrations
     , keiro-ops
     , keiro-ops-http
-    , kiroku-metrics        ^>=0.1.0.10
+    , kiroku-metrics        ^>=0.3.0.0
     , kiroku-store
     , optparse-applicative  >=0.19 && <0.20
     , text                  >=2.1  && <2.2
@@ -551,9 +556,8 @@ resolved through `Keiro.Ops.Env.resolveConnectionString` exactly as plan 276's e
 does), `--bind HOST` (default `127.0.0.1`), `--port N` (default `9092`), and
 `--allow-origin ORIGIN` (repeatable); opens the store with `withStore
 (defaultConnectionSettings connectionString)`; builds the kiroku surface with the expression
-from Milestone 2 (`newKirokuMetrics`, `newWebSocketState`, `websocketsOr`, `httpApp`); builds
-the keiro surface as `opsApplication defaultOpsHttpConfig emptyAppHooks store` (or
-`opsApplicationWithFeeds` under `withFeedHandle` when it exists); composes them with
+from Milestone 2 (`newKirokuMetrics`, `storeServerProviders`, `combinedAppWithProviders`); binds
+the keiro application once from `opsApplicationWithFeeds` under `withFeedHandle`; composes the resulting applications with
 `composeSurfaces defaultComposeConfig { allowedOrigins } [MountedSurface keiroPrefix keiro,
 MountedSurface kirokuPrefix kiroku]`, exiting with the rendered `ComposeError` on `Left`;
 prints `keiro-ops-http-compose-example: listening on <host>:<port>; surfaces /keiro /kiroku`
@@ -569,12 +573,11 @@ inspection, composition]`). It must contain: the one-paragraph trusted-network o
 authenticating-proxy posture in the conventions' words; the four stable prefixes and the
 statement that they are frozen once released; how to build each surface's `Application`
 (keiro's from plan 276's runbook, kiroku's from the expression above with a pointer to
-`combinedAppWithProviders` for `kiroku-metrics` 0.2.0.0 and later, shibuya's and pgmq's "once
+`combinedAppWithProviders` for released `kiroku-metrics` 0.3.0.0, shibuya's and pgmq's "once
 their packages export an `Application`", naming shibuya MasterPlan 7 and pgmq-hs IR-3 by
 canonical handle); the composition call and the `withOpsHttpServer` runner; the root index and
 the `surface_not_mounted` refusal with copied transcripts; the CORS-once rule, including the
-sentence that a host passes its origin list to keiro's `OpsHttpConfig` only for the WebSocket
-upgrade origin check and may leave its HTTP CORS off; the note that WebSocket endpoints work
+sentence that a host passes the same origin list to the outer composition and keiro's `OpsHttpConfig` for the WebSocket origin check; the outer middleware adds only absent HTTP CORS headers; the note that WebSocket endpoints work
 unchanged behind a prefix (`/kiroku/ws/metrics`, `/kiroku/ws/events`, `/keiro/ws`); the
 single-origin deployment story for the keiro-ui console (static assets served beside the
 composed mount, no CORS needed); and how to run the example. Add the guide to
@@ -692,7 +695,7 @@ cabal build keiro-ops-http:test:keiro-ops-http-test --dry-run 2>&1 | grep -i "ki
 cabal test keiro-ops-http-test --test-options='--match "composed surfaces"' --test-show-details=direct
 ```
 
-Expected: the dry run lists `kiroku-metrics-0.1.0.10` (and `kiroku-cli`) as new components of
+Expected: the dry run lists the compatible released `kiroku-metrics-0.3.0.0` closure as new components of
 the test suite's plan and nothing under any other package; the suite passes with every case
 above, the keiro WebSocket case either passing or reported as pending with plan 277's name.
 
@@ -741,6 +744,9 @@ unbuildable by default is accepted).
 
 ## Validation and Acceptance
 
+A real composed-feed integration test is mandatory before this child and the cohort complete; a temporary `pendingWith` while EP-5 is unfinished records incomplete work. Compare volatile metrics bodies using one captured response or stable fields, never assert timestamps or live counters are byte-equal across independently timed reads. Reuse EP-1/EP-5 budgets under the prefix without creating another set of permits or widening limits. Run the final interference scenario through `/keiro/...` as well as standalone to prove composition preserves admission, cancellation, drift refusal and slow-reader cleanup.
+
+
 IR-31 lists five acceptance criteria; each maps to a named test and to a transcript:
 
 1. Keiro's surface and kiroku-metrics' surface mounted in one process on one port, with
@@ -781,9 +787,7 @@ bound to make it solve. If `just verify` fails on the example because the flag s
 if validation reports a duplicate, another plan took it: re-run `okf id next` and rename. If
 plan 277 lands after this plan, add the keiro WebSocket case then (it is written as
 `pendingWith` until `opsApplicationWithFeeds` exists) and switch the example to
-`opsApplicationWithFeeds`; record the change in the Decision Log. When `kiroku-metrics`
-0.2.0.0 becomes the pinned version, replace the hand-composed kiroku expression in the test
-and the example with its exported application and record that in the Decision Log.
+`opsApplicationWithFeeds`; record the change in the Decision Log. Use the released 0.3.0.0 public application from the start. Temporary stub or pending cases keep Milestone 2 and this plan incomplete; final acceptance requires the real package and both WebSocket mounts.
 
 
 ## Interfaces and Dependencies
@@ -848,7 +852,7 @@ composeSurfaces :: ComposeConfig -> [MountedSurface] -> Either ComposeError Appl
 
 -- | Nothing when the request's first segment is not this prefix; otherwise the
 -- request with pathInfo and rawPathInfo stripped of the prefix and every other
--- field unchanged. A single trailing empty segment is dropped before matching.
+-- field unchanged. Normalize only the mount root; preserve trailing segments elsewhere.
 stripSurfacePrefix :: SurfacePrefix -> Request -> Maybe Request
 
 -- | Like Keiro.Ops.Http.Cors.corsMiddleware, but adds Access-Control-Allow-Origin
@@ -875,11 +879,7 @@ Consumed from plan 276 without change: `Keiro.Ops.Http.Application.opsApplicatio
 `Keiro.Ops.Http.opsApplicationWithFeeds`, `Keiro.Ops.Http.Feed.withFeedHandle`,
 `defaultFeedConfig`.
 
-Consumed from `kiroku-metrics` 0.1.0.10 (test suite and flag-guarded example only):
-`Kiroku.Metrics.Server.httpApp`, `Kiroku.Metrics.WebSocket.websocketApp`,
-`Kiroku.Metrics.WebSocket.newWebSocketState`, `Kiroku.Metrics.Collector.newKirokuMetrics`,
-`Kiroku.Metrics.Config.defaultConfig` and `MetricsServerConfig (..)`; from 0.2.0.0,
-`combinedAppWithProviders` and `storeServerProviders` replace the hand-composed expression.
+Consumed from `kiroku-metrics` 0.3.0.0 (test suite and flag-guarded example only): `newKirokuMetrics`, `defaultConfig`, `storeServerProviders`, and `combinedAppWithProviders`, with the released signatures in Context. No hand-composed private server expression is needed.
 
 External libraries: `wai` (`Request` fields, `mapResponseHeaders`, `responseHeaders`,
 `Middleware`), `http-types` (`encodePathSegments`, statuses, `methodOptions`),
@@ -890,3 +890,9 @@ External libraries: `wai` (`Request` fields, `mapResponseHeaders`, `responseHead
 plans 276 and 277 except `kiroku-metrics`, which enters only the test suite and the
 flag-guarded executable. Sources were read from `mori://yesodweb/wai` (wai, wai-websockets)
 and `mori://shinzui/kiroku` (kiroku-metrics).
+
+
+## Revision notes
+
+
+2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.

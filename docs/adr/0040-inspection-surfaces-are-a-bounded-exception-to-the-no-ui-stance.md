@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Inspection surfaces are a bounded exception to the no-UI stance
 description: Keiro sanctions state browsing and safe operator actions over supported library APIs in opt-in sister packages, while metrics and traces stay in OpenTelemetry and no keiro package grows a dashboard, a server process, or a parallel observability stack.
-timestamp: 2026-09-10T03:35:00Z
+timestamp: 2026-10-14T01:35:20Z
 docId: ADR-40
 status: Accepted
 date: 2026-09-10
@@ -117,6 +117,38 @@ means: no parallel observability stack and no server process, with state
 inspection and operations sanctioned here as an opt-in sister package. The
 stance text and this record must agree. When they drift, this record is
 authoritative and the stance text is corrected.
+
+### Runtime isolation and bounded inspection
+
+The exception also requires measured isolation from command and worker hot paths.
+An unmounted surface and disabled inspection provenance introduce no additional
+queries, event reads, metadata encoding, or background work. Diagnostic hydration
+shares the existing replay logic while retaining a specialized ordinary-command
+result path; adding a diagnostic pair and relying on optimization is not evidence
+that command allocation is unchanged. Reaction provenance is explicit host opt-in,
+disabled by default, and bounded in both entries and encoded bytes. Missing or
+truncated provenance must remain visible as incomplete evidence.
+
+A mounted surface bounds admission, database execution, handler duration, response
+bytes, distinct live views, connections, and queued bytes. Examples use a separate
+inspection pool; shared-pool hosts must reserve runtime capacity and measure
+interference. Read-only SQL and a returned-row limit do not bound rows examined,
+sorts, catalog verification, replay cost, or index maintenance on writes. Index
+changes require both normal-planner read evidence and runtime write/WAL evidence.
+Schema refusal remains fail-closed inside the budget; a cache may not silently
+weaken the drift contract.
+
+Feeds coalesce wakes, share reads across equivalent subscriptions, and own bounded,
+cancellation-safe resource lifetimes. They retain no notification cursor without
+active views. Clock-derived display fields do not by themselves trigger broadcasts;
+changes to meaningful top-level read data do. A slow consumer cannot create an
+unbounded queue or leave abandoned driver tasks behind.
+
+[MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
+and its children define concrete limits and matched baseline/candidate gates for
+unmounted, mounted-idle, and active inspection under writer load, including retained
+heap after churn. Those measurements are required before release. This decision is
+a design constraint, not a claim that the unimplemented surface has passed them.
 
 ## Consequences
 

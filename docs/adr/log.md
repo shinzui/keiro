@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-14
+* **Update**: Clarify inspection isolation: default-off bounded provenance, admission and feed resource limits, and measured runtime interference before release.
+
 ## 2026-10-13
 * **Update**: ADR-17: harness evidence follows transition ownership (plan 309).
 
