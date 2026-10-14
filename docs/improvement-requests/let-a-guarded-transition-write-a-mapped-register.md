@@ -5,9 +5,12 @@ description: >-
   Give a declared transition target-typed initial and mapped-lift register expressions without
   taking the whole edge into an implementation hole, so that a mapped-value construction can be
   one side of a guarded pair without weakening guard, replay, or ownership guarantees.
-timestamp: 2026-09-16T04:45:00Z
+timestamp: 2026-10-14T17:57:46Z
 requestId: IR-34
 status: accepted
+generated:
+  by: codex-cli/gpt-6.1-sol
+  at: 2026-10-14T17:57:46Z
 origin: mori://shinzui/rei
 plan: docs/plans/267-add-safe-mapped-register-construction-to-declared-transitions.md
 reviews:
@@ -51,21 +54,32 @@ reviews:
 
 ## Status
 
-**Validated, justified, and accepted; planned as
-[Plan 267](../plans/267-add-safe-mapped-register-construction-to-declared-transitions.md), not
-yet implemented.** Raised from
-`mori://shinzui/rei/plans/206-author-the-rei-service-workspace-at-keiro-dsl-language-5`,
-Milestone 7, after reproducing the problem with the published `keiro-dsl` 0.13.0.0 binary while
-declaring Rei's Intention root aggregate.
+**Implemented by
+[Plan 267](../plans/267-add-safe-mapped-register-construction-to-declared-transitions.md);
+acceptance status remains pending the bundle-level native request-metadata gate.**
+Candidate Language 6 now supports target `initial` and one declaration-owned,
+versioned scalar `write-lift` under generated guard and slot ownership. The compiled
+lifecycle fixture proves complementary guards, complete forward/encoded/full replay,
+finite lift cases, and snapshot identity. Focused tests cover construction safety,
+backward ledger decoding, workspace locations, and valid lift removal/source evolution.
+All 26 focused examples, all nine restoring negative mutations, the compiled
+lifecycle proof, 884 DSL unit examples, full package builds, and every repository
+verification recipe pass in Nix. The restoring mutation driver runs through
+`mapped-register-construction-proof` in `just verify`. Published source contracts and existing generated corpus bytes remain
+unchanged. No consumer adoption or release has occurred.
 
-The review reproduced the same failures with the then-current published `keiro-dsl` 0.14.0.0
-binary and traced the generated path through the checker and scaffolder. Re-confirmed on
-2026-09-16 against `keiro-dsl` 0.16.0.0 (the current Hackage release and the version in the
-tree): no `write-lift` declaration exists, `Keiro.Dsl.Scaffold` still emits the
-`MappedRegisterInitialMissing` hole for a mapped register's initial symbol, and Plan 267 has not
-started, so the gap is unchanged. This is not a runtime or Keiki
-defect, and it is not an operator error in Rei. It is a missing expression capability in
-`mori://shinzui/keiro/packages/keiro-dsl`.
+The request originated from
+`mori://shinzui/rei/plans/206-author-the-rei-service-workspace-at-keiro-dsl-language-5`,
+after reproduction against the published 0.13.0.0 DSL, and was independently
+reconfirmed against 0.14.0.0 and 0.16.0.0. It is a DSL construction capability,
+not a Keiki runtime defect or an operator error in Rei. The removed Rei register
+remains correctly absent; the new repository fixture supplies the observable proof.
+
+Installed Mori v6 currently reports 73 pre-existing request metadata errors across
+this bundle beyond its pinned OKF profile. This record now carries truthful current
+revision attribution, but remains `accepted` until the required acceptance gate is
+reconciled. Historical authorship and completion times for unrelated requests have
+not been invented to make that gate green.
 
 The original wording was too broad. Keiro already lets a generated transition copy a whole mapped
 value from a same-typed command field into a mapped register. The unsupported operation is

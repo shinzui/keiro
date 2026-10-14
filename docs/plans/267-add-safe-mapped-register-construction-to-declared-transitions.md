@@ -74,6 +74,10 @@ construction remains outside the language. It also does not relax
 ## Progress
 
 
+- [x] (2026-10-14) Complete restoring mutation recipe: all nine mutations fail their expected named gate, original digests match after restoration, the compiled baseline passes, and all 26 focused examples pass.
+- [x] (2026-10-14) Complete all package and repository verification recipes in Nix. The full `just verify` run passed through the re-export gate, then required regenerated record migration inventories; those inventories and every remaining recipe passed in a sequential follow-up. Full DSL unit coverage passes 884 examples; the PGMQ suite retains two existing pending examples.
+- [ ] Reconcile 73 pre-existing native Mori request-metadata errors in other requests, then close IR-34 and repeat native and pinned-profile request validation. The feature and repository checks are complete; this acceptance bookkeeping gate remains open.
+
 - [x] (2026-10-14) Full corpus regeneration: 57 entries, source/suite and record/disk consistency pass, with no generated changes. `cabal build all --enable-tests --enable-benchmarks` passes. Focused construction regressions now pass 26 examples, including parenthesized initial shadowing and ID literal preservation.
 
 - [x] (2026-10-14) Recheck Hackage and upstream release tag, verify Z3 4.16.0 in Nix, and rerun all eight retained feasibility assertions successfully.
@@ -98,20 +102,21 @@ construction remains outside the language. It also does not relax
 - [x] (2026-10-14) Add and regenerate the candidate Language-6 compiled conformance service and its
       forward/replay, guard-verification, snapshot, and negative mutation evidence.
 - [x] (2026-10-14) Register this feature in the existing candidate-primary conformance inventory without moving
-      any current suite, skeleton, or language/profile identifier. Full corpus regeneration and policy remain a final gate.
+      any current suite, skeleton, or language/profile identifier. Full corpus regeneration and policy pass with no existing generated-module changes.
 - [x] (2026-10-14) Close the pre-implementation validation gaps: reject a predicate-valued lift child at check
       time, reject every projected lift child recursively, diagnose `initial` shadowing under
       Language 6, enforce walker exhaustiveness in the
       scaffold and fingerprint modules, decode the ledger lift field optionally, and append the
       lift fold field only when a lift is used.
-- [ ] Amend the relevant ADRs and user guidance, close IR-34 only after all acceptance gates pass,
-      and run the complete package, documentation, and repository verification.
+- [x] (2026-10-14) Amend ADRs 3, 12, 17, and 18, current aggregate/type-mapping user guidance, consumer adoption guidance, changelogs, and corpus inventories. Strict ADR, user-documentation, and guide validation pass; all 54 requests pass their pinned strict OKF profile. Keep IR-34 accepted pending the separate native metadata gate above.
 
 
 ## Surprises & Discoveries
 
 
-- Observation (2026-10-14 implementation): installed `mori v6.0.0.0 (9b6d0e1)` imposes native request metadata beyond the pinned local OKF profile: the full improvement-request command reports 74 missing `generated`/`completedAt` fields across existing requests, while strict pinned-profile validation passes all 54 concepts. This is not caused by mapped construction. Keep IR-34 accepted until the extra metadata gate is reconciled; do not invent historical authorship or completion times for unrelated requests.
+- Observation (2026-10-14 final verification): the record migration policy checks generated inventories of exported fields and generated modules, including source locations. This feature requires regenerating `keiro-dsl/record-field-migration-0.15.md` and `keiro-dsl/generated-haskell-edition-idiomatic-v2.md`; the resulting inventory changes pass policy. This is documentation generation, not a change to pre-existing scaffold output.
+
+- Observation (2026-10-14 implementation): installed `mori v6.0.0.0 (9b6d0e1)` imposes native request metadata beyond the pinned local OKF profile: the full improvement-request command initially reported 74 missing `generated`/`completedAt` fields across existing requests, while strict pinned-profile validation passes all 54 concepts. Truthful current revision attribution for IR-34 reduces this to 73 errors, all in other requests. This is not caused by mapped construction. Keep IR-34 accepted until the extra metadata gate is reconciled; do not invent historical authorship or completion times for unrelated requests.
 
 - Observation (2026-10-14 implementation): conformance discovery reads tracked ledger paths. New ledger/fragment sidecars match repository ignores and therefore require explicit force-add for this curated corpus. The first full regeneration left all pre-existing files unchanged but failed suite coverage until those new sidecars were tracked. A concurrent Cabal build/test run also collided on `Main.o.tmp`; serialize all remaining Cabal gates rather than share one build directory concurrently.
 
@@ -539,7 +544,13 @@ construction remains outside the language. It also does not relax
 ## Outcomes & Retrospective
 
 
-Implementation checkpoint (2026-10-14): the focused construction suite passes 23 examples, including strict fresh-stub compilation for all six scalar sources and the Time alias, consumer/source type collision, workspace member/row attribution, backward ledger decoding, complete build-only diff vectors, valid evolution, independent aggregate selection, and compact-JSON framing. The compiled lifecycle service passes all guard, every-prefix forward/encoded/full replay, snapshot, case, and consumer-witness assertions. All nine negative mutations failed their named gates and restored byte-identical targets; their final green unit run first exposed a duplicate-package environment issue, now corrected using Cabal's selected Keiki package ID. Two further parser/shadowing regressions, full corpus/package/repository gates, final mutation rerun, and IR closure remain. No release, consumer deployment, or data migration has occurred.
+Implementation outcome (2026-10-14): candidate Language 6 now supports target mapped `initial` and declaration-owned scalar `mapped(...)` writes under generated guard and slot ownership. Parser/checker safety, total lowering, create-once binding obligations, persisted lift provenance, conditional fold identity, build-only diff advisories, and own-revision replay impact are implemented. Existing released language/profile contracts and generated corpus bytes remain unchanged.
+
+The focused suite passes all 26 examples, including strict fresh-stub compilation for all six scalar sources plus the Time alias, import collisions, workspace locations, backward ledger decoding, complete diff vectors, valid evolution, independent aggregate selection, and compact-JSON framing. The compiled lifecycle service passes complementary guard verification, every-prefix forward/encoded/full replay with all registers, snapshot composition, finite lift cases, and all 25 consumer behavior witnesses. All nine negative mutations fail their named gates, restore byte-identical targets, and finish with a green compiled service and focused suite.
+
+Full corpus regeneration and consistency pass for 57 entries with no existing generated-module changes. All packages build with tests and benchmarks enabled. The full Nix verification run passes the runtime suites (756 core examples, 15 retention examples, 80 PGMQ examples with two existing pending, 51 operations examples, and 25 Jitsurei examples), all DSL suites including 884 unit examples, documentation/profile checks, and source policies. After regenerating the required migration inventories, the remaining record/generated-name/corpus policies, process recovery and initial-hole mutations, replay compatibility, and checked-mapping adoption recipes pass. Formatting checks 305 files with zero changes; strict ADR validation covers 52 concepts, user/guide validation covers 34/29 concepts, and pinned-profile request validation covers all 54 concepts.
+
+The sole open acceptance item is the installed native Mori request validator's 73 pre-existing missing metadata errors in other requests. IR-34 itself has no native metadata errors and retains truthful current revision attribution, but remains `accepted` until this bundle-level gate is reconciled. No unrelated historical authorship or completion dates were invented. No release, consumer deployment, or data migration has occurred; public DSL record changes require the separately coordinated shared PVP-major release.
 
 The 2026-10-14 review found a release-blocking plan defect in replay comparison and incomplete
 instructions for opaque binding skeletons, symbol validation, and automated mutation coverage.
@@ -996,7 +1007,7 @@ not part of the plan-only validation completed below. Use an isolated verificati
 ```bash
 nix develop -c cabal build all --enable-tests --enable-benchmarks
 nix develop -c cabal test keiro-dsl:tests
-nix fmt -- --check
+nix fmt -- --ci
 git diff --check
 nix develop -c okf validate docs/adr --strict --profile docs/adr/profile.dhall --profile-enforce --log-enforce
 nix develop -c mori improvement-requests validate --path /Users/shinzui/Keikaku/bokuno/keiro
@@ -1341,4 +1352,6 @@ opaque obligation/render/import and lexical/workspace validation instructions; r
 recurring mutation gate; moved prospective verification into Nix; and reconciled release
 sequencing with ADR 49. The core scope and the eight-check feasibility result remain unchanged.
 
-Revision note (2026-10-14 implementation): implement the candidate parser/checker/lowering, lift obligations and persisted provenance, used-lift fold framing, build advisories, and own-revision replay branch; add the compiled lifecycle proof. Mutation, expanded regression, corpus, documentation, and repository gates are still in progress.
+Revision note (2026-10-14 implementation): implement the candidate parser/checker/lowering, lift obligations and persisted provenance, used-lift fold framing, build advisories, and own-revision replay branch; add the compiled lifecycle proof. Mutation, expanded regression, corpus, documentation, and all repository recipe gates now pass. Record generated migration inventories and final evidence; retain the explicit native Mori metadata reconciliation and IR closure item.
+
+Revision note (2026-10-14 final verification): complete all implementation and repository verification recipes, regenerate required public-field inventories, distill durable behavior into ADRs and user guidance, and retain IR-34 as accepted solely pending the native Mori metadata gate in unrelated requests.
