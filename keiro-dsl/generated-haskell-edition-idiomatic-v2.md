@@ -8,7 +8,7 @@ spelling while deriving their target and structural facts from current v2 output
 rows intentionally
 over-approximate selector use so no consumer occurrence is silently omitted during review.
 
-Inventory: 783 generated modules, 523 record declarations, 2364 fields, 21241 field-label occurrences, 19 local default-pragmas, and 188 hand-owned conformance modules.
+Inventory: 795 generated modules, 524 record declarations, 2365 fields, 21300 field-label occurrences, 19 local default-pragmas, and 190 hand-owned conformance modules.
 
 The `idiomatic-v2` manifest defaults are `DuplicateRecordFields`, `NoFieldSelectors`,
 `OverloadedRecordDot`, and `OverloadedStrings`. Constructor names, arity, field order, wire
@@ -661,6 +661,7 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/Emergency/Contract.hs:24` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), region :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:27` | `InboxFailure` | data | `inboxFailureReason` | `reason` | `!Text` | `(.reason)` or constructor pattern |
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:28` | `InboxFailure` | data | `inboxFailureAttempt` | `attempt` | `!(Maybe Int)` | `(.attempt)` or constructor pattern |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/Queue.hs:23` | `JobTypePayload` | data | `subscriptionId` | `subscriptionId` | `!SubscriptionId` | `(.subscriptionId)` or constructor pattern |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:33` | `MappedJob` | data | `job` | `job` | `!JobPayload` | `(.job)` or constructor pattern |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:34` | `MappedJob` | data | `maybeJob` | `maybeJob` | `!(Maybe JobPayload)` | `(.maybeJob)` or constructor pattern |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:35` | `MappedJob` | data | `trace` | `trace` | `!Value` | `(.trace)` or constructor pattern |
@@ -8482,6 +8483,58 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:72` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:73` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-intake-runtime/Generated/HospitalCapacity/IncidentInbox/Inbox.hs:78` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/Queue.hs:13` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/Queue.hs:13` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/Queue.hs:25` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/Queue.hs:30` | `subscriptionId` | record-dot `(.subscriptionId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/QueueCodec.hs:2` | `envelope` | record-dot `(.envelope)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/QueueCodec.hs:2` | `job` | record-dot `(.job)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/QueueCodec.hs:8` | `job` | record-dot `(.job)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/QueuePolicy.hs:17` | `required` | record-dot `(.required)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/JobType/QueuePolicy.hs:36` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Nominals/Internal.hs:12` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Nominals/Internal.hs:12` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Nominals/Internal.hs:18` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Nominals/Internal.hs:30` | `reason` | record-dot `(.reason)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Nominals/Internal.hs:37` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:19` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:19` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:20` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:20` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:22` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:22` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:23` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:23` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:24` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:24` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:41` | `source` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:46` | `source` | record-dot `(.source)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ProjectionCatalog.hs:47` | `target` | record-dot `(.target)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Structural/NominalLeaves.hs:6` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Structural/NominalLeaves.hs:6` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Structural/NominalLeaves.hs:7` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/Structural/NominalLeaves.hs:7` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModel.hs:21` | `name` | record-dot `(.name)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:5` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:5` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:6` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:6` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:7` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:7` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:8` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:8` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:11` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:11` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:14` | `name` | record-dot `(.name)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:31` | `missing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:35` | `missing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:39` | `missing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:47` | `missing` | record-dot `(.missing)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:51` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:55` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelHarness.hs:56` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelTable.hs:7` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-keyword-segments/Generated/KeywordSegments/ValidateCustomType/ReadModelTable.hs:7` | `reference` | record-dot `(.reference)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:16` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-mapped-queue/Generated/MappedQueue/MappedJobs/Queue.hs:17` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
@@ -22669,6 +22722,13 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-intake-full/HospitalCapacity/IncidentInbox/Integration.hs:31` | `filled` | record-dot `(.filled)` or positional pattern/construction | hand-owned; report only |
 | `keiro-dsl/test/conformance-intake-full/HospitalCapacity/IncidentInbox/Integration.hs:37` | `name` | record-dot `(.name)` or positional pattern/construction | hand-owned; report only |
 | `keiro-dsl/test/conformance-intake-full/HospitalCapacity/IncidentInbox/Integration.hs:38` | `source` | record-dot `(.source)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs:10` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs:10` | `as` | record-dot `(.as)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs:11` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs:11` | `as` | record-dot `(.as)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ValidateCustomType/ReadModelHoles.hs:8` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ValidateCustomType/ReadModelHoles.hs:8` | `as` | record-dot `(.as)` or positional pattern/construction | hand-owned; report only |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ValidateCustomType/ReadModelHoles.hs:10` | `via` | record-dot `(.via)` or positional pattern/construction | hand-owned; report only |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Bindings.hs:12` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | hand-owned; report only |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Bindings.hs:12` | `as` | record-dot `(.as)` or positional pattern/construction | hand-owned; report only |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Bindings.hs:14` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | hand-owned; report only |
@@ -23716,6 +23776,8 @@ These files are inventory inputs only. Edition adoption must not rewrite their b
 | `keiro-dsl/test/conformance-import-planning/ImportPlanningCollisions/CollisionLedger/BehaviorHoles.hs` | `Generated.ImportPlanningCollisions.CollisionLedger.BehaviorContract` |
 | `keiro-dsl/test/conformance-intake-delegated/HospitalCapacity/IncidentInbox/DelegatedIntegration.hs` | `Generated.HospitalCapacity.IncidentInbox.Inbox` |
 | `keiro-dsl/test/conformance-intake-full/HospitalCapacity/IncidentInbox/Integration.hs` | `Generated.HospitalCapacity.IncidentInbox.Inbox` |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ProjectionCatalog/ProjectionCatalogHoles.hs` | none |
+| `keiro-dsl/test/conformance-keyword-segments/KeywordSegments/ValidateCustomType/ReadModelHoles.hs` | `Generated.KeywordSegments.ValidateCustomType.QueryContract`, `Generated.KeywordSegments.ValidateCustomType.ReadModelTable` |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Bindings.hs` | `Generated.MappedQueue.Structural.Shape.JobMetadata`, `Generated.MappedQueue.Structural.Shape.JobPayload` |
 | `keiro-dsl/test/conformance-mapped-queue/Conformance/MappedQueue/Domain.hs` | none |
 | `keiro-dsl/test/conformance-mapped-readmodel/Conformance/MappedReadModel/Bindings.hs` | `Generated.MappedReadmodel.Structural.Shape.AccountLookup`, `Generated.MappedReadmodel.Structural.Shape.AccountProfile`, `Generated.MappedReadmodel.Structural.Shape.AccountSummary`, `Generated.MappedReadmodel.Structural.Shape.TenantKey`, `Generated.MappedReadmodel.Structural.Shape.UnusedFilter` |
