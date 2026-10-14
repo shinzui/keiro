@@ -2,6 +2,7 @@
 module Generated.ContractListFields.Templates.Contract
   ( TemplatesPayload (..)
   , TemplatesReassignedData (..)
+  , IndexData (..)
   , templateEventsTopic
   , messageTypeOf
   , encodeTemplatesPayload
@@ -9,7 +10,8 @@ module Generated.ContractListFields.Templates.Contract
   ) where
 
 import Data.Aeson (Value, object, withObject, withText, parseJSON, (.=))
-import Data.Aeson.Types (Parser, explicitParseField, parseEither, JSONPathElement (Index), (<?>))
+import Data.Aeson.Types (Parser, explicitParseField, parseEither, (<?>))
+import qualified Data.Aeson.Types as Aeson
 import Data.KindID (KindID)
 import qualified Data.KindID as KindID
 import Conformance.ContractListFields.Domain (ClaimId)
@@ -27,13 +29,18 @@ templateEventsTopic = "templates.events"
 data TemplatesReassignedData = TemplatesReassignedData {typeId :: !Nominals.TemplateId, templateIds :: ![Nominals.TemplateId], claimIds :: ![ClaimId], legacyTemplateIds :: ![(KindID "template")], labels :: ![Text], positions :: ![Int]}
   deriving stock (Eq, Show)
 
+data IndexData = IndexData {offsets :: ![Int]}
+  deriving stock (Eq, Show)
+
 data TemplatesPayload
   = TemplatesReassigned !TemplatesReassignedData
+  | Index !IndexData
   deriving stock (Eq, Show)
 
 messageTypeOf :: TemplatesPayload -> Text
 messageTypeOf = \case
   TemplatesReassigned {} -> "TemplatesReassigned"
+  Index {} -> "Index"
 
 encodeTemplatesPayload :: TemplatesPayload -> Value
 encodeTemplatesPayload = \case
@@ -46,6 +53,11 @@ encodeTemplatesPayload = \case
         "legacyTemplateIds" .= map KindID.toText payload.legacyTemplateIds,
         "labels" .= payload.labels,
         "positions" .= payload.positions
+      ]
+  Index payload ->
+    object
+      [ "messageType" .= ("Index" :: Text),
+        "offsets" .= payload.offsets
       ]
 
 parseTemplatesPayload :: Value -> Either Text TemplatesPayload
@@ -64,6 +76,11 @@ parseTemplatesPayload = mapLeftText . parseEither (withObject "TemplatesPayload"
                     <*> explicitParseField (parseContractList parseJSON) o "labels"
                     <*> explicitParseField (parseContractList parseJSON) o "positions"
                 )
+        "Index" ->
+          Index
+            <$> ( IndexData
+                    <$> explicitParseField (parseContractList parseJSON) o "offsets"
+                )
         _ -> fail "validated message type was not handled"
 
 mapLeftText :: Either String b -> Either Text b
@@ -71,10 +88,10 @@ mapLeftText = either (Left . T.pack) Right
 
 validateMessageType :: Text -> Parser Text
 validateMessageType kind
-  | kind `elem` ["TemplatesReassigned"] = pure kind
-  | otherwise = fail ("unknown message type " <> show kind <> "; expected one of: TemplatesReassigned")
+  | kind `elem` ["TemplatesReassigned", "Index"] = pure kind
+  | otherwise = fail ("unknown message type " <> show kind <> "; expected one of: TemplatesReassigned, Index")
 
 parseContractList :: (Value -> Parser a) -> Value -> Parser [a]
 parseContractList element value = do
   items <- parseJSON value :: Parser [Value]
-  traverse (\(index, item) -> element item <?> Index index) (zip [0 :: Int ..] items)
+  traverse (\(index, item) -> element item <?> Aeson.Index index) (zip [0 :: Int ..] items)

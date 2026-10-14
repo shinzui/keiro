@@ -3916,6 +3916,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
                <> ")",
              aesonTypesImport
            ]
+        ++ ["import qualified Data.Aeson.Types as Aeson" | hasListFields]
         ++ typedKindIdImports
         ++ T.lines (renderPlannedImports importPlan)
         ++ [ "import Data.Text (Text)",
@@ -4045,7 +4046,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
     isLiteralTypedTypeId _ = False
     aesonTypesImport =
       "import Data.Aeson.Types (Parser, explicitParseField, parseEither"
-        <> (if hasListFields then ", JSONPathElement (Index), (<?>)" else "")
+        <> (if hasListFields then ", (<?>)" else "")
         <> ")"
     encodeArm e =
       [ "  " <> (.name) e <> " payload ->",
@@ -4106,7 +4107,7 @@ emitContractGen ctx languageContract genPrefix nominalLeaves c =
         "parseContractList :: (Value -> Parser a) -> Value -> Parser [a]",
         "parseContractList element value = do",
         "  items <- parseJSON value :: Parser [Value]",
-        "  traverse (\\(index, item) -> element item <?> Index index) (zip [0 :: Int ..] items)"
+        "  traverse (\\(index, item) -> element item <?> Aeson.Index index) (zip [0 :: Int ..] items)"
       ]
 
 contractNeedsDuplicateRecordFields :: ContractNode -> Bool

@@ -8624,7 +8624,7 @@ main = hspec $ do
           "explicitParseField (parseContractList parseJSON) o \"labels\"",
           "explicitParseField (parseContractList parseJSON) o \"positions\"",
           "parseContractList :: (Value -> Parser a) -> Value -> Parser [a]",
-          "element item <?> Index index"
+          "element item <?> Aeson.Index index"
         ]
         $ \fragment -> contractModule `shouldSatisfy` T.isInfixOf fragment
       forM_ ["parseTemplateIdLeaf", "parseClaimIdLeaf"] $ \fragment -> leaves `shouldSatisfy` T.isInfixOf fragment
@@ -8675,7 +8675,7 @@ main = hspec $ do
         primitive <- checkedServiceFromText "primitive-list.keiro" (T.unlines ["language keiro-dsl 6", "context primitive", "contract values { schemaVersion 1 discriminator kind topic events \"values.events\"", "event Values on events { labels: List text " <> (if withScalar then "name: text" else "") <> " } }"])
         let rendered = generatedTextEndingIn "Values/Contract.hs" (scaffoldServiceModules (defaultContext (checkedSpec primitive).context) primitive)
         validateService primitive `shouldBe` []
-        forM_ ["parseJSON", "JSONPathElement (Index)", "(<?>)"] $ \fragment -> rendered `shouldSatisfy` T.isInfixOf fragment
+        forM_ ["parseJSON", "import qualified Data.Aeson.Types as Aeson", "(<?>)"] $ \fragment -> rendered `shouldSatisfy` T.isInfixOf fragment
         ("(.:)" `T.isInfixOf` rendered) `shouldBe` withScalar
 
     it "refuses contract list fields as identity once per clause with envelope precedence" $ do

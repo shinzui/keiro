@@ -68,6 +68,8 @@ main = do
       empty = TemplatesReassigned (TemplatesReassignedData (templateIdValue) [] [] [] [] [])
       reversed = TemplatesReassigned (TemplatesReassignedData (templateIdValue) (reverse templateIdsValue) [claimId] [legacyTemplateIdValue] ["first", "second"] [1, 2])
       repeated = TemplatesReassigned (TemplatesReassignedData (templateIdValue) (templateIdsValue <> templateIdsValue) [claimId, claimId] [legacyTemplateIdValue, legacyTemplateIdValue] ["first", "first"] [1, 1])
+      indexPayload = Index (IndexData [2, 1, 2])
+      indexJson = object ["messageType" .= ("Index" :: Text), "offsets" .= ([2, 1, 2] :: [Int])]
       expectedEmpty = foldr (\key -> replaceField key (toJSON ([] :: [Value]))) expectedJson listKeys
       checks =
         [ ("list fields encode exact ordered scalar arrays", encoded == expectedJson),
@@ -82,7 +84,9 @@ main = do
           ("all list fields are required", all (\key -> rejectsAt (T.pack (show key)) (removeField key encoded)) listKeys),
           ("all list fields reject null", all (\key -> rejectsAt ("$." <> T.dropAround (== '"') (T.pack (show key))) (replaceField key Null encoded)) listKeys),
           ("all scalar families reject null elements at their index", all (\key -> rejectsAt ("$." <> T.dropAround (== '"') (T.pack (show key)) <> "[0]") (replaceField key (toJSON [Null]) encoded)) listKeys),
-          ("contract-only nominal helpers pass conformance", all snd structuralConformanceAssertions)
+          ("contract-only nominal helpers pass conformance", all snd structuralConformanceAssertions),
+          ("Index event encodes exact arrays and round-trips", encodeTemplatesPayload indexPayload == indexJson && parseTemplatesPayload indexJson == Right indexPayload),
+          ("Index event retains element error paths", rejectsAt "$.offsets[1]" (replaceField "offsets" (toJSON [toJSON (2 :: Int), Null]) indexJson))
         ]
   mapM_ (\(label, ok) -> putStrLn ((if ok then "PASS  " else "FAIL  ") <> label)) checks
   if all snd checks then pure () else exitFailure

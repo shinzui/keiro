@@ -26,6 +26,11 @@ provenance:
       at: 2026-10-14T04:06:31Z
       mode: "implement"
       note: "Implement list contract fields, strict generated codecs, validation, evolution and conformance coverage."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T19:31:23Z
+      mode: "implement"
+      note: "Fix the generated contract Index constructor collision and add compiled regression coverage."
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -37,6 +42,11 @@ provenance:
       at: 2026-10-14T01:12:53Z
       verdict: "approved"
       note: "Follow-up review of revised plan: initial findings addressed; repository/API paths, admission semantics, identity precedence, corpus sequencing, and document checks verified. Implementation remains pending."
+    - model: "gpt-6-astra"
+      harness: "codex-cli"
+      at: 2026-10-14T19:19:27Z
+      verdict: "changes-requested"
+      note: "Implementation review at 6692f43e, including plan 313 parser corrections: reproduced accepted Index event failing generated-code compilation when list parsing imports Aeson Index unqualified; scalar and ordinary-list controls compile, and qualifying Index fixes the probe."
 ---
 
 # Support list fields in integration contracts
@@ -118,10 +128,19 @@ note RES-18, `docs/research/15-containers-in-public-contract-fields.md`, asked f
 - [x] (2026-10-14 06:00Z) M4. Update `docs/user/keiro-dsl-integration.md`, `docs/user/keiro-dsl-reference.md`, `docs/user/keiro-dsl-validation-and-evolution.md`, `docs/user/log.md`; `just user-documentation-validate` passes.
 - [x] (2026-10-14 06:00Z) M4. Record the change in `keiro-dsl/CHANGELOG.md` and `CHANGELOG.md` under `[Unreleased]`.
 - [x] (2026-10-14 06:00Z) M4. Move IR-54 to `completed` with `completedAt` and `resolution`; log it; distill ADRs; write Outcomes & Retrospective.
+- [x] (2026-10-14) Follow-up: qualify the generated list index constructor and add an `Index` event to the compiled corpus and evolution fixtures.
+- [x] (2026-10-14) Follow-up: the regenerated contract compiles and all 15 list-codec checks pass, including the Index round-trip and indexed-error regression.
+- [ ] Follow-up: finish the DSL unit suite, repository policies, and clean-baseline corpus drift check.
 - [ ] Release. Ship in the next keiro-dsl release per the shared release convention; tick this box with the version; notify the consumer (see Milestone 4).
 
 
 ## Surprises & Discoveries
+
+Implementation review found that the unqualified Aeson `Index` import collided with a
+valid public event named `Index`. Validation accepted it, but generated Haskell failed
+with GHC-87543. Scalar `Index` and ordinary list-event controls compiled. The follow-up
+uses the already reserved `Aeson` qualifier and exercises the collision in the compiled
+corpus; no wire or language policy changes are needed.
 
 Document unexpected behaviors, bugs, optimizations, or insights discovered during
 implementation. Provide concise evidence.
@@ -299,6 +318,13 @@ implementation. Provide concise evidence.
 
 
 ## Outcomes & Retrospective
+
+The implementation-review follow-up qualifies Aeson’s index constructor using the
+already reserved `Aeson` qualifier, preserving legal event names without changing
+array semantics. The expanded compiled corpus passes 15 checks, including an `Index`
+event round-trip and its indexed error path. The full unit suite, policy checks,
+and clean-baseline corpus drift check are pending. This repairs the implementation
+of ADR-52; no architectural policy change is required.
 
 All four implementation milestones completed on 2026-10-14. Candidate Language 6
 accepts List of literal TypeID, generated declared ID, consumer-bound declared ID,
@@ -700,14 +726,15 @@ rendering and compatibility decisions retain the outer shape:
   `renderedDeclaredLeafHelper "parse" name` for a declared id, and `parseJSON` otherwise.
 - Add `hasListFields = any (any (contractIsList . (.valueType)) . (.fields)) ((.events) c)`.
   When it is true, add `parseJSON` to the `Data.Aeson` import list (line 3840), change
-  `aesonTypesImport` to also import `JSONPathElement (Index)` and `(<?>)`, and append this
+  `aesonTypesImport` to also import `(<?>)`, emit `import qualified Data.Aeson.Types as Aeson`
+  (an existing reserved renderer qualifier), and append this
   helper after `validateMessageType` at the end of the module:
 
 ```haskell
 parseContractList :: (Value -> Parser a) -> Value -> Parser [a]
 parseContractList element value = do
   items <- parseJSON value :: Parser [Value]
-  traverse (\(index, item) -> element item <?> Index index) (zip [0 :: Int ..] items)
+  traverse (\(index, item) -> element item <?> Aeson.Index index) (zip [0 :: Int ..] items)
 ```
 
   Emit none of this when no field is a list, because generated output compiles under
@@ -1241,8 +1268,8 @@ modules that contain a list field define
 parseContractList :: (Value -> Parser a) -> Value -> Parser [a]
 ```
 
-and import `parseJSON` from `Data.Aeson` and `JSONPathElement (Index)` and `(<?>)` from
-`Data.Aeson.Types`; their package dependencies are unchanged (`aeson`, `text`, and for typed
+and import `parseJSON` from `Data.Aeson`, `(<?>)` from `Data.Aeson.Types`, and
+`Data.Aeson.Types` qualified as `Aeson` for `Aeson.Index`; their package dependencies are unchanged (`aeson`, `text`, and for typed
 IDs `keiro-core` and `mmzk-typeid`, per `keiro-dsl/src/Keiro/Dsl/Manifest.hs`).
 
 Milestone 2 ends with a new `DiagnosticCode` constructor `ContractListFieldUsedAsKey` in
@@ -1356,3 +1383,9 @@ External libraries: `aeson` for `Value`, `Parser`, `explicitParseField`, `parseJ
 - 2026-10-14 (implement): Final ADR, research, improvement-request, and user-documentation
   bundle validations all passed; IR-54 was read back as completed with its timestamp and
   resolution. Only the future Release checkbox remains open.
+
+- 2026-10-14 (implement follow-up): Addressed the review finding by qualifying the
+  generated Aeson index constructor. Added a public `Index` event with a list field
+  to the compiled corpus and matching evolution fixtures, with exact JSON round-trip
+  and indexed-error checks. Updated import assertions and changelog. The regenerated corpus passes all 15 checks;
+  full unit, policy, and clean-baseline drift verification remain pending.

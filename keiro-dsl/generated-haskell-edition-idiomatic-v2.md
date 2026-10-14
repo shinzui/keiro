@@ -8,7 +8,7 @@ spelling while deriving their target and structural facts from current v2 output
 rows intentionally
 over-approximate selector use so no consumer occurrence is silently omitted during review.
 
-Inventory: 810 generated modules, 543 record declarations, 2411 fields, 21935 field-label occurrences, 19 local default-pragmas, and 196 hand-owned conformance modules.
+Inventory: 810 generated modules, 544 record declarations, 2412 fields, 21941 field-label occurrences, 19 local default-pragmas, and 196 hand-owned conformance modules.
 
 The `idiomatic-v2` manifest defaults are `DuplicateRecordFields`, `NoFieldSelectors`,
 `OverloadedRecordDot`, and `OverloadedStrings`. Constructor names, arity, field order, wire
@@ -402,7 +402,8 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-contract/Generated/HospitalCapacity/Emergency/Contract.hs:29` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), triageRecordId :: !Text, family :: !Text, payloadType :: !Text, serviceRegion :: !Text, redCount :: !Int` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-contract/Generated/HospitalCapacity/Emergency/Contract.hs:32` | `TransferReservationAcceptedData` | data | `incidentId` | `incidentId` | `!(KindID "inc"), reservationId :: !(KindID "rsv"), hospitalId :: !(KindID "hsp"), expirationDeadline :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-contract-declared-id/Generated/ContractDeclaredId/Templates/Contract.hs:27` | `TemplateClaimedData` | data | `templateId` | `templateId` | `!Nominals.TemplateId, claimId :: !ClaimId, legacyTemplateId :: !(KindID "template")` | `(.templateId)` or constructor pattern |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:27` | `TemplatesReassignedData` | data | `typeId` | `typeId` | `!Nominals.TemplateId, templateIds :: ![Nominals.TemplateId], claimIds :: ![ClaimId], legacyTemplateIds :: ![(KindID "template")], labels :: ![Text], positions :: ![Int]` | `(.typeId)` or constructor pattern |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:29` | `TemplatesReassignedData` | data | `typeId` | `typeId` | `!Nominals.TemplateId, templateIds :: ![Nominals.TemplateId], claimIds :: ![ClaimId], legacyTemplateIds :: ![(KindID "template")], labels :: ![Text], positions :: ![Int]` | `(.typeId)` or constructor pattern |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:32` | `IndexData` | data | `offsets` | `offsets` | `![Int]` | `(.offsets)` or constructor pattern |
 | `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:25` | `IncidentTransferNeedDeclaredData` | data | `incidentId` | `incidentId` | `!Text, triageRecordId :: !Text, region :: !Text, redCount :: !Int` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:28` | `TransferReservationAcceptedData` | data | `incidentId` | `incidentId` | `!Text, reservationId :: !Text, hospitalId :: !Text, expirationDeadline :: !Text` | `(.incidentId)` or constructor pattern |
 | `keiro-dsl/test/conformance-declarative-router/Generated/TransferRouting/BehaviorSourceMap.hs:12` | `BehaviorSourceLocation` | data | `sourceFile` | `file` | `!FilePath` | `(.file)` or constructor pattern |
@@ -6207,27 +6208,33 @@ keys, runtime behavior, and create-once source bytes remain unchanged.
 | `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:14` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:16` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:17` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:17` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:18` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:18` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:19` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:19` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:24` | `templates` | record-dot `(.templates)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:27` | `labels` | record-dot `(.labels)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:27` | `typeId` | record-dot `(.typeId)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:28` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:32` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:43` | `typeId` | record-dot `(.typeId)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:47` | `labels` | record-dot `(.labels)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:55` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:56` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:60` | `typeId` | record-dot `(.typeId)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:64` | `labels` | record-dot `(.labels)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:73` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:74` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:75` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:75` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:78` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
-| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:79` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:21` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:21` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:26` | `templates` | record-dot `(.templates)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:29` | `labels` | record-dot `(.labels)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:29` | `typeId` | record-dot `(.typeId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:30` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:32` | `offsets` | record-dot `(.offsets)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:33` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:38` | `stock` | record-dot `(.stock)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:50` | `typeId` | record-dot `(.typeId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:54` | `labels` | record-dot `(.labels)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:60` | `offsets` | record-dot `(.offsets)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:67` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:68` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:72` | `typeId` | record-dot `(.typeId)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:76` | `labels` | record-dot `(.labels)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:82` | `offsets` | record-dot `(.offsets)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:90` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:91` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:92` | `expected` | record-dot `(.expected)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:92` | `kind` | record-dot `(.kind)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:95` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
+| `keiro-dsl/test/conformance-contract-list-fields/Generated/ContractListFields/Templates/Contract.hs:96` | `value` | record-dot `(.value)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:16` | `qualified` | record-dot `(.qualified)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:16` | `as` | record-dot `(.as)` or positional pattern/construction | overwriteable Generated |
 | `keiro-dsl/test/conformance-contract-v1-compat/Generated/HospitalCapacity/Emergency/Contract.hs:25` | `incidentId` | record-dot `(.incidentId)` or positional pattern/construction | overwriteable Generated |

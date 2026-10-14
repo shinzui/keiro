@@ -25,4 +25,8 @@ contract templates {
     labels: List int
     positions: List int
   }
+
+  event Index on templateEvents {
+    offsets: List int
+  }
 }

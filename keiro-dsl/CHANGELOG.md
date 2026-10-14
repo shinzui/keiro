@@ -49,6 +49,9 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Bug Fixes
 
+- Generated contract list codecs qualify Aeson's `Index` constructor so a public
+  event named `Index` compiles and retains indexed decoding errors.
+
 - `diff --since` classifies command/event/state removals and writes compatibility
   and replay-impact reports before the usual breaking gate exits nonzero.
   Replay analysis resolves each revision against its own declarations, retaining
