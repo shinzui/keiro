@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Integration contracts admit lists of scalar fields
 description: Public contracts own ordered arrays of admitted scalars with strict element admission, scalar identity keys, and shape-aware public evolution.
-timestamp: 2026-10-14T04:08:20Z
+timestamp: 2026-10-14T14:31:37Z
 docId: ADR-52
 status: Accepted
 date: 2026-10-14
@@ -27,6 +27,19 @@ The separately owned grammar represents scalars and lists of scalars independent
 so nesting is unrepresentable. Optional values, maps, sets, records, unions, and references
 to structural mappings remain excluded. This breaks the library's `ContractType` API;
 its former constructors belong to `ContractScalarType`, without a compatibility shim.
+
+Container recognition is contextual and case-sensitive. Only exact `List` followed
+by an operand introduces a list; `List`, `Optional`, `Map`, and `Set` remain legal
+declared ID names as scalars and list elements. Thus `List List` can denote a list
+of IDs named `List`, while `List List text` is invalid nesting. Unsupported
+container applications do not reserve their identically spelled nominal names.
+A type ends at `;`, `}`, or a complete next field head, including optional
+selector/wire aliases and `:`. Whitespace and comments do not delimit fields.
+The type graph permits a single ID declaration to share these contextual container
+words, while retaining scalar built-in and cross-declaration collision checks.
+Recognition uses syntax alone, preserving declaration-order and workspace-member
+independence; symbol resolution remains the validator's responsibility. Located
+Language 6 feature gates remain outside recognition backtracking.
 
 The writer emits a JSON array preserving order and duplicates. The reader requires the
 field, rejects non-arrays and null, and validates each element through its scalar parser.

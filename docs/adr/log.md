@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: ADR-52 clarifies contextual, case-sensitive List applications and legal nominal ID names under plan 313.
 * **Update**: ADR-46 clarifies that literal/declared public ID transitions require equal admission and shape, as implemented by ADR-52.
 * **Addition**: ADR-52 admits List fields of scalar types in integration contracts (Option B of RES-18) for IR-54.
 * **Update**: ADR-9 records registry-aware verification, identity-only exclusions, and guarded catalog fallback under plan 311.

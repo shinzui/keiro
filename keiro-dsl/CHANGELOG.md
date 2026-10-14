@@ -33,6 +33,11 @@ All notable changes to `keiro-dsl` are recorded here. The format follows
 
 ### Bug Fixes
 
+- Contract parsing admits declared IDs named `List`, `Optional`, `Map`, and `Set`
+  as scalars and list elements, including adjacent fields without semicolons.
+  The list keyword is exactly `List`; wrong-case applications are rejected.
+  Nested and unsupported container applications remain invalid.
+
 - Literal/declared contract ID transitions compare resolved admission as well as
   prefix and shape. Same-prefix admission widening or narrowing is public breaking,
   including inside a list; equal admission retains the consumer-build advisory.

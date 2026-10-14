@@ -6,7 +6,7 @@ docId: DOC-29
 tags: [keiro, dsl, integration, kafka, reference]
 generated:
   by: process:codex-cli
-  at: 2026-10-14T04:19:11Z
+  at: 2026-10-14T14:13:49Z
 ---
 
 # Keiro DSL Integration Contracts
@@ -100,8 +100,15 @@ Encoding writes an ordered JSON array and retains duplicates. Decoding requires 
 list field, rejects non-arrays and explicit null at `$.field`, and rejects any invalid
 or null element at `$.field[index]`. One bad element rejects the whole payload;
 `[]` is valid. Each ID element uses the same prefix and admission checks as a scalar.
-Nested containers, Optional, Map, Set, records, unions, enums, and structural references
-are refused in contracts.
+Nested containers, `Optional`, `Map`, and `Set` applications, records, unions, enums,
+and structural references are refused in contracts. Those application spellings do
+not reserve ID names: an `id Optional prefix=probe` declaration can supply both
+`value: Optional` and `values: List Optional`. Likewise, a declared ID named `List`
+can supply `value: List` and `values: List List`. A bare type ends at `;`, `}`, or
+the next field head (including its aliases and `:`); newlines are whitespace.
+Keywords are case-sensitive: only `List` introduces a list, so `list text`,
+`LIST text`, and `LiSt text` are invalid applications. Mixed-case words used alone
+remain ordinary declared ID names.
 
 A list field cannot be a publisher `outboxId` or an intake `dedupe` key; the checker
 reports `ContractListFieldUsedAsKey`. Canonical envelope identity names take precedence

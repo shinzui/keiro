@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-10-14
+* **Update**: DOC-29 clarifies exact List spelling, nominal container-name IDs, and adjacent field boundaries.
 * **Update**: Document List fields in integration contracts (Language 6 candidate): element types, codec policy, identity refusal, and evolution rules.
 * **Update**: Operations and migrations describe registry-recorded binding views, required privileges, and preserved drift checks.
 

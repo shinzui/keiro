@@ -42,7 +42,8 @@ This plan addresses the two parser findings from the review of `keiro-dsl-0.20.0
 - [x] (2026-10-14 14:28Z) M2 implementation: Repair contextual parsing and contextual ID collision checks, retaining feature gates and precise token spans.
 - [x] (2026-10-14 14:30Z) M2 validation: Focused parser/check/pretty/scaffold suite passes: `42 examples, 0 failures`, including checked workspace validation and CLI `check`.
 - [x] (2026-10-14 14:28Z) M3 documentation: Clarify the lexical rule and release correction in the reference, changelog, and ADR-52; strict ADR/documentation checks pass.
-- [ ] M3 validation: Run the full DSL suite and corpus gate.
+- [x] (2026-10-14 14:36Z) M3 suite validation: All 58 DSL suites pass; the main suite reports `848 examples, 0 failures`.
+- [x] (2026-10-14 14:37Z) M3 corpus validation: Generated corpus comparison passes (`56 plan entries`), including suite coverage, record/disk consistency, and Cabal inventory consistency.
 
 ## Surprises & Discoveries
 
@@ -65,14 +66,22 @@ The starting implementation failed the added nominal/boundary assertions and acc
 ## Outcomes & Retrospective
 
 
-Implementation and documentation are in place. The CLI returns `OK` for both `/tmp/parser-probe.keiro` (declared `Optional`) and `/tmp/parser-probe-list.keiro` (declared `List`), and canonical pretty output retains a scalar plus one-layer list. `/tmp/parser-probe-wrong-case.keiro` fails at line 8, column 59 on the extra operand, with exit 1. The focused workspace test initially called legacy `validateSpec`; it now uses `validateService (checkedWorkspace workspace)` to retain Language 6. The final focused suite passes (`42 examples, 0 failures`); the full suite and corpus gate remain outstanding. Strict ADR/user-documentation checks, API boundaries, record-migration policy, and formatting pass.
+Completed on 2026-10-14. Contract fields preserve scalar declared IDs and one-layer lists for `Optional`, `Map`, `Set`, and `List`, including aliases, comments, adjacent fields, and declarations in another workspace member. Exact `List` applications work; wrong-case applications, genuine nesting, and unsupported container applications fail. Unknown bare names reach `ContractIdUnknown`. Pretty printing retains the same AST shapes, and Language 5 retains the exact `List` feature-refusal span.
+
+The unchanged starting parser failed 25 of 41 focused examples. After the repair and an added collision-guard example, the focused suite passes all 42 examples. `nix develop -c cabal test keiro-dsl:tests --test-show-details=direct` passes all 58 declared suites; the main suite reports 848 examples with no failures. This includes the compiled contract-list codec, identity-key, evolution, and symbolic conformance checks. Z3 in this shell is 4.16.0.
+
+CLI `check` returns `OK` for the declared-`Optional` and declared-`List` probes. `pretty` retains the scalar and list forms. The wrong-case probe fails with exit 1 at line 8, column 59 on the extra operand. Two fresh CLI scaffolds of the declared-`List` probe produce five byte-identical Haskell modules. No committed fixture or generated corpus module changed.
+
+`nix develop -c just conformance-corpus-policy` passes all 56 corpus plan entries, record/disk consistency, and Cabal inventory consistency. Strict ADR and user-documentation validation, DSL API boundaries, record-migration policy, configured Fourmolu checks, and `git diff --check` pass. The record-migration manifest was regenerated solely for shifted TypeGraph source line references. The corpus regeneration command was unnecessary because no committed fixture changed.
+
+The important discovery was that the type graph also claimed contextual container words globally. Its narrow single-ID exception is necessary for successful public checks, while scalar built-ins and actual declaration collisions remain rejected. ADR-52 now records this distinction and the syntax-only field-boundary rule; no new ADR is needed. The workspace regression uses `validateService (checkedWorkspace workspace)` because legacy `validateSpec` intentionally lacks the workspace's Language 6 contract. Public ASTs, runtime capabilities, dependency bounds, wire representations, and aggregate-fold policy are unchanged. No implementation or validation remains outstanding.
 
 ## Context and Orientation
 
 
 Run commands from the repository root, `/Users/shinzui/Keikaku/bokuno/keiro`. A `.keiro` source selects a language and declares IDs and service nodes. An ID declaration, such as `id Optional prefix=probe`, gives a nominal type: a named identity type with a checked wire prefix. A contract describes public message payloads. `CScalar (CDeclaredId "Optional")` means one such ID; `CList (CDeclaredId "Optional")` means a list of those IDs. Neither is an optional-value container.
 
-`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs` owns `pContract`, `pContractType`, and `pContractScalarType`. The starting `contractContainerKeyword` imported Megaparsec's case-insensitive `string'`, unlike `keyword` in `keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`, which uses exact `chunk` matching and checks identifier boundaries. The starting scalar parser rejected every occurrence of `List`, `Optional`, `Map`, and `Set` before trying `ident`. Consequently an ordinary declared ID is rejected by spelling alone. The starting outer list branch also consumed a bare `List` before determining whether it has an element type.
+`keiro-dsl/src/Keiro/Dsl/Parser/Integration.hs` owns `pContract`, `pContractType`, and `pContractScalarType`. The starting `contractContainerKeyword` imported Megaparsec's case-insensitive `string'`, unlike `keyword` in `keiro-dsl/src/Keiro/Dsl/Parser/Core.hs`, which uses exact `chunk` matching and checks identifier boundaries. The starting scalar parser rejected every occurrence of `List`, `Optional`, `Map`, and `Set` before trying `ident`. Consequently an ordinary declared ID was rejected by spelling alone. The starting outer list branch also consumed a bare `List` before determining whether it has an element type.
 
 The starting `keiro-dsl/src/Keiro/Dsl/TypeGraph.hs` also rejected built-in container-word collisions with a single ID declaration. Repair this narrow collision for `Optional`, `List`, and `Map`; retain scalar built-in collisions and every actual cross-declaration collision. `Set` is not a structural built-in.
 
@@ -189,3 +198,7 @@ Implementation revision (2026-10-14, M2 discovery): Added the narrow built-in/si
 Implementation revision (2026-10-14, verification): CLI nominal/check/pretty probes pass and wrong-case application fails. Corrected the workspace regression to retain its checked Language 6 contract; split implementation/documentation completion from remaining suite and corpus validation.
 
 Implementation revision (2026-10-14, M2 complete): All 42 focused examples pass, including checked workspace composition, precise feature spans, contextual nominal ASTs, casing, aliases, round trips, and deterministic scalar/list scaffold codecs.
+
+Implementation revision (2026-10-14, full validation): All 58 DSL suites pass in the Nix shell, including the compiled contract-list codec suite, and the main suite reports 848 passing examples. Two fresh CLI scaffolds of the declared-List probe produced five byte-identical Haskell modules. The final corpus comparison remains outstanding.
+
+Completion revision (2026-10-14): Finished all milestones, recorded the passing 42-case focused suite, all 58 DSL suites (848 main examples), the 56-entry corpus comparison, strict documentation/policy/format checks, and fresh deterministic CLI scaffolds. Distilled contextual container recognition and the narrow ID collision exception into ADR-52.
