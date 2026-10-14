@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: BUG-12 fixed on master under plan 311: registry-aware comparison passes runtime, migration, operator, CLI, and full just verify gates; fixedVersion is unreleased.
 * **Update**: BUG-12 confirmed: compiled all-rows contract fixture reproduces unexpected binding-view drift on master; evidence retained and regression pending plan 311.
 * **Update**: BUG-11 fixed: whole-name generated stems and bounded import audit pass Language 6 keyword-segment conformance and full verification
 * **Update**: BUG-11 in progress: Language 6 conformance suite reproduces GHC-61689

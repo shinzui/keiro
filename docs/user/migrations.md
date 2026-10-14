@@ -2,11 +2,12 @@
 type: Runbook
 title: Database Migrations
 description: Install, upgrade, and verify Keiro framework database migrations.
+timestamp: 2026-10-14T03:37:57Z
 docId: DOC-14
 tags: [keiro, migrations, database, operations]
 generated:
   by: human:nadeem
-  at: 2026-08-17T04:23:40Z
+  at: 2026-10-14T03:37:57Z
 ---
 
 # Database Migrations
@@ -61,10 +62,15 @@ cabal run keiro-migrate -- verify-schema
 - `status` compares declared migrations with the durable `pgmigrate` ledger.
 - `verify` is the strict plan-versus-ledger gate. It rejects pending, changed,
   reordered, repaired, or unknown migration history.
-- `verify-schema` compares the live tables, columns, constraints, and indexes in
-  the `keiro` schema with the embedded PostgreSQL 18 expected snapshot. Run it
-  after restores and cutovers, and alongside `verify` in deployment, so a clean
-  ledger cannot conceal live object drift.
+- `verify-schema` compares live tables, columns, constraints, indexes, and ordered
+  view column signatures in `keiro` and `keiro_read` with the embedded PostgreSQL
+  18 expected snapshot. Binding views recorded in
+  `keiro.keiro_managed_read_objects` with `managed_by = 'keiro'` are allowed
+  runtime additions when the verifier has table `SELECT` and schema `USAGE`.
+  Consumer-managed and unregistered additions remain drift, as do missing or
+  changed migration-owned objects. A missing or unreadable registry preserves
+  the previous comparison. Run this after restores and cutovers, and alongside
+  `verify` in deployment, so a clean ledger cannot conceal live object drift.
 - `up` acquires the shared advisory lock and applies the complete pending plan
   in dependency order. Do not select a subset during deployment.
 

@@ -2,12 +2,12 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-09-10T03:35:00Z
+timestamp: 2026-10-14T03:37:57Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
   by: human:nadeem
-  at: 2026-09-18T04:05:10Z
+  at: 2026-10-14T03:37:57Z
 ---
 
 # Operations
@@ -33,6 +33,13 @@ they first return an exact preview plus a `--force` reinvocation. Permanent
 stream operations also require the stream name to be typed in human mode.
 `--json` emits the same result value as the human table and is the stable
 automation surface.
+
+Binding views recorded in `keiro.keiro_managed_read_objects` with
+`managed_by = 'keiro'`, such as `keiro.external_read_<function>_binding`, are
+allowed runtime additions when verification has table `SELECT` and schema
+`USAGE`. Consumer-managed and unregistered additions are still drift, and
+missing or changed migration-owned objects remain checked. A missing or
+unreadable registry preserves the previous snapshot comparison.
 
 The standalone executable can operate only on capabilities whose complete
 contract lives in the database. Application-code-dependent commands are

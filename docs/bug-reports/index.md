@@ -39,7 +39,7 @@ steps in plans 299, 300, and 301 are still unchecked.
 | [BUG-9](9-pgmq-dlq-read-json-renders-message-id-with-show.md) | `reported` | No plan for this failure | Open; reported from the Kenshou operator cross-check scenario. |
 | [BUG-10](10-initial-hole-harness-requires-acceptance-from-empty-registers.md) | `fixed` | [309](../plans/309-prove-hole-owned-initial-edges-through-history-backed-witnesses-in-generated-harnesses-to-fix-bug-10.md) | Completed; history-backed initial-hole acceptance and persisted-codec replay pass aggregate and whole-service proofs, all eight witness mutations fail by name, and the full verification gate passes. Fixed version: `unreleased`. |
 | [BUG-11](11-read-model-harness-imports-inconsistent-keyword-segment-name.md) | `fixed` | [310](../plans/310-derive-generated-declaration-stems-from-whole-logical-names-to-fix-bug-11.md) | Implemented; keyword-segment conformance suite compiles and the full verification gate passes. Fixed version: `unreleased`. |
-| [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `confirmed` | [311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md) | Compiled all-rows fixture reproduces the unexpected binding view on master; [evidence](evidence/BUG-12-master-binding-view-drift.txt) retained and regression committed pending the fix. |
+| [BUG-12](12-ops-schema-verification-flags-keiro-managed-binding-view.md) | `fixed` | [311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md) | Registry-aware verification implemented; runtime, migration, operator, CLI, and full verification checks pass. `fixedVersion: unreleased`. [Original reproduction](evidence/BUG-12-master-binding-view-drift.txt). |
 
 BUG-10 was added on 2026-10-13 after the historical audit above. Its two failing
 assertions share one reproduction. Later that day the owning repository validated the
@@ -56,4 +56,5 @@ verification gate now pass. The report is `fixed` with `fixedVersion: unreleased
 
 BUG-12 was merged from GitHub PR #7 on 2026-10-13. The owning repository confirmed the
 cause from master source the same day and wrote plan 311. The compiled owner fixture
-reproduced the exact binding-view drift on 2026-10-14; status is `confirmed`.
+reproduced the exact binding-view drift on 2026-10-14. Registry-aware verification
+and the full gate now pass; status is `fixed` with `fixedVersion: unreleased`.

@@ -4,9 +4,11 @@ title: Operator schema verification flags Keiro's own external-read binding view
 description: "keiro-ops verifies the live keiro schema against a migrations-only snapshot, so the binding view Keiro creates for every all-rows external-read contract is reported as unexpected drift and every mutating operator command refuses without --allow-schema-drift."
 generated:
   by: process:claude-code
-  at: "2026-10-14T03:33:25Z"
+  at: "2026-10-14T04:03:39Z"
 bugId: BUG-12
-status: confirmed
+status: fixed
+fixedVersion: "unreleased"
+resolution: "Plan 311 makes schema verification consult Keiro-managed binding-view registry rows while preserving ordinary drift and missing-privilege fallback."
 severity: degraded
 origin: mori://tan/notification-render-service
 affects: mori://shinzui/keiro
@@ -133,11 +135,19 @@ lists every view in the `keiro` and `keiro_read` schemas, and
 Tracked by [plan 311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md),
 which makes `verifyExpectedSchema` consult `keiro.keiro_managed_read_objects` so that a
 live object Keiro's runtime created and recorded is expected rather than unexpected, while
-an unregistered view is still reported. Its first milestone reproduces the drift with a
-compiled fixture before the status moves to `confirmed`.
+an unregistered view is still reported. Its first milestone reproduced the drift with a
+compiled fixture before the status moved to `confirmed`.
 
 The owning repository reproduced the exact unexpected binding view on master with
 a compiled all-rows fixture on 2026-10-14. The clean pre-reconciliation assertion
 passed; the final assertion failed. See the retained
-[evidence transcript](evidence/BUG-12-master-binding-view-drift.txt). The fixture is
-committed pending the registry-aware comparison.
+[evidence transcript](evidence/BUG-12-master-binding-view-drift.txt). The fixture was
+initially committed pending the registry-aware comparison and now runs successfully.
+
+Plan 311 is implemented and the full `nix develop -c just verify` gate passed on
+2026-10-14. Regression coverage spans the migration library (registry states,
+restricted roles, absent registries, and preserved drift), real all-rows runtime
+reconciliation, and operator executable mutation gating. The built migration CLI
+also succeeds for every registered lifecycle state and rejects an unregistered
+neighbour. The fix is on master and remains unreleased; installed binaries need
+rebuilding against the fixed migration library.

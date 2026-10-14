@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-14
+* **Update**: ADR-9 records registry-aware verification, identity-only exclusions, and guarded catalog fallback under plan 311.
 * **Addition**: ADR-51: derive generated declaration names from whole logical names and audit known sibling exports
 * **Update**: Clarify inspection isolation: default-off bounded provenance, admission and feed resource limits, and measured runtime interference before release.
 

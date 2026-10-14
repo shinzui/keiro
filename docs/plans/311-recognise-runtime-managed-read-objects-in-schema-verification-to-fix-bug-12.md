@@ -100,9 +100,9 @@ binding view.
 - [x] 2026-10-14 03:38Z: Milestone 3: update ADR 9 with the registry-aware verification decision, advance its
       timestamp, log the ADR bundle, and pass strict validation.
 - [x] 2026-10-14 03:38Z: Milestone 3: record the fix under `[Unreleased]` in the root `CHANGELOG.md`.
-- [ ] Milestone 3: set BUG-12 `fixed` with `fixedVersion: unreleased` and a `resolution`,
+- [x] 2026-10-14 04:03Z: Milestone 3: set BUG-12 `fixed` with `fixedVersion: unreleased` and a `resolution`,
       update the index coverage row, log the bundle, and pass strict validation.
-- [ ] Milestone 3: `nix develop -c just verify` passes; fill Outcomes & Retrospective.
+- [x] 2026-10-14 04:03Z: Milestone 3: `nix develop -c just verify` passes; fill Outcomes & Retrospective.
 
 
 ## Surprises & Discoveries
@@ -231,39 +231,65 @@ helper for the same reason.
 ## Outcomes & Retrospective
 
 
-Implementation reproduced BUG-12 at baseline commit
-`b82e308eb3d0570501928309b909e7b4b2ec6656`: the all-rows fixture had a clean schema
-before reconciliation and exactly one unexpected binding view afterwards. The
-retained transcript is `docs/bug-reports/evidence/BUG-12-master-binding-view-drift.txt`.
-The fixture block reported `7 examples, 1 failure`, with all six existing examples
-passing. BUG-12 is now confirmed and its strict bundle check passes. The pending fixture run passed with `7 examples, 0 failures, 1 pending`; the
-registry-aware implementation is complete. The full migration suite passed with
-`40 examples, 0 failures`, including all four new examples, every registry state,
-both missing-privilege paths, an authorised non-owner, absent registries, and
-unchanged migration-owned drift detection. The runtime block now passes with
-`7 examples, 0 failures`, including the previously failing fixture. Both operator
-executable examples pass (`2 examples, 0 failures`): registered views permit the
-forced mutation, and a hand-added column still triggers refusal.
+BUG-12 is fixed in the working tree and remains unreleased. The registry-aware
+comparison permits only unexpected runtime binding views recorded as Keiro-managed;
+it preserves missing and changed migration-owned objects, unregistered and
+consumer-managed additions, and conservative fallback for absent or unreadable
+registries. Raw snapshots and the existing public verifier signature are unchanged.
 
-Missing or altered runtime-object definitions remain outside this fix: a registry
-row establishes which runtime additions are allowed, not that their live definition
-is correct.
+The compiled runtime fixture failed at baseline commit
+`b82e308eb3d0570501928309b909e7b4b2ec6656` with exactly the unexpected binding view,
+after its pre-reconciliation assertion passed. The transcript is retained at
+`docs/bug-reports/evidence/BUG-12-master-binding-view-drift.txt`. It was committed
+pending in `58a5d155`, the library fix in `b13d814d`, and passing runtime/operator
+regressions in `943a2a09`.
 
-Review validation ran the existing suite from the repository root:
+Validation ran in the Nix development shell with GHC 9.12.4, PostgreSQL 18.6,
+and Z3 4.16.0. The focused runtime block passed all seven examples; the operator
+executable block passed both success and genuine-drift refusal examples. The full
+migration suite passed all 40 examples, including all four new regressions.
+A disposable PostgreSQL cluster migrated with the built CLI also proved:
+
+```text
+active: exit 0; schema verification succeeded
+pending-retirement: exit 0; schema verification succeeded
+retired: exit 0; schema verification succeeded
+unregistered neighbour: exit 1; schema drift: unexpected view keiro.external_read_rogue_v1_binding (actual: columns=1:id bigint)
+```
+
+The repository-wide gate completed successfully on 2026-10-14:
 
 ```bash
-nix develop -c cabal test keiro-migrations:keiro-migrations-test --test-show-details=direct \
-  --test-options='--match "native expected schema"'
+nix develop -c just verify
 ```
 
 ```text
-3 examples, 0 failures
-Test suite keiro-migrations-test: PASS
+keiro-test: 756 examples, 0 failures
+keiro-retention: 15 examples, 0 failures
+keiro-pgmq-test: 80 examples, 0 failures, 2 pending
+keiro-ops-test: 51 examples, 0 failures
+keiro-dsl-test: 806 examples, 0 failures
+keiro-migrations-test: 40 examples, 0 failures
+just verify: exit 0
 ```
 
-This verifies the unchanged baseline, not the four proposed regression examples or the
-feature fix. The review also checked local links, required sections, code-fence language
-tags, and whitespace. The full implementation gate has not been run for this plan review.
+All DSL conformance suites, Jitsurei checks, documentation bundles, repository
+policies, hydration and mutation proofs, replay compatibility, and mapped-consumer
+adoption checks included in that gate passed. The two pre-existing PGMQ pending
+examples require a deterministic polling fault injector and a pg_partman-enabled
+fixture, respectively; none of this plan's regressions is pending. Only documentation
+and bug-closure metadata changed after the full gate.
+
+ADR 9 now records the durable registry authority, comparison-only exception,
+lifecycle rule, and privilege fallback. Operations and migration documentation and
+all three changelogs describe the behavior. BUG-12 is `fixed` with `fixedVersion: unreleased`; strict closure validation
+passed with all 12 bug-report concepts valid. Every implementation milestone is
+complete.
+
+Missing or altered runtime-only object definitions remain a deliberate follow-up:
+a registry row establishes which additions are allowed, not whether their live
+definition is correct. Installed operator binaries must be rebuilt against the
+fixed migration library; version selection and cohort bounds remain release work.
 
 
 ## Context and Orientation
@@ -1151,3 +1177,10 @@ named in Context and Orientation. None of that changes.
 
 - 2026-10-14: Milestone 2 complete: enabled the runtime regression and verified the
   operator executable success/refusal paths. Seven runtime and two operator examples pass.
+
+- 2026-10-14: full `just verify` gate passed; final outcomes record all three regression
+  layers, CLI state/rogue-view checks, and the existing PGMQ pending-test limitations.
+  Durable decisions were distilled into ADR 9; BUG-12 closure follows the full gate.
+
+- 2026-10-14: strict BUG-12 closure validation passed; checked off the full-gate
+  and closure items. Plan 311 is complete with no outstanding implementation work.

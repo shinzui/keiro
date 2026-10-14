@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-10-14
+* **Update**: Operations and migrations describe registry-recorded binding views, required privileges, and preserved drift checks.
+
 ## 2026-10-13
 * **Update**: Document history-backed initial-hole harness evidence and whole-service witness checks.
 

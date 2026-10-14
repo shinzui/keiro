@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Keiro owns live schema verification under pg-migrate
 description: Keiro owns live-schema verification as a separate keiro-migrate verify-schema gate, distinct from pg-migrate's ledger-integrity verify.
-timestamp: 2026-08-14T02:59:54Z
+timestamp: 2026-10-14T03:37:57Z
 docId: ADR-9
 status: Accepted
 date: 2026-07-23
@@ -63,6 +63,23 @@ privileges are covered by dedicated contract tests.
 - `verifyExpectedSchema :: Settings -> IO (Either MigrationError [SchemaDrift])` for the
   CLI and other callers that have connection settings.
 
+The expected snapshot describes only what migrations build. Keiro's runtime also
+creates read objects inside `keiro` and records each in
+`keiro.keiro_managed_read_objects` in the same transaction. Verification therefore
+suppresses only `UnexpectedObject` for a `binding-view` key recorded with
+`managed_by = 'keiro'`, in every lifecycle state, including retirement (which does
+not drop the view). Missing and changed migration-owned objects, consumer-managed
+additions, and unregistered additions remain drift. This exception is applied in
+comparison; raw snapshots remain complete. Functions and types have no snapshot
+keys and are not mapped to another kind.
+
+The registry lookup uses a catalog existence and privilege guard requiring an
+ordinary table, table `SELECT`, and schema `USAGE`. An absent or unreadable registry
+returns no managed keys and preserves the previous comparison, rather than failing
+verification. Readability is not inferred from a snapshot line. A registry row
+without a live runtime object is not reported, and this identity-based exception
+does not validate a runtime-only view's definition or `definition_hash`.
+
 The settings-based boundary is intentional. Keiro will not import pg-migrate internals or
 require an upstream release merely to run its own catalog query.
 
@@ -92,6 +109,10 @@ native-lock entry.
 
 ## Consequences
 
+Services with registered all-rows external-read binding views can run operator
+mutations without `--allow-schema-drift` when the verifier can read the registry.
+A restricted verifier still reports those views as drift.
+
 Hand-altered live schemas now produce a nonzero CLI result naming each missing, unexpected,
 or changed object, while pg-migrate's existing ledger semantics remain unchanged.
 
@@ -120,6 +141,9 @@ backstop.
 
 
 ## References
+
+- [ExecPlan 311](../plans/311-recognise-runtime-managed-read-objects-in-schema-verification-to-fix-bug-12.md)
+  — registry-aware verification, privilege fallback, and BUG-12 regression evidence.
 
 - [docs/plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md](../plans/122-restore-live-schema-verification-body-lint-and-the-startup-handshake-under-pg-migrate.md)
   — implementation plan and negative-path evidence.

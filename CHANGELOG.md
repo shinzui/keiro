@@ -8,6 +8,15 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Bug Fixes
 
+- Schema verification allows runtime binding views recorded with
+  `managed_by = 'keiro'` in `keiro.keiro_managed_read_objects`, fixing
+  [BUG-12](docs/bug-reports/12-ops-schema-verification-flags-keiro-managed-binding-view.md).
+  All-rows external-read contracts no longer trigger drift warnings or mutation
+  refusal in `keiro-ops`. Missing table `SELECT` or schema `USAGE` preserves the
+  previous comparison; migration-owned differences and unregistered additions
+  remain drift. `keiro-migrations` exports `managedObjectSnapshotKeys` and
+  `compareSchemaSnapshotWithManaged`; the original pure comparison is unchanged.
+
 - `keiro-dsl` derives read-model and workqueue declarations from their whole
   logical names, fixing [BUG-11](docs/bug-reports/11-read-model-harness-imports-inconsistent-keyword-segment-name.md), and checks provably missing imports between generated modules before writing. Affected generated names require consumer source updates after re-scaffolding.
 - Generated aggregate harnesses prove Hole-owned live initial transitions with
