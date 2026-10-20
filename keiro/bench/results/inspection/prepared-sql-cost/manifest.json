@@ -1,0 +1,20 @@
+{
+  "driver": "scripts/inspection-prepared-sql-cost-evidence.hs",
+  "driver_sha256": "339232ee7d0c94cdfd2bbe46ecfdae2da97fda04268957ae002f1fff7c6b69c4",
+  "binary_sha256": "bad0dadc97cd4c68e225c3e275144406f4a030d105ff335c021854fb8267ccf2",
+  "build_flags": [
+    "-O2",
+    "-threaded",
+    "-rtsopts",
+    "-XGHC2024",
+    "-package=keiro",
+    "-package=keiro-test-support",
+    "-package=keiro-ops-http"
+  ],
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "repetitions": 5,
+  "calls_per_repetition": 100
+}

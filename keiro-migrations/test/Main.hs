@@ -277,6 +277,9 @@ main = hspec $ do
                 """
             )
         drifts <- verifyExpectedSchema settings >>= requireRight
+        withConnection settings $ \connection -> do
+          actual <- useSession connection ((<>) <$> snapshotSchema "keiro" <*> snapshotSchema "keiro_read")
+          drifts `shouldBe` compareSchemaSnapshot expectedSchemaSnapshot actual
         let rendered = renderSchemaDrift <$> drifts
         rendered
           `shouldSatisfy` any
@@ -355,18 +358,20 @@ main = hspec $ do
             demoDrift = [UnexpectedObject "view\tkeiro.external_read_demo_v1_binding\tcolumns=1:id bigint,2:total bigint"]
             checkRole expectedKeys expectedDrifts =
               withConnection settings $ \connection -> do
-                (keys, drifts) <-
+                (keys, drifts, optimized) <-
                   useSession
                     connection
                     ( do
                         Session.script "SET ROLE keiro_verify_probe"
                         managed <- managedObjectSnapshotKeys
                         actual <- (<>) <$> snapshotSchema "keiro" <*> snapshotSchema "keiro_read"
-                        pure (managed, compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot actual)
+                        optimized <- verifyExpectedSchemaSession
+                        pure (managed, compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot actual, optimized)
                     )
                     `finally` useSession connection (Session.script "RESET ROLE")
                 keys `shouldBe` expectedKeys
                 drifts `shouldBe` expectedDrifts
+                requireRight optimized >>= (`shouldBe` expectedDrifts)
         _ <- runMigrationPlan defaultRunOptions settings plan >>= requireRight
         withConnection settings $ \connection -> do
           useSession connection (Session.script managedBindingFixtureSql)
@@ -394,6 +399,22 @@ main = hspec $ do
           checkRole Set.empty demoDrift
           useSession connection (Session.script "GRANT USAGE ON SCHEMA keiro TO keiro_verify_probe")
           checkRole demoKeys []
+
+    it "preserves snapshot comparison for duplicate keys, quoting, and changed defaults" $ do
+      plan <- requirePlan
+      result <- withMigratedDatabase plan $ \connection -> do
+        useSession connection $
+          Session.script
+            """
+            CREATE TABLE keiro.schema_collision (shared_value text DEFAULT E'quote''slash\\\\tab\\t');
+            CREATE TABLE keiro_read.schema_collision (shared_value bigint DEFAULT 42);
+            ALTER TABLE keiro.keiro_workflows ALTER COLUMN attempts SET DEFAULT 3;
+            ALTER TABLE keiro.keiro_workflows ALTER COLUMN last_error SET DEFAULT E'quote''slash\\\\tab\\t';
+            """
+        actual <- useSession connection ((<>) <$> snapshotSchema "keiro" <*> snapshotSchema "keiro_read")
+        optimized <- useSession connection verifyExpectedSchemaSession >>= requireRight
+        optimized `shouldBe` compareSchemaSnapshot expectedSchemaSnapshot actual
+      either (expectationFailure . show) pure result
 
     it "falls back to ordinary drift when the registry is absent" $ do
       plan <- requirePlan

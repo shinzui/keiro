@@ -119,7 +119,7 @@ snapshotSchema :: Text -> Session Text
 snapshotSchema schema =
   Text.unlines <$> Session.statement schema schemaSnapshotStatement
 
--- | PostgreSQL 18 snapshot regenerated through migration 0031.
+-- | PostgreSQL 18 snapshot regenerated through migration 0033.
 expectedSchemaSnapshot :: Text
 expectedSchemaSnapshot =
   $(embedTextFile "expected-schema/native/keiro-v18.txt")
@@ -154,10 +154,11 @@ verifyExpectedSchemaSession = do
   let majorVersion = fromIntegral serverVersionNumber `div` 10000
   if majorVersion == (18 :: Int)
     then do
-      privateSchema <- snapshotSchema "keiro"
-      publicSchema <- snapshotSchema "keiro_read"
-      managed <- managedObjectSnapshotKeys
-      pure (Right (compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot (privateSchema <> publicSchema)))
+      readable <- Session.statement () registryReadableStatement
+      -- Compare every live catalog observation in PostgreSQL. Returning only
+      -- differences avoids rebuilding two complete Text/Map snapshots per poll.
+      -- No live result is cached, and registry visibility stays role-dependent.
+      Right <$> Session.statement () (if readable then managedSchemaDriftStatement else unmanagedSchemaDriftStatement)
     else pure (Left (UnsupportedPostgresVersion majorVersion))
 
 -- | Snapshot keys of the objects Keiro's runtime created and recorded in
@@ -244,73 +245,124 @@ splitSnapshotKey key =
 schemaSnapshotStatement :: Statement Text [Text]
 schemaSnapshotStatement =
   Statement.preparable
-    """
-    WITH configured AS MATERIALIZED (
-      SELECT set_config('search_path', 'pg_catalog', true) AS search_path
-    )
-    SELECT line
-    FROM configured
-    CROSS JOIN LATERAL (
-      SELECT 'table' || E'\t' || c.relname || E'\t' || 'kind=r' AS line
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = $1
-          AND c.relkind = 'r'
-          AND configured.search_path = 'pg_catalog'
-      UNION ALL
-      SELECT 'column' || E'\t' || c.relname || '.' || a.attname || E'\t'
-             || format_type(a.atttypid, a.atttypmod)
-             || CASE WHEN a.attnotnull THEN ' not null' ELSE '' END
-             || coalesce(' default ' || pg_get_expr(d.adbin, d.adrelid), '')
-        FROM pg_attribute a
-        JOIN pg_class c ON c.oid = a.attrelid
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        LEFT JOIN pg_attrdef d
-          ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-        WHERE n.nspname = $1
-          AND c.relkind = 'r'
-          AND a.attnum > 0
-          AND NOT a.attisdropped
-          AND configured.search_path = 'pg_catalog'
-      UNION ALL
-      SELECT 'constraint' || E'\t' || rel.relname || '.' || con.conname || E'\t'
-             || pg_get_constraintdef(con.oid)
-        FROM pg_constraint con
-        JOIN pg_class rel ON rel.oid = con.conrelid
-        JOIN pg_namespace n ON n.oid = rel.relnamespace
-        WHERE n.nspname = $1
-          AND configured.search_path = 'pg_catalog'
-      UNION ALL
-      SELECT 'index' || E'\t' || ci.relname || E'\t'
-             || pg_get_indexdef(i.indexrelid)
-        FROM pg_index i
-        JOIN pg_class ci ON ci.oid = i.indexrelid
-        JOIN pg_class ct ON ct.oid = i.indrelid
-        JOIN pg_namespace n ON n.oid = ct.relnamespace
-        WHERE n.nspname = $1
-          AND configured.search_path = 'pg_catalog'
-      UNION ALL
-      SELECT 'view' || E'\t' || n.nspname || '.' || c.relname || E'\t'
-             || 'columns='
-             || string_agg(
-                  a.attnum::text || ':' || a.attname || ' '
-                    || format_type(a.atttypid, a.atttypmod),
-                  ',' ORDER BY a.attnum
-                ) AS line
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        JOIN pg_attribute a ON a.attrelid = c.oid
-        WHERE n.nspname = $1
-          AND c.relkind = 'v'
-          AND a.attnum > 0
-          AND NOT a.attisdropped
-          AND configured.search_path = 'pg_catalog'
-        GROUP BY n.nspname, c.relname
-    ) snapshot
-    ORDER BY line COLLATE "C"
-    """
+    schemaSnapshotSql
     (Encoders.param (Encoders.nonNullable Encoders.text))
     (Decoders.rowList (Decoders.column (Decoders.nonNullable Decoders.text)))
+
+schemaSnapshotSql :: Text
+schemaSnapshotSql =
+  """
+  WITH configured AS MATERIALIZED (
+    SELECT set_config('search_path', 'pg_catalog', true) AS search_path
+  )
+  SELECT line
+  FROM configured
+  CROSS JOIN LATERAL (
+    SELECT 'table' || E'\t' || c.relname || E'\t' || 'kind=r' AS line
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1
+        AND c.relkind = 'r'
+        AND configured.search_path = 'pg_catalog'
+    UNION ALL
+    SELECT 'column' || E'\t' || c.relname || '.' || a.attname || E'\t'
+           || format_type(a.atttypid, a.atttypmod)
+           || CASE WHEN a.attnotnull THEN ' not null' ELSE '' END
+           || coalesce(' default ' || pg_get_expr(d.adbin, d.adrelid), '')
+      FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      LEFT JOIN pg_attrdef d
+        ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+      WHERE n.nspname = $1
+        AND c.relkind = 'r'
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+        AND configured.search_path = 'pg_catalog'
+    UNION ALL
+    SELECT 'constraint' || E'\t' || rel.relname || '.' || con.conname || E'\t'
+           || pg_get_constraintdef(con.oid)
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = rel.relnamespace
+      WHERE n.nspname = $1
+        AND configured.search_path = 'pg_catalog'
+    UNION ALL
+    SELECT 'index' || E'\t' || ci.relname || E'\t'
+           || pg_get_indexdef(i.indexrelid)
+      FROM pg_index i
+      JOIN pg_class ci ON ci.oid = i.indexrelid
+      JOIN pg_class ct ON ct.oid = i.indrelid
+      JOIN pg_namespace n ON n.oid = ct.relnamespace
+      WHERE n.nspname = $1
+        AND configured.search_path = 'pg_catalog'
+    UNION ALL
+    SELECT 'view' || E'\t' || n.nspname || '.' || c.relname || E'\t'
+           || 'columns='
+           || string_agg(
+                a.attnum::text || ':' || a.attname || ' '
+                  || format_type(a.atttypid, a.atttypmod),
+                ',' ORDER BY a.attnum
+              ) AS line
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.oid
+      WHERE n.nspname = $1
+        AND c.relkind = 'v'
+        AND a.attnum > 0
+        AND NOT a.attisdropped
+        AND configured.search_path = 'pg_catalog'
+      GROUP BY n.nspname, c.relname
+  ) snapshot
+  ORDER BY line COLLATE "C"
+  """
+
+-- These two prepared statements embed only the immutable expected snapshot.
+-- Their SQL is constructed once, not serialized as a large parameter per poll.
+managedSchemaDriftStatement :: Statement () [SchemaDrift]
+{-# NOINLINE managedSchemaDriftStatement #-}
+managedSchemaDriftStatement = schemaDriftStatement managedKeysSql
+  where
+    managedKeysSql =
+      "SELECT ('view' || E'\\t' || object_schema || '.' || object_name) COLLATE \"C\" AS key "
+        <> "FROM keiro.keiro_managed_read_objects WHERE managed_by = 'keiro' AND object_kind = 'binding-view'"
+
+unmanagedSchemaDriftStatement :: Statement () [SchemaDrift]
+{-# NOINLINE unmanagedSchemaDriftStatement #-}
+unmanagedSchemaDriftStatement = schemaDriftStatement "SELECT NULL::text COLLATE \"C\" AS key WHERE false"
+
+schemaDriftStatement :: Text -> Statement () [SchemaDrift]
+schemaDriftStatement managedSql = Statement.preparable sql Encoders.noParams decoder
+  where
+    -- E literals preserve quotes, backslashes and embedded control characters
+    -- independently of standard_conforming_strings. No runtime input enters SQL.
+    literal value = "E'" <> Text.replace "'" "''" (Text.replace "\\" "\\\\" value) <> "'"
+    expectedRows =
+      Text.intercalate "," ["(" <> Text.intercalate "," (map literal [key, line, definition]) <> ")" | (key, (line, definition)) <- Map.toAscList (snapshotObjects expectedSchemaSnapshot)]
+    sql =
+      "WITH live_lines AS MATERIALIZED (SELECT schemas.priority, observed.line FROM "
+        <> "(VALUES ('keiro'::text,1),('keiro_read'::text,2)) AS schemas(name,priority) CROSS JOIN LATERAL ("
+        <> Text.replace "$1" "schemas.name" schemaSnapshotSql
+        <> ") AS observed), actual_keys AS (SELECT priority,line COLLATE \"C\" AS line, "
+        <> "(split_part(line,E'\\t',1)||E'\\t'||split_part(line,E'\\t',2)) COLLATE \"C\" AS key FROM live_lines), "
+        -- Match Map.fromList over the two sorted snapshots: the public schema
+        -- wins duplicate keys, then the final C-sorted line within that schema.
+        <> "actual AS (SELECT DISTINCT ON (key) key,line,substring(line FROM length(key)+2) COLLATE \"C\" AS definition "
+        <> "FROM actual_keys ORDER BY key,priority DESC,line DESC), "
+        <> "expected AS (SELECT key COLLATE \"C\" AS key,line,definition COLLATE \"C\" AS definition FROM (VALUES "
+        <> expectedRows
+        <> ") AS embedded(key,line,definition)), managed AS ("
+        <> managedSql
+        <> ") SELECT coalesce(e.key,a.key),e.line,a.line,e.definition,a.definition FROM expected e FULL JOIN actual a USING(key) "
+        <> "WHERE a.key IS NULL OR (e.key IS NULL AND NOT EXISTS (SELECT 1 FROM managed m WHERE m.key=a.key)) "
+        <> "OR (e.key IS NOT NULL AND a.key IS NOT NULL AND e.definition IS DISTINCT FROM a.definition) ORDER BY coalesce(e.key,a.key) COLLATE \"C\""
+    decoder = Decoders.rowList (toDrift <$> required <*> optional <*> optional <*> optional <*> optional)
+    required = Decoders.column (Decoders.nonNullable Decoders.text)
+    optional = Decoders.column (Decoders.nullable Decoders.text)
+    toDrift _ (Just line) Nothing _ _ = MissingObject line
+    toDrift _ Nothing (Just line) _ _ = UnexpectedObject line
+    toDrift key (Just _) (Just _) (Just expected) (Just actual) = ChangedObject key expected actual
+    toDrift _ _ _ _ _ = error "schema comparison returned an impossible null combination"
 
 serverVersionStatement :: Statement () Int32
 serverVersionStatement =

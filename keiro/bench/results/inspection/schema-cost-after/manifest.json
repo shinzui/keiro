@@ -1,0 +1,13 @@
+{
+  "candidate_commit": "d9960626 plus source.patch.gz",
+  "comparison": "initial server-side comparison before preserving prepared statement CAF sharing",
+  "build_command": "nix develop -c cabal exec -- ghc -O2 -threaded -rtsopts -XGHC2024 -package=keiro -package=keiro-test-support -package=keiro-ops-http -outputdir /tmp/keiro-schema-probe-build scripts/inspection-schema-cost-evidence.hs -o /tmp/keiro-schema-cost-evidence-after",
+  "run_command": "nix develop -c /tmp/keiro-schema-cost-evidence-after OUTPUT_DIRECTORY +RTS -N2 -T -RTS",
+  "source_sha256": {
+    "scripts/inspection-schema-cost-evidence.hs": "4d7d15f3d539f3ed9a4a747fcf358b3e4f3a2318bd823b366a4cc75344c42e04",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "c0d9337673672d7f3457ac3cd1171c8a8c414acec2742a279942710be7bb6751"
+  },
+  "binary_sha256": "f9afafd85e630714b2e70a798cfef7f921f7ed6c13e8389bea39ee37f95f9448",
+  "allocation_scope": "whole process; allocation deltas include a forced major GC after each measured block",
+  "limitations": "attribution probe, not matched old/new deployment acceptance"
+}

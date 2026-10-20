@@ -9,14 +9,13 @@ module Keiro.Ops.Http.Budget
   )
 where
 
-import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (race)
 import Control.Concurrent.STM
 import Control.Exception (bracket, evaluate, mask)
 import Data.Aeson (Value, encode)
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Lazy qualified as LazyByteString
 import Keiro.Ops.Http.Config
+import System.Timeout (timeout)
 
 -- | One mount's admission counter; feed refreshes share this exact handle.
 data InspectionBudget = InspectionBudget !Int !(TVar Int)
@@ -33,8 +32,8 @@ newInspectionBudget limits
     deadlines = [limits.readDeadlineSeconds, limits.mutationDeadlineSeconds]
     values = deadlines <> [limits.maxConcurrentReads, limits.statementTimeoutMillis, limits.maxResponseBytes, limits.maxRequestBytes]
 
--- | No waiting queue. Cancellation joins the losing action before releasing the
--- permit, including on caller cancellation. Exceptions from work are preserved.
+-- | No waiting queue. Timed-out or cancelled work unwinds before releasing the
+-- permit. Exceptions from work are preserved.
 withInspectionBudget :: InspectionBudget -> Int -> IO a -> IO (Either BudgetFailure a)
 withInspectionBudget budget seconds action = do
   result <- withInspectionAdmission budget (withInspectionDeadline seconds action)
@@ -56,10 +55,12 @@ withInspectionAdmission (InspectionBudget capacity active) action = mask $ \rest
 -- computation timeout response can no longer be substituted safely.
 withInspectionDeadline :: Int -> IO a -> IO (Either BudgetFailure a)
 withInspectionDeadline seconds action = do
-  outcome <- race (threadDelay (seconds * 1000000)) action
-  pure $ case outcome of
-    Left () -> Left InspectionTimedOut
-    Right value -> Right value
+  -- The threaded RTS timer manager delivers an async exception on expiry;
+  -- successful reads reuse the request thread rather than allocating two Async
+  -- threads and fresh stacks per request. timeout owns timer cleanup as well as
+  -- unwinding the action before returning Nothing.
+  outcome <- timeout (seconds * 1000000) action
+  pure (maybe (Left InspectionTimedOut) Right outcome)
 
 -- | Demand at most the cap plus one byte of Aeson's lazy output. Force the
 -- bounded body before leaving the deadline; no partial result is served.

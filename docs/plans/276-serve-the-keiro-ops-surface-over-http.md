@@ -82,6 +82,15 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Progress
 
+- [x] (2026-10-20) Performance revision: live comparison returns differences
+  from PostgreSQL, prepared values remain shared, pure read parsing is bounded
+  to 64 entries, and successful deadlines reuse the request thread. All 42
+  migration, 51 ops, and 24 HTTP examples pass after the relevant changes.
+- [ ] Steady-state latency, full domain interference matrix and strict retention
+  acceptance. The narrow 380/s old/new profile has medians within 5%, but its
+  control variation and startup outlier make latency inconclusive. Keep raw
+  evidence; repeat with active clients warmed before measurement.
+
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
 
@@ -104,6 +113,42 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 
 ## Surprises & Discoveries
+
+2026-10-20: The real-socket/external-client repetition also rejects the first
+optimized candidate at the exploratory 50 writer operations/second: 32-view
+allocation remains about 17% above idle, with all 640 polls succeeding in each
+of five legs. Raw evidence is in `http-interference-real/`; its retained driver
+matches the manifest hash. Replacing per-request Async work/timer threads with
+the threaded RTS timeout manager preserves joined cancellation semantics and
+passes all 24 HTTP examples; the attribution header drops from about 124 KB
+to 87 KB. Fresh deployment acceptance remains open.
+
+Before selecting a different representative offered load, qualify baseline
+writer capacity with five unpaced, unmounted 1,000-operation legs on the same
+durable fixture. Predeclared selection rule: 75% of the minimum measured
+throughput, rounded down to the nearest ten operations/second. Validate that proposal in a paced baseline leg: throughput must reach 99% of
+the offered rate and the last/first tenth mean queue-delay growth must stay
+within 20 ms. If it fails, reduce the rate by a fixed 20%, rounded down to the
+nearest ten, and retain every rejected qualification. Keep the first passing
+rate fixed across comparison modes; repeat the headroom check on every actual
+baseline leg. The initial 480/s paced baseline failed at 452.8/s with about
+0.95 seconds of queue growth, before any candidate was accepted. The earlier 50/s rejection is retained; a pass
+at a different load will not erase it or establish the full cohort gate.
+
+2026-10-20: Five alternating same-binary, durable deployment legs reject the
+initial header polling implementation on aggregate allocation. Per 1,000 writer
+operations, idle allocated about 640.6 MiB and 32 views allocated 2,246.4 MiB
+(640 successful polls, no errors). Raw writer queue/phase samples, settings,
+CPU and allocation counters are in
+`keiro/bench/results/inspection/http-interference/`. This is a narrow rejection
+experiment, not the pre-change/full-cohort acceptance matrix. Attribution in
+`schema-cost-before/` measures 2,314,081 bytes per schema verification versus
+35,263 per point instance read. Returning only differences from a live
+server-side comparison preserves the contract; preserving the prepared
+statement CAFs in optimized code reduces verification to about 10,340 bytes
+per call (`schema-cost-shared/`). The ordinary full-snapshot comparison stays
+available and is used as the parity oracle. Header parser sharing and matched
+deployment reruns remain outstanding at this checkpoint.
 
 2026-10-20: Response computation alone is not the lifetime of retained output.
 Admission now continues through WAI's response callback, while the computation
@@ -145,6 +190,14 @@ shutdown test caught and fixed the ownership leak.
 
 
 ## Decision Log
+
+- Decision (2026-10-20): preserve per-request live catalog verification while
+  moving comparison against the immutable embedded schema into PostgreSQL.
+  Return differences only; cache neither live agreement nor registry privileges.
+  Keep separate prepared statements for readable/absent-or-unreadable registry
+  paths, preserve C ordering and duplicate-key precedence, and keep prepared
+  statement construction shared in optimized code. Rationale: measured polling
+  allocation violated the 5% gate; a TTL cache would weaken drift refusal.
 
 - Decision (2026-10-20): configure SQL deadlines through the inspection-owned
   pool's init session, preserving schema/search-path configuration. Every
@@ -357,8 +410,11 @@ builds in `nix develop`; Cabal check reports no errors or warnings. Strict ADR,
 capability, user-documentation, and improvement-request profiles pass (53, 20,
 34/30, and 54 concepts respectively). The project manifest type-checks.
 The solved dependency graph reports `Existing-package web dependency violations: []`.
-The full repository gate is running; integrated matched performance and
-retention measurements are not yet available and this child remains In Progress.
+The full repository gate subsequently passed. The live-comparison revision
+passes 42 migration, 51 ops and 24 HTTP examples. The narrow allocation
+experiment rejected the first polling implementation; optimized matched
+interference and retention acceptance remains open, so this child remains
+In Progress.
 
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.

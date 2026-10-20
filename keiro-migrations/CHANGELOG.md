@@ -6,6 +6,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Performance
+
+- Compare live schema observations in PostgreSQL and return differences only,
+  retaining per-call verification, registry permissions, and drift diagnostics.
+
 ### New Features
 
 - Migration 0033 adds the workflow creation-order inspection index.

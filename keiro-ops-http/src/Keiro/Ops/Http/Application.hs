@@ -14,6 +14,9 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as ByteString
 import Data.ByteString.Char8 qualified as Char8
 import Data.ByteString.Lazy qualified as LazyByteString
+import Data.IORef
+import Data.Map.Strict qualified as Map
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
@@ -88,9 +91,31 @@ opsApplicationWithBudget config budget hooks store =
 
 opsApplicationWithOperations :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> OpsHttpOperations -> IO Application
 opsApplicationWithOperations config budget hooks store operations = do
-  let flags = flagNames (commandParser hooks)
+  parsedReads <- newIORef (Map.empty, Seq.empty)
+  let parser = commandParser hooks
+      flags = flagNames parser
+      parse arguments = do
+        (known, _) <- readIORef parsedReads
+        case Map.lookup arguments known of
+          Just command -> pure (Parsed command)
+          Nothing -> case parseArgumentsWithParser parser arguments of
+            Parsed command
+              | not (isMutation command),
+                Right () <- validateCommand command -> do
+                  -- Cache only pure parsing, never observations or authorization.
+                  -- FIFO capacity and the request-byte cap bound retained inputs.
+                  atomicModifyIORef' parsedReads $ \(commands, order) ->
+                    if Map.member arguments commands
+                      then ((commands, order), ())
+                      else
+                        let (kept, queue) = case Seq.viewl order of
+                              oldest Seq.:< rest | Map.size commands >= 64 -> (Map.delete oldest commands, rest)
+                              _ -> (commands, order)
+                         in ((Map.insert arguments command kept, queue Seq.|> arguments), ())
+                  pure (Parsed command)
+            outcome -> pure outcome
   pure $ corsMiddleware config.allowedOrigins $ \request respond -> do
-    result <- trySync (dispatch flags request)
+    result <- trySync (dispatch parse flags request)
     case result of
       Left _ -> respond internalError
       Right (Immediate response) -> respond response
@@ -108,7 +133,7 @@ opsApplicationWithOperations config budget hooks store operations = do
           Right sent -> pure sent
   where
     limits = config.inspectionLimits
-    dispatch flags request
+    dispatch parse flags request
       | inputBytes request > limits.maxRequestBytes = immediate (failure status413 "inspection_request_too_large" "request path and query exceed the host limit")
       | pathInfo request == [] = immediate (failure status404 "not_found" "no inspection command at this path")
       | pathInfo request == ["health"] =
@@ -117,18 +142,20 @@ opsApplicationWithOperations config budget hooks store operations = do
             else immediate (methodFailure methodGet)
       | otherwise = case translate flags request of
           Left message -> immediate (failure status400 "invalid_request" message)
-          Right arguments -> case parseArguments hooks arguments of
-            Rejected message -> immediate (errorResponse (OpsHttpError status400 "invalid_request" message (Just (object ["arguments" .= arguments]))))
-            Parsed command | Left (code, message) <- validateCommand command -> immediate (failure status400 code message)
-            Parsed command -> do
-              let mutation = isMutation command
-                  method = if mutation then methodPost else methodGet
-              if requestMethod request /= method
-                then immediate (methodFailure method)
-                else
-                  if mutation && config.mutations == MutationsDisabled
-                    then immediate (failure status403 "mutations_disabled" "this surface was mounted without mutations")
-                    else budgetedCommand request command mutation
+          Right arguments -> do
+            parsed <- parse arguments
+            case parsed of
+              Rejected message -> immediate (errorResponse (OpsHttpError status400 "invalid_request" message (Just (object ["arguments" .= arguments]))))
+              Parsed command | Left (code, message) <- validateCommand command -> immediate (failure status400 code message)
+              Parsed command -> do
+                let mutation = isMutation command
+                    method = if mutation then methodPost else methodGet
+                if requestMethod request /= method
+                  then immediate (methodFailure method)
+                  else
+                    if mutation && config.mutations == MutationsDisabled
+                      then immediate (failure status403 "mutations_disabled" "this surface was mounted without mutations")
+                      else budgetedCommand request command mutation
     translate flags request = do
       query <- either (Left . Text.pack . displayException) Right (traverse decodeQuery (queryString request))
       either (Left . renderRouteError) Right (translateRequest (flags (pathInfo request)) (pathInfo request) query)

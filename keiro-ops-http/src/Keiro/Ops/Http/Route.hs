@@ -5,6 +5,7 @@ module Keiro.Ops.Http.Route
     translateRequest,
     ParseOutcome (..),
     parseArguments,
+    parseArgumentsWithParser,
   )
 where
 
@@ -81,8 +82,13 @@ translateRequest flags path query = do
 data ParseOutcome = Parsed !Command | Rejected !Text
 
 parseArguments :: AppHooks -> [Text] -> ParseOutcome
-parseArguments hooks arguments =
-  case Options.execParserPure Options.defaultPrefs (Options.info (commandParser hooks) Options.fullDesc) (map Text.unpack arguments) of
+parseArguments hooks = parseArgumentsWithParser (commandParser hooks)
+
+-- | Share the immutable command grammar across requests at one mount. This
+-- does not cache command results or bypass any owning-library validation.
+parseArgumentsWithParser :: Options.Parser Command -> [Text] -> ParseOutcome
+parseArgumentsWithParser parser arguments =
+  case Options.execParserPure Options.defaultPrefs (Options.info parser Options.fullDesc) (map Text.unpack arguments) of
     Options.Success command -> Parsed command
     Options.Failure failure -> Rejected (Text.pack (fst (Options.renderFailure failure "keiro-ops")))
     Options.CompletionInvoked _ -> Rejected "shell completion is not available over HTTP"

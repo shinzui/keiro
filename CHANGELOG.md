@@ -6,6 +6,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Performance
+
+- Compare live schema observations in PostgreSQL, bound pure read parsing reuse,
+  and reuse request threads for inspection deadlines.
+
 ### New Features
 
 - Add bounded workflow pages and `wf inspect`, canonical status classes, and the shared cursor codec.

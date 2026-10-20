@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The HTTP operational surface is a transport over the ops command tree
 description: HTTP reuses the supported command grammar and handlers with bounded inspection work, schema agreement, and explicit mutation confirmation.
-timestamp: 2026-10-20T17:05:00Z
+timestamp: 2026-10-20T19:28:26Z
 docId: ADR-53
 status: Accepted
 date: 2026-10-20
@@ -36,12 +36,21 @@ Mutations are off by default. A mutation timeout reports an unknown commit
 outcome and never causes an automatic retry.
 
 Every admitted operation verifies schema agreement within its resource budget.
+The owner compares live catalog observations against the binary's immutable
+expected snapshot in PostgreSQL and returns differences only. Both schemas are
+observed in that comparison statement; registry visibility is checked for the
+current role. This caches neither live agreement nor role privileges. The
+full-snapshot API remains available as a diagnostic and parity oracle. The
+large prepared comparison statements must remain shared in optimized code;
+allocation evidence is required before removing that sharing boundary.
 Drift refusal applies to reads, previews, and confirmed mutations; an explicit
 host policy can allow it with a response header. Invalid input, disabled
 mutations, and excess admission perform no schema work. Four default slots
 have no waiting queue; deadlines cover verification, execution, and encoding.
 Request, confirmation, and response bytes are capped. Async cancellation is
-propagated; losing tasks are joined before permits are released. Admission
+propagated and computation unwinds before permits are released. The threaded
+RTS timeout manager reuses the request thread on successful work; a deadline
+does not allocate fresh work and timer threads for every read. Admission
 continues through response delivery, bounding retained encoded bodies when
 clients read slowly. The computation deadline ends before delivery; network
 exceptions propagate without attempting a second response.
@@ -62,6 +71,12 @@ non-consuming primitives in the local upstream checkout are absent from the
 released `mori://shinzui/pgmq-hs/packages/pgmq-effectful` 0.6.1.1; Keiro does not reach into its private tables
 or depend on unpublished code. Raw queue browsing remains owned by
 `mori://shinzui/pgmq-hs`.
+
+A mount shares its immutable parser grammar and retains at most 64 valid,
+read-only parsed commands under the request-byte cap. This reuses pure parsing
+only: observations, mutation parsing, schema agreement, registry visibility,
+and authorization are not cached. Generation rotation and schema changes
+therefore remain visible on the next request.
 
 Routes are mount-relative and emit no absolute URLs. CORS uses exact allowed
 origins, is disabled by default, emits no credential header, and preserves

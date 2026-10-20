@@ -162,6 +162,8 @@ spec fixture = do
         _ <- runStoreIO store (runWorkflow (WorkflowName "approval") (WorkflowId "wf-1") (continueAsNew () >> pure ())) >>= either (fail . show) pure
         rotated <- call app methodGet ("/wf/inspect/steps/approval/wf-1?after=" <> token) ""
         assertError rotated status409 "cursor_generation_mismatch"
+        freshHeader <- call app methodGet "/wf/inspect/header/approval/wf-1" ""
+        field "generation" (body freshHeader) `shouldBe` Just (Number 1)
     describe "HTTP boundary" $ do
       it "shares the supported read/write classification across every mounted domain" $ \store -> do
         seedInspection store

@@ -1,0 +1,29 @@
+{
+  "candidate_commit": "d9960626",
+  "comparison": "same candidate binary across unmounted, idle, active-1 and active-32; no pre-change binary comparison",
+  "build_command": "nix develop -c cabal exec -- ghc -O2 -threaded -rtsopts -XGHC2024 -package=keiro -package=keiro-test-support -package=keiro-ops-http -outputdir /tmp/keiro-http-probe-build keiro/bench/results/inspection/http-interference/driver.hs -o /tmp/keiro-http-interference-evidence",
+  "run_command": "nix develop -c /tmp/keiro-http-interference-evidence OUTPUT_DIRECTORY +RTS -N2 -T -RTS",
+  "warm_operations": 50,
+  "measured_operations_per_leg": 1000,
+  "fixture_rows": 100000,
+  "writer_offered_operations_per_second": 50,
+  "polls_per_view_per_second": 1,
+  "runs": 5,
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "allocation_scope": "whole process during measured writer operations, including active inspection and poll clients",
+  "http_transport": "WAI application via wai-extra test session; point-header polls, no network transport",
+  "source_sha256": {
+    "scripts/inspection-http-interference-evidence.hs": "12be440a2d4c6aa7a144f0a6c319ff71461b397542aa42128eff289d347b2f79",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "add692952d2723ed0172d60645eace1099bbf353cd04f1918e7028e97a9841be",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "231105a7404865bcb932226dc76275b7fac1870725ba66350787e4d23186a0aa",
+    "keiro/src/Keiro/Workflow/Inspection.hs": "9d71536db8771e26f89165f8ba54b422afbea76105abdf46e1ca7142a9f69efa"
+  },
+  "binary_sha256": "6cd86e6a8b58fc99b35598aea2b14da71839cfc9378dc895bc8bf67ae5ad6ca0",
+  "limitations": [
+    "not the full cohort workload matrix",
+    "no pre-change binary, large-value or slow-reader deployment leg",
+    "pools and client tasks share one process; allocation is aggregate, not a per-writer-thread counter",
+    "no claim of full performance or retention acceptance"
+  ],
+  "retained_driver": "driver.hs"
+}

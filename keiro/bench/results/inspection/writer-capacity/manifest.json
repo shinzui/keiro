@@ -1,0 +1,18 @@
+{
+  "candidate_commit": "d9960626 plus source.patch.gz from http-interference-real and inline-deadline revision",
+  "comparison": "candidate unmounted capacity qualification only; this is not the pre-change baseline",
+  "selection_rule": "75% of the minimum throughput across five unpaced 1000-operation legs, rounded down to nearest ten; pre-change qualification still required",
+  "raw_throughput_ops_per_second": [
+    726.8329272760046,
+    764.1071369898917,
+    743.1352877791402,
+    683.4172227974317,
+    659.4357340311043
+  ],
+  "source_sha256": {
+    "driver.hs": "91028e745bbf98ffa81edf214bb8090282ff460862b5e7d428890d06bbfc07bd"
+  },
+  "binary_sha256": "a10e8916c8c300d2b5fcf22faa2003d6a71129e3e2f383f4397a87bb1586aadf",
+  "build_command": "same optimized probe build recorded in http-interference-real/manifest.json, using retained driver.hs",
+  "run_command": "nix develop -c /tmp/keiro-http-interference-evidence-qualified OUTPUT_DIRECTORY saturation +RTS -N2 -T -RTS"
+}

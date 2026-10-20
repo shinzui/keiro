@@ -88,6 +88,15 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Surprises & Discoveries
 
+2026-10-20: The temporary key/class-index experiment under
+`keiro/bench/results/inspection/query-key-and-class-experiment/` proves a key
+index fixes unfiltered/name-filtered first/deep pages (21 examined rows), but
+indexes alone do not fix generic array-valued class predicates. At 100,000 rows
+custom absent-class scans zero through the class index; generic absent-class
+scans all 100,000 rows and generic rare failed status scans 21,000. An absent
+update window still scans the whole ledger. No additional migration is selected
+from this experiment. Query-shape and write/HOT-cost acceptance remains open.
+
 2026-10-20: Five short alternating same-binary creation-index write legs retain
 raw queue/schedule/claim/resume samples and PostgreSQL WAL/HOT counters in
 `keiro/bench/results/inspection/creation-index-write/`. The index adds about

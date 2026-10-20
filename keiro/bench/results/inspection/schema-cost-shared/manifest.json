@@ -1,0 +1,14 @@
+{
+  "candidate_commit": "d9960626 plus source.patch.gz",
+  "comparison": "server-side comparison with NOINLINE prepared-statement CAFs; HTTP parser not yet shared",
+  "build_command": "nix develop -c cabal exec -- ghc -O2 -threaded -rtsopts -XGHC2024 -package=keiro -package=keiro-test-support -package=keiro-ops-http -outputdir /tmp/keiro-schema-probe-build scripts/inspection-schema-cost-evidence.hs -o /tmp/keiro-schema-cost-evidence-shared",
+  "run_command": "nix develop -c /tmp/keiro-schema-cost-evidence-shared OUTPUT_DIRECTORY +RTS -N2 -T -RTS",
+  "source_sha256": {
+    "scripts/inspection-schema-cost-evidence.hs": "4d7d15f3d539f3ed9a4a747fcf358b3e4f3a2318bd823b366a4cc75344c42e04",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "df1fa1a042f55a328d6d6db2fac9410a8273f4b60a7519836954f3207c6b00e2",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "231105a7404865bcb932226dc76275b7fac1870725ba66350787e4d23186a0aa"
+  },
+  "binary_sha256": "bafee83852785346447d692170ec7a122a885c6e9d82fe9361b83f0b0148adb7",
+  "allocation_scope": "whole process; allocation deltas include a forced major GC after each measured block",
+  "limitations": "attribution probe, not matched old/new deployment acceptance"
+}

@@ -1,0 +1,19 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "binary_sha256": "bb7e6c9365bfc7a757c22240fcd8c39260174738f4837db6583224cbae95a2eb",
+  "driver_sha256": "1cf86ae881ea079fa8b8c8fd8b2e1f6a3ad3161e2db611dd67bb84fb6888397d",
+  "compile_flags": [
+    "-O2",
+    "-threaded",
+    "-rtsopts",
+    "-XGHC2024",
+    "-DKEIRO_INSPECTION_BASELINE",
+    "-package=keiro",
+    "-package=keiro-test-support"
+  ],
+  "run_command": "nix develop -c /tmp/keiro-http-interference-evidence-prechange OUTPUT_DIRECTORY saturation +RTS -N2 -T -RTS",
+  "selection_rule": "75% of minimum of five throughputs rounded down to nearest ten",
+  "selected_offered_rate": 480,
+  "sample_count_per_leg": 1000,
+  "fixture_rows": 100000
+}

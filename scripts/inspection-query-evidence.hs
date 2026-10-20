@@ -33,11 +33,24 @@ import System.FilePath ((</>))
 
 main :: IO ()
 main = do
-  [output] <- getArgs
+  (output, indexes) <-
+    getArgs >>= \case
+      [path] -> pure (path, "none")
+      [path, experiment] | experiment `elem` ["key", "key-and-class", "class-only"] -> pure (path, experiment)
+      _ -> fail "expected OUTPUT_DIRECTORY [key|key-and-class|class-only]"
   createDirectoryIfMissing True output
   withMigratedBenchmarkSuite $ \fixture -> forM_ [10000, 100000] $ \count ->
     withFreshDatabase fixture $ \url -> do
       execute url ("INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,created_at,updated_at) SELECT 'w-'||lpad(n::text,8,'0'),CASE WHEN n<=" <> number (count * 9 `div` 10) <> " THEN 'hot' ELSE 'small' END,CASE WHEN n%1000=0 THEN 'failed' ELSE 'running' END,'2026-10-01 00:00:00+00'::timestamptz+(n/1000)*interval '1 minute','2026-10-01 00:00:00+00'::timestamptz FROM generate_series(1," <> number count <> ") n; ANALYZE keiro.keiro_workflows")
+      -- Experimental indexes exist only in the disposable clone. No migration
+      -- is selected until read plans and ordinary write costs justify it.
+      if indexes `elem` ["key", "key-and-class"]
+        then execute url "CREATE INDEX inspection_experiment_key ON keiro.keiro_workflows (workflow_name,workflow_id)"
+        else pure ()
+      if indexes `elem` ["class-only", "key-and-class"]
+        then execute url "CREATE INDEX inspection_experiment_class_key ON keiro.keiro_workflows ((CASE WHEN status='running' AND attempts=0 THEN 'running' WHEN status='running' THEN 'retrying' WHEN status='suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status='suspended' THEN 'awaiting' ELSE status END),workflow_name,workflow_id)"
+        else pure ()
+      execute url "ANALYZE keiro.keiro_workflows"
       forM_ ["force_custom_plan", "force_generic_plan"] $ \mode ->
         forM_ (cases count) $ \(label, query, arguments) ->
           withStore (defaultConnectionSettings url) {poolSize = 1} $ \store -> do
@@ -49,7 +62,7 @@ main = do
             (name, sql) <- case prepared of [entry] -> pure entry; _ -> fail ("expected one actual inspection statement, got " <> show prepared)
             let explain = "EXPLAIN (ANALYZE,BUFFERS,SETTINGS,FORMAT JSON) EXECUTE \"" <> Text.replace "\"" "\"\"" name <> "\"(" <> arguments <> ")"
             plan <- use store (Session.statement () (Statement.preparable explain E.noParams (D.singleRow (D.column (D.nonNullable D.json)))))
-            let artifact = object ["rows" .= count, "mode" .= mode, "case" .= label, "sql" .= sql, "arguments" .= arguments, "plan" .= (plan :: Value)]
+            let artifact = object ["rows" .= count, "mode" .= mode, "indexes" .= indexes, "case" .= label, "sql" .= sql, "arguments" .= arguments, "plan" .= (plan :: Value)]
                 path = output </> Text.unpack (number count <> "-" <> mode <> "-" <> label) <> ".json"
             Lazy.writeFile path (Aeson.encode artifact)
             putStrLn path
@@ -64,6 +77,7 @@ cases count =
     ("created-first", base {ordering = ByCreatedDesc}, "21"),
     ("created-deep", base {ordering = ByCreatedDesc, cursor = Just (encodeCursor "wf-created" (deepTime, "hot" :: Text, deepId))}, "'" <> Text.pack (show deepTime) <> "'::timestamptz,'hot','" <> deepId <> "',21"),
     ("rare-status", base {classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],ARRAY['failed']::text[],21"),
+    ("absent-class", base {classes = Just (ClassRetrying :| [])}, "ARRAY['running']::text[],ARRAY['retrying']::text[],21"),
     ("absent-name", base {workflowName = Just "absent"}, "'absent',21"),
     ("small-name", base {workflowName = Just "small"}, "'small',21"),
     ("update-window", base {updatedSince = Just (read "2026-10-02 00:00:00 UTC")}, "'2026-10-02'::timestamptz,21")

@@ -1,0 +1,32 @@
+[
+  {
+    "offered": 480,
+    "passed": false,
+    "command": [
+      "/tmp/keiro-http-interference-evidence-prechange",
+      "keiro/bench/results/inspection/matched-http-qualified/paced-qualification/480",
+      "480",
+      "1",
+      "unmounted",
+      "+RTS",
+      "-N2",
+      "-T",
+      "-RTS"
+    ]
+  },
+  {
+    "offered": 380,
+    "passed": true,
+    "command": [
+      "/tmp/keiro-http-interference-evidence-prechange",
+      "keiro/bench/results/inspection/matched-http-qualified/paced-qualification/380",
+      "380",
+      "1",
+      "unmounted",
+      "+RTS",
+      "-N2",
+      "-T",
+      "-RTS"
+    ]
+  }
+]

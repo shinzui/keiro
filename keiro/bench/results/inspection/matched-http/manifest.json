@@ -1,0 +1,38 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "offered_writer_operations_per_second": 480,
+  "selection_rule": "75% of the minimum of five pre-change saturation throughputs, rounded down to nearest ten",
+  "baseline_binary_sha256": "bb7e6c9365bfc7a757c22240fcd8c39260174738f4837db6583224cbae95a2eb",
+  "candidate_binary_sha256": "2a35114dc7ca9eef954074d5a76297386f1124dbe92e53deb76514d7038876b8",
+  "driver_sha256": "1cf86ae881ea079fa8b8c8fd8b2e1f6a3ad3161e2db611dd67bb84fb6888397d",
+  "client_sha256": "d521c0517b9a2d15fa3ce9c47fc56341b3f685a9c8db175c8e07ade03d31230a",
+  "runner_sha256": "1ab0828753fb5272234348d6cfd055da809d93d964e27f3a7d945c356c09373b",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "duration_seconds": 20,
+  "fixture_workflow_rows": 100000,
+  "repetitions": 5,
+  "allocation_scope": "runtime process; HTTP clients are external Python processes",
+  "headroom_check": "baseline throughput at least 99% of offered rate and last/first tenth mean queue delay growth at most 20ms",
+  "order": [
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-prechange",
+        "keiro/bench/results/inspection/matched-http/1-baseline-unmounted",
+        "480",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "limitations": "workflow point headers only; not the full domain, large-value, slow-reader or retention matrix"
+}

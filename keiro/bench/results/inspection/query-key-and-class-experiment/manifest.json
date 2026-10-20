@@ -1,0 +1,11 @@
+{
+  "candidate_commit": "d9960626",
+  "experiment": "temporary ordered-key and status-class/key indexes on disposable clones; no new migration selected",
+  "run_command": "nix develop -c cabal exec -- runghc -XGHC2024 -package=keiro -package=keiro-test-support scripts/inspection-query-evidence.hs OUTPUT_DIRECTORY key-and-class",
+  "source_sha256": {
+    "scripts/inspection-query-evidence.hs": "8575e9e7751712a5f5a1f32fe5115cae84096d1c6c07b816f666c18ed4c8455a",
+    "keiro/src/Keiro/Workflow/Instance.hs": "6e278193d0a73f36d322096ecfb96a4daad6d69c423c959bafcbfdef1c6acf64",
+    "keiro/src/Keiro/Workflow/Inspection.hs": "9d71536db8771e26f89165f8ba54b422afbea76105abdf46e1ca7142a9f69efa"
+  },
+  "verdict": "rejected for automatic filtered refresh: generic absent-class scans 100000 rows; generic rare status scans 21000 rows; updated window remains unindexed"
+}

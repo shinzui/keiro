@@ -1,0 +1,13 @@
+{
+  "candidate_commit": "d9960626",
+  "comparison": "five repetitions of 100 point reads, schema verifications, and real HTTP headers; each warms ten calls",
+  "build_command": "nix develop -c cabal exec -- ghc -O2 -threaded -rtsopts -XGHC2024 -package=keiro -package=keiro-test-support -package=keiro-ops-http -outputdir /tmp/keiro-schema-probe-build scripts/inspection-schema-cost-evidence.hs -o /tmp/keiro-schema-cost-evidence",
+  "run_command": "nix develop -c /tmp/keiro-schema-cost-evidence OUTPUT_DIRECTORY +RTS -N2 -T -RTS",
+  "source_sha256": {
+    "scripts/inspection-schema-cost-evidence.hs": "4d7d15f3d539f3ed9a4a747fcf358b3e4f3a2318bd823b366a4cc75344c42e04",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "add692952d2723ed0172d60645eace1099bbf353cd04f1918e7028e97a9841be"
+  },
+  "binary_sha256": "b984d39f60cb86bc8ac33599c583507207322f112e40e258420ea0662ce466b0",
+  "allocation_scope": "whole process; allocation deltas include a forced major GC after each measured block",
+  "limitations": "attribution probe, not matched old/new deployment acceptance"
+}

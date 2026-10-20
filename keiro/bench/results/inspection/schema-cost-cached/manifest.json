@@ -1,0 +1,22 @@
+{
+  "candidate_commit": "d9960626 plus source.patch.gz",
+  "driver_sha256": "4d7d15f3d539f3ed9a4a747fcf358b3e4f3a2318bd823b366a4cc75344c42e04",
+  "binary_sha256": "08152124f0133745b42e9601c58f60c300a60a12304358e615aa4d9924488b04",
+  "source_sha256": {
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "df1fa1a042f55a328d6d6db2fac9410a8273f4b60a7519836954f3207c6b00e2",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "066ae124e47f287b31af91abb02bd39530d42e602e06a3be82fd597917a437d6",
+    "keiro-ops-http/src/Keiro/Ops/Http/Budget.hs": "285eb88c2bbaf3fe05ab8da71b0fa7e3df3db5ed006540da76c1e8ac977e402d",
+    "keiro-ops-http/src/Keiro/Ops/Http/Route.hs": "883a6797683557bc421fabab94952bfcde6956e649a5ea9994d8bbae7434b34d"
+  },
+  "run_command": "nix develop -c BINARY OUTPUT_DIRECTORY +RTS -N2 -T -RTS",
+  "build_flags": [
+    "-O2",
+    "-threaded",
+    "-rtsopts",
+    "-XGHC2024",
+    "-package=keiro",
+    "-package=keiro-test-support",
+    "-package=keiro-ops-http"
+  ],
+  "limitations": "attribution only; in-process WAI clients"
+}

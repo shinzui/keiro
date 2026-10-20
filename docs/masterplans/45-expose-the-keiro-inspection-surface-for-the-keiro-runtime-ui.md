@@ -412,6 +412,13 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
+- (2026-10-20) EP-1 retains five old/new workflow-header comparisons using
+  identical dependency units, measured writer headroom, and external real-HTTP
+  clients. Narrow medians are within 5% (32-view allocation +1.52%); latency is
+  inconclusive because of variation and a cold-start queue spike. Full steady
+  state/domain/retention acceptance remains open, as do EP-2's generic filtered
+  query paths. Both children remain In Progress; no dependent is unblocked.
+
 - (2026-10-20) The full Nix `just verify` run passed, including 766 Keiro examples,
   DSL conformance and mutation proofs, and 41 migration examples. Subsequent
   HTTP delivery-admission and connection-churn fixes pass all 24 HTTP examples.
@@ -432,6 +439,16 @@ Child plans own milestone evidence. Matched interference and retention
 measurements, publication, and consumer proofs remain required before completion.
 
 ## Surprises & Discoveries
+
+- (2026-10-20) EP-1's five alternating same-binary header-poll legs reject the
+  first implementation on aggregate allocation: about 640.6 MiB per 1,000
+  workflow operations idle versus 2,246.4 MiB with 32 views. The point header
+  avoids EP-2's unindexed list sort. Attribution identifies schema comparison;
+  moving the comparison into PostgreSQL retains a fresh live check on every
+  request and reduces verifier allocation from about 2.31 MB to 10 KB per call.
+  No live result/privilege TTL cache was introduced. Raw evidence and manifests
+  live under `keiro/bench/results/inspection/`. Full matched deployment and
+  retention acceptance is still open; no whole-child dependency is waived.
 
 - (2026-10-20) EP-2's normal-planner evidence rejects the current default key
   and rare-status access paths: both examine all 100,000 fixture rows. The

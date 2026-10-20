@@ -1,0 +1,30 @@
+{
+  "candidate_commit": "d9960626 plus source.patch.gz",
+  "comparison": "same candidate binary, live comparison and bounded pure-parser reuse, real loopback HTTP with external Python clients",
+  "build_command": "nix develop -c cabal exec -- ghc -O2 -threaded -rtsopts -XGHC2024 -package=keiro -package=keiro-test-support -package=keiro-ops-http -outputdir /tmp/keiro-http-probe-build keiro/bench/results/inspection/http-interference-real/driver.hs -o /tmp/keiro-http-interference-evidence-real",
+  "run_command": "nix develop -c /tmp/keiro-http-interference-evidence-real OUTPUT_DIRECTORY +RTS -N2 -T -RTS",
+  "warm_operations": 50,
+  "measured_operations_per_leg": 1000,
+  "fixture_rows": 100000,
+  "writer_offered_operations_per_second": 50,
+  "polls_per_view_per_second": 1,
+  "runs": 5,
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "allocation_scope": "runtime Haskell process, excluding external Python HTTP clients",
+  "http_transport": "Warp loopback socket; Python HTTP clients in a separate process",
+  "source_sha256": {
+    "scripts/inspection-http-interference-evidence.hs": "d2b01726d68223785c7a0c80e225dccf84857fbae791b6cc4b9b509798e7eb02",
+    "scripts/inspection-http-poll-client.py": "d521c0517b9a2d15fa3ce9c47fc56341b3f685a9c8db175c8e07ade03d31230a",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "df1fa1a042f55a328d6d6db2fac9410a8273f4b60a7519836954f3207c6b00e2",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "7e737ee35c31dd9183b32e891820cbd393f83151540df1c5d83238db6a46b509",
+    "keiro-ops-http/src/Keiro/Ops/Http/Route.hs": "883a6797683557bc421fabab94952bfcde6956e649a5ea9994d8bbae7434b34d",
+    "keiro-ops-http/src/Keiro/Ops/Http/Budget.hs": "285eb88c2bbaf3fe05ab8da71b0fa7e3df3db5ed006540da76c1e8ac977e402d"
+  },
+  "binary_sha256": "62255fc3f10a4016f3d9a4f43a723c90724aea5b2bc0f8d853f09356eb6dda3b",
+  "limitations": [
+    "same binary only; no pre-change cohort comparison",
+    "point-header workload only; not full writer/domain matrix",
+    "no large-value/slow-reader retention acceptance"
+  ],
+  "retained_driver": "driver.hs"
+}
