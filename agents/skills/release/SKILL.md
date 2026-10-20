@@ -1,6 +1,6 @@
 ---
 name: release
-description: Release the keiro Hackage packages (keiro-core, keiro, keiro-pgmq, keiro-migrations, keiro-dsl, keiro-ops) together under one shared PVP version, in dependency order.
+description: Release the keiro Hackage packages (keiro-core, keiro, keiro-pgmq, keiro-migrations, keiro-dsl, keiro-ops, keiro-ops-http) together under one shared PVP version, in dependency order.
 argument-hint: "[major|minor|patch]"
 disable-model-invocation: true
 allowed-tools: Read, Bash, Edit, Glob, Grep, Write, AskUserQuestion
@@ -44,6 +44,7 @@ depends on `keiro-migrations`, so it follows it. `keiro-ops` depends on
    fixtures. Library depends on `keiro-migrations`.
 6. **keiro-dsl** (`keiro-dsl/`) — typed `.keiro` spec toolchain (library + `keiro-dsl` exe). Depends on `keiro-core`.
 7. **keiro-ops** (`keiro-ops/`) — embeddable operational command tree + `keiro-ops` exe. Depends on `keiro`, `keiro-pgmq`, and `keiro-migrations`.
+8. **keiro-ops-http** (`keiro-ops-http/`) — HTTP transport and runner. Depends on `keiro-ops` and `keiro-migrations`, so upload it last.
 
 Only **library** dependencies constrain upload order. `keiro`, `keiro-pgmq`,
 `keiro-ops`, and `keiro-dsl` depend on `keiro-test-support` from their
@@ -52,7 +53,7 @@ uploaded after `keiro` and `keiro-pgmq` — a consumer's default build plan neve
 reaches it.
 
 Do not assume the internal dependency graph from this list — re-derive every
-internal-package occurrence from all seven manifests each release with the scan
+internal-package occurrence from all eight manifests each release with the scan
 in step 3. The 0.7.0.0 release found the
 skill's previous claim that "`keiro-dsl`'s library is standalone" to be false,
 and that its `keiro-core` dependency had shipped in 0.6.0.0 with **no version
@@ -158,7 +159,7 @@ Set the new `version:` in every published package's cabal file:
 `keiro-core/keiro-core.cabal`, `keiro/keiro.cabal`, `keiro-pgmq/keiro-pgmq.cabal`,
 `keiro-migrations/keiro-migrations.cabal`,
 `keiro-test-support/keiro-test-support.cabal`, `keiro-dsl/keiro-dsl.cabal`,
-`keiro-ops/keiro-ops.cabal`.
+`keiro-ops/keiro-ops.cabal`, and `keiro-ops-http/keiro-ops-http.cabal`.
 
 Leave `jitsurei` as it is unless you deliberately choose to bump it for
 consistency (it is not published).
@@ -169,7 +170,7 @@ Find every internal dependency first — do not work from a remembered list:
 ```bash
 rg -n -g '*.cabal' \
   'keiro-core|keiro-migrations|keiro-pgmq|keiro-test-support|(^|[ ,])keiro([ ,]|$)' \
-  keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops
+  keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http
 ```
 
 **Read the matches, do not blind-replace them.** A bulk
@@ -216,7 +217,7 @@ conformance suites **cannot** catch a miss here — they depend on `keiro-core`
 directly. 0.7.0.0 shipped `Keiro.Codec.IdDomain` and needed exactly this fix.
 
 #### Changelogs
-All seven published packages have a `CHANGELOG.md`, plus a root
+All eight published packages have a `CHANGELOG.md`, plus a root
 `CHANGELOG.md` summarizing the release across packages (it feeds the GitHub
 release notes in step 7). All follow
 [Keep a Changelog](https://keepachangelog.com/) + PVP with dates in
@@ -426,7 +427,7 @@ nix flake check   # treefmt + pre-commit hooks gate
   version:
 
   ```bash
-  for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops; do
+  for pkg in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http; do
     git tag -a "$pkg-<version>" -m "$pkg <version>"
   done
   ```
@@ -438,7 +439,7 @@ nix flake check   # treefmt + pre-commit hooks gate
 
 For **each** publishable package, in the order
 `keiro-core → keiro → keiro-pgmq → keiro-migrations → keiro-test-support →
-keiro-dsl → keiro-ops`:
+keiro-dsl → keiro-ops → keiro-ops-http`:
 
 1. Re-confirm the package's dependencies are all on Hackage (see the
    prerequisite warning above). If a dependency reachable from the **default**
@@ -474,11 +475,11 @@ keiro-dsl → keiro-ops`:
 6. Report the Hackage URL:
    `https://hackage.haskell.org/package/<pkg>-<version>`.
 
-After all seven, confirm each is actually live rather than trusting the upload
+After all eight, confirm each is actually live rather than trusting the upload
 output — both the package page and its docs:
 
 ```bash
-for p in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops; do
+for p in keiro-core keiro keiro-pgmq keiro-migrations keiro-test-support keiro-dsl keiro-ops keiro-ops-http; do
   echo "$p $(curl -s -o /dev/null -w '%{http_code}' https://hackage.haskell.org/package/$p-<version>)" \
        "$(curl -s -o /dev/null -w '%{http_code}' https://hackage.haskell.org/package/$p-<version>/docs/)"
 done
@@ -498,6 +499,7 @@ After all uploads, present a summary table:
 | keiro-test-support | X.Y.Z.W | https://hackage.haskell.org/package/keiro-test-support-X.Y.Z.W |
 | keiro-dsl | X.Y.Z.W | https://hackage.haskell.org/package/keiro-dsl-X.Y.Z.W |
 | keiro-ops | X.Y.Z.W | https://hackage.haskell.org/package/keiro-ops-X.Y.Z.W |
+| keiro-ops-http | X.Y.Z.W | https://hackage.haskell.org/package/keiro-ops-http-X.Y.Z.W |
 
 ### 7. Create the GitHub release (required)
 
@@ -531,7 +533,7 @@ gh release create keiro-<version> --title "keiro <version>" --notes-file "$S/rel
 - Always ask the user to **confirm the version bump and changelogs before
   committing**.
 - Always publish in dependency order: **keiro-core → keiro → keiro-pgmq →
-  keiro-migrations → keiro-test-support → keiro-dsl → keiro-ops**.
+  keiro-migrations → keiro-test-support → keiro-dsl → keiro-ops → keiro-ops-http**.
 - Never skip the gates: `nix fmt`, `just verify`, `cabal check`, `nix flake
   check`.
 - **Stop on any failure** — a failed gate, `cabal check`, or upload. Do not

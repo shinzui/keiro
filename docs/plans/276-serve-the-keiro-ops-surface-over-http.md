@@ -90,20 +90,36 @@ requested separately; see the Decision Log for how this plan relates to it.
       2026-09-10); the request stays `proposed` until implementation evidence exists.
 - [x] (2026-10-20) Milestone 1: `keiro-ops` exports its command type, classifier, parser, and runner;
       `keiro-migrations` exports a session-level schema verifier preserving managed-object handling. Nix verification: 51 ops and 40 migration examples pass.
-- [ ] Milestone 2: the `keiro-ops-http` package exists with the request-to-arguments
-      translation and the parser-tree flag introspection, covered by pure unit tests.
-- [ ] Milestone 3: the WAI application performs the schema handshake, the read/write method
+- [x] (2026-10-20) Milestone 2: the `keiro-ops-http` package exists with the request-to-arguments
+      translation and the parser-tree flag introspection, covered by pure unit tests (including released parser grammar and legacy two-value after).
+- [x] (2026-10-20) Milestone 3: the WAI application performs the schema handshake, the read/write method
       split, the preview/confirm mutation flow, the mutation gate, CORS, and the health route,
-      covered by in-process tests against a real database.
-- [ ] Milestone 4: the Warp runner and the standalone `keiro-ops-http` executable exist; the
+      covered by migrated PostgreSQL tests with seeded state, joined cancellation, SQL deadlines, and byte caps.
+- [x] (2026-10-20) Milestone 4: the Warp runner and the standalone `keiro-ops-http` executable exist; the
       CLI-agreement test diffs the executable's `--json` output against endpoint bodies for a
-      representative command in every domain; the runner is exercised over a real socket.
+      representative non-consuming command in each applicable domain; DLQ reservation separately requires confirmation. The runner is exercised over a real socket, closes its listener, and joins accepted connection workers.
 - [ ] Milestone 5: documentation (runbook, operations guide pointer, capability record),
       changelogs, README, release skill, justfile, the build-plan check for acceptance
       criterion 5, IR-26 implementation evidence, and the ADR distillation.
 
 
 ## Surprises & Discoveries
+
+2026-10-20: Seeded CLI/HTTP agreement exposed a reservation hidden behind a
+read-only classifier: `readDlq` hides messages for 30 seconds and increments
+read counts. `mori://shinzui/pgmq-hs/packages/pgmq-effectful` 0.6.1.1 is the latest Hackage release; its source
+has no non-consuming message primitive, though the Mori-located checkout does.
+The owning `pgmq dlq read` command now previews by default and requires force;
+HTTP derives POST and confirmation mechanically. PGMQ has no remaining
+non-consuming read command in this subtree, so its acceptance proof exercises
+reservation/confirmation rather than comparing two successive reads as if
+state had not changed. No private queue SQL or unpublished API is introduced.
+
+Released optparse-applicative 0.19.0.0 has `CmdReader` children keyed by String;
+the local corpus has newer NonEmpty aliases. The traversal uses released source.
+Warp's `runSettingsSocket` leaves listener closure to its caller; a socket
+shutdown test caught and fixed the ownership leak.
+
 
 2026-10-13 source review: SchemaCheck scans catalog definitions for two schemas per admitted request. Pool reuse does not remove that cost; bounded concurrency, execution/cancellation and byte limits are required.
 
@@ -112,6 +128,17 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 
 ## Decision Log
+
+- Decision (2026-10-20): configure SQL deadlines through the inspection-owned
+  pool's init session, preserving schema/search-path configuration. Every
+  connection gets the timeout without modifying runtime connections. A
+  host-supplied/shared pool must provide that uniform policy; a per-request
+  SET on one borrow cannot cover independently borrowing handlers.
+- Decision (2026-10-20): classify DLQ reservation as mutation and preserve the
+  preview/force discipline in the owning command. Its HTTP route is POST, not
+  GET. This corrects the earlier read/write test table and CLI-agreement table;
+  all genuinely read-only commands still render their existing JSON unchanged.
+
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: SchemaCheck scans catalog definitions for two schemas per admitted request. Pool reuse does not remove that cost; bounded concurrency, execution/cancellation and byte limits are required. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 
@@ -306,6 +333,16 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20 implementation checkpoint: 20 focused HTTP examples pass, as do the
+51 existing ops examples and 40 migration examples. The package/executable
+builds in `nix develop`; Cabal check reports no errors or warnings. Strict ADR,
+capability, user-documentation, and improvement-request profiles pass (53, 20,
+34/30, and 54 concepts respectively). The project manifest type-checks.
+The solved dependency graph reports `Existing-package web dependency violations: []`.
+The full repository gate is running; integrated matched performance and
+retention measurements are not yet available and this child remains In Progress.
+
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 
@@ -1082,7 +1119,7 @@ Extend `keiro-ops-http/test/Main.hs`:
   | timer | `GET /timer/stuck/list?min_age=0s` | `timer stuck list --min-age 0s` |
   | outbox | `GET /outbox/backlog` | `outbox backlog` |
   | inbox | `GET /inbox/backlog` | `inbox backlog` |
-  | pgmq | `GET /pgmq/dlq/read?queue=keiro_ops_http.dlq` | `pgmq dlq read --queue keiro_ops_http.dlq` |
+  | pgmq | `POST /pgmq/dlq/read?queue=keiro_ops_http.dlq` (confirmed mutation) | `pgmq dlq read --queue keiro_ops_http.dlq --force` (reservation; test separately from successive-read agreement) |
   | projection | `GET /projection/position?subscription=ops-http` | `projection position --subscription ops-http` |
   | shard | `GET /shard/status?subscription=ops-http` | `shard status --subscription ops-http` |
   | snapshot | `GET /snapshot/show?stream=order-1` | `snapshot show --stream order-1` |
@@ -1305,7 +1342,7 @@ IR-26 lists six acceptance criteria. Each maps to observable behavior and to a n
 1. Every read-only command's endpoint returns the same `jsonValue` as `keiro-ops <command>
    --json` against the same database state. Proven by the "CLI agreement" group, which spawns
    the built `keiro-ops` executable and diffs decoded JSON for one representative read in each
-   of the nine database-only domains, and by the in-process comparison for `rebuild`. Beyond
+   of the eight domains with non-consuming reads, and by the in-process comparison for `rebuild`. Beyond
    the tests: the transcript above shows `curl …/wf/list` and `keiro-ops wf list --json`
    printing the same `[]`.
 2. A mutation endpoint without confirmation returns the preview and changes nothing; the
@@ -1485,3 +1522,5 @@ moved since; the MasterPlan settles them and this plan must agree with it withou
 be self-contained.
 
 2026-10-13: Applied the correctness and hot-path review. Added explicit performance acceptance and ownership, refreshed released dependency facts, and corrected the affected implementation and wire contracts. Earlier dated decisions remain historical; the current milestones and review constraints govern implementation. No runtime changes or benchmark results are claimed.
+
+2026-10-20: Implemented transport and corrected the existing DLQ reservation classifier. SQL deadlines belong to per-connection pool initialization; tests cover released parser metadata and complete server connection cleanup. The integrated performance gate remains required.

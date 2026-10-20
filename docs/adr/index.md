@@ -49,3 +49,5 @@
 - [Delegated inbox intake uses a downstream event receipt](0043-delegated-inbox-intake-uses-a-downstream-event-receipt.md) - A consumer may omit its inbox row only when one deterministic downstream event receipt covers the complete atomic operation.
 - [FIFO jobs declare ordering and only group heads batch safely](0044-fifo-jobs-declare-ordering-and-only-group-heads-batch-safely.md) - Every PGMQ job declares its ordering contract; strict FIFO batching uses absolute group heads, while legacy grouped strategies are restricted to batch size one.
 - [PGMQ provisioning preserves upstream SQL and bounds local retention validation](0045-pgmq-provisioning-preserves-upstream-sql-and-bounds-local-retention-validation.md) - Keiro preserves PGMQ-owned provisioning and validates only the partition-retention mistakes it can identify without duplicating PostgreSQL or pg_partman semantics.
+
+- [The HTTP operational surface is a transport over the ops command tree](0053-the-http-operational-surface-is-a-transport-over-the-ops-command-tree.md) - Reuse the parser and handlers with bounded inspection and explicit mutation confirmation.

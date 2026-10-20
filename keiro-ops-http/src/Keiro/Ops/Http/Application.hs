@@ -1,0 +1,195 @@
+module Keiro.Ops.Http.Application
+  ( opsApplication,
+    opsApplicationWithBudget,
+    OpsHttpError (..),
+    errorResponse,
+    OpsHttpOperations (..),
+    opsApplicationWithOperations,
+  )
+where
+
+import Control.Exception (SomeAsyncException, SomeException, displayException, fromException, throwIO, try)
+import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson qualified as Aeson
+import Data.ByteString qualified as ByteString
+import Data.ByteString.Char8 qualified as Char8
+import Data.ByteString.Lazy qualified as LazyByteString
+import Data.Text (Text)
+import Data.Text qualified as Text
+import Data.Text.Encoding qualified as Text
+import Hasql.Pool qualified as Pool
+import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchemaSession)
+import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommand)
+import Keiro.Ops.Env (OpsEnv (..), OutputMode (Json))
+import Keiro.Ops.Http.Budget
+import Keiro.Ops.Http.Config
+import Keiro.Ops.Http.Cors
+import Keiro.Ops.Http.Route
+import Keiro.Ops.Render
+import Kiroku.Store.Connection (KirokuStore (..))
+import Network.HTTP.Types
+import Network.Wai
+import System.Exit (ExitCode (..))
+
+data OpsHttpError = OpsHttpError
+  { status :: !Status,
+    code :: !Text,
+    message :: !Text,
+    details :: !(Maybe Value)
+  }
+
+jsonHeaders :: ResponseHeaders
+jsonHeaders = [(hContentType, "application/json; charset=utf-8")]
+
+errorResponse :: OpsHttpError -> Response
+errorResponse err = responseLBS err.status jsonHeaders (Aeson.encode (errorValue err))
+
+errorValue :: OpsHttpError -> Value
+errorValue err = object ["error" .= object (["code" .= err.code, "message" .= err.message] <> maybe [] (\value -> ["details" .= value]) err.details)]
+
+failure :: Status -> Text -> Text -> Response
+failure status code message = errorResponse (OpsHttpError status code message Nothing)
+
+-- | A host/test seam for supported verification and execution, never a route
+-- registry. Production mounting uses 'opsApplication'.
+data OpsHttpOperations = OpsHttpOperations
+  { verifySchema :: IO (Either Text [Text]),
+    executeCommand :: OpsEnv -> Command -> IO OpsOutcome
+  }
+
+-- | Allocate once per mount. The supplied store must have statement_timeout
+-- configured on EVERY connection, at or below inspectionLimits. Use a dedicated
+-- pool; changing a borrowed connection here cannot constrain another handler's
+-- borrow and would change writer policy on a shared pool.
+opsApplication :: OpsHttpConfig -> AppHooks -> KirokuStore -> IO Application
+opsApplication config hooks store = do
+  budget <- newInspectionBudget config.inspectionLimits
+  opsApplicationWithBudget config budget hooks store
+
+-- | Internal feed integration: HTTP and refresh work consume the same budget.
+opsApplicationWithBudget :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> IO Application
+opsApplicationWithBudget config budget hooks store =
+  opsApplicationWithOperations
+    config
+    budget
+    hooks
+    store
+    OpsHttpOperations
+      { verifySchema = do
+          result <- Pool.use store.pool verifyExpectedSchemaSession
+          pure $ case result of
+            Left err -> Left (Text.pack (show err))
+            Right (Left err) -> Left (Text.pack (show err))
+            Right (Right drifts) -> Right (map renderSchemaDrift drifts),
+        executeCommand = runCommand hooks
+      }
+
+opsApplicationWithOperations :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> OpsHttpOperations -> IO Application
+opsApplicationWithOperations config budget hooks store operations = do
+  let flags = flagNames (commandParser hooks)
+  pure $ corsMiddleware config.allowedOrigins $ \request respond -> do
+    result <- trySync (dispatch flags request)
+    respond $ either (const (failure status500 "internal_error" "inspection failed")) id result
+  where
+    limits = config.inspectionLimits
+    dispatch flags request
+      | inputBytes request > limits.maxRequestBytes = pure (failure status413 "inspection_request_too_large" "request path and query exceed the host limit")
+      | pathInfo request == [] = pure (failure status404 "not_found" "no inspection command at this path")
+      | pathInfo request == ["health"] =
+          if requestMethod request == methodGet
+            then budgeted False health
+            else pure (methodFailure methodGet)
+      | otherwise = case translate flags request of
+          Left message -> pure (failure status400 "invalid_request" message)
+          Right arguments -> case parseArguments hooks arguments of
+            Rejected message -> pure (errorResponse (OpsHttpError status400 "invalid_request" message (Just (object ["arguments" .= arguments]))))
+            Parsed command -> do
+              let mutation = isMutation command
+                  method = if mutation then methodPost else methodGet
+              if requestMethod request /= method
+                then pure (methodFailure method)
+                else
+                  if mutation && config.mutations == MutationsDisabled
+                    then pure (failure status403 "mutations_disabled" "this surface was mounted without mutations")
+                    else budgetedCommand request command mutation
+    translate flags request = do
+      query <- either (Left . Text.pack . displayException) Right (traverse decodeQuery (queryString request))
+      either (Left . renderRouteError) Right (translateRequest (flags (pathInfo request)) (pathInfo request) query)
+    decodeQuery (key, value) = (,) <$> Text.decodeUtf8' key <*> traverse Text.decodeUtf8' value
+    inputBytes request = ByteString.length (rawPathInfo request) + ByteString.length (rawQueryString request)
+    methodFailure method = mapResponseHeaders ((hAllow, method) :) (failure status405 "method_not_allowed" "method does not match the command classification")
+    budgetedCommand request command mutation =
+      budgeted mutation $ do
+        confirmation <- if mutation then readConfirmation request else pure (Right False)
+        case confirmation of
+          Left err -> pure err
+          Right confirmed -> do
+            verified <- operations.verifySchema
+            case verified of
+              Left message -> pure (failure status500 "schema_verification_failed" message)
+              Right drift
+                | not (null drift) && config.schemaDrift == RefuseOnDrift ->
+                    boundedJson status409 [] (errorValue (OpsHttpError status409 "schema_drift" "the live schema differs from this binary; refusing to serve until they agree" (Just (object ["drift" .= drift]))))
+                | otherwise -> do
+                    let env = OpsEnv store Json (mutation && confirmed) drift (config.schemaDrift == AllowDrift)
+                    outcome <- operations.executeCommand env command
+                    renderOutcome mutation drift outcome
+    budgeted mutation action = do
+      let deadline = if mutation then limits.mutationDeadlineSeconds else limits.readDeadlineSeconds
+      result <- withInspectionBudget budget deadline action
+      pure $ case result of
+        Left InspectionBusy -> failure status503 "inspection_busy" "all inspection slots are in use; retry later"
+        Left InspectionTimedOut
+          | mutation -> failure status504 "mutation_outcome_unknown" "deadline exceeded; the mutation may have committed; inspect state before deciding whether to retry"
+          | otherwise -> failure status504 "inspection_timeout" "inspection exceeded the host deadline"
+        Right response -> response
+    health = do
+      result <- operations.verifySchema
+      case result of
+        Left message -> boundedJson status503 [] (object ["status" .= ("unavailable" :: Text), "message" .= message])
+        Right drift ->
+          boundedJson
+            (if null drift || config.schemaDrift == AllowDrift then status200 else status503)
+            (driftHeaders drift)
+            (object ["status" .= (if null drift then "ok" else "schema_drift" :: Text), "schema_drift" .= drift, "mutations_enabled" .= (config.mutations == MutationsEnabled)])
+    driftHeaders drift = [("Keiro-Ops-Schema-Drift", Char8.pack (show (length drift))) | not (null drift) && config.schemaDrift == AllowDrift]
+    boundedJson status headers value = do
+      encoded <- encodeBounded limits.maxResponseBytes value
+      pure $ case encoded of
+        Nothing -> failure status413 "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read"
+        Just body -> responseLBS status (jsonHeaders <> headers) body
+    renderOutcome mutation drift = \case
+      Failed message -> boundedJson status422 [] (errorValue (OpsHttpError status422 "command_failed" message Nothing))
+      PreviewRequired result invocation -> boundedJson status200 (driftHeaders drift) (object ["outcome" .= ("preview" :: Text), "result" .= result.jsonValue, "cli_reinvocation" .= invocation])
+      Succeeded result -> success result ExitSuccess
+      SucceededWithExit result exitCode -> success result exitCode
+      where
+        success result exitCode =
+          let exitFields = case exitCode of ExitSuccess -> []; ExitFailure n -> ["exit_code" .= n]
+              exitHeaders = case exitCode of ExitSuccess -> []; ExitFailure n -> [("Keiro-Ops-Exit-Code", Char8.pack (show n))]
+              value = if mutation then object (["outcome" .= ("executed" :: Text), "result" .= result.jsonValue] <> exitFields) else result.jsonValue
+           in boundedJson status200 (driftHeaders drift <> if mutation then [] else exitHeaders) value
+
+readConfirmation :: Request -> IO (Either Response Bool)
+readConfirmation request = go 0 []
+  where
+    go size chunks = do
+      chunk <- getRequestBodyChunk request
+      let nextSize = size + ByteString.length chunk
+      if nextSize > 1024
+        then pure (Left (failure status413 "inspection_request_too_large" "confirmation body exceeds 1 KiB"))
+        else
+          if ByteString.null chunk
+            then pure (parse (LazyByteString.fromChunks (reverse chunks)))
+            else go nextSize (chunk : chunks)
+    parse body
+      | LazyByteString.null body = Right False
+      | Aeson.decode body == Just (object ["confirm" .= ("execute" :: Text)]) = Right True
+      | otherwise = Left (failure status400 "invalid_confirmation" "expected an empty body or exactly {\"confirm\":\"execute\"}")
+
+trySync :: IO a -> IO (Either SomeException a)
+trySync action = do
+  result <- try action
+  case result of
+    Left exception | Just (_ :: SomeAsyncException) <- fromException exception -> throwIO exception
+    _ -> pure result

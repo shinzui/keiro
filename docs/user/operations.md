@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-14T03:37:57Z
+timestamp: 2026-10-20T17:05:00Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -137,6 +137,7 @@ queue name and needs no application hook:
 
 ```console
 keiro-ops pgmq dlq read --queue billing --limit 20
+keiro-ops pgmq dlq read --queue billing --limit 20 --force
 keiro-ops pgmq dlq redrive --queue billing --limit 100
 keiro-ops pgmq dlq archive --queue billing --entry 42
 keiro-ops pgmq dlq archive --queue billing --limit 100
@@ -661,3 +662,10 @@ Before production:
 - Decide outbox dead-letter handling and inbox retention/GC cadence.
 - Load test command paths that touch long streams.
 - Document which APIs are considered stable for your application.
+
+
+The same application hooks mount the optional HTTP transport; see
+[Serve Keiro Ops Over HTTP](../guides/serve-keiro-ops-over-http.md). Mutations
+are disabled by default. DLQ `read` is a mutation: PGMQ hides each returned
+message for 30 seconds and increments its read count. It now previews unless
+`--force` is supplied; HTTP uses POST and explicit confirmation for it.

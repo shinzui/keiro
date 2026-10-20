@@ -1,5 +1,8 @@
 # Keiro User Documentation Log
 
+## 2026-10-20
+* **Update**: Link HTTP operations and require force for DLQ reads that reserve messages.
+
 ## 2026-10-14
 * **Update**: DOC-27, DOC-26, and DOC-12 document candidate mapped register construction, pure/total versioned lifts, create-once cases, and replay/adoption boundaries (plan 267).
 * **Update**: DOC-34 documents command/event/state removal reports and the normal failing compatibility gate status (plan 314).

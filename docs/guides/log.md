@@ -1,5 +1,8 @@
 # Keiro Guides Log
 
+## 2026-10-20
+* **Addition**: Document bounded HTTP operations and dedicated inspection pools.
+
 ## 2026-10-13
 * **Update**: Explain whole-service execution of initial-hole behavior witnesses.
 

@@ -421,6 +421,16 @@ required before completion.
 
 ## Surprises & Discoveries
 
+- (2026-10-20) The PGMQ DLQ `read` command reserved rows despite its read-only
+  classifier. EP-1 fixes the owner classifier and preview behavior; subsequent
+  command-tree consumers must treat it as a POST mutation. Non-consuming queue
+  browsing remains upstream-owned. Released `mori://shinzui/pgmq-hs/packages/pgmq-effectful` 0.6.1.1 lacks the
+  newer local checkout's peek primitive.
+- (2026-10-20) `withOpsInspectionPool` owns per-connection SQL timeouts and search
+  paths. EP-5/EP-6 examples must use it rather than setting a timeout on a single
+  schema-verification borrow.
+
+
 - (2026-10-13) `Keiro.Wake.wakeSignalFromStore` duplicates an unbounded `TChan` once per call. Sharing that returned signal makes drivers consume each other's ticks; keeping it idle can retain a notification backlog. EP-5 now owns a continuously drained broadcast epoch while views exist, and drops the cursor at zero views.
 - (2026-10-13) Plan 275 added library pages but left CLI commands draining whole histories. Plan 276 cannot derive missing routes from those APIs. The `wf inspect` subtree closes the hand-off.
 - (2026-10-13) Existing `runTransaction` uses ReadCommitted in `mori://shinzui/kiroku/packages/kiroku-store`; two statements in a transaction do not establish one row snapshot. Database clock consistency and snapshot consistency are separate claims.

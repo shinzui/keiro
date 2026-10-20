@@ -23,6 +23,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-20T17:10:21Z
+      mode: "implement"
+      note: "Record EP-1 DLQ reservation classification as a required release and upgrade handoff"
 ---
 
 # Release the keiro inspection surface cohort and complete the keiro-ui requests
@@ -75,6 +80,14 @@ This plan is EP-7 of MasterPlan 45 and hard-depends on all six implementation ch
 
 
 ## Surprises & Discoveries
+
+2026-10-20 EP-1 handoff: `pgmq dlq read` was incorrectly classified as read-only
+although the supported PGMQ operation reserves messages for 30 seconds. It now
+previews by default and requires CLI `--force` or HTTP POST confirmation. The
+cohort release notes and upgrade edge must name this behavior change. Do not
+restore GET or compare two successive reservation reads as equivalent
+observations; the HTTP tests prove the reservation and confirmation explicitly.
+
 
 2026-10-13 source review: Current store 0.11 already provides listing; partial release instructions conflict with Complete status and cannot discharge missing performance evidence.
 

@@ -6,6 +6,10 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### New Features
+
+- Add `keiro-ops-http`, an opt-in HTTP transport with bounded inspection, per-request schema verification, and preview/confirm mutations.
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Breaking Changes

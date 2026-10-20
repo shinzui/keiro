@@ -46,7 +46,7 @@ commandParser =
 dlqParser :: Parser DlqCommand
 dlqParser =
   hsubparser
-    ( command "read" (info readParser (progDesc "Read and decode visible DLQ entries"))
+    ( command "read" (info readParser (progDesc "Preview or reserve and decode visible DLQ entries for 30 seconds"))
         <> command "redrive" (info redriveParser (progDesc "Preview or move DLQ entries back to the main queue"))
         <> command "archive" (info archiveParser (progDesc "Preview or archive DLQ entries for retention"))
         <> command "purge" (info purgeParser (progDesc "Preview or permanently purge a DLQ"))
@@ -75,14 +75,16 @@ int64Reader = eitherReader $ \raw ->
 
 isMutation :: Command -> Bool
 isMutation (Dlq dlqCommand) = case dlqCommand of
-  Read {} -> False
+  Read {} -> True
   Redrive {} -> True
   Archive {} -> True
   Purge {} -> True
 
 runCommand :: OpsEnv -> Command -> IO OpsOutcome
 runCommand env (Dlq dlqCommand) = case dlqCommand of
-  Read queue limit -> handlePgmq (runJobEff (pgmqRuntime env) (readDlq (rawJob queue) (fromIntegral limit))) (Succeeded . dlqListResult queue)
+  Read queue limit
+    | env.force -> handlePgmq (runJobEff (pgmqRuntime env) (readDlq (rawJob queue) (fromIntegral limit))) (Succeeded . dlqListResult queue)
+    | otherwise -> previewFromDepth env "read" queue (Just limit) ["pgmq", "dlq", "read", "--queue", queue, "--limit", showText limit]
   Redrive queue limit -> runRedrive env queue limit
   Archive queue entry limit -> runArchive env queue entry limit
   Purge queue -> runPurge env queue

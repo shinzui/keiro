@@ -116,6 +116,8 @@ effect handling, and **Streamly** for streaming reads and worker loops.
 - `keiro-ops/` — schema-checked operational CLI and embeddable command tree for
   inspection, safe preview/`--force` repair, stable JSON, workflow/timer hooks,
   replay audits, and typed catalog rebuilds.
+- `keiro-ops-http/` — embeddable HTTP operations with bounded inspection and
+  preview/confirm mutations.
 - `keiro-test-support/` — shared PostgreSQL test fixtures for the test suites.
 - `jitsurei/` — guide-backed, runnable worked examples, including one-catalog
   live/async application and a mixed clear/preserve rebuild with fencing and

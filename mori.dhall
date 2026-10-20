@@ -439,6 +439,32 @@ in  Schema.Project::{
               }
           ]
         }
+      , Schema.Package::{
+        , name = "keiro-ops-http"
+        , type = Schema.PackageType.Library
+        , language = Schema.Language.Haskell
+        , description = Some "Bounded HTTP transport over the supported operational command tree"
+        , dependencies =
+          [ Schema.Dependency.WithAugmentation
+              { name = "yesodweb/wai:wai"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=3.2 && <3.3"
+              }
+          , Schema.Dependency.WithAugmentation
+              { name = "yesodweb/wai:warp"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=3.4 && <3.5"
+              }
+          ]
+        }
       ]
     , dependencies =
       [ "shinzui/kiroku:kiroku-store"

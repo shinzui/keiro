@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-20
+* **Implementation**: IR-26 begins the bounded HTTP transport with parser-derived routes and fail-closed schema verification.
+
 ## 2026-10-14
 * **Update**: Record implemented candidate mapped construction and executable proof under plan 267; all repository recipe gates pass; acceptance remains pending 73 existing native Mori request-metadata errors in other requests.
 * **Completion**: IR-50 completed under ExecPlan 314 in 3cd98914: own-revision removal classification, complete CLI reports, ten focused regressions, all 58 DSL suites, and clean corpus/documentation gates pass.

@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-09-16T04:51:52Z
+timestamp: 2026-10-20T17:05:00Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -182,3 +182,7 @@ must independently revalidate their guards; the read API does not reserve work.
 - [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
   defines the application-provisioner and Keiro-orchestration boundary for online
   schema-changing projection rebuilds.
+
+The HTTP front end follows this same command boundary under
+[ADR-53](0053-the-http-operational-surface-is-a-transport-over-the-ops-command-tree.md).
+A DLQ read that reserves rows is a mutation even when its command is named `read`.

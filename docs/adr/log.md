@@ -1,5 +1,9 @@
 # Bundle Update Log
 
+## 2026-10-20
+* **Update**: Link the HTTP transport decision and clarify that reservation reads are mutations.
+* **Addition**: Record parser-derived HTTP operations, bounded inspection pools, and explicit DLQ reservation confirmation.
+
 ## 2026-10-14
 * **Update**: ADR-18 freezes conditional compact-JSON used-lift identity and own-revision conservative construction replay comparison (plan 267).
 * **Update**: ADR-17 preserves generated guard/slot ownership for contextual mapped construction and rejects recursive projections and mixed Hole ownership (plan 267).

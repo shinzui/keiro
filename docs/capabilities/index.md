@@ -41,6 +41,8 @@ distinction.
 | [Typed domain command outcomes](typed-domain-command-outcomes.md) | CAP-18 | 0.12.0.0 | Accepted event batches plus typed business rejection and no-op decisions |
 | [Canonical integration-event envelope](canonical-integration-events.md) | CAP-19 | 0.1.0.0 | Transport-neutral public event identity, metadata, payload, and trace contract |
 
+| [HTTP operational surface](http-operational-surface.md) | CAP-20 | unreleased | Bounded HTTP reads and explicitly confirmed operator actions |
+
 ## Published-package coverage
 
 The 0.12.0.0 release publishes six packages. Every one maps to at least one

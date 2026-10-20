@@ -1,5 +1,8 @@
 # Bundle Update Log
 
+## 2026-10-20
+* **Addition**: Record the default-branch HTTP operational surface; release remains pending.
+
 ## 2026-09-10
 * **Update**: CAP-16: point the operational console at ADR-40's inspection-surface boundary (IR-32).
 

@@ -6,9 +6,9 @@ description: >-
   JSON endpoints reusing the OpsResult envelope, with mutations exposed only behind the existing
   preview/force discipline and the fail-closed schema-drift handshake, so a browser UI can reach
   the operational surface applications already embed as a CLI.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-20T17:05:00Z
 requestId: IR-26
-status: accepted
+status: in-progress
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/276-serve-the-keiro-ops-surface-over-http.md
 relatedPlans:
@@ -38,7 +38,7 @@ reviews:
 
 ## Status
 
-Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
+Implementation is in progress under MasterPlan 45. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`). The
 initiative is preparing a browser UI for applications built on the keiro runtime; per its
@@ -168,3 +168,20 @@ The sister package with the mechanical read/write split, preview/confirm mutatio
 schema-drift refusal, CORS configuration, tests for each acceptance criterion, and user
 documentation with copyable request/response transcripts. The stance ADR itself is requested
 separately (`mori://shinzui/keiro/okf/improvement-requests/concepts/IR-32`).
+
+
+## Implementation evidence (2026-10-20)
+
+[ExecPlan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md) implements
+`keiro-ops-http`: parser-derived routes, JSON agreement with the executable,
+preview/confirm mutations, default mutation refusal, fail-closed schema checks,
+exact-origin CORS, bounded work, dedicated inspection pools, and joined server
+shutdown. `keiro-ops-http/test/Main.hs` exercises seeded PostgreSQL state and
+real sockets; the initial 20 examples pass. The existing ops and migration
+suites pass 51 and 40 examples. DLQ `read` now correctly previews and requires
+confirmation because the supported operation reserves messages.
+
+This request remains in progress. Full repository verification, matched
+interference/retention acceptance, and the published cohort release under
+[ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md)
+remain required; no published release is claimed here.

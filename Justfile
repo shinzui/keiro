@@ -137,6 +137,7 @@ haskell-test:
     cabal test keiro-retention
     cabal test keiro-pgmq-test
     cabal test keiro-ops-test
+    cabal test keiro-ops-http-test
     # `<package>:tests`, not `<package>`. A bare package name resolves to a
     # single component, so `cabal test keiro-dsl` ran only keiro-dsl-test and
     # silently skipped the other 37 suites — the conformance corpus compiled
