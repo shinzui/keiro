@@ -4,10 +4,12 @@
 
 -- Index-only experiment on durable, disposable clones. Uses the same runtime
 -- binary in alternating legs; it does not replace the cohort's old/new binary
--- interference and allocation experiment. Supply OUTPUT_DIRECTORY.
+-- interference and allocation experiment. Supply OUTPUT_DIRECTORY
+-- [creation|class|stored-class] [nominal|crash-counter]. The crash-counter profile is a
+-- storage diagnostic with a progress reset every twenty crashes.
 import Control.Concurrent (threadDelay)
 import Control.Exception (bracket)
-import Control.Monad (forM, forM_, unless)
+import Control.Monad (forM, forM_, unless, when)
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as Lazy
@@ -37,18 +39,27 @@ import System.FilePath ((</>))
 
 main :: IO ()
 main = do
-  [output] <- getArgs
+  (output, indexMode, profile) <-
+    getArgs >>= \case
+      [path] -> pure (path, "creation", "nominal")
+      [path, index, workload] | index `elem` ["creation", "class", "stored-class"], workload `elem` ["nominal", "crash-counter"] -> pure (path, index, workload)
+      _ -> fail "expected OUTPUT_DIRECTORY [creation|class|stored-class] [nominal|crash-counter]"
   createDirectoryIfMissing True output
   withMigratedBenchmarkSuite $ \fixture ->
     forM_ [1 .. (5 :: Int)] $ \trial ->
-      forM_ [False, True] $ \creationIndex -> withFreshDatabase fixture $ \url -> do
+      forM_ [False, True] $ \candidate -> withFreshDatabase fixture $ \url -> do
         execute url "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'seed-'||n,'seed','running' FROM generate_series(1,100000) n; ANALYZE keiro.keiro_workflows"
-        unless creationIndex (execute url "DROP INDEX keiro.keiro_workflows_created_idx")
+        when (indexMode == "creation" && not candidate) (execute url "DROP INDEX keiro.keiro_workflows_created_idx")
+        when (indexMode == "class" && candidate) (execute url "CREATE INDEX inspection_experiment_class_key ON keiro.keiro_workflows ((CASE WHEN status='running' AND attempts=0 THEN 'running' WHEN status='running' THEN 'retrying' WHEN status='suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status='suspended' THEN 'awaiting' ELSE status END),workflow_name,workflow_id)")
+        when (indexMode == "stored-class" && candidate) (execute url "ALTER TABLE keiro.keiro_workflows ADD COLUMN inspection_status_class text GENERATED ALWAYS AS (CASE WHEN status='running' AND attempts=0 THEN 'running' WHEN status='running' THEN 'retrying' WHEN status='suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status='suspended' THEN 'awaiting' ELSE status END) STORED; CREATE INDEX inspection_experiment_class_key ON keiro.keiro_workflows (inspection_status_class,workflow_name,workflow_id)")
+        when (profile == "crash-counter") (execute url "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('counter','index-evidence','running')")
         withStore (defaultConnectionSettings url) {poolSize = 1} $ \store -> do
           settings <- use store (Session.statement () (Statement.preparable "SELECT jsonb_build_object('fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'),'autovacuum',current_setting('autovacuum'),'server_version',current_setting('server_version'))" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb)))))
           durable <- use store (Session.statement () (Statement.preparable "SELECT current_setting('fsync')='on' AND current_setting('synchronous_commit')='on' AND current_setting('full_page_writes')='on' AND current_setting('autovacuum')='on'" E.noParams (D.singleRow (D.column (D.nonNullable D.bool)))))
           unless durable (fail "index experiment requires normal durable settings")
-          forM_ [1 .. 50] $ \n -> operation store ("warm-" <> number n) >> pure ()
+          let run prefix n = if profile == "crash-counter" then crashCounterOperation store n else operation store (prefix <> number n)
+          forM_ [1 .. 50] $ \n -> run "warm-" n >> pure ()
+          when (profile == "crash-counter") (runStoreIO store (Instance.resetInstanceAttempts (WorkflowName "index-evidence") (WorkflowId "counter")) >>= right)
           flush store
           before <- counters store
           started <- getMonotonicTimeNSec
@@ -57,7 +68,7 @@ main = do
             let due = started + fromIntegral (n - 1) * 20000000
             if due > now then threadDelay (fromIntegral ((due - now) `div` 1000)) else pure ()
             admitted <- getMonotonicTimeNSec
-            (schedule, claim, resume) <- operation store ("measured-" <> number n)
+            (schedule, claim, resume) <- run "measured-" n
             let waiting = if admitted > due then fromIntegral (admitted - due) / 1000 else 0
             pure (waiting, schedule, claim, resume)
           finished <- getMonotonicTimeNSec
@@ -66,10 +77,19 @@ main = do
           let elapsed = fromIntegral (finished - started) / 1e9 :: Double
               durations = map (\(q, a, b, c) -> q + a + b + c) samples
               percentile p = sort durations !! min 199 (floor (p * 200))
-              artifact = object ["trial" .= trial, "creation_index" .= creationIndex, "settings" .= (settings :: Value), "offered_ops_per_second" .= (50 :: Int), "elapsed_seconds" .= elapsed, "throughput" .= (200 / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_us" .= samples]
-              path = output </> (show trial <> if creationIndex then "-candidate.json" else "-baseline.json")
+              artifact = object ["trial" .= trial, "candidate" .= candidate, "index_mode" .= indexMode, "profile" .= profile, "settings" .= (settings :: Value), "offered_ops_per_second" .= (50 :: Int), "elapsed_seconds" .= elapsed, "throughput" .= (200 / elapsed), "p50_us" .= percentile 0.5, "p95_us" .= percentile 0.95, "p99_us" .= percentile 0.99, "before" .= before, "after" .= after, "samples_wait_schedule_claim_resume_us" .= samples]
+              path = output </> (show trial <> if candidate then "-candidate.json" else "-baseline.json")
           Lazy.writeFile path (Aeson.encode artifact)
           putStrLn path
+
+crashCounterOperation :: KirokuStore -> Int -> IO (Double, Double, Double)
+crashCounterOperation store iteration = do
+  started <- getMonotonicTimeNSec
+  count <- runStoreIO store (runTransaction (Instance.recordCrashTx "counter" "index-evidence" "same failure")) >>= right
+  case count of Just _ -> pure (); Nothing -> fail "crash diagnostic row became terminal"
+  when (iteration `mod` 20 == 0) (runStoreIO store (Instance.resetInstanceAttempts (WorkflowName "index-evidence") (WorkflowId "counter")) >>= right)
+  finished <- getMonotonicTimeNSec
+  pure (0, 0, fromIntegral (finished - started) / 1000)
 
 -- Returns schedule/claim/resume phase durations. The resume performs a real
 -- named step and completion, then releases its advance lease.

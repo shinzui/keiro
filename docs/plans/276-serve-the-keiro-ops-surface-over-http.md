@@ -89,7 +89,7 @@ requested separately; see the Decision Log for how this plan relates to it.
 - [ ] Steady-state latency, full domain interference matrix and strict retention
   acceptance. The narrow 380/s old/new profile has medians within 5%, but its
   control variation and startup outlier make latency inconclusive. Keep raw
-  evidence; repeat with active clients warmed before measurement.
+  evidence; the warmed-client repeat also fails baseline headroom and remains inconclusive.
 
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
@@ -113,6 +113,20 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 
 ## Surprises & Discoveries
+
+2026-10-20: The warmed persistent-client comparison in
+`keiro/bench/results/inspection/matched-http-warm/` completes four trials then
+aborts when the fifth pre-change baseline fails the declared headroom check.
+The fixed load remains 380/s. Trial four has unmounted and idle p95 spikes
+about 263 ms and 633 ms. All raw legs remain; there is no comparison summary
+or latency pass. A quiet window or exclusive benchmark environment is needed
+for a trustworthy repeat. The complete domain/large-value/slow-reader/retention
+matrix also remains open.
+
+2026-10-20: Workflow producers can fail a required continuation whose stored
+key exceeds 4096 encoded bytes. The structured result-size failure now maps
+to HTTP 413; all 25 HTTP examples and 51 ops examples pass. Static parser
+metadata is forced once at application construction, before the first request.
 
 2026-10-20: The real-socket/external-client repetition also rejects the first
 optimized candidate at the exploratory 50 writer operations/second: 32-view

@@ -1,0 +1,15 @@
+{
+  "parent_commit": "f24f569d02301b7faa48b5fc12a0b674bdb855b3",
+  "driver_sha256": "c2a2f55f8f8d632defcd5c049bfe78c7941da674aa0e676aac3b92abde6534d8",
+  "binary_sha256": "313909ab7cba8b3ae44398b564f48de65c9ee22f3155eb962f11b13dc408a602",
+  "command": "nix develop -c /tmp/keiro-class-index-write-evidence keiro/bench/results/inspection/class-index-write-crash class crash-counter",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "trials": 5,
+  "warm_operations": 50,
+  "measured_operations": 200,
+  "offered_rate": 50,
+  "index_only_clone_experiment": true,
+  "cohort_acceptance": false
+}

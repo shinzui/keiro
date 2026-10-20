@@ -1,0 +1,41 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "candidate_commit": "f24f569d plus source.patch.gz",
+  "source_sha256": {
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "df1fa1a042f55a328d6d6db2fac9410a8273f4b60a7519836954f3207c6b00e2",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "fd9a72c2a5228b144aab2dd2bc41ac526e61eb0592cbc474e6c0f692004c0838",
+    "keiro-ops-http/src/Keiro/Ops/Http/Budget.hs": "29fe3b6b6afc150a57e03da7cb402b2805b3548dddfd5814030a36c2c1dc9ba4",
+    "keiro-ops-http/src/Keiro/Ops/Http/Route.hs": "883a6797683557bc421fabab94952bfcde6956e649a5ea9994d8bbae7434b34d"
+  },
+  "toolchain": {
+    "ghc": "9.12.4",
+    "driver_optimization": "-O2",
+    "library_optimization": "Cabal default -O1 for both builds",
+    "rts": [
+      "-N2",
+      "-T"
+    ]
+  },
+  "common_dependency_unit_differences": [],
+  "baseline_plan_sha256": "c0442e50b9434ed652d823a769f69209225b32b5038300315f5cff8948a7571a",
+  "candidate_plan_sha256": "77d605a8f1439a388342c5a75640cbc29285cbd2b13ec1390c21f0de2d1c6b9b",
+  "baseline_compile_flags": [
+    "-O2",
+    "-threaded",
+    "-rtsopts",
+    "-XGHC2024",
+    "-DKEIRO_INSPECTION_BASELINE",
+    "-package=keiro",
+    "-package=keiro-test-support"
+  ],
+  "candidate_compile_flags": [
+    "-O2",
+    "-threaded",
+    "-rtsopts",
+    "-XGHC2024",
+    "-package=keiro",
+    "-package=keiro-test-support",
+    "-package=keiro-ops-http"
+  ],
+  "warmup": "writer warm-up, successful header for every view on retained TCP connections, one-second settling period, then explicit measurement start"
+}

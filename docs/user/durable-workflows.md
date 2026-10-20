@@ -7,7 +7,7 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
-timestamp: 2026-10-20T17:36:52Z
+timestamp: 2026-10-20T20:34:48Z
 ---
 
 # Durable Workflows
@@ -289,7 +289,9 @@ rows whose allocation step has not yet been journaled.
 
 Page sizes are 1 through 500. Responses contain `items`, a PostgreSQL
 `observed_at`, and `next_cursor` only when a look-ahead row exists; a full final
-page has no cursor. Tokens are opaque and at most 4096 encoded bytes. Change
+page has no cursor. Tokens are opaque and at most 4096 encoded bytes. A stored
+key that cannot fit a required continuation fails with `inspection_result_too_large`
+(HTTP 413); the page never returns a truncated or unusable cursor. Change
 filters or ordering and restart without a cursor. Detail cursors bind the
 owner; journal/step cursors also bind the generation. Rotation between pages
 returns `cursor_generation_mismatch`; restart or explicitly select the old

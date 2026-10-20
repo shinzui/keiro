@@ -36,6 +36,7 @@ def main():
     parser.add_argument("candidate", type=Path)
     parser.add_argument("capacity", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--reuse-qualified", type=Path, help="reuse a previous five-baseline headroom-qualified rate")
     args = parser.parse_args()
     capacities = [read(path) for path in sorted(args.capacity.glob("*-unmounted.json"))]
     if len(capacities) != 5 or any(row["offered_ops_per_second"] is not None for row in capacities):
@@ -46,7 +47,18 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     proposed = offered
     qualifications = []
-    while True:
+    if args.reuse_qualified:
+        prior = read(args.reuse_qualified / "manifest.json")
+        previous_rate = prior["offered_writer_operations_per_second"]
+        if prior["baseline_commit"] != "3bf3ac229f21d6c95179ce49b5e8f6323322f99b" or not 0 < previous_rate <= offered:
+            raise RuntimeError("previous qualification does not match this baseline/rate proposal")
+        for trial in range(1, 6):
+            result = read(args.reuse_qualified / f"{trial}-baseline-unmounted/1-unmounted.json")
+            if result["offered_ops_per_second"] != previous_rate or not has_headroom(result, previous_rate):
+                raise RuntimeError("previous baseline does not establish headroom")
+        offered = previous_rate
+        qualifications.append({"offered": offered, "reused_from": str(args.reuse_qualified), "previous_baselines_checked": 5})
+    while not qualifications or not args.reuse_qualified:
         directory = args.output / "paced-qualification" / str(offered)
         directory.parent.mkdir(parents=True, exist_ok=True)
         command = [str(args.baseline), str(directory), str(offered), "1", "unmounted", "+RTS", "-N2", "-T", "-RTS"]
@@ -78,6 +90,8 @@ def main():
         "fixture_workflow_rows": 100000,
         "repetitions": 5,
         "allocation_scope": "runtime process; HTTP clients are external Python processes",
+        "active_client_warmup": "one successful header per view on a retained TCP connection, then parent-controlled measurement start",
+        "settle_seconds_after_warmup": 1,
         "headroom_check": "baseline throughput at least 99% of offered rate and last/first tenth mean queue delay growth at most 20ms",
         "order": [],
         "limitations": "workflow point headers only; not the full domain, large-value, slow-reader or retention matrix",

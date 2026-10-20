@@ -38,10 +38,16 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       let payload = ("承認" :: Text, "workflow/1" :: Text, read "2026-10-20 01:02:03.123456 UTC" :: UTCTime)
           token = encodeCursor "wf-key" payload
       decodeCursor "wf-key" token `shouldBe` Right payload
+      encodeCursorBounded "wf-key" payload `shouldBe` Just token
+      encodeCursorBounded "wf-key" (Text.replicate 100000 "界") `shouldBe` Nothing
       (decodeCursor "wf-created" token :: Either CursorError Value) `shouldBe` Left (CursorKindMismatch "wf-created" "wf-key")
       forM_ ["not-a-cursor", "", Text.replicate 4097 "a", "===="] $ \bad ->
         (decodeCursor "wf-key" (InspectionCursor bad) :: Either CursorError Value) `shouldSatisfy` (\case Left (MalformedCursor _) -> True; _ -> False)
   around (withFreshStore fixture) $ do
+    it "rejects an outgoing cursor that clients could not resume within the cursor limit" $ \store -> do
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a',repeat('界',2000),'running'),('b',repeat('界',2000),'running')"
+      result <- expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {pageSize = 1})
+      result `shouldBe` Left CursorResultTooLarge
     it "classifies every stored row identically in Haskell and SQL without modifying rows" $ \store -> do
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id, workflow_name, status, attempts, wake_after) VALUES ('running','test','running',0,NULL),('retrying','test','running',2,NULL),('sleeping','test','suspended',0,now()+interval '1 hour'),('awaiting','test','suspended',0,NULL),('completed','test','completed',0,NULL),('cancelled','test','cancelled',0,NULL),('failed','test','failed',0,NULL)"
       sql store "UPDATE keiro.keiro_workflows SET status='running' WHERE workflow_id='failed'"

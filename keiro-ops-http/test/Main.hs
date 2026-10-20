@@ -130,6 +130,12 @@ spec fixture = do
       newInspectionBudget defaultInspectionLimits {maxConcurrentReads = 0} `shouldThrow` anyIOException
   around (withFreshStore fixture) $ do
     describe "workflow page routes" $ do
+      it "rejects an unrepresentable outgoing cursor instead of returning an unusable token" $ \store -> do
+        result <- Pool.use store.pool (Session.script "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a',repeat('界',2000),'running'),('b',repeat('界',2000),'running')")
+        either (fail . show) pure result
+        app <- opsApplication defaultOpsHttpConfig hooks store
+        response <- call app methodGet "/wf/inspect/list?limit=1" ""
+        assertError response status413 "inspection_result_too_large"
       it "pages supported reads through the same parser and maps typed failures" $ \store -> do
         seedInspection store
         now <- getCurrentTime

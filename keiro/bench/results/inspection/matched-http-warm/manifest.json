@@ -1,0 +1,368 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "offered_writer_operations_per_second": 380,
+  "selection_rule": "75% of minimum of five pre-change saturation throughputs rounded down to nearest ten, then fixed 20% reductions until paced headroom check passes",
+  "initial_proposal": 480,
+  "paced_qualifications": [
+    {
+      "offered": 380,
+      "reused_from": "keiro/bench/results/inspection/matched-http-qualified",
+      "previous_baselines_checked": 5
+    }
+  ],
+  "baseline_binary_sha256": "d2a073c3a827adae886234e926dfe553edd39a14383f8b50ff2ecc654f2ac233",
+  "candidate_binary_sha256": "a68c30efac009b1916e1bac81bf625593cbf635f865467a6e7358437e67082c4",
+  "driver_sha256": "d9fede66b9bd609f8858e30a059124c257593aad04a374a0518ed879266fc148",
+  "client_sha256": "2b2d527637d5e9a69431ab7f4a67665d73b994996ab94f89129f4c9898fe01ad",
+  "runner_sha256": "513a75cf6b347ea5a1f8e7772be5d2fdbae4214889f957f761cf127f2b9b25af",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "duration_seconds": 20,
+  "fixture_workflow_rows": 100000,
+  "repetitions": 5,
+  "allocation_scope": "runtime process; HTTP clients are external Python processes",
+  "active_client_warmup": "one successful header per view on a retained TCP connection, then parent-controlled measurement start",
+  "settle_seconds_after_warmup": 1,
+  "headroom_check": "baseline throughput at least 99% of offered rate and last/first tenth mean queue delay growth at most 20ms",
+  "order": [
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-prechange-warm",
+        "keiro/bench/results/inspection/matched-http-warm/1-baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/1-candidate-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/1-candidate-idle",
+        "380",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/1-candidate-active-1",
+        "380",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-32",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/1-candidate-active-32",
+        "380",
+        "1",
+        "active-32",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-prechange-warm",
+        "keiro/bench/results/inspection/matched-http-warm/2-baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/2-candidate-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/2-candidate-active-1",
+        "380",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "active-32",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/2-candidate-active-32",
+        "380",
+        "1",
+        "active-32",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 2,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/2-candidate-idle",
+        "380",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-prechange-warm",
+        "keiro/bench/results/inspection/matched-http-warm/3-baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/3-candidate-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "active-32",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/3-candidate-active-32",
+        "380",
+        "1",
+        "active-32",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/3-candidate-idle",
+        "380",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 3,
+      "role": "candidate",
+      "mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/3-candidate-active-1",
+        "380",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-prechange-warm",
+        "keiro/bench/results/inspection/matched-http-warm/4-baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "candidate",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/4-candidate-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/4-candidate-idle",
+        "380",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "candidate",
+      "mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/4-candidate-active-1",
+        "380",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 4,
+      "role": "candidate",
+      "mode": "active-32",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-warm-final",
+        "keiro/bench/results/inspection/matched-http-warm/4-candidate-active-32",
+        "380",
+        "1",
+        "active-32",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 5,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-interference-evidence-prechange-warm",
+        "keiro/bench/results/inspection/matched-http-warm/5-baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "limitations": "workflow point headers only; not the full domain, large-value, slow-reader or retention matrix"
+}

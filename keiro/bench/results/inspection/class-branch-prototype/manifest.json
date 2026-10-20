@@ -1,0 +1,11 @@
+{
+  "parent_commit": "f24f569d02301b7faa48b5fc12a0b674bdb855b3",
+  "driver_sha256": "5e35cb4e5ca6e428e149b20e8345a1af3584266f78a4aee2f4c3f877497f91d1",
+  "prototype_only": true,
+  "temporary_index_only": true,
+  "plan_count": 16,
+  "command": "nix develop -c /tmp/keiro-class-branch-experiment keiro/bench/results/inspection/class-branch-prototype",
+  "ghc": "9.12.4",
+  "postgresql": "18.6",
+  "dependency_plan_sha256": "5f48c416301ed07a47fc177151c7c2eae9546500e71a601e187361c783f8d8f3"
+}

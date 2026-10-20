@@ -71,7 +71,7 @@ import Kiroku.Store.Types
 maxInspectionPageSize :: Int
 maxInspectionPageSize = 500
 
-data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int
+data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge
   deriving stock (Eq, Show, Generic)
 
 statusClassOf :: WorkflowInstanceRow -> WorkflowStatusClass
@@ -99,22 +99,24 @@ decode kind token = either (Left . InvalidCursor) Right (decodeCursor kind token
 invalid :: Text -> Either InspectionError a
 invalid = Left . InvalidCursor . MalformedCursor
 
-nextFor :: (ToJSON key) => Text -> Int -> [a] -> (a -> key) -> Maybe InspectionCursor
+nextFor :: (ToJSON key) => Text -> Int -> [a] -> (a -> key) -> Either InspectionError (Maybe InspectionCursor)
 nextFor kind count rows key
-  | length rows <= count = Nothing
+  | length rows <= count = Right Nothing
   | otherwise = case reverse (take count rows) of
-      row : _ -> Just (encodeCursor kind (key row))
-      [] -> Nothing
+      row : _ ->
+        maybe (Left CursorResultTooLarge) (Right . Just) (encodeCursorBounded kind (key row))
+      [] -> Right Nothing
 
 listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Eff es (Either InspectionError WorkflowListPage)
 listWorkflowInstancesPage query = case validated of
   Left err -> pure (Left err)
   Right position -> do
     (observedAt, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
-    let nextCursor = case query.ordering of
-          ByKey -> nextFor "wf-key" query.pageSize rows (\r -> (r.workflowName, r.workflowId))
-          ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
-    pure (Right (WorkflowListPage (take query.pageSize rows) nextCursor observedAt))
+    pure $ do
+      nextCursor <- case query.ordering of
+        ByKey -> nextFor "wf-key" query.pageSize rows (\r -> (r.workflowName, r.workflowId))
+        ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
+      pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
   where
     validated = do
       validateSize query.pageSize
@@ -232,8 +234,7 @@ readWorkflowJournalPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId) q
       observedAt <- Schema.inspectionObservedAt
       recorded <- Vector.toList <$> readStreamForward (workflowGenerationStreamName name wid gen) (StreamVersion (maybe 0 (\value -> value) after)) (fromIntegral (query.pageSize + 1))
       entries <- either (throwIO . WorkflowJournalDecodeError) pure (traverse decodeJournalEntry (take query.pageSize recorded))
-      let nextCursor = nextFor "wf-journal" query.pageSize recorded (\r -> (ownerName, ownerId, gen, case r.streamVersion of StreamVersion v -> v))
-      pure (Right (WorkflowJournalPage gen entries nextCursor observedAt))
+      pure $ (\nextCursor -> WorkflowJournalPage gen entries nextCursor observedAt) <$> nextFor "wf-journal" query.pageSize recorded (\r -> (ownerName, ownerId, gen, case r.streamVersion of StreamVersion v -> v))
 
 loadStepIndexPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> DetailPageQuery -> Eff es (Either InspectionError WorkflowStepPage)
 loadStepIndexPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId) query = do
@@ -243,7 +244,7 @@ loadStepIndexPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId) query =
     Right (gen, after) -> do
       observedAt <- Schema.inspectionObservedAt
       rows <- Schema.loadStepIndexPage name wid gen after (query.pageSize + 1)
-      pure (Right (WorkflowStepPage gen (take query.pageSize rows) (nextFor "wf-steps" query.pageSize rows (\r -> (ownerName, ownerId, gen, r.stepName))) observedAt))
+      pure $ (\nextCursor -> WorkflowStepPage gen (take query.pageSize rows) nextCursor observedAt) <$> nextFor "wf-steps" query.pageSize rows (\r -> (ownerName, ownerId, gen, r.stepName))
 
 listWorkflowChildrenPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowChildPage)
 listWorkflowChildrenPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId) query =
@@ -252,7 +253,7 @@ listWorkflowChildrenPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId) 
     Right after -> do
       observedAt <- Schema.inspectionObservedAt
       rows <- Child.lookupChildrenOfParentPage ownerId ownerName after (query.pageSize + 1)
-      pure (Right (WorkflowChildPage (take query.pageSize rows) (nextFor "wf-children" query.pageSize rows (\r -> (ownerName, ownerId, (r.createdAt, r.childId, r.childName)))) observedAt))
+      pure $ (\nextCursor -> WorkflowChildPage (take query.pageSize rows) nextCursor observedAt) <$> nextFor "wf-children" query.pageSize rows (\r -> (ownerName, ownerId, (r.createdAt, r.childId, r.childName)))
 
 listWorkflowAwakeablesPage :: (IOE :> es, Store :> es) => WorkflowName -> WorkflowId -> OwnerPageQuery -> Eff es (Either InspectionError WorkflowAwakeablePage)
 listWorkflowAwakeablesPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId) query =
@@ -261,7 +262,7 @@ listWorkflowAwakeablesPage name@(WorkflowName ownerName) wid@(WorkflowId ownerId
     Right after -> do
       observedAt <- Schema.inspectionObservedAt
       rows <- Awakeable.lookupAwakeablesOfOwnerPage ownerName ownerId after (query.pageSize + 1)
-      pure (Right (WorkflowAwakeablePage (take query.pageSize rows) (nextFor "wf-awakeables" query.pageSize rows (\r -> (ownerName, ownerId, (r.createdAt, r.awakeableId)))) observedAt))
+      pure $ (\nextCursor -> WorkflowAwakeablePage (take query.pageSize rows) nextCursor observedAt) <$> nextFor "wf-awakeables" query.pageSize rows (\r -> (ownerName, ownerId, (r.createdAt, r.awakeableId)))
 
 decodeJournalEntry :: RecordedEvent -> Either Text WorkflowJournalEntry
 decodeJournalEntry recorded = do

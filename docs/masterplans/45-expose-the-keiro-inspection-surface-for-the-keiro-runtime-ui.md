@@ -252,11 +252,16 @@ interface:
 ```haskell
 newtype InspectionCursor = InspectionCursor { cursorText :: Text }
 data CursorError = MalformedCursor !Text | CursorKindMismatch !Text !Text
+maxCursorBytes :: Int -- 4096
 encodeCursor :: (ToJSON payload) => Text -> payload -> InspectionCursor
+encodeCursorBounded :: (ToJSON payload) => Text -> payload -> Maybe InspectionCursor
 decodeCursor :: (FromJSON payload) => Text -> InspectionCursor -> Either CursorError payload
 ```
 
-Reject tokens longer than 4096 encoded bytes before decoding. A token is unpadded base64url over the compact JSON object `{"k":<kind>,"v":<payload>}`;
+Reject tokens longer than 4096 encoded bytes before decoding. Page producers use
+`encodeCursorBounded`; if a stored continuation key cannot fit, return an explicit
+result-size failure (HTTP 413 `inspection_result_too_large`) rather than an unusable
+next cursor. The unchecked encoder remains available for codec fixtures. A token is unpadded base64url over the compact JSON object `{"k":<kind>,"v":<payload>}`;
 `decodeCursor` rejects a kind other than the one requested. `base64-bytestring >=1.2 && <1.3`
 is added to `keiro/keiro.cabal` by EP-2. Kind tags are plain text
 constants owned by the module that owns each read: `wf-key`, `wf-created`, `wf-steps`,
@@ -411,6 +416,14 @@ consequences paragraph naming the shipped package and the release that carried i
 
 
 ## Progress
+
+- (2026-10-20) A warmed external-client comparison aborts at the fifth
+  old-runtime baseline's failed headroom check; it is inconclusive, with no
+  discarded legs. EP-2 rejects the direct class-expression index after five
+  crash diagnostics show HOT falling from 210/210 to zero and WAL +190%.
+  A fixed seven-branch query prototype bounds generic class scans, but its
+  index remains experimental. Required outgoing continuations now fail
+  explicitly if they exceed the shared decoder limit. No child is complete.
 
 - (2026-10-20) EP-1 retains five old/new workflow-header comparisons using
   identical dependency units, measured writer headroom, and external real-HTTP

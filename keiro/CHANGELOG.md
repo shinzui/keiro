@@ -6,6 +6,11 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Fail oversized workflow continuations explicitly instead of returning a cursor
+  that the next request cannot decode.
+
 ### New Features
 
 - Bounded workflow inspection pages, canonical status classes and JSON, pure validation, and opaque cursors.

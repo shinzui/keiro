@@ -8,9 +8,6 @@
 -- Supply OUTPUT_DIRECTORY [saturation|OPS_PER_SECOND] [TRIALS] [MODE].
 -- Run with +RTS -N2 -T -RTS; this is not the full domain workload matrix.
 import Control.Concurrent (threadDelay)
-#ifndef KEIRO_INSPECTION_BASELINE
-import Control.Concurrent.Async (link, wait, withAsync)
-#endif
 import Control.Exception (bracket)
 import Control.Monad (forM, forM_, unless)
 import Data.Aeson (Value, object, (.=))
@@ -48,11 +45,12 @@ import System.Directory (createDirectoryIfMissing)
 import System.Environment (getArgs)
 #ifndef KEIRO_INSPECTION_BASELINE
 import System.Exit (ExitCode (..))
+import System.IO (hClose, hFlush, hGetLine, hPutStrLn)
 #endif
 import System.FilePath ((</>))
 import System.Mem (performMajorGC)
 #ifndef KEIRO_INSPECTION_BASELINE
-import System.Process (readProcessWithExitCode)
+import System.Process (CreateProcess (..), StdStream (..), createProcess, proc, readProcessWithExitCode, terminateProcess, waitForProcess)
 #endif
 import Text.Read (readMaybe)
 
@@ -90,19 +88,25 @@ main = do
           durable <- use store (Session.statement () (Statement.preparable "SELECT current_setting('fsync')='on' AND current_setting('synchronous_commit')='on' AND current_setting('full_page_writes')='on' AND current_setting('autovacuum')='on'" E.noParams (D.singleRow (D.column (D.nonNullable D.bool)))))
           unless durable (fail "index experiment requires normal durable settings")
           forM_ [1 .. 50] $ \n -> operation store ("warm-" <> number n) >> pure ()
-          flush store
-          before <- counters store
-          performMajorGC
-          statsBefore <- getRTSStats
-          started <- getMonotonicTimeNSec
-          (samples, pollSuccess, pollFailure) <- withPollers app mode $ forM [1 .. sampleCount] $ \n -> do
-            now <- getMonotonicTimeNSec
-            let due = maybe now (\rate -> started + fromIntegral (n - 1) * (1000000000 `div` fromIntegral rate)) offeredRate
-            if due > now then threadDelay (fromIntegral ((due - now) `div` 1000)) else pure ()
-            admitted <- getMonotonicTimeNSec
-            (schedule, claim, resume) <- operation store ("measured-" <> number n)
-            let waiting = if offeredRate /= Nothing && admitted > due then fromIntegral (admitted - due) / 1000 else 0
-            pure (waiting, schedule, claim, resume)
+          ((samples, statsBefore, started, before), pollSuccess, pollFailure) <- withPollers app mode $ \startPolling -> do
+            -- Let warm writer notifications settle in every mode, including
+            -- the baseline, before capturing counters and the measurement clock.
+            threadDelay 1000000
+            flush store
+            before <- counters store
+            performMajorGC
+            statsBefore <- getRTSStats
+            started <- getMonotonicTimeNSec
+            startPolling
+            samples <- forM [1 .. sampleCount] $ \n -> do
+              now <- getMonotonicTimeNSec
+              let due = maybe now (\rate -> started + fromIntegral (n - 1) * (1000000000 `div` fromIntegral rate)) offeredRate
+              if due > now then threadDelay (fromIntegral ((due - now) `div` 1000)) else pure ()
+              admitted <- getMonotonicTimeNSec
+              (schedule, claim, resume) <- operation store ("measured-" <> number n)
+              let waiting = if offeredRate /= Nothing && admitted > due then fromIntegral (admitted - due) / 1000 else 0
+              pure (waiting, schedule, claim, resume)
+            pure (samples, statsBefore, started, before)
           finished <- getMonotonicTimeNSec
           performMajorGC
           statsAfter <- getRTSStats
@@ -164,9 +168,9 @@ withMount _ _ _ action = action Nothing
 inspectionModes :: [Text]
 inspectionModes = ["unmounted"]
 
-withPollers :: Maybe Int -> Text -> IO a -> IO (a, Int, Int)
+withPollers :: Maybe Int -> Text -> (IO () -> IO a) -> IO (a, Int, Int)
 withPollers _ _ action = do
-  result <- action
+  result <- action (pure ())
   pure (result, 0, 0)
 #else
 withMount store url mode action
@@ -178,15 +182,27 @@ withMount store url mode action
         _ <- pollClient server.serverPort 0
         action (Just server.serverPort)
 
-withPollers :: Maybe Int -> Text -> IO a -> IO (a, Int, Int)
+withPollers :: Maybe Int -> Text -> (IO () -> IO a) -> IO (a, Int, Int)
 withPollers mount mode action = case mount of
-  Just serverPort | clients > 0 -> withAsync (pollClient serverPort clients) $ \job -> do
-    link job
-    result <- action
-    (good, bad) <- wait job
-    pure (result, good, bad)
+  Just serverPort | clients > 0 -> do
+    let child = (proc "python3" ["scripts/inspection-http-poll-client.py", show serverPort, show clients, "20", "controlled"]) {std_in = CreatePipe, std_out = CreatePipe}
+        cleanup (input, output, errors, process) = do
+          terminateProcess process
+          _ <- waitForProcess process
+          mapM_ (maybe (pure ()) hClose) [input, output, errors]
+    bracket (createProcess child) cleanup $ \case
+      (Just input, Just output, _, process) -> do
+        ready <- hGetLine output
+        unless (ready == "ready") (fail "poll client did not finish warming its views")
+        result <- action (hPutStrLn input "go" >> hFlush input)
+        counts <- hGetLine output
+        exit <- waitForProcess process
+        unless (exit == ExitSuccess) (fail "poll client failed")
+        (good, bad) <- right (Aeson.eitherDecode (LazyChar8.pack counts))
+        pure (result, good, bad)
+      _ -> fail "missing poll client control pipes"
   _ -> do
-    result <- action
+    result <- action (pure ())
     pure (result, 0, 0)
   where
     clients = case mode of "active-1" -> 1; "active-32" -> 32; _ -> 0
@@ -196,8 +212,7 @@ inspectionModes = ["unmounted", "idle", "active-1", "active-32"]
 
 pollClient :: Int -> Int -> IO (Int, Int)
 pollClient serverPort clients = do
-  -- readProcessWithExitCode owns, terminates and joins its child on cancellation.
-  -- The external client keeps requester allocation out of runtime RTS counters.
+  -- Outside-measurement health prime; active clients use controlled warm-up.
   (exit, output, errors) <- readProcessWithExitCode "python3" ["scripts/inspection-http-poll-client.py", show serverPort, show clients, show (20 :: Int)] ""
   case exit of
     ExitSuccess -> right (Aeson.eitherDecode (LazyChar8.pack output))

@@ -1,0 +1,178 @@
+[
+  {
+    "file": "10000-force_custom_plan-absent-retrying.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "absent-retrying",
+    "examined": 0.0,
+    "execution_ms": 0.029,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-all.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "all",
+    "examined": 22.0,
+    "execution_ms": 0.104,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-rare-failed.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "rare-failed",
+    "examined": 10.0,
+    "execution_ms": 0.046,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-running.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "running",
+    "examined": 21.0,
+    "execution_ms": 0.056,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-absent-retrying.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "absent-retrying",
+    "examined": 0.0,
+    "execution_ms": 0.029,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-all.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "all",
+    "examined": 22.0,
+    "execution_ms": 0.1,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-rare-failed.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "rare-failed",
+    "examined": 10.0,
+    "execution_ms": 0.04,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-running.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "running",
+    "examined": 21.0,
+    "execution_ms": 0.04,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-absent-retrying.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "absent-retrying",
+    "examined": 0.0,
+    "execution_ms": 0.029,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-all.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "all",
+    "examined": 22.0,
+    "execution_ms": 0.128,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-rare-failed.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "rare-failed",
+    "examined": 21.0,
+    "execution_ms": 0.131,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-running.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "running",
+    "examined": 21.0,
+    "execution_ms": 0.053,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-absent-retrying.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "absent-retrying",
+    "examined": 0.0,
+    "execution_ms": 0.032,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-all.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "all",
+    "examined": 22.0,
+    "execution_ms": 0.121,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-rare-failed.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "rare-failed",
+    "examined": 21.0,
+    "execution_ms": 0.077,
+    "scan_types": [
+      "Index Scan"
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-running.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "running",
+    "examined": 21.0,
+    "execution_ms": 0.056,
+    "scan_types": [
+      "Index Scan"
+    ]
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "parent_commit": "f24f569d02301b7faa48b5fc12a0b674bdb855b3",
+  "driver_sha256": "564a6953ac70bb1ceb4f2f4372cc9dd11e474a91365c851de823b293b6dfb353",
+  "binary_sha256": "6cb6a87441e2654df530d746066332d28f300bd5dfa4e34bd7651f935c280745",
+  "command": "nix develop -c /tmp/keiro-stored-class-write-evidence keiro/bench/results/inspection/stored-class-write-nominal stored-class nominal",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "trials": 5,
+  "warm_operations": 50,
+  "measured_operations": 200,
+  "offered_rate": 50,
+  "temporary_schema_only": true,
+  "cohort_acceptance": false
+}

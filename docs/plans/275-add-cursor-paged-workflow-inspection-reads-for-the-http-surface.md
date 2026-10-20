@@ -88,6 +88,23 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Surprises & Discoveries
 
+2026-10-20: Stored PostgreSQL keys can exceed the decoder's cursor limit.
+All page producers now use `encodeCursorBounded` and return
+`CursorResultTooLarge` rather than a next token over 4096 bytes. Ops preserves
+`inspection_result_too_large`; HTTP returns 413. Eleven focused workflow,
+51 ops and 25 HTTP examples pass, including long multibyte stored names.
+
+2026-10-20: `class-branch-prototype/` retains a fixed seven-class UNION shape
+with one bound mask: generic first pages inspect 22 rows for all classes,
+21 for running, 21 for rare failed at 100,000 rows, and zero for absent
+retrying. It is not the actual API query and proves no write acceptance.
+`class-index-write-nominal/` has unchanged HOT counts and WAL about +5.35%,
+but `class-index-write-crash/` rejects the expression index: all 210 baseline
+updates are HOT versus zero candidate, with about +190% WAL in each of five
+pairs. A stored generated class is being evaluated on clones; no additional
+migration is selected. These are short storage diagnostics, not the matched
+5% cohort gate.
+
 2026-10-20: The temporary key/class-index experiment under
 `keiro/bench/results/inspection/query-key-and-class-experiment/` proves a key
 index fixes unfiltered/name-filtered first/deep pages (21 examined rows), but
@@ -467,7 +484,7 @@ Create `keiro/src/Keiro/Inspection/Cursor.hs` (add it to `exposed-modules` in
 `keiro/keiro.cabal`, and add `base64-bytestring >=1.2 && <1.3` to the library
 `build-depends`). It defines `InspectionCursor` (a newtype over `Text` whose constructor is
 exported so the HTTP layer and CLI can carry it, but whose contents are documented as opaque),
-`CursorError`, `encodeCursor`, and `decodeCursor`. Encoding builds the compact JSON object
+`CursorError`, `maxCursorBytes`, `encodeCursor`, `encodeCursorBounded`, and `decodeCursor`. Encoding builds the compact JSON object
 `{"k":<kind>,"v":<payload>}` with `Data.Aeson.encode`, then applies
 `Data.ByteString.Base64.URL.encodeUnpadded` and decodes the bytes as `Text`. Decoding reverses
 that, rejects any base64 or JSON failure as `MalformedCursor`, and rejects a kind tag other
@@ -707,7 +724,10 @@ by hand where the runtime can produce them:
 
 ### Milestone 4: Canonical JSON rendering and keiro-ops adoption
 
-Add read-only `wf inspect list`, `wf inspect header NAME ID`, `wf inspect journal NAME ID`, `wf inspect steps NAME ID`, `wf inspect children NAME ID`, and `wf inspect awakeables NAME ID`. These call exactly one new library page (header does only `lookupInstance`) and return its JSON unchanged. List flags are repeatable `--status-class`, `--workflow-name`, half-open `--created-since/--created-before` and `--updated-since/--updated-before`, `--ordering key|created_desc`, `--limit` and `--after`; journal/steps also take `--generation`. Use `cursorReader`, validate before SQL, and cover all six commands through the parser, `isMutation`, and handler tests. EP-1 then serves `/wf/inspect/...` mechanically, using these same option names in snake_case. Legacy `wf list/show/steps/journal` remain compatible and may be expensive; a browser uses the bounded subtree. Typed page failures require `InspectionFailed !Text !Text` in `OpsOutcome` (stable code and message; owned by EP-2, with updates to CLI rendering and all matches) so EP-1 maps `invalid_page_size`, `invalid_cursor`, and `cursor_generation_mismatch` without parsing error text. Existing `Failed Text` remains supported. If EP-1 already exists, this milestone updates its outcome match and HTTP tests; otherwise EP-1 consumes the variant when it lands. The variant introduces no HTTP dependency in `keiro-ops`.
+Add read-only `wf inspect list`, `wf inspect header NAME ID`, `wf inspect journal NAME ID`, `wf inspect steps NAME ID`, `wf inspect children NAME ID`, and `wf inspect awakeables NAME ID`. These call exactly one new library page (header does only `lookupInstance`) and return its JSON unchanged. List flags are repeatable `--status-class`, `--workflow-name`, half-open `--created-since/--created-before` and `--updated-since/--updated-before`, `--ordering key|created_desc`, `--limit` and `--after`; journal/steps also take `--generation`. Use `cursorReader`, validate before SQL, and cover all six commands through the parser, `isMutation`, and handler tests. EP-1 then serves `/wf/inspect/...` mechanically, using these same option names in snake_case. Legacy `wf list/show/steps/journal` remain compatible and may be expensive; a browser uses the bounded subtree. Typed page failures require `InspectionFailed !Text !Text` in `OpsOutcome` (stable code and message; owned by EP-2, with updates to CLI rendering and all matches) so EP-1 maps `invalid_page_size`, `invalid_cursor`, and `cursor_generation_mismatch` without parsing error text. Page producers use the checked encoder and return
+`CursorResultTooLarge` when a stored continuation cannot fit the 4096-byte token
+limit; ops carries `inspection_result_too_large`, mapped to HTTP 413. Never
+truncate a continuation key. Existing `Failed Text` remains supported. If EP-1 already exists, this milestone updates its outcome match and HTTP tests; otherwise EP-1 consumes the variant when it lands. The variant introduces no HTTP dependency in `keiro-ops`.
 
 Header/page rendering equality tests compare values from one injected/captured library result. Independent calls with different `observed_at` timestamps cannot be byte-equal. Integration tests compare stable fields and separately assert clock/age relations. Do not discard real state differences to force equality.
 
@@ -961,7 +981,9 @@ data CursorError
   | CursorKindMismatch !Text !Text   -- expected kind, actual kind
   deriving stock (Eq, Show, Generic)
 
+maxCursorBytes :: Int -- 4096
 encodeCursor :: (ToJSON payload) => Text -> payload -> InspectionCursor
+encodeCursorBounded :: (ToJSON payload) => Text -> payload -> Maybe InspectionCursor
 decodeCursor :: (FromJSON payload) => Text -> InspectionCursor -> Either CursorError payload
 ```
 
@@ -999,6 +1021,7 @@ data InspectionError
   = InvalidPageSize !Int
   | InvalidCursor !CursorError
   | CursorGenerationMismatch !Int !Int   -- resolved generation, cursor's generation
+  | CursorResultTooLarge                 -- stored continuation exceeds the decoder limit
   deriving stock (Eq, Show, Generic)
 
 data WorkflowListOrdering = ByKey | ByCreatedDesc

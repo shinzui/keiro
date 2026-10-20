@@ -1,7 +1,9 @@
 module Keiro.Inspection.Cursor
   ( InspectionCursor (..),
     CursorError (..),
+    maxCursorBytes,
     encodeCursor,
+    encodeCursorBounded,
     decodeCursor,
   )
 where
@@ -23,14 +25,31 @@ newtype InspectionCursor = InspectionCursor {cursorText :: Text}
 data CursorError = MalformedCursor !Text | CursorKindMismatch !Text !Text
   deriving stock (Eq, Show, Generic)
 
+maxCursorBytes :: Int
+maxCursorBytes = 4096
+
 encodeCursor :: (ToJSON payload) => Text -> payload -> InspectionCursor
-encodeCursor kind payload = InspectionCursor (Text.decodeUtf8 (Base64.encodeUnpadded (LazyByteString.toStrict (encode (object ["k" .= kind, "v" .= payload])))))
+encodeCursor kind payload = encodedCursor (cursorJson kind payload)
+
+-- | Page producers must not emit a continuation the decoder would reject.
+-- Demand only the maximum representable JSON prefix before base64 encoding.
+encodeCursorBounded :: (ToJSON payload) => Text -> payload -> Maybe InspectionCursor
+encodeCursorBounded kind payload =
+  let decodedLimit = maxCursorBytes * 3 `div` 4
+      prefix = LazyByteString.take (fromIntegral decodedLimit + 1) (cursorJson kind payload)
+   in if LazyByteString.length prefix > fromIntegral decodedLimit then Nothing else Just (encodedCursor prefix)
+
+cursorJson :: (ToJSON payload) => Text -> payload -> LazyByteString.ByteString
+cursorJson kind payload = encode (object ["k" .= kind, "v" .= payload])
+
+encodedCursor :: LazyByteString.ByteString -> InspectionCursor
+encodedCursor = InspectionCursor . Text.decodeUtf8 . Base64.encodeUnpadded . LazyByteString.toStrict
 
 decodeCursor :: (FromJSON payload) => Text -> InspectionCursor -> Either CursorError payload
 decodeCursor expected (InspectionCursor token)
   -- Check character count before UTF-8 encoding, then the actual encoded bytes.
-  | Text.length token > 4096 = Left (MalformedCursor "cursor exceeds 4096 encoded bytes")
-  | ByteString.length bytes > 4096 = Left (MalformedCursor "cursor exceeds 4096 encoded bytes")
+  | Text.length token > maxCursorBytes = Left (MalformedCursor "cursor exceeds 4096 encoded bytes")
+  | ByteString.length bytes > maxCursorBytes = Left (MalformedCursor "cursor exceeds 4096 encoded bytes")
   | otherwise = do
       decoded <- malformed (Base64.decodeUnpadded bytes)
       value <- malformed (eitherDecodeStrict' decoded)

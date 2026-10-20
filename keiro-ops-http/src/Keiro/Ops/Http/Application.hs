@@ -8,7 +8,7 @@ module Keiro.Ops.Http.Application
   )
 where
 
-import Control.Exception (SomeAsyncException, SomeException, displayException, fromException, throwIO, try)
+import Control.Exception (SomeAsyncException, SomeException, displayException, evaluate, fromException, throwIO, try)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as ByteString
@@ -114,6 +114,8 @@ opsApplicationWithOperations config budget hooks store operations = do
                          in ((Map.insert arguments command kept, queue Seq.|> arguments), ())
                   pure (Parsed command)
             outcome -> pure outcome
+  -- Initialize static command metadata during mounting, before requests arrive.
+  _ <- evaluate (flags [])
   pure $ corsMiddleware config.allowedOrigins $ \request respond -> do
     result <- trySync (dispatch parse flags request)
     case result of
@@ -202,7 +204,10 @@ opsApplicationWithOperations config budget hooks store operations = do
         Just body -> responseLBS status (jsonHeaders <> headers) body
     renderOutcome mutation drift = \case
       InspectionFailed code message ->
-        let status = if code == "cursor_generation_mismatch" then status409 else status400
+        let status
+              | code == "cursor_generation_mismatch" = status409
+              | code == "inspection_result_too_large" = status413
+              | otherwise = status400
          in boundedJson status [] (errorValue (OpsHttpError status code message Nothing))
       Failed message -> boundedJson status422 [] (errorValue (OpsHttpError status422 "command_failed" message Nothing))
       PreviewRequired result invocation -> boundedJson status200 (driftHeaders drift) (object ["outcome" .= ("preview" :: Text), "result" .= result.jsonValue, "cli_reinvocation" .= invocation])

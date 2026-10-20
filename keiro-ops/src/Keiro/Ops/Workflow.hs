@@ -31,7 +31,7 @@ import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
-import Keiro.Inspection.Cursor (InspectionCursor)
+import Keiro.Inspection.Cursor (InspectionCursor, maxCursorBytes)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
 import Keiro.Ops.Parse (cursorReader, durationReader, nonNegativeReader, positiveIntReader)
 import Keiro.Ops.Render
@@ -328,12 +328,16 @@ inspectionFailure :: Inspection.InspectionError -> OpsOutcome
 inspectionFailure err = uncurry InspectionFailed (inspectionError err)
 
 inspectionError :: Inspection.InspectionError -> (Text, Text)
-inspectionError err = (code, Text.pack (show err))
+inspectionError err = (code, message)
   where
+    message = case err of
+      Inspection.CursorResultTooLarge -> "the continuation key exceeds the " <> Text.pack (show maxCursorBytes) <> "-byte cursor limit"
+      _ -> Text.pack (show err)
     code = case err of
       Inspection.InvalidPageSize _ -> "invalid_page_size"
       Inspection.InvalidCursor _ -> "invalid_cursor"
       Inspection.CursorGenerationMismatch _ _ -> "cursor_generation_mismatch"
+      Inspection.CursorResultTooLarge -> "inspection_result_too_large"
 
 -- | Validate the owning library's inspection grammar without any SQL.
 validateCommand :: Command -> Either (Text, Text) ()

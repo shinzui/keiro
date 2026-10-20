@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-20
+* **Update**: Bound workflow page continuations by the shared cursor decoder limit in ADR-28.
 * **Update**: ADR-53 records live server-side schema comparison, shared prepared values, bounded pure parsing, and timer-manager deadlines without caching live observations.
 * **Update**: Record canonical workflow pages, pure pre-admission validation, and open query/write-cost gates.
 * **Update**: Link the HTTP transport decision and clarify that reservation reads are mutations.

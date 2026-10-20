@@ -6,6 +6,11 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Fail oversized workflow continuations explicitly instead of returning a cursor
+  that the next request cannot decode.
+
 ### Performance
 
 - Compare live schema observations in PostgreSQL, bound pure read parsing reuse,
