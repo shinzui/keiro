@@ -6,9 +6,9 @@ description: >-
   children, awakeables) that a browser UI needs beyond the one-shot keiro-ops wf output, in
   the owning library first, so the durable-execution screens can render and refresh
   incrementally against the keiro_workflows wake ledger.
-timestamp: 2026-10-14T13:54:48Z
+timestamp: 2026-10-20T17:36:52Z
 requestId: IR-30
-status: accepted
+status: in-progress
 origin: mori://shinzui/keiro-ui
 plan: docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md
 relatedPlans:
@@ -119,3 +119,16 @@ would improve, but the CLI's existing one-shot behavior is not in question.
 
 The paged reads with tests (including the CLI-agreement diff), the endpoint exposure under
 IR-26, and documentation of the status vocabulary and cursors.
+
+
+## Implementation evidence (2026-10-20)
+
+[ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
+implements the shared cursor codec, status classes, instance orderings,
+owner/generation-bound detail pages, canonical JSON, and six `wf inspect`
+commands. HTTP pages the ledger and maps typed errors. A header with 100,000
+children performs verification plus one instance read. Migration 0033 installs
+the creation index and its schema snapshot; 41 migration examples pass.
+Initial focused workflow, ops, and HTTP suites pass 10, 51, and 22 examples.
+Query/write-cost acceptance, full repository verification, and cohort release
+remain outstanding.

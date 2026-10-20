@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-20
+* **Implementation**: IR-30 implements workflow pages, JSON, CLI and HTTP routes; performance and release gates remain open.
 * **Implementation**: IR-26 begins the bounded HTTP transport with parser-derived routes and fail-closed schema verification.
 
 ## 2026-10-14

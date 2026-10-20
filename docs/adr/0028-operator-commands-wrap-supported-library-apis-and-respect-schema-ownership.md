@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-20T17:05:00Z
+timestamp: 2026-10-20T17:36:52Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -186,3 +186,14 @@ must independently revalidate their guards; the read API does not reserve work.
 The HTTP front end follows this same command boundary under
 [ADR-53](0053-the-http-operational-surface-is-a-transport-over-the-ops-command-tree.md).
 A DLQ read that reserves rows is a mutation even when its command is named `read`.
+
+
+Workflow inspection belongs to `Keiro.Workflow.Inspection`: at most 500 rows
+in immutable key or creation order, with a database observation clock and
+library-minted kind/owner/generation-bound cursors. The seven status classes
+partition stored status, attempt, and wake columns. Pure owning-library
+validation lets HTTP reject invalid page/cursor input before admission and
+schema scans; reads repeat validation for direct callers. CLI and HTTP share
+the canonical encoders. Header inspection performs only the instance read;
+legacy whole reads may drain pages. Matching index and runtime write-cost
+evidence remains required before automatic feed or release acceptance.

@@ -176,7 +176,7 @@ keiro's composed mount embeds, which is the constraint EP-6 relies on.
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
 | 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | In Progress |
-| 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | Not Started |
+| 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | In Progress |
 | 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 | None | Not Started |
 | 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2, EP-3 | None | Not Started |
 | 5 | Publish WebSocket live feeds over Keiro.Wake (IR-27) | docs/plans/277-publish-websocket-live-feeds-over-keiro-wake.md | EP-1, EP-2, EP-4 | None | Not Started |
@@ -412,14 +412,35 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
-EP-1 (276) is In Progress; all other children remain Not Started. The command
-exports, pool-level verifier, and bounded HTTP transport are the current work.
-The pre-implementation baseline is commit `3bf3ac229f21d6c95179ce49b5e8f6323322f99b`.
-Child plans own milestone evidence. Whole-child prerequisites, integrated
-interference/retention measurements, publication, and consumer proofs remain
-required before completion.
+- (2026-10-20) The full Nix `just verify` run passed, including 766 Keiro examples,
+  DSL conformance and mutation proofs, and 41 migration examples. Subsequent
+  HTTP delivery-admission and connection-churn fixes pass all 24 HTTP examples.
+  These establish correctness checks, not the strict matched performance gate.
+
+EP-1 (276) and EP-2 (275) are In Progress; other children remain Not Started.
+EP-1's functional transport is committed in `37d3567b` with 20 focused HTTP
+examples passing, alongside the existing 51 ops and 40 migration examples.
+Its integrated performance/retention acceptance remains open; the complete
+cross-feature experiment needs the later read/feed implementations. EP-2 now supplies the workflow reads, cursor codec, and bounded CLI/HTTP routes;
+focused workflow/ops/HTTP/migration suites pass 10/51/22/41 examples. Its query-cost
+gate rejects default key and rare-status scans, so EP-2 remains In Progress.
+No whole-child hard dependency is weakened by this handoff.
+
+The pre-implementation baseline is commit
+`3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. A broad gate passed core/retention and many DSL suites before workflow implementation changed its candidate; a final-candidate rerun remains required.
+Child plans own milestone evidence. Matched interference and retention
+measurements, publication, and consumer proofs remain required before completion.
 
 ## Surprises & Discoveries
+
+- (2026-10-20) EP-2's normal-planner evidence rejects the current default key
+  and rare-status access paths: both examine all 100,000 fixture rows. The
+  physical workflow primary key is id/name, opposite the inspection name/id
+  ordering. Creation-order pages use the new index and scan 21 rows. The
+  [retained plans](../../keiro/bench/results/inspection/query-before-key-index/README.md)
+  do not establish write-cost or interference acceptance. EP-2 remains
+  In Progress and its whole-child dependents remain ineligible.
+
 
 - (2026-10-20) The PGMQ DLQ `read` command reserved rows despite its read-only
   classifier. EP-1 fixes the owner classifier and preview behavior; subsequent

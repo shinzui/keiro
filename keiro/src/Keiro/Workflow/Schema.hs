@@ -27,6 +27,8 @@ module Keiro.Workflow.Schema
 
     -- * Read-only lookups
     loadStepIndex,
+    loadStepIndexPage,
+    inspectionObservedAt,
     lookupStepResult,
     stepExists,
     terminalMarkers,
@@ -36,6 +38,7 @@ module Keiro.Workflow.Schema
 where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5, contrazip6)
+import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -56,6 +59,25 @@ import Keiro.Workflow.Types
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+
+-- | Database clock for an inspection page. This is an observation timestamp,
+-- not a claim that separate ReadCommitted statements share a row snapshot.
+inspectionObservedAt :: (Store :> es) => Eff es UTCTime
+inspectionObservedAt = runTransaction (Tx.statement () (preparable "SELECT now()" E.noParams (D.singleRow (D.column (D.nonNullable D.timestamptz)))))
+
+-- | Bounded step rows in immutable name order. The caller validates the size.
+loadStepIndexPage :: (Store :> es) => WorkflowName -> WorkflowId -> Int -> Maybe Text -> Int -> Eff es [WorkflowStepRow]
+loadStepIndexPage (WorkflowName name) (WorkflowId wid) gen after count = runTransaction (Tx.statement () statement)
+  where
+    prefix = (const wid >$< E.param (E.nonNullable E.text)) <> (const name >$< E.param (E.nonNullable E.text)) <> (const (fromIntegral gen :: Int32) >$< E.param (E.nonNullable E.int4))
+    (cursorSql, cursorParams, limitParam) = case after of
+      Nothing -> ("", mempty, "$4")
+      Just key -> (" AND step_name > $4", const key >$< E.param (E.nonNullable E.text), "$5")
+    statement =
+      preparable
+        ("SELECT workflow_id, workflow_name, generation, step_name, result, recorded_at FROM keiro.keiro_workflow_steps WHERE workflow_id=$1 AND workflow_name=$2 AND generation=$3" <> cursorSql <> " ORDER BY step_name LIMIT " <> limitParam)
+        (prefix <> cursorParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4)))
+        (D.rowList (WorkflowStepRow <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text) <*> (fromIntegral <$> D.column (D.nonNullable D.int4)) <*> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.jsonb) <*> D.column (D.nonNullable D.timestamptz)))
 
 -- | A row of the @keiro_workflow_steps@ index: the workflow instance and
 -- name, the step name, the step's JSON result, and when it was recorded. The

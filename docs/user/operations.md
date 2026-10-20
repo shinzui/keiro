@@ -2,7 +2,7 @@
 type: Runbook
 title: Operations
 description: Deploy and operate Keiro applications, workers, rebuilds, retries, and production checks.
-timestamp: 2026-10-20T17:05:00Z
+timestamp: 2026-10-20T17:36:52Z
 docId: DOC-15
 tags: [keiro, operations, deployment, runbook]
 generated:
@@ -669,3 +669,10 @@ The same application hooks mount the optional HTTP transport; see
 are disabled by default. DLQ `read` is a mutation: PGMQ hides each returned
 message for 30 seconds and increments its read count. It now previews unless
 `--force` is supplied; HTTP uses POST and explicit confirmation for it.
+
+
+For bounded workflow browsing use `wf inspect list/header/journal/steps/children/awakeables`
+with `--limit` and `--after`. The [workflow inspection reference](durable-workflows.md#inspecting-instances)
+documents status classes and owner/generation-bound cursors. `wf list` and
+`wf show` instances also include `status_class`; legacy whole reads remain
+compatibility operations.

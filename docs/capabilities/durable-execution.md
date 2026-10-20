@@ -19,6 +19,8 @@ interface:
   - Keiro.Workflow.Awakeable.Compatibility
   - Keiro.Workflow.Child
   - Keiro.Workflow.Instance
+  - Keiro.Workflow.Inspection
+  - Keiro.Inspection.Cursor
   - Keiro.Workflow.Resume
   - Keiro.Workflow.Snapshot
   - Keiro.Workflow.Gc
@@ -34,6 +36,7 @@ evidence:
   - kind: example
     resource: jitsurei/src/Jitsurei/DurableWorkflow.hs
     proves: "A runnable order-fulfillment workflow exercising step, sleepNamed, awakeableNamed resolved by signalAwakeable, and a spawnChild child workflow."
+timestamp: 2026-10-20T17:36:52Z
 ---
 
 # Durable execution (the Workflow effect)
@@ -120,3 +123,12 @@ occur after publishing the id but before journaling the step result.
 - A resume registry must contain a definition for every workflow name still in
   flight. Missing names are reported and left durable; they are not guessed,
   skipped as success, or decoded through a different definition.
+
+
+Default-branch workflow inspection adds canonical status classes and bounded
+instance, journal, step, child, and awakeable pages. Evidence lives in
+`keiro/test/WorkflowInspectionSpec.hs` and `keiro-ops-http/test/Main.hs`; the
+HTTP suite proves a header with 100,000 children uses verification plus one
+instance read. The [reference](../user/durable-workflows.md#inspecting-instances)
+explains observations and cursors. Query/write-cost and cohort release gates
+remain open under [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).

@@ -435,11 +435,13 @@ import System.Timeout (timeout)
 import Test.Hspec
 import VersionedRebuildSpec qualified
 import VersionedTargetPostgresSpec qualified
+import WorkflowInspectionSpec qualified
 import WorkflowReplayCompatibilitySpec qualified
 import "hasql-transaction" Hasql.Transaction qualified as Tx
 
 main :: IO ()
 main = withMigratedSuite $ \fixture -> hspec $ do
+  WorkflowInspectionSpec.spec fixture
   CatalogSpec.spec
   PreimageSpec.spec
   CatalogEvolutionSpec.spec fixture

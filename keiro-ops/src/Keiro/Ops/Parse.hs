@@ -5,13 +5,20 @@ module Keiro.Ops.Parse
     positiveIntReader,
     nonNegativeReader,
     nonNegativeIntReader,
+    cursorReader,
   )
 where
 
 import Data.Char (toLower)
+import Data.Text qualified as Text
 import Data.Time (NominalDiffTime)
-import Options.Applicative (ReadM, eitherReader)
+import Keiro.Inspection.Cursor (InspectionCursor (..))
+import Options.Applicative (ReadM, eitherReader, str)
 import Text.Read qualified as Read
+
+-- | The owning read validates the opaque token's kind, owner, and payload.
+cursorReader :: ReadM InspectionCursor
+cursorReader = InspectionCursor . Text.pack <$> str
 
 durationReader :: ReadM NominalDiffTime
 durationReader = eitherReader parseDuration

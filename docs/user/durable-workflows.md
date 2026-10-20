@@ -7,6 +7,7 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
+timestamp: 2026-10-20T17:36:52Z
 ---
 
 # Durable Workflows
@@ -262,3 +263,53 @@ because step names are dynamic.
   journal snapshot policy.
 - The runnable source:
   [`../../jitsurei/src/Jitsurei/DurableWorkflow.hs`](../../jitsurei/src/Jitsurei/DurableWorkflow.hs).
+
+
+## Inspecting instances
+
+`Keiro.Workflow.Inspection` supplies bounded observations for tools. Status
+classes partition stored rows without a clock: `running` means running with
+zero attempts; `retrying` means running with positive attempts; `sleeping`
+means suspended with `wake_after`; `awaiting` means suspended without it.
+`completed`, `cancelled`, and `failed` are the terminal stored statuses. A
+failed row remains discoverable even if it retains a lease.
+
+`listWorkflowInstancesPage` accepts classes, an exact workflow name, half-open
+creation/update windows (since inclusive, before exclusive), and `ByKey` or
+`ByCreatedDesc`. Key order is `(workflow_name, workflow_id)`; creation order
+is `(created_at, workflow_name, workflow_id)` descending. Migration 0033 adds
+the creation index. Update windows are unindexed, and query/index-write
+acceptance remains open in [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
+Row limits do not bound database scans.
+
+The header is `lookupInstance` rendered with `instanceToJson`. Journal and
+step pages resolve the current generation unless explicitly selected. Child
+and awakeable pages use immutable creation keys. Awakeables include allocated
+rows whose allocation step has not yet been journaled.
+
+Page sizes are 1 through 500. Responses contain `items`, a PostgreSQL
+`observed_at`, and `next_cursor` only when a look-ahead row exists; a full final
+page has no cursor. Tokens are opaque and at most 4096 encoded bytes. Change
+filters or ordering and restart without a cursor. Detail cursors bind the
+owner; journal/step cursors also bind the generation. Rotation between pages
+returns `cursor_generation_mismatch`; restart or explicitly select the old
+generation. Pages observe then-current rows, not a snapshot held across calls.
+The observation clock does not make separate ReadCommitted reads share a
+snapshot. Inserts behind a cursor require a refresh from page one.
+
+```bash
+keiro-ops wf inspect list --status-class sleeping --limit 50 --json
+keiro-ops wf inspect header approval wf-1 --json
+keiro-ops wf inspect journal approval wf-1 --limit 50 --json
+keiro-ops wf inspect steps approval wf-1 --generation 0 --limit 50 --json
+keiro-ops wf inspect children approval wf-1 --limit 50 --json
+keiro-ops wf inspect awakeables approval wf-1 --limit 50 --json
+```
+
+Continue with `--after CURSOR`. HTTP exposes `/wf/inspect/...` with snake_case
+query keys. Legacy `wf list/show/steps/journal` retain their outer shapes;
+instances add `status_class`, and step rows add `recorded_at`. Whole-read
+compatibility commands can drain many pages. Browser tools should use the
+bounded subtree: header inspection reads only the instance row. The
+[HTTP runbook](../guides/serve-keiro-ops-over-http.md) documents deadlines,
+byte caps, and host policy.

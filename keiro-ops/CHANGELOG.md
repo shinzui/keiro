@@ -6,6 +6,10 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Bounded `wf inspect` commands and typed inspection errors; shared workflow rendering and paged compatibility reads.
+
 ### Changed
 
 - Treat `pgmq dlq read` as a mutation because it reserves messages for 30 seconds. It now previews by default and requires `--force` to read; the HTTP surface uses POST with explicit confirmation.

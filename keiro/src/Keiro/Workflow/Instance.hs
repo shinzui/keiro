@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedRecordDot #-}
+
 -- | Durable workflow instance summaries.
 --
 -- The journal stream and @keiro_workflow_steps@ index remain the source of truth
@@ -18,6 +20,7 @@ module Keiro.Workflow.Instance
     markInstanceSuspendedAwaiting,
     lookupInstance,
     listWorkflowInstances,
+    inspectionInstanceRows,
     cancelWorkflow,
     claimInstance,
     renewInstanceLeaseTx,
@@ -32,9 +35,13 @@ module Keiro.Workflow.Instance
 where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
+import Data.Functor.Compose (Compose (..))
+import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int32)
+import Data.List (nub)
 import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text qualified as Text
 import Data.Time (NominalDiffTime, addUTCTime)
 import Data.UUID (UUID)
@@ -55,6 +62,7 @@ import Keiro.Workflow.Child.Schema
     lookupChild,
     reviveFailedChildTx,
   )
+import Keiro.Workflow.Inspection.Query
 import Keiro.Workflow.Instance.Schema
   ( WorkflowStatus (..),
     statusFromText,
@@ -678,18 +686,89 @@ reviveFailedInstanceStmt =
     ((> 0) <$> D.rowsAffected)
 
 instanceRowDecoder :: D.Row WorkflowInstanceRow
-instanceRowDecoder =
+instanceRowDecoder = instanceFields (D.column . D.nonNullable) (D.column . D.nullable)
+
+-- Shared by ordinary reads and the nullable row of an inspection outer join.
+-- The ordinary decoder retains the exact same columns and nullability.
+instanceFields :: (Applicative f) => (forall a. D.Value a -> f a) -> (forall a. D.Value a -> f (Maybe a)) -> f WorkflowInstanceRow
+instanceFields required optional =
   WorkflowInstanceRow
-    <$> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.text)
-    <*> D.column (D.nonNullable D.int4)
-    <*> (statusFromText <$> D.column (D.nonNullable D.text))
-    <*> D.column (D.nonNullable D.int4)
-    <*> D.column (D.nullable D.text)
-    <*> D.column (D.nullable D.timestamptz)
-    <*> D.column (D.nullable D.timestamptz)
-    <*> D.column (D.nullable D.text)
-    <*> D.column (D.nullable D.timestamptz)
-    <*> D.column (D.nonNullable D.timestamptz)
-    <*> D.column (D.nonNullable D.timestamptz)
-    <*> D.column (D.nullable D.timestamptz)
+    <$> required D.text
+    <*> required D.text
+    <*> required D.int4
+    <*> (statusFromText <$> required D.text)
+    <*> required D.int4
+    <*> optional D.text
+    <*> optional D.timestamptz
+    <*> optional D.timestamptz
+    <*> optional D.text
+    <*> optional D.timestamptz
+    <*> required D.timestamptz
+    <*> required D.timestamptz
+    <*> optional D.timestamptz
+
+-- | Inspection-only parameterized statement shapes. Absent filters are omitted
+-- from SQL rather than hidden behind nullable ORs that defeat generic plans.
+-- The facade validates the size and cursor before calling this primitive.
+-- The outer join returns the database observation clock even for an empty page.
+inspectionInstanceRows :: (Store :> es) => WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Eff es (UTCTime, [WorkflowInstanceRow])
+inspectionInstanceRows query position count = do
+  rows <- runTransaction (Tx.statement () (inspectionInstanceStatement query position count))
+  case rows of
+    (clock, _) : _ -> pure (clock, mapMaybe snd rows)
+    [] -> error "inspection clock outer join returned no row"
+
+inspectionInstanceStatement :: WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Statement () [(UTCTime, Maybe WorkflowInstanceRow)]
+inspectionInstanceStatement query position count = preparable sql params decoder
+  where
+    number = Text.pack . show
+    parameter :: Text -> E.Value a -> a -> (Int -> Text, Int, E.Params ())
+    parameter template value argument = (\n -> Text.replace "?" ("$" <> number n) template, 1, const argument >$< E.param (E.nonNullable value))
+    optional template value = fmap (parameter template value)
+    statusClassCase = "CASE WHEN status = 'running' AND attempts = 0 THEN 'running' WHEN status = 'running' THEN 'retrying' WHEN status = 'suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status = 'suspended' THEN 'awaiting' ELSE status END"
+    classParts = case query.classes of
+      Nothing -> []
+      Just classes ->
+        [ parameter "status = ANY(?::text[])" (E.foldableArray (E.nonNullable E.text)) (nub (map (statusToText . classStatus) (NonEmpty.toList classes))),
+          parameter (statusClassCase <> " = ANY(?::text[])") (E.foldableArray (E.nonNullable E.text)) (map statusClassToText (NonEmpty.toList classes))
+        ]
+    filters =
+      classParts
+        <> catMaybes
+          [ optional "workflow_name = ?" E.text query.workflowName,
+            optional "created_at >= ?" E.timestamptz query.createdSince,
+            optional "created_at < ?" E.timestamptz query.createdBefore,
+            optional "updated_at >= ?" E.timestamptz query.updatedSince,
+            optional "updated_at < ?" E.timestamptz query.updatedBefore
+          ]
+        <> cursorParts
+    cursorParts = case position of
+      Nothing -> []
+      Just (AfterWorkflowKey name wid) ->
+        [ ( \n -> "(workflow_name, workflow_id) > ($" <> number n <> ",$" <> number (n + 1) <> ")",
+            2,
+            (const name >$< E.param (E.nonNullable E.text)) <> (const wid >$< E.param (E.nonNullable E.text))
+          )
+        ]
+      Just (AfterWorkflowCreated created name wid) ->
+        [ ( \n -> "(created_at, workflow_name, workflow_id) < ($" <> number n <> ",$" <> number (n + 1) <> ",$" <> number (n + 2) <> ")",
+            3,
+            (const created >$< E.param (E.nonNullable E.timestamptz)) <> (const name >$< E.param (E.nonNullable E.text)) <> (const wid >$< E.param (E.nonNullable E.text))
+          )
+        ]
+    (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
+    order = case query.ordering of ByKey -> "workflow_name, workflow_id"; ByCreatedDesc -> "created_at DESC, workflow_name DESC, workflow_id DESC"
+    columns = "workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at"
+    sql =
+      "WITH inspection_page AS MATERIALIZED (SELECT "
+        <> columns
+        <> " FROM keiro.keiro_workflows"
+        <> (if null predicates then "" else " WHERE " <> Text.intercalate " AND " predicates)
+        <> " ORDER BY "
+        <> order
+        <> " LIMIT $"
+        <> number next
+        <> ") SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY "
+        <> order
+    params = filterParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4))
+    decoder = D.rowList ((,) <$> D.column (D.nonNullable D.timestamptz) <*> getCompose (instanceFields (Compose . D.column . D.nullable) (Compose . fmap Just . D.column . D.nullable)))

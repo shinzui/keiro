@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-20
+* **Update**: Record default-branch workflow inspection APIs; performance acceptance remains open.
 * **Addition**: Record the default-branch HTTP operational surface; release remains pending.
 
 ## 2026-09-10

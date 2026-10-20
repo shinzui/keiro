@@ -41,7 +41,10 @@ host policy can allow it with a response header. Invalid input, disabled
 mutations, and excess admission perform no schema work. Four default slots
 have no waiting queue; deadlines cover verification, execution, and encoding.
 Request, confirmation, and response bytes are capped. Async cancellation is
-propagated; losing tasks are joined before permits are released.
+propagated; losing tasks are joined before permits are released. Admission
+continues through response delivery, bounding retained encoded bodies when
+clients read slowly. The computation deadline ends before delivery; network
+exceptions propagate without attempting a second response.
 
 `withOpsInspectionPool` configures search paths and the SQL timeout on every
 connection of a dedicated pool. Embedding with a host-supplied/shared pool

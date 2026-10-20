@@ -3,7 +3,7 @@ module Main (main) where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Concurrent.MVar
-import Control.Exception (bracket, finally)
+import Control.Exception (IOException, bracket, finally, try)
 import Control.Monad (forM_, replicateM)
 import Data.Aeson (Value (..), object, (.=))
 import Data.Aeson qualified as Aeson
@@ -24,6 +24,7 @@ import Hasql.Connection.Settings qualified as Settings
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
 import Hasql.Pool qualified as Pool
+import Hasql.Pool.Observation qualified as Observation
 import Hasql.Session qualified as Session
 import Hasql.Statement qualified as Statement
 import Keiro.Ops qualified as Ops
@@ -40,7 +41,7 @@ import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
 import Keiro.Test.Postgres
 import Keiro.Timer qualified as Timer
-import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry)
+import Keiro.Workflow (WorkflowId (..), WorkflowJournalEvent (..), WorkflowName (..), appendJournalEntry, continueAsNew, runWorkflow)
 import Keiro.Workflow.Resume (defaultWorkflowResumeOptions)
 import Kiroku.Store.Append (appendToStream)
 import Kiroku.Store.Connection
@@ -50,6 +51,8 @@ import Kiroku.Store.Transaction (runTransaction)
 import Kiroku.Store.Types hiding (id)
 import Network.HTTP.Client qualified as Client
 import Network.HTTP.Types
+import Network.Socket qualified as Socket
+import Network.Socket.ByteString qualified as Socket
 import Network.Wai
 import Network.Wai.Test hiding (request)
 import Options.Applicative qualified as Options
@@ -126,6 +129,39 @@ spec fixture = do
       encodeBounded 4 (String "hi") `shouldReturn` Just "\"hi\""
       newInspectionBudget defaultInspectionLimits {maxConcurrentReads = 0} `shouldThrow` anyIOException
   around (withFreshStore fixture) $ do
+    describe "workflow page routes" $ do
+      it "pages supported reads through the same parser and maps typed failures" $ \store -> do
+        seedInspection store
+        now <- getCurrentTime
+        forM_ ["wf-2", "wf-3"] $ \wid ->
+          runStoreIO store (appendJournalEntry (WorkflowName "approval") (WorkflowId wid) (StepRecorded "received" Null now)) >>= either (fail . show) pure
+        app <- opsApplication defaultOpsHttpConfig hooks store
+        let pages cursor = do
+              response <- call app methodGet ("/wf/inspect/list?limit=1" <> maybe "" ("&after=" <>) cursor) ""
+              simpleStatus response `shouldBe` status200
+              field "observed_at" (body response) `shouldSatisfy` maybe False (\case String _ -> True; _ -> False)
+              let items = case field "items" (body response) of Just (Array rows) -> foldr (:) [] rows; _ -> []
+              length items `shouldBe` 1
+              rest <- case field "next_cursor" (body response) of Just (String token) -> pages (Just token); _ -> pure []
+              pure (items <> rest)
+        rows <- pages Nothing
+        map (field "workflow_id") rows `shouldBe` map (Just . String) ["wf-1", "wf-2", "wf-3"]
+        header <- call app methodGet "/wf/inspect/header/approval/wf-1" ""
+        legacy <- call app methodGet "/wf/show/approval/wf-1" ""
+        field "instance" (body legacy) `shouldBe` Just (body header)
+        forM_ ["header", "journal", "steps", "children", "awakeables"] $ \command -> do
+          response <- call app methodGet ("/wf/inspect/" <> command <> "/approval/wf-1") ""
+          simpleStatus response `shouldBe` status200
+        malformed <- call app methodGet "/wf/inspect/list?after=not-a-cursor" ""
+        assertError malformed status400 "invalid_cursor"
+        oversized <- call app methodGet "/wf/inspect/list?limit=501" ""
+        assertError oversized status400 "invalid_page_size"
+        runStoreIO store (appendJournalEntry (WorkflowName "approval") (WorkflowId "wf-1") (StepRecorded "second" Null now)) >>= either (fail . show) pure
+        first <- call app methodGet "/wf/inspect/steps/approval/wf-1?limit=1" ""
+        token <- case field "next_cursor" (body first) of Just (String value) -> pure value; _ -> fail "missing step cursor"
+        _ <- runStoreIO store (runWorkflow (WorkflowName "approval") (WorkflowId "wf-1") (continueAsNew () >> pure ())) >>= either (fail . show) pure
+        rotated <- call app methodGet ("/wf/inspect/steps/approval/wf-1?after=" <> token) ""
+        assertError rotated status409 "cursor_generation_mismatch"
     describe "HTTP boundary" $ do
       it "shares the supported read/write classification across every mounted domain" $ \store -> do
         seedInspection store
@@ -240,6 +276,23 @@ spec fixture = do
           readIORef count `shouldReturn` 1
           response <- wait job
           assertError response status504 "inspection_timeout"
+      it "holds admission during response delivery and releases it when the client cancels" $ \store -> do
+        entered <- newEmptyMVar
+        gate <- newEmptyMVar
+        count <- newIORef (0 :: Int)
+        let config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxConcurrentReads = 1}}
+            operations = OpsHttpOperations (modifyIORef' count (+ 1) >> pure (Right [])) (\_ _ -> pure (Succeeded emptyResult))
+        budget <- newInspectionBudget config.inspectionLimits
+        app <- opsApplicationWithOperations config budget Ops.emptyAppHooks store operations
+        let slow request respond = app request (\response -> putMVar entered () >> takeMVar gate >> respond response)
+        withAsync (call slow methodGet "/health" "") $ \job -> do
+          takeMVar entered
+          refused <- call app methodGet "/health" ""
+          assertError refused status503 "inspection_busy"
+          readIORef count `shouldReturn` 1
+          cancel job
+        recovered <- call app methodGet "/health" ""
+        simpleStatus recovered `shouldBe` status200
       it "mounts idly without recurring verification and skips SQL for disabled/invalid requests" $ \store -> do
         count <- newIORef (0 :: Int)
         budget <- newInspectionBudget defaultInspectionLimits
@@ -252,6 +305,8 @@ spec fixture = do
             (OpsHttpOperations (modifyIORef' count (+ 1) >> pure (Right [])) (\_ _ -> pure (Succeeded emptyResult)))
         threadDelay 100000
         _ <- call app methodGet "/wf/list?force=true" ""
+        _ <- call app methodGet "/wf/inspect/list?after=not-a-cursor" ""
+        _ <- call app methodGet "/wf/inspect/list?limit=501" ""
         _ <- call app methodPost "/outbox/maintenance-pass" ""
         readIORef count `shouldReturn` 0
       it "serves through a loopback socket and releases its port" $ \store -> do
@@ -266,7 +321,35 @@ spec fixture = do
         freshManager <- Client.newManager Client.defaultManagerSettings
         Client.httpLbs request manager `shouldThrow` (\(_ :: Client.HttpException) -> True)
         Client.httpLbs request freshManager `shouldThrow` (\(_ :: Client.HttpException) -> True)
+      it "joins idle accepted connections across repeated start/stop churn" $ \store -> do
+        app <- opsApplication defaultOpsHttpConfig Ops.emptyAppHooks store
+        forM_ [1 .. (20 :: Int)] $ \_ ->
+          withOpsHttpServer defaultOpsHttpServerConfig {port = 0} app $ \server ->
+            bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close $ \client -> do
+              Socket.connect client (Socket.SockAddrInet (fromIntegral server.serverPort) (Socket.tupleToHostAddress (127, 0, 0, 1)))
+              stopOpsHttpServer server
+              result <- timeout 1000000 (try (Socket.recv client 1))
+              case result of
+                Just (Left (_ :: IOException)) -> pure ()
+                Just (Right bytes) | Char8.null bytes -> pure ()
+                _ -> expectationFailure "stopped runner retained an idle connection"
   around (withFreshDatabase fixture) $ do
+    describe "bounded workflow header" $ do
+      it "uses one supported instance read even with 100000 children" $ \url ->
+        withStore (defaultConnectionSettings url) $ \store -> do
+          seedInspection store
+          executeSql url "INSERT INTO keiro.keiro_workflow_children(child_id,child_name,parent_id,parent_name,await_step) SELECT 'child-'||n,'child','wf-1','approval','await-'||n FROM generate_series(1,100000) n"
+          calls <- newIORef (0 :: Int)
+          let observe = \case Observation.ConnectionObservation _ Observation.InUseConnectionStatus -> atomicModifyIORef' calls (\n -> (n + 1, ())); _ -> pure ()
+              settings = (defaultConnectionSettings url) {observationHandler = Just observe}
+          withOpsInspectionPool defaultInspectionLimits settings $ \pool -> do
+            app <- opsApplication defaultOpsHttpConfig hooks store {pool}
+            response <- call app methodGet "/wf/inspect/header/approval/wf-1" ""
+            simpleStatus response `shouldBe` status200
+            field "workflow_id" (body response) `shouldBe` Just (String "wf-1")
+            field "children" (body response) `shouldBe` Nothing
+            -- One schema-verification session and one instance-read session.
+            readIORef calls `shouldReturn` 2
     describe "schema handshake" $ do
       it "bounds SQL on every inspection connection and releases pool capacity on cancellation" $ \url -> do
         let limits = defaultInspectionLimits {statementTimeoutMillis = 100, maxConcurrentReads = 1}

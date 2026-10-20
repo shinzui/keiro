@@ -19,7 +19,7 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Hasql.Pool qualified as Pool
 import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchemaSession)
-import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommand)
+import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommand, validateCommand)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (Json))
 import Keiro.Ops.Http.Budget
 import Keiro.Ops.Http.Config
@@ -30,6 +30,8 @@ import Kiroku.Store.Connection (KirokuStore (..))
 import Network.HTTP.Types
 import Network.Wai
 import System.Exit (ExitCode (..))
+
+data ResponsePlan = Immediate Response | Inspected Bool (IO Response)
 
 data OpsHttpError = OpsHttpError
   { status :: !Status,
@@ -89,28 +91,43 @@ opsApplicationWithOperations config budget hooks store operations = do
   let flags = flagNames (commandParser hooks)
   pure $ corsMiddleware config.allowedOrigins $ \request respond -> do
     result <- trySync (dispatch flags request)
-    respond $ either (const (failure status500 "internal_error" "inspection failed")) id result
+    case result of
+      Left _ -> respond internalError
+      Right (Immediate response) -> respond response
+      Right (Inspected mutation action) -> do
+        let deadline = if mutation then limits.mutationDeadlineSeconds else limits.readDeadlineSeconds
+        delivered <- withInspectionAdmission budget $ do
+          computed <- withInspectionDeadline deadline (trySync action)
+          -- Network exceptions must propagate; never attempt a second response.
+          respond $ case computed of
+            Left problem -> budgetFailure mutation problem
+            Right (Left _) -> internalError
+            Right (Right response) -> response
+        case delivered of
+          Left problem -> respond (budgetFailure mutation problem)
+          Right sent -> pure sent
   where
     limits = config.inspectionLimits
     dispatch flags request
-      | inputBytes request > limits.maxRequestBytes = pure (failure status413 "inspection_request_too_large" "request path and query exceed the host limit")
-      | pathInfo request == [] = pure (failure status404 "not_found" "no inspection command at this path")
+      | inputBytes request > limits.maxRequestBytes = immediate (failure status413 "inspection_request_too_large" "request path and query exceed the host limit")
+      | pathInfo request == [] = immediate (failure status404 "not_found" "no inspection command at this path")
       | pathInfo request == ["health"] =
           if requestMethod request == methodGet
-            then budgeted False health
-            else pure (methodFailure methodGet)
+            then pure (Inspected False health)
+            else immediate (methodFailure methodGet)
       | otherwise = case translate flags request of
-          Left message -> pure (failure status400 "invalid_request" message)
+          Left message -> immediate (failure status400 "invalid_request" message)
           Right arguments -> case parseArguments hooks arguments of
-            Rejected message -> pure (errorResponse (OpsHttpError status400 "invalid_request" message (Just (object ["arguments" .= arguments]))))
+            Rejected message -> immediate (errorResponse (OpsHttpError status400 "invalid_request" message (Just (object ["arguments" .= arguments]))))
+            Parsed command | Left (code, message) <- validateCommand command -> immediate (failure status400 code message)
             Parsed command -> do
               let mutation = isMutation command
                   method = if mutation then methodPost else methodGet
               if requestMethod request /= method
-                then pure (methodFailure method)
+                then immediate (methodFailure method)
                 else
                   if mutation && config.mutations == MutationsDisabled
-                    then pure (failure status403 "mutations_disabled" "this surface was mounted without mutations")
+                    then immediate (failure status403 "mutations_disabled" "this surface was mounted without mutations")
                     else budgetedCommand request command mutation
     translate flags request = do
       query <- either (Left . Text.pack . displayException) Right (traverse decodeQuery (queryString request))
@@ -119,7 +136,7 @@ opsApplicationWithOperations config budget hooks store operations = do
     inputBytes request = ByteString.length (rawPathInfo request) + ByteString.length (rawQueryString request)
     methodFailure method = mapResponseHeaders ((hAllow, method) :) (failure status405 "method_not_allowed" "method does not match the command classification")
     budgetedCommand request command mutation =
-      budgeted mutation $ do
+      pure $ Inspected mutation $ do
         confirmation <- if mutation then readConfirmation request else pure (Right False)
         case confirmation of
           Left err -> pure err
@@ -134,15 +151,13 @@ opsApplicationWithOperations config budget hooks store operations = do
                     let env = OpsEnv store Json (mutation && confirmed) drift (config.schemaDrift == AllowDrift)
                     outcome <- operations.executeCommand env command
                     renderOutcome mutation drift outcome
-    budgeted mutation action = do
-      let deadline = if mutation then limits.mutationDeadlineSeconds else limits.readDeadlineSeconds
-      result <- withInspectionBudget budget deadline action
-      pure $ case result of
-        Left InspectionBusy -> failure status503 "inspection_busy" "all inspection slots are in use; retry later"
-        Left InspectionTimedOut
-          | mutation -> failure status504 "mutation_outcome_unknown" "deadline exceeded; the mutation may have committed; inspect state before deciding whether to retry"
-          | otherwise -> failure status504 "inspection_timeout" "inspection exceeded the host deadline"
-        Right response -> response
+    immediate = pure . Immediate
+    internalError = failure status500 "internal_error" "inspection failed"
+    budgetFailure mutation = \case
+      InspectionBusy -> failure status503 "inspection_busy" "all inspection slots are in use; retry later"
+      InspectionTimedOut
+        | mutation -> failure status504 "mutation_outcome_unknown" "deadline exceeded; the mutation may have committed; inspect state before deciding whether to retry"
+        | otherwise -> failure status504 "inspection_timeout" "inspection exceeded the host deadline"
     health = do
       result <- operations.verifySchema
       case result of
@@ -159,6 +174,9 @@ opsApplicationWithOperations config budget hooks store operations = do
         Nothing -> failure status413 "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read"
         Just body -> responseLBS status (jsonHeaders <> headers) body
     renderOutcome mutation drift = \case
+      InspectionFailed code message ->
+        let status = if code == "cursor_generation_mismatch" then status409 else status400
+         in boundedJson status [] (errorValue (OpsHttpError status code message Nothing))
       Failed message -> boundedJson status422 [] (errorValue (OpsHttpError status422 "command_failed" message Nothing))
       PreviewRequired result invocation -> boundedJson status200 (driftHeaders drift) (object ["outcome" .= ("preview" :: Text), "result" .= result.jsonValue, "cli_reinvocation" .= invocation])
       Succeeded result -> success result ExitSuccess

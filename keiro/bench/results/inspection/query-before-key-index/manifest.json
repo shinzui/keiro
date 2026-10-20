@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-10-20T17:49:25.092992+00:00",
+  "purpose": "Query-cost rejection evidence, not passing interference or index-write acceptance",
+  "samples": 32,
+  "sizes": [
+    10000,
+    100000
+  ],
+  "plan_modes": [
+    "force_custom_plan",
+    "force_generic_plan"
+  ],
+  "durable_settings_asserted_on": [
+    "fsync",
+    "synchronous_commit",
+    "full_page_writes",
+    "autovacuum"
+  ],
+  "seed": "UTC 2026-10-01; 90% hot owner; 0.1% failed; many equal creation timestamps",
+  "ghc": "9.12.4",
+  "sources": {
+    "scripts/inspection-query-evidence.hs": "02b34a57e9d8f2aee81365009910ff477aa0a178e59d040aa241b0c3a1808ef7",
+    "keiro/src/Keiro/Workflow/Instance.hs": "6e278193d0a73f36d322096ecfb96a4daad6d69c423c959bafcbfdef1c6acf64",
+    "keiro/src/Keiro/Workflow/Inspection.hs": "9d71536db8771e26f89165f8ba54b422afbea76105abdf46e1ca7142a9f69efa",
+    "keiro/src/Keiro/Workflow/Inspection/Query.hs": "dd66d4ef3a12e04508bcbed02cb266d19a2148a463d2ac09fadc0bb8dea9702d",
+    "keiro-migrations/migrations/0033.sql": "375b8d24018f4be48d73f9ea3ac58bd68e537c32f9764a196f29c4d89d31fc33"
+  }
+}

@@ -6,6 +6,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### New Features
+
+- Migration 0033 adds the workflow creation-order inspection index.
+
 ### Added
 
 - Export verifyExpectedSchemaSession for fail-closed verification on an existing pool, preserving managed-object handling.

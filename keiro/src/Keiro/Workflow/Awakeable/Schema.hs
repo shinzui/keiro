@@ -32,11 +32,14 @@ module Keiro.Workflow.Awakeable.Schema
 
     -- * Read-only lookups
     lookupAwakeable,
+    lookupAwakeablesOfOwnerPage,
     countPendingAwakeables,
   )
 where
 
 import Contravariant.Extras (contrazip3)
+import Data.Functor.Contravariant ((>$<))
+import Data.Int (Int32)
 import Data.UUID (UUID)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
@@ -46,6 +49,20 @@ import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+
+-- | One exclusive creation-key page, including allocations not yet journaled.
+lookupAwakeablesOfOwnerPage :: (Store :> es) => Text -> Text -> Maybe (UTCTime, UUID) -> Int -> Eff es [AwakeableRow]
+lookupAwakeablesOfOwnerPage name wid after count = runTransaction (Tx.statement () statement)
+  where
+    prefix = (const name >$< E.param (E.nonNullable E.text)) <> (const wid >$< E.param (E.nonNullable E.text))
+    (cursorSql, cursorParams, limitParam) = case after of
+      Nothing -> ("", mempty, "$3")
+      Just (created, ident) -> (" AND (created_at,awakeable_id)>($3,$4)", (const created >$< E.param (E.nonNullable E.timestamptz)) <> (const ident >$< E.param (E.nonNullable E.uuid)), "$5")
+    statement =
+      preparable
+        ("SELECT awakeable_id, owner_workflow_name, owner_workflow_id, status, payload, created_at, updated_at, completed_at FROM keiro.keiro_awakeables WHERE owner_workflow_name=$1 AND owner_workflow_id=$2" <> cursorSql <> " ORDER BY created_at,awakeable_id LIMIT " <> limitParam)
+        (prefix <> cursorParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4)))
+        (D.rowList awakeableRowDecoder)
 
 -- | An awakeable's lifecycle state.
 --

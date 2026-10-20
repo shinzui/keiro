@@ -1,0 +1,16 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "comparison": "same candidate binary, creation index absent/present; not old/new cohort acceptance",
+  "command": "nix develop -c /tmp/keiro-index-write-evidence OUTPUT_DIRECTORY +RTS -N2 -RTS",
+  "build_command": "nix develop -c cabal exec -- ghc -O2 -threaded -rtsopts -XGHC2024 -package=keiro -package=keiro-test-support -outputdir /tmp/keiro-index-probe-build scripts/inspection-index-write-evidence.hs -o /tmp/keiro-index-write-evidence",
+  "warm_operations": 50,
+  "measured_operations": 200,
+  "fixture_rows": 100000,
+  "offered_operations_per_second": 50,
+  "runs": 5,
+  "source_sha256": {
+    "scripts/inspection-index-write-evidence.hs": "447aa0c8a0a8addb36e3ba6d749d27351ef33ff8cb6d233312967d6037b7eba4",
+    "keiro-migrations/migrations/0033.sql": "375b8d24018f4be48d73f9ea3ac58bd68e537c32f9764a196f29c4d89d31fc33"
+  },
+  "verdict": "preliminary; latency noise and short duration do not establish acceptance"
+}

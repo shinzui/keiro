@@ -651,6 +651,7 @@ index	keiro_workflow_children_running_idx	CREATE INDEX keiro_workflow_children_r
 index	keiro_workflow_steps_pkey	CREATE UNIQUE INDEX keiro_workflow_steps_pkey ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation, step_name)
 index	keiro_workflow_steps_workflow_idx	CREATE INDEX keiro_workflow_steps_workflow_idx ON keiro.keiro_workflow_steps USING btree (workflow_id, workflow_name, generation)
 index	keiro_workflows_active_idx	CREATE INDEX keiro_workflows_active_idx ON keiro.keiro_workflows USING btree (status, wake_after) WHERE (status = ANY (ARRAY['running'::text, 'suspended'::text]))
+index	keiro_workflows_created_idx	CREATE INDEX keiro_workflows_created_idx ON keiro.keiro_workflows USING btree (created_at, workflow_name, workflow_id)
 index	keiro_workflows_gc_idx	CREATE INDEX keiro_workflows_gc_idx ON keiro.keiro_workflows USING btree (status, completed_at)
 index	keiro_workflows_pkey	CREATE UNIQUE INDEX keiro_workflows_pkey ON keiro.keiro_workflows USING btree (workflow_id, workflow_name)
 table	keiro_awakeables	kind=r

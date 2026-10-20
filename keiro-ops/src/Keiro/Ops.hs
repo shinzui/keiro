@@ -8,6 +8,7 @@ module Keiro.Ops
     Command (..),
     opsCommandTree,
     commandParser,
+    validateCommand,
     isMutation,
     runCommand,
     runOpsInvocation,
@@ -172,6 +173,11 @@ runInvocation hooks OpsInvocation {globalOptions, opsCommand} = do
                   }
           runCommand hooks env opsCommand >>= finishOutcome env
 
+-- | Validate supported command arguments before admission or schema work.
+validateCommand :: Command -> Either (Text.Text, Text.Text) ()
+validateCommand (Workflow command) = Workflow.validateCommand command
+validateCommand _ = Right ()
+
 -- | Authoritative read/write classification for every front end.
 isMutation :: Command -> Bool
 isMutation = \case
@@ -220,6 +226,7 @@ finishOutcome env = \case
     Text.IO.hPutStrLn stderr ("preview only; re-run with --force: " <> reinvocation)
     pure (Exit.ExitFailure 1)
   Failed message -> operationalFailure message
+  InspectionFailed code message -> operationalFailure (code <> ": " <> message)
 
 operationalFailure :: Text.Text -> IO Exit.ExitCode
 operationalFailure message = do

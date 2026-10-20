@@ -34,11 +34,15 @@ startOpsHttpServer config app
       let spawn :: ((forall a. IO a -> IO a) -> IO ()) -> IO ()
           spawn action = mask $ \_ -> do
             registered <- newEmptyMVar
-            client <- asyncWithUnmask $ \unmask -> do
-              tid <- readMVar registered
-              action unmask `finally` modifyMVar_ clients (pure . Map.delete tid)
+            client <- asyncWithUnmask $ \unmask ->
+              -- Warp must install its accepted-socket cleanup before waiting
+              -- for registration. Its first unmask occurs inside that bracket.
+              action (\io -> readMVar registered >> unmask io) `finally` do
+                tid <- readMVar registered
+                modifyMVar_ clients (pure . Map.delete tid)
             let tid = asyncThreadId client
-            (modifyMVar_ clients (pure . Map.insert tid client) >> putMVar registered tid) `onException` cancel client
+            (modifyMVar_ clients (pure . Map.insert tid client) >> putMVar registered tid)
+              `onException` (tryPutMVar registered tid >> cancel client)
           stopClients = do
             live <- modifyMVar clients (\connections -> pure (Map.empty, Map.elems connections))
             mapM_ cancel live

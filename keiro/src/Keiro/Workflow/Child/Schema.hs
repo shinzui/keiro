@@ -40,6 +40,7 @@ module Keiro.Workflow.Child.Schema
     -- * Read-only lookups
     lookupChild,
     lookupChildrenOfParent,
+    lookupChildrenOfParentPage,
     childStatus,
     countActiveChildren,
     findRunningChildIds,
@@ -47,6 +48,8 @@ module Keiro.Workflow.Child.Schema
 where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
+import Data.Functor.Contravariant ((>$<))
+import Data.Int (Int32)
 import Effectful (Eff, (:>))
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
@@ -55,6 +58,24 @@ import Keiro.Prelude
 import Kiroku.Store.Effect (Store)
 import Kiroku.Store.Transaction (runTransaction)
 import "hasql-transaction" Hasql.Transaction qualified as Tx
+
+-- | One exclusive creation-key page; size validation belongs to inspection.
+lookupChildrenOfParentPage :: (Store :> es) => Text -> Text -> Maybe (UTCTime, Text, Text) -> Int -> Eff es [ChildRow]
+lookupChildrenOfParentPage pid pname after count = runTransaction (Tx.statement () statement)
+  where
+    prefix = (const pid >$< E.param (E.nonNullable E.text)) <> (const pname >$< E.param (E.nonNullable E.text))
+    (cursorSql, cursorParams, limitParam) = case after of
+      Nothing -> ("", mempty, "$3")
+      Just (created, cid, cname) ->
+        ( " AND (created_at,child_id,child_name)>($3,$4,$5)",
+          (const created >$< E.param (E.nonNullable E.timestamptz)) <> (const cid >$< E.param (E.nonNullable E.text)) <> (const cname >$< E.param (E.nonNullable E.text)),
+          "$6"
+        )
+    statement =
+      preparable
+        ("SELECT child_id, child_name, parent_id, parent_name, await_step, status, result, failure_reason, created_at, updated_at, completed_at FROM keiro.keiro_workflow_children WHERE parent_id=$1 AND parent_name=$2" <> cursorSql <> " ORDER BY created_at,child_id,child_name LIMIT " <> limitParam)
+        (prefix <> cursorParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4)))
+        (D.rowList childRowDecoder)
 
 -- | A child workflow's lifecycle, as seen from its parent.
 --

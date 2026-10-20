@@ -1,6 +1,8 @@
 # Keiro User Documentation Log
 
 ## 2026-10-20
+* **Update**: Point tools at bounded workflow inspection routes.
+* **Update**: Document workflow status classes, cursors, and bounded reads.
 * **Update**: Link HTTP operations and require force for DLQ reads that reserve messages.
 
 ## 2026-10-14

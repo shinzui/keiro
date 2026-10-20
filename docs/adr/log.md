@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-20
+* **Update**: Record canonical workflow pages, pure pre-admission validation, and open query/write-cost gates.
 * **Update**: Link the HTTP transport decision and clarify that reservation reads are mutations.
 * **Addition**: Record parser-derived HTTP operations, bounded inspection pools, and explicit DLQ reservation confirmation.
 

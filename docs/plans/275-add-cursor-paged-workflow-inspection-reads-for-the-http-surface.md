@@ -18,6 +18,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-20T17:15:00Z
+      mode: "implement"
+      note: "Begin independent workflow inspection work while EP-1 awaits the integrated performance gate"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -66,22 +71,55 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
 
 
-- [ ] Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
+- [x] (2026-10-20) Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
       listing over `keiro_workflows` in key order and creation order, with the legacy
-      `listWorkflowInstances` re-based onto the shared statements.
+      `listWorkflowInstances` SQL unchanged. Ten focused examples cover classes, both orders, UTC cursors, validation, and read-only behavior.
 - [ ] Milestone 2: the next migration (`0033.sql` at planning time; the number is
       allocated by `keiro-migrate new` at implementation) adding
       `keiro_workflows_created_idx`, the migration-suite bookkeeping, and the index-usage
       proof.
-- [ ] Milestone 3: paged detail reads (journal, step index, children, awakeables) with
+- [x] (2026-10-20) Milestone 3: paged detail reads (journal, step index, children, awakeables) with
       generation resolution, exercised against a real workflow instance.
-- [ ] Milestone 4: canonical JSON rendering in the library and `keiro-ops` adoption
-      (`wf show`, `wf steps`, `wf journal`), including the header-agreement diff test.
+- [x] (2026-10-20) Milestone 4: canonical JSON rendering in the library and `keiro-ops` adoption
+      (`wf show`, `wf steps`, `wf journal`), including header agreement, six parsed routes, HTTP pagination and typed failures, and pure pre-admission validation; 51 ops and 22 HTTP examples pass.
 - [ ] Milestone 5: documentation, changelogs, ADR-28 update, IR-30 evidence, and the full
       verification gate.
 
 
 ## Surprises & Discoveries
+
+2026-10-20: Five short alternating same-binary creation-index write legs retain
+raw queue/schedule/claim/resume samples and PostgreSQL WAL/HOT counters in
+`keiro/bench/results/inspection/creation-index-write/`. The index adds about
+3.7% WAL per operation; measured HOT counts are unchanged. Paired p95 changes
+range from -12.0% to +7.4%, so latency acceptance is inconclusive. Longer
+matched runs, allocations, pre-change binary and active-inspection comparisons
+remain required. This is preliminary evidence, not completion of M2.
+
+2026-10-20: Full Nix `just verify` passed after the page/CLI/migration changes,
+including 766 Keiro examples, all DSL conformance and mutation proofs, and 41
+migration examples. The affected HTTP suite subsequently passed 24 examples
+with delivery admission and connection churn. M2's query/write-cost evidence
+and the matched performance gates remain open; functional verification alone
+does not complete this child.
+
+2026-10-20: Actual prepared-query evidence at 10,000/100,000 rows, both
+`force_custom_plan` and `force_generic_plan`, shows that the proposed creation
+index alone is insufficient. The physical primary key is
+`(workflow_id, workflow_name)`, opposite the inspection key ordering. At
+100,000 rows the generic default key page and rare-status page examine the
+whole ledger; creation first/deep pages scan 21 rows. The retained
+[probe and plans](../../keiro/bench/results/inspection/query-before-key-index/README.md)
+are rejection evidence, not a passing performance gate. Matching ordered and
+filtered access plus write/WAL experiments remain implementation work.
+
+Pure validation is exported by the owning library and delegated through
+`Keiro.Ops.validateCommand`, so invalid page sizes, malformed/foreign cursors,
+and invalid generations are refused by HTTP before admission/schema scans.
+Detail read cursors bind the owner as well as kind and generation. The header
+HTTP test seeds 100,000 children and counts exactly two inspection pool uses:
+one verification session and one instance read.
+
 
 2026-10-13 source review: Library-only pages never become routes through the parser. Forced index use and owner-only indexes do not establish bounded filtering/sorting, and host time is not the database observation clock.
 
@@ -90,6 +128,16 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 
 ## Decision Log
+
+- Decision (2026-10-20): retain the initial creation-index migration and the
+  complete failed query-cost evidence as an implementation checkpoint. Default
+  key and rare-status reads cannot be accepted for automatic refresh until
+  matching access paths and write/WAL measurements pass. Do not mark this child
+  complete based only on correct page results or the creation-order proof.
+- Decision (2026-10-20): export pure owning-library validation and delegate it
+  through the command boundary so HTTP refuses malformed cursors/page sizes
+  before catalog scans. Direct library reads validate again.
+
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Library-only pages never become routes through the parser. Forced index use and owner-only indexes do not establish bounded filtering/sorting, and host time is not the database observation clock. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 
@@ -233,6 +281,17 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 
 ## Outcomes & Retrospective
+
+2026-10-20 functional checkpoint: the library, six bounded CLI commands,
+canonical rendering, typed failures, and HTTP traversal are implemented.
+Focused workflow/ops/HTTP suites pass 10/51/22 examples; the migration suite
+passes 41 examples, including migration 0033 and its one-line schema snapshot
+change. Query-cost acceptance fails for the default key and rare-status shapes
+on the 100,000-row fixture. This child remains In Progress. No write-cost,
+interference, retention, whole-repository final-candidate, or release acceptance
+is claimed. Resolve the measured access-path failure before dependent plans
+can start under the whole-child prerequisites.
+
 
 2026-10-13: Design corrected after source review; no feature implementation or passing performance evidence exists yet. The new acceptance gates must be met during implementation.
 
@@ -542,6 +601,7 @@ body with:
 -- created_at is immutable, so a keyset over (created_at, workflow_name,
 -- workflow_id) never skips or repeats under concurrent status or lease updates,
 -- and a backward scan of this index serves the newest-first ordering.
+-- This index does not establish bounded key-order or filtered reads.
 CREATE INDEX IF NOT EXISTS keiro_workflows_created_idx
   ON keiro.keiro_workflows (created_at, workflow_name, workflow_id);
 ```

@@ -1,6 +1,7 @@
 module Keiro.Ops.Workflow
   ( AwakeableCommand (..),
     Command (..),
+    InspectionCommand (..),
     GcOptions (..),
     InspectOptions (..),
     ListOptions (..),
@@ -9,6 +10,7 @@ module Keiro.Ops.Workflow
     ResumeOptions (..),
     WorkflowRef (..),
     commandParser,
+    validateCommand,
     commandParserWithResume,
     isMutation,
     runCommand,
@@ -18,30 +20,26 @@ where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Types qualified as AesonTypes
-import Data.Int (Int64)
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text.Encoding
-import Data.Time (NominalDiffTime, UTCTime, getCurrentTime)
+import Data.Time (NominalDiffTime, UTCTime, defaultTimeLocale, getCurrentTime, parseTimeM)
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
-import Data.Vector qualified as Vector
 import Effectful (Eff, IOE, (:>))
 import Effectful.Error.Static (Error)
-import Keiro.Codec (decodeRecorded)
+import Keiro.Inspection.Cursor (InspectionCursor)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (..))
-import Keiro.Ops.Parse (durationReader, nonNegativeReader, positiveIntReader)
+import Keiro.Ops.Parse (cursorReader, durationReader, nonNegativeReader, positiveIntReader)
 import Keiro.Ops.Render
 import Keiro.Workflow.Awakeable (AwakeableId (..), cancelAwakeable, signalAwakeable)
 import Keiro.Workflow.Awakeable.Schema qualified as Awakeable
 import Keiro.Workflow.Child.Schema qualified as Child
 import Keiro.Workflow.Gc qualified as Gc
+import Keiro.Workflow.Inspection qualified as Inspection
 import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Resume
   ( ResumeSummary (..),
@@ -52,20 +50,10 @@ import Keiro.Workflow.Resume
 import Keiro.Workflow.Schema qualified as WorkflowSchema
 import Keiro.Workflow.Types
   ( WorkflowId (..),
-    WorkflowJournalEvent (..),
     WorkflowName (..),
-    awakeableAllocStepPrefix,
-    cancelledStepName,
-    completedStepName,
-    continuedAsNewStepName,
-    failedStepName,
-    workflowGenerationStreamName,
-    workflowJournalCodec,
   )
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
-import Kiroku.Store.Read qualified as StoreRead
-import Kiroku.Store.Types
 import Options.Applicative hiding (action, value)
 import Options.Applicative qualified as Optparse
 
@@ -119,6 +107,7 @@ data AwakeableCommand
 
 data Command
   = List !ListOptions
+  | Inspect !InspectionCommand
   | Show !WorkflowRef
   | Steps !InspectOptions
   | Journal !InspectOptions
@@ -130,6 +119,15 @@ data Command
   | ResumeOnce !ResumeOptions
   deriving stock (Eq, Show)
 
+data InspectionCommand
+  = InspectList !Inspection.WorkflowListQuery
+  | InspectHeader !WorkflowRef
+  | InspectJournal !WorkflowRef !Inspection.DetailPageQuery
+  | InspectSteps !WorkflowRef !Inspection.DetailPageQuery
+  | InspectChildren !WorkflowRef !Inspection.OwnerPageQuery
+  | InspectAwakeables !WorkflowRef !Inspection.OwnerPageQuery
+  deriving stock (Eq, Show)
+
 commandParser :: Parser Command
 commandParser = commandParserWithResume False
 
@@ -137,6 +135,7 @@ commandParserWithResume :: Bool -> Parser Command
 commandParserWithResume includeResume =
   hsubparser
     ( command "list" (info (List <$> listOptionsParser) (progDesc "List workflow instances with stable keyset paging"))
+        <> command "inspect" (info (Inspect <$> inspectionParser) (progDesc "Bounded workflow observation pages"))
         <> command "show" (info (Show <$> workflowRefParser) (progDesc "Show an instance, its children, and its awakeables"))
         <> command "steps" (info (Steps <$> inspectOptionsParser) (progDesc "Show the derived step index for one generation"))
         <> command "journal" (info (Journal <$> inspectOptionsParser) (progDesc "Decode one workflow journal generation in order"))
@@ -179,6 +178,40 @@ inspectOptionsParser =
   InspectOptions
     <$> workflowRefParser
     <*> optional (option (nonNegativeReader "expected a non-negative generation") (long "generation" <> metavar "N" <> help "Journal generation; defaults to current"))
+
+inspectionParser :: Parser InspectionCommand
+inspectionParser =
+  hsubparser
+    ( command "list" (info (InspectList <$> listQuery) (progDesc "Page workflow instances"))
+        <> command "header" (info (InspectHeader <$> workflowRefParser) (progDesc "Read only the instance header"))
+        <> command "journal" (info (InspectJournal <$> workflowRefParser <*> detailQuery) (progDesc "Page one journal generation"))
+        <> command "steps" (info (InspectSteps <$> workflowRefParser <*> detailQuery) (progDesc "Page one generation's step index"))
+        <> command "children" (info (InspectChildren <$> workflowRefParser <*> ownerQuery) (progDesc "Page child links"))
+        <> command "awakeables" (info (InspectAwakeables <$> workflowRefParser <*> ownerQuery) (progDesc "Page allocated external promises"))
+    )
+  where
+    limit = option positiveIntReader (long "limit" <> metavar "N" <> Optparse.value 100 <> help "Page size, at most 500")
+    after = optional (option cursorReader (long "after" <> metavar "CURSOR"))
+    detailQuery =
+      Inspection.DetailPageQuery
+        <$> optional (option (nonNegativeReader "expected a non-negative generation") (long "generation" <> metavar "N"))
+        <*> limit
+        <*> after
+    ownerQuery = Inspection.OwnerPageQuery <$> limit <*> after
+    listQuery =
+      Inspection.WorkflowListQuery
+        <$> (NonEmpty.nonEmpty <$> many (option statusClassReader (long "status-class" <> metavar "CLASS")))
+        <*> optional (Text.pack <$> strOption (long "workflow-name" <> metavar "NAME"))
+        <*> optional (option utcReader (long "created-since" <> metavar "UTC"))
+        <*> optional (option utcReader (long "created-before" <> metavar "UTC"))
+        <*> optional (option utcReader (long "updated-since" <> metavar "UTC"))
+        <*> optional (option utcReader (long "updated-before" <> metavar "UTC"))
+        <*> option orderingReader (long "ordering" <> metavar "key|created_desc" <> Optparse.value Inspection.ByKey)
+        <*> limit
+        <*> after
+    statusClassReader = eitherReader $ \raw -> maybe (Left "expected running, retrying, sleeping, awaiting, completed, cancelled, or failed") Right (Inspection.statusClassFromText (Text.pack raw))
+    orderingReader = eitherReader $ \case "key" -> Right Inspection.ByKey; "created_desc" -> Right Inspection.ByCreatedDesc; _ -> Left "expected key or created_desc"
+    utcReader = eitherReader $ \raw -> maybe (Left "expected a UTC timestamp such as 2026-10-20T01:02:03Z") Right (parseTimeM True defaultTimeLocale "%Y-%m-%dT%H:%M:%S%QZ" raw)
 
 workflowRefParser :: Parser WorkflowRef
 workflowRefParser =
@@ -245,6 +278,7 @@ workflowStatusReader = eitherReader $ \case
 
 isMutation :: Command -> Bool
 isMutation = \case
+  Inspect {} -> False
   List {} -> False
   Show {} -> False
   Steps {} -> False
@@ -263,6 +297,7 @@ runCommand = runCommandWithResume Nothing
 
 runCommandWithResume :: Maybe ResumeHook -> OpsEnv -> Command -> IO OpsOutcome
 runCommandWithResume resumeHook env = \case
+  Inspect inspection -> runInspection env inspection
   List options -> runList env options
   Show ref -> runShow env ref
   Steps options -> runSteps env options
@@ -273,6 +308,43 @@ runCommandWithResume resumeHook env = \case
   ReleaseLease ref -> runReleaseLease env ref
   GcRunOnce options -> runGc env options
   ResumeOnce options -> runResumeOnce resumeHook env options
+
+runInspection :: OpsEnv -> InspectionCommand -> IO OpsOutcome
+runInspection env = \case
+  InspectList query -> page (Inspection.listWorkflowInstancesPage query)
+  InspectHeader ref -> runAction env (Instance.lookupInstance (refName ref) (refId ref)) $ \case
+    Nothing -> Failed (workflowLabel ref <> " was not found")
+    Just row -> Succeeded (jsonResult (Inspection.instanceToJson row))
+  InspectJournal ref query -> page (Inspection.readWorkflowJournalPage (refName ref) (refId ref) query)
+  InspectSteps ref query -> page (Inspection.loadStepIndexPage (refName ref) (refId ref) query)
+  InspectChildren ref query -> page (Inspection.listWorkflowChildrenPage (refName ref) (refId ref) query)
+  InspectAwakeables ref query -> page (Inspection.listWorkflowAwakeablesPage (refName ref) (refId ref) query)
+  where
+    page :: (Aeson.ToJSON a) => Eff '[Store, Error StoreError, IOE] (Either Inspection.InspectionError a) -> IO OpsOutcome
+    page action = runAction env action (either inspectionFailure (Succeeded . jsonResult . Aeson.toJSON))
+    jsonResult value = OpsResult ["result"] [[jsonText value]] value
+
+inspectionFailure :: Inspection.InspectionError -> OpsOutcome
+inspectionFailure err = uncurry InspectionFailed (inspectionError err)
+
+inspectionError :: Inspection.InspectionError -> (Text, Text)
+inspectionError err = (code, Text.pack (show err))
+  where
+    code = case err of
+      Inspection.InvalidPageSize _ -> "invalid_page_size"
+      Inspection.InvalidCursor _ -> "invalid_cursor"
+      Inspection.CursorGenerationMismatch _ _ -> "cursor_generation_mismatch"
+
+-- | Validate the owning library's inspection grammar without any SQL.
+validateCommand :: Command -> Either (Text, Text) ()
+validateCommand (Inspect command) = either (Left . inspectionError) Right $ case command of
+  InspectList query -> Inspection.validateWorkflowListQuery query
+  InspectHeader _ -> Right ()
+  InspectJournal ref query -> Inspection.validateJournalQuery (refName ref) (refId ref) query
+  InspectSteps ref query -> Inspection.validateStepQuery (refName ref) (refId ref) query
+  InspectChildren ref query -> Inspection.validateChildQuery (refName ref) (refId ref) query
+  InspectAwakeables ref query -> Inspection.validateAwakeableQuery (refName ref) (refId ref) query
+validateCommand _ = Right ()
 
 runResumeOnce :: Maybe ResumeHook -> OpsEnv -> ResumeOptions -> IO OpsOutcome
 runResumeOnce Nothing _ _ =
@@ -360,40 +432,48 @@ runList env options =
         options.limit
 
 runShow :: OpsEnv -> WorkflowRef -> IO OpsOutcome
-runShow env ref =
-  runAction env action $ \case
-    Nothing -> Failed (workflowLabel ref <> " was not found")
-    Just details -> Succeeded (workflowDetailsResult details)
+runShow env ref = runAction env action $ \case
+  Left err -> inspectionFailure err
+  Right Nothing -> Failed (workflowLabel ref <> " was not found")
+  Right (Just details) -> Succeeded (workflowDetailsResult details)
   where
     action = do
       instanceRow <- Instance.lookupInstance (refName ref) (refId ref)
       case instanceRow of
-        Nothing -> pure Nothing
+        Nothing -> pure (Right Nothing)
         Just row -> do
-          children <- Child.lookupChildrenOfParent ref.workflowId ref.workflowName
-          awakeables <- lookupWorkflowAwakeables ref
-          pure (Just (row, children, awakeables))
+          children <- drainPages (\cursor -> Inspection.listWorkflowChildrenPage (refName ref) (refId ref) (Inspection.OwnerPageQuery 500 cursor)) (.items) (.nextCursor)
+          awakeables <- drainPages (\cursor -> Inspection.listWorkflowAwakeablesPage (refName ref) (refId ref) (Inspection.OwnerPageQuery 500 cursor)) (.items) (.nextCursor)
+          pure ((\cs as -> Just (row, cs, as)) <$> children <*> awakeables)
 
 runSteps :: OpsEnv -> InspectOptions -> IO OpsOutcome
-runSteps env options =
-  runAction env action (Succeeded . uncurry stepsResult)
+runSteps env options = runAction env action $ \(gen, rows) -> either inspectionFailure (Succeeded . stepsResult gen) rows
   where
     action = do
-      selectedGeneration <- resolveGeneration options
-      steps <- WorkflowSchema.loadStepIndex (refName options.target) (refId options.target) selectedGeneration
-      pure (selectedGeneration, steps)
+      gen <- resolveGeneration options
+      rows <- drainPages (\cursor -> Inspection.loadStepIndexPage (refName options.target) (refId options.target) (Inspection.DetailPageQuery (Just gen) 500 cursor)) (.items) (.nextCursor)
+      pure (gen, rows)
 
 runJournal :: OpsEnv -> InspectOptions -> IO OpsOutcome
-runJournal env options =
-  runAction env action $ \(selectedGeneration, recorded) ->
-    case traverse decodeJournalView recorded of
-      Left err -> Failed err
-      Right views -> Succeeded (journalResult selectedGeneration views)
+runJournal env options = runAction env action $ \(gen, rows) -> either inspectionFailure (Succeeded . journalResult gen) rows
   where
     action = do
-      selectedGeneration <- resolveGeneration options
-      recorded <- readJournalEvents (workflowGenerationStreamName (refName options.target) (refId options.target) selectedGeneration)
-      pure (selectedGeneration, recorded)
+      gen <- resolveGeneration options
+      rows <- drainPages (\cursor -> Inspection.readWorkflowJournalPage (refName options.target) (refId options.target) (Inspection.DetailPageQuery (Just gen) 500 cursor)) (.items) (.nextCursor)
+      pure (gen, rows)
+
+-- Compatibility commands intentionally drain pages. Bounded inspect commands
+-- above invoke one library page only, and the HTTP deadline still bounds these.
+drainPages :: (Maybe InspectionCursor -> Eff es (Either Inspection.InspectionError page)) -> (page -> [a]) -> (page -> Maybe InspectionCursor) -> Eff es (Either Inspection.InspectionError [a])
+drainPages load items next = go Nothing []
+  where
+    go cursor chunks = do
+      result <- load cursor
+      case result of
+        Left err -> pure (Left err)
+        Right page -> case next page of
+          Nothing -> pure (Right (concat (reverse (items page : chunks))))
+          Just token -> go (Just token) (items page : chunks)
 
 runAwakeable :: OpsEnv -> AwakeableCommand -> IO OpsOutcome
 runAwakeable env = \case
@@ -514,76 +594,12 @@ resolveGeneration options =
     pure
     options.generation
 
-lookupWorkflowAwakeables :: (Store :> es) => WorkflowRef -> Eff es [Awakeable.AwakeableRow]
-lookupWorkflowAwakeables ref = do
-  current <- WorkflowSchema.currentGeneration (refName ref) (refId ref)
-  stepIndexes <- traverse (WorkflowSchema.loadStepIndex (refName ref) (refId ref)) [0 .. current]
-  catMaybes <$> traverse Awakeable.lookupAwakeable (awakeableIds stepIndexes)
-
-awakeableIds :: [Map Text Value] -> [UUID]
-awakeableIds indexes =
-  Set.toAscList . Set.fromList $ do
-    index <- indexes
-    (stepName, value) <- Map.toList index
-    if awakeableAllocStepPrefix `Text.isPrefixOf` stepName
-      then case Aeson.fromJSON value of
-        AesonTypes.Success (AwakeableId awakeableId) -> [awakeableId]
-        AesonTypes.Error _ -> []
-      else []
-
-readJournalEvents :: (Store :> es) => StreamName -> Eff es [RecordedEvent]
-readJournalEvents streamName = go (StreamVersion 0) []
-  where
-    pageSize = 256
-    go cursor pages = do
-      page <- StoreRead.readStreamForward streamName cursor pageSize
-      if Vector.null page
-        then pure (concat (reverse pages))
-        else
-          let nextCursor = (Vector.last page).streamVersion
-           in go nextCursor (Vector.toList page : pages)
-
-data JournalView = JournalView
-  { eventId :: !Text,
-    eventType :: !Text,
-    streamVersion :: !Int64,
-    globalPosition :: !Int64,
-    stepName :: !Text,
-    recordedAt :: !UTCTime,
-    payload :: !Value
-  }
-
-decodeJournalView :: RecordedEvent -> Either Text JournalView
-decodeJournalView recorded = do
-  event <- firstShow (decodeRecorded workflowJournalCodec recorded)
-  let (stepName, recordedAt, payload) = case event of
-        StepRecorded name value timestamp -> (name, timestamp, value)
-        WorkflowCompleted timestamp -> (completedStepName, timestamp, Aeson.Null)
-        WorkflowCancelled timestamp -> (cancelledStepName, timestamp, Aeson.Null)
-        WorkflowFailed reason timestamp -> (failedStepName, timestamp, Aeson.toJSON reason)
-        WorkflowContinuedAsNew generation timestamp -> (continuedAsNewStepName, timestamp, Aeson.toJSON generation)
-  pure
-    JournalView
-      { eventId = case recorded.eventId of EventId value -> UUID.toText value,
-        eventType = case recorded.eventType of EventType value -> value,
-        streamVersion = case recorded.streamVersion of StreamVersion value -> value,
-        globalPosition = case recorded.globalPosition of GlobalPosition value -> value,
-        stepName,
-        recordedAt,
-        payload
-      }
-
-firstShow :: (Show err) => Either err value -> Either Text value
-firstShow = \case
-  Left err -> Left ("workflow journal decode failed: " <> Text.pack (show err))
-  Right value -> Right value
-
 workflowListResult :: [Instance.WorkflowInstanceRow] -> OpsResult
 workflowListResult instances =
   OpsResult
     { headers = ["name", "id", "generation", "status", "attempts", "lease", "wake_after", "updated_at"],
       rows = map workflowListRow instances,
-      jsonValue = Aeson.toJSON (map workflowInstanceJson instances)
+      jsonValue = Aeson.toJSON (map Inspection.instanceToJson instances)
     }
 
 workflowListRow :: Instance.WorkflowInstanceRow -> [Text]
@@ -597,24 +613,6 @@ workflowListRow row =
     maybeTime row.wakeAfter,
     timeText row.updatedAt
   ]
-
-workflowInstanceJson :: Instance.WorkflowInstanceRow -> Value
-workflowInstanceJson row =
-  object
-    [ "workflow_id" .= row.workflowId,
-      "workflow_name" .= row.workflowName,
-      "generation" .= row.generation,
-      "status" .= Instance.statusToText row.status,
-      "attempts" .= row.attempts,
-      "last_error" .= row.lastError,
-      "next_attempt_at" .= row.nextAttemptAt,
-      "wake_after" .= row.wakeAfter,
-      "leased_by" .= row.leasedBy,
-      "lease_expires_at" .= row.leaseExpiresAt,
-      "created_at" .= row.createdAt,
-      "updated_at" .= row.updatedAt,
-      "completed_at" .= row.completedAt
-    ]
 
 workflowDetailsResult :: (Instance.WorkflowInstanceRow, [Child.ChildRow], [Awakeable.AwakeableRow]) -> OpsResult
 workflowDetailsResult (row, children, awakeables) =
@@ -634,41 +632,25 @@ workflowDetailsResult (row, children, awakeables) =
         ],
       jsonValue =
         object
-          [ "instance" .= workflowInstanceJson row,
-            "children" .= map childJson children,
-            "awakeables" .= map awakeableJson awakeables
+          [ "instance" .= Inspection.instanceToJson row,
+            "children" .= map Inspection.childToJson children,
+            "awakeables" .= map Inspection.awakeableToJson awakeables
           ]
     }
 
-childJson :: Child.ChildRow -> Value
-childJson row =
-  object
-    [ "child_id" .= row.childId,
-      "child_name" .= row.childName,
-      "parent_id" .= row.parentId,
-      "parent_name" .= row.parentName,
-      "await_step" .= row.awaitStep,
-      "status" .= Child.statusToText row.status,
-      "result" .= row.result,
-      "failure_reason" .= row.failureReason,
-      "created_at" .= row.createdAt,
-      "updated_at" .= row.updatedAt,
-      "completed_at" .= row.completedAt
-    ]
-
-stepsResult :: Int -> Map Text Value -> OpsResult
+stepsResult :: Int -> [WorkflowSchema.WorkflowStepRow] -> OpsResult
 stepsResult generation steps =
   OpsResult
     { headers = ["step", "result"],
-      rows = [[name, truncateCell 120 (jsonText value)] | (name, value) <- Map.toAscList steps],
+      rows = [[row.stepName, truncateCell 120 (jsonText row.result)] | row <- steps],
       jsonValue =
         object
           [ "generation" .= generation,
-            "steps" .= [object ["step" .= name, "result" .= value] | (name, value) <- Map.toAscList steps]
+            "steps" .= map Inspection.stepToJson steps
           ]
     }
 
-journalResult :: Int -> [JournalView] -> OpsResult
+journalResult :: Int -> [Inspection.WorkflowJournalEntry] -> OpsResult
 journalResult generation views =
   OpsResult
     { headers = ["version", "event_type", "step", "recorded_at", "payload"],
@@ -681,20 +663,8 @@ journalResult generation views =
           ]
         | view <- views
         ],
-      jsonValue = object ["generation" .= generation, "events" .= map journalViewJson views]
+      jsonValue = object ["generation" .= generation, "events" .= map Inspection.journalEntryToJson views]
     }
-
-journalViewJson :: JournalView -> Value
-journalViewJson view =
-  object
-    [ "event_id" .= view.eventId,
-      "event_type" .= view.eventType,
-      "stream_version" .= view.streamVersion,
-      "global_position" .= view.globalPosition,
-      "step_name" .= view.stepName,
-      "recorded_at" .= view.recordedAt,
-      "payload" .= view.payload
-    ]
 
 awakeableResult :: Awakeable.AwakeableRow -> OpsResult
 awakeableResult row =
@@ -709,21 +679,8 @@ awakeableResult row =
             timeText row.updatedAt
           ]
         ],
-      jsonValue = awakeableJson row
+      jsonValue = Inspection.awakeableToJson row
     }
-
-awakeableJson :: Awakeable.AwakeableRow -> Value
-awakeableJson row =
-  object
-    [ "awakeable_id" .= UUID.toText row.awakeableId,
-      "owner_workflow_name" .= row.ownerWorkflowName,
-      "owner_workflow_id" .= row.ownerWorkflowId,
-      "status" .= Awakeable.statusToText row.status,
-      "payload" .= row.payload,
-      "created_at" .= row.createdAt,
-      "updated_at" .= row.updatedAt,
-      "completed_at" .= row.completedAt
-    ]
 
 awakeablePreviewResult :: Text -> UUID -> Maybe Awakeable.AwakeableRow -> OpsResult
 awakeablePreviewResult operation awakeableId row =
@@ -735,7 +692,7 @@ awakeablePreviewResult operation awakeableId row =
           [ "preview" .= True,
             "operation" .= operation,
             "disposition" .= disposition,
-            "awakeable" .= fmap awakeableJson row
+            "awakeable" .= fmap Inspection.awakeableToJson row
           ]
     }
   where
@@ -756,7 +713,7 @@ awakeableMutationResult operation awakeableId transitioned row =
           [ "operation" .= operation,
             "outcome" .= outcome,
             "transitioned" .= transitioned,
-            "awakeable" .= fmap awakeableJson row
+            "awakeable" .= fmap Inspection.awakeableToJson row
           ]
     }
   where
@@ -775,7 +732,7 @@ instancePreviewResult operation ref disposition row =
             "operation" .= operation,
             "disposition" .= disposition,
             "target" .= object ["workflow_name" .= ref.workflowName, "workflow_id" .= ref.workflowId],
-            "instance" .= fmap workflowInstanceJson row
+            "instance" .= fmap Inspection.instanceToJson row
           ]
     }
 

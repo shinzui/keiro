@@ -34,6 +34,7 @@ data OpsOutcome
   | SucceededWithExit !OpsResult !ExitCode
   | PreviewRequired !OpsResult !Text
   | Failed !Text
+  | InspectionFailed !Text !Text
   deriving stock (Eq, Show)
 
 emptyResult :: OpsResult

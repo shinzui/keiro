@@ -105,6 +105,23 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Surprises & Discoveries
 
+2026-10-20: Response computation alone is not the lifetime of retained output.
+Admission now continues through WAI's response callback, while the computation
+deadline remains separate so a network failure cannot trigger a second response.
+A deterministic blocked-delivery test proves excess work is refused before SQL
+and cancellation releases the slot. A 20-cycle idle-connection churn test also
+proves accepted socket workers are joined. All 24 HTTP examples pass. The full
+Nix `just verify` passed before this final HTTP resource fix; the affected suite
+was rerun after it. Matched interference and retention acceptance remains open.
+
+2026-10-20 EP-2 integration: `Keiro.Ops.validateCommand` delegates pure page,
+cursor-kind/owner, and generation-range validation to the owning library.
+HTTP calls it before admission and schema verification; invalid inspection
+input performs no SQL. `InspectionFailed` preserves stable size/cursor codes
+(400) and generation mismatch (409). The HTTP suite now includes page traversal
+and header agreement with the compatibility command.
+
+
 2026-10-20: Seeded CLI/HTTP agreement exposed a reservation hidden behind a
 read-only classifier: `readDlq` hides messages for 30 seconds and increments
 read counts. `mori://shinzui/pgmq-hs/packages/pgmq-effectful` 0.6.1.1 is the latest Hackage release; its source

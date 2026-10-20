@@ -6,6 +6,10 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### New Features
+
+- Bounded workflow inspection pages, canonical status classes and JSON, pure validation, and opaque cursors.
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Other Changes
