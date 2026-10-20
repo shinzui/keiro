@@ -12,7 +12,7 @@ default:
     just --list
 
 [group('meta')]
-verify: mapped-register-construction-proof process-compose-check jitsurei haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
+verify: mapped-register-construction-proof process-compose-check jitsurei-verify haskell-verify adr-validate research-validate capabilities-validate reviews-validate bug-reports-validate user-documentation-validate terminology-validate extension-policy dsl-api-boundaries keiro-reexports record-migration-policy generated-name-policy conformance-corpus-policy process-reaction-proof initial-hole-proof replay-compatibility checked-mapping-adoption
     cabal test keiro-migrations-test
 
 # Strict OKF enforcement for the architecture-decision bundle (docs/adr,
@@ -232,6 +232,11 @@ jitsurei-all: jitsurei-migrate
 
 [group('jitsurei')]
 jitsurei: jitsurei-all
+
+# Keep verification independent of an interactive demo's migration/data history.
+[group('jitsurei')]
+jitsurei-verify:
+    PGHOST="{{pg_host}}" PGDATA="{{pg_data}}" PGLOG="{{pg_log}}" PGUSER="{{pg_user}}" bash scripts/verify-jitsurei.sh
 
 # Candidate mapped writes preserve generated ownership, recovery, and replay identity.
 [group('haskell')]

@@ -11,6 +11,8 @@ module Keiro.Workflow.Inspection
     classStatus,
     InspectionError (..),
     maxInspectionPageSize,
+    maxWideWorkflowCandidates,
+    maxWideWorkflowKeyBytes,
     WorkflowListOrdering (..),
     WorkflowListQuery (..),
     defaultWorkflowListQuery,
@@ -71,7 +73,7 @@ import Kiroku.Store.Types
 maxInspectionPageSize :: Int
 maxInspectionPageSize = 500
 
-data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge
+data InspectionError = InvalidPageSize !Int | InvalidCursor !CursorError | CursorGenerationMismatch !Int !Int | CursorResultTooLarge | InspectionWorkLimitExceeded
   deriving stock (Eq, Show, Generic)
 
 statusClassOf :: WorkflowInstanceRow -> WorkflowStatusClass
@@ -111,12 +113,15 @@ listWorkflowInstancesPage :: (IOE :> es, Store :> es) => WorkflowListQuery -> Ef
 listWorkflowInstancesPage query = case validated of
   Left err -> pure (Left err)
   Right position -> do
-    (observedAt, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
-    pure $ do
-      nextCursor <- case query.ordering of
-        ByKey -> nextFor "wf-key" query.pageSize rows (\r -> (r.workflowName, r.workflowId))
-        ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
-      pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
+    (observedAt, exceeded, rows) <- Instance.inspectionInstanceRows query position (query.pageSize + 1)
+    pure $
+      if exceeded
+        then Left InspectionWorkLimitExceeded
+        else do
+          nextCursor <- case query.ordering of
+            ByKey -> nextFor "wf-key" query.pageSize rows (\r -> (r.workflowName, r.workflowId))
+            ByCreatedDesc -> nextFor "wf-created" query.pageSize rows (\r -> (r.createdAt, r.workflowName, r.workflowId))
+          pure (WorkflowListPage (take query.pageSize rows) nextCursor observedAt)
   where
     validated = do
       validateSize query.pageSize

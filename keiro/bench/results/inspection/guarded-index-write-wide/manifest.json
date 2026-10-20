@@ -1,0 +1,38 @@
+{
+  "parent_commit": "e80a7ee72c4707fd1de4bf7833f479171c2dea9b",
+  "source_patch": "source.patch.gz",
+  "production_source_sha256": {
+    "keiro/src/Keiro/Workflow/Instance.hs": "c4df027a205655c7b904817de6a37963416d5da5f1bc3fe12bd391f513803696",
+    "keiro/src/Keiro/Workflow/Inspection.hs": "59c10d195498f118da5bdf8d96b24356adde4aa3fecf6027c5ca256b420b091e",
+    "keiro/src/Keiro/Workflow/Inspection/Query.hs": "696ca3f0c9252d65ce128bc26b75d0f674bf44f82b1d6f94936c824fbd106f32",
+    "keiro-ops/src/Keiro/Ops/Workflow.hs": "aede78fdee0ac67b0f09dd3a95b0cc66bf96ae1da57e0a507fcccd6adb33d219",
+    "keiro-migrations/migrations/0033.sql": "bcf174603945ba918617fdbcc002ae1c3b737d10074df434cfe36b17ec4c55ed",
+    "keiro-migrations/migrations/0034.sql": "2011aee4bdc1043fc1acf756e5d3f6b22dccd6ca3d25d3e366c83fd2b3637a24",
+    "keiro-migrations/migrations/manifest": "1f25945f532a556af8bbe02c2be851f39f76373e783db8908bc8a5bb7d51a2dd",
+    "keiro-migrations/migrations.native.lock": "04f46a387154ecfe9465c42b7967717819642177388408637be49e259bded572",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "ad9b3857108d02afa199c55a277cd637af28cb04833d065df00f0e4f4dc6365f",
+    "keiro-migrations/expected-schema/native/keiro-v18.txt": "fac5b623628b4a08b116f87015d7424b81769578ac19e788f0d41308942b2ec7"
+  },
+  "driver_sha256": "0bf6500ea5ea926c530283929845753b05061cb7923ab86ac141dc4481d93c5d",
+  "binary_sha256": "27a6cb80b0b6340a0457da64cd9fedc8ff422aeb461af13c863eeb86d39caf4f",
+  "command": "nix develop -c /tmp/keiro-inspection-final-index-write keiro/bench/results/inspection/guarded-index-write-wide wide-nominal 1000 +RTS -N2 -T -RTS",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "postgresql": "18.6",
+  "cohort_acceptance": false,
+  "migrations": 34,
+  "profile": "wide-nominal",
+  "trials": 5,
+  "sample_count": 1000,
+  "warm_operations": 50,
+  "offered_rate": 50,
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "fixture_workflow_rows": 100000,
+  "schema_only": true,
+  "baseline_definition": "same runtime binary; remove unreleased inspection indexes/generated column; VACUUM FULL and ANALYZE both legs before warmup",
+  "status": "aborted before measurement: Kiroku stream-name length constraint"
+}

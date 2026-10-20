@@ -1,0 +1,25 @@
+{
+  "parent_commit": "e80a7ee72c4707fd1de4bf7833f479171c2dea9b",
+  "source_patch": "source.patch.gz",
+  "production_source_sha256": {
+    "keiro/src/Keiro/Workflow/Instance.hs": "817fe0055765ce1a807ed630f46c00a494ebd6e8019b7c1996ed485d22c5b494",
+    "keiro-migrations/migrations/0034.sql": "d9af93afacf624b8ea4305cfaa279fb07d493eb184926a5bd1c02b40c5851ad7",
+    "keiro-migrations/migrations/manifest": "1f25945f532a556af8bbe02c2be851f39f76373e783db8908bc8a5bb7d51a2dd",
+    "keiro-migrations/migrations.native.lock": "cab88b583bb52fd829ad4e459c902184d661e00f7aa488498260d44d3801679b",
+    "keiro-migrations/src/Keiro/Migrations/SchemaCheck.hs": "ad9b3857108d02afa199c55a277cd637af28cb04833d065df00f0e4f4dc6365f",
+    "keiro-migrations/expected-schema/native/keiro-v18.txt": "3150afa9af6c6dbb20cfc89cb86b12b94d783a930c7e8add4c474670daf9e6e6"
+  },
+  "driver_sha256": "a89d9abda9bec8a958a4b9ac49aa4a95405c66093f9e9acf96ed70298877a6d0",
+  "binary_sha256": "b0fc3d7bfe15a6ed4058fa2c9c4c2ace5c92534f0207ba89f80a5e5bd274b3df",
+  "command": "nix develop -c /tmp/keiro-inspection-owner-query keiro/bench/results/inspection/query-owner-index-experiment",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "postgresql": "18.6",
+  "migrations": 34,
+  "plan_count": 48,
+  "actual_supported_api": true,
+  "cohort_acceptance": false,
+  "experimental_owner_indexes": true,
+  "fixture_settings": "normal durable/autovacuum settings supplied by withMigratedBenchmarkSuite; unlike the list driver this driver does not separately assert them per page"
+}

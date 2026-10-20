@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-20T20:34:48Z
+timestamp: 2026-10-20T22:01:39Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -122,6 +122,45 @@ following storage continuation past pages emptied by authorization. Neither the
 owner label nor an observed reason grants permission. Later guarded mutations
 must independently revalidate their guards; the read API does not reserve work.
 
+The HTTP front end follows this same command boundary under
+[ADR-53](0053-the-http-operational-surface-is-a-transport-over-the-ops-command-tree.md).
+A DLQ read that reserves rows is a mutation even when its command is named `read`.
+
+
+Workflow inspection belongs to `Keiro.Workflow.Inspection`: at most 500 rows
+in immutable key or creation order, with a database observation clock and
+library-minted kind/owner/generation-bound cursors. The seven status classes
+partition stored status, attempt, and wake columns. Pure owning-library
+validation lets HTTP reject invalid page/cursor input before admission and
+schema scans; reads repeat validation for direct callers. CLI and HTTP share
+the canonical encoders. Header inspection performs only the instance read;
+legacy whole reads may drain pages. Matching index and runtime write-cost
+evidence remains required before automatic feed or release acceptance.
+
+Page producers reject required continuations that exceed the shared 4096-byte
+codec limit. A stored key can be larger than a valid input cursor; such a page
+returns a typed result-size failure instead of an unusable or truncated token.
+The transport maps this failure to HTTP 413 using the same structured ops code.
+
+Inspection indexes preserve the ordinary writer key domain. Adding columns or
+reversing text-key order can exceed PostgreSQL's index-tuple limit for a row
+accepted by the existing primary key. The unreleased workflow page indexes
+therefore cover keys up to 2600 database-encoded bytes. Wider keys remain valid
+runtime inputs and use a fixed-width class/name-hash/id-hash access path. Full
+text is rechecked; hashes never become workflow identity or cursor content.
+The same statement budgets the raw class/name candidate population before
+cursor/time filtering, merges at most 64 exceptional candidates, and caps their
+combined key bytes at 256 KiB. Exceeding that budget fails explicitly rather
+than omitting rows or widening ordinary writer constraints.
+
+Owner-only child and awakeable indexes do not bound page sorting at a large
+owner. The compound-index experiment both exceeds the preliminary write-latency
+threshold and rejects valid large owner/child keys. Those detail shapes remain
+manual reads with host SQL/read deadlines, outside automatic feeds. Their row
+caps are cardinality bounds, not a claim that every owner lookup scans only one
+page. Matching read plans, key-domain compatibility and write costs are all
+required when choosing any later index.
+
 ## Consequences
 
 - Workflow cancellation, failure resurrection, awakeable settlement, and timer
@@ -182,23 +221,5 @@ must independently revalidate their guards; the read API does not reserve work.
 - [ADR 0034](0034-online-projection-rebuilds-use-schema-versioned-target-generations.md)
   defines the application-provisioner and Keiro-orchestration boundary for online
   schema-changing projection rebuilds.
-
-The HTTP front end follows this same command boundary under
-[ADR-53](0053-the-http-operational-surface-is-a-transport-over-the-ops-command-tree.md).
-A DLQ read that reserves rows is a mutation even when its command is named `read`.
-
-
-Workflow inspection belongs to `Keiro.Workflow.Inspection`: at most 500 rows
-in immutable key or creation order, with a database observation clock and
-library-minted kind/owner/generation-bound cursors. The seven status classes
-partition stored status, attempt, and wake columns. Pure owning-library
-validation lets HTTP reject invalid page/cursor input before admission and
-schema scans; reads repeat validation for direct callers. CLI and HTTP share
-the canonical encoders. Header inspection performs only the instance read;
-legacy whole reads may drain pages. Matching index and runtime write-cost
-evidence remains required before automatic feed or release acceptance.
-
-Page producers reject required continuations that exceed the shared 4096-byte
-codec limit. A stored key can be larger than a valid input cursor; such a page
-returns a typed result-size failure instead of an unusable or truncated token.
-The transport maps this failure to HTTP 413 using the same structured ops code.
+- [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md)
+  records workflow page, write-cost, key-domain and manual-query evidence.

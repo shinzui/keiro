@@ -1,6 +1,7 @@
 # Keiro User Documentation Log
 
 ## 2026-10-20
+* **Update**: Document guarded workflow pages, exceptional key budgets, and manual owner/time read deadlines.
 * **Update**: Point tools at bounded workflow inspection routes.
 * **Update**: Document workflow status classes, cursors, and bounded reads.
 * **Update**: Link HTTP operations and require force for DLQ reads that reserve messages.

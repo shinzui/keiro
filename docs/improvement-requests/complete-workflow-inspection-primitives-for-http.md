@@ -6,7 +6,7 @@ description: >-
   children, awakeables) that a browser UI needs beyond the one-shot keiro-ops wf output, in
   the owning library first, so the durable-execution screens can render and refresh
   incrementally against the keiro_workflows wake ledger.
-timestamp: 2026-10-20T17:36:52Z
+timestamp: 2026-10-20T22:01:39Z
 requestId: IR-30
 status: in-progress
 origin: mori://shinzui/keiro-ui
@@ -38,7 +38,7 @@ reviews:
 
 ## Status
 
-Accepted; implementation has not started. Originally proposed by the keiro runtime UI initiative
+Implementation is in progress; query/write-cost and publication gates remain open. Originally proposed by the keiro runtime UI initiative
 (`mori://shinzui/keiro-ui/masterplans/1-keiro-runtime-ui-foundations`, filed under
 `mori://shinzui/keiro-ui/plans/5-audit-keiro-and-file-ui-endpoint-improvement-requests`).
 Companion to `mori://shinzui/keiro/okf/improvement-requests/concepts/IR-26`, which serves
@@ -50,13 +50,13 @@ canonical JSON rendering, and `keiro-ops` adoption — is specified by
 [plan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
 Endpoint exposure is deliberately outside that plan: it belongs to the IR-26 sister package,
 whose own plan ([plan 276](../plans/276-serve-the-keiro-ops-surface-over-http.md)) wraps the
-plan 275 reads. This request is accepted and completes once plan 275 is implemented and the
-endpoints exist.
+plan 275 reads. This request remains in progress until the accepted implementation and its
+endpoints are included in the cohort release.
 
 Coordinated since 2026-09-30 by [MasterPlan 45](../masterplans/45-expose-the-keiro-inspection-surface-for-the-keiro-runtime-ui.md)
 (this request is EP-2), which settles the artifacts shared across plans 274 through 278
-(the cursor codec, the pending-timer read, the hydration primitive, the `kiroku-store`
-0.10.0.0 listing gate, migration and handle allocation), adds
+(the cursor codec, the pending-timer read, the hydration primitive, released listing
+interfaces, migration and handle allocation), adds
 [ExecPlan 302](../plans/302-mount-composed-runtime-inspection-surfaces-under-one-port.md)
 for IR-31, and adds
 [ExecPlan 303](../plans/303-release-the-keiro-inspection-surface-cohort-and-complete-the-keiro-ui-requests.md),
@@ -132,3 +132,13 @@ the creation index and its schema snapshot; 41 migration examples pass.
 Initial focused workflow, ops, and HTTP suites pass 10, 51, and 22 examples.
 Query/write-cost acceptance, full repository verification, and cohort release
 remain outstanding.
+
+The revised workflow index candidate preserves large stored keys with guarded
+ordered indexes and a separately budgeted exceptional set. All 13 focused
+workflow examples and 43 migration/51 ops/26 HTTP examples pass at the recorded
+checkpoints. 136 actual custom/generic plans cover normal and 100,000-wide-key
+fixtures, including an explicit 65-row-lookahead failure. Manual time and owner
+detail shapes remain outside automatic feeds under host deadlines. Longer
+schema-only write diagnostics retain WAL/HOT costs and noisy control ranges;
+they do not establish the integrated 5% or retention gates. Publication and
+request completion remain owned by plan 303.

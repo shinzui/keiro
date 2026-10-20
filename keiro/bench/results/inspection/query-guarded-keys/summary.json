@@ -1,0 +1,2509 @@
+[
+  {
+    "file": "10000-force_custom_plan-absent-class.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "absent-class",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.051,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-absent-name.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "absent-name",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.051,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-created-deep.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "created-deep",
+    "result": "ok",
+    "examined": 23.0,
+    "execution_ms": 0.063,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-created-first.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "created-first",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.059,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-created-rare-status.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "created-rare-status",
+    "result": "ok",
+    "examined": 11.0,
+    "execution_ms": 0.048,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-created-window.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "created-window",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.059,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-key-deep.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "key-deep",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.078,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-key-first.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "key-first",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.075,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-key-past-wide.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "key-past-wide",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.053,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-mixed-class.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "mixed-class",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.077,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-rare-status-deep.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "rare-status-deep",
+    "result": "ok",
+    "examined": 3.0,
+    "execution_ms": 0.056,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-rare-status.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "rare-status",
+    "result": "ok",
+    "examined": 11.0,
+    "execution_ms": 0.061,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-running-class.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "running-class",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.064,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-small-name-rare.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "small-name-rare",
+    "result": "ok",
+    "examined": 1.0,
+    "execution_ms": 0.054,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-small-name.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "small-name",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.069,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-update-window.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "update-window",
+    "result": "ok",
+    "examined": 10002.0,
+    "execution_ms": 0.49,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_custom_plan-wide-name.json",
+    "rows": 10000,
+    "mode": "force_custom_plan",
+    "case": "wide-name",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.069,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-absent-class.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "absent-class",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.05,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-absent-name.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "absent-name",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.067,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-created-deep.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "created-deep",
+    "result": "ok",
+    "examined": 23.0,
+    "execution_ms": 0.065,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-created-first.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "created-first",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.058,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-created-rare-status.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "created-rare-status",
+    "result": "ok",
+    "examined": 10001.0,
+    "execution_ms": 0.579,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-created-window.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "created-window",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.063,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-key-deep.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "key-deep",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.089,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-key-first.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "key-first",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.087,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-key-past-wide.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "key-past-wide",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.067,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-mixed-class.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "mixed-class",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.077,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-rare-status-deep.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "rare-status-deep",
+    "result": "ok",
+    "examined": 3.0,
+    "execution_ms": 0.065,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-rare-status.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "rare-status",
+    "result": "ok",
+    "examined": 11.0,
+    "execution_ms": 0.065,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-running-class.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "running-class",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.066,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-small-name-rare.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "small-name-rare",
+    "result": "ok",
+    "examined": 1.0,
+    "execution_ms": 0.061,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-small-name.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "small-name",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.082,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-update-window.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "update-window",
+    "result": "ok",
+    "examined": 10002.0,
+    "execution_ms": 0.525,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-force_generic_plan-wide-name.json",
+    "rows": 10000,
+    "mode": "force_generic_plan",
+    "case": "wide-name",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.077,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-absent-class.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "absent-class",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.048,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-absent-name.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "absent-name",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.052,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-created-deep.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "created-deep",
+    "result": "ok",
+    "examined": 23.0,
+    "execution_ms": 0.057,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-created-first.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "created-first",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.059,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-created-rare-status.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "created-rare-status",
+    "result": "ok",
+    "examined": 101.0,
+    "execution_ms": 0.073,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "top-N heapsort",
+        "space_kb": 30,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-created-window.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "created-window",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.058,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-key-deep.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "key-deep",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.078,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-key-first.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "key-first",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.08,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-key-past-wide.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "key-past-wide",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.055,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-mixed-class.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "mixed-class",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.074,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-rare-status-deep.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "rare-status-deep",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.068,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-rare-status.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "rare-status",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.065,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-running-class.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "running-class",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.063,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-small-name-rare.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "small-name-rare",
+    "result": "ok",
+    "examined": 10.0,
+    "execution_ms": 0.06,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-small-name.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "small-name",
+    "result": "ok",
+    "examined": 31.0,
+    "execution_ms": 0.073,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 29,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-update-window.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "update-window",
+    "result": "ok",
+    "examined": 100002.0,
+    "execution_ms": 6.095,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_custom_plan-wide-name.json",
+    "rows": 100000,
+    "mode": "force_custom_plan",
+    "case": "wide-name",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.063,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-absent-class.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "absent-class",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.051,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-absent-name.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "absent-name",
+    "result": "ok",
+    "examined": 0.0,
+    "execution_ms": 0.072,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-created-deep.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "created-deep",
+    "result": "ok",
+    "examined": 23.0,
+    "execution_ms": 0.068,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-created-first.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "created-first",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.06,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-created-rare-status.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "created-rare-status",
+    "result": "ok",
+    "examined": 19002.0,
+    "execution_ms": 1.055,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-created-window.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "created-window",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.067,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-key-deep.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "key-deep",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.092,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-key-first.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "key-first",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.086,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-key-past-wide.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "key-past-wide",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.068,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-mixed-class.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "mixed-class",
+    "result": "ok",
+    "examined": 24.0,
+    "execution_ms": 0.077,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-rare-status-deep.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "rare-status-deep",
+    "result": "ok",
+    "examined": 21.0,
+    "execution_ms": 0.085,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-rare-status.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "rare-status",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.068,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-running-class.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "running-class",
+    "result": "ok",
+    "examined": 22.0,
+    "execution_ms": 0.071,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-small-name-rare.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "small-name-rare",
+    "result": "ok",
+    "examined": 10.0,
+    "execution_ms": 0.067,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-small-name.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "small-name",
+    "result": "ok",
+    "examined": 31.0,
+    "execution_ms": 0.089,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 26,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 29,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-update-window.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "update-window",
+    "result": "ok",
+    "examined": 100002.0,
+    "execution_ms": 6.383,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-force_generic_plan-wide-name.json",
+    "rows": 100000,
+    "mode": "force_generic_plan",
+    "case": "wide-name",
+    "result": "ok",
+    "examined": 2.0,
+    "execution_ms": 0.078,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      },
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  }
+]

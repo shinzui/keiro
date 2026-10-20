@@ -164,3 +164,8 @@ remain future-facing. See
 ## License
 
 BSD-3-Clause.
+
+Repository verification uses `nix develop -c just verify`. Its demo run creates
+and removes a private database; the interactive `JITSUREI_DATABASE` is preserved.
+Use `JITSUREI_DATABASE=keiro_inspection_demo just jitsurei` when testing a changed unreleased
+migration against a fresh interactive demo without altering an older demo.

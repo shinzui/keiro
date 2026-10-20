@@ -1,0 +1,878 @@
+[
+  {
+    "file": "10000-baseline-force_custom_plan-awakeables-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": false,
+    "examined": 0.0,
+    "execution_ms": 0.007,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_custom_plan-awakeables-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": false,
+    "examined": 11000.0,
+    "execution_ms": 0.501,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_custom_plan-awakeables-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": false,
+    "examined": 11000.0,
+    "execution_ms": 0.654,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_custom_plan-children-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": false,
+    "examined": 0.0,
+    "execution_ms": 0.007,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_custom_plan-children-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": false,
+    "examined": 11000.0,
+    "execution_ms": 0.703,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_custom_plan-children-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": false,
+    "examined": 11000.0,
+    "execution_ms": 1.444,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_generic_plan-awakeables-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": false,
+    "examined": 0.0,
+    "execution_ms": 0.007,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_generic_plan-awakeables-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": false,
+    "examined": 10000.0,
+    "execution_ms": 0.503,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_generic_plan-awakeables-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": false,
+    "examined": 10000.0,
+    "execution_ms": 0.628,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_generic_plan-children-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": false,
+    "examined": 0.0,
+    "execution_ms": 0.006,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_generic_plan-children-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": false,
+    "examined": 10000.0,
+    "execution_ms": 0.667,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-baseline-force_generic_plan-children-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": false,
+    "examined": 10000.0,
+    "execution_ms": 1.324,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "10000-indexed-force_custom_plan-awakeables-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.005,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_custom_plan-awakeables-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.012,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_custom_plan-awakeables-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.011,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_custom_plan-children-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.004,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_custom_plan-children-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.013,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_custom_plan-children-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.01,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_generic_plan-awakeables-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.006,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_generic_plan-awakeables-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.013,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_generic_plan-awakeables-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.01,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_generic_plan-children-absent.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.005,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_generic_plan-children-deep.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.013,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "10000-indexed-force_generic_plan-children-first.json",
+    "rows": 11000,
+    "owner_rows": 10000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.012,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-baseline-force_custom_plan-awakeables-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": false,
+    "examined": 0.0,
+    "execution_ms": 0.008,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_custom_plan-awakeables-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 5.752,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_custom_plan-awakeables-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 6.82,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_custom_plan-children-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": false,
+    "examined": 0.0,
+    "execution_ms": 0.007,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_custom_plan-children-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 9.002,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_custom_plan-children-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 11.081,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_generic_plan-awakeables-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 3.228,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_generic_plan-awakeables-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": false,
+    "examined": 100000.0,
+    "execution_ms": 4.536,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_generic_plan-awakeables-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 7.713,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_generic_plan-children-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 3.515,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_generic_plan-children-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": false,
+    "examined": 100000.0,
+    "execution_ms": 6.588,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-baseline-force_generic_plan-children-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": false,
+    "examined": 110000.0,
+    "execution_ms": 11.313,
+    "scan_types": [
+      "Seq Scan"
+    ],
+    "sorts": [
+      {
+        "method": "top-N heapsort",
+        "space_kb": 27,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-indexed-force_custom_plan-awakeables-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.007,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-indexed-force_custom_plan-awakeables-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.01,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_custom_plan-awakeables-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.009,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_custom_plan-children-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.007,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": [
+      {
+        "method": "quicksort",
+        "space_kb": 25,
+        "space_type": "Memory"
+      }
+    ]
+  },
+  {
+    "file": "100000-indexed-force_custom_plan-children-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.012,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_custom_plan-children-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_custom_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.011,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_generic_plan-awakeables-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.011,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_generic_plan-awakeables-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.014,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_generic_plan-awakeables-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "awakeables",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.012,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_generic_plan-children-absent.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "absent",
+    "indexed": true,
+    "examined": 0.0,
+    "execution_ms": 0.006,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_generic_plan-children-deep.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "deep",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.012,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  },
+  {
+    "file": "100000-indexed-force_generic_plan-children-first.json",
+    "rows": 110000,
+    "owner_rows": 100000,
+    "mode": "force_generic_plan",
+    "domain": "children",
+    "case": "first",
+    "indexed": true,
+    "examined": 21.0,
+    "execution_ms": 0.012,
+    "scan_types": [
+      "Index Scan"
+    ],
+    "sorts": []
+  }
+]

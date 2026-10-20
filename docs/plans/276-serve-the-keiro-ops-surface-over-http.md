@@ -114,6 +114,22 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Surprises & Discoveries
 
+2026-10-20: Full final-candidate Nix `just verify` passes after supplying the
+registered Mori socket: 769 Keiro examples, 26 HTTP, 51 ops, 43 migration,
+coarse retention, all DSL suites/proofs and strict repository/documentation
+checks. Strict IR profile validation also passes. Dedicated demo verification
+creates and drops only its own database; no existing ledger was repaired.
+Strict matched interference and persistent-retention acceptance stay open.
+
+2026-10-20: Schema comparison parity now includes newline/carriage-return
+string defaults and generated expressions. Defaults escape line breaks and
+backslashes; generated expressions are JSON-quoted and identify stored/virtual
+derivation. All 43 migration and 26 HTTP examples pass after correcting the
+initial SQL-literal escaping mistake. This preserves the one-object-per-line
+oracle without caching live observations. Full verification uses disposable
+demo databases so an earlier unreleased checksum in the interactive demo cannot
+change or block the validation workload.
+
 2026-10-20: The warmed persistent-client comparison in
 `keiro/bench/results/inspection/matched-http-warm/` completes four trials then
 aborts when the fifth pre-change baseline fails the declared headroom check.

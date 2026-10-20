@@ -6,6 +6,14 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ## [Unreleased]
 
+### Other Changes
+
+- Migration 0034 derives workflow inspection classes in stored generated data and
+  indexes class/name/id pages while preserving existing writer key limits. Applying it rewrites the workflow table and blocks
+  writes; schedule maintenance for large stores. Manual time filters retain host
+  deadlines and remain outside automatic refresh. Large key populations have an
+  explicit inspection work budget rather than a silent partial result.
+
 ### Bug Fixes
 
 - Fail oversized workflow continuations explicitly instead of returning a cursor

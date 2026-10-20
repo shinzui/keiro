@@ -64,3 +64,11 @@ defaultWorkflowListQuery = WorkflowListQuery Nothing Nothing Nothing Nothing Not
 -- | Validated exclusive database keys, decoded by the inspection facade.
 data WorkflowListPosition = AfterWorkflowKey !Text !Text | AfterWorkflowCreated !UTCTime !Text !Text
   deriving stock (Eq, Show)
+
+-- Wide keys keep their ordinary writer domain. Page indexes cover narrow
+-- entries; inspection merges a bounded exceptional set rather than indexing
+-- wider tuples than the existing primary key permits.
+maxIndexedWorkflowKeyBytes, maxWideWorkflowCandidates, maxWideWorkflowKeyBytes :: Int
+maxIndexedWorkflowKeyBytes = 2600
+maxWideWorkflowCandidates = 64
+maxWideWorkflowKeyBytes = 256 * 1024

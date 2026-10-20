@@ -7,7 +7,7 @@ tags: [keiro, workflows, durability, reference]
 generated:
   by: human:nadeem
   at: 2026-08-14T15:06:34Z
-timestamp: 2026-10-20T20:34:48Z
+timestamp: 2026-10-20T22:01:39Z
 ---
 
 # Durable Workflows
@@ -278,14 +278,30 @@ failed row remains discoverable even if it retains a lease.
 creation/update windows (since inclusive, before exclusive), and `ByKey` or
 `ByCreatedDesc`. Key order is `(workflow_name, workflow_id)`; creation order
 is `(created_at, workflow_name, workflow_id)` descending. Migration 0033 adds
-the creation index. Update windows are unindexed, and query/index-write
-acceptance remains open in [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
+the creation index. Migration 0034 adds a stored generated status class and a
+class/name/id index for key-order browsing. It rewrites the workflow table and
+blocks writes while applying; schedule a maintenance window for large stores.
+The class stays derived by PostgreSQL when runtime status, attempts, or wake
+values change. Ordinary writer key limits are preserved. Key-order class/name
+pages use fixed class branches under generic plans. Lists merge up to 64
+instances with unusually large name/id keys and at most 256 KiB of those key
+bytes. The budget applies to the class/name population before cursor or time
+filtering. If it is exceeded, narrow the class/name filters or use header
+inspection; the read returns `inspection_result_too_large` (HTTP 413).
+Update windows and creation-order class filtering remain manual reads, outside
+automatic feed refresh. Use the inspection pool's SQL timeout when exposing
+those filters. Overall query/index-write acceptance remains open in [ExecPlan 275](../plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md).
 Row limits do not bound database scans.
 
 The header is `lookupInstance` rendered with `instanceToJson`. Journal and
 step pages resolve the current generation unless explicitly selected. Child
 and awakeable pages use immutable creation keys. Awakeables include allocated
 rows whose allocation step has not yet been journaled.
+
+Child and awakeable owner pages can scan/sort a large owner's rows. They remain
+manual reads outside automatic feeds; use host statement/read deadlines.
+HTTP's dedicated inspection pool supplies a 2-second SQL timeout and a 5-second
+read deadline. Direct library/CLI hosts supply their own timeout policy.
 
 Page sizes are 1 through 500. Responses contain `items`, a PostgreSQL
 `observed_at`, and `next_cursor` only when a look-ahead row exists; a full final

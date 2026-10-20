@@ -213,6 +213,16 @@ Measure four deployment modes separately: pre-change runtime; candidate with ins
 
 **Bounded workflow routes** (owner EP-2, consumed by EP-1 and EP-5). Add the read-only command subtree `wf inspect`: `list`, `header NAME ID`, `journal NAME ID`, `steps NAME ID`, `children NAME ID`, and `awakeables NAME ID`. It exposes the new page APIs directly, without draining them. List options are repeatable `--status-class`, `--workflow-name`, `--created-since`, `--created-before`, `--updated-since`, `--updated-before`, `--ordering key|created_desc`, `--limit`, and `--after`; detail reads use `--limit`, `--after`, and, for journal/steps, `--generation`. These mechanically become `/wf/inspect/...` routes; EP-1 does not write a second route table. EP-2 adds structured `InspectionFailed code message` outcomes and updates an existing transport match; if the transport lands later, EP-1 consumes that variant. Whichever integrates second proves HTTP codes without introducing a reverse package dependency. Old CLI commands keep their shapes and are explicitly expensive compatibility routes when they drain whole histories. EP-5's workflow feed consumes this bounded listing and the seven status classes; `/wf/inspect/list` is its authoritative poll route.
 
+Workflow automatic refresh is restricted to key ordering with class/name filters.
+EP-2's actual generic-plan evidence with guarded migrations 0033/0034 bounds those paths;
+manual update windows and creation-order status filtering can still scan broadly
+and remain outside feed inputs. The listing merges at most 64 exceptionally wide keys / 256 KiB raw key bytes
+before time/cursor filtering and otherwise returns an explicit size failure.
+Hash keys only locate candidates; exact text and database ordering remain
+canonical. Owner compound indexes fail write/key-domain checks; child and
+awakeable pages remain manual under host SQL/read deadlines, outside feeds.
+The child is not complete merely from list results.
+
 **Resource limits** (EP-1 and EP-5). Application construction becomes `IO Application`, allocating one admission budget once per mount. Defaults: at most 4 concurrent inspection jobs including schema checks and feed reads, no unbounded waiting queue (HTTP excess returns 503 `inspection_busy`), 5-second overall read deadline, 2-second database statement timeout, 1 MiB encoded response/frame limit, 2 MiB queued bytes per socket, and 16 KiB request/cursor input limits (cursor maximum 4096 encoded bytes). EP-5 additionally caps distinct active views at 32, refreshes a view at most once per second, caps connections at 256 and subscriptions at three per socket, and accounts for in-flight construction as well as established resources. Oversized results fail explicitly, never truncate silently. Configure longer deadlines only through host policy. A Warp idle timeout is not a handler deadline. Use an inspection-owned pool in standalone/composed examples and recommend it for embedding; a shared pool remains supported only within these budgets and must pass interference tests. PostgreSQL CPU, IO, WAL and index-write costs are shared even with separate pools.
 
 Per-request schema verification remains fail-closed and runs inside the budget; pool reuse does not make its catalog scans cheap. Rejected admission, invalid input and disabled mutations do no schema work. No TTL cache may silently weaken drift refusal. Measure the scan at expected poll load; if it exceeds the interference gate, stop and revise the drift protocol explicitly rather than ship a cache. Existing feeds stop publishing when their next budgeted refresh discovers drift or verification failure; verification is shared once for an admitted refresh batch, not repeated per subscriber. No refresh is published under an unverified schema.
@@ -417,39 +427,28 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
-- (2026-10-20) A warmed external-client comparison aborts at the fifth
-  old-runtime baseline's failed headroom check; it is inconclusive, with no
-  discarded legs. EP-2 rejects the direct class-expression index after five
-  crash diagnostics show HOT falling from 210/210 to zero and WAL +190%.
-  A fixed seven-branch query prototype bounds generic class scans, but its
-  index remains experimental. Required outgoing continuations now fail
-  explicitly if they exceed the shared decoder limit. No child is complete.
+EP-1 (276) and EP-2 (275) are In Progress; the other five children remain Not
+Started. HTTP transport, bounded workflow reads, canonical rendering and typed
+failures are implemented. Focused workflow/ops/HTTP/migration checks pass
+13/51/26/43 examples. The final-candidate Nix `just verify` passes, including
+769 Keiro examples, all DSL proofs, coarse retention, strict documentation/
+terminology checks and 43 migration examples. No whole-child prerequisite is waived.
 
-- (2026-10-20) EP-1 retains five old/new workflow-header comparisons using
-  identical dependency units, measured writer headroom, and external real-HTTP
-  clients. Narrow medians are within 5% (32-view allocation +1.52%); latency is
-  inconclusive because of variation and a cold-start queue spike. Full steady
-  state/domain/retention acceptance remains open, as do EP-2's generic filtered
-  query paths. Both children remain In Progress; no dependent is unblocked.
+EP-2 now preserves the existing large-key writer domain with guarded indexes
+and an exceptional-key budget. 136 actual custom/generic plans cover normal
+key/class/name pages and 100,000 wide keys; an excessive exceptional population
+fails explicitly before cursor/time filtering. Five paired schema-only write
+runs per profile retain normal/crash medians within 5%, noisy latency and higher
+large-row WAL costs. Owner detail reads stay manual under deadlines after their
+compound indexes fail write-cost and key-domain checks.
 
-- (2026-10-20) The full Nix `just verify` run passed, including 766 Keiro examples,
-  DSL conformance and mutation proofs, and 41 migration examples. Subsequent
-  HTTP delivery-admission and connection-churn fixes pass all 24 HTTP examples.
-  These establish correctness checks, not the strict matched performance gate.
-
-EP-1 (276) and EP-2 (275) are In Progress; other children remain Not Started.
-EP-1's functional transport is committed in `37d3567b` with 20 focused HTTP
-examples passing, alongside the existing 51 ops and 40 migration examples.
-Its integrated performance/retention acceptance remains open; the complete
-cross-feature experiment needs the later read/feed implementations. EP-2 now supplies the workflow reads, cursor codec, and bounded CLI/HTTP routes;
-focused workflow/ops/HTTP/migration suites pass 10/51/22/41 examples. Its query-cost
-gate rejects default key and rare-status scans, so EP-2 remains In Progress.
-No whole-child hard dependency is weakened by this handoff.
-
-The pre-implementation baseline is commit
-`3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. A broad gate passed core/retention and many DSL suites before workflow implementation changed its candidate; a final-candidate rerun remains required.
-Child plans own milestone evidence. Matched interference and retention
-measurements, publication, and consumer proofs remain required before completion.
+The pre-implementation baseline is
+`3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. A five-run narrow HTTP comparison has
+medians within 5% but inconclusive latency; its warmed repeat aborts when the
+fifth baseline lacks headroom, preserving every leg. View/client matrix
+expansion and timed pool-retention attribution are under way. Strict matched
+interference and persistent-retention acceptance remain open. Publication,
+consumer proofs and later child implementations remain required.
 
 ## Surprises & Discoveries
 

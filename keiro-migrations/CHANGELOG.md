@@ -6,6 +6,14 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Other Changes
+
+- Migration 0034 derives workflow inspection classes in stored generated data and
+  indexes class/name/id pages while preserving existing writer key limits. Applying it rewrites the workflow table and blocks
+  writes; schedule maintenance for large stores. Manual time filters retain host
+  deadlines and remain outside automatic refresh. Large key populations have an
+  explicit inspection work budget rather than a silent partial result.
+
 ### Performance
 
 - Compare live schema observations in PostgreSQL and return differences only,
@@ -18,6 +26,11 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 ### Added
 
 - Export verifyExpectedSchemaSession for fail-closed verification on an existing pool, preserving managed-object handling.
+
+### Bug Fixes
+
+- Preserve multiline generated/default expressions in schema fingerprints so
+  pooled and full-snapshot comparisons agree.
 
 ## 0.21.0.0 — 2026-10-14
 

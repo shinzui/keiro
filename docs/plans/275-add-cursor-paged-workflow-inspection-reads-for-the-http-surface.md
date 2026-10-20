@@ -73,7 +73,7 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 - [x] (2026-10-20) Milestone 1: opaque cursor codec, status-class vocabulary, and the bounded instance
       listing over `keiro_workflows` in key order and creation order, with the legacy
-      `listWorkflowInstances` SQL unchanged. Ten focused examples cover classes, both orders, UTC cursors, validation, and read-only behavior.
+      `listWorkflowInstances` SQL unchanged. Eleven focused examples cover classes, both orders, UTC cursors, validation, and read-only behavior.
 - [ ] Milestone 2: the next migration (`0033.sql` at planning time; the number is
       allocated by `keiro-migrate new` at implementation) adding
       `keiro_workflows_created_idx`, the migration-suite bookkeeping, and the index-usage
@@ -87,6 +87,79 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 
 ## Surprises & Discoveries
+
+2026-10-20: The final guarded candidate passes the complete Nix `just verify`
+with the registered Mori connection supplied, plus strict IR profile validation.
+The verification demo uses a unique database and removes it afterward; the
+existing interactive demo with an earlier unreleased checksum is untouched.
+This is correctness/coarse-retention evidence, not strict cohort acceptance.
+
+2026-10-20: Longer guarded-schema diagnostics retain five 1,000-operation pairs
+per profile. Normal completed-workflow medians: p95 +0.25%, allocation +0.15%,
+WAL +8.86%; the p95 range -9.01%..+21.83% remains inconclusive. A storage-only
+large-row failure/lease profile has p95 +1.03% and WAL +43.75%, with 2000/3000
+HOT versus 2989..3000 baseline. Repeated crash/reset has p95 +1.42% and 950/1050
+HOT versus 1050/1050; only class transitions lose HOT. Cluster WAL/CPU vary
+substantially, all raw legs remain, and none is a pre-change full-cohort pass.
+A proposed completed-workflow profile with a 2700-character id aborts before
+measurement at the journal stream-name contract; its failure is retained.
+Large wake-ledger row compatibility is distinct from executable workflow input.
+
+2026-10-20: Key-domain evidence in `key-domain/` rejects the unguarded creation,
+class and owner compound indexes. PostgreSQL accepts a 2684-byte workflow name
+or 2687-byte workflow id through the old primary key but rejects the larger
+inspection index tuples. A per-class name/id index still rejects the latter;
+reversing text fields changes alignment. Child and awakeable candidate indexes
+also reject existing valid keys. Ordinary writer compatibility is required,
+not inferred from fast read plans.
+
+2026-10-20: The revised, unreleased migrations 0033/0034 guard wide workflow
+index entries. A fixed-width class/name-hash/id-hash index locates exceptional
+keys, with exact text rechecks. One read statement budgets the raw class/name
+population before cursor/time filtering (64 candidates / 256 KiB key bytes),
+merges it with the narrow ordered page, and returns InspectionWorkLimitExceeded
+rather than silently omitting rows if the budget is exceeded. Ops uses
+inspection_result_too_large / HTTP 413. Existing large writer keys remain
+valid; both list orderings include a bounded exceptional set. The 0033 checksum changes before first publication. An earlier full verification
+had applied its prior payload to the local interactive jitsurei database, so the
+next default verification correctly refused that checksum. The database is
+preserved. `just verify` now runs demos in a uniquely named disposable database,
+with cleanup, rather than mutating/relying on the interactive demo's history.
+The historical shipped migration lock is unchanged; no ledger repair is used.
+
+2026-10-20: All 13 focused workflow examples pass, including large-key traversal,
+raw exceptional-population limits before deep cursor filtering and byte limits.
+The revised migration/ops/HTTP suites pass 43/51/26 examples. The last full
+767-example Keiro gate predates this revision; final full verification remains
+open. The preliminary added-owner-index writer median p95 is +6.72% and WAL
++8.51%, so those indexes are unselected. Child/awakeable pages remain manual
+with host SQL/read deadlines, outside automatic feeds. Their row limit is a
+cardinality cap, not a bounded scan claim.
+
+2026-10-20: Migration 0034 is allocated through `keiro-migrate new` and adds
+`inspection_status_class` as a stored generated column plus a class/name/id
+index. Actual supported-API evidence in `query-stored-class/` has 60 normal
+prepared plans. At 100,000 rows generic default first/deep pages examine 22,
+rare failed 21, absent retrying/name zero; small-name examines 31. The fixed
+seven branches share a bound mask, preserving one shape across class sets.
+Update windows still examine 100,000 and creation-order rare status 20,001;
+these manual shapes are excluded from automatic feed inputs and use host
+statement/deadline policy. This is access-path evidence, not the full 5% gate.
+
+2026-10-20: The stored projection avoids the direct expression index's repeated
+retry HOT loss. Its short normal write legs have 600/800 HOT versus 597/800
+baseline and WAL about +5.55%; paired p95 varies -14.0% to +9.35%, so no latency
+pass is claimed. Crash diagnostics retain HOT except class transitions.
+The migration rewrites the table and requires a write-blocking maintenance
+window. No Haskell writer statement, event read or metadata encoding is added.
+
+2026-10-20: Generated CASE expressions are multiline in pg_get_expr. The native
+fingerprint now JSON-quotes generated expressions into one snapshot line and
+records stored/virtual derivation. Migration tests verify existing-row backfill,
+subsequent class transitions and drift when derivation is removed. All 767
+Keiro, 43 migration, 51 ops and 25 HTTP examples pass after correcting remaining
+upgrade-count assertions. This is the affected-suite gate; the last full
+`just verify` predates this candidate.
 
 2026-10-20: Stored PostgreSQL keys can exceed the decoder's cursor limit.
 All page producers now use `encodeCursorBounded` and return
@@ -154,6 +227,23 @@ one verification session and one instance read.
 
 
 ## Decision Log
+
+- Decision (2026-10-20): preserve the ordinary writer key domain by guarding
+  large ordered workflow index entries and budgeting a separately indexed
+  exceptional set in the same statement. Reject unguarded larger tuples and
+  reversed text indexes that narrow valid keys. Preserve database text ordering
+  and cursor contents; hashes only locate/reorder bounded candidates.
+- Decision (2026-10-20): keep owner detail shapes manual under explicit host
+  deadlines after their compound-index write and key-domain failures. Do not
+  introduce them into automatic feeds or claim cardinality bounds are scan bounds.
+
+- Decision (2026-10-20): use a stored generated class and fixed literal class
+  branches for key-order inspection. Reject indexing the raw attempt expression,
+  which destroys HOT on every retry increment. Generated storage preserves
+  derivation without changing ordinary writer SQL; it has measured WAL and
+  maintenance costs, and does not waive the full interference gate.
+- Decision (2026-10-20): retain broad manual time/status shapes with explicit
+  host deadlines; automatic workflow views use only key/class/name inputs.
 
 - Decision (2026-10-20): retain the initial creation-index migration and the
   complete failed query-cost evidence as an implementation checkpoint. Default
@@ -307,6 +397,18 @@ one verification session and one instance read.
 
 
 ## Outcomes & Retrospective
+
+2026-10-20 guarded-index checkpoint: focused workflow/ops/HTTP/migration
+checks pass 13/51/26/43 examples. Actual custom/generic plans now bound the
+normal key/class/name paths and exceptional-key candidate work. The earlier
+access-path rejection below is superseded by guarded migrations 0033/0034 and
+an explicit wide-key budget; historical evidence is retained. Five paired
+schema-only write runs per profile are diagnostic, with noisy latency and
+higher wide-row WAL. The final-candidate Nix `just verify` passes: 769 Keiro examples, all DSL
+proofs, coarse retention, repository policies, strict documentation/terminology
+and 43 migration examples. Full pre-change interference and strict retention
+acceptance remain open. This child stays
+In Progress and its dependents remain unstarted.
 
 2026-10-20 functional checkpoint: the library, six bounded CLI commands,
 canonical rendering, typed failures, and HTTP traversal are implemented.
@@ -593,6 +695,18 @@ groups are unaffected.
 
 ### Milestone 2: The creation-order index
 
+The implemented design uses [0033.sql](../../keiro-migrations/migrations/0033.sql)
+and [0034.sql](../../keiro-migrations/migrations/0034.sql). Both ordered text
+indexes exclude keys whose combined raw length exceeds 2600 bytes. Migration
+0034 adds the stored inspection class and its normal-key index plus a fixed-width
+class/name-hash/id-hash index for exceptional candidates. Reads recheck full
+text, budget the raw exceptional population before cursor/time predicates, and
+merge at most 64 candidates / 256 KiB. This supersedes the original unguarded
+single-index proposal: it rejected keys the old primary key accepted. The
+stored-column migration rewrites the table and requires a maintenance window.
+Do not recreate or renumber these already allocated migrations; the allocation
+commands below describe their original creation workflow.
+
 A row limit bounds response cardinality, not query work. Keep reproducible fixtures and EXPLAIN transcripts outside the fast unit suite. Seed 10,000 and 100,000 rows with skew (one owner has 90% of rows, rare/absent filters, and many equal timestamps), ANALYZE, and measure first and deep pages with `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` using the actual parameterized query under both `force_custom_plan` and `force_generic_plan`. Run with normal planner settings; `enable_seqscan = off` is a diagnostic only, never acceptance. Record rows examined, rows removed by filter, sort memory/spill, buffers, planning/execution time and query count. Separate absent/present-filter statement shapes where nullable-OR predicates defeat ordered index access. A repeatable dashboard query that scans or sorts the whole ledger at each refresh is not accepted merely because it returns 501 rows. Either provide an evidence-backed matching index, bound the supported filter workload and deadline explicitly, or keep that shape out of automatic feeds. Measure schedule/claim/resume throughput, WAL and HOT-update behavior before and after every index. An immutable index key does not guarantee that index maintenance costs zero on non-HOT updates.
 
 The proposed creation index supports unfiltered creation order but does not prove bounded cost for rare status/name/update-window filters or key-order sorting. Inspect those shapes separately. For child and awakeable pages, owner-only indexes still sort all of one owner's rows; measure owners with 100,000 children/awakeables and evaluate `(parent_id,parent_name,created_at,child_id,child_name)` and `(owner_workflow_name,owner_workflow_id,created_at,awakeable_id)` indexes. Add only indexes justified by the read/write experiment, allocated through normal migrations. Do not claim one index serves every order or that a creation index is never maintained on updates.
@@ -629,7 +743,8 @@ body with:
 -- and a backward scan of this index serves the newest-first ordering.
 -- This index does not establish bounded key-order or filtered reads.
 CREATE INDEX IF NOT EXISTS keiro_workflows_created_idx
-  ON keiro.keiro_workflows (created_at, workflow_name, workflow_id);
+  ON keiro.keiro_workflows (created_at, workflow_name, workflow_id)
+  WHERE octet_length(workflow_name) + octet_length(workflow_id) <= 2600;
 ```
 
 Append the checksum line and regenerate the snapshot:
@@ -646,14 +761,16 @@ git diff --stat keiro-migrations/expected-schema/native/keiro-v18.txt
 The `keiro-migrate new` command (from `mori://shinzui/pg-migrate`) names the file with the
 next zero-padded number, seeds it with the description as a comment line, and appends it to
 the manifest. The lockfile format is `<sha256><two spaces><file name>`, which is what
-`shasum -a 256` prints when run inside the directory. The snapshot diff must show exactly one
-added index line for `keiro_workflows_created_idx`. In `keiro-migrations/test/Main.hs`
+`shasum -a 256` prints when run inside the directory. The creation migration adds one index line for
+`keiro_workflows_created_idx`, including its width guard. The class migration
+also adds its generated-column expression and two guarded indexes; review
+those lines together with the native lock and manifest. In `keiro-migrations/test/Main.hs`
 increment the migration count the tests hard-code by one, in the three test titles that
 state it in words and digits and in `nativeMigrationFiles` (append `"<NNNN>.sql"` after the
 last entry), and add an example under `describe "fresh native databases"` named
 "<NNNN> adds the creation-order index" that applies the plan to a fresh database, asserts
 `SELECT indexdef FROM pg_indexes WHERE indexname = 'keiro_workflows_created_idx'` returns
-`CREATE INDEX keiro_workflows_created_idx ON keiro.keiro_workflows USING btree (created_at, workflow_name, workflow_id)`,
+the guarded definition checked by the current migration test,
 and inserts and reads back one instance row to show the table is unaffected. Add an
 Unreleased entry to `keiro-migrations/CHANGELOG.md` in the style of the 0.16.0.0 entry for
 0032, naming the allocated number.
@@ -1005,6 +1122,7 @@ cursorReader :: ReadM InspectionCursor
 `keiro/src/Keiro/Workflow/Inspection.hs` (new, exposed):
 
 ```haskell
+maxWideWorkflowCandidates, maxWideWorkflowKeyBytes :: Int -- 64 / 256 KiB
 maxInspectionPageSize :: Int              -- 500
 
 data WorkflowStatusClass
@@ -1022,6 +1140,7 @@ data InspectionError
   | InvalidCursor !CursorError
   | CursorGenerationMismatch !Int !Int   -- resolved generation, cursor's generation
   | CursorResultTooLarge                 -- stored continuation exceeds the decoder limit
+  | InspectionWorkLimitExceeded          -- exceptional workflow key work exceeds its budget
   deriving stock (Eq, Show, Generic)
 
 data WorkflowListOrdering = ByKey | ByCreatedDesc

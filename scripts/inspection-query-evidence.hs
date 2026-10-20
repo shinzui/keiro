@@ -33,23 +33,20 @@ import System.FilePath ((</>))
 
 main :: IO ()
 main = do
-  (output, indexes) <-
+  (output, wideFixture) <-
     getArgs >>= \case
-      [path] -> pure (path, "none")
-      [path, experiment] | experiment `elem` ["key", "key-and-class", "class-only"] -> pure (path, experiment)
-      _ -> fail "expected OUTPUT_DIRECTORY [key|key-and-class|class-only]"
+      [path] -> pure (path, False)
+      [path, "wide"] -> pure (path, True)
+      _ -> fail "expected OUTPUT_DIRECTORY [wide]"
   createDirectoryIfMissing True output
   withMigratedBenchmarkSuite $ \fixture -> forM_ [10000, 100000] $ \count ->
     withFreshDatabase fixture $ \url -> do
-      execute url ("INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,created_at,updated_at) SELECT 'w-'||lpad(n::text,8,'0'),CASE WHEN n<=" <> number (count * 9 `div` 10) <> " THEN 'hot' ELSE 'small' END,CASE WHEN n%1000=0 THEN 'failed' ELSE 'running' END,'2026-10-01 00:00:00+00'::timestamptz+(n/1000)*interval '1 minute','2026-10-01 00:00:00+00'::timestamptz FROM generate_series(1," <> number count <> ") n; ANALYZE keiro.keiro_workflows")
-      -- Experimental indexes exist only in the disposable clone. No migration
-      -- is selected until read plans and ordinary write costs justify it.
-      if indexes `elem` ["key", "key-and-class"]
-        then execute url "CREATE INDEX inspection_experiment_key ON keiro.keiro_workflows (workflow_name,workflow_id)"
-        else pure ()
-      if indexes `elem` ["class-only", "key-and-class"]
-        then execute url "CREATE INDEX inspection_experiment_class_key ON keiro.keiro_workflows ((CASE WHEN status='running' AND attempts=0 THEN 'running' WHEN status='running' THEN 'retrying' WHEN status='suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status='suspended' THEN 'awaiting' ELSE status END),workflow_name,workflow_id)"
-        else pure ()
+      let keyColumns =
+            if wideFixture
+              then "repeat('x',2700)||lpad(n::text,8,'0'),'wide'"
+              else "'w-'||lpad(n::text,8,'0'),CASE WHEN n<=" <> number (count * 9 `div` 10) <> " THEN 'hot' ELSE 'small' END"
+      execute url ("INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,created_at,updated_at) SELECT " <> keyColumns <> ",CASE WHEN n%1000=0 THEN 'failed' ELSE 'running' END,'2026-10-01 00:00:00+00'::timestamptz+(n/1000)*interval '1 minute','2026-10-01 00:00:00+00'::timestamptz FROM generate_series(1," <> number count <> ") n")
+      unless wideFixture $ execute url "WITH bytes AS (SELECT string_agg(md5(n::text),'') value FROM generate_series(1,120) n) INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT left(value,2668)||lpad(n::text,2,'0'),'wide',CASE n WHEN 1 THEN 'running' ELSE 'failed' END FROM bytes CROSS JOIN generate_series(1,2) n"
       execute url "ANALYZE keiro.keiro_workflows"
       forM_ ["force_custom_plan", "force_generic_plan"] $ \mode ->
         forM_ (cases count) $ \(label, query, arguments) ->
@@ -57,12 +54,17 @@ main = do
             use store (Session.script ("SET plan_cache_mode='" <> mode <> "'"))
             durable <- use store (Session.statement () (Statement.preparable "SELECT current_setting('fsync')='on' AND current_setting('synchronous_commit')='on' AND current_setting('full_page_writes')='on' AND current_setting('autovacuum')='on'" E.noParams (D.singleRow (D.column (D.nonNullable D.bool)))))
             unless durable (fail "inspection evidence requires normal durable settings")
-            _ <- runStoreIO store (listWorkflowInstancesPage query) >>= right >>= right
-            prepared <- use store (Session.statement () (Statement.preparable "SELECT name,statement FROM pg_prepared_statements WHERE statement LIKE 'WITH inspection_page%'" E.noParams (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))))
+            settings <- use store (Session.statement () (Statement.preparable "SELECT jsonb_build_object('fsync',current_setting('fsync'),'synchronous_commit',current_setting('synchronous_commit'),'full_page_writes',current_setting('full_page_writes'),'autovacuum',current_setting('autovacuum'),'server_version',current_setting('server_version'))" E.noParams (D.singleRow (D.column (D.nonNullable D.jsonb)))))
+            result <- runStoreIO store (listWorkflowInstancesPage query) >>= right
+            case result of
+              Left InspectionWorkLimitExceeded -> pure ()
+              Left err -> fail (show err)
+              Right _ -> pure ()
+            prepared <- use store (Session.statement () (Statement.preparable "SELECT name,statement FROM pg_prepared_statements WHERE statement LIKE 'WITH inspection_wide%'" E.noParams (D.rowList ((,) <$> D.column (D.nonNullable D.text) <*> D.column (D.nonNullable D.text)))))
             (name, sql) <- case prepared of [entry] -> pure entry; _ -> fail ("expected one actual inspection statement, got " <> show prepared)
             let explain = "EXPLAIN (ANALYZE,BUFFERS,SETTINGS,FORMAT JSON) EXECUTE \"" <> Text.replace "\"" "\"\"" name <> "\"(" <> arguments <> ")"
             plan <- use store (Session.statement () (Statement.preparable explain E.noParams (D.singleRow (D.column (D.nonNullable D.json)))))
-            let artifact = object ["rows" .= count, "mode" .= mode, "indexes" .= indexes, "case" .= label, "sql" .= sql, "arguments" .= arguments, "plan" .= (plan :: Value)]
+            let artifact = object ["rows" .= count, "wide_fixture" .= wideFixture, "settings" .= (settings :: Value), "result" .= (case result of Left _ -> "work_limit_exceeded" :: Text; Right _ -> "ok"), "mode" .= mode, "indexes" .= ("current migrations" :: Text), "case" .= label, "sql" .= sql, "arguments" .= arguments, "plan" .= (plan :: Value)]
                 path = output </> Text.unpack (number count <> "-" <> mode <> "-" <> label) <> ".json"
             Lazy.writeFile path (Aeson.encode artifact)
             putStrLn path
@@ -72,17 +74,26 @@ number = Text.pack . show
 
 cases :: Int -> [(Text, WorkflowListQuery, Text)]
 cases count =
-  [ ("key-first", base, "21"),
-    ("key-deep", base {cursor = Just (encodeCursor "wf-key" ("hot" :: Text, deepId))}, "'hot','" <> deepId <> "',21"),
-    ("created-first", base {ordering = ByCreatedDesc}, "21"),
-    ("created-deep", base {ordering = ByCreatedDesc, cursor = Just (encodeCursor "wf-created" (deepTime, "hot" :: Text, deepId))}, "'" <> Text.pack (show deepTime) <> "'::timestamptz,'hot','" <> deepId <> "',21"),
-    ("rare-status", base {classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],ARRAY['failed']::text[],21"),
-    ("absent-class", base {classes = Just (ClassRetrying :| [])}, "ARRAY['running']::text[],ARRAY['retrying']::text[],21"),
-    ("absent-name", base {workflowName = Just "absent"}, "'absent',21"),
-    ("small-name", base {workflowName = Just "small"}, "'small',21"),
-    ("update-window", base {updatedSince = Just (read "2026-10-02 00:00:00 UTC")}, "'2026-10-02'::timestamptz,21")
+  [ ("key-first", base, allClasses <> ",21"),
+    ("key-past-wide", base {cursor = Just (encodeCursor "wf-key" ("zzzz" :: Text, "zzzz" :: Text))}, allClasses <> ",'zzzz','zzzz',21"),
+    ("key-deep", base {cursor = Just (encodeCursor "wf-key" ("hot" :: Text, deepId))}, allClasses <> ",'hot','" <> deepId <> "',21"),
+    ("created-first", base {ordering = ByCreatedDesc}, allClasses <> ",21"),
+    ("created-deep", base {ordering = ByCreatedDesc, cursor = Just (encodeCursor "wf-created" (deepTime, "hot" :: Text, deepId))}, allClasses <> ",'" <> Text.pack (show deepTime) <> "'::timestamptz,'hot','" <> deepId <> "',21"),
+    ("rare-status", base {classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],21"),
+    ("absent-class", base {classes = Just (ClassRetrying :| [])}, "ARRAY['retrying']::text[],21"),
+    ("absent-name", base {workflowName = Just "absent"}, allClasses <> ",'absent',21"),
+    ("small-name", base {workflowName = Just "small"}, allClasses <> ",'small',21"),
+    ("running-class", base {classes = Just (ClassRunning :| [])}, "ARRAY['running']::text[],21"),
+    ("mixed-class", base {classes = Just (ClassFailed :| [ClassRunning, ClassFailed])}, "ARRAY['failed','running']::text[],21"),
+    ("rare-status-deep", base {classes = Just (ClassFailed :| []), cursor = Just (encodeCursor "wf-key" ("hot" :: Text, deepId))}, "ARRAY['failed']::text[],'hot','" <> deepId <> "',21"),
+    ("small-name-rare", base {workflowName = Just "small", classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],'small',21"),
+    ("created-window", base {ordering = ByCreatedDesc, createdSince = Just deepTime}, allClasses <> ",'" <> Text.pack (show deepTime) <> "'::timestamptz,21"),
+    ("created-rare-status", base {ordering = ByCreatedDesc, classes = Just (ClassFailed :| [])}, "ARRAY['failed']::text[],21"),
+    ("wide-name", base {workflowName = Just "wide"}, allClasses <> ",'wide',21"),
+    ("update-window", base {updatedSince = Just (read "2026-10-02 00:00:00 UTC")}, allClasses <> ",'2026-10-02'::timestamptz,21")
   ]
   where
+    allClasses = "ARRAY['running','retrying','sleeping','awaiting','completed','cancelled','failed']::text[]"
     base :: WorkflowListQuery
     base = defaultWorkflowListQuery {pageSize = 20}
     deep = count * 8 `div` 10

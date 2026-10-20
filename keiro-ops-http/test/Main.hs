@@ -136,6 +136,12 @@ spec fixture = do
         app <- opsApplication defaultOpsHttpConfig hooks store
         response <- call app methodGet "/wf/inspect/list?limit=1" ""
         assertError response status413 "inspection_result_too_large"
+      it "reports exceptional workflow scan limits explicitly" $ \store -> do
+        result <- Pool.use store.pool (Session.script "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) SELECT 'wide-'||n,repeat('x',2700),'running' FROM generate_series(1,65) n")
+        either (fail . show) pure result
+        app <- opsApplication defaultOpsHttpConfig hooks store
+        response <- call app methodGet "/wf/inspect/list?limit=1" ""
+        assertError response status413 "inspection_result_too_large"
       it "pages supported reads through the same parser and maps typed failures" $ \store -> do
         seedInspection store
         now <- getCurrentTime

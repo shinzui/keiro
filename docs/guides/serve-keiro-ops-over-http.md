@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-20T20:34:48Z
+timestamp: 2026-10-20T22:01:39Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -126,7 +126,7 @@ Errors have `{"error":{"code":"...","message":"...","details":...}}`;
 | 405 | `method_not_allowed` | Method disagrees with classification; see `Allow` |
 | 409 | `schema_drift` | Live schema differs from the binary |
 | 413 | `inspection_request_too_large` | Path, query, or confirmation exceeds its cap |
-| 413 | `inspection_result_too_large` | Encoded result or required continuation exceeds its cap |
+| 413 | `inspection_result_too_large` | Result, continuation, or work for large keys exceeds its cap |
 | 422 | `command_failed` | Supported handler returned a failure |
 | 500 | `schema_verification_failed` | Verification could not run |
 | 500 | `internal_error` | Handler raised a synchronous exception |

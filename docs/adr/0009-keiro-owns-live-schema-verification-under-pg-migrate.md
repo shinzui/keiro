@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Keiro owns live schema verification under pg-migrate
 description: Keiro owns live-schema verification as a separate keiro-migrate verify-schema gate, distinct from pg-migrate's ledger-integrity verify.
-timestamp: 2026-10-14T03:37:57Z
+timestamp: 2026-10-20T22:01:39Z
 docId: ADR-9
 status: Accepted
 date: 2026-07-23
@@ -57,9 +57,12 @@ settings, and standalone sequence properties are outside this gate. Sequence-bac
 column defaults remain covered as column definitions. Public-view meanings and
 privileges are covered by dedicated contract tests.
 
-`Keiro.Migrations.SchemaCheck` exposes two layers:
+`Keiro.Migrations.SchemaCheck` exposes session and settings boundaries:
 
 - `snapshotSchema :: Text -> Session Text` for callers that own a Hasql connection.
+- `verifyExpectedSchemaSession :: Session (Either MigrationError [SchemaDrift])`
+  for pooled callers, comparing fresh live catalog data in PostgreSQL and returning
+  only differences. The full snapshot/pure comparison remains the parity oracle.
 - `verifyExpectedSchema :: Settings -> IO (Either MigrationError [SchemaDrift])` for the
   CLI and other callers that have connection settings.
 
@@ -88,6 +91,12 @@ Catalog rendering must be independent of the login role. The snapshot query loca
 `pg_get_expr`; otherwise an unchanged `regclass` default can render with or without a schema
 qualification depending on whether the role's `$user` schema is visible.
 
+Snapshot column definitions retain one catalog object per line. Generated
+expressions use JSON quoting and record whether derivation is stored or virtual;
+regular defaults escape backslashes and line breaks. A multiline CASE or string
+literal must not be truncated by the line-oriented comparison. Both verification
+paths consume the same canonical rendering, with fresh role/registry checks.
+
 The other restored checks remain separate and run in the default build:
 
 - A pure body lint rejects DDL targets outside its explicit `keiro.` and `keiro_read.`
@@ -99,6 +108,10 @@ The other restored checks remain separate and run in the default build:
 - `migrations.native.lock` pins every native component file by SHA-256, manifest order, and
   directory membership in the default test suite. The legacy `migrations.lock` remains
   frozen codd-cutover evidence.
+
+Repository verification runs demos in a uniquely named disposable database and
+cleans it up after the run. Interactive demo data and its migration history are
+kept independent; checksum mismatches are never repaired by verification.
 
 No check replaces another. Operators use `verify` for ledger integrity and `verify-schema`
 for live objects; services use the startup handshake; CI runs the lint, the native lockfile

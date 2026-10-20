@@ -9,4 +9,18 @@ The current narrow old/new comparison is `matched-http-qualified/`: all medians 
 `class-branch-prototype/` demonstrates bounded generic class branches on clones.
 The direct expression index is rejected by `class-index-write-crash/`: HOT drops
 from 210/210 updates to zero and WAL rises about 190%. The nominal companion
-would miss this regression. A stored-class alternative remains experimental.
+would miss this regression. The guarded candidate uses a stored class instead; its longer schema-only
+write diagnostics are retained separately and do not establish cohort acceptance.
+
+`key-domain/` rejects the unguarded workflow and compound-owner indexes because
+they reject previously accepted stored keys. `query-guarded-keys/` and
+`query-wide-key-budget/` retain 136 actual prepared plans for the revised guarded
+workflow schema, including bounded explicit failures over 100,000 wide keys.
+Owner compound indexes remain unselected; their write diagnostic exceeds the
+preliminary 5% median p95 threshold, and the pages stay manual under deadlines.
+
+`guarded-index-write-nominal/` is a longer same-binary schema-only comparison,
+not a pre-change/full-cohort proof. Its p95 spread is still inconclusive.
+`guarded-index-write-wide/` is a failed pre-measurement fixture: a journal stream
+name constraint rejects that key during warmup. Large-row storage checks must
+be distinguished from valid completed-workflow measurements.

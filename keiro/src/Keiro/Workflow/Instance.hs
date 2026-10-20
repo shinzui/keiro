@@ -711,36 +711,29 @@ instanceFields required optional =
 -- from SQL rather than hidden behind nullable ORs that defeat generic plans.
 -- The facade validates the size and cursor before calling this primitive.
 -- The outer join returns the database observation clock even for an empty page.
-inspectionInstanceRows :: (Store :> es) => WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Eff es (UTCTime, [WorkflowInstanceRow])
+inspectionInstanceRows :: (Store :> es) => WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Eff es (UTCTime, Bool, [WorkflowInstanceRow])
 inspectionInstanceRows query position count = do
   rows <- runTransaction (Tx.statement () (inspectionInstanceStatement query position count))
   case rows of
-    (clock, _) : _ -> pure (clock, mapMaybe snd rows)
+    (clock, exceeded, _) : _ -> pure (clock, exceeded, mapMaybe (\(_, _, row) -> row) rows)
     [] -> error "inspection clock outer join returned no row"
 
-inspectionInstanceStatement :: WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Statement () [(UTCTime, Maybe WorkflowInstanceRow)]
+inspectionInstanceStatement :: WorkflowListQuery -> Maybe WorkflowListPosition -> Int -> Statement () [(UTCTime, Bool, Maybe WorkflowInstanceRow)]
 inspectionInstanceStatement query position count = preparable sql params decoder
   where
     number = Text.pack . show
     parameter :: Text -> E.Value a -> a -> (Int -> Text, Int, E.Params ())
     parameter template value argument = (\n -> Text.replace "?" ("$" <> number n) template, 1, const argument >$< E.param (E.nonNullable value))
     optional template value = fmap (parameter template value)
-    statusClassCase = "CASE WHEN status = 'running' AND attempts = 0 THEN 'running' WHEN status = 'running' THEN 'retrying' WHEN status = 'suspended' AND wake_after IS NOT NULL THEN 'sleeping' WHEN status = 'suspended' THEN 'awaiting' ELSE status END"
-    classParts = case query.classes of
-      Nothing -> []
-      Just classes ->
-        [ parameter "status = ANY(?::text[])" (E.foldableArray (E.nonNullable E.text)) (nub (map (statusToText . classStatus) (NonEmpty.toList classes))),
-          parameter (statusClassCase <> " = ANY(?::text[])") (E.foldableArray (E.nonNullable E.text)) (map statusClassToText (NonEmpty.toList classes))
-        ]
+    selectedClasses = nub (maybe [minBound .. maxBound] NonEmpty.toList query.classes)
     filters =
-      classParts
-        <> catMaybes
-          [ optional "workflow_name = ?" E.text query.workflowName,
-            optional "created_at >= ?" E.timestamptz query.createdSince,
-            optional "created_at < ?" E.timestamptz query.createdBefore,
-            optional "updated_at >= ?" E.timestamptz query.updatedSince,
-            optional "updated_at < ?" E.timestamptz query.updatedBefore
-          ]
+      catMaybes
+        [ optional "workflow_name = ?" E.text query.workflowName,
+          optional "created_at >= ?" E.timestamptz query.createdSince,
+          optional "created_at < ?" E.timestamptz query.createdBefore,
+          optional "updated_at >= ?" E.timestamptz query.updatedSince,
+          optional "updated_at < ?" E.timestamptz query.updatedBefore
+        ]
         <> cursorParts
     cursorParts = case position of
       Nothing -> []
@@ -756,19 +749,74 @@ inspectionInstanceStatement query position count = preparable sql params decoder
             (const created >$< E.param (E.nonNullable E.timestamptz)) <> (const name >$< E.param (E.nonNullable E.text)) <> (const wid >$< E.param (E.nonNullable E.text))
           )
         ]
-    (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (1, [], mempty) filters
+    (next, predicates, filterParams) = foldl' (\(index, clauses, encoders) (render, width, encoder) -> (index + width, clauses <> [render index], encoders <> encoder)) (2, [], mempty) filters
     order = case query.ordering of ByKey -> "workflow_name, workflow_id"; ByCreatedDesc -> "created_at DESC, workflow_name DESC, workflow_id DESC"
     columns = "workflow_id, workflow_name, generation, status, attempts, last_error, next_attempt_at, wake_after, leased_by, lease_expires_at, created_at, updated_at, completed_at"
-    sql =
-      "WITH inspection_page AS MATERIALIZED (SELECT "
+    keyBytes = "(octet_length(workflow_name) + octet_length(workflow_id))"
+    narrowKey = keyBytes <> " <= " <> number maxIndexedWorkflowKeyBytes
+    wideKey = keyBytes <> " > " <> number maxIndexedWorkflowKeyBytes
+    limit = " LIMIT $" <> number next
+    selectRows clauses rowOrder rowLimit =
+      "SELECT "
         <> columns
-        <> " FROM keiro.keiro_workflows"
-        <> (if null predicates then "" else " WHERE " <> Text.intercalate " AND " predicates)
+        <> " FROM keiro.keiro_workflows WHERE "
+        <> Text.intercalate " AND " clauses
         <> " ORDER BY "
+        <> rowOrder
+        <> rowLimit
+    -- Literal classes constrain the leading key under custom and generic
+    -- plans. The array only gates branches; values never enter prepared SQL.
+    classPredicates status =
+      [ "'" <> statusClassToText status <> "' = ANY($1::text[])",
+        "inspection_status_class = '" <> statusClassToText status <> "'"
+      ]
+    union branches = Text.intercalate " UNION ALL " ["(" <> branch <> ")" | branch <- branches]
+    narrowPage = case query.ordering of
+      ByCreatedDesc ->
+        selectRows
+          ([narrowKey] <> ["inspection_status_class = ANY($1::text[])" | query.classes /= Nothing] <> predicates)
+          order
+          limit
+      ByKey ->
+        "SELECT * FROM ("
+          <> union [selectRows (classPredicates status <> [narrowKey] <> predicates) order limit | status <- [minBound .. maxBound]]
+          <> ") AS candidates ORDER BY "
+          <> order
+          <> limit
+    -- The fixed-width hash keys only locate/sort candidates. Exact text
+    -- equality still rechecks collisions and follows the database collation.
+    wideName = ["hashtextextended(workflow_name,0) = hashtextextended($2::text,0)" | query.workflowName /= Nothing]
+    wideExactName = ["workflow_name = $2" | query.workflowName /= Nothing]
+    wideOrder = "hashtextextended(workflow_name,0), hashtextextended(workflow_id,0)"
+    wideLimit = " LIMIT " <> number (maxWideWorkflowCandidates + 1)
+    -- Budget the raw class/name population before time/cursor filtering, so a
+    -- deep cursor cannot turn the exceptional path into a ledger-wide search.
+    widePage =
+      "SELECT * FROM ("
+        <> union [selectRows (classPredicates status <> [wideKey] <> wideName <> wideExactName) wideOrder wideLimit | status <- [minBound .. maxBound]]
+        <> ") AS wide_candidates"
+        <> wideLimit
+    sql =
+      "WITH inspection_wide AS MATERIALIZED ("
+        <> widePage
+        <> "), wide_budget AS MATERIALIZED (SELECT count(*) > "
+        <> number maxWideWorkflowCandidates
+        <> " OR coalesce(sum("
+        <> keyBytes
+        <> "),0) > "
+        <> number maxWideWorkflowKeyBytes
+        <> " AS exceeded FROM inspection_wide), inspection_page AS MATERIALIZED (SELECT * FROM (("
+        <> narrowPage
+        <> ") UNION ALL SELECT * FROM inspection_wide"
+        <> (if null predicates then "" else " WHERE " <> Text.intercalate " AND " predicates)
+        <> ") AS candidates "
+        <> "WHERE NOT (SELECT exceeded FROM wide_budget) ORDER BY "
         <> order
-        <> " LIMIT $"
-        <> number next
-        <> ") SELECT now(), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY "
+        <> limit
+        <> ") SELECT now(), (SELECT exceeded FROM wide_budget), inspection_page.* FROM (VALUES (1)) AS clock(x) LEFT JOIN inspection_page ON true ORDER BY "
         <> order
-    params = filterParams <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4))
-    decoder = D.rowList ((,) <$> D.column (D.nonNullable D.timestamptz) <*> getCompose (instanceFields (Compose . D.column . D.nullable) (Compose . fmap Just . D.column . D.nullable)))
+    params =
+      (const (map statusClassToText selectedClasses) >$< E.param (E.nonNullable (E.foldableArray (E.nonNullable E.text))))
+        <> filterParams
+        <> (const (fromIntegral count :: Int32) >$< E.param (E.nonNullable E.int4))
+    decoder = D.rowList ((,,) <$> D.column (D.nonNullable D.timestamptz) <*> D.column (D.nonNullable D.bool) <*> getCompose (instanceFields (Compose . D.column . D.nullable) (Compose . fmap Just . D.column . D.nullable)))

@@ -119,7 +119,7 @@ snapshotSchema :: Text -> Session Text
 snapshotSchema schema =
   Text.unlines <$> Session.statement schema schemaSnapshotStatement
 
--- | PostgreSQL 18 snapshot regenerated through migration 0033.
+-- | PostgreSQL 18 snapshot regenerated through migration 0034.
 expectedSchemaSnapshot :: Text
 expectedSchemaSnapshot =
   $(embedTextFile "expected-schema/native/keiro-v18.txt")
@@ -268,7 +268,13 @@ schemaSnapshotSql =
     SELECT 'column' || E'\t' || c.relname || '.' || a.attname || E'\t'
            || format_type(a.atttypid, a.atttypmod)
            || CASE WHEN a.attnotnull THEN ' not null' ELSE '' END
-           || coalesce(' default ' || pg_get_expr(d.adbin, d.adrelid), '')
+           -- JSON quoting keeps a multiline generated expression on one snapshot line.
+           || CASE a.attgenerated
+                WHEN 's' THEN ' generated always as ' || to_json(pg_get_expr(d.adbin, d.adrelid))::text || ' stored'
+                WHEN 'v' THEN ' generated always as ' || to_json(pg_get_expr(d.adbin, d.adrelid))::text || ' virtual'
+                ELSE coalesce(' default ' || replace(replace(replace(pg_get_expr(d.adbin, d.adrelid),
+                       chr(92), chr(92) || chr(92)), chr(10), chr(92) || 'n'), chr(13), chr(92) || 'r'), '')
+              END
       FROM pg_attribute a
       JOIN pg_class c ON c.oid = a.attrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace

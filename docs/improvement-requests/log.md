@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-20
+* **Update**: Record IR-30 guarded paging evidence and the remaining performance/publication gates.
 * **Implementation**: IR-30 implements workflow pages, JSON, CLI and HTTP routes; performance and release gates remain open.
 * **Implementation**: IR-26 begins the bounded HTTP transport with parser-derived routes and fail-closed schema verification.
 

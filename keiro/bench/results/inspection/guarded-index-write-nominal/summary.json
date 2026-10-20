@@ -1,0 +1,95 @@
+{
+  "profile": "completed workflow",
+  "paired_percent_changes": [
+    {
+      "trial": 1,
+      "p95_us": 2.8121484814398245,
+      "throughput": -0.018902416051991278,
+      "allocated_bytes": 0.5412783396357312,
+      "cpu_ns": 44.92250952751711,
+      "wal_bytes": 9.138132059545079,
+      "baseline_updates": 4000,
+      "baseline_hot": 2993,
+      "candidate_updates": 4000,
+      "candidate_hot": 3000
+    },
+    {
+      "trial": 2,
+      "p95_us": 0.2502432920895359,
+      "throughput": 0.01824029174859465,
+      "allocated_bytes": 0.1467606923266196,
+      "cpu_ns": -18.675765640421716,
+      "wal_bytes": 14.427790473313728,
+      "baseline_updates": 4000,
+      "baseline_hot": 2993,
+      "candidate_updates": 4000,
+      "candidate_hot": 3000
+    },
+    {
+      "trial": 3,
+      "p95_us": 21.83131773205591,
+      "throughput": -0.007966046627705392,
+      "allocated_bytes": 0.382501751910036,
+      "cpu_ns": 134.45933150512178,
+      "wal_bytes": -7.8779116100093365,
+      "baseline_updates": 4000,
+      "baseline_hot": 2993,
+      "candidate_updates": 4000,
+      "candidate_hot": 3000
+    },
+    {
+      "trial": 4,
+      "p95_us": -3.0135471385125845,
+      "throughput": -0.001766185640417195,
+      "allocated_bytes": 0.01644145470414138,
+      "cpu_ns": 1.1785675435095122,
+      "wal_bytes": 8.698766759517419,
+      "baseline_updates": 4000,
+      "baseline_hot": 2993,
+      "candidate_updates": 4000,
+      "candidate_hot": 3000
+    },
+    {
+      "trial": 5,
+      "p95_us": -9.012247071352498,
+      "throughput": -0.0046280829974709725,
+      "allocated_bytes": -0.08601953440843246,
+      "cpu_ns": 1.9612210475467684,
+      "wal_bytes": 8.864003113875407,
+      "baseline_updates": 4000,
+      "baseline_hot": 2993,
+      "candidate_updates": 4000,
+      "candidate_hot": 3000
+    }
+  ],
+  "median_percent_changes": {
+    "p95_us": 0.2502432920895359,
+    "throughput": -0.0046280829974709725,
+    "allocated_bytes": 0.1467606923266196,
+    "cpu_ns": 1.9612210475467684,
+    "wal_bytes": 8.864003113875407
+  },
+  "ranges_percent": {
+    "p95_us": [
+      -9.012247071352498,
+      21.83131773205591
+    ],
+    "throughput": [
+      -0.018902416051991278,
+      0.01824029174859465
+    ],
+    "allocated_bytes": [
+      -0.08601953440843246,
+      0.5412783396357312
+    ],
+    "cpu_ns": [
+      -18.675765640421716,
+      134.45933150512178
+    ],
+    "wal_bytes": [
+      -7.8779116100093365,
+      14.427790473313728
+    ]
+  },
+  "cohort_acceptance": false
+}
