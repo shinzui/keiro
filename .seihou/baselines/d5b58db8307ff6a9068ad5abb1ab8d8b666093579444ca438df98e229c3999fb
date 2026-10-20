@@ -2,6 +2,7 @@ indentation: 2
 function-arrows: trailing
 comma-style: trailing
 import-export-style: trailing
+import-grouping: preserve
 indent-wheres: true
 record-brace-space: true
 newlines-between-decls: 1
