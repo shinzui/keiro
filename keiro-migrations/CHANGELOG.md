@@ -6,6 +6,10 @@ All notable changes to `keiro-migrations` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Export verifyExpectedSchemaSession for fail-closed verification on an existing pool, preserving managed-object handling.
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Bug Fixes

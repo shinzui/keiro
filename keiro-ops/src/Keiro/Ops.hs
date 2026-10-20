@@ -4,8 +4,12 @@ module Keiro.Ops
     AppHooks (..),
     OpsAuditConfig (..),
     emptyAppHooks,
-    OpsInvocation,
+    OpsInvocation (..),
+    Command (..),
     opsCommandTree,
+    commandParser,
+    isMutation,
+    runCommand,
     runOpsInvocation,
   )
 where
@@ -60,6 +64,8 @@ data OpsInvocation = OpsInvocation
     opsCommand :: !Command
   }
 
+-- | Programmatic front-end boundary. Alternative front ends must verify the
+-- live schema, use JSON output mode, and respect 'isMutation'.
 data Command
   = Workflow Workflow.Command
   | Timer Timer.Command
@@ -85,6 +91,7 @@ opsCommandTree hooks =
 invocationParser :: AppHooks -> Parser OpsInvocation
 invocationParser hooks = OpsInvocation <$> globalOptionsParser <*> commandParser hooks
 
+-- | The authoritative command grammar, including only mounted hooks.
 commandParser :: AppHooks -> Parser Command
 commandParser hooks =
   hsubparser
@@ -165,6 +172,7 @@ runInvocation hooks OpsInvocation {globalOptions, opsCommand} = do
                   }
           runCommand hooks env opsCommand >>= finishOutcome env
 
+-- | Authoritative read/write classification for every front end.
 isMutation :: Command -> Bool
 isMutation = \case
   Workflow workflowCommand -> Workflow.isMutation workflowCommand
@@ -179,6 +187,8 @@ isMutation = \case
   ReplayAudit _ -> False
   Rebuild rebuildCommand -> Rebuild.isMutation rebuildCommand
 
+-- | Execute a parsed command after schema verification. Front ends must use
+-- JSON mode and enable force only after explicit mutation confirmation.
 runCommand :: AppHooks -> OpsEnv -> Command -> IO OpsOutcome
 runCommand hooks env = \case
   Workflow workflowCommand -> Workflow.runCommandWithResume hooks.workflowResume env workflowCommand

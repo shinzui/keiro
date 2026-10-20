@@ -18,6 +18,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-20T16:50:14Z
+      mode: "implement"
+      note: "Begin HTTP transport implementation and bounded execution verification"
   reviews:
     - model: "gpt-6-astra"
       harness: "codex-cli"
@@ -83,8 +88,8 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 - [x] Planning: IR-26 records this plan (`## Planning` section and a bundle log entry,
       2026-09-10); the request stays `proposed` until implementation evidence exists.
-- [ ] Milestone 1: `keiro-ops` exports its command type, classifier, parser, and runner;
-      `keiro-migrations` exports a session-level schema verifier. Existing test suites pass.
+- [x] (2026-10-20) Milestone 1: `keiro-ops` exports its command type, classifier, parser, and runner;
+      `keiro-migrations` exports a session-level schema verifier preserving managed-object handling. Nix verification: 51 ops and 40 migration examples pass.
 - [ ] Milestone 2: the `keiro-ops-http` package exists with the request-to-arguments
       translation and the parser-tree flag introspection, covered by pure unit tests.
 - [ ] Milestone 3: the WAI application performs the schema handshake, the read/write method

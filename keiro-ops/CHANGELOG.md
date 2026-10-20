@@ -6,6 +6,10 @@ All notable changes to `keiro-ops` are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Export the authoritative command grammar, classifier, runner, and invocation fields for alternative front ends.
+
 ## 0.21.0.0 — 2026-10-14
 
 ### Bug Fixes

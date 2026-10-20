@@ -9,6 +9,7 @@ module Keiro.Migrations.SchemaCheck
     renderSchemaDrift,
     snapshotSchema,
     verifyExpectedSchema,
+    verifyExpectedSchemaSession,
   )
 where
 
@@ -139,25 +140,25 @@ verifyExpectedSchema settings = do
       pure (Left (ConnectionAcquisitionFailed connectionError))
     Right connection -> do
       result <-
-        Connection.use connection liveSnapshotSession
+        Connection.use connection verifyExpectedSchemaSession
           `finally` Connection.release connection
       pure $ case result of
         Left sessionError -> Left (DatabaseSessionFailed sessionError)
-        Right (Left migrationError) -> Left migrationError
-        Right (Right (managed, actual)) ->
-          Right (compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot actual)
-  where
-    liveSnapshotSession :: Session (Either MigrationError (Set Text, Text))
-    liveSnapshotSession = do
-      serverVersionNumber <- Session.statement () serverVersionStatement
-      let majorVersion = fromIntegral serverVersionNumber `div` 10000
-      if majorVersion == (18 :: Int)
-        then do
-          privateSchema <- snapshotSchema "keiro"
-          publicSchema <- snapshotSchema "keiro_read"
-          managed <- managedObjectSnapshotKeys
-          pure (Right (managed, privateSchema <> publicSchema))
-        else pure (Left (UnsupportedPostgresVersion majorVersion))
+        Right result -> result
+
+-- | Verify the live schema on an existing connection or pool. This retains the
+-- CLI's PostgreSQL version check and runtime-managed object handling.
+verifyExpectedSchemaSession :: Session (Either MigrationError [SchemaDrift])
+verifyExpectedSchemaSession = do
+  serverVersionNumber <- Session.statement () serverVersionStatement
+  let majorVersion = fromIntegral serverVersionNumber `div` 10000
+  if majorVersion == (18 :: Int)
+    then do
+      privateSchema <- snapshotSchema "keiro"
+      publicSchema <- snapshotSchema "keiro_read"
+      managed <- managedObjectSnapshotKeys
+      pure (Right (compareSchemaSnapshotWithManaged managed expectedSchemaSnapshot (privateSchema <> publicSchema)))
+    else pure (Left (UnsupportedPostgresVersion majorVersion))
 
 -- | Snapshot keys of the objects Keiro's runtime created and recorded in
 -- @keiro.keiro_managed_read_objects@ with @managed_by = 'keiro'@. Every state

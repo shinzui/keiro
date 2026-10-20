@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-14T01:38:52Z
       mode: "update"
       note: "Correct hot-path isolation, bounded inspection/feed ownership, released APIs, observation semantics, and mandatory performance acceptance; implementation remains pending."
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-20T16:50:14Z
+      mode: "implement"
+      note: "Begin EP-1 in registry order; preserve required integration and release gates"
 ---
 
 # Expose the keiro inspection surface for the keiro runtime UI
@@ -170,7 +175,7 @@ keiro's composed mount embeds, which is the constraint EP-6 relies on.
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | Not Started |
+| 1 | Serve the keiro-ops surface over HTTP (IR-26) | docs/plans/276-serve-the-keiro-ops-surface-over-http.md | None | None | In Progress |
 | 2 | Add cursor-paged workflow inspection reads for the HTTP surface (IR-30) | docs/plans/275-add-cursor-paged-workflow-inspection-reads-for-the-http-surface.md | None | None | Not Started |
 | 3 | Expose aggregate inspection read APIs (IR-28) | docs/plans/278-expose-aggregate-inspection-read-apis.md | EP-2 | None | Not Started |
 | 4 | Expose process-manager inspection reads (IR-29) | docs/plans/274-expose-process-manager-inspection-reads.md | EP-2, EP-3 | None | Not Started |
@@ -407,48 +412,12 @@ consequences paragraph naming the shipped package and the release that carried i
 
 ## Progress
 
-- [x] (2026-10-13) Reviewed all seven child plans against runtime source and released upstream APIs; corrected hot-path, feed, pagination, dependency, and closure contracts. No implementation or performance result is claimed.
-- [ ] EP-7: pass the matched disabled/idle/active inspection interference and retention gates before release.
-
-
-Track milestone-level progress across all child plans. Each entry names the child plan
-and the milestone. This section provides an at-a-glance view of the entire initiative.
-
-- [x] (2026-09-30) Coordination: MasterPlan 45 created; plans 274 through 278 adopted with `master_plan` frontmatter and coordination notes; plans 302 and 303 created; IR-26 through IR-31 link the MasterPlan and IR-31 links plan 302.
-- [ ] EP-1 (276) M1: `keiro-ops` exports the command tree and `keiro-migrations` exports the verifier session.
-- [ ] EP-1 (276) M2: `keiro-ops-http` package with request translation and parser introspection.
-- [ ] EP-1 (276) M3: the WAI application with schema handshake, read/write split, preview/confirm, CORS, health.
-- [ ] EP-1 (276) M4: the Warp runner, the standalone executable, and the CLI-agreement proof.
-- [ ] EP-1 (276) M5: runbook, capability record, changelogs, release-skill entry, IR-26 evidence, ADR.
-- [ ] EP-2 (275) M1: `Keiro.Inspection.Cursor`, the status vocabulary, and the bounded instance listing.
-- [ ] EP-2 (275) M2: the creation-order index migration and its index-usage proof.
-- [ ] EP-2 (275) M3: paged journal, step, child, and awakeable reads.
-- [ ] EP-2 (275) M4: library-owned JSON rendering and `keiro-ops` adoption.
-- [ ] EP-2 (275) M5: documentation, changelogs, ADR-28 paragraph, IR-30 evidence.
-- [ ] EP-3 (278) M0 and M1: preflight; `hydrateWithSource` and `observeSnapshotRow`.
-- [ ] EP-3 (278) M2: `Keiro.Inspection.Aggregate` with fold-equivalence tests.
-- [ ] EP-3 (278) M3: `AppHooks.aggregates`, the `aggregate` domain, and the jitsurei inspectors.
-- [ ] EP-3 (278) M4: `listAggregates` and `aggregate list`.
-- [ ] EP-3 (278) M5: documentation, capability records, changelogs, IR-28 evidence, ADR.
-- [ ] EP-4 (274) M0 and M1: validation gate; bounded opt-in reaction provenance, disabled by default.
-- [ ] EP-4 (274) M2: `Keiro.ProcessManager.Inspect`, the instance view, `AppHooks.processManagers`, `pm show`.
-- [ ] EP-4 (274) M3: `findPendingTimers` and `timer pending list`.
-- [ ] EP-4 (274) M4: shard ownership views, `shard list`, and the extended `shard status`.
-- [ ] EP-4 (274) M5: `listProcessManagerInstances` and `pm list`.
-- [ ] EP-4 (274) M6: documentation, capability records, changelogs, IR-29 evidence, ADR.
-- [ ] EP-5 (277) M1: the paired `keiro-ops` commands and encoders.
-- [ ] EP-5 (277) M2: the paired poll routes through the transport; WebSocket dependencies added.
-- [ ] EP-5 (277) M3: protocol, views, feed engine, `/ws` endpoint, driver and end-to-end tests.
-- [ ] EP-5 (277) M4: killed-LISTEN degradation proof.
-- [ ] EP-5 (277) M5: executable mounting, feeds guide, CAP-16, changelogs, ADR, IR-27 evidence.
-- [ ] EP-6 (302) M1: `Keiro.Ops.Http.Compose` router, CORS-once, and unit tests over stub surfaces.
-- [ ] EP-6 (302) M2: keiro plus kiroku-metrics composed end to end, including WebSocket through a prefix.
-- [ ] EP-6 (302) M3: the example executable and the composition guide.
-- [ ] EP-6 (302) M4: capability record, changelogs, ADR, IR-31 evidence.
-- [ ] EP-7 (303) M1: preflight: all implementation and performance gates, versions, and bounds.
-- [ ] EP-7 (303) M2: the lockstep release of eight packages.
-- [ ] EP-7 (303) M3: clean-consumer proof and request completion.
-
+EP-1 (276) is In Progress; all other children remain Not Started. The command
+exports, pool-level verifier, and bounded HTTP transport are the current work.
+The pre-implementation baseline is commit `3bf3ac229f21d6c95179ce49b5e8f6323322f99b`.
+Child plans own milestone evidence. Whole-child prerequisites, integrated
+interference/retention measurements, publication, and consumer proofs remain
+required before completion.
 
 ## Surprises & Discoveries
 
