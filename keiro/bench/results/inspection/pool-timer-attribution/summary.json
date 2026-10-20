@@ -1,0 +1,38 @@
+{
+  "1-pooled": {
+    "steady_samples": 9,
+    "steady_slope_bytes_per_operation": 5.0964,
+    "steady_live_min": 411200,
+    "steady_live_max": 454904,
+    "initial_live": 150240,
+    "final_live": 454688,
+    "drained_live": 212832
+  },
+  "2-direct": {
+    "steady_samples": 9,
+    "steady_slope_bytes_per_operation": 4.771066666666667,
+    "steady_live_min": 213568,
+    "steady_live_max": 245624,
+    "initial_live": 156392,
+    "final_live": 245408,
+    "drained_live": 149112
+  },
+  "3-direct": {
+    "steady_samples": 9,
+    "steady_slope_bytes_per_operation": 4.77,
+    "steady_live_min": 213584,
+    "steady_live_max": 245624,
+    "initial_live": 150144,
+    "final_live": 245408,
+    "drained_live": 149160
+  },
+  "4-pooled": {
+    "steady_samples": 9,
+    "steady_slope_bytes_per_operation": 4.786,
+    "steady_live_min": 422008,
+    "steady_live_max": 454720,
+    "initial_live": 156488,
+    "final_live": 454720,
+    "drained_live": 212840
+  }
+}

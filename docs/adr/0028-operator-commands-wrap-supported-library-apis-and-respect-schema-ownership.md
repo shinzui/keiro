@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Operator commands wrap supported library APIs and respect schema ownership
 description: Keiro operator commands preserve library invariants, schema ownership, destructive previews, and the standalone-versus-embedded capability boundary.
-timestamp: 2026-10-20T22:01:39Z
+timestamp: 2026-10-20T23:50:22Z
 docId: ADR-28
 status: Accepted
 date: 2026-08-08
@@ -136,6 +136,17 @@ schema scans; reads repeat validation for direct callers. CLI and HTTP share
 the canonical encoders. Header inspection performs only the instance read;
 legacy whole reads may drain pages. Matching index and runtime write-cost
 evidence remains required before automatic feed or release acceptance.
+
+The owning instance module also exposes a bounded conditional header session.
+It compares an exact image of every header field in the current database
+snapshot before allowing reuse of pure presentation. The image includes lookup
+identity; an image from another identity cannot establish equality. UTC day
+and seconds-of-day components preserve BC and distant fractional timestamps
+without epoch rounding. Infinity values preserve the existing binary decoder's
+Int64-microsecond interpretation, verified against the ordinary lookup. The key is opaque: transaction ids, hashes and wall
+clocks are not substitutes for exact field equality. No writer SQL or legacy
+lookup contract changes. Transport presentation reuse remains in ops, without
+HTTP dependencies in the library.
 
 Page producers reject required continuations that exceed the shared 4096-byte
 codec limit. A stored key can be larger than a valid input cursor; such a page

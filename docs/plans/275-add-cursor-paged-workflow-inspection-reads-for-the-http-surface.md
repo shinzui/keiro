@@ -67,6 +67,13 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 ## Progress
 
+2026-10-20: The bounded exact-header candidate passes the complete Nix
+`just verify`: 772 Keiro examples, 51 ops, 29 HTTP, 43 migration, 25 example
+application examples, coarse retention and the DSL/policy/documentation gates.
+Infinity values agree with the ordinary binary decoder. Required measured
+interference, strict retention and final release checks remain open.
+
+
 - [x] (2026-10-13) Correctness and hot-path design review applied; implementation remains outstanding.
 - [ ] Validate the review constraints and record the required performance/correctness evidence before marking this plan complete.
 
@@ -87,6 +94,25 @@ paging a seeded ledger with the new `Keiro.Workflow.Inspection` functions from `
 
 
 ## Surprises & Discoveries
+
+2026-10-20: The conditional reader now also preserves infinity timestamp
+behavior from the released binary decoder. Its ordinary decoder treats the
+Int64 wire sentinels as microseconds from 2000; SQL date subtraction on infinity
+would instead fail. Explicit image markers reconstruct the same UTCTime, and
+all six timestamp fields are covered against the ordinary lookup. The 16
+focused examples and 29 HTTP examples pass after this correction.
+
+
+2026-10-20: HTTP allocation attribution motivates an owning-session header
+read and a prototype conditional image read. The latter compares all thirteen
+current fields in one SELECT, rather than trusting a hash or transaction id.
+Every individual field mutation, row absence and raw/escaped image limits have
+regressions. A far-future microsecond parity case rejects a single numeric-epoch
+representation: split UTC day/seconds avoids its rounding, while BC dates avoid
+textual JSON date parsing. The bounded HTTP presentation candidate now uses this exact owning query;
+its 16 focused query examples and 29 HTTP examples pass. Allocation and matched
+interference checks remain pending.
+The diagnostic alone is not performance acceptance.
 
 2026-10-20: The final guarded candidate passes the complete Nix `just verify`
 with the registered Mori connection supplied, plus strict IR profile validation.

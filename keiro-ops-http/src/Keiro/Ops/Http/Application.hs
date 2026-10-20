@@ -22,13 +22,14 @@ import Data.Text qualified as Text
 import Data.Text.Encoding qualified as Text
 import Hasql.Pool qualified as Pool
 import Keiro.Migrations.SchemaCheck (renderSchemaDrift, verifyExpectedSchemaSession)
-import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommand, validateCommand)
+import Keiro.Ops (AppHooks, Command, commandParser, isMutation, runCommandWithHeaderCache, validateCommand)
 import Keiro.Ops.Env (OpsEnv (..), OutputMode (Json))
 import Keiro.Ops.Http.Budget
 import Keiro.Ops.Http.Config
 import Keiro.Ops.Http.Cors
 import Keiro.Ops.Http.Route
 import Keiro.Ops.Render
+import Keiro.Ops.WorkflowHeaderCache (newWorkflowHeaderCache)
 import Kiroku.Store.Connection (KirokuStore (..))
 import Network.HTTP.Types
 import Network.Wai
@@ -73,24 +74,27 @@ opsApplication config hooks store = do
 
 -- | Internal feed integration: HTTP and refresh work consume the same budget.
 opsApplicationWithBudget :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> IO Application
-opsApplicationWithBudget config budget hooks store =
-  opsApplicationWithOperations
-    config
-    budget
-    hooks
-    store
-    OpsHttpOperations
-      { verifySchema = do
-          result <- Pool.use store.pool verifyExpectedSchemaSession
-          pure $ case result of
-            Left err -> Left (Text.pack (show err))
-            Right (Left err) -> Left (Text.pack (show err))
-            Right (Right drifts) -> Right (map renderSchemaDrift drifts),
-        executeCommand = runCommand hooks
-      }
+opsApplicationWithBudget config budget hooks store = do
+  cache <- newWorkflowHeaderCache config.inspectionLimits.maxResponseBytes $ \value ->
+    fmap LazyByteString.toStrict <$> encodeBounded config.inspectionLimits.maxResponseBytes value
+  let verify = do
+        result <- Pool.use store.pool verifyExpectedSchemaSession
+        pure $ case result of
+          Left err -> Left (Text.pack (show err))
+          Right (Left err) -> Left (Text.pack (show err))
+          Right (Right drifts) -> Right (map renderSchemaDrift drifts)
+  opsApplicationPrepared config budget hooks store verify (runCommandWithHeaderCache cache hooks)
 
 opsApplicationWithOperations :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> OpsHttpOperations -> IO Application
-opsApplicationWithOperations config budget hooks store operations = do
+opsApplicationWithOperations config budget hooks store operations =
+  opsApplicationPrepared config budget hooks store operations.verifySchema $ \env command -> do
+    outcome <- operations.executeCommand env command
+    pure (outcome, Nothing)
+
+-- The prepared bytes are paired with the exact successful read outcome by the
+-- owning runner. They never change the public OpsResult or mutation protocol.
+opsApplicationPrepared :: OpsHttpConfig -> InspectionBudget -> AppHooks -> KirokuStore -> IO (Either Text [Text]) -> (OpsEnv -> Command -> IO (OpsOutcome, Maybe ByteString.ByteString)) -> IO Application
+opsApplicationPrepared config budget hooks store verify execute = do
   parsedReads <- newIORef (Map.empty, Seq.empty)
   let parser = commandParser hooks
       flags = flagNames parser
@@ -170,7 +174,7 @@ opsApplicationWithOperations config budget hooks store operations = do
         case confirmation of
           Left err -> pure err
           Right confirmed -> do
-            verified <- operations.verifySchema
+            verified <- verify
             case verified of
               Left message -> pure (failure status500 "schema_verification_failed" message)
               Right drift
@@ -178,8 +182,8 @@ opsApplicationWithOperations config budget hooks store operations = do
                     boundedJson status409 [] (errorValue (OpsHttpError status409 "schema_drift" "the live schema differs from this binary; refusing to serve until they agree" (Just (object ["drift" .= drift]))))
                 | otherwise -> do
                     let env = OpsEnv store Json (mutation && confirmed) drift (config.schemaDrift == AllowDrift)
-                    outcome <- operations.executeCommand env command
-                    renderOutcome mutation drift outcome
+                    (outcome, prepared) <- execute env command
+                    renderOutcome mutation drift prepared outcome
     immediate = pure . Immediate
     internalError = failure status500 "internal_error" "inspection failed"
     budgetFailure mutation = \case
@@ -188,7 +192,7 @@ opsApplicationWithOperations config budget hooks store operations = do
         | mutation -> failure status504 "mutation_outcome_unknown" "deadline exceeded; the mutation may have committed; inspect state before deciding whether to retry"
         | otherwise -> failure status504 "inspection_timeout" "inspection exceeded the host deadline"
     health = do
-      result <- operations.verifySchema
+      result <- verify
       case result of
         Left message -> boundedJson status503 [] (object ["status" .= ("unavailable" :: Text), "message" .= message])
         Right drift ->
@@ -202,7 +206,7 @@ opsApplicationWithOperations config budget hooks store operations = do
       pure $ case encoded of
         Nothing -> failure status413 "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read"
         Just body -> responseLBS status (jsonHeaders <> headers) body
-    renderOutcome mutation drift = \case
+    renderOutcome mutation drift prepared = \case
       InspectionFailed code message ->
         let status
               | code == "cursor_generation_mismatch" = status409
@@ -218,7 +222,13 @@ opsApplicationWithOperations config budget hooks store operations = do
           let exitFields = case exitCode of ExitSuccess -> []; ExitFailure n -> ["exit_code" .= n]
               exitHeaders = case exitCode of ExitSuccess -> []; ExitFailure n -> [("Keiro-Ops-Exit-Code", Char8.pack (show n))]
               value = if mutation then object (["outcome" .= ("executed" :: Text), "result" .= result.jsonValue] <> exitFields) else result.jsonValue
-           in boundedJson status200 (driftHeaders drift <> if mutation then [] else exitHeaders) value
+           in case (mutation, prepared) of
+                (False, Just body)
+                  | ByteString.length body <= limits.maxResponseBytes ->
+                      pure (responseLBS status200 (jsonHeaders <> driftHeaders drift <> exitHeaders) (LazyByteString.fromStrict body))
+                  | otherwise ->
+                      pure (failure status413 "inspection_result_too_large" "encoded result exceeds the host limit; narrow the read")
+                _ -> boundedJson status200 (driftHeaders drift <> if mutation then [] else exitHeaders) value
 
 readConfirmation :: Request -> IO (Either Response Bool)
 readConfirmation request = go 0 []

@@ -36,6 +36,8 @@ import Keiro.Ops.Http.Config qualified
 import Keiro.Ops.Http.Route
 import Keiro.Ops.Render
 import Keiro.Ops.ReplayAudit qualified as Audit
+import Keiro.Ops.Workflow qualified as Workflow
+import Keiro.Ops.WorkflowHeaderCache
 import Keiro.PGMQ
 import Keiro.Projection.Catalog qualified as Catalog
 import Keiro.Projection.Catalog.Operations qualified as CatalogOperations
@@ -176,6 +178,73 @@ spec fixture = do
         assertError rotated status409 "cursor_generation_mismatch"
         freshHeader <- call app methodGet "/wf/inspect/header/approval/wf-1" ""
         field "generation" (body freshHeader) `shouldBe` Just (Number 1)
+    describe "fresh header presentation reuse" $ do
+      it "preserves canonical bytes and observes edits, deletion and recreation" $ \store -> do
+        seedInspection store
+        app <- opsApplication defaultOpsHttpConfig hooks store
+        let readHeader = call app methodGet "/wf/inspect/header/approval/wf-1" ""
+            sql statement = Pool.use store.pool (Session.script statement) >>= either (fail . show) pure
+        first <- readHeader
+        second <- readHeader
+        shouldBe (simpleBody second) (simpleBody first)
+        sql "UPDATE keiro.keiro_workflows SET attempts=7,last_error='changed',leased_by='new-owner' WHERE workflow_name='approval' AND workflow_id='wf-1'"
+        changed <- readHeader
+        shouldBe (field "attempts" (body changed)) (Just (Number 7))
+        shouldBe (field "last_error" (body changed)) (Just (String "changed"))
+        shouldBe (field "leased_by" (body changed)) (Just (String "new-owner"))
+        legacy <- call app methodGet "/wf/show/approval/wf-1" ""
+        shouldBe (field "instance" (body legacy)) (Just (body changed))
+        sql "DELETE FROM keiro.keiro_workflows WHERE workflow_name='approval' AND workflow_id='wf-1'"
+        missing <- readHeader
+        assertError missing status422 "command_failed"
+        sql "INSERT INTO keiro.keiro_workflows(workflow_name,workflow_id,status) VALUES ('approval','wf-1','failed')"
+        recreated <- readHeader
+        shouldBe (field "status" (body recreated)) (Just (String "failed"))
+      it "enforces byte and entry limits through churn, oversized changes and misses" $ \store -> do
+        let sql statement = Pool.use store.pool (Session.script statement) >>= either (fail . show) pure
+            encode value = fmap LazyByteString.toStrict <$> encodeBounded (1024 * 1024) value
+        sql "INSERT INTO keiro.keiro_workflows(workflow_name,workflow_id,status) SELECT 'cache','id-'||n,'running' FROM generate_series(1,96) n"
+        cache <- newWorkflowHeaderCache (1024 * 1024) encode
+        let readHeader wid = Ops.runCommandWithHeaderCache cache hooks (OpsEnv store Json False [] False) (Ops.Workflow (Workflow.Inspect (Workflow.InspectHeader (Workflow.WorkflowRef "cache" wid))))
+            bounded = do
+              (count, bytes) <- workflowHeaderCacheUsage cache
+              shouldSatisfy count (<= 32)
+              shouldSatisfy bytes (<= 1024 * 1024)
+        forM_ [1 .. (96 :: Int)] $ \n -> do
+          (outcome, encoded) <- readHeader ("id-" <> Text.pack (show n))
+          shouldSatisfy outcome (\case Succeeded _ -> True; _ -> False)
+          shouldSatisfy encoded isJust
+          bounded
+        shouldReturn (fmap fst (workflowHeaderCacheUsage cache)) 32
+        sql "UPDATE keiro.keiro_workflows SET last_error=repeat('x',20000)"
+        forM_ [1 .. (96 :: Int)] $ \n -> readHeader ("id-" <> Text.pack (show n)) >> bounded
+        (largeCount, _) <- workflowHeaderCacheUsage cache
+        shouldSatisfy largeCount (< 32)
+        sql "DELETE FROM keiro.keiro_workflows"
+        forM_ [1 .. (96 :: Int)] $ \n -> readHeader ("id-" <> Text.pack (show n)) >> bounded
+        shouldReturn (workflowHeaderCacheUsage cache) (0, 0)
+      it "fails oversized changes explicitly and reapplies schema policy to warm headers" $ \store -> do
+        seedInspection store
+        let sql statement = Pool.use store.pool (Session.script statement) >>= either (fail . show) pure
+            config = defaultOpsHttpConfig {inspectionLimits = defaultInspectionLimits {maxResponseBytes = 1024}}
+        app <- opsApplication config hooks store
+        let readHeader = call app methodGet "/wf/inspect/header/approval/wf-1" ""
+        warm <- readHeader
+        shouldBe (simpleStatus warm) status200
+        sql "UPDATE keiro.keiro_workflows SET last_error=repeat('x',100000) WHERE workflow_id='wf-1'"
+        tooLarge <- readHeader
+        assertError tooLarge status413 "inspection_result_too_large"
+        sql "UPDATE keiro.keiro_workflows SET last_error=NULL WHERE workflow_id='wf-1'"
+        restored <- readHeader
+        shouldBe (body restored) (body warm)
+        sql "ALTER TABLE keiro.keiro_timers ADD COLUMN header_test_drift text"
+        refused <- readHeader
+        assertError refused status409 "schema_drift"
+        allowed <- opsApplication config {Keiro.Ops.Http.Config.schemaDrift = AllowDrift} hooks store
+        first <- call allowed methodGet "/wf/inspect/header/approval/wf-1" ""
+        second <- call allowed methodGet "/wf/inspect/header/approval/wf-1" ""
+        shouldBe (simpleBody second) (simpleBody first)
+        shouldBe (lookup "Keiro-Ops-Schema-Drift" (simpleHeaders second)) (Just "1")
     describe "HTTP boundary" $ do
       it "shares the supported read/write classification across every mounted domain" $ \store -> do
         seedInspection store

@@ -1,0 +1,72 @@
+{
+  "point-read": {
+    "allocated_bytes_per_op": [
+      35311.68,
+      35336.32,
+      35297.12,
+      35256.24,
+      35211.76
+    ],
+    "median_allocated_bytes_per_op": 35297.12
+  },
+  "http-static-json-no-database": {
+    "allocated_bytes_per_op": [
+      22349.76,
+      23021.76,
+      22350.08,
+      22349.76,
+      22461.76
+    ],
+    "median_allocated_bytes_per_op": 22350.08
+  },
+  "http-no-database": {
+    "allocated_bytes_per_op": [
+      39514.56,
+      40025.28,
+      40173.12,
+      39656.0,
+      39581.76
+    ],
+    "median_allocated_bytes_per_op": 39656.0
+  },
+  "http-static-json-with-schema": {
+    "allocated_bytes_per_op": [
+      33206.24,
+      33626.24,
+      32930.72,
+      33363.2,
+      33190.32
+    ],
+    "median_allocated_bytes_per_op": 33206.24
+  },
+  "http-header": {
+    "allocated_bytes_per_op": [
+      87362.8,
+      86995.44,
+      87294.56,
+      87327.6,
+      87426.72
+    ],
+    "median_allocated_bytes_per_op": 87327.6
+  },
+  "schema-verification": {
+    "allocated_bytes_per_op": [
+      10328.56,
+      10357.68,
+      10454.0,
+      10481.6,
+      10227.2
+    ],
+    "median_allocated_bytes_per_op": 10357.68
+  },
+  "http-no-schema": {
+    "allocated_bytes_per_op": [
+      76660.48,
+      77101.76,
+      76769.68,
+      77263.6,
+      76852.08
+    ],
+    "median_allocated_bytes_per_op": 76852.08
+  }
+}

@@ -9,9 +9,13 @@ import time
 
 def main():
     port, clients, seconds = map(int, sys.argv[1:4])
-    controlled = sys.argv[4:] == ["controlled"]
-    if sys.argv[4:] and not controlled:
+    options = sys.argv[4:]
+    controlled = bool(options) and options[0] == "controlled"
+    if options and (not controlled or len(options) > 2):
         raise RuntimeError("unknown client mode")
+    views = int(options[1]) if len(options) == 2 else max(1, clients)
+    if clients < 0 or views < 1:
+        raise RuntimeError("clients must be nonnegative and views positive")
     if clients == 0:
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         try:
@@ -35,10 +39,12 @@ def main():
 
     def poll(index):
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-        def fetch():
+        assigned = list(range(index, views, clients)) if clients <= views else [index % views]
+
+        def fetch(view):
             try:
                 connection.request(
-                    "GET", f"/wf/inspect/header/index-evidence/warm-{index + 1}"
+                    "GET", f"/wf/inspect/header/index-evidence/warm-{view + 1}"
                 )
                 response = connection.getresponse()
                 response.read()
@@ -49,22 +55,26 @@ def main():
 
         try:
             if controlled:
-                stop.wait(index / 32)
-                if not fetch():
-                    with lock:
-                        warm_errors.append(index)
+                stop.wait(index / max(clients, views))
+                for view in assigned:
+                    if not fetch(view):
+                        with lock:
+                            warm_errors.append((index, view))
                 warmed.wait()
                 go.wait()
                 if stop.is_set():
                     return
-            due = started + index / 32
-            while due < started + seconds:
+            iteration = 0
+            while True:
+                due = started + index / max(clients, views) + iteration / len(assigned)
+                if due >= started + seconds:
+                    break
                 if stop.wait(max(0, due - time.monotonic())):
                     break
-                good = fetch()
+                good = fetch(assigned[iteration % len(assigned)])
                 with lock:
                     counts[0 if good else 1] += 1
-                due += 1
+                iteration += 1
         finally:
             connection.close()
 
@@ -81,7 +91,11 @@ def main():
                 raise RuntimeError("parent did not start the measurement")
             started = time.monotonic()
             go.set()
-        stop.wait(seconds)
+        # Each worker owns a finite schedule. Join its final offered request
+        # even if host scheduling delivers that last slot just after the wall
+        # clock boundary; cancelling here silently drops offered work.
+        for worker in workers:
+            worker.join()
     finally:
         stop.set()
         go.set()

@@ -1,0 +1,116 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "candidate_commit": "5f5cafcc",
+  "baseline_binary_sha256": "acc9d77c063a79b34af089b861157b83c9e588c436c01ad818ec3dd187566f7a",
+  "candidate_binary_sha256": "dfb17f5fdb66be03b4a06610094241d5ef99240b05fca17b94ddbf53242b7349",
+  "driver_sha256": "3b47431d847201966afbe17f11c49a2c2911772b8a433e99457f92b354abbf81",
+  "client_sha256": "e0702e48c5b02c4f8dece1202e66c1de9b4f7935ccc9a5521f254c0f774b63fd",
+  "runner_sha256": "00424dee7576fcbe257fd1f962fc8445ddfbfef70065575613b71533e0448b4d",
+  "common_dependency_unit_differences": [],
+  "common_dependency_packages_checked": 284,
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "offered_writer_operations_per_second": 380,
+  "rate_qualification": "matched-http-qualified (all five old-runtime baselines); reassess headroom per retained leg",
+  "duration_seconds": 20,
+  "fixture_workflow_rows": 100000,
+  "trials": 1,
+  "cohort_acceptance": false,
+  "order": [
+    {
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-client-matrix-prechange",
+        "keiro/bench/results/inspection/http-client-matrix-smoke/baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "role": "candidate",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-client-matrix-evidence",
+        "keiro/bench/results/inspection/http-client-matrix-smoke/candidate-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/tmp/keiro-http-client-matrix-evidence",
+        "keiro/bench/results/inspection/http-client-matrix-smoke/candidate-idle",
+        "380",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "role": "candidate",
+      "mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-client-matrix-evidence",
+        "keiro/bench/results/inspection/http-client-matrix-smoke/candidate-active-32x1",
+        "380",
+        "1",
+        "active-32x1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "role": "candidate",
+      "mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-client-matrix-evidence",
+        "keiro/bench/results/inspection/http-client-matrix-smoke/candidate-active-1x256",
+        "380",
+        "1",
+        "active-1x256",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "role": "candidate",
+      "mode": "active-32x256",
+      "command": [
+        "/tmp/keiro-http-client-matrix-evidence",
+        "keiro/bench/results/inspection/http-client-matrix-smoke/candidate-active-32x256",
+        "380",
+        "1",
+        "active-32x256",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ]
+}

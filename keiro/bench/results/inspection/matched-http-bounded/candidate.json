@@ -1,0 +1,10 @@
+{
+  "parent_commit": "5f5cafcc",
+  "source_patch": "source.patch.gz",
+  "common_dependency_units": 285,
+  "common_dependency_unit_differences": [],
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "cohort_acceptance": false
+}

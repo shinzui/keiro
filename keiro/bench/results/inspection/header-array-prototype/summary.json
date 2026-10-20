@@ -1,0 +1,102 @@
+{
+  "point-conditional-unchanged": {
+    "bytes_per_operation": [
+      28304.8,
+      28333.36,
+      28326.64,
+      28100.16,
+      28240.16
+    ],
+    "median_bytes_per_operation": 28304.8
+  },
+  "point-read": {
+    "bytes_per_operation": [
+      35426.72,
+      35464.64,
+      35431.2,
+      35383.2,
+      35253.2
+    ],
+    "median_bytes_per_operation": 35426.72
+  },
+  "point-session": {
+    "bytes_per_operation": [
+      27643.52,
+      27586.72,
+      27439.76,
+      27565.76,
+      27557.68
+    ],
+    "median_bytes_per_operation": 27565.76
+  },
+  "schema-verification": {
+    "bytes_per_operation": [
+      11587.92,
+      10459.6,
+      11453.04,
+      11830.88,
+      10316.64
+    ],
+    "median_bytes_per_operation": 11453.04
+  },
+  "tcp-http-conditional-header": {
+    "bytes_per_operation": [
+      61912.128,
+      62123.76,
+      62051.504,
+      60368.544,
+      61938.192
+    ],
+    "median_bytes_per_operation": 61938.192
+  },
+  "tcp-http-header": {
+    "bytes_per_operation": [
+      100170.84,
+      102048.776,
+      101885.904,
+      102071.848,
+      99655.424
+    ],
+    "median_bytes_per_operation": 101885.904
+  },
+  "tcp-http-no-database": {
+    "bytes_per_operation": [
+      51960.272,
+      52191.32,
+      52096.648,
+      52098.08,
+      52012.176
+    ],
+    "median_bytes_per_operation": 52096.648
+  },
+  "tcp-http-no-schema": {
+    "bytes_per_operation": [
+      89464.264,
+      89677.72,
+      89603.648,
+      89780.712,
+      89996.584
+    ],
+    "median_bytes_per_operation": 89677.72
+  },
+  "tcp-http-static-json-no-database": {
+    "bytes_per_operation": [
+      34794.072,
+      35164.288,
+      34838.64,
+      35028.488,
+      35009.688
+    ],
+    "median_bytes_per_operation": 35009.688
+  },
+  "tcp-http-static-json-with-schema": {
+    "bytes_per_operation": [
+      47268.552,
+      47592.224,
+      47535.056,
+      47305.304,
+      45682.352
+    ],
+    "median_bytes_per_operation": 47305.304
+  }
+}

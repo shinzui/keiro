@@ -15,6 +15,7 @@ module Keiro.Ops.Workflow
     isMutation,
     runCommand,
     runCommandWithResume,
+    headerOutcome,
   )
 where
 
@@ -312,9 +313,7 @@ runCommandWithResume resumeHook env = \case
 runInspection :: OpsEnv -> InspectionCommand -> IO OpsOutcome
 runInspection env = \case
   InspectList query -> page (Inspection.listWorkflowInstancesPage query)
-  InspectHeader ref -> runAction env (Instance.lookupInstance (refName ref) (refId ref)) $ \case
-    Nothing -> Failed (workflowLabel ref <> " was not found")
-    Just row -> Succeeded (jsonResult (Inspection.instanceToJson row))
+  InspectHeader ref -> runAction env (Instance.lookupInstance (refName ref) (refId ref)) (headerOutcome ref)
   InspectJournal ref query -> page (Inspection.readWorkflowJournalPage (refName ref) (refId ref) query)
   InspectSteps ref query -> page (Inspection.loadStepIndexPage (refName ref) (refId ref) query)
   InspectChildren ref query -> page (Inspection.listWorkflowChildrenPage (refName ref) (refId ref) query)
@@ -323,6 +322,14 @@ runInspection env = \case
     page :: (Aeson.ToJSON a) => Eff '[Store, Error StoreError, IOE] (Either Inspection.InspectionError a) -> IO OpsOutcome
     page action = runAction env action (either inspectionFailure (Succeeded . jsonResult . Aeson.toJSON))
     jsonResult value = OpsResult ["result"] [[jsonText value]] value
+
+-- | Canonical CLI and HTTP outcome for a freshly observed header.
+headerOutcome :: WorkflowRef -> Maybe Instance.WorkflowInstanceRow -> OpsOutcome
+headerOutcome ref = \case
+  Nothing -> Failed (workflowLabel ref <> " was not found")
+  Just row ->
+    let value = Inspection.instanceToJson row
+     in Succeeded (OpsResult ["result"] [[jsonText value]] value)
 
 inspectionFailure :: Inspection.InspectionError -> OpsOutcome
 inspectionFailure err = uncurry InspectionFailed (inspectionError err)

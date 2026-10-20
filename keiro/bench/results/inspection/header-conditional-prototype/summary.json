@@ -1,0 +1,102 @@
+{
+  "point-conditional-unchanged": {
+    "bytes_per_operation": [
+      19766.24,
+      19785.84,
+      19716.4,
+      19552.24,
+      19690.56
+    ],
+    "median_bytes_per_operation": 19716.4
+  },
+  "point-read": {
+    "bytes_per_operation": [
+      35402.0,
+      35426.72,
+      35336.72,
+      35342.4,
+      35253.36
+    ],
+    "median_bytes_per_operation": 35342.4
+  },
+  "point-session": {
+    "bytes_per_operation": [
+      27618.08,
+      27623.12,
+      27399.44,
+      27564.32,
+      27559.92
+    ],
+    "median_bytes_per_operation": 27564.32
+  },
+  "schema-verification": {
+    "bytes_per_operation": [
+      11965.92,
+      10508.88,
+      11921.52,
+      11941.84,
+      10316.64
+    ],
+    "median_bytes_per_operation": 11921.52
+  },
+  "tcp-http-conditional-header": {
+    "bytes_per_operation": [
+      53168.76,
+      53145.56,
+      53298.512,
+      51769.752,
+      53228.792
+    ],
+    "median_bytes_per_operation": 53168.76
+  },
+  "tcp-http-header": {
+    "bytes_per_operation": [
+      101431.016,
+      101918.912,
+      101553.824,
+      102027.728,
+      99641.088
+    ],
+    "median_bytes_per_operation": 101553.824
+  },
+  "tcp-http-no-database": {
+    "bytes_per_operation": [
+      51979.024,
+      52215.032,
+      52133.04,
+      52141.416,
+      52033.24
+    ],
+    "median_bytes_per_operation": 52133.04
+  },
+  "tcp-http-no-schema": {
+    "bytes_per_operation": [
+      89449.288,
+      89694.216,
+      89614.064,
+      89769.768,
+      89926.44
+    ],
+    "median_bytes_per_operation": 89694.216
+  },
+  "tcp-http-static-json-no-database": {
+    "bytes_per_operation": [
+      34789.992,
+      35196.752,
+      34857.352,
+      35047.064,
+      35014.288
+    ],
+    "median_bytes_per_operation": 35014.288
+  },
+  "tcp-http-static-json-with-schema": {
+    "bytes_per_operation": [
+      47406.64,
+      47508.424,
+      47268.624,
+      47249.856,
+      45752.84
+    ],
+    "median_bytes_per_operation": 47268.624
+  }
+}

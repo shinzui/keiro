@@ -64,6 +64,7 @@ library
     Keiro.Ops.Stream
     Keiro.Ops.Timer
     Keiro.Ops.Workflow
+    Keiro.Ops.WorkflowHeaderCache
 
   build-depends:
     aeson >=2.2.2 && <2.3,
@@ -73,6 +74,7 @@ library
     effectful >=2.6 && <2.8,
     effectful-core >=2.6 && <2.7 || >=2.7.1.1 && <2.8,
     hasql >=1.10 && <1.11,
+    hasql-pool >=1.4 && <1.5,
     keiro ^>=0.21.0.0,
     keiro-migrations ^>=0.21.0.0,
     keiro-pgmq ^>=0.21.0.0,

@@ -2,7 +2,7 @@
 type: Runbook
 title: Serve Keiro Ops Over HTTP
 description: Mount bounded HTTP inspection and explicitly confirmed operator actions using the supported Keiro command tree.
-timestamp: 2026-10-20T22:01:39Z
+timestamp: 2026-10-20T23:50:22Z
 docId: DOC-30
 tags: [keiro, operations, http, inspection]
 generated:
@@ -66,6 +66,12 @@ inspect state before deciding whether to retry it. A result that exceeds the cap
 returns an explicit error; it is never silently truncated. Large compatibility
 reads such as replay audit still consume a slot and obey the deadline. Resource
 limits do not imply that a SQL LIMIT bounds database scan work.
+
+Repeated header reads may reuse their JSON presentation after checking every
+current header field in PostgreSQL. The mount keeps at most 32 presentations
+and 1 MiB of charged retained data, with no background refresh. Edits, deletion,
+oversized results and live schema changes are still checked on the next request.
+Other reads retain their own observation clocks and normal execution paths.
 
 ## Request mapping and confirmation
 

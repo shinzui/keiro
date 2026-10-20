@@ -11,11 +11,13 @@ module Keiro.Ops
     validateCommand,
     isMutation,
     runCommand,
+    runCommandWithHeaderCache,
     runOpsInvocation,
   )
 where
 
 import Control.Exception (SomeException, displayException, fromException, try)
+import Data.ByteString (ByteString)
 import Data.Foldable (traverse_)
 import Data.Maybe (isJust)
 import Data.Text qualified as Text
@@ -36,6 +38,7 @@ import Keiro.Ops.Snapshot qualified as Snapshot
 import Keiro.Ops.Stream qualified as Stream
 import Keiro.Ops.Timer qualified as Timer
 import Keiro.Ops.Workflow qualified as Workflow
+import Keiro.Ops.WorkflowHeaderCache (WorkflowHeaderCache, runHeaderCached)
 import Kiroku.Store.Connection (defaultConnectionSettings, withStore)
 import Options.Applicative
 import System.Exit qualified as Exit
@@ -192,6 +195,15 @@ isMutation = \case
   Stream streamCommand -> Stream.isMutation streamCommand
   ReplayAudit _ -> False
   Rebuild rebuildCommand -> Rebuild.isMutation rebuildCommand
+
+-- | Reuse only pure header presentation after an exact fresh database check.
+-- The optional bytes encode this outcome's successful read result. Other
+-- commands use the ordinary authoritative runner without a cache lookup.
+runCommandWithHeaderCache :: WorkflowHeaderCache -> AppHooks -> OpsEnv -> Command -> IO (OpsOutcome, Maybe ByteString)
+runCommandWithHeaderCache cache _ env (Workflow (Workflow.Inspect (Workflow.InspectHeader ref))) = runHeaderCached cache env ref
+runCommandWithHeaderCache _ hooks env command = do
+  outcome <- runCommand hooks env command
+  pure (outcome, Nothing)
 
 -- | Execute a parsed command after schema verification. Front ends must use
 -- JSON mode and enable force only after explicit mutation confirmation.

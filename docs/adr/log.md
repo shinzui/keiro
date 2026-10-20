@@ -1,6 +1,8 @@
 # Bundle Update Log
 
 ## 2026-10-20
+* **Update**: Bound header presentation reuse while retaining exact fresh row checks, live schema policy and unchanged OpsResult and mutation protocols.
+* **Update**: Record exact bounded header-image sessions, identity checks and timestamp parity for pure presentation reuse.
 * **Update**: ADR-9 and ADR-28 record line-safe catalog fingerprints, guarded workflow key indexes, bounded exceptional reads, and isolated demo verification.
 * **Update**: Bound workflow page continuations by the shared cursor decoder limit in ADR-28.
 * **Update**: ADR-53 records live server-side schema comparison, shared prepared values, bounded pure parsing, and timer-manager deadlines without caching live observations.

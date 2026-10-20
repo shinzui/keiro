@@ -420,6 +420,15 @@ in  Schema.Project::{
               , versionConstraint = Some ">=1.10 && <1.11"
               }
           , Schema.Dependency.WithAugmentation
+              { name = "hasql/hasql:hasql-pool"
+              , extraDocs = [] : List Schema.DocRef.Type
+              , localPathOverride = None Text
+              , kind = Some Schema.DependencyKind.ThirdParty
+              , source = Some Schema.DependencySource.Hackage
+              , scope = Some Schema.DependencyScope.Regular
+              , versionConstraint = Some ">=1.4 && <1.5"
+              }
+          , Schema.Dependency.WithAugmentation
               { name = "hasql/hasql:hasql-transaction"
               , extraDocs = [] : List Schema.DocRef.Type
               , localPathOverride = None Text

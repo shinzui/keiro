@@ -1,0 +1,26 @@
+{
+  "parent_commit": "5f5cafcc",
+  "source_patch": "source.patch.gz",
+  "source_sha256": {
+    "keiro/src/Keiro/Workflow/Instance.hs": "a08638e0c6bf28753e795e9a5428bae58631995403c87345e12ff6ea2a870dd9",
+    "keiro-ops/keiro-ops.cabal": "d420e346d381cda3376b34206ceace2c29712274d84dbec024a37dda5a6328f5",
+    "keiro-ops/src/Keiro/Ops.hs": "b7c4ee3f35a1b0fa0ad0e1866ed31c8b0fb04cf3491038ac46f6f28c5c4865f3",
+    "keiro-ops/src/Keiro/Ops/Workflow.hs": "474215154424d8e41de8d4441618a46b4a27401931bc4cf31d899e1ef4eb973a",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "17373701e8ed68c588423281f434af6debb4b55184b315ccda1e76f40b0997fc",
+    "keiro-ops/src/Keiro/Ops/WorkflowHeaderCache.hs": "d21bb50274fba47fe48866494c5370e447e2c15d520973b561284daa62084950"
+  },
+  "driver_sha256": "92a69dba1eb8b3397c0b0199631737322cfa5f89a045a77874811f0c68c2b9a1",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "trials": 5,
+  "api_iterations": 100,
+  "tcp_iterations": 1000,
+  "cohort_acceptance": false,
+  "scope": "production default HTTP application with exact conditional header checks, bounded 32-entry/1-MiB charged presentation cache, fresh schema verification and unmodified canonical OpsResult; external sequential client",
+  "binary_sha256": "92b031c5824dd339cfc5ec616e44e01a87106470c37a4abd26c118f4a9d32616"
+}

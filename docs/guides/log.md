@@ -1,6 +1,7 @@
 # Keiro Guides Log
 
 ## 2026-10-20
+* **Update**: Document header presentation limits and fresh observation/schema checks on repeated reads.
 * **Update**: Document explicit size failures for workflow continuation and exceptional-key work.
 * **Addition**: Document bounded HTTP operations and dedicated inspection pools.
 

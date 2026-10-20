@@ -1,0 +1,15 @@
+{"mode":"pooled","rate":200,"seconds":60,"settings":{"autovacuum":"on","fsync":"on","full_page_writes":"on","server_version":"18.6","synchronous_commit":"on"}}
+{"allocated_bytes":30164352,"large_object_bytes":59136,"live_bytes":150240,"operations":0,"phase":"initial"}
+{"allocated_bytes":41399192,"large_object_bytes":95992,"live_bytes":274512,"operations":1000,"phase":"running"}
+{"allocated_bytes":52857464,"large_object_bytes":128760,"live_bytes":419536,"operations":2000,"phase":"running"}
+{"allocated_bytes":61925656,"large_object_bytes":128760,"live_bytes":417736,"operations":3000,"phase":"running"}
+{"allocated_bytes":71214024,"large_object_bytes":132832,"live_bytes":411200,"operations":4000,"phase":"running"}
+{"allocated_bytes":80735272,"large_object_bytes":132832,"live_bytes":421232,"operations":5000,"phase":"running"}
+{"allocated_bytes":90175536,"large_object_bytes":132832,"live_bytes":422864,"operations":6000,"phase":"running"}
+{"allocated_bytes":99541416,"large_object_bytes":165600,"live_bytes":453896,"operations":7000,"phase":"running"}
+{"allocated_bytes":108930816,"large_object_bytes":165600,"live_bytes":454616,"operations":8000,"phase":"running"}
+{"allocated_bytes":118345376,"large_object_bytes":165600,"live_bytes":453896,"operations":9000,"phase":"running"}
+{"allocated_bytes":127793832,"large_object_bytes":165600,"live_bytes":438272,"operations":10000,"phase":"running"}
+{"allocated_bytes":137366336,"large_object_bytes":165600,"live_bytes":454904,"operations":11000,"phase":"running"}
+{"allocated_bytes":147029312,"large_object_bytes":165600,"live_bytes":454688,"operations":12000,"phase":"running"}
+{"allocated_bytes":149053856,"large_object_bytes":165600,"live_bytes":212832,"operations":12000,"phase":"drained"}

@@ -9,6 +9,8 @@
 
 ### Performance
 
+- Reuse at most 32 header presentations / 1 MiB charged data after exact current-row checks, retaining live schema verification and host response caps.
+
 - Reuse bounded pure read parsing and the RTS deadline manager. Retain a fresh
   live schema check for every admitted operation and hold admission through
   response delivery.

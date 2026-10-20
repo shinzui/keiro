@@ -13,6 +13,7 @@ import Data.Time (UTCTime)
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE)
 import Effectful.Error.Static (Error)
+import Hasql.Pool qualified as Pool
 import Keiro.Inspection.Cursor
 import Keiro.Test.Postgres
 import Keiro.Workflow (appendJournalEntry, continueAsNew, runWorkflow)
@@ -23,7 +24,7 @@ import Keiro.Workflow.Instance qualified as Instance
 import Keiro.Workflow.Schema qualified as Schema
 import Keiro.Workflow.Types
 import Kiroku.Store.Append (appendToStream)
-import Kiroku.Store.Connection (KirokuStore)
+import Kiroku.Store.Connection (KirokuStore (..))
 import Kiroku.Store.Effect (Store, runStoreIO)
 import Kiroku.Store.Error (StoreError)
 import Kiroku.Store.Transaction (runTransaction)
@@ -44,6 +45,65 @@ spec fixture = describe "Keiro.Workflow.Inspection" $ do
       forM_ ["not-a-cursor", "", Text.replicate 4097 "a", "===="] $ \bad ->
         (decodeCursor "wf-key" (InspectionCursor bad) :: Either CursorError Value) `shouldSatisfy` (\case Left (MalformedCursor _) -> True; _ -> False)
   around (withFreshStore fixture) $ do
+    it "rechecks every header field against its exact image, including old and far-future dates" $ \store -> do
+      let fields =
+            [ ("workflow_id", "'two'"),
+              ("workflow_name", "'other'"),
+              ("generation", "1"),
+              ("status", "'failed'"),
+              ("attempts", "0"),
+              ("last_error", "'revised'"),
+              ("next_attempt_at", "NULL"),
+              ("wake_after", "NULL"),
+              ("leased_by", "NULL"),
+              ("lease_expires_at", "NULL"),
+              ("created_at", "'0002-01-01 00:00:00 BC'"),
+              ("updated_at", "'294276-01-01 00:00:00.123456+00'"),
+              ("completed_at", "NULL"),
+              ("created_at", "'infinity'"),
+              ("updated_at", "'-infinity'"),
+              ("next_attempt_at", "'infinity'"),
+              ("wake_after", "'-infinity'"),
+              ("lease_expires_at", "'infinity'"),
+              ("completed_at", "'-infinity'")
+            ]
+          readHeader known name wid =
+            Pool.use store.pool (Instance.lookupInstanceConditionalSession 4096 known (WorkflowName name) (WorkflowId wid)) >>= either (fail . show) pure
+      forM_ fields $ \(field, value) -> do
+        sql store "DELETE FROM keiro.keiro_workflows; INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,attempts,last_error,next_attempt_at,wake_after,leased_by,lease_expires_at,created_at,updated_at,completed_at) VALUES ('one','header','running',2,'問題','1910-01-01 01:02:03.123456+00','2050-01-01+00','worker','2070-01-01+00','0001-01-01 00:00:00 BC','1970-01-01 00:00:00.123456+00','2026-01-01+00')"
+        initial <- readHeader Nothing "header" "one"
+        (key, original) <- case initial of
+          Just (Instance.HeaderChanged key row) -> pure (key, row)
+          other -> fail (show other)
+        shouldBe (Just original) =<< expectStore store (Instance.lookupInstance (WorkflowName "header") (WorkflowId "one"))
+        shouldReturn (readHeader (Just key) "header" "one") (Just Instance.HeaderUnchanged)
+        sql store ("UPDATE keiro.keiro_workflows SET " <> field <> "=" <> value)
+        let name = if field == "workflow_name" then "other" else "header"
+            wid = if field == "workflow_id" then "two" else "one"
+        changed <- readHeader (Just key) name wid
+        case changed of
+          Just (Instance.HeaderChanged next row) -> do
+            shouldBe (Just row) =<< expectStore store (Instance.lookupInstance (WorkflowName name) (WorkflowId wid))
+            shouldReturn (readHeader (Just next) name wid) (Just Instance.HeaderUnchanged)
+          other -> fail ("did not observe changed " <> Text.unpack field <> ": " <> show other)
+        shouldReturn (readHeader (Just key) "absent" "one") Nothing
+        sql store "DELETE FROM keiro.keiro_workflows"
+        shouldReturn (readHeader (Just key) name wid) Nothing
+    it "rejects header images before returning oversized text or escaped JSON" $ \store -> do
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status,last_error) VALUES ('one','header','running',repeat('x',5000))"
+      let readHeader = Pool.use store.pool (Instance.lookupInstanceConditionalSession 512 Nothing (WorkflowName "header") (WorkflowId "one"))
+      shouldReturn readHeader (Right (Just Instance.HeaderImageTooLarge))
+      sql store "UPDATE keiro.keiro_workflows SET last_error=repeat(chr(1),100)"
+      shouldReturn readHeader (Right (Just Instance.HeaderImageTooLarge))
+    it "reads fresh, owner-scoped headers through a reused session action" $ \store -> do
+      sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('one','header','running')"
+      let readHeader = Pool.use store.pool (Instance.lookupInstanceSession (WorkflowName "header") (WorkflowId "one")) >>= either (fail . show) pure
+      initial <- readHeader
+      shouldBe initial =<< expectStore store (Instance.lookupInstance (WorkflowName "header") (WorkflowId "one"))
+      sql store "UPDATE keiro.keiro_workflows SET generation=1,status='failed',last_error='new' WHERE workflow_id='one' AND workflow_name='header'"
+      refreshed <- readHeader
+      shouldBe (fmap (\row -> (row.generation, row.status, row.lastError)) refreshed) (Just (1, Instance.WfFailed, Just "new"))
+      shouldReturn (Pool.use store.pool (Instance.lookupInstanceSession (WorkflowName "other") (WorkflowId "one"))) (Right Nothing)
     it "rejects an outgoing cursor that clients could not resume within the cursor limit" $ \store -> do
       sql store "INSERT INTO keiro.keiro_workflows(workflow_id,workflow_name,status) VALUES ('a',repeat('界',2000),'running'),('b',repeat('界',2000),'running')"
       result <- expectStore store (listWorkflowInstancesPage defaultWorkflowListQuery {pageSize = 1})

@@ -1,0 +1,36 @@
+{
+  "1-direct.jsonl": {
+    "running_60_to_180_seconds": {
+      "samples": 25,
+      "min_live_bytes": 245808,
+      "max_live_bytes": 246024,
+      "first_live_bytes": 245808,
+      "last_live_bytes": 245840,
+      "fitted_bytes_per_query": -0.0013292307692307692
+    },
+    "drained": {
+      "allocated_bytes": 364306352,
+      "large_object_bytes": 100368,
+      "live_bytes": 149512,
+      "operations": 36000,
+      "phase": "drained"
+    }
+  },
+  "2-pooled.jsonl": {
+    "running_60_to_180_seconds": {
+      "samples": 25,
+      "min_live_bytes": 449472,
+      "max_live_bytes": 455424,
+      "first_live_bytes": 454728,
+      "last_live_bytes": 454632,
+      "fitted_bytes_per_query": -0.02518153846153846
+    },
+    "drained": {
+      "allocated_bytes": 375427936,
+      "large_object_bytes": 165616,
+      "live_bytes": 212968,
+      "operations": 36000,
+      "phase": "drained"
+    }
+  }
+}

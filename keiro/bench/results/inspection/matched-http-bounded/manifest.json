@@ -1,0 +1,152 @@
+{
+  "baseline_commit": "3bf3ac229f21d6c95179ce49b5e8f6323322f99b",
+  "offered_writer_operations_per_second": 380,
+  "selection_rule": "75% of minimum of five pre-change saturation throughputs rounded down to nearest ten, then fixed 20% reductions until paced headroom check passes",
+  "initial_proposal": 480,
+  "paced_qualifications": [
+    {
+      "offered": 380,
+      "reused_from": "keiro/bench/results/inspection/matched-http-qualified",
+      "previous_baselines_checked": 5
+    }
+  ],
+  "baseline_binary_sha256": "e53ba7ca8c4b1dfa3c0497fa53b7051dc05fa3b5dcc0754229e66684c87735c2",
+  "candidate_binary_sha256": "bf1fe835297297081047f3e4cd041f3d55758c4a9a88aa2c506f9bc7a58b51d1",
+  "driver_sha256": "f3520276c8e051c96705d8c6e16b8ad59eb8a92e97ca00a45cf0cd19fc5ef437",
+  "client_sha256": "e0702e48c5b02c4f8dece1202e66c1de9b4f7935ccc9a5521f254c0f774b63fd",
+  "runner_sha256": "fc214a2a8cede5663c2bd8ed6a2685288f4948d976d31e4ef9283653aaf8f8a6",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "duration_seconds": 20,
+  "fixture_workflow_rows": 100000,
+  "repetitions": 5,
+  "candidate_modes": [
+    "idle",
+    "active-1",
+    "active-32",
+    "active-32x1",
+    "active-1x256",
+    "active-32x256"
+  ],
+  "allocation_scope": "runtime process; HTTP clients are external Python processes",
+  "active_client_warmup": "one successful header per view on a retained TCP connection, then parent-controlled measurement start",
+  "settle_seconds_after_warmup": 1,
+  "headroom_check": "baseline throughput at least 99% of offered rate and last/first tenth mean queue delay growth at most 20ms",
+  "order": [
+    {
+      "trial": 1,
+      "role": "baseline",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-bounded-prechange",
+        "keiro/bench/results/inspection/matched-http-bounded/1-baseline-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "unmounted",
+      "command": [
+        "/tmp/keiro-http-bounded-evidence",
+        "keiro/bench/results/inspection/matched-http-bounded/1-candidate-unmounted",
+        "380",
+        "1",
+        "unmounted",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "idle",
+      "command": [
+        "/tmp/keiro-http-bounded-evidence",
+        "keiro/bench/results/inspection/matched-http-bounded/1-candidate-idle",
+        "380",
+        "1",
+        "idle",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-1",
+      "command": [
+        "/tmp/keiro-http-bounded-evidence",
+        "keiro/bench/results/inspection/matched-http-bounded/1-candidate-active-1",
+        "380",
+        "1",
+        "active-1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-32",
+      "command": [
+        "/tmp/keiro-http-bounded-evidence",
+        "keiro/bench/results/inspection/matched-http-bounded/1-candidate-active-32",
+        "380",
+        "1",
+        "active-32",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-32x1",
+      "command": [
+        "/tmp/keiro-http-bounded-evidence",
+        "keiro/bench/results/inspection/matched-http-bounded/1-candidate-active-32x1",
+        "380",
+        "1",
+        "active-32x1",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "trial": 1,
+      "role": "candidate",
+      "mode": "active-1x256",
+      "command": [
+        "/tmp/keiro-http-bounded-evidence",
+        "keiro/bench/results/inspection/matched-http-bounded/1-candidate-active-1x256",
+        "380",
+        "1",
+        "active-1x256",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ],
+  "limitations": "workflow point headers only; not the full domain, large-value, slow-reader or retention matrix"
+}

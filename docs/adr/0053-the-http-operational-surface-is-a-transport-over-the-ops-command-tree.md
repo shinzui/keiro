@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: The HTTP operational surface is a transport over the ops command tree
 description: HTTP reuses the supported command grammar and handlers with bounded inspection work, schema agreement, and explicit mutation confirmation.
-timestamp: 2026-10-20T19:28:26Z
+timestamp: 2026-10-20T23:50:22Z
 docId: ADR-53
 status: Accepted
 date: 2026-10-20
@@ -25,7 +25,7 @@ that independently borrow another connection from the same pool.
 `keiro-ops-http` exports an IO constructor returning a bare WAI application,
 a convenience Warp runner, and a database-only executable. Existing packages
 acquire no web dependency. It parses requests through `commandParser`, classifies
-through `isMutation`, and calls `runCommand`. Mounted application hooks determine
+through `isMutation`, and calls the owning ops runner. Mounted application hooks determine
 which commands exist. No command data is reconstructed by transport SQL.
 
 Paths supply words and positional arguments; snake_case queries supply options.
@@ -74,9 +74,22 @@ or depend on unpublished code. Raw queue browsing remains owned by
 
 A mount shares its immutable parser grammar and retains at most 64 valid,
 read-only parsed commands under the request-byte cap. This reuses pure parsing
-only: observations, mutation parsing, schema agreement, registry visibility,
-and authorization are not cached. Generation rotation and schema changes
-therefore remain visible on the next request.
+only; mutation parsing, schema agreement, registry visibility and authorization
+are not cached. Generation rotation and schema changes remain visible on the
+next request.
+
+A mount may additionally reuse pure header presentation through the owning
+ops runner after an exact current-row comparison in PostgreSQL on every
+request. The mount retains at most 32 entries and 1 MiB of charged data,
+including lookup keys, full images, JSON, rendered cells and encoded bodies.
+Oversized valid responses can be served without retention. Replacements and
+evictions remove queue entries as well as map entries; failures, missing rows
+and oversized reads invalidate the corresponding presentation. There is no
+TTL or refresh task. Live schema checks, response headers, CORS and the final
+host byte cap remain fresh. The public OpsResult and mutation envelope stay
+unchanged; prepared bytes are paired with the exact successful read result by
+the owning runner. A fresh database comparison, rather than an invalidation
+hint, authorizes reuse.
 
 Routes are mount-relative and emit no absolute URLs. CORS uses exact allowed
 origins, is disabled by default, emits no credential header, and preserves

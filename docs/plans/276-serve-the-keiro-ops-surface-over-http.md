@@ -82,6 +82,13 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Progress
 
+2026-10-20: The bounded exact-header candidate passes the complete Nix
+`just verify`: 772 Keiro examples, 51 ops, 29 HTTP, 43 migration, 25 example
+application examples, coarse retention and the DSL/policy/documentation gates.
+Infinity values agree with the ordinary binary decoder. Required measured
+interference, strict retention and final release checks remain open.
+
+
 - [x] (2026-10-20) Performance revision: live comparison returns differences
   from PostgreSQL, prepared values remain shared, pure read parsing is bounded
   to 64 entries, and successful deadlines reuse the request thread. All 42
@@ -114,6 +121,61 @@ requested separately; see the Decision Log for how this plan relates to it.
 
 ## Surprises & Discoveries
 
+2026-10-20: The first bounded-candidate matched matrix stops at 5,119/5,120
+one-view / 256-client polls with zero HTTP errors; there is no five-run pass.
+Its allocator change is about +4.31%, while latency varies substantially.
+The client previously cancelled its last scheduled slot at the wall-clock
+boundary; it now joins its finite schedule instead. Nix protocol checks cover
+32 views / one client and one/32 views / 256 clients with exact counts. A new
+optional paired-control runner gives every mode an adjacent fresh baseline,
+reverses pair order on alternate trials and rejects mismatched RTS capacity
+qualifications. The candidate also corrects infinity timestamp parity before
+final measurements; all 16 query / 29 HTTP examples pass.
+
+The host reports 36 logical CPUs and 256 GiB RAM. An additional eight-capability,
+16-MiB-per-capability nursery profile will qualify its own baseline capacity and
+use the identical settings for all old/new legs. This is a separate deployment
+profile, not a pass attributed to the earlier N2 measurements. The full domain,
+large-value, slow-reader and strict retention gates remain required.
+
+
+2026-10-20: The expanded HTTP smoke at 380 writer operations/s completes
+all 640/5,120 requested polls without errors. One client over 32 views allocates
++1.43%; 256 clients over one/32 views allocate +11.55%/+11.54%. All legs have
+writer headroom, but this is one trial, not acceptance. Evidence lives in
+`keiro/bench/results/inspection/http-client-matrix-smoke/`. In-process and TCP
+attribution separate database reads, canonical presentation and transport.
+A point-session primitive saves about 8 KiB; a NOINLINE lookup statement
+experiment adds no useful reduction and is not selected.
+
+Two pooled and two direct 60-second probes in `pool-timer-attribution/` show a
+ten-second timer warmup and a shared 32 KiB large-object step near 35 seconds.
+The full 20–60-second fit remains positive in both controls and pooled legs;
+this establishes no strict retention pass. The 180-second follow-up keeps
+both controls level over seconds 60..180 (slightly negative fitted slopes),
+with no further buffer step; pooled heap drops after the timer drain.
+`pool-timer-long-attribution/` retains the source, runner, settings and samples.
+Domain-worker and active-inspection retention acceptance remains open.
+
+The five-trial exact conditional prototype halves header TCP allocation from
+about 101.6 kB to 53.2 kB while preserving a live schema check and full row-image
+comparison on every request. A single-array input experiment worsens this to
+61.9 kB and is rejected. Exact retained drivers, source patches and hashes live
+in `header-conditional-prototype/` and `header-array-prototype/` under the
+inspection evidence directory.
+
+The next candidate reuses the image's own identity fields to remove redundant
+parameter serialization and adds a mount-owned presentation cache, capped at
+32 entries / 1 MiB charged retained bytes. It caches canonical pure JSON and
+encoded bytes only after an exact current-row comparison; missing, oversized
+and failed reads evict. No TTL, transaction-id/hash identity, skipped live
+schema check or new background task is used. The public OpsResult stays
+unchanged; the owning runner pairs a successful result with its prepared bytes.
+All 16 owning-query examples and 29 HTTP examples pass, including exact-field/
+timestamp parity, churn bounds, oversized changes, deletion/recreation and warm
+schema drift. Matched allocation/interference evidence remains pending.
+No performance gate is claimed from the diagnostic prototype.
+
 2026-10-20: Full final-candidate Nix `just verify` passes after supplying the
 registered Mori socket: 769 Keiro examples, 26 HTTP, 51 ops, 43 migration,
 coarse retention, all DSL suites/proofs and strict repository/documentation
@@ -135,9 +197,10 @@ change or block the validation workload.
 aborts when the fifth pre-change baseline fails the declared headroom check.
 The fixed load remains 380/s. Trial four has unmounted and idle p95 spikes
 about 263 ms and 633 ms. All raw legs remain; there is no comparison summary
-or latency pass. A quiet window or exclusive benchmark environment is needed
-for a trustworthy repeat. The complete domain/large-value/slow-reader/retention
-matrix also remains open.
+or latency pass. The user subsequently confirmed that benchmarking should
+continue on this machine while other work runs. Extend matched controls here
+and assess measured uncertainty without requiring an exclusive environment.
+The complete domain/large-value/slow-reader/retention matrix also remains open.
 
 2026-10-20: Workflow producers can fail a required continuation whose stored
 key exceeds 4096 encoded bytes. The structured result-size failure now maps

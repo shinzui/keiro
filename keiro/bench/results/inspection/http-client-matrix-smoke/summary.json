@@ -1,0 +1,74 @@
+{
+  "baseline-unmounted": {
+    "poll_success": 0,
+    "poll_failure": 0,
+    "headroom_check": true,
+    "queue_growth_us": -194.63543684210526,
+    "changes_from_prechange": {
+      "allocated_bytes": 0.0,
+      "cpu_ns": 0.0,
+      "p95_us": 0.0,
+      "throughput": 0.0
+    }
+  },
+  "candidate-unmounted": {
+    "poll_success": 0,
+    "poll_failure": 0,
+    "headroom_check": true,
+    "queue_growth_us": -193.85972894736835,
+    "changes_from_prechange": {
+      "allocated_bytes": -0.000190341687847706,
+      "cpu_ns": -0.03229179653759151,
+      "p95_us": -0.013631351243945766,
+      "throughput": 3.29999076000842e-05
+    }
+  },
+  "candidate-idle": {
+    "poll_success": 0,
+    "poll_failure": 0,
+    "headroom_check": true,
+    "queue_growth_us": -187.35552631578946,
+    "changes_from_prechange": {
+      "allocated_bytes": -0.00013018629950622973,
+      "cpu_ns": -0.026874335987744136,
+      "p95_us": -0.012602674805572756,
+      "throughput": 2.544973659523997e-05
+    }
+  },
+  "candidate-active-32x1": {
+    "poll_success": 640,
+    "poll_failure": 0,
+    "headroom_check": true,
+    "queue_growth_us": -212.41189736842102,
+    "changes_from_prechange": {
+      "allocated_bytes": 0.014263983097781319,
+      "cpu_ns": -0.03313918007279493,
+      "p95_us": -0.03443134926928182,
+      "throughput": -0.0005591671278089017
+    }
+  },
+  "candidate-active-1x256": {
+    "poll_success": 5120,
+    "poll_failure": 0,
+    "headroom_check": true,
+    "queue_growth_us": -299.1607894736842,
+    "changes_from_prechange": {
+      "allocated_bytes": 0.1155487080816262,
+      "cpu_ns": 0.0008889422311708639,
+      "p95_us": -0.018941962778820987,
+      "throughput": -0.0007770678552997401
+    }
+  },
+  "candidate-active-32x256": {
+    "poll_success": 5120,
+    "poll_failure": 0,
+    "headroom_check": true,
+    "queue_growth_us": -1626.966860526316,
+    "changes_from_prechange": {
+      "allocated_bytes": 0.11541111633135559,
+      "cpu_ns": -0.0028335788055479094,
+      "p95_us": -0.011224729702461356,
+      "throughput": -0.0005953240528607795
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "candidate_commit": "5f5cafcc",
+  "binary_sha256": "ff5c2d5c05bfc8f547d92e9add6db99a40a2c2ddcd09cda9d66e33c67b905464",
+  "driver_sha256": "2f10b5563c2ac2f8cc3bf508a8992cda09198071b60eac64ac038c983c3c00b9",
+  "runner_sha256": "916ca9b5bbdcb917e872a9909f5f9702fa42a0a5263c7c12a50077358775d4ea",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "hasql_pool_version": "1.4.2.3",
+  "default_acquisition_timeout_seconds": 10,
+  "duration_seconds": 180,
+  "drain_seconds": 12,
+  "queries_per_second": 200,
+  "sample_interval_seconds": 5,
+  "cohort_acceptance": false,
+  "order": [
+    {
+      "mode": "direct",
+      "command": [
+        "/tmp/keiro-pool-retention-evidence",
+        "keiro/bench/results/inspection/pool-timer-long-attribution/1-direct.jsonl",
+        "direct",
+        "180",
+        "200",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    },
+    {
+      "mode": "pooled",
+      "command": [
+        "/tmp/keiro-pool-retention-evidence",
+        "keiro/bench/results/inspection/pool-timer-long-attribution/2-pooled.jsonl",
+        "pooled",
+        "180",
+        "200",
+        "+RTS",
+        "-N2",
+        "-T",
+        "-RTS"
+      ]
+    }
+  ]
+}

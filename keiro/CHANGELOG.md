@@ -21,6 +21,8 @@ the [Haskell Package Versioning Policy](https://pvp.haskell.org/).
 
 ### New Features
 
+- Exact, bounded conditional workflow header sessions and reusable single-SELECT point reads.
+
 - Bounded workflow inspection pages, canonical status classes and JSON, pure validation, and opaque cursors.
 
 ## 0.21.0.0 — 2026-10-14

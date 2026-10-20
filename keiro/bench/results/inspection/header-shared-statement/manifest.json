@@ -1,0 +1,18 @@
+{
+  "parent_commit": "5f5cafcc",
+  "source_patch": "source.patch.gz",
+  "instance_source_sha256": "360e208ac4e1ffeebe8e0ad78fbd9c9a02375209a2b88db894dd4b3e829e99de",
+  "driver_sha256": "a289191f7ec57a8b03dc0504de3d1a20f5608779369c793922c1986d20ad00db",
+  "binary_sha256": "ffa9327942bc54583971fea0fe2c98f61a146abcdb3080e89bb783f8230b7d28",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "cohort_acceptance": false,
+  "trials": 5,
+  "iterations": 100,
+  "scope": "NOINLINE point statement experiment; no meaningful allocation improvement observed"
+}

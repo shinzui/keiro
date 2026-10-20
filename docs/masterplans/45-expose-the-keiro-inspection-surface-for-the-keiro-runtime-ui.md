@@ -430,8 +430,8 @@ consequences paragraph naming the shipped package and the release that carried i
 EP-1 (276) and EP-2 (275) are In Progress; the other five children remain Not
 Started. HTTP transport, bounded workflow reads, canonical rendering and typed
 failures are implemented. Focused workflow/ops/HTTP/migration checks pass
-13/51/26/43 examples. The final-candidate Nix `just verify` passes, including
-769 Keiro examples, all DSL proofs, coarse retention, strict documentation/
+16/51/29/43 examples. The bounded header candidate passes Nix `just verify`, including
+772 Keiro examples, all DSL proofs, coarse retention, strict documentation/
 terminology checks and 43 migration examples. No whole-child prerequisite is waived.
 
 EP-2 now preserves the existing large-key writer domain with guarded indexes
@@ -445,10 +445,21 @@ compound indexes fail write-cost and key-domain checks.
 The pre-implementation baseline is
 `3bf3ac229f21d6c95179ce49b5e8f6323322f99b`. A five-run narrow HTTP comparison has
 medians within 5% but inconclusive latency; its warmed repeat aborts when the
-fifth baseline lacks headroom, preserving every leg. View/client matrix
-expansion and timed pool-retention attribution are under way. Strict matched
+fifth baseline lacks headroom, preserving every leg. The expanded smoke completes all polls but measures about +11.5% allocation
+with 256 HTTP clients, requiring further optimization. Timed pool attribution
+shows temporary timer roots plus a shared 32 KiB buffer step; it is not strict
+retention acceptance. A bounded exact current-row presentation candidate passes
+16 owning-query / 29 HTTP examples without a TTL or skipped schema check;
+its allocation/interference evidence remains pending. The 180-second pooled/
+direct follow-up has slightly negative fits over seconds 60..180, supporting
+finite timer/buffer warm-up without establishing domain retention acceptance.
+The first bounded N2 matrix aborts at a missing final offered poll; it is retained,
+and the client now joins its finite schedule. A separate N8/A16m profile will
+qualify fresh capacity and use adjacent old/new controls for every mode. Strict matched
 interference and persistent-retention acceptance remain open. Publication,
-consumer proofs and later child implementations remain required.
+consumer proofs and later child implementations remain required. The user
+confirmed that benchmarking should continue on this machine while other work
+runs; matched controls and measured uncertainty remain the acceptance basis.
 
 ## Surprises & Discoveries
 

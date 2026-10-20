@@ -1,0 +1,23 @@
+{
+  "parent_commit": "5f5cafcc",
+  "source_patch": "source.patch.gz",
+  "source_sha256": {
+    "keiro/src/Keiro/Workflow/Instance.hs": "0bc84edd9dc91cce36f6c550e08f8f4902d045c03e14772c0bde28cb11a82c0c",
+    "keiro-ops/src/Keiro/Ops/Render.hs": "476f00d75c666b9ec66d7187f1eb51add3cfcb1fe80221bb96744665c67b1274",
+    "keiro-ops-http/src/Keiro/Ops/Http/Application.hs": "3dc3e8e9ea0d1762728954a4181da87d75bc7beda9bf65256effe4e22f662073"
+  },
+  "driver_sha256": "c83a0520e1f7d022dd161d7a9d3d1c41f9d104fbf5e4169cb0b19b5010d70cf5",
+  "binary_sha256": "677ec7b033360a86fa67221e762f315ca47e9704eed96f39630bae5c21a99524",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "cohort_acceptance": false,
+  "trials": 5,
+  "api_iterations": 100,
+  "tcp_iterations": 1000,
+  "scope": "external sequential TCP client; exact conditional row image with one typed text-array input parameter; bounded canonical value/bytes reused by single-entry diagnostic seam; schema verification on every request"
+}

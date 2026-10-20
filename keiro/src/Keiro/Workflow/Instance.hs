@@ -19,6 +19,11 @@ module Keiro.Workflow.Instance
     upsertInstanceTx,
     markInstanceSuspendedAwaiting,
     lookupInstance,
+    lookupInstanceSession,
+    WorkflowHeaderKey,
+    workflowHeaderKeyBytes,
+    WorkflowHeaderObservation (..),
+    lookupInstanceConditionalSession,
     listWorkflowInstances,
     inspectionInstanceRows,
     cancelWorkflow,
@@ -35,6 +40,11 @@ module Keiro.Workflow.Instance
 where
 
 import Contravariant.Extras (contrazip2, contrazip3, contrazip4, contrazip5)
+import Data.Aeson ((.:))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Types (parseEither)
+import Data.ByteString qualified as ByteString
+import Data.ByteString.Lazy qualified as LazyByteString
 import Data.Functor.Compose (Compose (..))
 import Data.Functor.Contravariant ((>$<))
 import Data.Int (Int32)
@@ -43,13 +53,14 @@ import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text qualified as Text
-import Data.Time (NominalDiffTime, addUTCTime)
+import Data.Time (NominalDiffTime, UTCTime (..), addDays, addUTCTime, fromGregorian)
 import Data.UUID (UUID)
 import Data.UUID qualified as UUID
 import Effectful (Eff, IOE, (:>))
 import Effectful.Exception (throwIO)
 import Hasql.Decoders qualified as D
 import Hasql.Encoders qualified as E
+import Hasql.Session qualified as Session
 import Hasql.Statement (Statement, preparable)
 import Keiro.Prelude
 import Keiro.Workflow.Awakeable.Schema
@@ -220,6 +231,47 @@ awakeableUuidFromStep stepName =
 lookupInstance :: (Store :> es) => WorkflowName -> WorkflowId -> Eff es (Maybe WorkflowInstanceRow)
 lookupInstance (WorkflowName name) (WorkflowId wid) =
   runTransaction (Tx.statement (wid, name) lookupInstanceStmt)
+
+-- | Read one header in the caller's session. A single SELECT already observes
+-- one database snapshot; inspection hosts need no transaction-control round
+-- trips around it. This reuses the ordinary lookup's statement and decoder.
+lookupInstanceSession :: WorkflowName -> WorkflowId -> Session.Session (Maybe WorkflowInstanceRow)
+lookupInstanceSession (WorkflowName name) (WorkflowId wid) =
+  Session.statement (wid, name) lookupInstanceStmt
+
+-- | An exact image of all header fields, produced only by the owning query.
+-- It is a representation key, never a timestamp, hash or transaction id.
+data WorkflowHeaderKey = WorkflowHeaderKey !ByteString.ByteString !Text !Text
+  deriving stock (Eq)
+
+instance Show WorkflowHeaderKey where
+  show _ = "<workflow header key>"
+
+workflowHeaderKeyBytes :: WorkflowHeaderKey -> Int
+workflowHeaderKeyBytes (WorkflowHeaderKey bytes _ _) = ByteString.length bytes
+
+data WorkflowHeaderObservation
+  = HeaderUnchanged
+  | HeaderChanged !WorkflowHeaderKey !WorkflowInstanceRow
+  | HeaderImageTooLarge
+  deriving stock (Eq, Show)
+
+-- | Recheck the complete current row in one SELECT. An equal image permits
+-- reuse of its pure rendering; every request still observes the database.
+-- The byte limit bounds the returned image before client decoding. Missing
+-- rows, changed rows and oversized images remain distinct.
+lookupInstanceConditionalSession :: Int -> Maybe WorkflowHeaderKey -> WorkflowName -> WorkflowId -> Session.Session (Maybe WorkflowHeaderObservation)
+lookupInstanceConditionalSession limit known (WorkflowName name) (WorkflowId wid) =
+  Session.statement (image, fromIntegral limit) lookupInstanceConditionalStmt
+  where
+    -- A complete prior image already contains the exact lookup identity. Reuse
+    -- its encoded bytes, avoiding separate serialization of both key strings.
+    -- A foreign identity starts with an incomplete image and cannot compare
+    -- equal to the complete database header.
+    image = case known of
+      Just (WorkflowHeaderKey bytes previousName previousId)
+        | name == previousName && wid == previousId -> bytes
+      _ -> LazyByteString.toStrict (Aeson.encode (Aeson.object ["workflow_name" Aeson..= name, "workflow_id" Aeson..= wid]))
 
 -- | Enumerate workflow instance summaries using stable keyset pagination.
 --
@@ -471,6 +523,95 @@ lookupInstanceStmt =
         (E.param (E.nonNullable E.text))
     )
     (D.rowMaybe instanceRowDecoder)
+
+lookupInstanceConditionalStmt :: Statement (ByteString.ByteString, Int64) (Maybe WorkflowHeaderObservation)
+{-# NOINLINE lookupInstanceConditionalStmt #-}
+lookupInstanceConditionalStmt =
+  preparable
+    """
+    WITH header AS MATERIALIZED (
+      SELECT workflow_id, workflow_name, generation, status, attempts,
+             last_error,
+             CASE WHEN next_attempt_at IS NOT NULL THEN CASE WHEN isfinite(next_attempt_at) THEN jsonb_build_array(
+               (next_attempt_at AT TIME ZONE 'UTC')::date - DATE '2000-01-01',
+               extract(epoch FROM (next_attempt_at AT TIME ZONE 'UTC')::time)) ELSE to_jsonb(next_attempt_at::text) END END AS next_attempt_at,
+             CASE WHEN wake_after IS NOT NULL THEN CASE WHEN isfinite(wake_after) THEN jsonb_build_array(
+               (wake_after AT TIME ZONE 'UTC')::date - DATE '2000-01-01',
+               extract(epoch FROM (wake_after AT TIME ZONE 'UTC')::time)) ELSE to_jsonb(wake_after::text) END END AS wake_after,
+             leased_by,
+             CASE WHEN lease_expires_at IS NOT NULL THEN CASE WHEN isfinite(lease_expires_at) THEN jsonb_build_array(
+               (lease_expires_at AT TIME ZONE 'UTC')::date - DATE '2000-01-01',
+               extract(epoch FROM (lease_expires_at AT TIME ZONE 'UTC')::time)) ELSE to_jsonb(lease_expires_at::text) END END AS lease_expires_at,
+             CASE WHEN isfinite(created_at) THEN jsonb_build_array((created_at AT TIME ZONE 'UTC')::date - DATE '2000-01-01',
+               extract(epoch FROM (created_at AT TIME ZONE 'UTC')::time)) ELSE to_jsonb(created_at::text) END AS created_at,
+             CASE WHEN isfinite(updated_at) THEN jsonb_build_array((updated_at AT TIME ZONE 'UTC')::date - DATE '2000-01-01',
+               extract(epoch FROM (updated_at AT TIME ZONE 'UTC')::time)) ELSE to_jsonb(updated_at::text) END AS updated_at,
+             CASE WHEN completed_at IS NOT NULL THEN CASE WHEN isfinite(completed_at) THEN jsonb_build_array(
+               (completed_at AT TIME ZONE 'UTC')::date - DATE '2000-01-01',
+               extract(epoch FROM (completed_at AT TIME ZONE 'UTC')::time)) ELSE to_jsonb(completed_at::text) END END AS completed_at
+      FROM keiro.keiro_workflows
+      WHERE workflow_id = ($1::jsonb ->> 'workflow_id')
+        AND workflow_name = ($1::jsonb ->> 'workflow_name')
+    ), image AS MATERIALIZED (
+      SELECT CASE
+        WHEN $2 <= 0 OR octet_length(workflow_id)::bigint
+             + octet_length(workflow_name)::bigint
+             + coalesce(octet_length(last_error)::bigint,0)
+             + coalesce(octet_length(leased_by)::bigint,0) > $2
+          THEN NULL
+        ELSE to_jsonb(header)
+      END AS value FROM header
+    ), checked AS MATERIALIZED (
+      SELECT value, value IS NULL OR octet_length(value::text) > $2 AS oversized
+      FROM image
+    )
+    SELECT oversized,
+           CASE WHEN oversized OR value = $1::jsonb THEN NULL ELSE value END
+    FROM checked
+    """
+    ( contrazip2
+        (E.param (E.nonNullable E.jsonbBytes))
+        (E.param (E.nonNullable E.int8))
+    )
+    (D.rowMaybe (observation <$> D.column (D.nonNullable D.bool) <*> D.column (D.nullable (D.jsonbBytes decodeImage))))
+  where
+    observation True _ = HeaderImageTooLarge
+    observation False Nothing = HeaderUnchanged
+    observation False (Just (key, row)) = HeaderChanged key row
+    decodeImage bytes = do
+      value <- either (Left . Text.pack) Right (Aeson.eitherDecodeStrict' bytes)
+      row <- either (Left . Text.pack) Right (parseEither parseHeader value)
+      pure (WorkflowHeaderKey bytes (row ^. #workflowName) (row ^. #workflowId), row)
+    parseHeader = Aeson.withObject "workflow header image" $ \row ->
+      WorkflowInstanceRow
+        <$> row .: "workflow_id"
+        <*> row .: "workflow_name"
+        <*> row .: "generation"
+        <*> (statusFromText <$> row .: "status")
+        <*> row .: "attempts"
+        <*> row .: "last_error"
+        <*> (row .: "next_attempt_at" >>= traverse timestampImage)
+        <*> (row .: "wake_after" >>= traverse timestampImage)
+        <*> row .: "leased_by"
+        <*> (row .: "lease_expires_at" >>= traverse timestampImage)
+        <*> (row .: "created_at" >>= timestampImage)
+        <*> (row .: "updated_at" >>= timestampImage)
+        <*> (row .: "completed_at" >>= traverse timestampImage)
+    -- Separate days from seconds so epoch division cannot round a distant
+    -- timestamp's microseconds. BC dates also avoid textual JSON date parsing.
+    -- Match the existing binary decoder's Int64 microsecond interpretation
+    -- of PostgreSQL's infinity sentinels, rather than changing legacy JSON.
+    timestampImage (Aeson.String "infinity") = pure (sentinelTime (maxBound :: Int64))
+    timestampImage (Aeson.String "-infinity") = pure (sentinelTime (minBound :: Int64))
+    timestampImage value = do
+      (days, seconds) <- Aeson.parseJSON value
+      Aeson.withScientific
+        "timestamp seconds"
+        (\s -> pure (UTCTime (addDays days (fromGregorian 2000 1 1)) (fromRational (toRational s))))
+        seconds
+    sentinelTime microseconds =
+      let (days, remainder) = divMod (toInteger microseconds) (86400 * 1000000)
+       in UTCTime (addDays days (fromGregorian 2000 1 1)) (fromRational (toRational remainder / 1000000))
 
 listWorkflowInstancesStmt :: Statement (Maybe [Text], Maybe Text, Maybe Text, Maybe Text, Int32) [WorkflowInstanceRow]
 listWorkflowInstancesStmt =

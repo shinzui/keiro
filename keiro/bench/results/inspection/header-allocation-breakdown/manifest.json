@@ -1,0 +1,17 @@
+{
+  "candidate_commit": "5f5cafcc",
+  "driver_sha256": "eb5a3a4da985f4d33ca5a31f358282a21add8798be653b7d9fe0a652f8dad520",
+  "binary_sha256": "813e72241a8c9b86cb169ba68a40eb9665abb2fb17b6eb77ad00453443f1984d",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "trials": 5,
+  "iterations": 100,
+  "warm_iterations": 10,
+  "cohort_acceptance": false,
+  "scope": "in-process WAI test seam attribution; no-database/static-json variants deliberately replace owning reads, never production behavior"
+}

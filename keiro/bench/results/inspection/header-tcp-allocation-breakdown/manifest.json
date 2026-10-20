@@ -1,0 +1,19 @@
+{
+  "parent_commit": "5f5cafcc",
+  "source_patch": "source.patch.gz",
+  "instance_source_sha256": "ca4865f6421383f660c6f8be09d457729a992279153d998ada63f30032b42991",
+  "driver_sha256": "a289191f7ec57a8b03dc0504de3d1a20f5608779369c793922c1986d20ad00db",
+  "binary_sha256": "ec8a1c43337326760c8db5f088367cec60f856157007f464969ab78a63478062",
+  "ghc": "9.12.4",
+  "library_optimization": "O1",
+  "driver_optimization": "O2",
+  "rts": [
+    "-N2",
+    "-T"
+  ],
+  "cohort_acceptance": false,
+  "trials": 5,
+  "api_iterations": 100,
+  "tcp_iterations": 1000,
+  "scope": "external sequential TCP client; explicit operations seams remove selected work; one TCP setup per measured 1000 requests"
+}

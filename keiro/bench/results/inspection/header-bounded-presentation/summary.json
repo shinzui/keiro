@@ -1,0 +1,102 @@
+{
+  "point-conditional-unchanged": {
+    "bytes_per_operation": [
+      7904.72,
+      7928.24,
+      7910.32,
+      7688.24,
+      7828.24
+    ],
+    "median_bytes_per_operation": 7904.72
+  },
+  "point-read": {
+    "bytes_per_operation": [
+      35421.44,
+      35475.36,
+      35379.52,
+      35382.96,
+      35253.52
+    ],
+    "median_bytes_per_operation": 35382.96
+  },
+  "point-session": {
+    "bytes_per_operation": [
+      27618.96,
+      27621.68,
+      27399.04,
+      27565.2,
+      27567.76
+    ],
+    "median_bytes_per_operation": 27567.76
+  },
+  "schema-verification": {
+    "bytes_per_operation": [
+      11570.16,
+      10418.56,
+      12265.6,
+      11975.36,
+      10275.92
+    ],
+    "median_bytes_per_operation": 11570.16
+  },
+  "tcp-http-header": {
+    "bytes_per_operation": [
+      40510.944,
+      42473.808,
+      42162.728,
+      42495.832,
+      39995.592
+    ],
+    "median_bytes_per_operation": 42162.728
+  },
+  "tcp-http-no-database": {
+    "bytes_per_operation": [
+      52009.832,
+      52221.232,
+      52168.344,
+      52200.144,
+      52249.408
+    ],
+    "median_bytes_per_operation": 52200.144
+  },
+  "tcp-http-no-schema": {
+    "bytes_per_operation": [
+      89479.472,
+      89695.472,
+      89560.024,
+      89777.216,
+      90036.832
+    ],
+    "median_bytes_per_operation": 89695.472
+  },
+  "tcp-http-static-json-no-database": {
+    "bytes_per_operation": [
+      34846.032,
+      35252.696,
+      34929.624,
+      35098.488,
+      35026.424
+    ],
+    "median_bytes_per_operation": 35026.424
+  },
+  "tcp-http-static-json-with-schema": {
+    "bytes_per_operation": [
+      47275.176,
+      47843.68,
+      47631.824,
+      47754.16,
+      45772.04
+    ],
+    "median_bytes_per_operation": 47631.824
+  },
+  "tcp-http-uncached-header": {
+    "bytes_per_operation": [
+      99926.208,
+      101589.208,
+      101605.032,
+      101293.224,
+      101663.848
+    ],
+    "median_bytes_per_operation": 101589.208
+  }
+}

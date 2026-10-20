@@ -24,6 +24,8 @@ packages follow the [Haskell Package Versioning Policy](https://pvp.haskell.org/
 
 ### Performance
 
+- Bound workflow header presentation reuse while checking the complete current row and live schema on every request.
+
 - Compare live schema observations in PostgreSQL, bound pure read parsing reuse,
   and reuse request threads for inspection deadlines.
 
