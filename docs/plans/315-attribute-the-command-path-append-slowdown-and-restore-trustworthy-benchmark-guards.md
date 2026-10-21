@@ -11,6 +11,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T12:21:07Z
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-21T13:02:16Z
+      mode: "implement"
+      note: "M1 and M2: tag sweep and no-preparation experiment attribute the fan-out slowdown to the benchmark harness"
 ---
 
 # Attribute the command-path append slowdown and restore trustworthy benchmark guards
@@ -39,23 +45,30 @@ green for the next release.
 
 ## Progress
 
-- [ ] M1: The attribution curve is recorded. The command guard has been built and run at the
-      baseline commit `2477a5aa`, at every release tag from `keiro-0.13.0.0` to
-      `keiro-0.19.0.0`, at `keiro-0.19.0.1`, and at HEAD, against the same
-      `keiro/bench/baseline-command.csv`, and the first tag at which the append-heavy scenarios
-      cross the 25% ceiling is named in Surprises & Discoveries with the per-scenario numbers.
-      The baseline commit itself must pass (it is the control that proves the machine and
-      PostgreSQL are comparable to the August recording); if it does not, the baseline is not
-      comparable and the plan records that instead.
-- [ ] M2: The mechanism is isolated. A targeted measurement separates the three things each
-      command scenario's timed action does (hard-delete the target stream, create it again,
-      append) and shows which of them carries the slowdown, and the Kiroku change at the
-      attributed tag that explains it is named by commit or migration number.
-- [ ] M3: The decision is made and acted on. Either the cost is removed (a Keiro-side change,
-      or an improvement request filed in `mori://shinzui/kiroku` with the measurement attached
-      and the Keiro bound bumped when it ships) or it is accepted: a new
-      `keiro/bench/baseline-command.csv` is recorded from five serial runs with a README under
-      `keiro/bench/results/` that states the attributed cause and the accepted numbers.
+- [x] M1 (2026-10-21): The attribution curve is recorded in Surprises & Discoveries. The
+      control at the baseline commit `2477a5aa` failed (ten of fifteen rows outside the
+      ceiling against its own CSV), so the August rows are not reproducible on this machine
+      and the plan records that. The first release carrying the fan-out step is
+      `keiro-0.17.0.0`: 0.16.0.0 measures 670 ms and 804 ms at 1,000 targets, 0.17.0.0 and
+      every later point measure about 1.9 s. The tags 0.13.0.0 to 0.15.0.0 were deliberately
+      not measured once the step was located above 0.16.0.0.
+- [x] M2 (2026-10-21): The mechanism is isolated without the three-way micro-measurement:
+      the two commits that changed the benchmark's startup in the 0.17.0.0 window seed the
+      delegated-inbox fixture into the store the command group uses, and HEAD with that
+      preparation skipped returns to the 0.16.0.0 level (662 ms and 777 ms at 1,000 targets)
+      and runs the single-command scenarios eight to nine times faster. No Kiroku change
+      needs naming; Kiroku 0.7's hard-delete guards add a bounded per-delete cost that only the
+      harness's fixture reset pays. Two systematic anomalies in the no-preparation run
+      (`no-op` at 21 ms, router fan-out slower at 10 and 100 targets than at 1,000) are
+      recorded for M3.
+- [ ] M3: The harness is isolated and the baseline re-recorded. `keiro/bench/Main.hs` gives
+      the command group its own fresh database (a second `withFreshResourceStore` clone, as
+      the read-model group already has) so no other group's preparation touches it, moves
+      each scenario's target reset out of the timed action, and explains the two anomalies
+      from M2 or removes them; then `keiro/bench/baseline-command.csv` is recorded from five
+      serial runs on this environment with a README under `keiro/bench/results/command-v2/`
+      that states the attribution, the control protocol and the machine, GHC, PostgreSQL and
+      commit. No Keiro serving path and no Kiroku change is involved.
 - [ ] M4: The producer-identity guard passes for a stated reason. The same-process 1.10
       ceiling in `keiro/bench/ProducerIdentityBench.hs` is either met after a measured change
       or replaced by a guard whose rationale is recorded (for example an absolute per-row budget
@@ -98,6 +111,79 @@ router-fanout.1000              629 ms      400 ms           1.86 s     2.01 s
 process-manager-fanout.1000     579 ms      416 ms           2.04 s     1.96 s
 ```
 
+A hypothesis for M2, formed before the remaining sweep points arrived. Both fan-out scenarios
+call `resetFanoutTargets` inside the timed action (`keiro/bench/Main.hs`), which issues one
+`Lifecycle.hardDeleteStream` per target before the router or manager dispatches to it, so a
+1,000-target iteration performs 1,000 hard deletes. `keiro-0.19.0.0` (sweep point, 12:32Z)
+measures `router-fanout.1000` at 1.945 s and `process-manager-fanout.1000` at 1.885 s, the
+same as 0.19.0.1 and HEAD, so the slowdown entered at or before 0.19.0.0. Between the baseline
+commit (`kiroku-store >=0.4 && <0.5`) and `keiro-0.13.0.0`, commit `33c557ab` (2026-08-16)
+adopted `kiroku-store` 0.8.0.0, and Kiroku's 0.7.0.0 release notes (2026-08-13,
+`kiroku-store/CHANGELOG.md` in `mori://shinzui/kiroku`) say: "Supported hard delete checks
+retention before mutation and locks every affected stream in ascending ID order, including
+streams containing links to target-originated events", and that append, link, lifecycle
+mutation and every supported hard delete serialize behind a transaction-scoped stream guard.
+If the follow-up points `33c557ab~1` and `33c557ab` differ by the fan-out cost, the slowdown
+is the price of Kiroku's replay-history protection paid by the benchmark's fixture reset, not
+by any serving path, and M3's answer is to move the reset outside the timed action and
+re-record, not to change Keiro or Kiroku. The dispatch path itself issues one identity probe
+per target for an ASCII seed (`Keiro.DeterministicId.deterministicIdProbes` adds the legacy
+probe only when the seed moved across encodings) and then one command run, at the baseline
+commit and at HEAD alike.
+
+The `keiro-0.16.0.0` point (12:39Z) weakens that hypothesis: `router-fanout.1000` 670 ms and
+`process-manager-fanout.1000` 804 ms, near the baseline commit rather than the 1.9 s of
+0.19.0.0, so the step lies between 0.16.0.0 and 0.19.0.0, after the Kiroku 0.7 guards were
+adopted. The strongest candidate in that window is the benchmark process itself: since
+0.17.0.0, `keiro/bench/Main.hs` calls `prepareInboxDelegatedBenchmarks store metrics` before
+`defaultMain`, on the same `store` the command group uses and regardless of the `-p`
+filter. `keiro/bench/InboxDelegatedBench.hs` shows what that does: it creates the business
+table, prepares every delegated-inbox scenario including a 100,000-event history
+(`prepareHistoryRun store 100000`), and runs every fresh scenario once as a warm-up. Every
+command scenario since 0.17.0.0 therefore appends to and hard-deletes from a store that
+already holds that fixture's events, junction rows and inbox tables, while the August
+baseline was recorded against a store holding only the rebuild fixture. An experiment is
+queued behind the follow-up points: HEAD with that preparation replaced by `pure []`, same
+guard, same baseline. If the fan-out rows return to the 0.16.0.0 range, the slowdown is the
+harness, not any serving path, and M3 isolates the command group's store before
+re-recording.
+
+The remaining points settled it. `keiro-0.18.0.0` (12:46Z) measures the fan-out rows at
+1.80 s and 2.03 s, the same level as 0.19.0.0, 0.19.0.1 and HEAD. `keiro-0.17.0.0` (12:53Z)
+measures them at 21.7 s ± 48 s and 21.6 s ± 48 s, a spread larger than the mean, which
+`tasty-bench` reports as "same as baseline" because it cannot compare; that run is an outlier
+of the same harness, not a different code state. Both commits that changed the benchmark's
+startup, `73231189` (the delegated-inbox evidence and its preparation on the shared store)
+and `af37b955` (the fresh-scenario warm-up inside that preparation), are first contained in
+`keiro-0.17.0.0`; nothing in `keiro/bench/InboxDelegatedBench.hs` changed between 0.17.0.0 and
+0.18.0.0. The sweep was stopped after 0.17.0.0 and the August-window points were not run,
+because the step is above 0.16.0.0 and the August changes cannot be its cause.
+
+The experiment then ran at HEAD (`03161924`) with `prepareInboxDelegatedBenchmarks store
+metrics` replaced by `pure []` and nothing else changed (12:55Z to 13:00Z, load average 1.5):
+
+```text
+scenario                        HEAD with preparation   HEAD without preparation   0.16.0.0
+domain.accepted-1               3.92 ms                 0.467 ms                   (n/a)
+domain.accepted-large           44.2 ms                 4.69 ms                    25.6 ms
+router-fanout.1000              2.01 s                  662 ms                     670 ms
+process-manager-fanout.1000     1.96 s                  777 ms                     804 ms
+domain.no-op                    75 µs                   21.4 ms                    121 µs
+router-fanout.10 / 100          108 ms / 678 ms         229 ms / 3.50 s            54 ms / 555 ms
+```
+
+The 1,000-target rows return exactly to the 0.16.0.0 level and the single-command rows become
+eight to nine times faster than with the preparation (and four to six times faster than the
+committed August rows). The command guard has therefore measured, since 0.17.0.0, a store that
+another group's fixture had already filled with a 100,000-event history, inbox tables and the
+warm-up traffic of every fresh delegated-inbox scenario; no serving path of Keiro or Kiroku
+got slower. Two rows in the no-preparation run are anomalous and systematic (tight spreads):
+`no-op` and `rejected` at about 21 ms where every other configuration measures them under
+130 µs, and `router-fanout` at 10 and 100 targets slower than at 1,000. They show that the
+command group's cost also depends on store state and on run order within the process, which
+is M3's problem to remove before any row is re-recorded; they do not change the attribution,
+which rests on the 1,000-target and single-command rows.
+
 
 ## Decision Log
 
@@ -115,6 +201,20 @@ process-manager-fanout.1000     579 ms      416 ms           2.04 s     1.96 s
   commit on the same machine); the fan-out rows moved with the code and must not be
   re-recorded until the cause is known and either fixed or accepted.
   Date: 2026-10-21
+- Decision: Attribute the fan-out slowdown to the benchmark harness (the delegated-inbox
+  preparation seeding the shared store since 0.17.0.0), fix the harness, and file no
+  improvement request against Kiroku.
+  Rationale: The no-preparation experiment at HEAD reproduces the 0.16.0.0 numbers exactly;
+  the serving paths did not change cost. Kiroku 0.7's hard-delete guards are real but are paid
+  only by the fixture reset, which M3 moves out of the timed action. This replaces the M2
+  micro-measurement and the M3 "fix or accept" fork that the plan originally described.
+  Date: 2026-10-21
+
+Revision note (2026-10-21): M1 and M2 were completed by a tag sweep (control, 0.16.0.0,
+0.17.0.0, 0.18.0.0, 0.19.0.0, 0.19.0.1, HEAD) and one controlled experiment rather than by the
+three-way micro-measurement first planned, because the sweep placed the step in the 0.17.0.0
+window where only the benchmark's own startup changed. M3 now means isolating the command
+group's store and re-recording; the "improvement request in Kiroku" branch is withdrawn.
 
 
 ## Outcomes & Retrospective

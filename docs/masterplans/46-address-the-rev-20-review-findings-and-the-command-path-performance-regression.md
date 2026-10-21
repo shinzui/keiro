@@ -10,6 +10,12 @@ provenance:
     model: "claude-fable-5-1"
     harness: "claude-code"
     at: 2026-10-21T12:21:07Z
+  revisions:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-21T13:02:16Z
+      mode: "implement"
+      note: "Record EP-1 attribution outcome and EP-2 gate wiring in progress"
 ---
 
 # Address the REV-20 review findings and the command-path performance regression
@@ -191,10 +197,10 @@ indexes (EP-3, a revision of ADR-40's rationale or a new ADR if the default orde
 
 ## Progress
 
-Phase 1 is open. EP-1 is In Progress: the tag-by-tag sweep of the command guard is running
-and its control point (the baseline commit itself) and the 0.19.0.1 point are the first
-results it needs. EP-2 is In Progress: the runner, the recipes, and the release skill text are
-committed; its acceptance run waits for a quiet machine after the sweep. EP-3, EP-4, EP-5, and
+Phase 1 is open. EP-1 is In Progress with M1 and M2 complete: the command-guard slowdown is
+attributed to the benchmark harness, and M3 (isolate the command group's store, re-record)
+through M6 remain. EP-2 is In Progress: the runner, the recipes, and the release skill text are
+committed; its acceptance run waits for a quiet machine. EP-3, EP-4, EP-5, and
 EP-6 are Not Started. The only cross-plan gate is plan 303's tag, which needs EP-2 and EP-6
 Complete and EP-1's guards green at the release commit.
 
@@ -211,6 +217,16 @@ five-fold slowdown per dispatched target that entered between `2477a5aa` and `ke
 This affects EP-2 as well: the release gate's ADR must say that a baseline is tied to a
 recorded environment and must be re-recorded, with the control rerun, when that environment
 changes. Details and the numbers are in EP-1's Surprises & Discoveries.
+
+Later the same day the sweep and a controlled experiment attributed the fan-out slowdown to
+the benchmark harness, not to Keiro or Kiroku: since 0.17.0.0 the benchmark main seeds the
+delegated-inbox fixture (a 100,000-event history and warm-up traffic) into the store the
+command group uses, before `defaultMain` and regardless of the `-p` filter; HEAD with that
+preparation skipped measures the fan-out rows at the 0.16.0.0 level and the single-command
+rows eight to nine times faster. No serving path got slower, so EP-1 files no Kiroku
+improvement request and its remaining work is harness isolation and re-recording. For EP-2
+the lesson is durable: a guard's baseline is only meaningful for an isolated fixture, and the
+ADR must say that each benchmark group owns its store.
 
 
 ## Decision Log
