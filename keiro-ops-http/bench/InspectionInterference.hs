@@ -162,9 +162,16 @@ benchmark = do
                 emit "before-running" 0
                 -- Discard every per-operation timing. Retaining a latency list
                 -- would itself create a false positive live-heap trend.
-                forM_ [1 .. sampleCount] $ \n -> do
-                  void (measured n)
-                  when (mod n (maybe 1 (* 5) offeredRate) == 0) (emit "running" n)
+                -- A range shared across trials/modes floats outside their
+                -- callbacks at O1 and retains 40 bytes per completed item.
+                -- Keep this counter strict and allocate no enumeration list.
+                let loop n
+                      | n > sampleCount = pure ()
+                      | otherwise = do
+                          void (measured n)
+                          when (mod n (maybe 1 (* 5) offeredRate) == 0) (emit "running" n)
+                          loop (n + 1)
+                loop 1
                 pure []
             pure (samples, statsBefore, started, before)
           finished <- getMonotonicTimeNSec

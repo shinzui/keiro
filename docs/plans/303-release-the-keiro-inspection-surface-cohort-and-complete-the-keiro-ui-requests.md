@@ -97,6 +97,24 @@ overlap builds and are diagnostics only; matched acceptance is pending.
 
 ## Surprises & Discoveries
 
+2026-10-20: loaded heap probes also exposed lazy updates in the HTTP runner's
+connection `MVar` map. The deferred insert/delete chain kept completed Async
+handles and their connection buffers reachable until server shutdown, even
+though active thread and feed counts had returned to zero. Force each new map
+at registration and deletion. This is inspection-server cleanup; ordinary
+command/worker modules are unchanged. Original latency evidence predates that
+cleanup fix; focused final-server checks and corrected heap probes follow.
+
+
+2026-10-20: the first heap probe retained a shared `[1..sampleCount]`
+enumeration across future trial/mode callbacks at O1. The pre-change baseline
+also retained about 40 B/operation after warm-up. Optimized Core names that
+outer list `lvl255_srTm`; strict recursion removes the probe's ownership of the
+list. Original short and 120-second control samples are diagnostics, not
+acceptance. Corrected probes leave product runtime code unchanged. ADR-48 now
+records this instrumentation trap.
+
+
 2026-10-20 EP-1 handoff: `pgmq dlq read` was incorrectly classified as read-only
 although the supported PGMQ operation reserves messages for 30 seconds. It now
 previews by default and requires CLI `--force` or HTTP POST confirmation. The
@@ -112,6 +130,12 @@ observations; the HTTP tests prove the reservation and confirmation explicitly.
 
 
 ## Decision Log
+
+- Decision (2026-10-20, user-directed core-path focus): use the focused evidence
+  mapping below rather than adding a domain-outcome/UI-load cross-product.
+  Keep all default-off invariants, the core 5% gates and bounded lifecycle checks.
+  Inspection latency/allocation and total-process allocation are diagnostics.
+
 
 - Decision (2026-10-13): apply the current review constraints in Context, Plan of Work, and Validation. Rationale: Current store 0.11 already provides listing; partial release instructions conflict with Complete status and cannot discharge missing performance evidence. Historical September decisions below are retained as history; conflicting create-first, downgrade, zero-cost-index, unconditional-provenance and partial-completion instructions are withdrawn.
 
@@ -284,7 +308,27 @@ Both listings are required: released `kiroku-store` 0.11.0.0 already exposes the
 
 Inspection is accepted only with measured interference bounds, not from the fact that an API is read-only. Capture a baseline at the pre-implementation commit with the same GHC optimization, RTS capabilities, database size, connection limits, PostgreSQL settings, and workload seed as the candidate. Run inside `nix develop`, with normal autovacuum and durable settings (`fsync`, `synchronous_commit`, and `full_page_writes` on); record settings and raw samples. Compare at least five alternating baseline/candidate runs after warm-up. At a fixed offered load below baseline saturation, a reproducible median throughput loss over 5%, p95 command/worker latency increase over 5%, or core-path allocated bytes per completed runtime operation increase over 5% blocks the milestone. These thresholds protect ordinary commands and workers, including contention caused by active inspection; they are not blanket targets for inspection request latency, inspection allocations, total-process allocation divided by writer completions, or WAL volume. Combined process allocation and WAL remain attribution diagnostics. Unmounted/default-off paths must add no inspection work, and inspection-only code stays outside those paths. Use focused behavior checks and measurements that resolve an actual core-path risk, rather than expanding the test matrix for its own sake. No extra database statements, event reads, metadata serialization, or background tasks are allowed on ordinary commands or provenance-disabled reactions. An inconclusive/noisy comparison is not a pass: extend matched runs and report uncertainty. Keep the existing 25% historical benchmark check as a coarse smoke test only.
 
-Measure four deployment modes separately: pre-change runtime; candidate with inspection not mounted and provenance off; mounted but idle; and active inspection with 1 and 32 distinct views, 1 and 256 clients, repeated HTTP polls, large values, and deliberately slow readers. Hold writer load fixed and include snapshot hit, no codec, snapshot miss/corruption fallback, long history, accepted/no-op/rejected/duplicate reactions, fan-out of 0/1/10/100 targets, timer scheduling/claim/firing, workflow resume, and projection application. Report query counts, rows examined, buffers, pool wait, CPU, allocation, WAL bytes, writer p50/p95/p99, completed operations, and post-major-GC live bytes. Idle mounting must issue no recurring database work without a subscriber or request. Reuse [ADR-48](../adr/0048-worker-retention-gates-use-post-major-live-heap-across-isolated-legs.md)'s isolated retention legs; also run subscription churn and an idle-mounted notification storm, then assert driver/thread/queue counts return to their starting values. A positive live-heap trend that persists when repeating the steady-state run blocks release even if it is below the existing coarse retention threshold. Performance measurements remain implementation work; this review supplies no passing runtime evidence.
+Use focused evidence for each actual core-path change, following the user's
+2026-10-20 instruction to avoid overengineering tests. Compare the pre-change
+runtime with unmounted/default-off, mounted-idle and active inspection, including
+1/32 views, 1/256 clients, repeated polls, large values, slow readers and churn.
+The matched writer covers workflow scheduling/claim/resume/release and timer
+schedule/claim/fire over identical ledgers and durable settings. Reuse the
+ordinary-hydration hit/miss/corrupt/no-codec/long-history comparison for that
+changed implementation. For default-off manager provenance, retain the existing
+accepted/no-op/rejected/duplicate/fan-out behavior and retention checks and verify
+the disabled pure options branch is the original update, before target traversal
+or metadata construction; it cannot issue database work. Existing projection
+application and worker retention checks cover their unchanged paths. These are
+separate, relevant proofs; a cross-product of every domain outcome with every UI
+load mode is not required. Retain raw writer latency/allocation, process CPU,
+WAL and table-update counters, plus the existing query-plan/row/buffer evidence.
+Idle mounting must perform no recurring SQL or own a wake cursor. Measure
+post-major live heap at equal operation blocks after warm-up for idle notification
+load and active/churning subscribers, repeating a persistent positive steady-state
+trend before acceptance. Assert views, connections and the wake pump return to
+zero after clients leave. The coarse existing retention threshold alone does not
+establish leak freedom.
 
 EP-7 collects the per-child measurements and runs the integrated workload on the final candidate. Add a reproducible `keiro-ops-http:bench:inspection-interference` harness, seeded through supported APIs, with command-line modes `disabled`, `idle`, `active-shared`, `active-distinct`, `slow-reader`, and `churn`; each emits machine-readable measurements and its complete configuration. Separate the unchanged runtime workload into a driver that builds against both revisions; build it in isolated checkouts with the same compiler/settings. The pre-change checkout has no `keiro-ops-http` package: do not try to build the new benchmark there or link it against candidate runtime libraries. Use the HTTP/feed load generator only against the candidate, and compare its writer workload with the independently built baseline. Run it with `nix develop -c cabal bench keiro-ops-http:bench:inspection-interference --benchmark-options="--mode <mode>"`. Record baseline/candidate revisions and raw output paths in this plan; the harness is an implementation deliverable, not an existing command claimed to have passed. Existing focused checks include `nix develop -c cabal test keiro-retention --test-show-details=direct` and `nix develop -c just bench-regression`. Run `nix develop -c z3 --version` before DSL symbolic conformance gates.
 

@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: API Reference
-timestamp: 2026-10-21T00:49:10Z
+timestamp: 2026-10-21T03:57:45Z
 description: Map Keiro's public modules and their user-facing interfaces.
 docId: DOC-2
 tags: [keiro, api, modules, reference]
@@ -1172,6 +1172,29 @@ Most applications use the executable instead: `parse`, `check`, `scaffold`,
 `diff --gate|--explain|--report-out`, repeatable `check|diff --deny CODE`, and
 `scaffold --codec-comparison ... --comparison-out ...`. See
 [Keiro DSL Reference](keiro-dsl-reference.md).
+
+## Bounded runtime inspection
+
+`Keiro.Workflow.Inspection` supplies cursor-bound workflow list, journal, step,
+child and awakeable pages. `Keiro.Inspection.Aggregate` reads application-described
+state and snapshot health. `Keiro.ProcessManager.Inspect` supplies manager
+state, live input candidates and optional legacy provenance. Capture is explicit
+through `RunCommandOptions.inspectionProvenance`; the default preserves the
+ordinary metadata path. Modern reaction provenance remains unavailable.
+
+`Keiro.Timer` supplies pending-timer pages; `Keiro.ReadModel.Rebuild` supplies
+bounded projection-group status pages. Shard observations report lease state
+against their database clock. These owner APIs are shared by CLI, HTTP and feeds.
+
+The optional `keiro-ops-http` package exports `Keiro.Ops.Http`: construct
+`opsApplication` or `opsApplicationWithFeeds` once in IO with a dedicated
+inspection pool. Scope `withFeedHandle` around the server lifetime. HTTP and
+feed reads share admission and deadlines; an idle handle owns no wake cursor.
+`Keiro.Ops.Http.Compose` mounts already allocated owner applications under stable
+prefixes while preserving their responses and WebSocket protocols.
+See [Serve Keiro Ops over HTTP](../guides/serve-keiro-ops-over-http.md),
+[Stream Keiro Inspection Views](../guides/stream-keiro-inspection-views.md) and
+[Compose Runtime Inspection Surfaces](../guides/compose-runtime-inspection-surfaces.md).
 
 ## `Keiro.Prelude`
 

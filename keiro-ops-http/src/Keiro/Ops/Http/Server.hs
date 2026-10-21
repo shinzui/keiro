@@ -39,9 +39,9 @@ startOpsHttpServer config app
               -- for registration. Its first unmask occurs inside that bracket.
               action (\io -> readMVar registered >> unmask io) `finally` do
                 tid <- readMVar registered
-                modifyMVar_ clients (pure . Map.delete tid)
+                modifyMVar_ clients (\connections -> pure $! Map.delete tid connections)
             let tid = asyncThreadId client
-            (modifyMVar_ clients (pure . Map.insert tid client) >> putMVar registered tid)
+            (modifyMVar_ clients (\connections -> pure $! Map.insert tid client connections) >> putMVar registered tid)
               `onException` (tryPutMVar registered tid >> cancel client)
           stopClients = do
             live <- modifyMVar clients (\connections -> pure (Map.empty, Map.elems connections))

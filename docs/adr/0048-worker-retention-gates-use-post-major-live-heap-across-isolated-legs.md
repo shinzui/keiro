@@ -2,7 +2,7 @@
 type: Architecture Decision Record
 title: Worker retention gates use post-major live heap across isolated legs
 description: Keiro gates worker heap retention on post-major live bytes measured across isolated store, adapter, and dispatch workloads with a conservative slope and growth threshold.
-timestamp: 2026-09-25T23:51:50Z
+timestamp: 2026-10-21T04:13:33Z
 docId: ADR-48
 status: Accepted
 date: 2026-09-25
@@ -70,6 +70,22 @@ every 100 target events to keep repeated history replay from overwhelming the
 worker retention measurement. Results from that longer variant must be named
 with its snapshot policy; they do not replace a profile of the original
 unsnapshotted workload when assigning the reported defect's cause.
+
+Heap probes must also bound their own bookkeeping. An enumeration such as
+`forM_ [1 .. count]` can be shared across future trials or modes and floated
+outside their callbacks by GHC. Its forced cons/Int cells then remain live at
+about 40 bytes per operation, including in a pre-change baseline. Use a strict
+recursive counter for streamed heap measurements and inspect optimized Core
+when a shared baseline shows that shape. Keep failed probe samples as diagnostic
+evidence; rerun corrected probes before attributing the slope to a runtime or
+inspection cursor. This is separate from intentionally retained latency samples,
+which must not be present in a heap-stability leg.
+
+Lifecycle ownership registries also need strict state updates. Storing lazy
+map insert/delete chains in an `MVar` can retain completed `Async` handles and
+their connection buffers until server shutdown, despite zero active counts.
+Force each updated registry when registering or removing an owner. Check
+post-major live memory after quiescence as well as logical view/thread counts.
 
 ## Consequences
 

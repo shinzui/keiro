@@ -115,7 +115,9 @@ Functional handoff (2026-10-20): the pure router, shared CORS implementation,
 flag-guarded example and DOC-32 are implemented. Focused tests exercise exact
 encoded remainders, streaming responses, mount refusals, both real HTTP owners
 and both socket protocols. All 40 HTTP examples pass, including both real sockets. The example builds
-and the strict documentation/profile checks pass. The native Nix flake check and package check also pass. Integrated runtime
+and the strict documentation/profile checks pass. The complete `just verify`
+cohort passed (783 core, 40 HTTP, 15 retention, 52 ops, 884 main DSL and 43
+migration examples, plus conformance/mutation/adoption/policy gates). The native Nix flake check and package check also pass. Integrated runtime
 interference remains open; no release acceptance is claimed.
 
 ## Surprises & Discoveries
