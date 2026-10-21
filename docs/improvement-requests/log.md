@@ -1,6 +1,7 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Addition**: IR-55 requests a runnable inspection host that mounts jitsurei's aggregate and process-manager hooks, filed by the keiro runtime console.
 * **Update**: Record IR-27 local feed implementation and 37 passing HTTP cases while composition, interference and release remain open.
 * **Update**: Record IR-29 local manager, timer and shard implementation evidence while integrated performance and release work remain open.
 * **Update**: IR-28 records aggregate read implementation, specialized ordinary hydration and focused state/page evidence; release completion remains open.
