@@ -1,6 +1,10 @@
 # Bundle Update Log
 
 ## 2026-10-21
+* **Addition**: IR-59 requests the categories each projection consumes, filed by the keiro runtime console.
+* **Addition**: IR-58 requests workflow instance counts by status class, filed by the keiro runtime console.
+* **Addition**: IR-57 requests the feeding subscription on projection status rows, filed by the keiro runtime console.
+* **Addition**: IR-56 requests a pm types read listing the mounted process managers, filed by the keiro runtime console.
 * **Addition**: IR-55 requests a runnable inspection host that mounts jitsurei's aggregate and process-manager hooks, filed by the keiro runtime console.
 * **Update**: Record IR-27 local feed implementation and 37 passing HTTP cases while composition, interference and release remain open.
 * **Update**: Record IR-29 local manager, timer and shard implementation evidence while integrated performance and release work remain open.
